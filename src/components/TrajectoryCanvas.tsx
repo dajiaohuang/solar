@@ -1,0 +1,549 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { GRID_LEVELS, SVG_PADDING, createProjection, projectPoint, type Projection } from '../lib/viewProjection'
+import type { CelestialBody, RenderedBodyPosition, TrajectorySample } from '../types'
+
+type Props = {
+  referenceBody: CelestialBody
+  trajectories: TrajectorySample[]
+  currentPositions: RenderedBodyPosition[]
+  viewRadiusAU: number
+  viewOffsetAU: { x: number; y: number }
+}
+
+type Geometry = {
+  linePositions: Float32Array
+  lineColors: Float32Array
+  pointPositions: Float32Array
+  pointColors: Float32Array
+  pointSizes: Float32Array
+}
+
+type GlResources = {
+  gl: WebGLRenderingContext
+  lineProgram: WebGLProgram
+  pointProgram: WebGLProgram
+  linePositionBuffer: WebGLBuffer
+  lineColorBuffer: WebGLBuffer
+  pointPositionBuffer: WebGLBuffer
+  pointColorBuffer: WebGLBuffer
+  pointSizeBuffer: WebGLBuffer
+}
+
+const CANVAS_SIZE = 880
+const MAJOR_LABEL_LIMIT = 18
+const ASTEROID_LABEL_LIMIT = 6
+const RING_SEGMENTS = 72
+
+function useElementSize<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null)
+  const [size, setSize] = useState({ width: CANVAS_SIZE, height: CANVAS_SIZE })
+
+  useEffect(() => {
+    const element = ref.current
+    if (!element) {
+      return
+    }
+
+    const update = () => {
+      const width = Math.max(Math.round(element.clientWidth), 1)
+      const height = Math.max(Math.round(element.clientHeight), 1)
+      setSize((previous) =>
+        previous.width === width && previous.height === height ? previous : { width, height },
+      )
+    }
+
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(element)
+
+    return () => observer.disconnect()
+  }, [])
+
+  return [ref, size] as const
+}
+
+function hexToRgba(hexColor: string, alpha: number) {
+  const normalized = hexColor.replace('#', '')
+  const value = normalized.length === 3
+    ? normalized
+        .split('')
+        .map((part) => part + part)
+        .join('')
+    : normalized
+
+  const red = Number.parseInt(value.slice(0, 2), 16) / 255
+  const green = Number.parseInt(value.slice(2, 4), 16) / 255
+  const blue = Number.parseInt(value.slice(4, 6), 16) / 255
+
+  return [red, green, blue, alpha]
+}
+
+function toClipSpace(point: { x: number; y: number }, projection: Projection) {
+  return {
+    x: (point.x / projection.width) * 2 - 1,
+    y: 1 - (point.y / projection.height) * 2,
+  }
+}
+
+function pushVertex(
+  positions: number[],
+  colors: number[],
+  x: number,
+  y: number,
+  rgba: number[],
+) {
+  positions.push(x, y)
+  colors.push(rgba[0], rgba[1], rgba[2], rgba[3])
+}
+
+function pushLineSegment(
+  positions: number[],
+  colors: number[],
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  rgba: number[],
+) {
+  pushVertex(positions, colors, start.x, start.y, rgba)
+  pushVertex(positions, colors, end.x, end.y, rgba)
+}
+
+function createShader(gl: WebGLRenderingContext, type: number, source: string) {
+  const shader = gl.createShader(type)
+  if (!shader) {
+    throw new Error('Failed to create shader')
+  }
+
+  gl.shaderSource(shader, source)
+  gl.compileShader(shader)
+
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const message = gl.getShaderInfoLog(shader) ?? 'Unknown shader error'
+    gl.deleteShader(shader)
+    throw new Error(message)
+  }
+
+  return shader
+}
+
+function createProgram(gl: WebGLRenderingContext, vertexSource: string, fragmentSource: string) {
+  const program = gl.createProgram()
+  if (!program) {
+    throw new Error('Failed to create WebGL program')
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource)
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource)
+
+  gl.attachShader(program, vertexShader)
+  gl.attachShader(program, fragmentShader)
+  gl.linkProgram(program)
+  gl.deleteShader(vertexShader)
+  gl.deleteShader(fragmentShader)
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const message = gl.getProgramInfoLog(program) ?? 'Unknown link error'
+    gl.deleteProgram(program)
+    throw new Error(message)
+  }
+
+  return program
+}
+
+function createResources(gl: WebGLRenderingContext): GlResources {
+  const lineProgram = createProgram(
+    gl,
+    `
+      attribute vec2 aPosition;
+      attribute vec4 aColor;
+      varying vec4 vColor;
+
+      void main() {
+        gl_Position = vec4(aPosition, 0.0, 1.0);
+        vColor = aColor;
+      }
+    `,
+    `
+      precision mediump float;
+      varying vec4 vColor;
+
+      void main() {
+        gl_FragColor = vColor;
+      }
+    `,
+  )
+
+  const pointProgram = createProgram(
+    gl,
+    `
+      attribute vec2 aPosition;
+      attribute vec4 aColor;
+      attribute float aPointSize;
+      uniform float uPixelRatio;
+      varying vec4 vColor;
+
+      void main() {
+        gl_Position = vec4(aPosition, 0.0, 1.0);
+        gl_PointSize = aPointSize * uPixelRatio;
+        vColor = aColor;
+      }
+    `,
+    `
+      precision mediump float;
+      varying vec4 vColor;
+
+      void main() {
+        vec2 centered = gl_PointCoord * 2.0 - 1.0;
+        if (dot(centered, centered) > 1.0) {
+          discard;
+        }
+
+        gl_FragColor = vColor;
+      }
+    `,
+  )
+
+  const linePositionBuffer = gl.createBuffer()
+  const lineColorBuffer = gl.createBuffer()
+  const pointPositionBuffer = gl.createBuffer()
+  const pointColorBuffer = gl.createBuffer()
+  const pointSizeBuffer = gl.createBuffer()
+
+  if (
+    !linePositionBuffer ||
+    !lineColorBuffer ||
+    !pointPositionBuffer ||
+    !pointColorBuffer ||
+    !pointSizeBuffer
+  ) {
+    throw new Error('Failed to create WebGL buffers')
+  }
+
+  return {
+    gl,
+    lineProgram,
+    pointProgram,
+    linePositionBuffer,
+    lineColorBuffer,
+    pointPositionBuffer,
+    pointColorBuffer,
+    pointSizeBuffer,
+  }
+}
+
+function resetVertexAttributes(gl: WebGLRenderingContext) {
+  const maxAttributes = gl.getParameter(gl.MAX_VERTEX_ATTRIBS) as number
+
+  for (let index = 0; index < maxAttributes; index += 1) {
+    gl.disableVertexAttribArray(index)
+  }
+}
+
+function buildGeometry(
+  projection: Projection,
+  referenceBody: CelestialBody,
+  trajectories: TrajectorySample[],
+  currentPositions: RenderedBodyPosition[],
+): Geometry {
+  const linePositions: number[] = []
+  const lineColors: number[] = []
+  const pointPositions: number[] = []
+  const pointColors: number[] = []
+  const pointSizes: number[] = []
+  const gridColor = [173 / 255, 201 / 255, 1, 0.18]
+  const haloColor = [1, 1, 1, 0.18]
+  const projectedReferencePoint = projectPoint({ x: 0, y: 0 }, projection)
+
+  for (const ratio of GRID_LEVELS) {
+    for (let index = 0; index < RING_SEGMENTS; index += 1) {
+      const startAngle = (index / RING_SEGMENTS) * Math.PI * 2
+      const endAngle = ((index + 1) / RING_SEGMENTS) * Math.PI * 2
+      const radius = projection.drawableRadius * ratio
+
+      pushLineSegment(
+        linePositions,
+        lineColors,
+        toClipSpace(
+          {
+            x: projection.centerX + Math.cos(startAngle) * radius,
+            y: projection.centerY + Math.sin(startAngle) * radius,
+          },
+          projection,
+        ),
+        toClipSpace(
+          {
+            x: projection.centerX + Math.cos(endAngle) * radius,
+            y: projection.centerY + Math.sin(endAngle) * radius,
+          },
+          projection,
+        ),
+        gridColor,
+      )
+    }
+  }
+
+  pushLineSegment(
+    linePositions,
+    lineColors,
+    toClipSpace({ x: projection.padding, y: projection.centerY }, projection),
+    toClipSpace({ x: projection.width - projection.padding, y: projection.centerY }, projection),
+    gridColor,
+  )
+  pushLineSegment(
+    linePositions,
+    lineColors,
+    toClipSpace({ x: projection.centerX, y: projection.padding }, projection),
+    toClipSpace({ x: projection.centerX, y: projection.height - projection.padding }, projection),
+    gridColor,
+  )
+
+  const haloSegments = 48
+  for (let index = 0; index < haloSegments; index += 1) {
+    const startAngle = (index / haloSegments) * Math.PI * 2
+    const endAngle = ((index + 1) / haloSegments) * Math.PI * 2
+    const radius = 16
+
+    pushLineSegment(
+      linePositions,
+      lineColors,
+      toClipSpace(
+        {
+          x: projectedReferencePoint.x + Math.cos(startAngle) * radius,
+          y: projectedReferencePoint.y + Math.sin(startAngle) * radius,
+        },
+        projection,
+      ),
+      toClipSpace(
+        {
+          x: projectedReferencePoint.x + Math.cos(endAngle) * radius,
+          y: projectedReferencePoint.y + Math.sin(endAngle) * radius,
+        },
+        projection,
+      ),
+      haloColor,
+    )
+  }
+
+  for (const trajectory of trajectories) {
+    if (trajectory.points.length < 2) {
+      continue
+    }
+
+    const color = hexToRgba(trajectory.body.color, trajectory.body.kind === 'asteroid' ? 0.3 : 0.92)
+
+    for (let index = 1; index < trajectory.points.length; index += 1) {
+      const previous = toClipSpace(projectPoint(trajectory.points[index - 1], projection), projection)
+      const current = toClipSpace(projectPoint(trajectory.points[index], projection), projection)
+      pushLineSegment(linePositions, lineColors, previous, current, color)
+    }
+  }
+
+  const referenceColor = hexToRgba(referenceBody.color, 1)
+  const referencePoint = toClipSpace(projectedReferencePoint, projection)
+  pushVertex(pointPositions, pointColors, referencePoint.x, referencePoint.y, referenceColor)
+  pointSizes.push(7)
+
+  for (const item of currentPositions) {
+    const projected = toClipSpace(projectPoint(item.planarPosition, projection), projection)
+    const color = hexToRgba(item.body.color, item.body.kind === 'asteroid' ? 0.92 : 1)
+    pushVertex(pointPositions, pointColors, projected.x, projected.y, color)
+    pointSizes.push(item.body.size)
+  }
+
+  return {
+    linePositions: new Float32Array(linePositions),
+    lineColors: new Float32Array(lineColors),
+    pointPositions: new Float32Array(pointPositions),
+    pointColors: new Float32Array(pointColors),
+    pointSizes: new Float32Array(pointSizes),
+  }
+}
+
+function drawLines(resources: GlResources, geometry: Geometry) {
+  const { gl, lineProgram, linePositionBuffer, lineColorBuffer } = resources
+  if (!geometry.linePositions.length) {
+    return
+  }
+
+  resetVertexAttributes(gl)
+  gl.useProgram(lineProgram)
+
+  const positionLocation = gl.getAttribLocation(lineProgram, 'aPosition')
+  const colorLocation = gl.getAttribLocation(lineProgram, 'aColor')
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, linePositionBuffer)
+  gl.bufferData(gl.ARRAY_BUFFER, geometry.linePositions, gl.DYNAMIC_DRAW)
+  gl.enableVertexAttribArray(positionLocation)
+  gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0)
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, lineColorBuffer)
+  gl.bufferData(gl.ARRAY_BUFFER, geometry.lineColors, gl.DYNAMIC_DRAW)
+  gl.enableVertexAttribArray(colorLocation)
+  gl.vertexAttribPointer(colorLocation, 4, gl.FLOAT, false, 0, 0)
+
+  gl.drawArrays(gl.LINES, 0, geometry.linePositions.length / 2)
+}
+
+function drawPoints(resources: GlResources, geometry: Geometry, pixelRatio: number) {
+  const { gl, pointProgram, pointPositionBuffer, pointColorBuffer, pointSizeBuffer } = resources
+  if (!geometry.pointPositions.length) {
+    return
+  }
+
+  resetVertexAttributes(gl)
+  gl.useProgram(pointProgram)
+
+  const positionLocation = gl.getAttribLocation(pointProgram, 'aPosition')
+  const colorLocation = gl.getAttribLocation(pointProgram, 'aColor')
+  const sizeLocation = gl.getAttribLocation(pointProgram, 'aPointSize')
+  const pixelRatioLocation = gl.getUniformLocation(pointProgram, 'uPixelRatio')
+
+  gl.uniform1f(pixelRatioLocation, pixelRatio)
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, pointPositionBuffer)
+  gl.bufferData(gl.ARRAY_BUFFER, geometry.pointPositions, gl.DYNAMIC_DRAW)
+  gl.enableVertexAttribArray(positionLocation)
+  gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0)
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, pointColorBuffer)
+  gl.bufferData(gl.ARRAY_BUFFER, geometry.pointColors, gl.DYNAMIC_DRAW)
+  gl.enableVertexAttribArray(colorLocation)
+  gl.vertexAttribPointer(colorLocation, 4, gl.FLOAT, false, 0, 0)
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, pointSizeBuffer)
+  gl.bufferData(gl.ARRAY_BUFFER, geometry.pointSizes, gl.DYNAMIC_DRAW)
+  gl.enableVertexAttribArray(sizeLocation)
+  gl.vertexAttribPointer(sizeLocation, 1, gl.FLOAT, false, 0, 0)
+
+  gl.drawArrays(gl.POINTS, 0, geometry.pointPositions.length / 2)
+}
+
+export function TrajectoryCanvas({
+  referenceBody,
+  trajectories,
+  currentPositions,
+  viewRadiusAU,
+  viewOffsetAU,
+}: Props) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const resourcesRef = useRef<GlResources | null>(null)
+  const [containerRef, size] = useElementSize<HTMLDivElement>()
+  const [webglUnavailable, setWebglUnavailable] = useState(false)
+
+  const projection = useMemo(
+    () =>
+      createProjection(
+        viewRadiusAU,
+        Math.max(size.width, 1),
+        Math.max(size.height, 1),
+        (SVG_PADDING / CANVAS_SIZE) * Math.max(size.width, 1),
+        viewOffsetAU,
+      ),
+    [size.height, size.width, viewOffsetAU, viewRadiusAU],
+  )
+
+  const labels = useMemo(() => {
+    const majorBodies = currentPositions.filter((item) => item.body.kind !== 'asteroid').slice(0, MAJOR_LABEL_LIMIT)
+    const asteroidBodies = currentPositions.filter((item) => item.body.kind === 'asteroid').slice(0, ASTEROID_LABEL_LIMIT)
+    return [...majorBodies, ...asteroidBodies]
+  }, [currentPositions])
+
+  const geometry = useMemo(
+    () => buildGeometry(projection, referenceBody, trajectories, currentPositions),
+    [currentPositions, projection, referenceBody, trajectories],
+  )
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) {
+      return
+    }
+
+    const width = Math.max(size.width, 1)
+    const height = Math.max(size.height, 1)
+    const pixelRatio = window.devicePixelRatio || 1
+
+    canvas.width = Math.round(width * pixelRatio)
+    canvas.height = Math.round(height * pixelRatio)
+    canvas.style.width = `${width}px`
+    canvas.style.height = `${height}px`
+
+    let resources = resourcesRef.current
+    if (!resources) {
+      const gl = canvas.getContext('webgl', { alpha: true, antialias: true })
+      if (!gl) {
+        setWebglUnavailable(true)
+        return
+      }
+
+      resources = createResources(gl)
+      resourcesRef.current = resources
+    }
+
+    const { gl } = resources
+    gl.viewport(0, 0, canvas.width, canvas.height)
+    gl.clearColor(0, 0, 0, 0)
+    gl.clear(gl.COLOR_BUFFER_BIT)
+    gl.enable(gl.BLEND)
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+
+    drawLines(resources, geometry)
+    drawPoints(resources, geometry, pixelRatio)
+  }, [geometry, size.height, size.width])
+
+  useEffect(() => {
+    return () => {
+      const resources = resourcesRef.current
+      if (!resources) {
+        return
+      }
+
+      const { gl } = resources
+      gl.deleteBuffer(resources.linePositionBuffer)
+      gl.deleteBuffer(resources.lineColorBuffer)
+      gl.deleteBuffer(resources.pointPositionBuffer)
+      gl.deleteBuffer(resources.pointColorBuffer)
+      gl.deleteBuffer(resources.pointSizeBuffer)
+      gl.deleteProgram(resources.lineProgram)
+      gl.deleteProgram(resources.pointProgram)
+      resourcesRef.current = null
+    }
+  }, [])
+
+  return (
+    <div className="viz-canvas canvas-mode" ref={containerRef}>
+      <canvas ref={canvasRef} className="trajectory-canvas" role="img" aria-label="太阳系轨迹平面图" />
+
+      <div className="canvas-label-layer" aria-hidden="true">
+        <span
+          className="floating-label reference-floating-label"
+          style={{
+            left: `${(projectPoint({ x: 0, y: 0 }, projection).x / Math.max(size.width, 1)) * 100}%`,
+            top: `${(projectPoint({ x: 0, y: 0 }, projection).y / Math.max(size.height, 1)) * 100}%`,
+          }}
+        >
+          {referenceBody.name}
+        </span>
+
+        {labels.map(({ body, planarPosition }) => {
+          const projected = projectPoint(planarPosition, projection)
+
+          return (
+            <span
+              key={body.id}
+              className={`floating-label ${body.kind === 'asteroid' ? 'minor-floating-label' : ''}`}
+              style={{
+                left: `${(projected.x / Math.max(size.width, 1)) * 100}%`,
+                top: `${(projected.y / Math.max(size.height, 1)) * 100}%`,
+              }}
+            >
+              {body.shortName ?? body.name}
+            </span>
+          )
+        })}
+
+        {!currentPositions.length && <span className="empty-overlay-copy">请先选择至少一个要显示的天体</span>}
+        {webglUnavailable && <span className="empty-overlay-copy">当前浏览器不支持 WebGL 加速渲染</span>}
+      </div>
+    </div>
+  )
+}
