@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { GRID_LEVELS, SVG_PADDING, createProjection, projectPoint, type Projection } from '../lib/viewProjection'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { GRID_LEVELS, SVG_PADDING, createProjection, projectPoint, unprojectPoint, type Projection } from '../lib/viewProjection'
 import type { CelestialBody, RenderedBodyPosition, TrajectorySample, Vector2 } from '../types'
 
 type OrbitEllipse = {
@@ -15,6 +15,7 @@ type Props = {
   viewOffsetAU: { x: number; y: number }
   showOrbits?: boolean
   orbitEllipses?: OrbitEllipse[]
+  onReferenceChange?: (bodyId: string) => void
 }
 
 type Geometry = {
@@ -479,6 +480,7 @@ export function TrajectoryCanvas({
   viewOffsetAU,
   showOrbits,
   orbitEllipses,
+  onReferenceChange,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const resourcesRef = useRef<GlResources | null>(null)
@@ -573,8 +575,44 @@ export function TrajectoryCanvas({
     }
   }, [])
 
+  const handleDoubleClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (!onReferenceChange) {
+        return
+      }
+
+      const rect = event.currentTarget.getBoundingClientRect()
+      const clickPoint = {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      }
+
+      const worldPoint = unprojectPoint(clickPoint, projection)
+      const thresholdAU = viewRadiusAU * 0.06
+
+      let nearestBody: string | null = null
+      let nearestDistance = Number.POSITIVE_INFINITY
+
+      for (const item of currentPositions) {
+        const dx = item.planarPosition.x - worldPoint.x
+        const dy = item.planarPosition.y - worldPoint.y
+        const dist = Math.hypot(dx, dy)
+
+        if (dist < thresholdAU && dist < nearestDistance) {
+          nearestDistance = dist
+          nearestBody = item.body.id
+        }
+      }
+
+      if (nearestBody) {
+        onReferenceChange(nearestBody)
+      }
+    },
+    [currentPositions, onReferenceChange, projection, viewRadiusAU],
+  )
+
   return (
-    <div className="viz-canvas canvas-mode" ref={containerRef}>
+    <div className="viz-canvas canvas-mode" ref={containerRef} onDoubleClick={handleDoubleClick}>
       <canvas ref={canvasRef} className="trajectory-canvas" role="img" aria-label="太阳系轨迹平面图" />
 
       <div className="canvas-label-layer" aria-hidden="true">
