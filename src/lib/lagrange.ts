@@ -1,7 +1,7 @@
 import type { CelestialBody, Vector2 } from '../types'
 
 // Planet masses relative to Sun mass (approximate)
-const MASS_RATIOS: Record<string, number> = {
+export const MASS_RATIOS: Record<string, number> = {
   mercury: 1.66e-7,
   venus: 2.45e-6,
   earth: 3.0e-6,

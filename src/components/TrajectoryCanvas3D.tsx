@@ -12,6 +12,8 @@ type Props = {
   onHover?: (body: CelestialBody | null, distance: number, x: number, y: number) => void
   lagrangePoints?: { body: CelestialBody; points: LagrangePoint[] }[]
   showEcliptic?: boolean
+  showSaturnRings?: boolean
+  showGlow?: boolean
 }
 
 function getMagnitudeScaledRadius(body: CelestialBody, baseRadius: number) {
@@ -42,6 +44,8 @@ export function TrajectoryCanvas3D({
   onHover,
   lagrangePoints: _lagrangePoints,
   showEcliptic,
+  showSaturnRings,
+  showGlow,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
@@ -214,8 +218,54 @@ export function TrajectoryCanvas3D({
       }
     }
 
+    if (showSaturnRings && referenceBody.id === 'sun') {
+      const saturnPos = currentPositions.find((p) => p.body.id === 'saturn')
+      if (saturnPos?.position3D) {
+        const ringGeo = new THREE.RingGeometry(0.15, 0.3, 64)
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: 0xddaa66,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.4,
+        })
+
+        const ring = new THREE.Mesh(ringGeo, ringMat)
+        ring.position.set(saturnPos.position3D.x, saturnPos.position3D.z, saturnPos.position3D.y)
+        ring.rotation.x = Math.PI / 2 + 0.47
+        scene.add(ring)
+        meshesRef.current.push(ring)
+      }
+    }
+
+    if (showGlow && referenceBody.id === 'sun') {
+      const spriteTex = (() => {
+        const canvas = document.createElement('canvas')
+        canvas.width = 64
+        canvas.height = 64
+        const ctx = canvas.getContext('2d')
+        if (ctx) {
+          const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32)
+          gradient.addColorStop(0, 'rgba(255,220,100,1)')
+          gradient.addColorStop(0.2, 'rgba(255,200,60,0.6)')
+          gradient.addColorStop(0.5, 'rgba(255,150,30,0.1)')
+          gradient.addColorStop(1, 'rgba(255,100,0,0)')
+          ctx.fillStyle = gradient
+          ctx.fillRect(0, 0, 64, 64)
+        }
+
+        return new THREE.CanvasTexture(canvas)
+      })()
+
+      const spriteMat = new THREE.SpriteMaterial({ map: spriteTex, blending: THREE.AdditiveBlending })
+      const sprite = new THREE.Sprite(spriteMat)
+      sprite.scale.set(0.8, 0.8, 1)
+      sprite.position.set(0, 0, 0)
+      scene.add(sprite)
+      meshesRef.current.push(sprite)
+    }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trajectories, currentPositions, referenceBody.id, _lagrangePoints, showEcliptic])
+  }, [trajectories, currentPositions, referenceBody.id, _lagrangePoints, showEcliptic, showSaturnRings, showGlow])
 
   const handleDoubleClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
