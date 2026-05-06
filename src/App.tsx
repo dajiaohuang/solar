@@ -8,7 +8,10 @@ import { useConjunctionWorker } from './hooks/useConjunctionWorker'
 import './App.css'
 import { defaultHistoryOptions, defaultSelectedBodyIds, majorBodies } from './data/majorBodies'
 import { SCENE_PRESETS } from './data/presets'
+import { SPACECRAFT } from './data/spacecraft'
+import { RESONANCES } from './data/resonances'
 import { decodeUrlState, encodeUrlState } from './lib/urlState'
+import { getLang, type Lang } from './lib/i18n'
 import { deleteGroup, loadGroups, saveGroup, type StoredGroup } from './lib/storedGroups'
 import { exportAsCSV, exportAsJSON } from './lib/dataExport'
 import { computeOrbitEllipses, getOrbitalPeriodDays } from './lib/orbitEllipse'
@@ -25,6 +28,7 @@ import {
 } from './lib/catalogLoader'
 import { dateToJulianDay, formatJulianDayAsDate, julianDayToDate, todayJulianDay } from './lib/julianDate'
 import { getSuggestedViewRadius } from './lib/referenceFrame'
+import { createBodyPositionResolver, estimateAphelionDistance } from './lib/ephemeris'
 import { getRecommendedSampleCount } from './lib/trajectory'
 import { SVG_PADDING, SVG_SIZE, createProjection, unprojectPoint } from './lib/viewProjection'
 import type {
@@ -45,14 +49,14 @@ const PRESET_SELECTIONS: Record<'inner' | 'outer' | 'dwarfs' | 'all', BodyId[]> 
 }
 
 const DRAWER_SECTIONS = [
-  { id: 'overview', label: '概览' },
-  { id: 'controls', label: '控制' },
-  { id: 'major', label: '主要天体' },
-  { id: 'asteroids', label: '小行星' },
-  { id: 'conjunctions', label: '交会' },
-  { id: 'properties', label: '属性' },
-  { id: 'custom', label: '自定义' },
-  { id: 'loaded', label: '已载入' },
+  { id: 'overview' },
+  { id: 'controls' },
+  { id: 'major' },
+  { id: 'asteroids' },
+  { id: 'conjunctions' },
+  { id: 'properties' },
+  { id: 'custom' },
+  { id: 'loaded' },
 ] as const
 
 const SECTION_PAGE_SIZE = 36
@@ -100,6 +104,11 @@ function trimPagesToRecordLimit(pages: CatalogWindowPage[], direction: 'start' |
 
 function App() {
   const initialUrl = useMemo(() => decodeUrlState(), [])
+  const [lang, setLang] = useState<Lang>(getLang)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const [planetOpacity, setPlanetOpacity] = useState(1)
+  const [asteroidOpacity, setAsteroidOpacity] = useState(1)
+  const [moonOpacity, setMoonOpacity] = useState(1)
   const [epochJulianDay] = useState(() => todayJulianDay())
   const [referenceId, setReferenceId] = useState<BodyId>(initialUrl.ref ?? 'sun')
   const [selectedMajorBodyIds, setSelectedMajorBodyIds] = useState<BodyId[]>(
@@ -253,6 +262,108 @@ function App() {
   }, [])
 
   useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+
+    document.addEventListener('fullscreenchange', handleFsChange)
+    return () => document.removeEventListener('fullscreenchange', handleFsChange)
+  }, [])
+
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen()
+    } else {
+      document.documentElement.requestFullscreen()
+    }
+  }, [])
+
+  const tt = useCallback(
+    (key: string) => {
+      const entry = {
+        menu: { zh: '菜单', en: 'Menu' },
+        play: { zh: '暂停', en: 'Pause' },
+        resume: { zh: '继续', en: 'Play' },
+        backToStart: { zh: '回到起点', en: 'Reset Time' },
+        resetZoom: { zh: '重置缩放', en: 'Reset Zoom' },
+        view3d: { zh: '3D 视图', en: '3D View' },
+        view2d: { zh: '2D 视图', en: '2D View' },
+        splitMode: { zh: '对比模式（分屏）', en: 'Split Compare' },
+        splitRef: { zh: '对比参考点', en: 'Compare Reference' },
+        showOrbits: { zh: '显示完整轨道椭圆', en: 'Show Full Orbits' },
+        showLagrange: { zh: '显示拉格朗日点', en: 'Show Lagrange Points' },
+        showEcliptic: { zh: '显示黄道面', en: 'Show Ecliptic Plane' },
+        measure: { zh: '测量距离', en: 'Measure Distance' },
+        measuring: { zh: '测量中…', en: 'Measuring…' },
+        screenshot: { zh: '截图 PNG', en: 'Screenshot PNG' },
+        exportJSON: { zh: '导出 JSON', en: 'Export JSON' },
+        exportCSV: { zh: '导出 CSV', en: 'Export CSV' },
+        fullscreen: { zh: '全屏', en: 'Fullscreen' },
+        scene: { zh: '场景', en: 'Scene' },
+        selectScene: { zh: '选择场景…', en: 'Select scene…' },
+        jumpDate: { zh: '跳转日期', en: 'Jump to Date' },
+        trajDuration: { zh: '轨迹时长', en: 'Trail Duration' },
+        timeSpeed: { zh: '时间倍率', en: 'Time Rate' },
+        zoom: { zh: '缩放倍率', en: 'Zoom' },
+        innerPlanets: { zh: '内行星', en: 'Inner' },
+        outerPlanets: { zh: '外行星', en: 'Outer' },
+        dwarfPlanets: { zh: '矮行星', en: 'Dwarfs' },
+        allMajor: { zh: '主要天体全选', en: 'All Major' },
+        savedGroups: { zh: '自定义组', en: 'Saved Groups' },
+        saveCurrent: { zh: '保存当前选择', en: 'Save Current' },
+        save: { zh: '保存', en: 'Save' },
+        cancel: { zh: '取消', en: 'Cancel' },
+        groupName: { zh: '输入组名…', en: 'Group name…' },
+        presetHint: { zh: '选择一个预设场景，自动配置参考点、天体、缩放和轨迹时长', en: 'Select a preset to auto-configure reference, bodies, zoom, and duration' },
+        currentRef: { zh: '当前参考点', en: 'Current Reference' },
+        simTime: { zh: '模拟时间', en: 'Sim Time' },
+        currentDate: { zh: '当前日期', en: 'Current Date' },
+        maxDistance: { zh: '当前最远距离', en: 'Max Distance' },
+        majorBodies: { zh: '主要天体', en: 'Major Bodies' },
+        searchAsteroids: { zh: '搜索小行星', en: 'Search Asteroids' },
+        orbitClass: { zh: '轨道分类', en: 'Orbit Class' },
+        clearLoaded: { zh: '清空已加载小天体', en: 'Clear Loaded' },
+        createBody: { zh: '创建自定义天体', en: 'Create Custom Body' },
+        createBtn: { zh: '创建天体', en: 'Create Body' },
+        name: { zh: '名称', en: 'Name' },
+        semiMajorAxis: { zh: '半长轴 (AU)', en: 'Semi-major axis (AU)' },
+        eccentricity: { zh: '离心率', en: 'Eccentricity' },
+        inclination: { zh: '倾角 (°)', en: 'Inclination (°)' },
+        ascendingNode: { zh: '升交点黄经 (°)', en: 'Asc. Node (°)' },
+        argPeriapsis: { zh: '近日点幅角 (°)', en: 'Arg. Periapsis (°)' },
+        meanAnomaly: { zh: '平近点角 (°)', en: 'Mean Anomaly (°)' },
+        color: { zh: '颜色', en: 'Color' },
+        selectBody: { zh: '选择天体', en: 'Select Body' },
+        bodyType: { zh: '类型', en: 'Type' },
+        orbits: { zh: '环绕', en: 'Orbits' },
+        orbitalPeriod: { zh: '轨道周期', en: 'Orbital Period' },
+        absMagnitude: { zh: '绝对星等', en: 'Abs. Magnitude' },
+        orbitClassLabel: { zh: '轨道分类', en: 'Orbit Class' },
+        dataSource: { zh: '数据来源', en: 'Data Source' },
+        reference: { zh: '参考点', en: 'Reference' },
+        date: { zh: '日期', en: 'Date' },
+        speed: { zh: '倍率', en: 'Speed' },
+        showing: { zh: '显示', en: 'Showing' },
+        daysPerSec: { zh: '天/秒', en: 'd/s' },
+        overview: { zh: '概览', en: 'Overview' },
+        controls: { zh: '控制', en: 'Controls' },
+        major: { zh: '主要天体', en: 'Major Bodies' },
+        asteroids: { zh: '小行星', en: 'Asteroids' },
+        conjunctions: { zh: '交会', en: 'Conjunctions' },
+        properties: { zh: '属性', en: 'Properties' },
+        custom: { zh: '自定义', en: 'Custom' },
+        loaded: { zh: '已载入', en: 'Loaded' },
+        measuringSelect: { zh: '双击天体选择', en: 'Double-click body to select' },
+        measuringSecond: { zh: '双击第二个天体', en: 'Double-click second body' },
+        measuringLabel: { zh: '测量', en: 'Measure' },
+      }[key] as Record<Lang, string> | undefined
+
+      return entry?.[lang] ?? key
+    },
+    [lang],
+  )
+
+  useEffect(() => {
     void loadAsteroidManifest().then((loadedManifest) => {
       if (!loadedManifest) {
         return
@@ -295,7 +406,20 @@ function App() {
   ])
 
   const allBodies = useMemo(
-    () => [...majorBodies, ...Object.values(loadedCatalogBodies)],
+    () => [
+      ...majorBodies,
+      ...Object.values(loadedCatalogBodies),
+      ...SPACECRAFT.map((sc) => ({
+        id: sc.id,
+        name: sc.name,
+        shortName: sc.shortName,
+        kind: sc.kind,
+        color: sc.color,
+        size: sc.size,
+        source: sc.source,
+        isCatalogBody: true,
+      } as CelestialBody)),
+    ],
     [loadedCatalogBodies],
   )
   const majorBodyIdSet = useMemo(() => new Set(majorBodies.map((body) => body.id)), [])
@@ -536,6 +660,45 @@ function App() {
     return computeOrbitEllipses(displayedBodies, bodiesById, activeReferenceId, quantizedJulianDay)
   }, [showOrbitEllipses, displayedBodies, bodiesById, activeReferenceId, quantizedJulianDay])
 
+  const spacecraftTrajectories = useMemo(() => {
+    return SPACECRAFT
+      .filter((sc) => selectedBodySet.has(sc.id))
+      .map((sc) => ({
+        body: {
+          id: sc.id,
+          name: sc.name,
+          shortName: sc.shortName,
+          kind: sc.kind,
+          color: sc.color,
+          size: sc.size,
+          source: sc.source,
+          isCatalogBody: true,
+        } as CelestialBody,
+        points: sc.trajectoryPoints.map((tp) => {
+          const resolve = createBodyPositionResolver(bodiesById, tp.jd)
+          const refPos = resolve(activeReferenceId)
+          return {
+            x: tp.x - refPos.x,
+            y: tp.y - refPos.y,
+          }
+        }),
+        points3D: sc.trajectoryPoints.map((tp) => {
+          const resolve = createBodyPositionResolver(bodiesById, tp.jd)
+          const refPos = resolve(activeReferenceId)
+          return {
+            x: tp.x - refPos.x,
+            y: tp.y - refPos.y,
+            z: tp.z - refPos.z,
+          }
+        }),
+      }))
+  }, [selectedBodySet, bodiesById, activeReferenceId])
+
+  const allTrajectories = useMemo(
+    () => [...trajectories, ...spacecraftTrajectories],
+    [trajectories, spacecraftTrajectories],
+  )
+
   const lagrangePoints = useMemo(() => {
     if (!showLagrange || activeReferenceId !== 'sun') {
       return []
@@ -692,8 +855,30 @@ function App() {
       }
 
       if (bodyId !== activeReferenceId && bodiesById.has(bodyId)) {
+        const body = bodiesById.get(bodyId)
+        let targetZoom = 1
+
+        if (body?.orbit) {
+          const aphelion = estimateAphelionDistance(body, bodiesById)
+          if (aphelion > 0) {
+            if (body.kind === 'moon' || aphelion < 0.05) {
+              targetZoom = 10
+            } else if (aphelion < 0.3) {
+              targetZoom = 4
+            } else if (aphelion < 2) {
+              targetZoom = 2
+            } else if (aphelion < 10) {
+              targetZoom = 0.8
+            } else if (aphelion < 40) {
+              targetZoom = 0.3
+            } else {
+              targetZoom = 0.15
+            }
+          }
+        }
+
         setReferenceId(bodyId)
-        animateTransition(zoomLevel, viewOffsetAU, 1, { x: 0, y: 0 })
+        animateTransition(zoomLevel, viewOffsetAU, targetZoom, { x: 0, y: 0 })
       }
     },
     [activeReferenceId, bodiesById, animateTransition, measuringMode, measureBodyA, zoomLevel, viewOffsetAU],
@@ -778,6 +963,7 @@ function App() {
     <main className="fullscreen-app">
       <div className={`drawer-backdrop ${drawerOpen ? 'open' : ''}`} onClick={() => setDrawerOpen(false)} />
 
+      {!isFullscreen && (
       <aside className={`left-drawer ${drawerOpen ? 'open' : ''}`}>
         <div className="drawer-header">
           <div>
@@ -797,7 +983,7 @@ function App() {
               className={`drawer-tab ${activeDrawerSection === section.id ? 'active' : ''}`}
               onClick={() => setActiveDrawerSection(section.id)}
             >
-              {section.label}
+              {tt(section.id)}
             </button>
           ))}
         </div>
@@ -1016,6 +1202,51 @@ function App() {
                     <span>显示黄道面</span>
                   </label>
                 )}
+
+                <div className="field">
+                  <div className="field-header">
+                    <span>行星透明度</span>
+                    <strong>{(planetOpacity * 100).toFixed(0)}%</strong>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="1"
+                    step="0.1"
+                    value={planetOpacity}
+                    onChange={(event) => setPlanetOpacity(Number(event.target.value))}
+                  />
+                </div>
+
+                <div className="field">
+                  <div className="field-header">
+                    <span>小行星透明度</span>
+                    <strong>{(asteroidOpacity * 100).toFixed(0)}%</strong>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="1"
+                    step="0.1"
+                    value={asteroidOpacity}
+                    onChange={(event) => setAsteroidOpacity(Number(event.target.value))}
+                  />
+                </div>
+
+                <div className="field">
+                  <div className="field-header">
+                    <span>卫星透明度</span>
+                    <strong>{(moonOpacity * 100).toFixed(0)}%</strong>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="1"
+                    step="0.1"
+                    value={moonOpacity}
+                    onChange={(event) => setMoonOpacity(Number(event.target.value))}
+                  />
+                </div>
 
                 <div className="button-row">
                   <button type="button" onClick={() => setIsPlaying((value) => !value)}>
@@ -1309,6 +1540,7 @@ function App() {
                   }
 
                   return (
+                    <>
                     <div className="stats-grid drawer-stats" style={{ marginTop: 8 }}>
                       <article className="stat-card">
                         <span>类型</span>
@@ -1383,6 +1615,74 @@ function App() {
                         <strong>{body.source}</strong>
                       </article>
                     </div>
+
+                    {(() => {
+                      const bodyResonances = RESONANCES.filter(
+                        (r) => r.bodyA === selectedPropertyBodyId || r.bodyB === selectedPropertyBodyId,
+                      )
+
+                      if (!bodyResonances.length) {
+                        return null
+                      }
+
+                      return (
+                        <div style={{ marginTop: 12 }}>
+                          <div className="field-header">
+                            <span>轨道共振</span>
+                          </div>
+                          {bodyResonances.map((r, idx) => (
+                            <div key={idx} className="catalog-summary" style={{ marginBottom: 4 }}>
+                              {bodiesById.get(r.bodyA)?.name ?? r.bodyA} ←→ {bodiesById.get(r.bodyB)?.name ?? r.bodyB} ({r.ratio})
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })()}
+
+                    {body.orbit && (
+                      <div style={{ marginTop: 12 }}>
+                        <div className="field-header">
+                          <span>星历表</span>
+                          <strong>10 个采样点</strong>
+                        </div>
+                        <div style={{ maxHeight: 200, overflowY: 'auto', fontSize: 11 }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr style={{ color: '#889' }}>
+                                <th style={{ textAlign: 'left', padding: 2 }}>日期</th>
+                                <th style={{ textAlign: 'right', padding: 2 }}>X AU</th>
+                                <th style={{ textAlign: 'right', padding: 2 }}>Y AU</th>
+                                <th style={{ textAlign: 'right', padding: 2 }}>距离</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(() => {
+                                const rows = []
+                                for (let i = 0; i < 10; i += 1) {
+                                  const jd = quantizedJulianDay - historyDays / 2 + (i / 9) * historyDays
+                                  const resolve = createBodyPositionResolver(bodiesById, jd)
+                                  const refPos = resolve(activeReferenceId)
+                                  const pos = resolve(selectedPropertyBodyId)
+                                  const rel = { x: pos.x - refPos.x, y: pos.y - refPos.y, z: pos.z - refPos.z }
+                                  const dist = Math.hypot(rel.x, rel.y)
+                                  rows.push(
+                                    <tr key={i} style={{ color: '#aab' }}>
+                                      <td style={{ padding: 2 }}>{timeFormat === 'date' ? formatJulianDayAsDate(jd) : `JD ${jd.toFixed(1)}`}</td>
+                                      <td style={{ textAlign: 'right', padding: 2 }}>{rel.x.toFixed(4)}</td>
+                                      <td style={{ textAlign: 'right', padding: 2 }}>{rel.y.toFixed(4)}</td>
+                                      <td style={{ textAlign: 'right', padding: 2 }}>{dist.toFixed(4)}</td>
+                                    </tr>,
+                                  )
+                                }
+
+                                return rows
+                              })()}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </>
                   )
                 })()}
               </div>
@@ -1575,12 +1875,31 @@ function App() {
           )}
         </div>
       </aside>
+      )}
 
       <section ref={stageRef} className="fullscreen-stage">
         <div className="stage-topbar">
           <button type="button" className="drawer-toggle-button" onClick={() => setDrawerOpen(true)}>
-            菜单
+            {tt('menu')}
           </button>
+
+          <div className="compact-stats" style={{ flex: 1 }}>
+            <button
+              type="button"
+              style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: '0 8px' }}
+              onClick={() => setLang((l) => (l === 'zh' ? 'en' : 'zh'))}
+              title="Switch language"
+            >
+              {lang === 'zh' ? 'EN' : '中文'}
+            </button>
+            <button
+              type="button"
+              style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: '0 8px' }}
+              onClick={toggleFullscreen}
+            >
+              {tt('fullscreen')}
+            </button>
+          </div>
 
           <div className="compact-stats">
             <span>参考点 {referenceBody.name}{splitMode ? ` / ${splitReferenceBody.name}` : ''}</span>
@@ -1622,7 +1941,7 @@ function App() {
             <div className="stage-canvas-shell" style={{ flex: 1, borderRight: '1px solid rgba(255,255,255,0.1)' }} onWheel={handleCanvasWheel}>
               <TrajectoryCanvas
                 referenceBody={referenceBody}
-                trajectories={trajectories}
+                trajectories={allTrajectories}
                 currentPositions={currentPositions}
                 viewRadiusAU={viewRadiusAU}
                 viewOffsetAU={viewOffsetAU}
@@ -1631,6 +1950,9 @@ function App() {
                 onReferenceChange={handleChangeReference}
                 onHover={handleHover}
                 lagrangePoints={lagrangePoints}
+                planetOpacity={planetOpacity}
+                asteroidOpacity={asteroidOpacity}
+                moonOpacity={moonOpacity}
               />
             </div>
             <div className="stage-canvas-shell" style={{ flex: 1 }} onWheel={handleCanvasWheel}>
@@ -1645,6 +1967,9 @@ function App() {
                 onReferenceChange={handleChangeReference}
                 onHover={handleHover}
                 lagrangePoints={lagrangePoints}
+                planetOpacity={planetOpacity}
+                asteroidOpacity={asteroidOpacity}
+                moonOpacity={moonOpacity}
               />
             </div>
           </div>
@@ -1653,7 +1978,7 @@ function App() {
             {viewMode === '2d' ? (
               <TrajectoryCanvas
                 referenceBody={referenceBody}
-                trajectories={trajectories}
+                trajectories={allTrajectories}
                 currentPositions={currentPositions}
                 viewRadiusAU={viewRadiusAU}
                 viewOffsetAU={viewOffsetAU}
@@ -1662,11 +1987,14 @@ function App() {
                 onReferenceChange={handleChangeReference}
                 onHover={handleHover}
                 lagrangePoints={lagrangePoints}
+                planetOpacity={planetOpacity}
+                asteroidOpacity={asteroidOpacity}
+                moonOpacity={moonOpacity}
               />
             ) : (
               <TrajectoryCanvas3D
                 referenceBody={referenceBody}
-                trajectories={trajectories}
+                trajectories={allTrajectories}
                 currentPositions={currentPositions}
                 onReferenceChange={handleChangeReference}
                 onHover={handleHover}
@@ -1677,7 +2005,27 @@ function App() {
           </div>
         )}
 
+        {!isFullscreen && (
         <div className="stage-bottombar">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px', marginBottom: 4 }}>
+            <input
+              type="range"
+              min={-historyDays / 2}
+              max={historyDays / 2}
+              step={Math.max(1, Math.round(historyDays / 500))}
+              value={simOffsetDays}
+              onChange={(event) => {
+                setIsPlaying(false)
+                setSimOffsetDays(Number(event.target.value))
+              }}
+              style={{ flex: 1 }}
+            />
+            <span style={{ fontSize: 11, whiteSpace: 'nowrap', minWidth: 90 }}>
+              {timeFormat === 'date'
+                ? formatJulianDayAsDate(currentJulianDay)
+                : `JD ${currentJulianDay.toFixed(1)}`}
+            </span>
+          </div>
           <div className="legend">
             {displayedBodies.slice(0, 28).map((body) => {
               const periodText = body.orbit ? ` (${formatDays(getOrbitalPeriodDays(body.orbit))})` : ''
@@ -1710,6 +2058,7 @@ function App() {
           </div>
           <p className="stage-footer-copy">轨迹全屏显示。左侧抽屉可切换概览、控制、主要天体、小行星和已载入分区。</p>
         </div>
+        )}
       </section>
       <BodyTooltip
         body={hoveredBody?.body ?? null}
