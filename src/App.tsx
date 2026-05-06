@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type WheelEvent } from 'react'
 import { CatalogPanel } from './components/CatalogPanel'
 import { TrajectoryCanvas } from './components/TrajectoryCanvas'
+import { TrajectoryCanvas3D } from './components/TrajectoryCanvas3D'
+import { ConjunctionPanel } from './components/ConjunctionPanel'
+import { useConjunctionWorker } from './hooks/useConjunctionWorker'
 import './App.css'
 import { defaultHistoryOptions, defaultSelectedBodyIds, majorBodies } from './data/majorBodies'
+import { SCENE_PRESETS } from './data/presets'
+import { decodeUrlState, encodeUrlState } from './lib/urlState'
+import { deleteGroup, loadGroups, saveGroup, type StoredGroup } from './lib/storedGroups'
+import { exportAsCSV, exportAsJSON } from './lib/dataExport'
+import { computeOrbitEllipses } from './lib/orbitEllipse'
 import { useTrajectoryWorker } from './hooks/useTrajectoryWorker'
 import {
   asteroidRecordToBody,
@@ -13,7 +21,7 @@ import {
   loadAsteroidSectionPage,
   normalizeSearchText,
 } from './lib/catalogLoader'
-import { formatJulianDayAsDate, todayJulianDay } from './lib/julianDate'
+import { dateToJulianDay, formatJulianDayAsDate, julianDayToDate, todayJulianDay } from './lib/julianDate'
 import { getSuggestedViewRadius } from './lib/referenceFrame'
 import { getRecommendedSampleCount } from './lib/trajectory'
 import { SVG_PADDING, SVG_SIZE, createProjection, unprojectPoint } from './lib/viewProjection'
@@ -39,6 +47,7 @@ const DRAWER_SECTIONS = [
   { id: 'controls', label: '控制' },
   { id: 'major', label: '主要天体' },
   { id: 'asteroids', label: '小行星' },
+  { id: 'conjunctions', label: '交会' },
   { id: 'loaded', label: '已载入' },
 ] as const
 
@@ -86,22 +95,34 @@ function trimPagesToRecordLimit(pages: CatalogWindowPage[], direction: 'start' |
 }
 
 function App() {
+  const initialUrl = useMemo(() => decodeUrlState(), [])
   const [epochJulianDay] = useState(() => todayJulianDay())
-  const [referenceId, setReferenceId] = useState<BodyId>('sun')
-  const [selectedMajorBodyIds, setSelectedMajorBodyIds] = useState<BodyId[]>(defaultSelectedBodyIds)
+  const [referenceId, setReferenceId] = useState<BodyId>(initialUrl.ref ?? 'sun')
+  const [selectedMajorBodyIds, setSelectedMajorBodyIds] = useState<BodyId[]>(
+    initialUrl.bodies ?? defaultSelectedBodyIds,
+  )
   const [selectedCatalogIds, setSelectedCatalogIds] = useState<BodyId[]>([])
-  const [historyDays, setHistoryDays] = useState(365)
-  const [speedDaysPerSecond, setSpeedDaysPerSecond] = useState(120)
-  const [zoomLevel, setZoomLevel] = useState(1)
+  const [historyDays, setHistoryDays] = useState(initialUrl.history ?? 365)
+  const [speedDaysPerSecond, setSpeedDaysPerSecond] = useState(initialUrl.speed ?? 120)
+  const [zoomLevel, setZoomLevel] = useState(initialUrl.zoom ?? 1)
   const [viewOffsetAU, setViewOffsetAU] = useState<Vector2>({ x: 0, y: 0 })
-  const [simOffsetDays, setSimOffsetDays] = useState(0)
+  const [simOffsetDays, setSimOffsetDays] = useState(initialUrl.offset ?? 0)
+  const [splitMode, setSplitMode] = useState(false)
+  const [splitReferenceId, setSplitReferenceId] = useState<BodyId>('earth')
+  const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d')
+  const [showOrbitEllipses, setShowOrbitEllipses] = useState(false)
   const [isPlaying, setIsPlaying] = useState(true)
   const [manifest, setManifest] = useState<AsteroidManifest | null>(null)
-  const [searchText, setSearchText] = useState('')
-  const [orbitClassFilter, setOrbitClassFilter] = useState('MBA')
+  const [searchText, setSearchText] = useState(initialUrl.search ?? '')
+  const [orbitClassFilter, setOrbitClassFilter] = useState(initialUrl.filter ?? 'MBA')
   const [searchBucketEntries, setSearchBucketEntries] = useState<AsteroidIndexEntry[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [loadedCatalogBodies, setLoadedCatalogBodies] = useState<Record<BodyId, CelestialBody>>({})
+  const [savedGroups, setSavedGroups] = useState<Record<string, StoredGroup>>(() => loadGroups())
+  const [groupNameInput, setGroupNameInput] = useState('')
+  const [isSavingGroup, setIsSavingGroup] = useState(false)
+  const [conjunctionThresholdAU, setConjunctionThresholdAU] = useState(0.05)
+  const [conjunctionWindowDays, setConjunctionWindowDays] = useState(365)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [activeDrawerSection, setActiveDrawerSection] =
     useState<(typeof DRAWER_SECTIONS)[number]['id']>('controls')
@@ -152,6 +173,38 @@ function App() {
       setManifest(loadedManifest)
     })
   }, [])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const queryString = encodeUrlState({
+        ref: referenceId !== 'sun' ? referenceId : undefined,
+        bodies: selectedMajorBodyIds,
+        offset: simOffsetDays !== 0 ? simOffsetDays : undefined,
+        zoom: zoomLevel !== 1 ? zoomLevel : undefined,
+        speed: speedDaysPerSecond !== 120 ? speedDaysPerSecond : undefined,
+        history: historyDays !== 365 ? historyDays : undefined,
+        filter: orbitClassFilter !== 'MBA' ? orbitClassFilter : undefined,
+        search: searchText || undefined,
+      })
+
+      const nextUrl = queryString
+        ? `${window.location.pathname}?${queryString}`
+        : window.location.pathname
+
+      window.history.replaceState(null, '', nextUrl)
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [
+    referenceId,
+    selectedMajorBodyIds,
+    simOffsetDays,
+    zoomLevel,
+    speedDaysPerSecond,
+    historyDays,
+    orbitClassFilter,
+    searchText,
+  ])
 
   const allBodies = useMemo(
     () => [...majorBodies, ...Object.values(loadedCatalogBodies)],
@@ -360,6 +413,38 @@ function App() {
     sampleCount,
   })
 
+  const effectiveSplitReferenceId = splitMode && splitReferenceId !== activeReferenceId ? splitReferenceId : activeReferenceId
+  const {
+    currentPositions: splitCurrentPositions,
+    trajectories: splitTrajectories,
+  } = useTrajectoryWorker({
+    bodies: splitMode ? displayedBodies : [],
+    resolutionBodies: allBodies,
+    referenceId: effectiveSplitReferenceId,
+    centerJulianDay: quantizedJulianDay,
+    historyDays,
+    sampleCount,
+  })
+
+  const splitReferenceBody = bodiesById.get(splitReferenceId) ?? majorBodies[0]
+
+  const { events: conjunctionEvents, isComputing: isConjunctionComputing } = useConjunctionWorker({
+    bodies: displayedBodies,
+    resolutionBodies: allBodies,
+    referenceId: activeReferenceId,
+    centerJulianDay: quantizedJulianDay,
+    windowDays: conjunctionWindowDays,
+    thresholdAU: conjunctionThresholdAU,
+  })
+
+  const orbitEllipses = useMemo(() => {
+    if (!showOrbitEllipses) {
+      return []
+    }
+
+    return computeOrbitEllipses(displayedBodies, bodiesById, activeReferenceId, quantizedJulianDay)
+  }, [showOrbitEllipses, displayedBodies, bodiesById, activeReferenceId, quantizedJulianDay])
+
   const catalogResults = useMemo(() => {
     if (!manifest) {
       return []
@@ -559,6 +644,35 @@ function App() {
             <div className="drawer-panel">
               <div className="panel-block drawer-section-card">
                 <label className="field">
+                  <span>场景</span>
+                  <select
+                    value=""
+                    onChange={(event) => {
+                      const preset = SCENE_PRESETS.find((p) => p.id === event.target.value)
+                      if (!preset) {
+                        return
+                      }
+
+                      setIsPlaying(false)
+                      setSimOffsetDays(preset.julianDay - epochJulianDay)
+                      setReferenceId(preset.referenceId)
+                      setSelectedMajorBodyIds(preset.selectedMajorBodyIds)
+                      setZoomLevel(preset.zoomLevel)
+                      setHistoryDays(preset.historyDays)
+                      setViewOffsetAU({ x: 0, y: 0 })
+                    }}
+                  >
+                    <option value="">选择场景…</option>
+                    {SCENE_PRESETS.map((preset) => (
+                      <option key={preset.id} value={preset.id}>
+                        {preset.name}
+                      </option>
+                    ))}
+                  </select>
+                  <small>选择一个预设场景，自动配置参考点、天体、缩放和轨迹时长</small>
+                </label>
+
+                <label className="field">
                   <span>固定参考点</span>
                   <select
                     value={activeReferenceId}
@@ -596,6 +710,23 @@ function App() {
                     ))}
                   </select>
                 </label>
+
+                <label className="field">
+                  <span>跳转日期</span>
+                  <input
+                    type="date"
+                    value={julianDayToDate(currentJulianDay).toISOString().slice(0, 10)}
+                    onChange={(event) => {
+                      const date = new Date(event.target.value)
+                      if (Number.isNaN(date.getTime())) {
+                        return
+                      }
+
+                      setIsPlaying(false)
+                      setSimOffsetDays(dateToJulianDay(date) - epochJulianDay)
+                    }}
+                  />
+                </label>
               </div>
 
               <div className="panel-block drawer-section-card">
@@ -630,6 +761,46 @@ function App() {
                   <small>轨迹部分全屏显示，缩放更适合用于观察某一类小天体的局部结构。</small>
                 </div>
 
+                <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={splitMode}
+                    disabled={viewMode === '3d'}
+                    onChange={(event) => setSplitMode(event.target.checked)}
+                  />
+                  <span>对比模式（分屏）</span>
+                </label>
+
+                {splitMode && (
+                  <label className="field">
+                    <span>对比参考点</span>
+                    <select
+                      value={splitReferenceId}
+                      onChange={(event) => setSplitReferenceId(event.target.value)}
+                    >
+                      {allBodies
+                        .filter(
+                          (body) =>
+                            !body.isCatalogBody || selectedBodySet.has(body.id) || body.id === splitReferenceId,
+                        )
+                        .map((body) => (
+                          <option key={body.id} value={body.id}>
+                            {body.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                )}
+
+                <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={showOrbitEllipses}
+                    onChange={(event) => setShowOrbitEllipses(event.target.checked)}
+                  />
+                  <span>显示完整轨道椭圆</span>
+                </label>
+
                 <div className="button-row">
                   <button type="button" onClick={() => setIsPlaying((value) => !value)}>
                     {isPlaying ? '暂停' : '继续'}
@@ -639,6 +810,33 @@ function App() {
                   </button>
                   <button type="button" onClick={resetViewTransform}>
                     重置缩放
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode((mode) => (mode === '2d' ? '3d' : '2d'))}
+                  >
+                    {viewMode === '2d' ? '3D 视图' : '2D 视图'}
+                  </button>
+                </div>
+
+                <div className="button-row">
+                  <button
+                    type="button"
+                    disabled={!trajectories.length}
+                    onClick={() =>
+                      exportAsJSON({ currentPositions, trajectories, maxDistance: maxRelativeDistance })
+                    }
+                  >
+                    导出 JSON
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!trajectories.length}
+                    onClick={() =>
+                      exportAsCSV({ currentPositions, trajectories, maxDistance: maxRelativeDistance })
+                    }
+                  >
+                    导出 CSV
                   </button>
                 </div>
               </div>
@@ -695,6 +893,112 @@ function App() {
                   })}
                 </div>
               </div>
+
+              <div className="panel-block drawer-section-card">
+                <div className="field-header">
+                  <span>自定义组</span>
+                  <strong>{Object.keys(savedGroups).length} 组</strong>
+                </div>
+
+                {isSavingGroup ? (
+                  <div className="field" style={{ marginTop: 8 }}>
+                    <input
+                      type="text"
+                      value={groupNameInput}
+                      onChange={(event) => setGroupNameInput(event.target.value)}
+                      placeholder="输入组名…"
+                      autoFocus
+                    />
+                    <div className="button-row" style={{ marginTop: 6 }}>
+                      <button
+                        type="button"
+                        disabled={!groupNameInput.trim()}
+                        onClick={() => {
+                          const name = groupNameInput.trim()
+                          if (!name) {
+                            return
+                          }
+
+                          saveGroup(name, selectedMajorBodyIds, selectedCatalogIds)
+                          setSavedGroups(loadGroups())
+                          setGroupNameInput('')
+                          setIsSavingGroup(false)
+                        }}
+                      >
+                        保存
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setGroupNameInput('')
+                          setIsSavingGroup(false)
+                        }}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setIsSavingGroup(true)}>
+                    保存当前选择
+                  </button>
+                )}
+
+                {Object.keys(savedGroups).length > 0 && (
+                  <div className="chip-grid" style={{ marginTop: 8 }}>
+                    {Object.entries(savedGroups).map(([name, group]) => (
+                      <div key={name} className="button-row" style={{ gap: 4 }}>
+                        <button
+                          type="button"
+                          className="body-chip"
+                          onClick={() => {
+                            setSelectedMajorBodyIds(group.majorBodyIds)
+                            if (group.catalogBodyIds.length > 0) {
+                              for (const id of group.catalogBodyIds) {
+                                if (!loadedCatalogBodies[id]) {
+                                  void (async () => {
+                                    const idxEntry = { id, chunkId: `body:${id}` }
+                                    await toggleCatalogBodySelection(idxEntry)
+                                  })()
+                                }
+                              }
+
+                              setSelectedCatalogIds((previous) =>
+                                dedupeIds([...previous, ...group.catalogBodyIds]),
+                              )
+                            }
+
+                            resetViewTransform()
+                          }}
+                        >
+                          {name}
+                          <span className="result-meta" style={{ marginLeft: 6 }}>
+                            {group.majorBodyIds.length + group.catalogBodyIds.length} 个
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="chip-dot"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: '#888',
+                            padding: '2px 4px',
+                          }}
+                          onClick={() => {
+                            deleteGroup(name)
+                            setSavedGroups(loadGroups())
+                          }}
+                          title={`删除 ${name}`}
+                        >
+                          x
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -719,6 +1023,26 @@ function App() {
                   onRemoveLoadedCatalogBodies={handleClearCatalogBodies}
                   onLoadPrevious={handleLoadPreviousSection}
                   onLoadMore={handleLoadMoreSection}
+                />
+              </div>
+            </div>
+          )}
+
+          {activeDrawerSection === 'conjunctions' && (
+            <div className="drawer-panel">
+              <div className="drawer-section-card">
+                <ConjunctionPanel
+                  events={conjunctionEvents}
+                  isComputing={isConjunctionComputing}
+                  thresholdAU={conjunctionThresholdAU}
+                  windowDays={conjunctionWindowDays}
+                  bodyCount={displayedBodies.length}
+                  onThresholdChange={setConjunctionThresholdAU}
+                  onWindowDaysChange={setConjunctionWindowDays}
+                  onJumpToEvent={(julianDay) => {
+                    setIsPlaying(false)
+                    setSimOffsetDays(julianDay - epochJulianDay)
+                  }}
                 />
               </div>
             </div>
@@ -775,22 +1099,59 @@ function App() {
           </button>
 
           <div className="compact-stats">
-            <span>参考点 {referenceBody.name}</span>
+            <span>参考点 {referenceBody.name}{splitMode ? ` / ${splitReferenceBody.name}` : ''}</span>
             <span>日期 {formatJulianDayAsDate(currentJulianDay)}</span>
             <span>倍率 {speedDaysPerSecond} 天/秒</span>
             <span>显示 {displayedBodies.length} 个</span>
           </div>
         </div>
 
-        <div className="stage-canvas-shell" onWheel={handleCanvasWheel}>
-          <TrajectoryCanvas
-            referenceBody={referenceBody}
-            trajectories={trajectories}
-            currentPositions={currentPositions}
-            viewRadiusAU={viewRadiusAU}
-            viewOffsetAU={viewOffsetAU}
-          />
-        </div>
+        {splitMode && viewMode === '2d' ? (
+          <div className="split-stage" style={{ display: 'flex', flex: 1, flexDirection: 'row' }}>
+            <div className="stage-canvas-shell" style={{ flex: 1, borderRight: '1px solid rgba(255,255,255,0.1)' }} onWheel={handleCanvasWheel}>
+              <TrajectoryCanvas
+                referenceBody={referenceBody}
+                trajectories={trajectories}
+                currentPositions={currentPositions}
+                viewRadiusAU={viewRadiusAU}
+                viewOffsetAU={viewOffsetAU}
+                showOrbits={showOrbitEllipses}
+                orbitEllipses={orbitEllipses}
+              />
+            </div>
+            <div className="stage-canvas-shell" style={{ flex: 1 }} onWheel={handleCanvasWheel}>
+              <TrajectoryCanvas
+                referenceBody={splitReferenceBody}
+                trajectories={splitTrajectories}
+                currentPositions={splitCurrentPositions}
+                viewRadiusAU={viewRadiusAU}
+                viewOffsetAU={viewOffsetAU}
+                showOrbits={false}
+                orbitEllipses={[]}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="stage-canvas-shell" onWheel={viewMode === '2d' ? handleCanvasWheel : undefined}>
+            {viewMode === '2d' ? (
+              <TrajectoryCanvas
+                referenceBody={referenceBody}
+                trajectories={trajectories}
+                currentPositions={currentPositions}
+                viewRadiusAU={viewRadiusAU}
+                viewOffsetAU={viewOffsetAU}
+                showOrbits={showOrbitEllipses}
+                orbitEllipses={orbitEllipses}
+              />
+            ) : (
+              <TrajectoryCanvas3D
+                referenceBody={referenceBody}
+                trajectories={trajectories}
+                currentPositions={currentPositions}
+              />
+            )}
+          </div>
+        )}
 
         <div className="stage-bottombar">
           <div className="legend">
@@ -800,6 +1161,18 @@ function App() {
                 {body.shortName ?? body.name}
               </span>
             ))}
+            {activeReferenceId === 'earth' && displayedBodies.some((b) => b.orbitClassCode && ['APO', 'ATE', 'AMO', 'ATI'].includes(b.orbitClassCode)) && (
+              <span className="legend-item" title="NEO 距离热力图：红=近，蓝=远">
+                <i
+                  style={{
+                    background: 'linear-gradient(to right, #ff4444, #ffcc00, #4466ff)',
+                    width: 48,
+                    borderRadius: 2,
+                  }}
+                />
+                NEO 距离
+              </span>
+            )}
           </div>
           <p className="stage-footer-copy">轨迹全屏显示。左侧抽屉可切换概览、控制、主要天体、小行星和已载入分区。</p>
         </div>

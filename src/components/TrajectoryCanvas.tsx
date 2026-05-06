@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { GRID_LEVELS, SVG_PADDING, createProjection, projectPoint, type Projection } from '../lib/viewProjection'
-import type { CelestialBody, RenderedBodyPosition, TrajectorySample } from '../types'
+import type { CelestialBody, RenderedBodyPosition, TrajectorySample, Vector2 } from '../types'
+
+type OrbitEllipse = {
+  body: CelestialBody
+  points: Vector2[]
+}
 
 type Props = {
   referenceBody: CelestialBody
@@ -8,6 +13,8 @@ type Props = {
   currentPositions: RenderedBodyPosition[]
   viewRadiusAU: number
   viewOffsetAU: { x: number; y: number }
+  showOrbits?: boolean
+  orbitEllipses?: OrbitEllipse[]
 }
 
 type Geometry = {
@@ -60,6 +67,23 @@ function useElementSize<T extends HTMLElement>() {
   }, [])
 
   return [ref, size] as const
+}
+
+const NEO_CLASSES = new Set(['APO', 'ATE', 'AMO', 'ATI'])
+
+function isNeo(body: CelestialBody) {
+  return body.orbitClassCode !== undefined && NEO_CLASSES.has(body.orbitClassCode)
+}
+
+function neoDistanceColor(distanceAU: number, alpha: number) {
+  const logDistance = Math.log(Math.max(distanceAU, 0.001))
+  const t = Math.max(0, Math.min(1, (logDistance - Math.log(0.01)) / (Math.log(1.0) - Math.log(0.01))))
+
+  const red = 1.0 - t
+  const green = t < 0.5 ? t * 2 : 2 - t * 2
+  const blue = t
+
+  return [red, green, blue, alpha]
 }
 
 function hexToRgba(hexColor: string, alpha: number) {
@@ -243,6 +267,8 @@ function buildGeometry(
   referenceBody: CelestialBody,
   trajectories: TrajectorySample[],
   currentPositions: RenderedBodyPosition[],
+  showOrbits: boolean,
+  orbitEllipses: OrbitEllipse[],
 ): Geometry {
   const linePositions: number[] = []
   const lineColors: number[] = []
@@ -323,17 +349,42 @@ function buildGeometry(
     )
   }
 
+  const distanceByBodyId = new Map(
+    currentPositions.map((item) => [item.body.id, item.distance]),
+  )
+  const isEarthReference = referenceBody.id === 'earth'
+
   for (const trajectory of trajectories) {
     if (trajectory.points.length < 2) {
       continue
     }
 
-    const color = hexToRgba(trajectory.body.color, trajectory.body.kind === 'asteroid' ? 0.3 : 0.92)
+    const bodyDistance = distanceByBodyId.get(trajectory.body.id) ?? 0
+    const useNeoColor = isEarthReference && isNeo(trajectory.body)
+    const color = useNeoColor
+      ? neoDistanceColor(bodyDistance, 0.6)
+      : hexToRgba(trajectory.body.color, trajectory.body.kind === 'asteroid' ? 0.3 : 0.92)
 
     for (let index = 1; index < trajectory.points.length; index += 1) {
       const previous = toClipSpace(projectPoint(trajectory.points[index - 1], projection), projection)
       const current = toClipSpace(projectPoint(trajectory.points[index], projection), projection)
       pushLineSegment(linePositions, lineColors, previous, current, color)
+    }
+  }
+
+  if (showOrbits) {
+    for (const ellipse of orbitEllipses) {
+      if (ellipse.points.length < 2) {
+        continue
+      }
+
+      const color = hexToRgba(ellipse.body.color, 0.18)
+
+      for (let index = 1; index < ellipse.points.length; index += 1) {
+        const previous = toClipSpace(projectPoint(ellipse.points[index - 1], projection), projection)
+        const current = toClipSpace(projectPoint(ellipse.points[index], projection), projection)
+        pushLineSegment(linePositions, lineColors, previous, current, color)
+      }
     }
   }
 
@@ -344,7 +395,10 @@ function buildGeometry(
 
   for (const item of currentPositions) {
     const projected = toClipSpace(projectPoint(item.planarPosition, projection), projection)
-    const color = hexToRgba(item.body.color, item.body.kind === 'asteroid' ? 0.92 : 1)
+    const useNeoColor = isEarthReference && isNeo(item.body)
+    const color = useNeoColor
+      ? neoDistanceColor(item.distance, 0.92)
+      : hexToRgba(item.body.color, item.body.kind === 'asteroid' ? 0.92 : 1)
     pushVertex(pointPositions, pointColors, projected.x, projected.y, color)
     pointSizes.push(item.body.size)
   }
@@ -423,6 +477,8 @@ export function TrajectoryCanvas({
   currentPositions,
   viewRadiusAU,
   viewOffsetAU,
+  showOrbits,
+  orbitEllipses,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const resourcesRef = useRef<GlResources | null>(null)
@@ -448,8 +504,16 @@ export function TrajectoryCanvas({
   }, [currentPositions])
 
   const geometry = useMemo(
-    () => buildGeometry(projection, referenceBody, trajectories, currentPositions),
-    [currentPositions, projection, referenceBody, trajectories],
+    () =>
+      buildGeometry(
+        projection,
+        referenceBody,
+        trajectories,
+        currentPositions,
+        showOrbits ?? false,
+        orbitEllipses ?? [],
+      ),
+    [currentPositions, orbitEllipses, projection, referenceBody, showOrbits, trajectories],
   )
 
   useEffect(() => {
