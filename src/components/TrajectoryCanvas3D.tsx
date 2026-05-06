@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { CelestialBody, RenderedBodyPosition, TrajectorySample } from '../types'
@@ -7,6 +7,7 @@ type Props = {
   referenceBody: CelestialBody
   trajectories: TrajectorySample[]
   currentPositions: RenderedBodyPosition[]
+  onReferenceChange?: (bodyId: string) => void
 }
 
 function createBodySphere(body: CelestialBody, position: THREE.Vector3) {
@@ -14,16 +15,23 @@ function createBodySphere(body: CelestialBody, position: THREE.Vector3) {
   const material = new THREE.MeshBasicMaterial({ color: body.color })
   const mesh = new THREE.Mesh(geometry, material)
   mesh.position.copy(position)
+  mesh.userData.bodyId = body.id
   return mesh
 }
 
-export function TrajectoryCanvas3D({ referenceBody, trajectories, currentPositions }: Props) {
+export function TrajectoryCanvas3D({
+  referenceBody,
+  trajectories,
+  currentPositions,
+  onReferenceChange,
+}: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
   const controlsRef = useRef<OrbitControls | null>(null)
   const meshesRef = useRef<THREE.Object3D[]>([])
+  const raycasterRef = useRef<THREE.Raycaster>(new THREE.Raycaster())
 
   useEffect(() => {
     const container = containerRef.current
@@ -154,5 +162,49 @@ export function TrajectoryCanvas3D({ referenceBody, trajectories, currentPositio
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trajectories, currentPositions, referenceBody.id])
 
-  return <div ref={containerRef} className="viz-canvas canvas-mode" />
+  const handleDoubleClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (!onReferenceChange) {
+        return
+      }
+
+      const container = containerRef.current
+      const camera = cameraRef.current
+      const scene = sceneRef.current
+      if (!container || !camera || !scene) {
+        return
+      }
+
+      const rect = container.getBoundingClientRect()
+      const mouse = new THREE.Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1,
+      )
+
+      const raycaster = raycasterRef.current
+      raycaster.setFromCamera(mouse, camera)
+
+      const clickable = meshesRef.current.filter(
+        (obj) => obj instanceof THREE.Mesh && obj.userData.bodyId,
+      )
+
+      const intersections = raycaster.intersectObjects(clickable, false)
+
+      if (intersections.length > 0) {
+        const bodyId = intersections[0].object.userData.bodyId as string | undefined
+        if (bodyId) {
+          onReferenceChange(bodyId)
+        }
+      }
+    },
+    [onReferenceChange],
+  )
+
+  return (
+    <div
+      ref={containerRef}
+      className="viz-canvas canvas-mode"
+      onDoubleClick={handleDoubleClick}
+    />
+  )
 }

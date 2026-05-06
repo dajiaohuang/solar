@@ -109,7 +109,7 @@ function App() {
   const [simOffsetDays, setSimOffsetDays] = useState(initialUrl.offset ?? 0)
   const [splitMode, setSplitMode] = useState(false)
   const [splitReferenceId, setSplitReferenceId] = useState<BodyId>('earth')
-  const [viewMode, setViewMode] = useState<'2d' | '3d'>('2d')
+  const [viewMode, setViewMode] = useState<'2d' | '3d'>('3d')
   const [showOrbitEllipses, setShowOrbitEllipses] = useState(false)
   const [isPlaying, setIsPlaying] = useState(true)
   const [manifest, setManifest] = useState<AsteroidManifest | null>(null)
@@ -536,6 +536,16 @@ function App() {
     setZoomLevel(1)
     setViewOffsetAU({ x: 0, y: 0 })
   }
+
+  const handleChangeReference = useCallback(
+    (bodyId: BodyId) => {
+      if (bodyId !== activeReferenceId && bodiesById.has(bodyId)) {
+        setReferenceId(bodyId)
+        resetViewTransform()
+      }
+    },
+    [activeReferenceId, bodiesById],
+  )
 
   const handleCanvasWheel = useCallback(
     (event: WheelEvent<HTMLDivElement>) => {
@@ -1117,6 +1127,7 @@ function App() {
                 viewOffsetAU={viewOffsetAU}
                 showOrbits={showOrbitEllipses}
                 orbitEllipses={orbitEllipses}
+                onReferenceChange={handleChangeReference}
               />
             </div>
             <div className="stage-canvas-shell" style={{ flex: 1 }} onWheel={handleCanvasWheel}>
@@ -1128,6 +1139,7 @@ function App() {
                 viewOffsetAU={viewOffsetAU}
                 showOrbits={false}
                 orbitEllipses={[]}
+                onReferenceChange={handleChangeReference}
               />
             </div>
           </div>
@@ -1142,12 +1154,14 @@ function App() {
                 viewOffsetAU={viewOffsetAU}
                 showOrbits={showOrbitEllipses}
                 orbitEllipses={orbitEllipses}
+                onReferenceChange={handleChangeReference}
               />
             ) : (
               <TrajectoryCanvas3D
                 referenceBody={referenceBody}
                 trajectories={trajectories}
                 currentPositions={currentPositions}
+                onReferenceChange={handleChangeReference}
               />
             )}
           </div>
@@ -1156,7 +1170,13 @@ function App() {
         <div className="stage-bottombar">
           <div className="legend">
             {displayedBodies.slice(0, 28).map((body) => (
-              <span key={body.id} className="legend-item">
+              <span
+                key={body.id}
+                className="legend-item"
+                style={{ cursor: 'pointer' }}
+                title={`双击切换参考点为 ${body.name}`}
+                onClick={() => handleChangeReference(body.id)}
+              >
                 <i style={{ backgroundColor: body.color }} />
                 {body.shortName ?? body.name}
               </span>
