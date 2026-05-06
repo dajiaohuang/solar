@@ -114,3 +114,20 @@ a {
   pointer-events: none;
   text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
 }
+
+.grid-au-label {
+  position: absolute;
+  font-size: 9px;
+  color: rgba(173, 201, 255, 0.5);
+  transform: translate(4px, -50%);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.soi-circle {
+  position: absolute;
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}

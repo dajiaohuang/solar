@@ -10,12 +10,13 @@ import { defaultHistoryOptions, defaultSelectedBodyIds, majorBodies } from './da
 import { SCENE_PRESETS } from './data/presets'
 import { SPACECRAFT } from './data/spacecraft'
 import { RESONANCES } from './data/resonances'
+import { computeHohmann } from './lib/hohmann'
 import { decodeUrlState, encodeUrlState } from './lib/urlState'
 import { getLang, type Lang } from './lib/i18n'
 import { deleteGroup, loadGroups, saveGroup, type StoredGroup } from './lib/storedGroups'
 import { exportAsCSV, exportAsJSON } from './lib/dataExport'
 import { computeOrbitEllipses, getOrbitalPeriodDays } from './lib/orbitEllipse'
-import { computeLagrangePoints, type LagrangePoint } from './lib/lagrange'
+import { computeLagrangePoints, type LagrangePoint, MASS_RATIOS } from './lib/lagrange'
 import { useTrajectoryWorker } from './hooks/useTrajectoryWorker'
 import {
   asteroidRecordToBody,
@@ -109,6 +110,10 @@ function App() {
   const [planetOpacity, setPlanetOpacity] = useState(1)
   const [asteroidOpacity, setAsteroidOpacity] = useState(1)
   const [moonOpacity, setMoonOpacity] = useState(1)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<CelestialBody[]>([])
+  const historyRef = useRef<{ ref: BodyId; zoom: number }[]>([])
+  const historyIndexRef = useRef(-1)
   const [epochJulianDay] = useState(() => todayJulianDay())
   const [referenceId, setReferenceId] = useState<BodyId>(initialUrl.ref ?? 'sun')
   const [selectedMajorBodyIds, setSelectedMajorBodyIds] = useState<BodyId[]>(
@@ -138,6 +143,9 @@ function App() {
     meanAnomalyDeg: '0',
     color: '#ff9944',
   })
+  const [showSOI, setShowSOI] = useState(false)
+  const [showSaturnRings, setShowSaturnRings] = useState(false)
+  const [showGlow, setShowGlow] = useState(true)
   const [showEcliptic, setShowEcliptic] = useState(false)
   const [showLagrange, setShowLagrange] = useState(false)
   const [showOrbitEllipses, setShowOrbitEllipses] = useState(false)
@@ -430,6 +438,29 @@ function App() {
   )
   const selectedBodySet = useMemo(() => new Set(selectedBodyIds), [selectedBodyIds])
   const loadedCatalogIdSet = useMemo(() => new Set(Object.keys(loadedCatalogBodies)), [loadedCatalogBodies])
+
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchQuery(value)
+      if (!value.trim()) {
+        setSearchResults([])
+        return
+      }
+
+      const q = value.toLowerCase()
+      const results = allBodies
+        .filter(
+          (b) =>
+            b.name.toLowerCase().includes(q) ||
+            b.shortName?.toLowerCase().includes(q) ||
+            b.id.toLowerCase().includes(q),
+        )
+        .slice(0, 5)
+
+      setSearchResults(results)
+    },
+    [allBodies],
+  )
   const normalizedSearchQuery = useMemo(() => normalizeSearchText(searchText), [searchText])
   const sectionEntries = useMemo(() => sectionPages.flatMap((page) => page.records), [sectionPages])
   const sectionHasPrevious = useMemo(() => {
@@ -651,6 +682,24 @@ function App() {
     windowDays: conjunctionWindowDays,
     thresholdAU: conjunctionThresholdAU,
   })
+
+  const soiCircles = useMemo(() => {
+    if (!showSOI) {
+      return []
+    }
+
+    return currentPositions
+      .filter((p) => p.body.kind === 'planet' && MASS_RATIOS[p.body.id] !== undefined)
+      .map((p) => {
+        const mu = MASS_RATIOS[p.body.id]
+        const orbit = p.body.orbit
+        if (!orbit) return null
+        const a = orbit.model === 'planetaryApprox' ? orbit.base.semiMajorAxisAU : orbit.semiMajorAxisAU
+        const hillRadius = a * Math.cbrt(mu / 3)
+        return { body: p.body, position: p.planarPosition, radiusAU: hillRadius }
+      })
+      .filter(Boolean) as { body: CelestialBody; position: Vector2; radiusAU: number }[]
+  }, [showSOI, currentPositions])
 
   const orbitEllipses = useMemo(() => {
     if (!showOrbitEllipses) {
@@ -877,12 +926,59 @@ function App() {
           }
         }
 
+        const history = historyRef.current
+        const idx = historyIndexRef.current
+        const newHistory = history.slice(0, idx + 1)
+        newHistory.push({ ref: bodyId, zoom: zoomLevel })
+        if (newHistory.length > 50) {
+          newHistory.shift()
+        }
+
+        historyRef.current = newHistory
+        historyIndexRef.current = newHistory.length - 1
         setReferenceId(bodyId)
         animateTransition(zoomLevel, viewOffsetAU, targetZoom, { x: 0, y: 0 })
       }
     },
     [activeReferenceId, bodiesById, animateTransition, measuringMode, measureBodyA, zoomLevel, viewOffsetAU],
   )
+
+  useEffect(() => {
+    const handleUndoRedo = (event: KeyboardEvent) => {
+      if (!event.ctrlKey) return
+      const tag = (event.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return
+
+      if (event.key === 'z' || event.key === 'Z') {
+        event.preventDefault()
+        const idx = historyIndexRef.current
+        if (idx > 0) {
+          historyIndexRef.current = idx - 1
+          const prev = historyRef.current[idx - 1]
+          if (prev) {
+            setReferenceId(prev.ref)
+            animateTransition(zoomLevel, viewOffsetAU, prev.zoom, { x: 0, y: 0 })
+          }
+        }
+      } else if (event.key === 'y' || event.key === 'Y') {
+        event.preventDefault()
+        const idx = historyIndexRef.current
+        const hist = historyRef.current
+        if (idx < hist.length - 1) {
+          historyIndexRef.current = idx + 1
+          const next = hist[idx + 1]
+          if (next) {
+            setReferenceId(next.ref)
+            animateTransition(zoomLevel, viewOffsetAU, next.zoom, { x: 0, y: 0 })
+          }
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleUndoRedo)
+    return () => window.removeEventListener('keydown', handleUndoRedo)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [animateTransition])
 
   const handleScreenshot = useCallback(() => {
     const container = stageRef.current
@@ -912,6 +1008,53 @@ function App() {
       setHoveredBody({ body, distance, x, y })
     },
     [],
+  )
+
+  const touchRef = useRef<{ dist: number; zoom: number; offset: Vector2 } | null>(null)
+
+  const handleTouchStart = useCallback(
+    (event: React.TouchEvent<HTMLDivElement>) => {
+      if (event.touches.length === 2) {
+        const dx = event.touches[0].clientX - event.touches[1].clientX
+        const dy = event.touches[0].clientY - event.touches[1].clientY
+        touchRef.current = {
+          dist: Math.hypot(dx, dy),
+          zoom: zoomLevel,
+          offset: { ...viewOffsetAU },
+        }
+      } else if (event.touches.length === 1) {
+        touchRef.current = {
+          dist: 0,
+          zoom: zoomLevel,
+          offset: { x: event.touches[0].clientX, y: event.touches[0].clientY },
+        }
+      }
+    },
+    [zoomLevel, viewOffsetAU],
+  )
+
+  const handleTouchMove = useCallback(
+    (event: React.TouchEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      const prev = touchRef.current
+      if (!prev) {
+        return
+      }
+
+      if (event.touches.length === 2 && prev.dist > 0) {
+        const dx = event.touches[0].clientX - event.touches[1].clientX
+        const dy = event.touches[0].clientY - event.touches[1].clientY
+        const newDist = Math.hypot(dx, dy)
+        const scale = newDist / prev.dist
+        const nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, prev.zoom * scale))
+        setZoomLevel(nextZoom)
+      } else if (event.touches.length === 1 && prev.dist === 0) {
+        const dx = (event.touches[0].clientX - prev.offset.x) / (suggestedViewRadius / zoomLevel)
+        const dy = (event.touches[0].clientY - prev.offset.y) / (suggestedViewRadius / zoomLevel)
+        setViewOffsetAU((o) => ({ x: o.x - dx * 0.01, y: o.y + dy * 0.01 }))
+      }
+    },
+    [suggestedViewRadius, zoomLevel],
   )
 
   const handleCanvasWheel = useCallback(
@@ -1192,7 +1335,17 @@ function App() {
                   <span>显示拉格朗日点</span>
                 </label>
 
+                <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={showSOI}
+                    onChange={(event) => setShowSOI(event.target.checked)}
+                  />
+                  <span>显示引力影响球 (SOI)</span>
+                </label>
+
                 {viewMode === '3d' && (
+                  <>
                   <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <input
                       type="checkbox"
@@ -1201,6 +1354,23 @@ function App() {
                     />
                     <span>显示黄道面</span>
                   </label>
+                  <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={showSaturnRings}
+                      onChange={(event) => setShowSaturnRings(event.target.checked)}
+                    />
+                    <span>土星光环</span>
+                  </label>
+                  <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={showGlow}
+                      onChange={(event) => setShowGlow(event.target.checked)}
+                    />
+                    <span>太阳光晕</span>
+                  </label>
+                  </>
                 )}
 
                 <div className="field">
@@ -1298,6 +1468,22 @@ function App() {
                     style={measuringMode ? { background: '#334', borderColor: '#68f' } : undefined}
                   >
                     {measuringMode ? '测量中…' : '测量距离'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const earth = bodiesById.get('earth')
+                      const mars = bodiesById.get('mars')
+                      if (!earth?.orbit || !mars?.orbit) return
+                      const aE = earth.orbit.model === 'planetaryApprox' ? earth.orbit.base.semiMajorAxisAU : earth.orbit.semiMajorAxisAU
+                      const aM = mars.orbit.model === 'planetaryApprox' ? mars.orbit.base.semiMajorAxisAU : mars.orbit.semiMajorAxisAU
+                      const result = computeHohmann(aE, aM)
+                      if (result) {
+                        alert(`霍曼转移 (地球→火星):\ntransfer ellipse a=${result.semiMajorAxisAU.toFixed(2)} AU e=${result.eccentricity.toFixed(3)}\nΔv1=${result.deltaV1.toFixed(2)} km/s  Δv2=${result.deltaV2.toFixed(2)} km/s\ntransfer time=${result.transferTimeDays.toFixed(0)} days`)
+                      }
+                    }}
+                  >
+                    霍曼转移
                   </button>
                   <button type="button" onClick={handleScreenshot}>
                     截图 PNG
@@ -1508,6 +1694,35 @@ function App() {
                     setSimOffsetDays(julianDay - epochJulianDay)
                   }}
                 />
+                <div style={{ marginTop: 10, padding: '8px 12px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const planets = currentPositions.filter((p) => p.body.kind === 'planet' || p.body.kind === 'dwarfPlanet')
+                      if (planets.length < 3) { alert('Need at least 3 planets'); return }
+
+                      let bestSpread = 360
+                      const positions: { body: CelestialBody; angle: number }[] = []
+                      for (const p of planets) {
+                        const angle = (Math.atan2(p.planarPosition.y, p.planarPosition.x) * 180 / Math.PI + 360) % 360
+                        positions.push({ body: p.body, angle })
+                      }
+                      positions.sort((a, b) => a.angle - b.angle)
+
+                      for (let i = 0; i < positions.length; i++) {
+                        for (let j = i + 2; j < positions.length; j++) {
+                          const spread = (positions[j].angle - positions[i].angle + 360) % 360
+                          if (spread < bestSpread) bestSpread = spread
+                        }
+                      }
+
+                      const names = positions.map((p) => p.body.name).join(', ')
+                      alert(`Planetary alignment scan:\nBodies: ${names}\nTightest angular spread: ${bestSpread.toFixed(1)}°\n(${bestSpread < 15 ? 'TIGHT alignment!' : bestSpread < 45 ? 'Loose grouping' : 'Scattered'})`)
+                    }}
+                  >
+                    扫描行星排列
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -1828,6 +2043,129 @@ function App() {
                     </span>
                   </div>
                 )}
+
+                <div className="button-row" style={{ marginTop: 10 }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const customBodies = Object.entries(loadedCatalogBodies)
+                        .filter(([id]) => id.startsWith('custom:'))
+                        .map(([, b]) => ({ name: b.name, semiMajorAxisAU: b.orbit?.model === 'keplerian' ? b.orbit.semiMajorAxisAU : 2.5, eccentricity: b.orbit?.model === 'keplerian' ? b.orbit.eccentricity : 0, inclinationDeg: b.orbit?.model === 'keplerian' ? b.orbit.inclinationDeg : 0, ascendingNodeDeg: b.orbit?.model === 'keplerian' ? b.orbit.ascendingNodeDeg : 0, argPeriapsisDeg: b.orbit?.model === 'keplerian' ? b.orbit.argPeriapsisDeg : 0, meanAnomalyDeg: b.orbit?.model === 'keplerian' ? b.orbit.meanAnomalyDeg : 0, color: b.color }))
+                      const blob = new Blob([JSON.stringify(customBodies, null, 2)], { type: 'application/json' })
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url; a.download = 'solar-custom-bodies.json'; a.click()
+                      URL.revokeObjectURL(url)
+                    }}
+                  >
+                    导出自定义天体
+                  </button>
+                  <label
+                    style={{ padding: '0.72rem 0.9rem', cursor: 'pointer', background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 4, fontSize: 13 }}
+                  >
+                    导入
+                    <input
+                      type="file"
+                      accept=".json"
+                      style={{ display: 'none' }}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0]
+                        if (!file) return
+                        const reader = new FileReader()
+                        reader.onload = () => {
+                          try {
+                            const data = JSON.parse(reader.result as string) as Array<Record<string, unknown>>
+                            const newBodies: Record<string, CelestialBody> = {}
+                            for (const item of data) {
+                              const id = `custom:${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+                              const a = Number(item.semiMajorAxisAU) || 2.5
+                              const periodDays = 365.25 * Math.sqrt(a * a * a)
+                              newBodies[id] = {
+                                id,
+                                name: String(item.name || 'Imported'),
+                                shortName: String(item.name || 'Imported'),
+                                kind: 'asteroid',
+                                color: String(item.color || '#ff9944'),
+                                size: 3,
+                                source: 'jpl-sbdb',
+                                isCatalogBody: true,
+                                orbit: {
+                                  model: 'keplerian',
+                                  epochJd: epochJulianDay,
+                                  semiMajorAxisAU: a,
+                                  eccentricity: Number(item.eccentricity) || 0,
+                                  inclinationDeg: Number(item.inclinationDeg) || 0,
+                                  ascendingNodeDeg: Number(item.ascendingNodeDeg) || 0,
+                                  argPeriapsisDeg: Number(item.argPeriapsisDeg) || 0,
+                                  meanAnomalyDeg: Number(item.meanAnomalyDeg) || 0,
+                                  meanMotionDegPerDay: 360 / periodDays,
+                                },
+                              }
+                            }
+                            setLoadedCatalogBodies((prev) => ({ ...prev, ...newBodies }))
+                          } catch { alert('Invalid JSON file') }
+                        }
+                        reader.readAsText(file)
+                      }}
+                    />
+                  </label>
+                </div>
+
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div className="field-header">
+                    <span>JPL SBDB 查询</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                    <input
+                      type="text"
+                      placeholder="输入编号或名称…"
+                      id="jpl-query-input"
+                      style={{ flex: 1, padding: '4px 8px', fontSize: 12, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 4, color: '#fff' }}
+                      onKeyDown={async (event) => {
+                        if (event.key !== 'Enter') return
+                        const input = event.currentTarget
+                        const query = input.value.trim()
+                        if (!query) return
+                        try {
+                          const resp = await fetch(`https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=${encodeURIComponent(query)}`)
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          const data: any = await resp.json()
+                          if (data.error) { alert(String(data.error)); return }
+                          const orbit = data.orbit
+                          if (!orbit) { alert('No orbit data'); return }
+                          const a = Number(orbit.semiMajorAxis) || 2.5
+                          const periodDays = 365.25 * Math.sqrt(Math.abs(a) * Math.abs(a) * Math.abs(a))
+                          const id = `jpl:${Date.now()}`
+                          const body: CelestialBody = {
+                            id,
+                            name: String(data.object?.designation || query),
+                            shortName: String(data.object?.shortname || query),
+                            kind: 'asteroid',
+                            color: '#ffcc66',
+                            size: 3,
+                            source: 'jpl-sbdb',
+                            isCatalogBody: true,
+                            absoluteMagnitude: Number(data.object?.H) || undefined,
+                            orbit: {
+                              model: 'keplerian',
+                              epochJd: Number(orbit.epoch) || epochJulianDay,
+                              semiMajorAxisAU: Math.abs(a),
+                              eccentricity: Math.abs(Number(orbit.e) || 0),
+                              inclinationDeg: Number(orbit.i) || 0,
+                              ascendingNodeDeg: Number(orbit.om) || 0,
+                              argPeriapsisDeg: Number(orbit.w) || 0,
+                              meanAnomalyDeg: Number(orbit.ma) || 0,
+                              meanMotionDegPerDay: Number(orbit.n) || 360 / periodDays,
+                            },
+                          }
+                          setLoadedCatalogBodies((prev) => ({ ...prev, [id]: body }))
+                          setSelectedCatalogIds((prev) => dedupeIds([...prev, id]))
+                          input.value = ''
+                        } catch { alert('Query failed') }
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -1899,6 +2237,71 @@ function App() {
             >
               {tt('fullscreen')}
             </button>
+            <div style={{ position: 'relative' }}>
+              <input
+                type="search"
+                placeholder="搜索天体…"
+                value={searchQuery}
+                onChange={(event) => handleSearchChange(event.target.value)}
+                style={{
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: 4,
+                  color: '#fff',
+                  padding: '2px 8px',
+                  fontSize: 12,
+                  width: 120,
+                }}
+              />
+              {searchResults.length > 0 && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  background: '#1a1a2e',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  borderRadius: 4,
+                  zIndex: 100,
+                  minWidth: 160,
+                  maxHeight: 200,
+                  overflowY: 'auto',
+                }}>
+                  {searchResults.map((b) => (
+                    <div
+                      key={b.id}
+                      onClick={() => {
+                        handleChangeReference(b.id)
+                        setSearchQuery('')
+                        setSearchResults([])
+                      }}
+                      style={{
+                        padding: '4px 10px',
+                        cursor: 'pointer',
+                        fontSize: 12,
+                        color: '#ccc',
+                        borderBottom: '1px solid rgba(255,255,255,0.05)',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <span style={{ color: b.color, marginRight: 6 }}>●</span>
+                      {b.name}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {activeReferenceId === 'earth' && selectedBodySet.has('moon') && (() => {
+              const moonPos = currentPositions.find((p) => p.body.id === 'moon')
+              const sunPos = currentPositions.find((p) => p.body.id === 'sun')
+              if (!moonPos || !sunPos) return null
+              const dx = moonPos.planarPosition.x - sunPos.planarPosition.x
+              const dy = moonPos.planarPosition.y - sunPos.planarPosition.y
+              const angle = Math.atan2(dy, dx)
+              const phase = (1 - Math.cos(angle)) / 2
+              const emoji = phase < 0.02 ? '🌑' : phase < 0.25 ? '🌒' : phase < 0.48 ? '🌓' : phase < 0.52 ? '🌕' : phase < 0.75 ? '🌔' : phase < 0.98 ? '🌗' : '🌘'
+              return <span style={{ fontSize: 16 }} title="当前月相">{emoji}</span>
+            })()}
           </div>
 
           <div className="compact-stats">
@@ -1938,7 +2341,7 @@ function App() {
 
         {splitMode && viewMode === '2d' ? (
           <div className="split-stage" style={{ display: 'flex', flex: 1, flexDirection: 'row' }}>
-            <div className="stage-canvas-shell" style={{ flex: 1, borderRight: '1px solid rgba(255,255,255,0.1)' }} onWheel={handleCanvasWheel}>
+            <div className="stage-canvas-shell" style={{ flex: 1, borderRight: '1px solid rgba(255,255,255,0.1)' }} onWheel={handleCanvasWheel} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove}>
               <TrajectoryCanvas
                 referenceBody={referenceBody}
                 trajectories={allTrajectories}
@@ -1950,12 +2353,13 @@ function App() {
                 onReferenceChange={handleChangeReference}
                 onHover={handleHover}
                 lagrangePoints={lagrangePoints}
+                soiCircles={soiCircles}
                 planetOpacity={planetOpacity}
                 asteroidOpacity={asteroidOpacity}
                 moonOpacity={moonOpacity}
               />
             </div>
-            <div className="stage-canvas-shell" style={{ flex: 1 }} onWheel={handleCanvasWheel}>
+            <div className="stage-canvas-shell" style={{ flex: 1 }} onWheel={handleCanvasWheel} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove}>
               <TrajectoryCanvas
                 referenceBody={splitReferenceBody}
                 trajectories={splitTrajectories}
@@ -1967,6 +2371,7 @@ function App() {
                 onReferenceChange={handleChangeReference}
                 onHover={handleHover}
                 lagrangePoints={lagrangePoints}
+                soiCircles={soiCircles}
                 planetOpacity={planetOpacity}
                 asteroidOpacity={asteroidOpacity}
                 moonOpacity={moonOpacity}
@@ -1974,7 +2379,10 @@ function App() {
             </div>
           </div>
         ) : (
-          <div className="stage-canvas-shell" onWheel={viewMode === '2d' ? handleCanvasWheel : undefined}>
+          <div className="stage-canvas-shell" onWheel={viewMode === '2d' ? handleCanvasWheel : undefined}
+            onTouchStart={viewMode === '2d' ? handleTouchStart : undefined}
+            onTouchMove={viewMode === '2d' ? handleTouchMove : undefined}
+          >
             {viewMode === '2d' ? (
               <TrajectoryCanvas
                 referenceBody={referenceBody}
@@ -1987,6 +2395,7 @@ function App() {
                 onReferenceChange={handleChangeReference}
                 onHover={handleHover}
                 lagrangePoints={lagrangePoints}
+                soiCircles={soiCircles}
                 planetOpacity={planetOpacity}
                 asteroidOpacity={asteroidOpacity}
                 moonOpacity={moonOpacity}
@@ -2000,6 +2409,8 @@ function App() {
                 onHover={handleHover}
                 lagrangePoints={lagrangePoints}
                 showEcliptic={showEcliptic}
+                showSaturnRings={showSaturnRings}
+                showGlow={showGlow}
               />
             )}
           </div>
@@ -2060,6 +2471,65 @@ function App() {
         </div>
         )}
       </section>
+      {!isFullscreen && (
+        <div style={{
+          position: 'fixed',
+          bottom: 44,
+          right: 12,
+          width: 130,
+          height: 130,
+          background: 'rgba(10,14,28,0.85)',
+          border: '1px solid rgba(255,255,255,0.12)',
+          borderRadius: 6,
+          zIndex: 50,
+        }}>
+          <canvas
+            ref={(el) => {
+              if (!el) return
+              const ctx = el.getContext('2d')
+              if (!ctx) return
+              const w = el.width = 130
+              const h = el.height = 130
+              ctx.clearRect(0, 0, w, h)
+              ctx.fillStyle = 'rgba(10,14,28,0.85)'
+              ctx.fillRect(0, 0, w, h)
+
+              const cx = w / 2
+              const cy = h / 2
+              const maxR = 60
+              const scale = maxR / (suggestedViewRadius || 10)
+
+              ctx.strokeStyle = 'rgba(255,255,255,0.1)'
+              ctx.beginPath()
+              ctx.arc(cx, cy, maxR, 0, Math.PI * 2)
+              ctx.stroke()
+              ctx.beginPath()
+              ctx.arc(cx, cy, maxR * 0.5, 0, Math.PI * 2)
+              ctx.stroke()
+
+              for (const pos of currentPositions) {
+                const sx = cx + pos.planarPosition.x * scale
+                const sy = cy - pos.planarPosition.y * scale
+                ctx.fillStyle = pos.body.color
+                ctx.beginPath()
+                ctx.arc(sx, sy, pos.body.kind === 'star' ? 3 : 1.5, 0, Math.PI * 2)
+                ctx.fill()
+              }
+
+              ctx.fillStyle = '#fff'
+              ctx.beginPath()
+              ctx.arc(cx, cy, 2.5, 0, Math.PI * 2)
+              ctx.fill()
+
+              ctx.fillStyle = 'rgba(255,255,255,0.4)'
+              ctx.font = '8px sans-serif'
+              ctx.textAlign = 'center'
+              ctx.fillText(referenceBody.shortName ?? referenceBody.name, cx, h - 6)
+            }}
+          />
+        </div>
+      )}
+
       <BodyTooltip
         body={hoveredBody?.body ?? null}
         distanceAU={hoveredBody?.distance ?? 0}

@@ -19,6 +19,7 @@ type Props = {
   onReferenceChange?: (bodyId: string) => void
   onHover?: (body: CelestialBody | null, distance: number, x: number, y: number) => void
   lagrangePoints?: { body: CelestialBody; points: LagrangePoint[] }[]
+  soiCircles?: { body: CelestialBody; position: Vector2; radiusAU: number }[]
   planetOpacity?: number
   asteroidOpacity?: number
   moonOpacity?: number
@@ -525,6 +526,7 @@ export function TrajectoryCanvas({
   onReferenceChange,
   onHover,
   lagrangePoints,
+  soiCircles,
   planetOpacity = 1,
   asteroidOpacity = 1,
   moonOpacity = 1,
@@ -720,6 +722,28 @@ export function TrajectoryCanvas({
           {referenceBody.name}
         </span>
 
+        {[0.33, 0.66, 1.0].map((ratio) => {
+          const ringAU = viewRadiusAU * ratio
+          const ringPixelRadius = projection.drawableRadius * ratio
+          const projected = {
+            x: projection.centerX + ringPixelRadius,
+            y: projection.centerY,
+          }
+
+          return (
+            <span
+              key={`grid-${ratio}`}
+              className="grid-au-label"
+              style={{
+                left: `${(projected.x / Math.max(size.width, 1)) * 100}%`,
+                top: `${(projected.y / Math.max(size.height, 1)) * 100}%`,
+              }}
+            >
+              {ringAU.toFixed(1)} AU
+            </span>
+          )
+        })}
+
         {labels.map(({ body, planarPosition }) => {
           const projected = projectPoint(planarPosition, projection)
 
@@ -756,6 +780,25 @@ export function TrajectoryCanvas({
             )
           }),
         )}
+
+        {soiCircles?.map((soi) => {
+          const center = projectPoint(soi.position, projection)
+          const radiusPx = soi.radiusAU * projection.scale
+
+          return (
+            <div
+              key={`soi-${soi.body.id}`}
+              className="soi-circle"
+              style={{
+                left: `${(center.x / Math.max(size.width, 1)) * 100}%`,
+                top: `${(center.y / Math.max(size.height, 1)) * 100}%`,
+                width: radiusPx * 2,
+                height: radiusPx * 2,
+              }}
+              title={`${soi.body.name} Hill Sphere: ${soi.radiusAU.toFixed(4)} AU`}
+            />
+          )
+        })}
 
         {!currentPositions.length && <span className="empty-overlay-copy">请先选择至少一个要显示的天体</span>}
         {webglUnavailable && <span className="empty-overlay-copy">当前浏览器不支持 WebGL 加速渲染</span>}
