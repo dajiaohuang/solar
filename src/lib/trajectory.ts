@@ -5,36 +5,29 @@ import type { BodyId, CelestialBody, TrajectoryFrameData, TrajectorySample, Vect
 
 const trajectoryCache = new Map<string, TrajectorySample[]>()
 
-export function getRecommendedSampleCount(displayCount: number) {
+export function getRecommendedSampleCount(displayCount: number, historyDays: number) {
+  let base: number
+
   if (displayCount >= 400) {
-    return 18
+    base = 18
+  } else if (displayCount >= 250) {
+    base = 24
+  } else if (displayCount >= 120) {
+    base = 36
+  } else if (displayCount >= 80) {
+    base = 48
+  } else if (displayCount >= 40) {
+    base = 72
+  } else if (displayCount >= 20) {
+    base = 96
+  } else if (displayCount >= 10) {
+    base = 128
+  } else {
+    base = 180
   }
 
-  if (displayCount >= 250) {
-    return 24
-  }
-
-  if (displayCount >= 120) {
-    return 36
-  }
-
-  if (displayCount >= 80) {
-    return 48
-  }
-
-  if (displayCount >= 40) {
-    return 72
-  }
-
-  if (displayCount >= 20) {
-    return 96
-  }
-
-  if (displayCount >= 10) {
-    return 128
-  }
-
-  return 180
+  const scaleByDuration = Math.sqrt(Math.max(historyDays, 1) / 365)
+  return Math.min(Math.round(base * scaleByDuration), 600)
 }
 
 export function buildTrajectories(params: {

@@ -491,7 +491,10 @@ function App() {
 
   const viewRadiusAU = suggestedViewRadius / zoomLevel
   const referenceBody = bodiesById.get(activeReferenceId) ?? majorBodies[0]
-  const sampleCount = useMemo(() => getRecommendedSampleCount(displayedBodies.length), [displayedBodies.length])
+  const sampleCount = useMemo(
+    () => getRecommendedSampleCount(displayedBodies.length, historyDays),
+    [displayedBodies.length, historyDays],
+  )
   const { currentPositions, trajectories, maxDistance: maxRelativeDistance } = useTrajectoryWorker({
     bodies: displayedBodies,
     resolutionBodies: allBodies,

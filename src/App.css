@@ -130,6 +130,13 @@ button {
 
 select {
   padding: 0.78rem 0.9rem;
+  background: #fff;
+  color: #111;
+}
+
+select option {
+  background: #fff;
+  color: #111;
 }
 
 button {
