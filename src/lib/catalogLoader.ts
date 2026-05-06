@@ -8,7 +8,8 @@ import type {
   OrbitClassCode,
 } from '../types'
 
-const manifestUrl = '/data/asteroids/manifest.json'
+const BASE = import.meta.env.BASE_URL
+const manifestUrl = `${BASE}data/asteroids/manifest.json`
 const searchBucketCache = new Map<string, Promise<AsteroidIndexEntry[]>>()
 const chunkCache = new Map<string, Promise<AsteroidRecord[]>>()
 let manifestPromise: Promise<AsteroidManifest | null> | null = null
@@ -68,7 +69,7 @@ export function loadAsteroidSearchBucket(bucketKey: string) {
   }
 
   const promise = fetchJson<AsteroidIndexEntry[]>(
-    `/data/asteroids/search/${encodeURIComponent(normalizedBucket)}.json`,
+    `${BASE}data/asteroids/search/${encodeURIComponent(normalizedBucket)}.json`,
   ).catch(() => [])
 
   searchBucketCache.set(normalizedBucket, promise)
@@ -82,7 +83,7 @@ export function loadAsteroidChunk(chunkId: string) {
   }
 
   const promise = fetchJson<AsteroidRecord[]>(
-    `/data/asteroids/chunks/${encodeURIComponent(chunkId)}.json`,
+    `${BASE}data/asteroids/chunks/${encodeURIComponent(chunkId)}.json`,
   )
 
   chunkCache.set(chunkId, promise)
