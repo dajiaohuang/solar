@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import type { LagrangePoint } from '../lib/lagrange'
 import type { CelestialBody, RenderedBodyPosition, TrajectorySample } from '../types'
 
 type Props = {
@@ -8,6 +9,9 @@ type Props = {
   trajectories: TrajectorySample[]
   currentPositions: RenderedBodyPosition[]
   onReferenceChange?: (bodyId: string) => void
+  onHover?: (body: CelestialBody | null, distance: number, x: number, y: number) => void
+  lagrangePoints?: { body: CelestialBody; points: LagrangePoint[] }[]
+  showEcliptic?: boolean
 }
 
 function createBodySphere(body: CelestialBody, position: THREE.Vector3) {
@@ -24,6 +28,9 @@ export function TrajectoryCanvas3D({
   trajectories,
   currentPositions,
   onReferenceChange,
+  onHover,
+  lagrangePoints: _lagrangePoints,
+  showEcliptic,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const sceneRef = useRef<THREE.Scene | null>(null)
@@ -51,7 +58,7 @@ export function TrajectoryCanvas3D({
     camera.lookAt(0, 0, 0)
     cameraRef.current = camera
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true })
     renderer.setSize(width, height)
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     container.appendChild(renderer.domElement)
@@ -64,6 +71,28 @@ export function TrajectoryCanvas3D({
 
     const gridHelper = new THREE.PolarGridHelper(3, 24, 16, 64, 0x334466, 0x334466)
     scene.add(gridHelper)
+
+    if (showEcliptic) {
+      const eclipticGeo = new THREE.CircleGeometry(5, 64)
+      const eclipticMat = new THREE.MeshBasicMaterial({
+        color: 0x4466aa,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.08,
+      })
+
+      const eclipticPlane = new THREE.Mesh(eclipticGeo, eclipticMat)
+      eclipticPlane.rotation.x = -Math.PI / 2
+      eclipticPlane.name = 'ecliptic-plane'
+      scene.add(eclipticPlane)
+
+      const ringGeo = new THREE.TorusGeometry(5, 0.015, 16, 100)
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x4466aa, transparent: true, opacity: 0.25 })
+      const ring = new THREE.Mesh(ringGeo, ringMat)
+      ring.rotation.x = -Math.PI / 2
+      ring.name = 'ecliptic-ring'
+      scene.add(ring)
+    }
 
     const animate = () => {
       controls.update()
@@ -90,6 +119,7 @@ export function TrajectoryCanvas3D({
       container.removeChild(renderer.domElement)
       scene.clear()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -159,8 +189,22 @@ export function TrajectoryCanvas3D({
     const referenceSphere = createBodySphere(referenceBody, new THREE.Vector3(0, 0, 0))
     scene.add(referenceSphere)
     meshesRef.current.push(referenceSphere)
+
+    if (_lagrangePoints) {
+      for (const group of _lagrangePoints) {
+        for (const lp of group.points) {
+          const geo = new THREE.SphereGeometry(0.03, 8, 8)
+          const mat = new THREE.MeshBasicMaterial({ color: lp.color })
+          const mesh = new THREE.Mesh(geo, mat)
+          mesh.position.set(lp.position.x, 0, lp.position.y)
+          scene.add(mesh)
+          meshesRef.current.push(mesh)
+        }
+      }
+    }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trajectories, currentPositions, referenceBody.id])
+  }, [trajectories, currentPositions, referenceBody.id, _lagrangePoints, showEcliptic])
 
   const handleDoubleClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
@@ -200,11 +244,57 @@ export function TrajectoryCanvas3D({
     [onReferenceChange],
   )
 
+  const handleMouseMove = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (!onHover) {
+        return
+      }
+
+      const container = containerRef.current
+      const camera = cameraRef.current
+      const scene = sceneRef.current
+      if (!container || !camera || !scene) {
+        return
+      }
+
+      const rect = container.getBoundingClientRect()
+      const mouse = new THREE.Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1,
+      )
+
+      const raycaster = raycasterRef.current
+      raycaster.setFromCamera(mouse, camera)
+
+      const clickable = meshesRef.current.filter(
+        (obj) => obj instanceof THREE.Mesh && obj.userData.bodyId,
+      )
+
+      const intersections = raycaster.intersectObjects(clickable, false)
+
+      if (intersections.length > 0) {
+        const bodyId = intersections[0].object.userData.bodyId as string | undefined
+        if (bodyId) {
+          const pos = currentPositions.find((p) => p.body.id === bodyId)
+          if (pos) {
+            onHover(pos.body, pos.distance, event.clientX, event.clientY)
+            return
+          }
+        }
+      }
+
+      onHover(null, 0, 0, 0)
+    },
+    [currentPositions, onHover],
+  )
+
   return (
     <div
       ref={containerRef}
       className="viz-canvas canvas-mode"
       onDoubleClick={handleDoubleClick}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => onHover?.(null, 0, 0, 0)}
     />
   )
 }
