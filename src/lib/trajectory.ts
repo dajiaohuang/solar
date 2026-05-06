@@ -1,7 +1,7 @@
 import { createBodyPositionResolver } from './ephemeris'
 import { getRelativePositions, toPlanarPoint } from './referenceFrame'
 import { vector3Magnitude } from './ephemeris'
-import type { BodyId, CelestialBody, TrajectoryFrameData, TrajectorySample } from '../types'
+import type { BodyId, CelestialBody, TrajectoryFrameData, TrajectorySample, Vector2, Vector3 } from '../types'
 
 const trajectoryCache = new Map<string, TrajectorySample[]>()
 
@@ -64,7 +64,8 @@ export function buildTrajectories(params: {
   }
 
   const trajectories = bodies.map((body) => {
-    const points = []
+    const points: Vector2[] = []
+    const points3D: Vector3[] = []
 
     for (let index = 0; index < sampleCount; index += 1) {
       const progress = sampleCount === 1 ? 0 : index / (sampleCount - 1)
@@ -73,9 +74,10 @@ export function buildTrajectories(params: {
       const [relativePosition] = getRelativePositions([body], referenceId, resolve)
 
       points.push(toPlanarPoint(relativePosition.position))
+      points3D.push(relativePosition.position)
     }
 
-    return { body, points }
+    return { body, points, points3D }
   })
 
   trajectoryCache.set(cacheKey, trajectories)
@@ -104,6 +106,7 @@ export function buildTrajectoryFrame(params: {
   const currentPositions = relativePositions.map((item) => ({
     body: item.body,
     planarPosition: toPlanarPoint(item.position),
+    position3D: item.position,
     distance: vector3Magnitude(item.position),
   }))
   const trajectories = buildTrajectories({

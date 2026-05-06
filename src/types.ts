@@ -89,12 +89,14 @@ export type BodyPosition = {
 export type RenderedBodyPosition = {
   body: CelestialBody
   planarPosition: Vector2
+  position3D?: Vector3
   distance: number
 }
 
 export type TrajectorySample = {
   body: CelestialBody
   points: Vector2[]
+  points3D?: Vector3[]
 }
 
 export type TrajectoryFrameData = {
