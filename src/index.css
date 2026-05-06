@@ -76,3 +76,41 @@ h2 {
 a {
   color: inherit;
 }
+
+.body-tooltip {
+  background: rgba(10, 14, 28, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.6;
+  min-width: 160px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.tooltip-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 4px;
+}
+
+.tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #aab;
+}
+
+.tooltip-row span:first-child {
+  color: #889;
+}
+
+.lagrange-marker {
+  position: absolute;
+  font-size: 10px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+}

@@ -4,7 +4,7 @@ import type { BodyId, CelestialBody, OrbitDefinition, Vector2 } from '../types'
 
 const ELLIPSE_SAMPLES = 300
 
-function getOrbitalPeriodDays(orbit: OrbitDefinition) {
+export function getOrbitalPeriodDays(orbit: OrbitDefinition) {
   const semiMajorAxisAU =
     orbit.model === 'planetaryApprox' ? orbit.base.semiMajorAxisAU : orbit.semiMajorAxisAU
 

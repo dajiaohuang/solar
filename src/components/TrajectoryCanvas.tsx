@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { GRID_LEVELS, SVG_PADDING, createProjection, projectPoint, unprojectPoint, type Projection } from '../lib/viewProjection'
+import type { LagrangePoint } from '../lib/lagrange'
 import type { CelestialBody, RenderedBodyPosition, TrajectorySample, Vector2 } from '../types'
 
 type OrbitEllipse = {
@@ -16,6 +17,8 @@ type Props = {
   showOrbits?: boolean
   orbitEllipses?: OrbitEllipse[]
   onReferenceChange?: (bodyId: string) => void
+  onHover?: (body: CelestialBody | null, distance: number, x: number, y: number) => void
+  lagrangePoints?: { body: CelestialBody; points: LagrangePoint[] }[]
 }
 
 type Geometry = {
@@ -481,6 +484,8 @@ export function TrajectoryCanvas({
   showOrbits,
   orbitEllipses,
   onReferenceChange,
+  onHover,
+  lagrangePoints,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const resourcesRef = useRef<GlResources | null>(null)
@@ -611,8 +616,52 @@ export function TrajectoryCanvas({
     [currentPositions, onReferenceChange, projection, viewRadiusAU],
   )
 
+  const handleMouseMove = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (!onHover) {
+        return
+      }
+
+      const rect = event.currentTarget.getBoundingClientRect()
+      const clickPoint = {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      }
+
+      const worldPoint = unprojectPoint(clickPoint, projection)
+      const thresholdAU = viewRadiusAU * 0.06
+
+      let nearestItem: (typeof currentPositions)[number] | null = null
+      let nearestDistance = Number.POSITIVE_INFINITY
+
+      for (const item of currentPositions) {
+        const dx = item.planarPosition.x - worldPoint.x
+        const dy = item.planarPosition.y - worldPoint.y
+        const dist = Math.hypot(dx, dy)
+
+        if (dist < thresholdAU && dist < nearestDistance) {
+          nearestDistance = dist
+          nearestItem = item
+        }
+      }
+
+      if (nearestItem) {
+        onHover(nearestItem.body, nearestItem.distance, event.clientX, event.clientY)
+      } else {
+        onHover(null, 0, 0, 0)
+      }
+    },
+    [currentPositions, onHover, projection, viewRadiusAU],
+  )
+
   return (
-    <div className="viz-canvas canvas-mode" ref={containerRef} onDoubleClick={handleDoubleClick}>
+    <div
+      className="viz-canvas canvas-mode"
+      ref={containerRef}
+      onDoubleClick={handleDoubleClick}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => onHover?.(null, 0, 0, 0)}
+    >
       <canvas ref={canvasRef} className="trajectory-canvas" role="img" aria-label="太阳系轨迹平面图" />
 
       <div className="canvas-label-layer" aria-hidden="true">
@@ -642,6 +691,26 @@ export function TrajectoryCanvas({
             </span>
           )
         })}
+
+        {lagrangePoints?.flatMap((group) =>
+          group.points.map((lp) => {
+            const projected = projectPoint(lp.position, projection)
+            return (
+              <span
+                key={`${group.body.id}-${lp.label}`}
+                className="lagrange-marker"
+                style={{
+                  left: `${(projected.x / Math.max(size.width, 1)) * 100}%`,
+                  top: `${(projected.y / Math.max(size.height, 1)) * 100}%`,
+                  color: lp.color,
+                }}
+                title={`${group.body.name} ${lp.label}`}
+              >
+                ◆
+              </span>
+            )
+          }),
+        )}
 
         {!currentPositions.length && <span className="empty-overlay-copy">请先选择至少一个要显示的天体</span>}
         {webglUnavailable && <span className="empty-overlay-copy">当前浏览器不支持 WebGL 加速渲染</span>}

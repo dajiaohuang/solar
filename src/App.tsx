@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { CatalogPanel } from './components/CatalogPanel'
 import { TrajectoryCanvas } from './components/TrajectoryCanvas'
 import { TrajectoryCanvas3D } from './components/TrajectoryCanvas3D'
+import { BodyTooltip } from './components/BodyTooltip'
 import { ConjunctionPanel } from './components/ConjunctionPanel'
 import { useConjunctionWorker } from './hooks/useConjunctionWorker'
 import './App.css'
@@ -10,7 +11,8 @@ import { SCENE_PRESETS } from './data/presets'
 import { decodeUrlState, encodeUrlState } from './lib/urlState'
 import { deleteGroup, loadGroups, saveGroup, type StoredGroup } from './lib/storedGroups'
 import { exportAsCSV, exportAsJSON } from './lib/dataExport'
-import { computeOrbitEllipses } from './lib/orbitEllipse'
+import { computeOrbitEllipses, getOrbitalPeriodDays } from './lib/orbitEllipse'
+import { computeLagrangePoints, type LagrangePoint } from './lib/lagrange'
 import { useTrajectoryWorker } from './hooks/useTrajectoryWorker'
 import {
   asteroidRecordToBody,
@@ -48,6 +50,8 @@ const DRAWER_SECTIONS = [
   { id: 'major', label: '主要天体' },
   { id: 'asteroids', label: '小行星' },
   { id: 'conjunctions', label: '交会' },
+  { id: 'properties', label: '属性' },
+  { id: 'custom', label: '自定义' },
   { id: 'loaded', label: '已载入' },
 ] as const
 
@@ -109,7 +113,24 @@ function App() {
   const [simOffsetDays, setSimOffsetDays] = useState(initialUrl.offset ?? 0)
   const [splitMode, setSplitMode] = useState(false)
   const [splitReferenceId, setSplitReferenceId] = useState<BodyId>('earth')
+  const [timeFormat, setTimeFormat] = useState<'date' | 'julian'>('date')
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('3d')
+  const [measuringMode, setMeasuringMode] = useState(false)
+  const [measureBodyA, setMeasureBodyA] = useState<BodyId | null>(null)
+  const [measureBodyB, setMeasureBodyB] = useState<BodyId | null>(null)
+  const [selectedPropertyBodyId, setSelectedPropertyBodyId] = useState<BodyId>('sun')
+  const [customForm, setCustomForm] = useState({
+    name: '',
+    semiMajorAxisAU: '2.5',
+    eccentricity: '0.1',
+    inclinationDeg: '5',
+    ascendingNodeDeg: '80',
+    argPeriapsisDeg: '30',
+    meanAnomalyDeg: '0',
+    color: '#ff9944',
+  })
+  const [showEcliptic, setShowEcliptic] = useState(false)
+  const [showLagrange, setShowLagrange] = useState(false)
   const [showOrbitEllipses, setShowOrbitEllipses] = useState(false)
   const [isPlaying, setIsPlaying] = useState(true)
   const [manifest, setManifest] = useState<AsteroidManifest | null>(null)
@@ -121,6 +142,8 @@ function App() {
   const [savedGroups, setSavedGroups] = useState<Record<string, StoredGroup>>(() => loadGroups())
   const [groupNameInput, setGroupNameInput] = useState('')
   const [isSavingGroup, setIsSavingGroup] = useState(false)
+  const stageRef = useRef<HTMLDivElement | null>(null)
+  const [hoveredBody, setHoveredBody] = useState<{ body: CelestialBody; distance: number; x: number; y: number } | null>(null)
   const [conjunctionThresholdAU, setConjunctionThresholdAU] = useState(0.05)
   const [conjunctionWindowDays, setConjunctionWindowDays] = useState(365)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -163,6 +186,71 @@ function App() {
     frameId = window.requestAnimationFrame(tick)
     return () => window.cancelAnimationFrame(frameId)
   }, [isPlaying, speedDaysPerSecond])
+
+  const resetViewTransform = () => {
+    setZoomLevel(1)
+    setViewOffsetAU({ x: 0, y: 0 })
+  }
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const tag = (event.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') {
+        return
+      }
+
+      switch (event.key) {
+        case ' ':
+          event.preventDefault()
+          setIsPlaying((value) => !value)
+          break
+        case 'r':
+        case 'R':
+          setSimOffsetDays(0)
+          resetViewTransform()
+          break
+        case 'Escape':
+          setMeasuringMode(false)
+          setMeasureBodyA(null)
+          setMeasureBodyB(null)
+          break
+        case 'f':
+        case 'F':
+          resetViewTransform()
+          break
+        case '+':
+        case '=':
+          setZoomLevel((z) => Math.min(MAX_ZOOM, z + 0.2))
+          break
+        case '-':
+          setZoomLevel((z) => Math.max(MIN_ZOOM, z - 0.2))
+          break
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5': {
+          const idx = Number(event.key) - 1
+          if (idx < SCENE_PRESETS.length) {
+            const preset = SCENE_PRESETS[idx]
+            setIsPlaying(false)
+            setSimOffsetDays(preset.julianDay - epochJulianDay)
+            setReferenceId(preset.referenceId)
+            setSelectedMajorBodyIds(preset.selectedMajorBodyIds)
+            setZoomLevel(preset.zoomLevel)
+            setHistoryDays(preset.historyDays)
+            setViewOffsetAU({ x: 0, y: 0 })
+          }
+
+          break
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     void loadAsteroidManifest().then((loadedManifest) => {
@@ -445,6 +533,25 @@ function App() {
     return computeOrbitEllipses(displayedBodies, bodiesById, activeReferenceId, quantizedJulianDay)
   }, [showOrbitEllipses, displayedBodies, bodiesById, activeReferenceId, quantizedJulianDay])
 
+  const lagrangePoints = useMemo(() => {
+    if (!showLagrange || activeReferenceId !== 'sun') {
+      return []
+    }
+
+    const points: { body: CelestialBody; points: LagrangePoint[] }[] = []
+
+    for (const pos of currentPositions) {
+      if (pos.body.kind === 'planet' && pos.body.id !== 'sun') {
+        const lp = computeLagrangePoints(pos.body, pos.planarPosition)
+        if (lp.length > 0) {
+          points.push({ body: pos.body, points: lp })
+        }
+      }
+    }
+
+    return points
+  }, [showLagrange, activeReferenceId, currentPositions])
+
   const catalogResults = useMemo(() => {
     if (!manifest) {
       return []
@@ -532,19 +639,91 @@ function App() {
     setSectionPages([])
   }
 
-  const resetViewTransform = () => {
-    setZoomLevel(1)
-    setViewOffsetAU({ x: 0, y: 0 })
-  }
+  const transitionRef = useRef<number | null>(null)
+
+  const animateTransition = useCallback(
+    (fromZoom: number, fromOffset: Vector2, toZoom: number, toOffset: Vector2) => {
+      if (transitionRef.current !== null) {
+        cancelAnimationFrame(transitionRef.current)
+      }
+
+      const duration = 400
+      const startTime = performance.now()
+
+      const step = (now: number) => {
+        const elapsed = now - startTime
+        const t = Math.min(elapsed / duration, 1)
+        const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+
+        setZoomLevel(fromZoom + (toZoom - fromZoom) * ease)
+        setViewOffsetAU({
+          x: fromOffset.x + (toOffset.x - fromOffset.x) * ease,
+          y: fromOffset.y + (toOffset.y - fromOffset.y) * ease,
+        })
+
+        if (t < 1) {
+          transitionRef.current = requestAnimationFrame(step)
+        } else {
+          transitionRef.current = null
+        }
+      }
+
+      transitionRef.current = requestAnimationFrame(step)
+    },
+    [],
+  )
 
   const handleChangeReference = useCallback(
     (bodyId: BodyId) => {
+      if (measuringMode) {
+        if (!measureBodyA) {
+          setMeasureBodyA(bodyId)
+          setMeasureBodyB(null)
+        } else if (measureBodyA === bodyId) {
+          setMeasureBodyA(null)
+        } else {
+          setMeasureBodyB(bodyId)
+        }
+
+        return
+      }
+
       if (bodyId !== activeReferenceId && bodiesById.has(bodyId)) {
         setReferenceId(bodyId)
-        resetViewTransform()
+        animateTransition(zoomLevel, viewOffsetAU, 1, { x: 0, y: 0 })
       }
     },
-    [activeReferenceId, bodiesById],
+    [activeReferenceId, bodiesById, animateTransition, measuringMode, measureBodyA, zoomLevel, viewOffsetAU],
+  )
+
+  const handleScreenshot = useCallback(() => {
+    const container = stageRef.current
+    if (!container) {
+      return
+    }
+
+    const canvas = container.querySelector('canvas')
+    if (!canvas) {
+      return
+    }
+
+    const dataUrl = canvas.toDataURL('image/png')
+    const anchor = document.createElement('a')
+    anchor.href = dataUrl
+    anchor.download = `solar-${formatJulianDayAsDate(currentJulianDay).replace(/\//g, '-')}-${referenceId}.png`
+    anchor.click()
+  }, [currentJulianDay, referenceId])
+
+  const handleHover = useCallback(
+    (body: CelestialBody | null, distance: number, x: number, y: number) => {
+      if (!body) {
+        setHoveredBody(null)
+        return
+      }
+
+      setHoveredBody({ body, distance, x, y })
+    },
+    [],
   )
 
   const handleCanvasWheel = useCallback(
@@ -634,7 +813,11 @@ function App() {
                 </article>
                 <article className="stat-card">
                   <span>当前日期</span>
-                  <strong>{formatJulianDayAsDate(currentJulianDay)}</strong>
+                  <strong>
+                    {timeFormat === 'date'
+                      ? formatJulianDayAsDate(currentJulianDay)
+                      : `JD ${currentJulianDay.toFixed(2)}`}
+                  </strong>
                 </article>
                 <article className="stat-card">
                   <span>当前最远距离</span>
@@ -811,6 +994,26 @@ function App() {
                   <span>显示完整轨道椭圆</span>
                 </label>
 
+                <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={showLagrange}
+                    onChange={(event) => setShowLagrange(event.target.checked)}
+                  />
+                  <span>显示拉格朗日点</span>
+                </label>
+
+                {viewMode === '3d' && (
+                  <label className="field" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={showEcliptic}
+                      onChange={(event) => setShowEcliptic(event.target.checked)}
+                    />
+                    <span>显示黄道面</span>
+                  </label>
+                )}
+
                 <div className="button-row">
                   <button type="button" onClick={() => setIsPlaying((value) => !value)}>
                     {isPlaying ? '暂停' : '继续'}
@@ -847,6 +1050,23 @@ function App() {
                     }
                   >
                     导出 CSV
+                  </button>
+                </div>
+
+                <div className="button-row">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMeasuringMode((m) => !m)
+                      setMeasureBodyA(null)
+                      setMeasureBodyB(null)
+                    }}
+                    style={measuringMode ? { background: '#334', borderColor: '#68f' } : undefined}
+                  >
+                    {measuringMode ? '测量中…' : '测量距离'}
+                  </button>
+                  <button type="button" onClick={handleScreenshot}>
+                    截图 PNG
                   </button>
                 </div>
               </div>
@@ -1058,6 +1278,257 @@ function App() {
             </div>
           )}
 
+          {activeDrawerSection === 'properties' && (
+            <div className="drawer-panel">
+              <div className="panel-block drawer-section-card">
+                <div className="field-header">
+                  <span>天体属性</span>
+                </div>
+
+                <label className="field">
+                  <span>选择天体</span>
+                  <select
+                    value={selectedPropertyBodyId}
+                    onChange={(event) => setSelectedPropertyBodyId(event.target.value)}
+                  >
+                    {allBodies.map((body) => (
+                      <option key={body.id} value={body.id}>
+                        {body.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {(() => {
+                  const body = bodiesById.get(selectedPropertyBodyId)
+                  if (!body) {
+                    return null
+                  }
+
+                  return (
+                    <div className="stats-grid drawer-stats" style={{ marginTop: 8 }}>
+                      <article className="stat-card">
+                        <span>类型</span>
+                        <strong>
+                          {body.kind === 'star'
+                            ? '恒星'
+                            : body.kind === 'planet'
+                              ? '行星'
+                              : body.kind === 'moon'
+                                ? '卫星'
+                                : body.kind === 'dwarfPlanet'
+                                  ? '矮行星'
+                                  : '小行星'}
+                        </strong>
+                      </article>
+                      {body.parentId && (
+                        <article className="stat-card">
+                          <span>环绕</span>
+                          <strong>{bodiesById.get(body.parentId)?.name ?? body.parentId}</strong>
+                        </article>
+                      )}
+                      {body.orbit && (
+                        <>
+                          <article className="stat-card">
+                            <span>半长轴</span>
+                            <strong>
+                              {(body.orbit.model === 'planetaryApprox'
+                                ? body.orbit.base.semiMajorAxisAU
+                                : body.orbit.semiMajorAxisAU
+                              ).toFixed(4)}{' '}
+                              AU
+                            </strong>
+                          </article>
+                          <article className="stat-card">
+                            <span>离心率</span>
+                            <strong>
+                              {(body.orbit.model === 'planetaryApprox'
+                                ? body.orbit.base.eccentricity
+                                : body.orbit.eccentricity
+                              ).toFixed(4)}
+                            </strong>
+                          </article>
+                          <article className="stat-card">
+                            <span>倾角</span>
+                            <strong>
+                              {(body.orbit.model === 'planetaryApprox'
+                                ? body.orbit.base.inclinationDeg
+                                : body.orbit.inclinationDeg
+                              ).toFixed(2)}°
+                            </strong>
+                          </article>
+                          <article className="stat-card">
+                            <span>轨道周期</span>
+                            <strong>{formatDays(getOrbitalPeriodDays(body.orbit))}</strong>
+                          </article>
+                        </>
+                      )}
+                      {body.absoluteMagnitude !== undefined && (
+                        <article className="stat-card">
+                          <span>绝对星等</span>
+                          <strong>{body.absoluteMagnitude.toFixed(1)}</strong>
+                        </article>
+                      )}
+                      {body.orbitClassName && (
+                        <article className="stat-card">
+                          <span>轨道分类</span>
+                          <strong>{body.orbitClassName}</strong>
+                        </article>
+                      )}
+                      <article className="stat-card">
+                        <span>数据来源</span>
+                        <strong>{body.source}</strong>
+                      </article>
+                    </div>
+                  )
+                })()}
+              </div>
+            </div>
+          )}
+
+          {activeDrawerSection === 'custom' && (
+            <div className="drawer-panel">
+              <div className="panel-block drawer-section-card">
+                <div className="field-header">
+                  <span>创建自定义天体</span>
+                </div>
+
+                <p className="catalog-summary" style={{ marginBottom: 8 }}>
+                  输入开普勒轨道根数创建一个虚拟天体并加入视图。创建后可在天体列表中选中等操作。
+                </p>
+
+                <label className="field">
+                  <span>名称</span>
+                  <input
+                    type="text"
+                    value={customForm.name}
+                    onChange={(event) => setCustomForm((f) => ({ ...f, name: event.target.value }))}
+                    placeholder="例如：我的彗星"
+                  />
+                </label>
+
+                <label className="field">
+                  <span>半长轴 (AU)</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={customForm.semiMajorAxisAU}
+                    onChange={(event) => setCustomForm((f) => ({ ...f, semiMajorAxisAU: event.target.value }))}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>离心率</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="0.99"
+                    value={customForm.eccentricity}
+                    onChange={(event) => setCustomForm((f) => ({ ...f, eccentricity: event.target.value }))}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>倾角 (°)</span>
+                  <input
+                    type="number"
+                    step="1"
+                    value={customForm.inclinationDeg}
+                    onChange={(event) => setCustomForm((f) => ({ ...f, inclinationDeg: event.target.value }))}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>升交点黄经 (°)</span>
+                  <input
+                    type="number"
+                    step="1"
+                    value={customForm.ascendingNodeDeg}
+                    onChange={(event) => setCustomForm((f) => ({ ...f, ascendingNodeDeg: event.target.value }))}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>近日点幅角 (°)</span>
+                  <input
+                    type="number"
+                    step="1"
+                    value={customForm.argPeriapsisDeg}
+                    onChange={(event) => setCustomForm((f) => ({ ...f, argPeriapsisDeg: event.target.value }))}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>平近点角 (°)</span>
+                  <input
+                    type="number"
+                    step="1"
+                    value={customForm.meanAnomalyDeg}
+                    onChange={(event) => setCustomForm((f) => ({ ...f, meanAnomalyDeg: event.target.value }))}
+                  />
+                </label>
+
+                <label className="field">
+                  <span>颜色</span>
+                  <input
+                    type="color"
+                    value={customForm.color}
+                    onChange={(event) => setCustomForm((f) => ({ ...f, color: event.target.value }))}
+                  />
+                </label>
+
+                <div className="button-row">
+                  <button
+                    type="button"
+                    disabled={!customForm.name.trim()}
+                    onClick={() => {
+                      const id = `custom:${Date.now()}`
+                      const a = Number(customForm.semiMajorAxisAU) || 2.5
+                      const periodDays = 365.25 * Math.sqrt(a * a * a)
+
+                      const body: CelestialBody = {
+                        id,
+                        name: customForm.name.trim(),
+                        shortName: customForm.name.trim(),
+                        kind: 'asteroid',
+                        color: customForm.color,
+                        size: 3,
+                        source: 'jpl-sbdb',
+                        isCatalogBody: true,
+                        orbit: {
+                          model: 'keplerian',
+                          epochJd: epochJulianDay,
+                          semiMajorAxisAU: a,
+                          eccentricity: Number(customForm.eccentricity) || 0,
+                          inclinationDeg: Number(customForm.inclinationDeg) || 0,
+                          ascendingNodeDeg: Number(customForm.ascendingNodeDeg) || 0,
+                          argPeriapsisDeg: Number(customForm.argPeriapsisDeg) || 0,
+                          meanAnomalyDeg: Number(customForm.meanAnomalyDeg) || 0,
+                          meanMotionDegPerDay: 360 / periodDays,
+                        },
+                      }
+
+                      setLoadedCatalogBodies((prev) => ({ ...prev, [id]: body }))
+                      setSelectedCatalogIds((prev) => dedupeIds([...prev, id]))
+                      setActiveDrawerSection('loaded')
+                    }}
+                  >
+                    创建天体
+                  </button>
+                </div>
+
+                {Object.keys(loadedCatalogBodies).filter((id) => id.startsWith('custom:')).length > 0 && (
+                  <div className="catalog-toolbar" style={{ marginTop: 10 }}>
+                    <span className="catalog-hint">
+                      已创建 {Object.keys(loadedCatalogBodies).filter((id) => id.startsWith('custom:')).length} 个自定义天体
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {activeDrawerSection === 'loaded' && (
             <div className="drawer-panel">
               <div className="panel-block drawer-section-card">
@@ -1102,7 +1573,7 @@ function App() {
         </div>
       </aside>
 
-      <section className="fullscreen-stage">
+      <section ref={stageRef} className="fullscreen-stage">
         <div className="stage-topbar">
           <button type="button" className="drawer-toggle-button" onClick={() => setDrawerOpen(true)}>
             菜单
@@ -1110,9 +1581,36 @@ function App() {
 
           <div className="compact-stats">
             <span>参考点 {referenceBody.name}{splitMode ? ` / ${splitReferenceBody.name}` : ''}</span>
-            <span>日期 {formatJulianDayAsDate(currentJulianDay)}</span>
+            <span
+              style={{ cursor: 'pointer' }}
+              title="点击切换日期/儒略日"
+              onClick={() => setTimeFormat((f) => (f === 'date' ? 'julian' : 'date'))}
+            >
+              {timeFormat === 'date'
+                ? `日期 ${formatJulianDayAsDate(currentJulianDay)}`
+                : `JD ${currentJulianDay.toFixed(2)}`}
+            </span>
             <span>倍率 {speedDaysPerSecond} 天/秒</span>
             <span>显示 {displayedBodies.length} 个</span>
+            {measuringMode && (
+              <span style={{ color: '#ffcc44' }}>
+                测量: {measureBodyA ? bodiesById.get(measureBodyA)?.name ?? measureBodyA : '双击天体选择'}
+                {measureBodyA && !measureBodyB && ' → 双击第二个天体'}
+                {measureBodyA && measureBodyB && (() => {
+                  const posA = currentPositions.find((p) => p.body.id === measureBodyA)
+                  const posB = currentPositions.find((p) => p.body.id === measureBodyB)
+                  if (!posA || !posB) {
+                    return ''
+                  }
+
+                  const dx = posA.planarPosition.x - posB.planarPosition.x
+                  const dy = posA.planarPosition.y - posB.planarPosition.y
+                  const dist = Math.hypot(dx, dy)
+
+                  return ` → ${bodiesById.get(measureBodyB)?.name ?? measureBodyB} = ${dist.toFixed(4)} AU (${(dist * 149597870.7).toFixed(0)} km)`
+                })()}
+              </span>
+            )}
           </div>
         </div>
 
@@ -1128,6 +1626,8 @@ function App() {
                 showOrbits={showOrbitEllipses}
                 orbitEllipses={orbitEllipses}
                 onReferenceChange={handleChangeReference}
+                onHover={handleHover}
+                lagrangePoints={lagrangePoints}
               />
             </div>
             <div className="stage-canvas-shell" style={{ flex: 1 }} onWheel={handleCanvasWheel}>
@@ -1140,6 +1640,8 @@ function App() {
                 showOrbits={false}
                 orbitEllipses={[]}
                 onReferenceChange={handleChangeReference}
+                onHover={handleHover}
+                lagrangePoints={lagrangePoints}
               />
             </div>
           </div>
@@ -1155,6 +1657,8 @@ function App() {
                 showOrbits={showOrbitEllipses}
                 orbitEllipses={orbitEllipses}
                 onReferenceChange={handleChangeReference}
+                onHover={handleHover}
+                lagrangePoints={lagrangePoints}
               />
             ) : (
               <TrajectoryCanvas3D
@@ -1162,6 +1666,9 @@ function App() {
                 trajectories={trajectories}
                 currentPositions={currentPositions}
                 onReferenceChange={handleChangeReference}
+                onHover={handleHover}
+                lagrangePoints={lagrangePoints}
+                showEcliptic={showEcliptic}
               />
             )}
           </div>
@@ -1169,18 +1676,22 @@ function App() {
 
         <div className="stage-bottombar">
           <div className="legend">
-            {displayedBodies.slice(0, 28).map((body) => (
-              <span
-                key={body.id}
-                className="legend-item"
-                style={{ cursor: 'pointer' }}
-                title={`双击切换参考点为 ${body.name}`}
-                onClick={() => handleChangeReference(body.id)}
-              >
-                <i style={{ backgroundColor: body.color }} />
-                {body.shortName ?? body.name}
-              </span>
-            ))}
+            {displayedBodies.slice(0, 28).map((body) => {
+              const periodText = body.orbit ? ` (${formatDays(getOrbitalPeriodDays(body.orbit))})` : ''
+
+              return (
+                <span
+                  key={body.id}
+                  className="legend-item"
+                  style={{ cursor: 'pointer' }}
+                  title={`单击切换参考点为 ${body.name}${periodText ? `，轨道周期${periodText.slice(1, -1)}` : ''}`}
+                  onClick={() => handleChangeReference(body.id)}
+                >
+                  <i style={{ backgroundColor: body.color }} />
+                  {body.shortName ?? body.name}{periodText}
+                </span>
+              )
+            })}
             {activeReferenceId === 'earth' && displayedBodies.some((b) => b.orbitClassCode && ['APO', 'ATE', 'AMO', 'ATI'].includes(b.orbitClassCode)) && (
               <span className="legend-item" title="NEO 距离热力图：红=近，蓝=远">
                 <i
@@ -1197,6 +1708,13 @@ function App() {
           <p className="stage-footer-copy">轨迹全屏显示。左侧抽屉可切换概览、控制、主要天体、小行星和已载入分区。</p>
         </div>
       </section>
+      <BodyTooltip
+        body={hoveredBody?.body ?? null}
+        distanceAU={hoveredBody?.distance ?? 0}
+        x={hoveredBody?.x ?? 0}
+        y={hoveredBody?.y ?? 0}
+        visible={hoveredBody !== null}
+      />
     </main>
   )
 }
