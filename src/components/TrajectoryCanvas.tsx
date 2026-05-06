@@ -19,6 +19,9 @@ type Props = {
   onReferenceChange?: (bodyId: string) => void
   onHover?: (body: CelestialBody | null, distance: number, x: number, y: number) => void
   lagrangePoints?: { body: CelestialBody; points: LagrangePoint[] }[]
+  planetOpacity?: number
+  asteroidOpacity?: number
+  moonOpacity?: number
 }
 
 type Geometry = {
@@ -79,6 +82,18 @@ function isNeo(body: CelestialBody) {
   return body.orbitClassCode !== undefined && NEO_CLASSES.has(body.orbitClassCode)
 }
 
+function isComet(body: CelestialBody) {
+  if (!body.orbit) {
+    return false
+  }
+
+  const e = body.orbit.model === 'planetaryApprox'
+    ? body.orbit.base.eccentricity
+    : body.orbit.eccentricity
+
+  return e > 0.9
+}
+
 function neoDistanceColor(distanceAU: number, alpha: number) {
   const logDistance = Math.log(Math.max(distanceAU, 0.001))
   const t = Math.max(0, Math.min(1, (logDistance - Math.log(0.01)) / (Math.log(1.0) - Math.log(0.01))))
@@ -88,6 +103,15 @@ function neoDistanceColor(distanceAU: number, alpha: number) {
   const blue = t
 
   return [red, green, blue, alpha]
+}
+
+function getMagnitudeScaledSize(body: CelestialBody) {
+  if (body.absoluteMagnitude === undefined) {
+    return body.size
+  }
+
+  const factor = 1 + (15 - body.absoluteMagnitude) * 0.12
+  return body.size * Math.max(0.6, Math.min(3, factor))
 }
 
 function hexToRgba(hexColor: string, alpha: number) {
@@ -273,6 +297,9 @@ function buildGeometry(
   currentPositions: RenderedBodyPosition[],
   showOrbits: boolean,
   orbitEllipses: OrbitEllipse[],
+  planetOpacity: number,
+  asteroidOpacity: number,
+  moonOpacity: number,
 ): Geometry {
   const linePositions: number[] = []
   const lineColors: number[] = []
@@ -365,9 +392,16 @@ function buildGeometry(
 
     const bodyDistance = distanceByBodyId.get(trajectory.body.id) ?? 0
     const useNeoColor = isEarthReference && isNeo(trajectory.body)
-    const color = useNeoColor
-      ? neoDistanceColor(bodyDistance, 0.6)
-      : hexToRgba(trajectory.body.color, trajectory.body.kind === 'asteroid' ? 0.3 : 0.92)
+    const isCometBody = isComet(trajectory.body)
+    const color = isCometBody
+      ? hexToRgba('#44dddd', 0.5 * asteroidOpacity)
+      : useNeoColor
+        ? neoDistanceColor(bodyDistance, 0.6)
+        : hexToRgba(
+            trajectory.body.color,
+            (trajectory.body.kind === 'asteroid' ? 0.3 : trajectory.body.kind === 'moon' ? 0.75 : 0.92) *
+              (trajectory.body.kind === 'planet' || trajectory.body.kind === 'dwarfPlanet' ? planetOpacity : trajectory.body.kind === 'moon' ? moonOpacity : asteroidOpacity),
+          )
 
     for (let index = 1; index < trajectory.points.length; index += 1) {
       const previous = toClipSpace(projectPoint(trajectory.points[index - 1], projection), projection)
@@ -400,11 +434,16 @@ function buildGeometry(
   for (const item of currentPositions) {
     const projected = toClipSpace(projectPoint(item.planarPosition, projection), projection)
     const useNeoColor = isEarthReference && isNeo(item.body)
+    const typeOpacity = item.body.kind === 'planet' || item.body.kind === 'dwarfPlanet'
+      ? planetOpacity
+      : item.body.kind === 'moon'
+        ? moonOpacity
+        : asteroidOpacity
     const color = useNeoColor
-      ? neoDistanceColor(item.distance, 0.92)
-      : hexToRgba(item.body.color, item.body.kind === 'asteroid' ? 0.92 : 1)
+      ? neoDistanceColor(item.distance, 0.92 * typeOpacity)
+      : hexToRgba(item.body.color, (item.body.kind === 'asteroid' ? 0.92 : 1) * typeOpacity)
     pushVertex(pointPositions, pointColors, projected.x, projected.y, color)
-    pointSizes.push(item.body.size)
+    pointSizes.push(getMagnitudeScaledSize(item.body))
   }
 
   return {
@@ -486,6 +525,9 @@ export function TrajectoryCanvas({
   onReferenceChange,
   onHover,
   lagrangePoints,
+  planetOpacity = 1,
+  asteroidOpacity = 1,
+  moonOpacity = 1,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const resourcesRef = useRef<GlResources | null>(null)
@@ -519,8 +561,11 @@ export function TrajectoryCanvas({
         currentPositions,
         showOrbits ?? false,
         orbitEllipses ?? [],
+        planetOpacity,
+        asteroidOpacity,
+        moonOpacity,
       ),
-    [currentPositions, orbitEllipses, projection, referenceBody, showOrbits, trajectories],
+    [asteroidOpacity, currentPositions, moonOpacity, orbitEllipses, planetOpacity, projection, referenceBody, showOrbits, trajectories],
   )
 
   useEffect(() => {

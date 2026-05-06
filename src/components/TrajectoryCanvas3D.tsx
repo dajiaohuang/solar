@@ -14,8 +14,19 @@ type Props = {
   showEcliptic?: boolean
 }
 
+function getMagnitudeScaledRadius(body: CelestialBody, baseRadius: number) {
+  if (body.absoluteMagnitude === undefined) {
+    return baseRadius
+  }
+
+  const factor = 1 + (15 - body.absoluteMagnitude) * 0.12
+  return baseRadius * Math.max(0.6, Math.min(3, factor))
+}
+
 function createBodySphere(body: CelestialBody, position: THREE.Vector3) {
-  const geometry = new THREE.SphereGeometry(body.kind === 'star' ? 0.12 : body.kind === 'planet' ? 0.08 : 0.04, 16, 16)
+  const baseRadius = body.kind === 'star' ? 0.12 : body.kind === 'planet' ? 0.08 : 0.04
+  const radius = getMagnitudeScaledRadius(body, baseRadius)
+  const geometry = new THREE.SphereGeometry(radius, 16, 16)
   const material = new THREE.MeshBasicMaterial({ color: body.color })
   const mesh = new THREE.Mesh(geometry, material)
   mesh.position.copy(position)
