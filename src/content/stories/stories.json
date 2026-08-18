@@ -1,0 +1,60 @@
+[
+  {
+    "id": "retrograde-mars",
+    "title": { "en": "Why Mars moves backward", "zh": "为什么火星会逆行" },
+    "summary": { "en": "Switch between heliocentric and geocentric frames as Earth overtakes Mars.", "zh": "在地心与日心参考系间切换，观察地球超越火星时的视运动。" },
+    "steps": [
+      { "title": { "en": "The overtaking", "zh": "轨道超越" }, "body": { "en": "Earth completes its orbit faster. Near opposition it passes between the Sun and Mars.", "zh": "地球公转更快；冲日前后，地球从太阳与火星之间超越而过。" }, "scene": { "date": "2027-02-19", "referenceId": "sun", "bodies": ["sun", "earth", "mars"], "historyDays": 220, "view": "2d" } },
+      { "title": { "en": "Change the origin", "zh": "改变坐标原点" }, "body": { "en": "In the Earth-centered frame, Mars traces a temporary loop. The planet never reverses its heliocentric velocity.", "zh": "在地心系中，火星轨迹出现短暂回环；它在日心系中的速度从未真正反向。" }, "scene": { "date": "2027-02-19", "referenceId": "earth", "bodies": ["sun", "earth", "mars"], "historyDays": 220, "view": "2d" } }
+    ]
+  },
+  {
+    "id": "reference-frames",
+    "title": { "en": "One system, many frames", "zh": "同一太阳系，多种参考系" },
+    "summary": { "en": "Compare Sun-, Earth-, and Jupiter-centered descriptions of the same instant.", "zh": "对比同一时刻在日心、地心与木星中心坐标中的描述。" },
+    "steps": [
+      { "title": { "en": "Heliocentric structure", "zh": "日心结构" }, "body": { "en": "The broad architecture is simplest when the Sun is the origin.", "zh": "以太阳为原点时，太阳系大尺度结构最简洁。" }, "scene": { "date": "2026-08-18", "referenceId": "sun", "bodies": ["mercury", "venus", "earth", "mars", "jupiter"], "historyDays": 730, "view": "3d" } },
+      { "title": { "en": "Observer-centered motion", "zh": "观测者中心运动" }, "body": { "en": "Changing frame changes coordinates and apparent paths, not the physical event.", "zh": "切换参考系会改变坐标与视轨迹，但不会改变物理事件本身。" }, "scene": { "date": "2026-08-18", "referenceId": "earth", "bodies": ["sun", "venus", "earth", "mars", "jupiter"], "historyDays": 730, "view": "2d" } }
+    ]
+  },
+  {
+    "id": "kirkwood-gaps",
+    "title": { "en": "The gaps carved by Jupiter", "zh": "木星刻出的柯克伍德空隙" },
+    "summary": { "en": "Read resonances as missing density in semi-major-axis space.", "zh": "在半长轴分布中，把平均运动共振读成密度缺口。" },
+    "steps": [
+      { "title": { "en": "Element space", "zh": "元素空间" }, "body": { "en": "Main-belt asteroids cluster in a–e space, but strong Jovian period ratios deplete narrow bands.", "zh": "主带小行星在 a–e 空间聚集，但木星的强周期比共振清空了若干窄带。" }, "scene": { "date": "2026-08-18", "referenceId": "sun", "bodies": ["jupiter", "ceres"], "historyDays": 4383, "view": "2d", "route": "elements" } }
+    ]
+  },
+  {
+    "id": "trojans",
+    "title": { "en": "Why Trojans gather at L4 and L5", "zh": "特洛伊群为何聚集在 L4/L5" },
+    "summary": { "en": "Explore the rotating geometry around Jupiter's stable triangular points.", "zh": "探索木星轨道上稳定三角拉格朗日点周围的旋转几何。" },
+    "steps": [
+      { "title": { "en": "Sixty degrees ahead and behind", "zh": "前后六十度" }, "body": { "en": "L4 and L5 form equilateral configurations with the Sun and Jupiter in the circular restricted three-body model.", "zh": "在圆型限制性三体模型中，L4、L5 与太阳、木星构成等边三角形。" }, "scene": { "date": "2026-08-18", "referenceId": "sun", "bodies": ["jupiter"], "historyDays": 4383, "view": "2d", "showLagrange": true } }
+    ]
+  },
+  {
+    "id": "neo-types",
+    "title": { "en": "Four kinds of near-Earth orbit", "zh": "四类近地轨道" },
+    "summary": { "en": "Atira, Aten, Apollo, and Amor are geometric orbit classes, not risk scores.", "zh": "阿提拉、阿登、阿波罗与阿莫尔是几何轨道分类，并非风险等级。" },
+    "steps": [
+      { "title": { "en": "Classify by q, a, and Q", "zh": "用 q、a、Q 分类" }, "body": { "en": "Filter the catalog and compare perihelion and aphelion distances with Earth's orbit.", "zh": "筛选目录，并把近日点与远日点距离同地球轨道比较。" }, "scene": { "date": "2026-08-18", "referenceId": "sun", "bodies": ["earth", "venus", "mars"], "historyDays": 365, "view": "2d", "route": "catalog" } }
+    ]
+  },
+  {
+    "id": "pluto-resonance",
+    "title": { "en": "Pluto's protective 3:2 resonance", "zh": "保护冥王星的 3:2 共振" },
+    "summary": { "en": "Pluto crosses Neptune's orbital radius without close encounters.", "zh": "冥王星虽穿过海王星的轨道半径，却通过共振避免近距离相遇。" },
+    "steps": [
+      { "title": { "en": "Two orbits, locked timing", "zh": "两条轨道，锁定的节奏" }, "body": { "en": "For every two Pluto revolutions, Neptune completes about three. Their conjunction geometry remains protected.", "zh": "冥王星每公转约两圈，海王星约完成三圈；二者的会合几何因此保持安全。" }, "scene": { "date": "2026-08-18", "referenceId": "sun", "bodies": ["neptune", "pluto"], "historyDays": 90580, "view": "3d" } }
+    ]
+  },
+  {
+    "id": "voyagers",
+    "title": { "en": "The road out: Voyager and beyond", "zh": "离开太阳系：旅行者号之路" },
+    "summary": { "en": "Overlay teaching trajectories on the rare outer-planet alignment of the launch era.", "zh": "在发射时代罕见的外行星排列上叠加教学型航天器轨迹。" },
+    "steps": [
+      { "title": { "en": "A gravity-assist chain", "zh": "引力助推链" }, "body": { "en": "Jupiter and Saturn redirected Voyager's heliocentric velocity; the overlay is schematic and identifies its source separately.", "zh": "木星与土星改变了旅行者号的日心速度；叠加轨迹是示意性的，并单独标注来源。" }, "scene": { "date": "1977-09-05", "referenceId": "sun", "bodies": ["jupiter", "saturn", "uranus", "neptune"], "historyDays": 7300, "view": "3d", "showSpacecraft": true } }
+    ]
+  }
+]

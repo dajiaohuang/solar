@@ -1,8 +1,10 @@
 export type BodyId = string
 
-export type BodyKind = 'star' | 'planet' | 'moon' | 'dwarfPlanet' | 'asteroid'
+export type BodyKind = 'star' | 'planet' | 'moon' | 'dwarfPlanet' | 'asteroid' | 'spacecraft'
 
-export type OrbitSource = 'jpl-approx' | 'jpl-sbdb' | 'mpcorb'
+export type OrbitSource = 'jpl-approx' | 'jpl-sbdb' | 'mpcorb' | 'horizons' | 'curated-approx' | 'schematic' | 'custom'
+
+export type DatasetMode = 'lite' | 'full'
 
 export type OrbitClassCode =
   | 'MBA'
@@ -78,6 +80,9 @@ export type CelestialBody = {
   orbitClassCode?: OrbitClassCode
   orbitClassName?: string
   absoluteMagnitude?: number
+  radiusKm?: number
+  orbitUncertainty?: string
+  dataEpochLabel?: string
   isCatalogBody?: boolean
 }
 
@@ -116,10 +121,24 @@ export type TrajectoryWorkerRequest = {
   sampleCount: number
 }
 
-export type TrajectoryWorkerResponse = {
-  type: 'result'
+export type TrajectoryWorkerCancelRequest = {
+  type: 'cancel'
   requestId: number
-  frame: TrajectoryFrameData
+}
+
+export type PackedTrajectoryData = {
+  bodyIds: BodyId[]
+  offsets: Uint32Array
+  points2D: Float64Array
+  points3D: Float64Array
+}
+
+export type TrajectoryWorkerResponse = {
+  type: 'result' | 'progress' | 'cancelled' | 'error'
+  requestId: number
+  packed?: PackedTrajectoryData
+  progress?: number
+  error?: string
 }
 
 export type AsteroidIndexEntry = {
@@ -152,13 +171,45 @@ export type AsteroidSectionCursor = {
 }
 
 export type AsteroidManifest = {
+  schemaVersion?: number
   version: string
+  datasetMode?: DatasetMode
   source: string
   generatedAt: string
+  sourceDownloadedAt?: string
+  sourceSha256?: string
+  parserVersion?: string
+  orbitModel?: string
+  precision?: string
   totalCount: number
   chunkCount: number
   chunkSize: number
+  format?: 'json-v1' | 'binary-v1'
+  releasePath?: string
+  lookupBucketCount?: number
   bucketCounts: Record<string, number>
   categoryCounts: Record<string, number>
   featured: AsteroidIndexEntry[]
+}
+
+export type DatasetVersion = {
+  schemaVersion: number
+  activeVersion: string
+  mode: DatasetMode
+  manifestPath: string
+  generatedAt: string
+  sourceSha256: string
+}
+
+export type DatasetProvenance = {
+  datasetVersion: string
+  source: string
+  downloadedAt: string
+  generatedAt: string
+  sourceSha256: string
+  parserVersion: string
+  totalObjects: number
+  mode: DatasetMode
+  orbitModel: string
+  precision: string
 }

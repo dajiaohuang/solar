@@ -1,0 +1,13 @@
+{
+  "name": "Solar Atlas — Solar System dynamics & small-body atlas",
+  "short_name": "Solar Atlas",
+  "description": "A traceable, browser-native Solar System dynamics and small-body atlas.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#05080c",
+  "theme_color": "#05080c",
+  "icons": [
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

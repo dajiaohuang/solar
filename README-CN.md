@@ -1,137 +1,119 @@
-# solar（中文说明）
+# Solar Atlas / 太阳系图谱
 
-solar 是一个基于 React + TypeScript + Vite 的太阳系轨迹可视化应用，可在二维平面中观察更接近真实星历的数据，并支持切换参考天体。
+**浏览器原生的太阳系动力学与小天体结构图谱。**
 
-- 主要行星与矮行星的更真实轨道参数
-- 小行星目录预处理（MPCORB）+ 分块加载
-- Web Worker 轨道计算 + WebGL 渲染
-- 全屏主舞台 + 左侧抽屉式控制面板
-- 小行星双向懒加载（向下加载后页，向上回补前页）
-- 小行星“已加载不等于已绘制”（必须手动点选才参与渲染）
+[在线演示](https://dajiaohuang.github.io/solar/) · [English](./README.md)
 
-英文主文档见 `README.md`。
+![Solar Atlas](./public/og-image.svg)
 
----
+Solar Atlas 把空间视图、轨道元素空间、时间事件与数据证据连接到同一个可复现工作台。它面向科学探索和教学，不是业务星历、近距离预警或航天导航产品。
 
-## 环境要求
+## 已实现能力
 
-- Node.js 18+（建议 20+）
-- npm 9+
-
----
+- **空间探索：** 日心、地心和任意天体中心参考系；二维/三维视图；分屏参考系对比；时间推进、测距、拉格朗日点、希尔球与拉普拉斯影响球。
+- **小天体目录：** MPCORB 二进制分片；名称、编号和临时编号搜索；NEO/PHA 与分类筛选；按 `a/e/i/H/q` 过滤；Lite/Full 显示预算；不可变数据版本与 IndexedDB 缓存。
+- **轨道元素空间：** `a–e`、`a–i`、`a–H`、`q–Q`、`a–周期` 联动图；Kirkwood gap / 共振标记；框选后同步聚焦三维空间。
+- **事件实验室：** 显式、可取消的近距离、合、冲、近日点和远日点任务；进度、结果缓存、时间线跳转、CSV/JSON 导出。播放模拟时间不会自动重新计算。
+- **任务实验室：** 单位与方向正确的霍曼基线、相位角、通用变量 Lambert 解、出发/到达 `v∞`、C3 与 Worker 生成的 Porkchop 图。
+- **引导故事：** 逆行、参考系、Kirkwood gaps、木星特洛伊、NEO 分类、冥王星共振与旅行者时代等 JSON 场景。
+- **可复现链接：** URL 保存数据集版本、历元、参考系、天体集合、筛选器、语言与视图。
+- **可安装网页应用：** 响应式移动端 Lite 布局、离线运行时缓存、Web App Manifest、社交分享元信息与路由代码分割。
 
 ## 快速开始
+
+需要 Node.js 22+ 和 npm 10+。
 
 ```bash
 npm install
 npm run dev
 ```
 
-启动后访问终端输出中的本地地址（通常为 `http://localhost:5173`）。
-
----
-
-## 首次生成小行星目录数据
-
-如需启用完整小行星目录，请先执行：
+没有小行星数据集时，应用仍能使用内置的主要天体数据。生成 30,000 条的 Lite 数据集：
 
 ```bash
-npm run preprocess:asteroids
-```
-
-脚本会：
-
-1. 从 Minor Planet Center 下载 `MPCORB.DAT.gz`
-2. 解析轨道参数与分类标记
-3. 生成前端可直接加载的分片数据：
-   - `public/data/asteroids/chunks/*.json`
-   - `public/data/asteroids/search/*.json`
-   - `public/data/asteroids/manifest.json`
-
-可选环境变量：
-
-- `MPCORB_CHUNK_SIZE`：每个分片的记录数（默认 `5000`）
-- `MPCORB_LIMIT`：只处理前 N 条记录（调试用）
-
-示例：
-
-```bash
-MPCORB_LIMIT=30000 npm run preprocess:asteroids
-```
-
----
-
-## 交互逻辑
-
-### 全屏主舞台
-
-- 页面整体锁定为单屏，不出现主页面纵向滚动
-- 在主画布区域滚轮缩放，缩放中心跟随鼠标位置
-- 点击左上角 `Menu`（菜单）打开抽屉面板
-
-### 抽屉面板板块
-
-- `Overview`：参考点、模拟时间/日期、最大相对距离
-- `Controls`：参考点、轨迹时长、速度倍率、缩放、播放控制
-- `Major Bodies`：预设组合 + 手动勾选
-- `Asteroids`：搜索、分类筛选、分区懒加载
-- `Loaded`：当前已加载和保留的小行星
-
-### 小行星窗口策略
-
-- 分区加载后不会自动绘制
-- 必须手动点选才进入轨迹渲染
-- 列表底部附近触发后续分页加载
-- 列表顶部附近触发前序分页回补
-- 超出窗口上限时，自动回收窗口外未点选条目
-- 已点选条目不会因回收而丢失
-
----
-
-## 常用命令
-
-```bash
+npm run data:lite
+npm run validate:data
 npm run dev
-npm run build
-npm run preview
-npm run lint
-npm run preprocess:asteroids
 ```
 
----
+生成 MPCORB 中所有通过校验的椭圆轨道记录：
 
-## 核心目录
+```bash
+npm run data:full
+```
+
+完整管线需要数 GB 可用内存。建议使用 `MPCORB_SOURCE_FILE=/path/to/MPCORB.DAT.gz` 固定源快照。
+
+## 数据发布 v2
+
+应用部署与数据发布是两个独立流程：
 
 ```text
-src/
-  components/
-    TrajectoryCanvas.tsx    # WebGL 渲染层
-    CatalogPanel.tsx        # 小行星面板 + 双向懒加载列表
-  hooks/
-    useTrajectoryWorker.ts  # Worker 通信与帧数据管理
-  workers/
-    trajectory.worker.ts    # 后台轨迹计算
-  lib/
-    ephemeris.ts            # 轨道求解
-    trajectory.ts           # 轨迹采样与帧组装
-    referenceFrame.ts       # 参考系换算
-    viewProjection.ts       # 投影/反投影（含视图偏移）
-    catalogLoader.ts        # 分片、搜索与游标分页
-  data/
-    majorBodies.ts          # 主要天体与矮行星参数
-  App.tsx                   # 全屏主界面与抽屉控制
+应用：lint → unit test → build → 部署指定的数据发布标签
 
-scripts/
-  preprocess-asteroids.mjs  # MPCORB 预处理脚本
+数据：下载源快照 → SHA-256 → 解析 → 校验
+   → Float64 分片 + 元数据/搜索/ID 索引
+   → 不可变 GitHub Release → 固定发布标签 → 部署
 ```
 
----
+每个 `public/data/asteroids/releases/<version>/` 都包含：
 
-## 数据来源
+```text
+manifest.json
+provenance.json
+checksums.json
+validation-report.json
+binary/*.bin
+meta/*.json
+search/*.json
+lookup/*.json
+```
 
-- JPL 行星近似轨道元素
-- JPL SBDB 开普勒元素
-- MPCORB（Minor Planet Center 小行星目录）
+根目录的 `dataset-version.json` 只是指向当前不可变版本的小型指针。GitHub Pages 部署不会重新下载一个不断变化的 MPCORB 文件；它只使用仓库变量 `ASTEROID_DATASET_TAG` 指定的发布资产。
+发布器会拒绝覆盖已经存在的版本，并且只在所有产物及校验报告写入完成后原子切换当前版本指针。
 
-> 本项目用于可视化与学习，不是高精度天体历积分器。
+## 双分辨率架构
 
+- **Catalog Mode：** 一颗天体对应一个 GPU point，不创建逐天体 React 元素，也不绘制完整轨迹。
+- **Focus Mode：** 上限 160 个对象，可以绘制轨迹、查看属性并参与有界分析。
+
+模拟时钟独立于 React 的逐帧渲染；React 只接收限频快照。轨迹、事件和 Porkchop 计算运行在可取消 Worker 中，轨迹结果通过 transferable typed arrays 返回。
+
+## 科学模型与边界
+
+| 功能 | 模型与范围 |
+| --- | --- |
+| 主要行星 | JPL 近似平均轨道根数与长期变化率，适合大尺度可视化 |
+| 卫星与矮行星 | 标为 `curated-approx` 的取整教学根数，并递归叠加父天体 |
+| MPCORB / SBDB | 只接受 `0 ≤ e < 1` 的椭圆密切根数，明确拒绝抛物线/双曲线数据 |
+| 月相 | 日—地—月相位角与有符号地心日月距角 |
+| 希尔球 | `a(1-e)(m/3M)^(1/3)` |
+| Laplace SOI | `a(m/M)^(2/5)`，不会再与希尔球混称 |
+| 霍曼转移 | 共面圆轨道端点、瞬时脉冲、太阳二体模型；输出有符号 km/s |
+| Lambert | 使用近似端点位置的零圈通用变量太阳二体解 |
+| 事件分析 | 有界采样的距离极小值和角度极值，只用于探索 |
+| 航天器轨迹 | 按真实任务里程碑定时的示意折线，与 Horizons/传播星历分开标注 |
+
+JPL SBDB 严格读取官方结构 `orbit.elements[]` 中的 `name/value/units/sigma`，不会从不存在的扁平字段生成默认轨道。
+
+主要数据来源：
+
+- [Minor Planet Center MPCORB](https://www.minorplanetcenter.net/iau/MPCORB.html)
+- [JPL SBDB API](https://ssd-api.jpl.nasa.gov/doc/sbdb.html)
+- [JPL 近似行星位置](https://ssd.jpl.nasa.gov/planets/approx_pos.html)
+
+## 验证
+
+```bash
+npm run lint
+npm run test:unit
+npm run test:e2e
+npm run build
+npm run ci
+```
+
+单元测试覆盖儒略日、开普勒传播、父天体/参考系、霍曼单位与方向、月相几何、Hill/SOI 定义、严格 JPL SBDB fixture、Lambert 圆轨道弧、版本化深链接、MPCORB 定长解析，以及微型数据集发布/哈希复核。Playwright 在桌面和移动 Chromium 上覆盖核心路由、可复现故事、任务 Worker 与 2D/3D 渲染。
+
+## 开源许可
+
+源代码使用 [MIT License](./LICENSE)。上游天文数据仍适用其来源机构的条款与署名要求。

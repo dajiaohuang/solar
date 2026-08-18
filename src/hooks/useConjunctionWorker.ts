@@ -1,71 +1,72 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CelestialBody } from '../types'
-import type { ConjunctionEvent, ConjunctionRequest, ConjunctionResponse } from '../workers/conjunction.worker'
+import type {
+  AnalysisEvent,
+  EventAnalysisRequest,
+  EventAnalysisResponse,
+  EventKind,
+} from '../workers/conjunction.worker'
 
-type Params = {
+export type RunEventAnalysisParams = {
   bodies: CelestialBody[]
   resolutionBodies: CelestialBody[]
   referenceId: string
   centerJulianDay: number
   windowDays: number
   thresholdAU: number
+  eventKinds: EventKind[]
+  sampleCount?: number
 }
 
-export function useConjunctionWorker(params: Params) {
-  const { bodies, resolutionBodies, referenceId, centerJulianDay, windowDays, thresholdAU } = params
+export function useConjunctionWorker() {
   const workerRef = useRef<Worker | null>(null)
   const latestRequestId = useRef(0)
-  const [events, setEvents] = useState<ConjunctionEvent[]>([])
-  const [isComputing, setIsComputing] = useState(false)
+  const [events, setEvents] = useState<AnalysisEvent[]>([])
+  const [status, setStatus] = useState<'idle' | 'running' | 'complete' | 'cancelled' | 'error'>('idle')
+  const [progress, setProgress] = useState(0)
+  const [error, setError] = useState<string | null>(null)
+  const [lastRun, setLastRun] = useState<RunEventAnalysisParams | null>(null)
 
-  useEffect(() => {
-    const worker = new Worker(
-      new URL('../workers/conjunction.worker.ts', import.meta.url),
-      { type: 'module' },
-    )
-
-    worker.onmessage = (event: MessageEvent<ConjunctionResponse>) => {
-      const response = event.data
-
-      if (response.type !== 'result' || response.requestId !== latestRequestId.current) {
-        return
-      }
-
-      setEvents(response.events)
-      setIsComputing(false)
-    }
-
-    workerRef.current = worker
-
-    return () => {
-      worker.terminate()
-      workerRef.current = null
-    }
+  const cancel = useCallback(() => {
+    const worker = workerRef.current
+    if (!worker) return
+    worker.postMessage({ type: 'cancel', requestId: latestRequestId.current })
+    worker.terminate()
+    workerRef.current = null
+    setStatus('cancelled')
   }, [])
 
-  useEffect(() => {
-    const worker = workerRef.current
-    if (!worker || bodies.length < 2) {
-      return
-    }
-
+  const run = useCallback((params: RunEventAnalysisParams) => {
+    if (workerRef.current) workerRef.current.terminate()
+    const worker = new Worker(new URL('../workers/conjunction.worker.ts', import.meta.url), { type: 'module' })
+    workerRef.current = worker
     const requestId = latestRequestId.current + 1
     latestRequestId.current = requestId
-    setIsComputing(true)
-
-    const request: ConjunctionRequest = {
-      type: 'find',
-      requestId,
-      bodies,
-      resolutionBodies,
-      referenceId,
-      centerJulianDay,
-      windowDays,
-      thresholdAU,
+    setStatus('running')
+    setProgress(0)
+    setError(null)
+    setEvents([])
+    setLastRun({ ...params, bodies: [...params.bodies], resolutionBodies: [...params.resolutionBodies], eventKinds: [...params.eventKinds] })
+    worker.onmessage = (event: MessageEvent<EventAnalysisResponse>) => {
+      const response = event.data
+      if (response.requestId !== latestRequestId.current) return
+      if (response.type === 'progress') setProgress(response.progress ?? 0)
+      if (response.type === 'result') {
+        setEvents(response.events ?? [])
+        setProgress(1)
+        setStatus('complete')
+      }
+      if (response.type === 'cancelled') setStatus('cancelled')
+      if (response.type === 'error') {
+        setError(response.error ?? 'Event analysis failed')
+        setStatus('error')
+      }
     }
-
+    const request: EventAnalysisRequest = { type: 'run', requestId, ...params }
     worker.postMessage(request)
-  }, [bodies, centerJulianDay, referenceId, resolutionBodies, windowDays, thresholdAU])
+  }, [])
 
-  return { events, isComputing }
+  useEffect(() => () => workerRef.current?.terminate(), [])
+
+  return { events, status, progress, error, lastRun, run, cancel }
 }

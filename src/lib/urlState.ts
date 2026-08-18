@@ -1,107 +1,139 @@
-import type { BodyId } from '../types'
+import type { AppRoute, ElementPlotMode } from '../state/ui-store'
+import type { BodyId, DatasetMode } from '../types'
 
-type AppUrlState = {
+export const SCENE_URL_VERSION = 2 as const
+export type ScientificLayer = 'ecliptic' | 'orbits' | 'lagrange' | 'hill' | 'soi' | 'spacecraft'
+
+export type AppUrlState = {
+  version?: typeof SCENE_URL_VERSION
+  route?: AppRoute
+  dataset?: string
+  mode?: DatasetMode
   ref?: BodyId
+  compareRef?: BodyId
+  compare?: boolean
   bodies?: BodyId[]
-  offset?: number
+  jd?: number
   zoom?: number
   speed?: number
   history?: number
+  view?: '2d' | '3d'
   filter?: string
   search?: string
   preset?: string
+  focused?: BodyId
+  plot?: ElementPlotMode
+  aRange?: [number, number]
+  eRange?: [number, number]
+  iRange?: [number, number]
+  hRange?: [number, number]
+  qRange?: [number, number]
+  layers?: ScientificLayer[]
+  offset?: [number, number]
+  lang?: 'zh' | 'en'
+}
+
+function finite(value: string | null) {
+  if (value === null) return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function parseRange(value: string | null): [number, number] | undefined {
+  if (!value) return undefined
+  const [minimum, maximum, ...extra] = value.split(',').map(Number)
+  return !extra.length && Number.isFinite(minimum) && Number.isFinite(maximum) && minimum <= maximum
+    ? [minimum, maximum]
+    : undefined
+}
+
+function parsePair(value: string | null): [number, number] | undefined {
+  if (!value) return undefined
+  const [first, second, ...extra] = value.split(',').map(Number)
+  return !extra.length && Number.isFinite(first) && Number.isFinite(second) ? [first, second] : undefined
+}
+
+function setRange(params: URLSearchParams, key: string, range?: [number, number]) {
+  if (range) params.set(key, `${range[0]},${range[1]}`)
 }
 
 export function encodeUrlState(state: AppUrlState) {
   const params = new URLSearchParams()
-
-  if (state.ref && state.ref !== 'sun') {
-    params.set('ref', state.ref)
-  }
-
-  if (state.bodies && state.bodies.length > 0) {
-    params.set('bodies', state.bodies.join(','))
-  }
-
-  if (state.offset !== undefined && state.offset !== 0) {
-    params.set('offset', String(Math.round(state.offset)))
-  }
-
-  if (state.zoom !== undefined && state.zoom !== 1) {
-    params.set('zoom', state.zoom.toFixed(1))
-  }
-
-  if (state.speed !== undefined && state.speed !== 120) {
-    params.set('speed', String(state.speed))
-  }
-
-  if (state.history !== undefined && state.history !== 365) {
-    params.set('history', String(state.history))
-  }
-
-  if (state.filter && state.filter !== 'MBA') {
-    params.set('filter', state.filter)
-  }
-
-  if (state.search) {
-    params.set('search', state.search)
-  }
-
-  if (state.preset) {
-    params.set('preset', state.preset)
-  }
-
+  params.set('v', String(SCENE_URL_VERSION))
+  if (state.route && state.route !== 'explorer') params.set('page', state.route)
+  if (state.dataset) params.set('dataset', state.dataset)
+  if (state.mode) params.set('mode', state.mode)
+  if (state.ref && state.ref !== 'sun') params.set('ref', state.ref)
+  if (state.compareRef) params.set('compareRef', state.compareRef)
+  if (state.compare) params.set('compare', '1')
+  if (state.bodies?.length) params.set('bodies', state.bodies.join(','))
+  if (state.jd !== undefined) params.set('jd', state.jd.toFixed(5))
+  if (state.zoom !== undefined && state.zoom !== 1) params.set('zoom', state.zoom.toFixed(2))
+  if (state.speed !== undefined && state.speed !== 30) params.set('speed', String(state.speed))
+  if (state.history !== undefined && state.history !== 365) params.set('history', String(state.history))
+  if (state.view && state.view !== '3d') params.set('view', state.view)
+  if (state.filter && state.filter !== 'all') params.set('filter', state.filter)
+  if (state.search) params.set('search', state.search)
+  if (state.preset) params.set('preset', state.preset)
+  if (state.focused) params.set('focused', state.focused)
+  if (state.plot) params.set('plot', state.plot)
+  setRange(params, 'a', state.aRange)
+  setRange(params, 'e', state.eRange)
+  setRange(params, 'i', state.iRange)
+  setRange(params, 'h', state.hRange)
+  setRange(params, 'q', state.qRange)
+  if (state.layers !== undefined) params.set('layers', state.layers.join(','))
+  if (state.offset && (state.offset[0] !== 0 || state.offset[1] !== 0)) setRange(params, 'pan', state.offset)
+  if (state.lang) params.set('lang', state.lang)
   return params.toString()
 }
 
-export function decodeUrlState(): AppUrlState {
-  const params = new URLSearchParams(window.location.search)
-  const state: AppUrlState = {}
-
+export function decodeUrlState(search = typeof window === 'undefined' ? '' : window.location.search): AppUrlState {
+  const params = new URLSearchParams(search)
+  const encodedVersion = params.get('v')
+  if (encodedVersion && encodedVersion !== String(SCENE_URL_VERSION)) return {}
+  const state: AppUrlState = { version: SCENE_URL_VERSION }
+  const routes: AppRoute[] = ['explorer', 'catalog', 'elements', 'events', 'mission', 'stories', 'about']
+  const route = params.get('page') as AppRoute | null
+  if (route && routes.includes(route)) state.route = route
+  const dataset = params.get('dataset')
+  if (dataset) state.dataset = dataset
+  const mode = params.get('mode')
+  if (mode === 'lite' || mode === 'full') state.mode = mode
   const ref = params.get('ref')
-  if (ref) {
-    state.ref = ref
-  }
-
+  if (ref) state.ref = ref
+  const compareRef = params.get('compareRef')
+  if (compareRef) state.compareRef = compareRef
+  state.compare = params.get('compare') === '1'
   const bodies = params.get('bodies')
-  if (bodies) {
-    state.bodies = bodies.split(',').filter(Boolean)
-  }
-
-  const offset = params.get('offset')
-  if (offset !== null) {
-    state.offset = Number(offset)
-  }
-
-  const zoom = params.get('zoom')
-  if (zoom !== null) {
-    state.zoom = Number(zoom)
-  }
-
-  const speed = params.get('speed')
-  if (speed !== null) {
-    state.speed = Number(speed)
-  }
-
-  const history = params.get('history')
-  if (history !== null) {
-    state.history = Number(history)
-  }
-
+  if (bodies) state.bodies = bodies.split(',').filter(Boolean)
+  state.jd = finite(params.get('jd'))
+  state.zoom = finite(params.get('zoom'))
+  state.speed = finite(params.get('speed'))
+  state.history = finite(params.get('history'))
+  const view = params.get('view')
+  if (view === '2d' || view === '3d') state.view = view
   const filter = params.get('filter')
-  if (filter) {
-    state.filter = filter
-  }
-
-  const search = params.get('search')
-  if (search) {
-    state.search = search
-  }
-
+  if (filter) state.filter = filter
+  const searchText = params.get('search')
+  if (searchText) state.search = searchText
   const preset = params.get('preset')
-  if (preset) {
-    state.preset = preset
+  if (preset) state.preset = preset
+  const focused = params.get('focused')
+  if (focused) state.focused = focused
+  const plot = params.get('plot') as ElementPlotMode | null
+  if (plot && ['a-e', 'a-i', 'a-H', 'q-Q', 'a-period'].includes(plot)) state.plot = plot
+  state.aRange = parseRange(params.get('a'))
+  state.eRange = parseRange(params.get('e'))
+  state.iRange = parseRange(params.get('i'))
+  state.hRange = parseRange(params.get('h'))
+  state.qRange = parseRange(params.get('q'))
+  state.offset = parsePair(params.get('pan'))
+  if (params.has('layers')) {
+    const knownLayers: ScientificLayer[] = ['ecliptic', 'orbits', 'lagrange', 'hill', 'soi', 'spacecraft']
+    state.layers = (params.get('layers') ?? '').split(',').filter((layer): layer is ScientificLayer => knownLayers.includes(layer as ScientificLayer))
   }
-
+  const lang = params.get('lang')
+  if (lang === 'zh' || lang === 'en') state.lang = lang
   return state
 }

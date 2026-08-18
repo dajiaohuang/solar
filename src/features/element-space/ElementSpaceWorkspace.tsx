@@ -1,0 +1,203 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { TrajectoryCanvas3D } from '../../components/TrajectoryCanvas3D'
+import { majorBodiesWithPhysicalData, useBodyRegistry } from '../../app/bodyRegistry'
+import { useSimulationClock } from '../../engine/clock/useSimulationClock'
+import { useI18n } from '../../i18n/context'
+import { asteroidRecordToBody, loadAsteroidSectionPage } from '../../lib/catalogLoader'
+import { buildCurrentPositions } from '../../lib/trajectory'
+import { catalogActions, catalogStore, filterCatalogRecords } from '../../state/catalog-store'
+import { selectionActions, selectionStore } from '../../state/selection-store'
+import { uiActions, uiStore, type ElementPlotMode } from '../../state/ui-store'
+import type { AsteroidRecord, BodyId, CelestialBody } from '../../types'
+import { bodyDisplayName } from '../../lib/bodyNames'
+
+type PlotMode = ElementPlotMode
+type PlotDatum = { record: AsteroidRecord; x: number; y: number }
+
+const RESONANCE_BANDS = [
+  { a: 2.50, label: '3:1' }, { a: 2.82, label: '5:2' }, { a: 2.96, label: '7:3' },
+  { a: 3.28, label: '2:1' }, { a: 3.97, label: '3:2' }, { a: 4.29, label: '4:3' }, { a: 5.20, label: '1:1' },
+]
+
+const CLASS_COLORS: Record<string, string> = {
+  MBA: '#72a6c9', APO: '#ff745f', ATE: '#ffad55', AMO: '#e78fd8', ATI: '#f4d35e',
+  HUN: '#6fd0a8', HIL: '#9e8cff', JTA: '#c9a66b', TNO: '#8eaeff', other: '#8795a5',
+}
+
+function toPlotDatum(record: AsteroidRecord, mode: PlotMode): PlotDatum {
+  const a = record.semiMajorAxisAU
+  const e = record.eccentricity
+  const values: Record<PlotMode, [number, number]> = {
+    'a-e': [a, e],
+    'a-i': [a, record.inclinationDeg],
+    'a-H': [a, record.absoluteMagnitude ?? 30],
+    'q-Q': [a * (1 - e), a * (1 + e)],
+    'a-period': [a, Math.sqrt(a ** 3)],
+  }
+  const [x, y] = values[mode]
+  return { record, x, y }
+}
+
+function labelsFor(mode: PlotMode) {
+  const values: Record<PlotMode, [string, string]> = {
+    'a-e': ['a · semi-major axis (AU)', 'e · eccentricity'],
+    'a-i': ['a · semi-major axis (AU)', 'i · inclination (°)'],
+    'a-H': ['a · semi-major axis (AU)', 'H · absolute magnitude'],
+    'q-Q': ['q · perihelion (AU)', 'Q · aphelion (AU)'],
+    'a-period': ['a · semi-major axis (AU)', 'period (years)'],
+  }
+  return values[mode]
+}
+
+type ScatterProps = {
+  data: PlotDatum[]
+  mode: PlotMode
+  selectedIds: Set<BodyId>
+  onSelect: (records: AsteroidRecord[]) => void
+  onFocus: (record: AsteroidRecord) => void
+}
+
+function ElementScatter({ data, mode, selectedIds, onSelect, onFocus }: ScatterProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [brush, setBrush] = useState<{ startX: number; startY: number; x: number; y: number } | null>(null)
+  const bounds = useMemo(() => {
+    if (!data.length) return { minX: 0, maxX: 1, minY: 0, maxY: 1 }
+    const xs = data.map((point) => point.x).filter(Number.isFinite)
+    const ys = data.map((point) => point.y).filter(Number.isFinite)
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys)
+    return { minX, maxX: maxX === minX ? minX + 1 : maxX, minY, maxY: maxY === minY ? minY + 1 : maxY }
+  }, [data])
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    const container = containerRef.current
+    if (!canvas || !container) return
+    const ratio = Math.min(window.devicePixelRatio, 2)
+    const width = Math.max(container.clientWidth, 1), height = Math.max(container.clientHeight, 1)
+    canvas.width = width * ratio; canvas.height = height * ratio; canvas.style.width = `${width}px`; canvas.style.height = `${height}px`
+    const context = canvas.getContext('2d')
+    if (!context) return
+    context.scale(ratio, ratio)
+    context.clearRect(0, 0, width, height)
+    const pad = { left: 56, right: 24, top: 26, bottom: 48 }
+    const px = (value: number) => pad.left + (value - bounds.minX) / (bounds.maxX - bounds.minX) * (width - pad.left - pad.right)
+    const py = (value: number) => height - pad.bottom - (value - bounds.minY) / (bounds.maxY - bounds.minY) * (height - pad.top - pad.bottom)
+    context.strokeStyle = 'rgba(126,163,184,.16)'; context.fillStyle = '#7890a0'; context.font = '11px ui-monospace, monospace'
+    for (let index = 0; index <= 5; index += 1) {
+      const x = pad.left + index / 5 * (width - pad.left - pad.right)
+      const y = pad.top + index / 5 * (height - pad.top - pad.bottom)
+      context.beginPath(); context.moveTo(x, pad.top); context.lineTo(x, height - pad.bottom); context.stroke()
+      context.beginPath(); context.moveTo(pad.left, y); context.lineTo(width - pad.right, y); context.stroke()
+      context.fillText((bounds.minX + index / 5 * (bounds.maxX - bounds.minX)).toFixed(2), x - 10, height - 20)
+      context.fillText((bounds.maxY - index / 5 * (bounds.maxY - bounds.minY)).toFixed(2), 6, y + 4)
+    }
+    if (mode.startsWith('a-')) {
+      context.setLineDash([3, 4])
+      for (const resonance of RESONANCE_BANDS) {
+        if (resonance.a < bounds.minX || resonance.a > bounds.maxX) continue
+        const x = px(resonance.a)
+        context.strokeStyle = 'rgba(244,196,102,.48)'; context.beginPath(); context.moveTo(x, pad.top); context.lineTo(x, height - pad.bottom); context.stroke()
+        context.fillStyle = '#d7b86c'; context.fillText(resonance.label, x + 3, pad.top + 12)
+      }
+      context.setLineDash([])
+    }
+    for (const point of data) {
+      const selected = selectedIds.has(point.record.id)
+      context.beginPath(); context.arc(px(point.x), py(point.y), selected ? 4.4 : 2.2, 0, Math.PI * 2)
+      context.fillStyle = selected ? '#fff2bd' : CLASS_COLORS[point.record.orbitClassCode] ?? CLASS_COLORS.other
+      context.globalAlpha = selected ? 1 : 0.62; context.fill()
+    }
+    context.globalAlpha = 1
+    if (brush) {
+      context.fillStyle = 'rgba(97,210,184,.13)'; context.strokeStyle = '#61d2b8'; context.setLineDash([5, 4])
+      context.fillRect(brush.startX, brush.startY, brush.x - brush.startX, brush.y - brush.startY)
+      context.strokeRect(brush.startX, brush.startY, brush.x - brush.startX, brush.y - brush.startY)
+    }
+  }, [bounds, brush, data, mode, selectedIds])
+
+  function coordinates(event: React.MouseEvent) {
+    const rect = event.currentTarget.getBoundingClientRect()
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top, width: rect.width, height: rect.height }
+  }
+
+  return <div ref={containerRef} className="element-scatter"
+    onMouseDown={(event) => { const p = coordinates(event); setBrush({ startX: p.x, startY: p.y, x: p.x, y: p.y }) }}
+    onMouseMove={(event) => { if (!brush) return; const p = coordinates(event); setBrush({ ...brush, x: p.x, y: p.y }) }}
+    onMouseUp={(event) => {
+      if (!brush) return
+      const p = coordinates(event)
+      const width = p.width, height = p.height, pad = { left: 56, right: 24, top: 26, bottom: 48 }
+      const x0 = Math.min(brush.startX, p.x), x1 = Math.max(brush.startX, p.x), y0 = Math.min(brush.startY, p.y), y1 = Math.max(brush.startY, p.y)
+      const px = (value: number) => pad.left + (value - bounds.minX) / (bounds.maxX - bounds.minX) * (width - pad.left - pad.right)
+      const py = (value: number) => height - pad.bottom - (value - bounds.minY) / (bounds.maxY - bounds.minY) * (height - pad.top - pad.bottom)
+      if (Math.hypot(x1 - x0, y1 - y0) < 6) {
+        const nearest = data.reduce<{ point: PlotDatum; distance: number } | null>((best, point) => {
+          const distance = Math.hypot(px(point.x) - p.x, py(point.y) - p.y)
+          return !best || distance < best.distance ? { point, distance } : best
+        }, null)
+        if (nearest && nearest.distance < 12) onFocus(nearest.point.record)
+      } else {
+        onSelect(data.filter((point) => { const x = px(point.x), y = py(point.y); return x >= x0 && x <= x1 && y >= y0 && y <= y1 }).map((point) => point.record))
+      }
+      setBrush(null)
+    }}
+  >
+    <canvas ref={canvasRef} role="img" aria-label={`Orbital element scatter plot ${mode}`} />
+  </div>
+}
+
+export function ElementSpaceWorkspace() {
+  const mode = uiStore.useStore((state) => state.elementPlot)
+  const catalog = catalogStore.useStore()
+  const selection = selectionStore.useStore()
+  const { bodiesById } = useBodyRegistry()
+  const clock = useSimulationClock()
+  const { t, language } = useI18n()
+
+  useEffect(() => {
+    if (!catalog.manifest || catalog.records.length) return
+    catalogActions.patch({ isLoading: true })
+    void loadAsteroidSectionPage({ manifest: catalog.manifest, orbitClassCode: 'all', pageSize: 1200 })
+      .then((page) => catalogActions.patch({ records: page.records, isLoading: false }))
+      .catch((error: unknown) => catalogActions.patch({ error: error instanceof Error ? error.message : String(error), isLoading: false }))
+  }, [catalog.manifest, catalog.records.length])
+
+  const records = useMemo(() => filterCatalogRecords(catalog.records, catalog.filters), [catalog.filters, catalog.records])
+  const data = useMemo(() => records.slice(0, catalog.mode === 'lite' ? 8000 : 30_000).map((record) => toPlotDatum(record, mode)), [catalog.mode, mode, records])
+  const selectedSet = useMemo(() => new Set(selection.selectedIds), [selection.selectedIds])
+  const miniBodies = useMemo(() => selection.selectedIds.map((id) => bodiesById.get(id)).filter((body): body is CelestialBody => Boolean(body)).slice(0, 160), [bodiesById, selection.selectedIds])
+  const miniFrame = useMemo(() => buildCurrentPositions({ bodies: miniBodies, bodiesById, referenceId: 'sun', julianDay: clock.julianDay }), [bodiesById, clock.julianDay, miniBodies])
+  const [xLabel, yLabel] = labelsFor(mode)
+
+  return <div className="workspace-page elements-workspace">
+    <header className="page-heading"><div><span className="eyebrow">LINKED VIEWS / BRUSH SELECTION / RESONANCE MAP</span><h1>{t('elements')}</h1><p>{t('brushHint')}</p></div><strong className="selection-stat">{selection.selectedIds.length} {t('selectedCount')}</strong></header>
+    <div className="elements-toolbar glass-panel">
+      <div className="segmented-control">{(['a-e', 'a-i', 'a-H', 'q-Q', 'a-period'] as PlotMode[]).map((item) => <button key={item} className={mode === item ? 'active' : ''} onClick={() => uiActions.setElementPlot(item)}>{item}</button>)}</div>
+      <div className="legend">{Object.entries(CLASS_COLORS).slice(0, 9).map(([key, color]) => <span key={key}><i style={{ background: color }} />{key}</span>)}</div>
+    </div>
+    <div className="elements-layout">
+      <section className="chart-panel glass-panel">
+        <div className="axis-title y">{yLabel}</div><ElementScatter data={data} mode={mode} selectedIds={selectedSet} onSelect={(selected) => {
+          const limited = selected.slice(0, 160)
+          selectionActions.addCatalogBodies(limited.map(asteroidRecordToBody))
+          selectionActions.setSelectedIds(limited.map((record) => record.id))
+          uiActions.toast(`${limited.length} ${t('selectedCount')}`)
+        }} onFocus={(record) => {
+          selectionActions.addCatalogBodies([asteroidRecordToBody(record)])
+          selectionActions.focus(record.id)
+          if (!selection.selectedIds.includes(record.id)) selectionActions.toggle(record.id)
+        }} /><div className="axis-title x">{xLabel}</div>
+      </section>
+      <section className="linked-space-panel glass-panel">
+        <div className="map-caption"><span>LINKED HELIOCENTRIC 3D</span><strong>{miniBodies.length}</strong></div>
+        <TrajectoryCanvas3D referenceBody={majorBodiesWithPhysicalData[0]} trajectories={[]} currentPositions={miniFrame.currentPositions} onBodySelect={selectionActions.focus} showEcliptic />
+      </section>
+      <aside className="selection-panel glass-panel">
+        <div className="section-heading"><span>{t('selectedBodies')}</span><button onClick={() => selectionActions.setSelectedIds([])}>{t('clear')}</button></div>
+        <div className="selected-object-list">{miniBodies.map((body) => <button key={body.id} onClick={() => selectionActions.focus(body.id)}><i style={{ background: body.color }} /><span>{bodyDisplayName(body, language)}</span><small>{body.orbitClassCode ?? body.kind}</small></button>)}</div>
+        <div className="resonance-note"><strong>{t('resonances')}</strong>{RESONANCE_BANDS.map((item) => <span key={item.label}>{item.label}<b>{item.a.toFixed(2)} AU</b></span>)}</div>
+      </aside>
+    </div>
+  </div>
+}

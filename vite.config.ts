@@ -5,4 +5,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: '/solar/',
+  // Three.js is isolated in a lazy renderer chunk; 600 kB keeps the build
+  // warning meaningful without flagging that deliberate route boundary.
+  build: { chunkSizeWarningLimit: 600 },
 })

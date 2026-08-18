@@ -9,6 +9,7 @@ type Props = {
   trajectories: TrajectorySample[]
   currentPositions: RenderedBodyPosition[]
   onReferenceChange?: (bodyId: string) => void
+  onBodySelect?: (bodyId: string) => void
   onHover?: (body: CelestialBody | null, distance: number, x: number, y: number) => void
   lagrangePoints?: { body: CelestialBody; points: LagrangePoint[] }[]
   showEcliptic?: boolean
@@ -16,24 +17,54 @@ type Props = {
   showGlow?: boolean
 }
 
-function getMagnitudeScaledRadius(body: CelestialBody, baseRadius: number) {
-  if (body.absoluteMagnitude === undefined) {
-    return baseRadius
-  }
-
-  const factor = 1 + (15 - body.absoluteMagnitude) * 0.12
-  return baseRadius * Math.max(0.6, Math.min(3, factor))
+type SceneResources = {
+  scene: THREE.Scene
+  renderer: THREE.WebGLRenderer
+  camera: THREE.PerspectiveCamera
+  controls: OrbitControls
+  bodyGeometry: THREE.SphereGeometry
+  bodyMeshes: Map<string, THREE.Mesh>
+  trajectoryLines: Map<string, THREE.Line>
+  auxiliaryGroup: THREE.Group
+  eclipticGroup: THREE.Group
+  glow: THREE.Sprite
+  glowTexture: THREE.Texture
+  bodyScale: number
 }
 
-function createBodySphere(body: CelestialBody, position: THREE.Vector3) {
-  const baseRadius = body.kind === 'star' ? 0.12 : body.kind === 'planet' ? 0.08 : 0.04
-  const radius = getMagnitudeScaledRadius(body, baseRadius)
-  const geometry = new THREE.SphereGeometry(radius, 16, 16)
-  const material = new THREE.MeshBasicMaterial({ color: body.color })
-  const mesh = new THREE.Mesh(geometry, material)
-  mesh.position.copy(position)
-  mesh.userData.bodyId = body.id
-  return mesh
+function radiusFor(body: CelestialBody) {
+  const base = body.kind === 'star' ? 0.12 : body.kind === 'planet' ? 0.075 : body.kind === 'moon' ? 0.042 : 0.032
+  if (body.absoluteMagnitude === undefined) return base
+  return base * Math.max(0.65, Math.min(2.6, 1 + (15 - body.absoluteMagnitude) * 0.1))
+}
+
+function toThree(position: { x: number; y: number; z: number }) {
+  return new THREE.Vector3(position.x, position.z, position.y)
+}
+
+function disposeObject(object: THREE.Object3D) {
+  if (object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.Points) {
+    object.geometry.dispose()
+    const materials = Array.isArray(object.material) ? object.material : [object.material]
+    for (const material of materials) material.dispose()
+  }
+}
+
+function createGlowTexture() {
+  const canvas = document.createElement('canvas')
+  canvas.width = 96
+  canvas.height = 96
+  const context = canvas.getContext('2d')
+  if (context) {
+    const gradient = context.createRadialGradient(48, 48, 0, 48, 48, 48)
+    gradient.addColorStop(0, 'rgba(255,240,170,1)')
+    gradient.addColorStop(0.18, 'rgba(255,190,72,.75)')
+    gradient.addColorStop(0.55, 'rgba(255,121,30,.13)')
+    gradient.addColorStop(1, 'rgba(255,80,0,0)')
+    context.fillStyle = gradient
+    context.fillRect(0, 0, 96, 96)
+  }
+  return new THREE.CanvasTexture(canvas)
 }
 
 export function TrajectoryCanvas3D({
@@ -41,320 +72,267 @@ export function TrajectoryCanvas3D({
   trajectories,
   currentPositions,
   onReferenceChange,
+  onBodySelect,
   onHover,
-  lagrangePoints: _lagrangePoints,
-  showEcliptic,
-  showSaturnRings,
-  showGlow,
+  lagrangePoints,
+  showEcliptic = true,
+  showSaturnRings = true,
+  showGlow = true,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const sceneRef = useRef<THREE.Scene | null>(null)
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null)
-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null)
-  const controlsRef = useRef<OrbitControls | null>(null)
-  const meshesRef = useRef<THREE.Object3D[]>([])
-  const raycasterRef = useRef<THREE.Raycaster>(new THREE.Raycaster())
+  const resourcesRef = useRef<SceneResources | null>(null)
+  const raycasterRef = useRef(new THREE.Raycaster())
+  const positionsRef = useRef(currentPositions)
+  const fitKeyRef = useRef('')
+  useEffect(() => { positionsRef.current = currentPositions }, [currentPositions])
 
   useEffect(() => {
     const container = containerRef.current
-    if (!container) {
-      return
-    }
-
-    const width = container.clientWidth
-    const height = container.clientHeight
-
+    if (!container) return
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x0a0a14)
-    sceneRef.current = scene
-
-    const camera = new THREE.PerspectiveCamera(45, width / Math.max(height, 1), 0.01, 200)
-    camera.position.set(0, 3, 5)
-    camera.lookAt(0, 0, 0)
-    cameraRef.current = camera
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true })
-    renderer.setSize(width, height)
+    scene.background = new THREE.Color(0x05070b)
+    scene.fog = new THREE.FogExp2(0x05070b, 0.012)
+    const camera = new THREE.PerspectiveCamera(42, container.clientWidth / Math.max(container.clientHeight, 1), 0.005, 500)
+    camera.position.set(0, 4.2, 7.5)
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setSize(container.clientWidth, container.clientHeight)
+    renderer.outputColorSpace = THREE.SRGBColorSpace
     container.appendChild(renderer.domElement)
-    rendererRef.current = renderer
-
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
-    controls.dampingFactor = 0.08
-    controlsRef.current = controls
+    controls.dampingFactor = 0.075
+    controls.minDistance = 0.08
+    controls.maxDistance = 220
 
-    const gridHelper = new THREE.PolarGridHelper(3, 24, 16, 64, 0x334466, 0x334466)
-    scene.add(gridHelper)
+    const grid = new THREE.PolarGridHelper(8, 24, 12, 96, 0x33465a, 0x172431)
+    ;(grid.material as THREE.Material).transparent = true
+    ;(grid.material as THREE.Material).opacity = 0.42
+    scene.add(grid)
 
-    if (showEcliptic) {
-      const eclipticGeo = new THREE.CircleGeometry(5, 64)
-      const eclipticMat = new THREE.MeshBasicMaterial({
-        color: 0x4466aa,
-        side: THREE.DoubleSide,
-        transparent: true,
-        opacity: 0.08,
-      })
+    const eclipticGroup = new THREE.Group()
+    const plane = new THREE.Mesh(
+      new THREE.CircleGeometry(8, 96),
+      new THREE.MeshBasicMaterial({ color: 0x36506c, side: THREE.DoubleSide, transparent: true, opacity: 0.075 }),
+    )
+    plane.rotation.x = -Math.PI / 2
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(8, 0.008, 6, 128),
+      new THREE.MeshBasicMaterial({ color: 0x5e87a5, transparent: true, opacity: 0.38 }),
+    )
+    ring.rotation.x = Math.PI / 2
+    eclipticGroup.add(plane, ring)
+    scene.add(eclipticGroup)
 
-      const eclipticPlane = new THREE.Mesh(eclipticGeo, eclipticMat)
-      eclipticPlane.rotation.x = -Math.PI / 2
-      eclipticPlane.name = 'ecliptic-plane'
-      scene.add(eclipticPlane)
+    const auxiliaryGroup = new THREE.Group()
+    scene.add(auxiliaryGroup)
+    const glowTexture = createGlowTexture()
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture, transparent: true, blending: THREE.AdditiveBlending }))
+    glow.scale.setScalar(0.9)
+    scene.add(glow)
 
-      const ringGeo = new THREE.TorusGeometry(5, 0.015, 16, 100)
-      const ringMat = new THREE.MeshBasicMaterial({ color: 0x4466aa, transparent: true, opacity: 0.25 })
-      const ring = new THREE.Mesh(ringGeo, ringMat)
-      ring.rotation.x = -Math.PI / 2
-      ring.name = 'ecliptic-ring'
-      scene.add(ring)
+    const resources: SceneResources = {
+      scene,
+      renderer,
+      camera,
+      controls,
+      bodyGeometry: new THREE.SphereGeometry(1, 16, 12),
+      bodyMeshes: new Map(),
+      trajectoryLines: new Map(),
+      auxiliaryGroup,
+      eclipticGroup,
+      glow,
+      glowTexture,
+      bodyScale: 1,
     }
-
-    const animate = () => {
-      controls.update()
-      renderer.render(scene, camera)
-    }
-
-    renderer.setAnimationLoop(animate)
-
-    const resizeObserver = new ResizeObserver(() => {
-      const w = container.clientWidth
-      const h = container.clientHeight
-      camera.aspect = w / Math.max(h, 1)
+    resourcesRef.current = resources
+    renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera) })
+    const observer = new ResizeObserver(() => {
+      const width = Math.max(container.clientWidth, 1)
+      const height = Math.max(container.clientHeight, 1)
+      camera.aspect = width / height
       camera.updateProjectionMatrix()
-      renderer.setSize(w, h)
+      renderer.setSize(width, height)
     })
-
-    resizeObserver.observe(container)
+    observer.observe(container)
 
     return () => {
-      resizeObserver.disconnect()
+      observer.disconnect()
       renderer.setAnimationLoop(null)
       controls.dispose()
+      for (const line of resources.trajectoryLines.values()) disposeObject(line)
+      for (const mesh of resources.bodyMeshes.values()) (mesh.material as THREE.Material).dispose()
+      resources.bodyGeometry.dispose()
+      for (const object of [...resources.auxiliaryGroup.children]) disposeObject(object)
+      for (const object of [...resources.eclipticGroup.children]) disposeObject(object)
+      ;(resources.glow.material as THREE.Material).dispose()
+      resources.glowTexture.dispose()
       renderer.dispose()
       container.removeChild(renderer.domElement)
-      scene.clear()
+      resourcesRef.current = null
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
-    const scene = sceneRef.current
-    if (!scene) {
-      return
-    }
+    const resources = resourcesRef.current
+    if (!resources) return
+    resources.eclipticGroup.visible = showEcliptic
+    resources.glow.visible = showGlow && referenceBody.id === 'sun'
 
-    for (const obj of meshesRef.current) {
-      scene.remove(obj)
-      if (obj instanceof THREE.Mesh || obj instanceof THREE.Line) {
-        obj.geometry.dispose()
-        if (Array.isArray(obj.material)) {
-          for (const mat of obj.material) {
-            mat.dispose()
-          }
-        } else {
-          obj.material.dispose()
-        }
-      }
-    }
-
-    meshesRef.current = []
-
+    const activeLineIds = new Set<string>()
     for (const trajectory of trajectories) {
-      const points3D = trajectory.points3D
-      if (!points3D || points3D.length < 2) {
-        const pos = currentPositions.find((p) => p.body.id === trajectory.body.id)
-        if (pos?.position3D) {
-          const sphere = createBodySphere(
-            trajectory.body,
-            new THREE.Vector3(pos.position3D.x, pos.position3D.z, pos.position3D.y),
-          )
-
-          scene.add(sphere)
-          meshesRef.current.push(sphere)
-        }
-
-        continue
+      const source = trajectory.points3D
+      if (!source || source.length < 2) continue
+      activeLineIds.add(trajectory.body.id)
+      const values = new Float32Array(source.length * 3)
+      for (let index = 0; index < source.length; index += 1) {
+        values[index * 3] = source[index].x
+        values[index * 3 + 1] = source[index].z
+        values[index * 3 + 2] = source[index].y
       }
-
-      const linePoints = points3D.map((p) => new THREE.Vector3(p.x, p.z, p.y))
-      const lineGeometry = new THREE.BufferGeometry().setFromPoints(linePoints)
-      const lineMaterial = new THREE.LineBasicMaterial({
-        color: trajectory.body.color,
-        transparent: true,
-        opacity: trajectory.body.kind === 'asteroid' ? 0.4 : 0.8,
-      })
-
-      const line = new THREE.Line(lineGeometry, lineMaterial)
-      scene.add(line)
-      meshesRef.current.push(line)
-    }
-
-    for (const item of currentPositions) {
-      if (item.position3D) {
-        const sphere = createBodySphere(
-          item.body,
-          new THREE.Vector3(item.position3D.x, item.position3D.z, item.position3D.y),
-        )
-
-        scene.add(sphere)
-        meshesRef.current.push(sphere)
-      }
-    }
-
-    const referenceSphere = createBodySphere(referenceBody, new THREE.Vector3(0, 0, 0))
-    scene.add(referenceSphere)
-    meshesRef.current.push(referenceSphere)
-
-    if (_lagrangePoints) {
-      for (const group of _lagrangePoints) {
-        for (const lp of group.points) {
-          const geo = new THREE.SphereGeometry(0.03, 8, 8)
-          const mat = new THREE.MeshBasicMaterial({ color: lp.color })
-          const mesh = new THREE.Mesh(geo, mat)
-          mesh.position.set(lp.position.x, 0, lp.position.y)
-          scene.add(mesh)
-          meshesRef.current.push(mesh)
-        }
-      }
-    }
-
-    if (showSaturnRings && referenceBody.id === 'sun') {
-      const saturnPos = currentPositions.find((p) => p.body.id === 'saturn')
-      if (saturnPos?.position3D) {
-        const ringGeo = new THREE.RingGeometry(0.15, 0.3, 64)
-        const ringMat = new THREE.MeshBasicMaterial({
-          color: 0xddaa66,
-          side: THREE.DoubleSide,
+      let line = resources.trajectoryLines.get(trajectory.body.id)
+      if (!line) {
+        const geometry = new THREE.BufferGeometry()
+        geometry.setAttribute('position', new THREE.BufferAttribute(values, 3))
+        line = new THREE.Line(geometry, new THREE.LineBasicMaterial({
+          color: trajectory.body.color,
           transparent: true,
-          opacity: 0.4,
-        })
-
-        const ring = new THREE.Mesh(ringGeo, ringMat)
-        ring.position.set(saturnPos.position3D.x, saturnPos.position3D.z, saturnPos.position3D.y)
-        ring.rotation.x = Math.PI / 2 + 0.47
-        scene.add(ring)
-        meshesRef.current.push(ring)
+          opacity: trajectory.body.kind === 'asteroid' ? 0.3 : 0.68,
+        }))
+        resources.trajectoryLines.set(trajectory.body.id, line)
+        resources.scene.add(line)
+      } else {
+        const attribute = line.geometry.getAttribute('position') as THREE.BufferAttribute
+        if (attribute.array.length === values.length) {
+          ;(attribute.array as Float32Array).set(values)
+          attribute.needsUpdate = true
+          line.geometry.computeBoundingSphere()
+        } else {
+          line.geometry.dispose()
+          line.geometry = new THREE.BufferGeometry()
+          line.geometry.setAttribute('position', new THREE.BufferAttribute(values, 3))
+        }
+      }
+    }
+    for (const [id, line] of resources.trajectoryLines) {
+      if (!activeLineIds.has(id)) {
+        resources.scene.remove(line)
+        disposeObject(line)
+        resources.trajectoryLines.delete(id)
       }
     }
 
-    if (showGlow && referenceBody.id === 'sun') {
-      const spriteTex = (() => {
-        const canvas = document.createElement('canvas')
-        canvas.width = 64
-        canvas.height = 64
-        const ctx = canvas.getContext('2d')
-        if (ctx) {
-          const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32)
-          gradient.addColorStop(0, 'rgba(255,220,100,1)')
-          gradient.addColorStop(0.2, 'rgba(255,200,60,0.6)')
-          gradient.addColorStop(0.5, 'rgba(255,150,30,0.1)')
-          gradient.addColorStop(1, 'rgba(255,100,0,0)')
-          ctx.fillStyle = gradient
-          ctx.fillRect(0, 0, 64, 64)
-        }
-
-        return new THREE.CanvasTexture(canvas)
-      })()
-
-      const spriteMat = new THREE.SpriteMaterial({ map: spriteTex, blending: THREE.AdditiveBlending })
-      const sprite = new THREE.Sprite(spriteMat)
-      sprite.scale.set(0.8, 0.8, 1)
-      sprite.position.set(0, 0, 0)
-      scene.add(sprite)
-      meshesRef.current.push(sprite)
+    const bodyPositions = new Map(currentPositions.map((item) => [item.body.id, item]))
+    bodyPositions.set(referenceBody.id, {
+      body: referenceBody,
+      planarPosition: { x: 0, y: 0 },
+      position3D: { x: 0, y: 0, z: 0 },
+      distance: 0,
+    })
+    for (const [id, item] of bodyPositions) {
+      let mesh = resources.bodyMeshes.get(id)
+      if (!mesh) {
+        mesh = new THREE.Mesh(resources.bodyGeometry, new THREE.MeshBasicMaterial({ color: item.body.color }))
+        mesh.userData.bodyId = id
+        resources.bodyMeshes.set(id, mesh)
+        resources.scene.add(mesh)
+      }
+      mesh.scale.setScalar(radiusFor(item.body) * resources.bodyScale)
+      if (item.position3D) mesh.position.copy(toThree(item.position3D))
+    }
+    for (const [id, mesh] of resources.bodyMeshes) {
+      if (!bodyPositions.has(id)) {
+        resources.scene.remove(mesh)
+        ;(mesh.material as THREE.Material).dispose()
+        resources.bodyMeshes.delete(id)
+      }
     }
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trajectories, currentPositions, referenceBody.id, _lagrangePoints, showEcliptic, showSaturnRings, showGlow])
-
-  const handleDoubleClick = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      if (!onReferenceChange) {
-        return
+    // Reframe only when the scene composition changes, preserving deliberate
+    // user camera moves during clock playback while keeping story/catalog
+    // scenes (including outbound spacecraft paths) discoverable.
+    const fitKey = `${referenceBody.id}|${[...bodyPositions.keys()].sort().join(',')}|${trajectories.map((item) => `${item.body.id}:${item.points3D?.length ?? 0}`).sort().join(',')}`
+    if (fitKeyRef.current !== fitKey) {
+      fitKeyRef.current = fitKey
+      let radius = 0
+      for (const item of bodyPositions.values()) {
+        if (item.position3D) radius = Math.max(radius, Math.hypot(item.position3D.x, item.position3D.y, item.position3D.z))
       }
-
-      const container = containerRef.current
-      const camera = cameraRef.current
-      const scene = sceneRef.current
-      if (!container || !camera || !scene) {
-        return
+      for (const trajectory of trajectories) {
+        if (trajectory.body.kind === 'spacecraft') continue
+        for (const point of trajectory.points3D ?? []) radius = Math.max(radius, Math.hypot(point.x, point.y, point.z))
       }
-
-      const rect = container.getBoundingClientRect()
-      const mouse = new THREE.Vector2(
-        ((event.clientX - rect.left) / rect.width) * 2 - 1,
-        -((event.clientY - rect.top) / rect.height) * 2 + 1,
-      )
-
-      const raycaster = raycasterRef.current
-      raycaster.setFromCamera(mouse, camera)
-
-      const clickable = meshesRef.current.filter(
-        (obj) => obj instanceof THREE.Mesh && obj.userData.bodyId,
-      )
-
-      const intersections = raycaster.intersectObjects(clickable, false)
-
-      if (intersections.length > 0) {
-        const bodyId = intersections[0].object.userData.bodyId as string | undefined
-        if (bodyId) {
-          onReferenceChange(bodyId)
-        }
+      const distance = Math.max(2.8, Math.min(260, radius * 1.45 + 1.4))
+      resources.bodyScale = Math.max(1, Math.min(4.5, Math.sqrt(Math.max(radius, 1) / 7)))
+      for (const [id, mesh] of resources.bodyMeshes) {
+        const item = bodyPositions.get(id)
+        if (item) mesh.scale.setScalar(radiusFor(item.body) * resources.bodyScale)
       }
-    },
-    [onReferenceChange],
-  )
+      resources.camera.position.set(distance * 0.16, distance * 0.48, distance)
+      resources.camera.far = Math.max(500, distance * 5)
+      resources.camera.updateProjectionMatrix()
+      resources.controls.maxDistance = Math.max(220, distance * 2.5)
+      resources.controls.target.set(0, 0, 0)
+      resources.controls.update()
+    }
 
-  const handleMouseMove = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      if (!onHover) {
-        return
+    for (const object of [...resources.auxiliaryGroup.children]) {
+      resources.auxiliaryGroup.remove(object)
+      disposeObject(object)
+    }
+    for (const group of lagrangePoints ?? []) {
+      for (const point of group.points) {
+        const marker = new THREE.Mesh(
+          new THREE.SphereGeometry(0.026, 8, 6),
+          new THREE.MeshBasicMaterial({ color: point.color }),
+        )
+        marker.position.set(point.position.x, 0, point.position.y)
+        resources.auxiliaryGroup.add(marker)
       }
-
-      const container = containerRef.current
-      const camera = cameraRef.current
-      const scene = sceneRef.current
-      if (!container || !camera || !scene) {
-        return
+    }
+    if (showSaturnRings) {
+      const saturn = bodyPositions.get('saturn')
+      if (saturn?.position3D) {
+        const saturnRing = new THREE.Mesh(
+          new THREE.RingGeometry(0.12, 0.21, 48),
+          new THREE.MeshBasicMaterial({ color: 0xd9bf8b, side: THREE.DoubleSide, transparent: true, opacity: 0.48 }),
+        )
+        saturnRing.position.copy(toThree(saturn.position3D))
+        saturnRing.rotation.x = Math.PI / 2 + 0.47
+        resources.auxiliaryGroup.add(saturnRing)
       }
+    }
+  }, [currentPositions, lagrangePoints, referenceBody, showEcliptic, showGlow, showSaturnRings, trajectories])
 
-      const rect = container.getBoundingClientRect()
-      const mouse = new THREE.Vector2(
-        ((event.clientX - rect.left) / rect.width) * 2 - 1,
-        -((event.clientY - rect.top) / rect.height) * 2 + 1,
-      )
-
-      const raycaster = raycasterRef.current
-      raycaster.setFromCamera(mouse, camera)
-
-      const clickable = meshesRef.current.filter(
-        (obj) => obj instanceof THREE.Mesh && obj.userData.bodyId,
-      )
-
-      const intersections = raycaster.intersectObjects(clickable, false)
-
-      if (intersections.length > 0) {
-        const bodyId = intersections[0].object.userData.bodyId as string | undefined
-        if (bodyId) {
-          const pos = currentPositions.find((p) => p.body.id === bodyId)
-          if (pos) {
-            onHover(pos.body, pos.distance, event.clientX, event.clientY)
-            return
-          }
-        }
-      }
-
-      onHover(null, 0, 0, 0)
-    },
-    [currentPositions, onHover],
-  )
+  const intersectBody = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const container = containerRef.current
+    const resources = resourcesRef.current
+    if (!container || !resources) return null
+    const rect = container.getBoundingClientRect()
+    const pointer = new THREE.Vector2(
+      (event.clientX - rect.left) / rect.width * 2 - 1,
+      -(event.clientY - rect.top) / rect.height * 2 + 1,
+    )
+    raycasterRef.current.setFromCamera(pointer, resources.camera)
+    const hits = raycasterRef.current.intersectObjects([...resources.bodyMeshes.values()], false)
+    return hits[0]?.object.userData.bodyId as string | undefined
+  }, [])
 
   return (
     <div
       ref={containerRef}
       className="viz-canvas canvas-mode"
-      onDoubleClick={handleDoubleClick}
-      onMouseMove={handleMouseMove}
+      data-testid="trajectory-canvas-3d"
+      role="img"
+      aria-label="Interactive three-dimensional Solar System trajectory view"
+      onClick={(event) => { const id = intersectBody(event); if (id) onBodySelect?.(id) }}
+      onDoubleClick={(event) => { const id = intersectBody(event); if (id) onReferenceChange?.(id) }}
+      onMouseMove={(event) => {
+        const id = intersectBody(event)
+        const position = positionsRef.current.find((item) => item.body.id === id)
+        if (position) onHover?.(position.body, position.distance, event.clientX, event.clientY)
+        else onHover?.(null, 0, 0, 0)
+      }}
       onMouseLeave={() => onHover?.(null, 0, 0, 0)}
     />
   )

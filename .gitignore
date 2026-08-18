@@ -13,6 +13,9 @@ dist-ssr
 .cache
 *.local
 public/data/asteroids
+test-results
+playwright-report
+.dataset-test-*
 
 # Editor directories and files
 .vscode/*

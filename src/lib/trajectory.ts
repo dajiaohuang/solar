@@ -56,22 +56,24 @@ export function buildTrajectories(params: {
     return cached
   }
 
-  const trajectories = bodies.map((body) => {
-    const points: Vector2[] = []
-    const points3D: Vector3[] = []
+  const trajectories = bodies.map((body) => ({
+    body,
+    points: [] as Vector2[],
+    points3D: [] as Vector3[],
+  }))
 
-    for (let index = 0; index < sampleCount; index += 1) {
-      const progress = sampleCount === 1 ? 0 : index / (sampleCount - 1)
-      const julianDay = centerJulianDay - historyDays + progress * historyDays
-      const resolve = createBodyPositionResolver(bodiesById, julianDay)
-      const [relativePosition] = getRelativePositions([body], referenceId, resolve)
-
-      points.push(toPlanarPoint(relativePosition.position))
-      points3D.push(relativePosition.position)
+  // One resolver per sample shares the same parent-body and reference-frame cache
+  // across every focused body at that instant.
+  for (let index = 0; index < sampleCount; index += 1) {
+    const progress = sampleCount === 1 ? 0 : index / (sampleCount - 1)
+    const julianDay = centerJulianDay - historyDays + progress * historyDays
+    const resolve = createBodyPositionResolver(bodiesById, julianDay)
+    const positions = getRelativePositions(bodies, referenceId, resolve)
+    for (let bodyIndex = 0; bodyIndex < positions.length; bodyIndex += 1) {
+      trajectories[bodyIndex].points.push(toPlanarPoint(positions[bodyIndex].position))
+      trajectories[bodyIndex].points3D.push(positions[bodyIndex].position)
     }
-
-    return { body, points, points3D }
-  })
+  }
 
   trajectoryCache.set(cacheKey, trajectories)
 
@@ -85,6 +87,26 @@ export function buildTrajectories(params: {
   return trajectories
 }
 
+export function buildCurrentPositions(params: {
+  bodies: CelestialBody[]
+  bodiesById: Map<BodyId, CelestialBody>
+  referenceId: BodyId
+  julianDay: number
+}) {
+  const resolve = createBodyPositionResolver(params.bodiesById, params.julianDay)
+  const relativePositions = getRelativePositions(params.bodies, params.referenceId, resolve)
+  const currentPositions = relativePositions.map((item) => ({
+    body: item.body,
+    planarPosition: toPlanarPoint(item.position),
+    position3D: item.position,
+    distance: vector3Magnitude(item.position),
+  }))
+  return {
+    currentPositions,
+    maxDistance: currentPositions.reduce((largest, item) => Math.max(largest, item.distance), 0),
+  }
+}
+
 export function buildTrajectoryFrame(params: {
   bodies: CelestialBody[]
   bodiesById: Map<BodyId, CelestialBody>
@@ -94,14 +116,12 @@ export function buildTrajectoryFrame(params: {
   sampleCount: number
 }): TrajectoryFrameData {
   const { bodies, bodiesById, referenceId, centerJulianDay, historyDays, sampleCount } = params
-  const resolve = createBodyPositionResolver(bodiesById, centerJulianDay)
-  const relativePositions = getRelativePositions(bodies, referenceId, resolve)
-  const currentPositions = relativePositions.map((item) => ({
-    body: item.body,
-    planarPosition: toPlanarPoint(item.position),
-    position3D: item.position,
-    distance: vector3Magnitude(item.position),
-  }))
+  const { currentPositions, maxDistance } = buildCurrentPositions({
+    bodies,
+    bodiesById,
+    referenceId,
+    julianDay: centerJulianDay,
+  })
   const trajectories = buildTrajectories({
     bodies,
     bodiesById,
@@ -110,8 +130,6 @@ export function buildTrajectoryFrame(params: {
     historyDays,
     sampleCount,
   })
-  const maxDistance = currentPositions.reduce((largest, item) => Math.max(largest, item.distance), 0)
-
   return {
     currentPositions,
     trajectories,

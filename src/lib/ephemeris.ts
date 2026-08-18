@@ -12,6 +12,13 @@ import type {
 const DEG_TO_RAD = Math.PI / 180
 const RAD_TO_DEG = 180 / Math.PI
 
+export class UnsupportedOrbitError extends RangeError {
+  constructor(message: string) {
+    super(message)
+    this.name = 'UnsupportedOrbitError'
+  }
+}
+
 export function normalizeDegrees(angle: number) {
   const wrapped = angle % 360
   return wrapped < 0 ? wrapped + 360 : wrapped
@@ -21,12 +28,22 @@ function toRadians(angleDeg: number) {
   return angleDeg * DEG_TO_RAD
 }
 
-function solveKeplerEquation(meanAnomalyDeg: number, eccentricity: number) {
-  let eccentricAnomalyDeg = meanAnomalyDeg + eccentricity * RAD_TO_DEG * Math.sin(toRadians(meanAnomalyDeg))
+export function solveKeplerEquation(meanAnomalyDeg: number, eccentricity: number) {
+  if (!Number.isFinite(eccentricity) || eccentricity < 0 || eccentricity >= 1) {
+    throw new UnsupportedOrbitError(
+      `Elliptic Kepler propagation requires 0 <= eccentricity < 1; received ${eccentricity}`,
+    )
+  }
 
-  for (let iteration = 0; iteration < 15; iteration += 1) {
+  const normalizedMeanAnomaly = normalizeDegrees(meanAnomalyDeg)
+  let eccentricAnomalyDeg = eccentricity < 0.8
+    ? normalizedMeanAnomaly
+    : 180
+
+  for (let iteration = 0; iteration < 30; iteration += 1) {
     const deltaMeanAnomalyDeg =
-      meanAnomalyDeg - (eccentricAnomalyDeg - eccentricity * RAD_TO_DEG * Math.sin(toRadians(eccentricAnomalyDeg)))
+      normalizedMeanAnomaly -
+      (eccentricAnomalyDeg - eccentricity * RAD_TO_DEG * Math.sin(toRadians(eccentricAnomalyDeg)))
     const deltaEccentricAnomalyDeg =
       deltaMeanAnomalyDeg / (1 - eccentricity * Math.cos(toRadians(eccentricAnomalyDeg)))
 
@@ -87,7 +104,7 @@ function getKeplerianElementsAtJulianDay(orbit: KeplerianOrbit, julianDay: numbe
   }
 }
 
-function getInstantaneousElements(orbit: OrbitDefinition, julianDay: number) {
+export function getInstantaneousElements(orbit: OrbitDefinition, julianDay: number) {
   return orbit.model === 'planetaryApprox'
     ? getPlanetaryElementsAtJulianDay(orbit, julianDay)
     : getKeplerianElementsAtJulianDay(orbit, julianDay)
@@ -102,6 +119,12 @@ export function orbitToHeliocentricVector(orbit: OrbitDefinition, julianDay: num
     argPeriapsisDeg,
     meanAnomalyDeg,
   } = getInstantaneousElements(orbit, julianDay)
+
+  if (!Number.isFinite(semiMajorAxisAU) || semiMajorAxisAU <= 0) {
+    throw new UnsupportedOrbitError(
+      `Elliptic Kepler propagation requires a positive semi-major axis; received ${semiMajorAxisAU}`,
+    )
+  }
 
   const eccentricAnomalyDeg = solveKeplerEquation(meanAnomalyDeg, eccentricity)
   const eccentricAnomalyRad = toRadians(eccentricAnomalyDeg)
@@ -146,6 +169,22 @@ export function vector3Magnitude(vector: Vector3) {
   return Math.hypot(vector.x, vector.y, vector.z)
 }
 
+export function scaleVector3(vector: Vector3, scalar: number): Vector3 {
+  return { x: vector.x * scalar, y: vector.y * scalar, z: vector.z * scalar }
+}
+
+export function dotVector3(a: Vector3, b: Vector3) {
+  return a.x * b.x + a.y * b.y + a.z * b.z
+}
+
+export function crossVector3(a: Vector3, b: Vector3): Vector3 {
+  return {
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x,
+  }
+}
+
 export function createBodyPositionResolver(bodiesById: Map<BodyId, CelestialBody>, julianDay: number) {
   const cache = new Map<BodyId, Vector3>()
 
@@ -174,6 +213,20 @@ export function createBodyPositionResolver(bodiesById: Map<BodyId, CelestialBody
   }
 
   return resolve
+}
+
+export function createBodyVelocityResolver(
+  bodiesById: Map<BodyId, CelestialBody>,
+  julianDay: number,
+  stepDays = 0.01,
+) {
+  const before = createBodyPositionResolver(bodiesById, julianDay - stepDays)
+  const after = createBodyPositionResolver(bodiesById, julianDay + stepDays)
+
+  return (bodyId: BodyId): Vector3 => {
+    const delta = subtractVector3(after(bodyId), before(bodyId))
+    return scaleVector3(delta, 1 / (2 * stepDays))
+  }
 }
 
 export function estimateAphelionDistance(body: CelestialBody, bodiesById: Map<BodyId, CelestialBody>): number {

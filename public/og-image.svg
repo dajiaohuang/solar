@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs><radialGradient id="g"><stop stop-color="#1c3b42"/><stop offset="1" stop-color="#05080c"/></radialGradient></defs>
+  <rect width="1200" height="630" fill="url(#g)"/>
+  <g fill="none" stroke="#6b8994" opacity=".45"><ellipse cx="430" cy="315" rx="245" ry="90" transform="rotate(-18 430 315)"/><ellipse cx="430" cy="315" rx="355" ry="145" transform="rotate(-18 430 315)"/><ellipse cx="430" cy="315" rx="470" ry="205" transform="rotate(-18 430 315)"/></g>
+  <circle cx="430" cy="315" r="22" fill="#e3bb68"/><circle cx="699" cy="231" r="9" fill="#62d0b5"/><circle cx="185" cy="418" r="7" fill="#e27660"/>
+  <text x="780" y="275" fill="#dbe5e8" font-family="system-ui,sans-serif" font-size="70" font-weight="300">SOLAR</text><text x="780" y="345" fill="#dbe5e8" font-family="system-ui,sans-serif" font-size="70" font-weight="300">ATLAS</text><text x="784" y="389" fill="#62d0b5" font-family="monospace" font-size="18">DYNAMICS · SMALL BODIES · MISSIONS</text>
+</svg>

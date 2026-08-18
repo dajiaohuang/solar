@@ -1,136 +1,162 @@
-# solar
+# Solar Atlas
 
-solar is a React + TypeScript + Vite app for visualizing realistic Solar System trajectories on a 2D plane with selectable reference bodies.
+**A browser-native Solar System dynamics and small-body atlas.**
 
-- Realistic major-planet and dwarf-planet orbital parameters
-- Large asteroid catalog workflow (MPCORB preprocessing + chunked loading)
-- Web Worker trajectory computation + WebGL rendering
-- Full-screen visualization stage with left-side drawer controls
-- Asteroid bidirectional lazy window loading (scroll down for next, scroll up for previous)
-- "Loaded but not rendered" asteroid behavior (manual selection required for drawing)
+[Live demo](https://dajiaohuang.github.io/solar/) · [中文文档](./README-CN.md) · [Scientific contract](#scientific-contract)
 
-For Chinese documentation, see `README-CN.md`.
+![Solar Atlas overview](./public/og-image.svg)
 
----
+Solar Atlas connects spatial views, orbital-element space, time events, and data evidence in one reproducible browser workspace. It is built for exploration and teaching—not operational navigation or certified ephemerides.
 
-## Requirements
+## What is implemented
 
-- Node.js 18+ (20+ recommended)
-- npm 9+
+- **Solar Explorer:** heliocentric, geocentric, and arbitrary body-centered frames; linked 2D/3D views; bounded simulation clock; split-frame comparison; distance measurement; time travel; Lagrange points; Hill spheres and Laplace SOIs.
+- **Small-Body Catalog:** MPCORB binary shards, name/number/designation search, NEO/PHA and orbit-class filters, numerical filters for `a`, `e`, `i`, `H`, and `q`, Lite/Full display budgets, immutable dataset versions, and IndexedDB caching.
+- **Orbital Element Space:** linked `a–e`, `a–i`, `a–H`, `q–Q`, and `a–period` plots, Kirkwood/resonance markers, brush selection, and synchronized 3D highlighting.
+- **Events Lab:** explicit, cancellable close-approach, conjunction, opposition, perihelion, and aphelion jobs with progress, cached results, timeline navigation, and CSV/JSON export. Playback never restarts an analysis.
+- **Mission Lab:** directionally correct Hohmann baselines in km/s, phase-angle guidance, a universal-variable Lambert solver, departure/arrival `v∞`, C3, and a worker-generated porkchop map.
+- **Guided Stories:** reproducible JSON stories for retrograde motion, reference frames, Kirkwood gaps, Trojans, NEO types, Pluto’s resonance, and Voyager-era trajectories.
+- **Reproducibility:** scene URLs include dataset version, epoch, reference frames, focus set, filters, language, and view settings.
+- **Installable web app:** responsive/mobile Lite layout, runtime offline cache, Web App Manifest, Open Graph metadata, and code-split workspaces.
 
----
+## Quick start
 
-## Quick Start
+Requirements: Node.js 22+ and npm 10+.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Then open the local URL from terminal output (typically `http://localhost:5173`).
-
----
-
-## Build Asteroid Dataset (First Time)
-
-To enable the full asteroid catalog, run:
+The app works without a local asteroid dataset using the curated major-body model. To add a reproducible Lite dataset:
 
 ```bash
-npm run preprocess:asteroids
-```
-
-The script will:
-
-1. Download `MPCORB.DAT.gz` from Minor Planet Center
-2. Parse orbital elements and classification flags
-3. Generate frontend-ready chunked files under:
-   - `public/data/asteroids/chunks/*.json`
-   - `public/data/asteroids/search/*.json`
-   - `public/data/asteroids/manifest.json`
-
-Optional environment variables:
-
-- `MPCORB_CHUNK_SIZE`: records per chunk (default `5000`)
-- `MPCORB_LIMIT`: process only first N records (debug usage)
-
-Example:
-
-```bash
-MPCORB_LIMIT=30000 npm run preprocess:asteroids
-```
-
----
-
-## Interaction Model
-
-### Full-screen stage
-
-- The app is locked to single-screen layout (no page-level vertical scrolling)
-- Mouse wheel over the main canvas zooms around cursor position
-- Use `Menu` button to open the left-side control drawer
-
-### Drawer sections
-
-- `Overview`: reference body, simulation time/date, max relative distance
-- `Controls`: reference body, history range, playback speed, zoom, play/pause
-- `Major Bodies`: preset groups + manual selection
-- `Asteroids`: search, class filter, lazy catalog browsing
-- `Loaded`: currently loaded and pinned asteroid bodies
-
-### Asteroid loading behavior
-
-- Loading a partition does **not** auto-render those asteroids
-- Asteroids are rendered only after manual selection
-- Scrolling near bottom loads later entries
-- Scrolling near top restores earlier unloaded entries
-- Window overflow evicts unselected out-of-window asteroids
-- Previously selected asteroids are preserved
-
----
-
-## Scripts
-
-```bash
+npm run data:lite
+npm run validate:data
 npm run dev
-npm run build
-npm run preview
-npm run lint
-npm run preprocess:asteroids
 ```
 
----
+To build all valid elliptic MPCORB records:
 
-## Project Structure (Core)
+```bash
+npm run data:full
+```
+
+The full pipeline needs several GB of free memory and downloads the current MPCORB source snapshot once. You can supply a pinned source file with `MPCORB_SOURCE_FILE=/path/to/MPCORB.DAT.gz`.
+
+## Data publication v2
+
+Application deployment and data publication are separate workflows.
+
+```text
+application: lint → unit tests → build → deploy pinned dataset tag
+
+dataset: download source snapshot → SHA-256 → parse → validate
+       → Float64 binary shards + metadata/search/lookup indexes
+       → immutable GitHub release → pin release tag → deploy
+```
+
+Each release lives under `public/data/asteroids/releases/<version>/` and contains:
+
+```text
+manifest.json
+provenance.json
+checksums.json
+validation-report.json
+binary/*.bin         # eight Float64 orbital values per record
+meta/*.json          # names, classifications, H, NEO/PHA flags
+search/*.json        # normalized name/number/designation indexes
+lookup/*.json        # stable-ID buckets for deep-link hydration
+```
+
+`dataset-version.json` is the small mutable pointer to the active immutable release. The GitHub Pages workflow never downloads a changing MPCORB file; it deploys the exact release named by the repository variable `ASTEROID_DATASET_TAG`.
+The publisher refuses to overwrite an existing release version and swaps the active pointer only after every artifact and validation report has been written.
+
+Optional pipeline variables:
+
+| Variable | Meaning |
+| --- | --- |
+| `MPCORB_SOURCE_FILE` | Existing pinned `.gz` or plain MPCORB source |
+| `MPCORB_SOURCE_URL` | Alternate source URL |
+| `MPCORB_DATASET_VERSION` | Explicit immutable version string |
+| `MPCORB_CHUNK_SIZE` | Records per binary shard; default 5,000 |
+| `MPCORB_LIMIT` | Stop after N valid records |
+| `MPCORB_MODE` | `lite` or `full` |
+| `MPCORB_REFRESH=1` | Replace the cached raw snapshot |
+
+## Architecture
 
 ```text
 src/
-  components/
-    TrajectoryCanvas.tsx    # WebGL rendering layer
-    CatalogPanel.tsx        # Asteroid panel + bidirectional lazy list
-  hooks/
-    useTrajectoryWorker.ts  # Worker request/response orchestration
-  workers/
-    trajectory.worker.ts    # Background orbit/trajectory calculations
-  lib/
-    ephemeris.ts            # Orbital mechanics and solvers
-    trajectory.ts           # Sampling and frame-building logic
-    referenceFrame.ts       # Relative frame transforms
-    viewProjection.ts       # Projection/unprojection with view offset
-    catalogLoader.ts        # Chunk/search/cursor-based loading
-  data/
-    majorBodies.ts          # Major planets + dwarf planets
-  App.tsx                   # Full-screen stage + drawer app shell
-
-scripts/
-  preprocess-asteroids.mjs  # MPCORB preprocessing pipeline
+  app/                 shell, route loading, providers, body registry
+  features/
+    explorer/          2D/3D spatial workbench and controls
+    catalog/           small-body discovery and GPU catalog mode
+    element-space/     linked quantitative plots and brushing
+    events/            explicit analysis jobs and timeline
+    mission/           Hohmann, Lambert, porkchop, model ladder
+    stories/           JSON-guided scenes
+    body-inspector/    elements, phase, influence radii, provenance
+    about/             dataset evidence and scientific contract
+  engine/
+    clock/             external simulation clock (8 Hz UI publication)
+    ephemeris/         phase, spacecraft, influence definitions
+    mission/           unit-safe Hohmann and Lambert calculations
+  state/               independent simulation/selection/catalog/UI stores
+  data/                curated bodies, loaders, IndexedDB cache
+  workers/             cancellable trajectory, event, porkchop workers
+  i18n/                one English/Chinese translation system
+pipeline data lives in scripts/preprocess-asteroids.mjs
 ```
 
----
+The render paths are intentionally different:
 
-## Data Sources
+- **Catalog Mode** draws thousands of current positions as GPU points without per-object React nodes or full trails.
+- **Focus Mode** is capped at 160 objects and adds full trajectories, labels, details, and bounded analysis.
 
-- JPL approximate planetary elements
-- JPL SBDB-derived Keplerian elements
-- MPCORB (Minor Planet Center asteroid catalog)
+The simulation clock is not React state updated every animation frame. React receives a throttled snapshot, while trajectory history runs independently in a cancellable worker. Worker payloads use transferable typed arrays.
 
-> This project is for visualization and educational exploration, not high-precision ephemeris integration.
+## Scientific contract
+
+| Capability | Model and scope |
+| --- | --- |
+| Major planets | JPL approximate mean elements and secular rates; broad visualization accuracy |
+| Moons/dwarfs | Rounded curated educational elements, explicitly labeled `curated-approx`, with parent-body recursion |
+| MPCORB/SBDB bodies | Elliptic (`0 ≤ e < 1`) osculating elements only; parabolic/hyperbolic records are rejected explicitly |
+| Moon phase | Sun–Earth–Moon phase angle plus signed geocentric elongation |
+| Hill sphere | `a(1-e)(m/3M)^(1/3)` |
+| Laplace SOI | `a(m/M)^(2/5)`; never labeled as a Hill sphere |
+| Hohmann | Coplanar circular endpoints, impulsive solar two-body model; signed burns and km/s conversion |
+| Lambert | Zero-revolution universal-variable solar two-body solution using approximate endpoint positions |
+| Event search | Bounded sampled minima/alignment extrema; exploratory, not certified close-approach prediction |
+| Spacecraft overlays | Milestone-dated schematic tracks labeled separately from Horizons and propagated ephemerides |
+
+JPL SBDB values are parsed from the documented `orbit.elements[]` records (`name`, `value`, `units`, and uncertainty fields), not from invented object properties.
+
+Primary sources:
+
+- [Minor Planet Center MPCORB](https://www.minorplanetcenter.net/iau/MPCORB.html)
+- [JPL SBDB API](https://ssd-api.jpl.nasa.gov/doc/sbdb.html)
+- [JPL approximate planetary positions](https://ssd.jpl.nasa.gov/planets/approx_pos.html)
+
+## Quality gates
+
+```bash
+npm run lint
+npm run test:unit
+npm run test:e2e
+npm run build
+npm run ci
+```
+
+Unit coverage includes Julian dates, Kepler propagation, parent/reference frames, Hohmann units/direction, Moon phase geometry, Hill/SOI definitions, strict JPL SBDB fixtures, Lambert circular-arc recovery, versioned deep-link round trips, MPCORB parsing, and an end-to-end immutable dataset publication/checksum fixture. Playwright runs the core routes, reproducible stories, mission workers, and 2D/3D renderers on desktop and mobile Chromium.
+
+## Deployment
+
+- `.github/workflows/ci.yml` validates every pull request and push.
+- `.github/workflows/data-refresh.yml` publishes a monthly/manual immutable dataset release.
+- `.github/workflows/deploy.yml` deploys the app plus the repository’s pinned dataset release with official GitHub Pages actions.
+
+## License
+
+Source code is available under the [MIT License](./LICENSE). Astronomical source data remains subject to its originating institution’s terms and attribution.

@@ -1,0 +1,55 @@
+name: Publish asteroid dataset
+
+on:
+  schedule:
+    - cron: '23 3 1 * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Dataset resolution
+        required: true
+        default: full
+        type: choice
+        options: [full, lite]
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: asteroid-data-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build source snapshot into versioned shards
+        env:
+          REQUESTED_MODE: ${{ inputs.mode || 'full' }}
+        run: |
+          if [ "$REQUESTED_MODE" = "lite" ]; then npm run data:lite; else npm run data:full; fi
+      - run: npm run validate:data
+      - name: Package immutable release
+        id: package
+        run: |
+          VERSION=$(node -p "require('./public/data/asteroids/dataset-version.json').activeVersion")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          tar -czf asteroid-dataset.tar.gz -C public/data/asteroids .
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          gh release create "dataset-$VERSION" asteroid-dataset.tar.gz \
+            --title "Asteroid dataset $VERSION" \
+            --notes "Immutable MPCORB-derived dataset. The archive contains provenance, SHA-256 checksums, a validation report, search indexes, and Float64 binary shards."
+          gh variable set ASTEROID_DATASET_TAG --body "dataset-$VERSION"
+          gh workflow run deploy.yml

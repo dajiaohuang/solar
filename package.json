@@ -1,14 +1,22 @@
 {
   "name": "solar",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "preprocess:asteroids": "node ./scripts/preprocess-asteroids.mjs"
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "ci": "npm run lint && npm run test:unit && npm run build",
+    "preprocess:asteroids": "node --max-old-space-size=4096 ./scripts/preprocess-asteroids.mjs",
+    "data:lite": "cross-env MPCORB_MODE=lite MPCORB_LIMIT=30000 node ./scripts/preprocess-asteroids.mjs",
+    "data:full": "cross-env MPCORB_MODE=full node --max-old-space-size=4096 ./scripts/preprocess-asteroids.mjs",
+    "validate:data": "node ./scripts/validate-dataset.mjs"
   },
   "dependencies": {
     "@types/three": "^0.184.0",
@@ -18,16 +26,19 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.55.0",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "cross-env": "^10.0.0",
     "eslint": "^10.2.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.5.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.2",
-    "vite": "^8.0.10"
+    "vite": "^8.0.10",
+    "vitest": "^3.2.4"
   }
 }

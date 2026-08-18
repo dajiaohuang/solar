@@ -1,61 +1,50 @@
-# CLAUDE.md
+# Solar Atlas contributor guide
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Solar Atlas is a React 19 + TypeScript 6 + Vite 8 scientific visualization application. It is a client-side, route-level code-split app with no server runtime.
 
-## Build/Run Commands
+## Commands
 
 ```bash
 npm install
-npm run dev          # Start Vite dev server (http://localhost:5173)
-npm run build        # TypeScript check + Vite production build
-npm run preview      # Preview production build locally
-npm run lint         # ESLint across the project
-npm run preprocess:asteroids   # Download MPCORB.DAT.gz, generate chunked asteroid JSON
+npm run dev
+npm run lint
+npm run test:unit
+npm run test:e2e
+npm run build
+npm run ci
+
+npm run data:lite
+npm run data:full
+npm run validate:data
 ```
 
-Optional env vars for asteroid preprocessing: `MPCORB_CHUNK_SIZE` (default 5000), `MPCORB_LIMIT` (debug: process only N records).
+The Vite base path is `/solar/`. Playwright starts its own development server. The asteroid commands download or consume MPCORB, validate it, and publish versioned artifacts under `public/data/asteroids/releases/` plus an atomic `dataset-version.json` pointer.
+
+Useful pipeline environment variables are `MPCORB_SOURCE_FILE`, `MPCORB_SOURCE_URL`, `MPCORB_OUTPUT_DIR`, `MPCORB_DATASET_VERSION`, `MPCORB_CHUNK_SIZE`, `MPCORB_LIMIT`, and `MPCORB_REFRESH=1`.
 
 ## Architecture
 
-This is a single-page React 19 + TypeScript 6 + Vite 8 app that visualizes Solar System trajectories on a 2D plane. The UI is Chinese-localized. No router, no state management library — all state lives in `App.tsx`.
+- `src/app/` — providers, route shell, lazy workspaces, and the shared body registry.
+- `src/features/` — Explorer, Catalog, Element Space, Events, Mission Lab, Stories, and Evidence/About workspaces.
+- `src/engine/` — simulation clock, ephemerides, units, spheres of influence, Hohmann, and Lambert calculations.
+- `src/workers/` — cancellable trajectory, event-analysis, and porkchop workers. Large trajectory results use transferable typed arrays.
+- `src/state/` — small external stores for simulation, selection, catalog, and UI state.
+- `src/data/` — curated major-body/spacecraft data, physical properties, catalog loaders, and IndexedDB cache support.
+- `src/components/TrajectoryCanvas.tsx` — raw WebGL 2D renderer and GPU point-catalog view.
+- `src/components/TrajectoryCanvas3D.tsx` — persistent Three.js scene graph; do not recreate the renderer or scene on each clock tick.
+- `src/i18n/` — the single bilingual translation source. Add keys to both `en.ts` and `zh.ts`.
+- `scripts/preprocess-asteroids.mjs` — strict fixed-width MPCORB parser and immutable binary-shard publisher.
 
-### Rendering pipeline
+## Scientific and state contracts
 
-1. **Orbit computation** (`src/lib/ephemeris.ts`) — Two orbit models: `planetaryApprox` (JPL approximate elements with century-rate tables for major planets) and `keplerian` (Keplerian elements at epoch for moons, dwarf planets, asteroids). Both resolve to heliocentric 3D positions via Kepler's equation. Parent-body chaining supports moons.
+- Internal distances are AU, dates are Julian days, and mission velocity outputs are km/s. Convert only through `src/engine/units.ts`.
+- MPCORB and SBDB production paths accept bound elliptic solutions only (`0 <= e < 1`, `a > 0`). Unsupported conics must fail visibly.
+- Position resolution is heliocentric first, including parent-body chaining, then transformed into the chosen reference frame. Do not mix frame-relative and absolute coordinates.
+- The simulation clock lives outside React and publishes throttled snapshots. Do not drive orbital recomputation with a component-level `requestAnimationFrame` loop.
+- Heavy analyses are explicit, cancellable worker jobs. UI parameter changes must not silently rerun them.
+- Results and exports must state their model, epoch/window, units, and approximation limits.
+- Share URLs are a versioned scene contract. Extend `src/lib/urlState.ts` compatibly when new shareable state is added.
 
-2. **Reference frames** (`src/lib/referenceFrame.ts`) — Converts absolute 3D positions to relative positions centered on the selected reference body. Projects 3D → 2D by dropping Z. Also computes suggested view radius from aphelion estimates.
+## Verification
 
-3. **Trajectory building** (`src/lib/trajectory.ts`) — Samples positions over a time window to produce trajectory line strips. Maintains an in-memory LRU cache (max 40 entries) keyed by body IDs + parameters. `getRecommendedSampleCount()` scales sample count inversely with number of displayed bodies to keep computation bounded.
-
-4. **Web Worker** (`src/workers/trajectory.worker.ts`, `src/hooks/useTrajectoryWorker.ts`) — Trajectory computation runs off the main thread. The hook spawns a worker, posts compute requests with a monotonically increasing request ID, and ignores stale responses. Worker termination lags out-of-date computations.
-
-5. **WebGL rendering** (`src/components/TrajectoryCanvas.tsx`) — Raw WebGL 1.0 (no library) with inline GLSL shaders. Trajectories drawn as `LINES`, body positions as round `POINTS` (discard outside radius in fragment shader). HTML overlay labels for a subset of bodies (max 18 major + 6 asteroid labels). ResizeObserver keeps canvas dimensions in sync with container.
-
-6. **View projection** (`src/lib/viewProjection.ts`) — AU → pixel coordinate mapping with configurable zoom and pan offset. Mouse-wheel zoom centers on cursor position by unprojecting/reprojecting.
-
-### Asteroid catalog system
-
-- **Preprocessing**: `scripts/preprocess-asteroids.mjs` downloads MPCORB.DAT.gz from the Minor Planet Center, decodes packed-date epochs, parses orbital elements, classifies by orbit type (MBA, NEO subtypes, TNO, Trojans, etc.), and outputs chunked JSON files under `public/data/asteroids/` — `chunks/` (full records), `search/` (index entries bucketed by first character), and `manifest.json`.
-
-- **Frontend loading** (`src/lib/catalogLoader.ts`) — Bidirectional lazy window: scrolling near bottom loads the next page forward; scrolling near top restores previously evicted pages backward. Window capped at 108 records; unselected asteroids outside the window are evicted. Selected asteroids persist in `loadedCatalogBodies` even when evicted from the window. Search uses bucketed index files keyed by first alphanumeric character + digit bucket.
-
-- **Key behavior**: Loading an asteroid partition/chunk does NOT auto-render those asteroids — they must be manually selected. This prevents overwhelming the WebGL renderer.
-
-### Major body data
-
-`src/data/majorBodies.ts` — Hardcoded orbital elements for Sun, 8 planets, Moon, Ceres, Pluto, Eris, Haumea, Makemake. Planets use JPL `planetaryApprox` model; moons and dwarfs use `keplerian`.
-
-### App.tsx state structure
-
-- `referenceId` — central reference body (default: sun)
-- `selectedMajorBodyIds` / `selectedCatalogIds` — which bodies are drawn
-- `simOffsetDays` — time offset from today, driven by `requestAnimationFrame` playback loop
-- `zoomLevel` / `viewOffsetAU` — camera transform
-- `loadedCatalogBodies` — asteroid records converted to CelestialBody objects
-- `sectionPages` — current bidirectional window of catalog records (with cursors for prev/next pagination)
-
-The drawer (left sidebar) has 5 sections: Overview, Controls, Major Bodies, Asteroids, Loaded.
-
-### TypeScript configuration
-
-Strict mode with `noUnusedLocals`, `noUnusedParameters`, `erasableSyntaxOnly`. Types are in `src/types.ts` — no separate types package.
+Every behavior change should at least pass `npm run ci`. Add deterministic unit tests for scientific formulas and parsers, and update `tests/e2e/app.spec.ts` for user-visible route or workflow changes. For renderer/UI changes, inspect both desktop and mobile breakpoints in a real browser and ensure console errors remain empty.
