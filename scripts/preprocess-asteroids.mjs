@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { createReadStream, createWriteStream, existsSync } from 'node:fs'
-import { mkdir, rename, stat, writeFile } from 'node:fs/promises'
+import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname, extname, isAbsolute, relative, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { pipeline } from 'node:stream/promises'
@@ -13,13 +13,20 @@ const DEFAULT_RAW_FILE = resolve(CACHE_DIR, 'MPCORB.DAT.gz')
 const OUTPUT_ROOT = resolve(process.env.MPCORB_OUTPUT_DIR ?? resolve(ROOT_DIR, 'public', 'data', 'asteroids'))
 const SOURCE_URL = process.env.MPCORB_SOURCE_URL ?? 'https://www.minorplanetcenter.net/iau/MPCORB/MPCORB.DAT.gz'
 const CHUNK_SIZE = Number(process.env.MPCORB_CHUNK_SIZE ?? 5000)
-const LIMIT = process.env.MPCORB_LIMIT ? Number(process.env.MPCORB_LIMIT) : Number.POSITIVE_INFINITY
-const DATASET_MODE = process.env.MPCORB_MODE === 'lite' || Number.isFinite(LIMIT) ? 'lite' : 'full'
+const LEGACY_LITE_LIMIT = process.env.MPCORB_LIMIT
+const LITE_MAX_PERMANENT_NUMBER = Number(process.env.MPCORB_LITE_MAX_NUMBER ?? LEGACY_LITE_LIMIT ?? 30_000)
+const DATASET_MODE = process.env.MPCORB_MODE === 'lite' || LEGACY_LITE_LIMIT ? 'lite' : 'full'
+const REQUIRE_FEATURED = process.env.MPCORB_REQUIRE_FEATURED !== '0'
 const PARSER_VERSION = '2.0.0'
 const MONTH_CODES = '123456789ABC'
 const DAY_CODES = '123456789ABCDEFGHIJKLMNOPQRSTUV'
 const SKIPPED_DWARF_IDS = new Set(['1', '134340', '136199', '136108', '136472'])
 const FEATURED_NAMES = new Set(['vesta', 'pallas', 'juno', 'hygiea', 'eros', 'psyche', 'bennu', 'apophis', 'ida', 'gaspra', 'itokawa', 'ryugu'])
+
+export function findMissingFeatured(shortLabels) {
+  const present = new Set(shortLabels.map(normalizeSearchText))
+  return [...FEATURED_NAMES].filter((name) => !present.has(name))
+}
 
 export function idLookupBucket(id) {
   let hash = 0x811c9dc5
@@ -83,12 +90,33 @@ export function classifyOrbit(flags) {
 function getBucketKey(searchKey) {
   const firstAlpha = [...searchKey].find((character) => /[a-z]/.test(character))
   if (firstAlpha) return firstAlpha
-  if (/^[0-9]/.test(searchKey)) return 'digit'
+  if (/^[0-9]/.test(searchKey)) return getDigitBucketKey(searchKey)
   return 'misc'
 }
 
-function buildBodyId(packedDesignation, readableDesignation) {
-  return `asteroid:${(readableDesignation || packedDesignation).replace(/\s+/g, '_')}`
+export function getDigitBucketKey(value) {
+  const firstDigit = value.match(/\d/)?.[0]
+  return firstDigit ? `digit-${firstDigit}` : 'digit-misc'
+}
+
+export function decodePackedPermanentNumber(packedDesignation) {
+  const packed = packedDesignation.trim()
+  if (/^\d+$/.test(packed)) return Number(packed)
+  const base62 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+  if (/^[A-Za-z]\d{4}$/.test(packed)) {
+    const high = base62.indexOf(packed[0])
+    return high >= 10 ? high * 10_000 + Number(packed.slice(1)) : null
+  }
+  if (/^~[0-9A-Za-z]{4}$/.test(packed)) {
+    let suffix = 0
+    for (const character of packed.slice(1)) suffix = suffix * 62 + base62.indexOf(character)
+    return 620_000 + suffix
+  }
+  return null
+}
+
+export function buildBodyId(packedDesignation) {
+  return `asteroid:mpc:${packedDesignation.trim()}`
 }
 
 function isSkippedDwarf(readableDesignation, packedDesignation) {
@@ -126,7 +154,9 @@ export function parseMpcorbLine(line, chunkId = 'chunk-0000') {
   const searchKey = [shortSearchKey, normalizeSearchText(readableDesignation), normalizeSearchText(packedDesignation)]
     .filter(Boolean).join(' ')
   const indexEntry = {
-    id: buildBodyId(packedDesignation, readableDesignation),
+    id: buildBodyId(packedDesignation),
+    packedDesignation,
+    permanentNumber: decodePackedPermanentNumber(packedDesignation) ?? undefined,
     label: readableDesignation,
     shortLabel,
     searchKey,
@@ -176,26 +206,31 @@ function serializeJson(value) {
 async function main() {
   assertSafeOutputPath(OUTPUT_ROOT)
   if (!Number.isInteger(CHUNK_SIZE) || CHUNK_SIZE <= 0) throw new Error('MPCORB_CHUNK_SIZE must be a positive integer')
+  if (DATASET_MODE === 'lite' && (!Number.isInteger(LITE_MAX_PERMANENT_NUMBER) || LITE_MAX_PERMANENT_NUMBER <= 0)) {
+    throw new Error('MPCORB_LITE_MAX_NUMBER must be a positive integer')
+  }
   const rawFile = await resolveRawCatalog()
   const sourceSha256 = await sha256File(rawFile)
   const sourceInfo = await stat(rawFile)
   const generatedAt = new Date().toISOString()
-  const dateVersion = generatedAt.slice(0, 10).replaceAll('-', '.')
-  const version = process.env.MPCORB_DATASET_VERSION ?? `${dateVersion}.${sourceSha256.slice(0, 8)}-${DATASET_MODE}`
   const releasesRoot = resolve(OUTPUT_ROOT, 'releases')
-  const releaseDir = resolve(releasesRoot, version)
-  assertSafeOutputPath(releaseDir)
-  if (!releaseDir.startsWith(`${releasesRoot}\\`) && !releaseDir.startsWith(`${releasesRoot}/`)) {
-    throw new Error(`Unsafe release path: ${releaseDir}`)
-  }
-  if (existsSync(releaseDir)) {
-    throw new Error(`Immutable dataset release already exists: ${releaseDir}`)
-  }
-  await Promise.all(['binary', 'meta', 'search', 'lookup'].map((directory) => mkdir(resolve(releaseDir, directory), { recursive: true })))
+  const stagingDir = resolve(releasesRoot, `.staging-${process.pid}-${Date.now()}`)
+  const parserCommit = process.env.MPCORB_PARSER_COMMIT ?? process.env.GITHUB_SHA ?? 'working-tree'
+  const selectionPolicy = DATASET_MODE === 'full'
+    ? { type: 'all-valid-elliptic', requiredFeaturedNames: [...FEATURED_NAMES].sort() }
+    : {
+        type: 'permanent-number-through-plus-featured',
+        maxPermanentNumber: LITE_MAX_PERMANENT_NUMBER,
+        requiredFeaturedNames: [...FEATURED_NAMES].sort(),
+      }
+  assertSafeOutputPath(stagingDir)
+  if (existsSync(stagingDir)) throw new Error(`Dataset staging directory already exists: ${stagingDir}`)
+  await Promise.all(['binary', 'meta', 'search', 'lookup'].map((directory) => mkdir(resolve(stagingDir, directory), { recursive: true })))
 
+  try {
   const checksums = {}
   async function writeArtifact(relativePath, value) {
-    const path = resolve(releaseDir, relativePath)
+    const path = resolve(stagingDir, relativePath)
     const data = Buffer.isBuffer(value) ? value : serializeJson(value)
     await mkdir(dirname(path), { recursive: true })
     await writeFile(path, data)
@@ -224,6 +259,8 @@ async function main() {
     const chunkId = `chunk-${String(chunkIndex).padStart(4, '0')}`
     const metadata = chunkRecords.map((record) => ({
       id: record.id,
+      packedDesignation: record.packedDesignation,
+      permanentNumber: record.permanentNumber,
       label: record.label,
       shortLabel: record.shortLabel,
       searchKey: record.searchKey,
@@ -267,6 +304,11 @@ async function main() {
       continue
     }
     const { record, indexEntry } = parsed
+    const featuredName = normalizeSearchText(indexEntry.shortLabel)
+    const isFeatured = FEATURED_NAMES.has(featuredName)
+    const selectedForDataset = DATASET_MODE === 'full' || isFeatured ||
+      (indexEntry.permanentNumber !== undefined && indexEntry.permanentNumber <= LITE_MAX_PERMANENT_NUMBER)
+    if (!selectedForDataset) continue
     chunkRecords.push(record)
     totalCount += 1
     categoryCounts[record.orbitClassCode] = (categoryCounts[record.orbitClassCode] ?? 0) + 1
@@ -280,7 +322,9 @@ async function main() {
       ranges[name][1] = Math.max(ranges[name][1], value)
     }
     const bucketKeys = new Set([getBucketKey(indexEntry.searchKey)])
-    if (/^\d/.test(normalizeSearchText(indexEntry.label))) bucketKeys.add('digit')
+    for (const token of indexEntry.searchKey.split(/\s+/)) {
+      if (/^\d/.test(token)) bucketKeys.add(getDigitBucketKey(token))
+    }
     for (const key of bucketKeys) {
       const entries = searchBuckets.get(key) ?? []
       entries.push(indexEntry)
@@ -290,17 +334,30 @@ async function main() {
     const lookupEntries = lookupBuckets.get(lookupKey) ?? []
     lookupEntries.push(indexEntry)
     lookupBuckets.set(lookupKey, lookupEntries)
-    if (FEATURED_NAMES.has(normalizeSearchText(indexEntry.shortLabel)) && !featuredKeys.has(indexEntry.id)) {
+    if (isFeatured && !featuredKeys.has(indexEntry.id)) {
       featured.push(indexEntry)
       featuredKeys.add(indexEntry.id)
     }
     if (chunkRecords.length >= CHUNK_SIZE) await flushChunk()
     if (totalCount % 50_000 === 0) console.log(`Validated ${totalCount.toLocaleString()} elliptic objects`)
-    if (totalCount >= LIMIT) break
   }
   await flushChunk()
   for (const [bucket, entries] of searchBuckets) await writeArtifact(`search/${bucket}.json`, entries)
   for (const [bucket, entries] of lookupBuckets) await writeArtifact(`lookup/${bucket}.json`, entries)
+
+  const missingFeatured = findMissingFeatured(featured.map((entry) => entry.shortLabel))
+  if (REQUIRE_FEATURED && missingFeatured.length) {
+    throw new Error(`Missing required featured bodies: ${missingFeatured.join(', ')}`)
+  }
+  const contentDescriptor = Object.fromEntries(Object.entries(checksums).sort(([left], [right]) => left.localeCompare(right)))
+  const contentSha256 = createHash('sha256').update(JSON.stringify(contentDescriptor)).digest('hex')
+  const version = process.env.MPCORB_DATASET_VERSION ?? `mpcorb-${contentSha256.slice(0, 16)}-${DATASET_MODE}`
+  const releaseDir = resolve(releasesRoot, version)
+  assertSafeOutputPath(releaseDir)
+  if (!releaseDir.startsWith(`${releasesRoot}\\`) && !releaseDir.startsWith(`${releasesRoot}/`)) {
+    throw new Error(`Unsafe release path: ${releaseDir}`)
+  }
+  if (existsSync(releaseDir)) throw new Error(`Immutable dataset release already exists: ${releaseDir}`)
 
   const manifest = {
     schemaVersion: 2,
@@ -310,7 +367,10 @@ async function main() {
     sourceDownloadedAt: sourceInfo.mtime.toISOString(),
     generatedAt,
     sourceSha256,
+    contentSha256,
     parserVersion: PARSER_VERSION,
+    parserCommit,
+    selectionPolicy,
     orbitModel: 'elliptic two-body propagation of MPCORB osculating elements',
     precision: 'MPCORB fixed-width source precision; Float64 binary shards',
     totalCount,
@@ -328,7 +388,10 @@ async function main() {
     downloadedAt: sourceInfo.mtime.toISOString(),
     generatedAt,
     sourceSha256,
+    contentSha256,
     parserVersion: PARSER_VERSION,
+    parserCommit,
+    selectionPolicy,
     totalObjects: totalCount,
     mode: DATASET_MODE,
     orbitModel: manifest.orbitModel,
@@ -343,6 +406,8 @@ async function main() {
     rejectedFraction: invalidCount / Math.max(totalCount + invalidCount, 1),
     rejectionReasons: invalidReasons,
     rejectionExamples: invalidExamples,
+    missingFeatured,
+    contentSha256,
     numericRanges: ranges,
     categoryCounts,
     invariants: {
@@ -350,6 +415,9 @@ async function main() {
       positiveSemiMajorAxis: true,
       positiveMeanMotion: true,
       inclinationWithin180Deg: true,
+      featuredComplete: missingFeatured.length === 0,
+      stablePackedDesignationIds: true,
+      shardedNumericSearch: true,
       binaryStride: 8,
     },
   }
@@ -361,6 +429,7 @@ async function main() {
   await writeArtifact('checksums.json', { schemaVersion: 1, algorithm: 'sha256', files: checksums })
   if (!validation.passed) throw new Error(`Dataset validation rejected ${(validation.rejectedFraction * 100).toFixed(2)}% of records`)
 
+  await rename(stagingDir, releaseDir)
   await mkdir(OUTPUT_ROOT, { recursive: true })
   const versionPointer = {
     schemaVersion: 1,
@@ -369,6 +438,8 @@ async function main() {
     manifestPath: `releases/${version}/manifest.json`,
     generatedAt,
     sourceSha256,
+    contentSha256,
+    selectionPolicy,
   }
   const pointerPath = resolve(OUTPUT_ROOT, 'dataset-version.json')
   const temporaryPointerPath = resolve(OUTPUT_ROOT, `.dataset-version-${process.pid}.tmp`)
@@ -376,6 +447,10 @@ async function main() {
   await rename(temporaryPointerPath, pointerPath)
   console.log(`Published ${totalCount.toLocaleString()} objects as immutable dataset ${version}`)
   console.log(`Release directory: ${releaseDir}`)
+  } catch (error) {
+    await rm(stagingDir, { recursive: true, force: true })
+    throw error
+  }
 }
 
 const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href

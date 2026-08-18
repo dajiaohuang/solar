@@ -16,6 +16,13 @@ type CatalogState = {
   manifest: AsteroidManifest | null
   provenance: DatasetProvenance | null
   records: AsteroidRecord[]
+  recordsComplete: boolean
+  loadProgress: number
+  selectionScope: {
+    datasetVersion: string
+    filters: CatalogFilters
+    count: number
+  } | null
   filters: CatalogFilters
   isLoading: boolean
   error: string | null
@@ -27,6 +34,9 @@ const initialCatalogState: CatalogState = {
   manifest: null,
   provenance: null,
   records: [],
+  recordsComplete: false,
+  loadProgress: 0,
+  selectionScope: null,
   filters: {
     query: '',
     orbitClass: 'all',
@@ -45,7 +55,22 @@ export const catalogStore = createStore(initialCatalogState)
 export const catalogActions = {
   patch: catalogStore.setState,
   patchFilters(update: Partial<CatalogFilters>) {
-    catalogStore.setState((state) => ({ filters: { ...state.filters, ...update } }))
+    catalogStore.setState((state) => ({
+      filters: { ...state.filters, ...update },
+      selectionScope: null,
+    }))
+  },
+  selectAllFiltered(datasetVersion: string, filters: CatalogFilters, count: number) {
+    catalogStore.setState({
+      selectionScope: {
+        datasetVersion,
+        filters: structuredClone(filters),
+        count,
+      },
+    })
+  },
+  clearCatalogSelection() {
+    catalogStore.setState({ selectionScope: null })
   },
 }
 

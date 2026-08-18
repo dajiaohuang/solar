@@ -14,7 +14,7 @@
     "test:e2e": "playwright test",
     "ci": "npm run lint && npm run test:unit && npm run build",
     "preprocess:asteroids": "node --max-old-space-size=4096 ./scripts/preprocess-asteroids.mjs",
-    "data:lite": "cross-env MPCORB_MODE=lite MPCORB_LIMIT=30000 node ./scripts/preprocess-asteroids.mjs",
+    "data:lite": "cross-env MPCORB_MODE=lite MPCORB_LITE_MAX_NUMBER=30000 node ./scripts/preprocess-asteroids.mjs",
     "data:full": "cross-env MPCORB_MODE=full node --max-old-space-size=4096 ./scripts/preprocess-asteroids.mjs",
     "validate:data": "node ./scripts/validate-dataset.mjs"
   },

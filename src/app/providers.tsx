@@ -62,6 +62,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
         provenance,
         datasetVersion: manifest?.version ?? 'unavailable',
         mode: manifest?.datasetMode ?? initial.mode ?? 'lite',
+        selectionScope: null,
+        recordsComplete: false,
+        loadProgress: 0,
         isLoading: false,
       })
       const selectedIds = initial.bodies ?? []

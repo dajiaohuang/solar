@@ -19,7 +19,12 @@ type Props = {
   onReferenceChange?: (bodyId: string) => void
   onHover?: (body: CelestialBody | null, distance: number, x: number, y: number) => void
   lagrangePoints?: { body: CelestialBody; points: LagrangePoint[] }[]
-  soiCircles?: { body: CelestialBody; position: Vector2; radiusAU: number }[]
+  influenceCircles?: {
+    body: CelestialBody
+    position: Vector2
+    radiusAU: number
+    definition: 'hill' | 'laplace-soi'
+  }[]
   planetOpacity?: number
   asteroidOpacity?: number
   moonOpacity?: number
@@ -526,7 +531,7 @@ export function TrajectoryCanvas({
   onReferenceChange,
   onHover,
   lagrangePoints,
-  soiCircles,
+  influenceCircles,
   planetOpacity = 1,
   asteroidOpacity = 1,
   moonOpacity = 1,
@@ -781,21 +786,22 @@ export function TrajectoryCanvas({
           }),
         )}
 
-        {soiCircles?.map((soi) => {
-          const center = projectPoint(soi.position, projection)
-          const radiusPx = soi.radiusAU * projection.scale
+        {influenceCircles?.map((influence) => {
+          const center = projectPoint(influence.position, projection)
+          const radiusPx = influence.radiusAU * projection.scale
+          const label = influence.definition === 'hill' ? 'Hill Sphere' : 'Laplace SOI'
 
           return (
             <div
-              key={`soi-${soi.body.id}`}
-              className="soi-circle"
+              key={`${influence.definition}-${influence.body.id}`}
+              className={`soi-circle influence-${influence.definition}`}
               style={{
                 left: `${(center.x / Math.max(size.width, 1)) * 100}%`,
                 top: `${(center.y / Math.max(size.height, 1)) * 100}%`,
                 width: radiusPx * 2,
                 height: radiusPx * 2,
               }}
-              title={`${soi.body.name} Hill Sphere: ${soi.radiusAU.toFixed(4)} AU`}
+              title={`${influence.body.name} ${label}: ${influence.radiusAU.toFixed(4)} AU`}
             />
           )
         })}

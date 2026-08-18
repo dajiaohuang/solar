@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decodePackedEpoch, parseMpcorbLine } from '../../scripts/preprocess-asteroids.mjs'
+import { buildBodyId, decodePackedEpoch, decodePackedPermanentNumber, findMissingFeatured, parseMpcorbLine } from '../../scripts/preprocess-asteroids.mjs'
 
 function fixedWidthLine() {
   const characters = Array(194).fill(' ')
@@ -21,7 +21,7 @@ describe('MPCORB pipeline parser', () => {
   it('parses a valid catalog record without rounding its orbital elements', () => {
     const parsed = parseMpcorbLine(fixedWidthLine().replace('1 Ceres', '999 Sample'), 'chunk-0042')
     expect(parsed.record).toMatchObject({
-      id: 'asteroid:999_Sample',
+      id: 'asteroid:mpc:0000001',
       chunkId: 'chunk-0042',
       epochJd: 2460310.5,
       semiMajorAxisAU: 2.767,
@@ -30,6 +30,19 @@ describe('MPCORB pipeline parser', () => {
       meanMotionDegPerDay: 0.214,
     })
     expect(parsed.indexEntry?.searchKey).toContain('sample')
+  })
+
+  it('uses the packed designation as a rename-stable identity', () => {
+    expect(buildBodyId('00433')).toBe('asteroid:mpc:00433')
+    expect(decodePackedPermanentNumber('A0345')).toBe(100345)
+    const before = parseMpcorbLine(fixedWidthLine().replace('1 Ceres', '433 Eros'))
+    const after = parseMpcorbLine(fixedWidthLine().replace('1 Ceres', '433 A-New-Name'))
+    expect(before.record?.id).toBe(after.record?.id)
+  })
+
+  it('makes missing curated targets a machine-checkable validation failure', () => {
+    expect(findMissingFeatured(['Bennu', 'Ryugu'])).toContain('apophis')
+    expect(findMissingFeatured(['Bennu', 'Ryugu'])).not.toContain('bennu')
   })
 
   it('rejects hyperbolic elements in the elliptic data product', () => {

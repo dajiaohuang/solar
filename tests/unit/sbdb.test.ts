@@ -28,4 +28,14 @@ describe('JPL SBDB parser', () => {
       expect(() => parseSbdbBody(invalid, 'test')).toThrow(SbdbParseError)
     },
   )
+
+  it('rejects incompatible element units and missing mean motion', () => {
+    const wrongUnits = structuredClone(fixture) as SbdbResponse
+    wrongUnits.orbit!.elements!.find((element) => element.name === 'a')!.units = 'km'
+    expect(() => parseSbdbBody(wrongUnits, 'test')).toThrow(/unsupported units/)
+
+    const missingMotion = structuredClone(fixture) as SbdbResponse
+    missingMotion.orbit!.elements = missingMotion.orbit!.elements!.filter((element) => element.name !== 'n')
+    expect(() => parseSbdbBody(missingMotion, 'test')).toThrow(/missing the n element/)
+  })
 })

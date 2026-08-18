@@ -26,6 +26,9 @@ type SceneResources = {
   bodyMeshes: Map<string, THREE.Mesh>
   trajectoryLines: Map<string, THREE.Line>
   auxiliaryGroup: THREE.Group
+  lagrangeGeometry: THREE.SphereGeometry
+  lagrangeMeshes: Map<string, THREE.Mesh>
+  saturnRing: THREE.Mesh
   eclipticGroup: THREE.Group
   glow: THREE.Sprite
   glowTexture: THREE.Texture
@@ -126,6 +129,14 @@ export function TrajectoryCanvas3D({
 
     const auxiliaryGroup = new THREE.Group()
     scene.add(auxiliaryGroup)
+    const lagrangeGeometry = new THREE.SphereGeometry(0.026, 8, 6)
+    const saturnRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.12, 0.21, 48),
+      new THREE.MeshBasicMaterial({ color: 0xd9bf8b, side: THREE.DoubleSide, transparent: true, opacity: 0.48 }),
+    )
+    saturnRing.rotation.x = Math.PI / 2 + 0.47
+    saturnRing.visible = false
+    auxiliaryGroup.add(saturnRing)
     const glowTexture = createGlowTexture()
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture, transparent: true, blending: THREE.AdditiveBlending }))
     glow.scale.setScalar(0.9)
@@ -140,6 +151,9 @@ export function TrajectoryCanvas3D({
       bodyMeshes: new Map(),
       trajectoryLines: new Map(),
       auxiliaryGroup,
+      lagrangeGeometry,
+      lagrangeMeshes: new Map(),
+      saturnRing,
       eclipticGroup,
       glow,
       glowTexture,
@@ -163,7 +177,9 @@ export function TrajectoryCanvas3D({
       for (const line of resources.trajectoryLines.values()) disposeObject(line)
       for (const mesh of resources.bodyMeshes.values()) (mesh.material as THREE.Material).dispose()
       resources.bodyGeometry.dispose()
-      for (const object of [...resources.auxiliaryGroup.children]) disposeObject(object)
+      for (const mesh of resources.lagrangeMeshes.values()) (mesh.material as THREE.Material).dispose()
+      resources.lagrangeGeometry.dispose()
+      disposeObject(resources.saturnRing)
       for (const object of [...resources.eclipticGroup.children]) disposeObject(object)
       ;(resources.glow.material as THREE.Material).dispose()
       resources.glowTexture.dispose()
@@ -276,30 +292,32 @@ export function TrajectoryCanvas3D({
       resources.controls.update()
     }
 
-    for (const object of [...resources.auxiliaryGroup.children]) {
-      resources.auxiliaryGroup.remove(object)
-      disposeObject(object)
-    }
+    const activeLagrangeIds = new Set<string>()
     for (const group of lagrangePoints ?? []) {
       for (const point of group.points) {
-        const marker = new THREE.Mesh(
-          new THREE.SphereGeometry(0.026, 8, 6),
-          new THREE.MeshBasicMaterial({ color: point.color }),
-        )
+        const markerId = `${group.body.id}:${point.label}`
+        activeLagrangeIds.add(markerId)
+        let marker = resources.lagrangeMeshes.get(markerId)
+        if (!marker) {
+          marker = new THREE.Mesh(resources.lagrangeGeometry, new THREE.MeshBasicMaterial({ color: point.color }))
+          resources.lagrangeMeshes.set(markerId, marker)
+          resources.auxiliaryGroup.add(marker)
+        }
         marker.position.set(point.position.x, 0, point.position.y)
-        resources.auxiliaryGroup.add(marker)
       }
     }
+    for (const [id, marker] of resources.lagrangeMeshes) {
+      if (activeLagrangeIds.has(id)) continue
+      resources.auxiliaryGroup.remove(marker)
+      ;(marker.material as THREE.Material).dispose()
+      resources.lagrangeMeshes.delete(id)
+    }
+    resources.saturnRing.visible = false
     if (showSaturnRings) {
       const saturn = bodyPositions.get('saturn')
       if (saturn?.position3D) {
-        const saturnRing = new THREE.Mesh(
-          new THREE.RingGeometry(0.12, 0.21, 48),
-          new THREE.MeshBasicMaterial({ color: 0xd9bf8b, side: THREE.DoubleSide, transparent: true, opacity: 0.48 }),
-        )
-        saturnRing.position.copy(toThree(saturn.position3D))
-        saturnRing.rotation.x = Math.PI / 2 + 0.47
-        resources.auxiliaryGroup.add(saturnRing)
+        resources.saturnRing.position.copy(toThree(saturn.position3D))
+        resources.saturnRing.visible = true
       }
     }
   }, [currentPositions, lagrangePoints, referenceBody, showEcliptic, showGlow, showSaturnRings, trajectories])

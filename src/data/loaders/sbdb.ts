@@ -36,6 +36,26 @@ function finiteNumber(value: unknown, field: string) {
   return parsed
 }
 
+function normalizedUnits(value: string | null | undefined) {
+  return (value ?? '').trim().toLowerCase().replaceAll(' ', '')
+}
+
+function requiredElement(
+  elements: Map<string | undefined, SbdbElement>,
+  name: string,
+  acceptedUnits: string[],
+) {
+  const element = elements.get(name)
+  if (!element) throw new SbdbParseError(`JPL SBDB response is missing the ${name} element`)
+  const units = normalizedUnits(element.units)
+  if (!acceptedUnits.includes(units)) {
+    throw new SbdbParseError(
+      `JPL SBDB ${name} element uses unsupported units "${element.units ?? 'unitless'}"; expected ${acceptedUnits.map((unit) => unit || 'unitless').join(' or ')}`,
+    )
+  }
+  return finiteNumber(element.value, name)
+}
+
 export function parseSbdbBody(response: SbdbResponse, fallbackDesignation: string): CelestialBody {
   const orbit = response.orbit
   if (!orbit || !Array.isArray(orbit.elements)) {
@@ -43,8 +63,8 @@ export function parseSbdbBody(response: SbdbResponse, fallbackDesignation: strin
   }
 
   const elements = new Map(orbit.elements.map((element) => [element.name, element]))
-  const e = finiteNumber(elements.get('e')?.value, 'e')
-  const a = finiteNumber(elements.get('a')?.value, 'a')
+  const e = requiredElement(elements, 'e', [''])
+  const a = requiredElement(elements, 'a', ['au'])
   if (e < 0 || e >= 1) {
     throw new SbdbParseError(
       `The selected object has eccentricity ${e}; Solar Atlas requires 0 <= e < 1 for elliptic SBDB orbits`,
@@ -53,10 +73,18 @@ export function parseSbdbBody(response: SbdbResponse, fallbackDesignation: strin
   if (a <= 0) throw new SbdbParseError(`The selected object has semi-major axis ${a}; elliptic SBDB orbits require a > 0`)
 
   const epochJd = finiteNumber(orbit.epoch, 'epoch')
-  const meanMotion = elements.has('n')
-    ? finiteNumber(elements.get('n')?.value, 'n')
-    : 0.9856076686 / Math.sqrt(a ** 3)
+  if (epochJd < 2_000_000 || epochJd > 3_000_000) {
+    throw new SbdbParseError(`JPL SBDB epoch ${epochJd} is outside the supported Julian Date range`)
+  }
+  const meanMotion = requiredElement(elements, 'n', ['deg/d', 'deg/day'])
   if (meanMotion <= 0) throw new SbdbParseError(`The selected object has mean motion ${meanMotion}; elliptic SBDB orbits require n > 0`)
+  const inclinationDeg = requiredElement(elements, 'i', ['deg'])
+  if (inclinationDeg < 0 || inclinationDeg > 180) {
+    throw new SbdbParseError(`The selected object has inclination ${inclinationDeg}; expected 0 to 180 deg`)
+  }
+  const ascendingNodeDeg = requiredElement(elements, 'om', ['deg'])
+  const argPeriapsisDeg = requiredElement(elements, 'w', ['deg'])
+  const meanAnomalyDeg = requiredElement(elements, 'ma', ['deg'])
   const absoluteMagnitudeEntry = response.phys_par?.find((entry) => entry.name === 'H')
   const absoluteMagnitude = absoluteMagnitudeEntry
     ? Number(absoluteMagnitudeEntry.value)
@@ -76,17 +104,17 @@ export function parseSbdbBody(response: SbdbResponse, fallbackDesignation: strin
     orbitClassName: response.object?.orbit_class?.name,
     absoluteMagnitude: Number.isFinite(absoluteMagnitude) ? absoluteMagnitude : undefined,
     orbitUncertainty: orbit.condition_code === undefined ? undefined : String(orbit.condition_code),
-    dataEpochLabel: `JD ${epochJd}`,
+    dataEpochLabel: `JD ${epochJd} TDB (JPL SBDB)`,
     isCatalogBody: true,
     orbit: {
       model: 'keplerian',
       epochJd,
       semiMajorAxisAU: a,
       eccentricity: e,
-      inclinationDeg: finiteNumber(elements.get('i')?.value, 'i'),
-      ascendingNodeDeg: finiteNumber(elements.get('om')?.value, 'om'),
-      argPeriapsisDeg: finiteNumber(elements.get('w')?.value, 'w'),
-      meanAnomalyDeg: finiteNumber(elements.get('ma')?.value, 'ma'),
+      inclinationDeg,
+      ascendingNodeDeg,
+      argPeriapsisDeg,
+      meanAnomalyDeg,
       meanMotionDegPerDay: meanMotion,
     },
   }

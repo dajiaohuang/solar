@@ -36,7 +36,7 @@ export function getSearchBucketKey(searchText: string) {
   const normalized = normalizeSearchText(searchText)
   if (!normalized) return 'misc'
   if (/[a-z]/.test(normalized[0])) return normalized[0]
-  if (/[0-9]/.test(normalized[0])) return 'digit'
+  if (/[0-9]/.test(normalized[0])) return `digit-${normalized[0]}`
   return 'misc'
 }
 
@@ -89,7 +89,10 @@ export async function loadDatasetProvenance(): Promise<DatasetProvenance | null>
       downloadedAt: activeManifest.sourceDownloadedAt ?? activeManifest.generatedAt,
       generatedAt: activeManifest.generatedAt,
       sourceSha256: activeManifest.sourceSha256 ?? 'not recorded (legacy dataset)',
+      contentSha256: activeManifest.contentSha256,
       parserVersion: activeManifest.parserVersion ?? 'legacy-v1',
+      parserCommit: activeManifest.parserCommit,
+      selectionPolicy: activeManifest.selectionPolicy,
       totalObjects: activeManifest.totalCount,
       mode: activeManifest.datasetMode ?? 'lite',
       orbitModel: activeManifest.orbitModel ?? 'two-body osculating elements',
@@ -105,7 +108,9 @@ export function loadAsteroidSearchBucket(bucketKey: string) {
   if (existing) return existing
   const promise = fetchJson<AsteroidIndexEntry[]>(
     `${activeReleaseRoot}/search/${encodeURIComponent(normalizedBucket)}.json`,
-  ).catch(() => [])
+  ).catch(() => normalizedBucket.startsWith('digit-')
+    ? fetchJson<AsteroidIndexEntry[]>(`${activeReleaseRoot}/search/digit.json`).catch(() => [])
+    : [])
   searchBucketCache.set(cacheKey, promise)
   return promise
 }
@@ -226,6 +231,24 @@ export function asteroidRecordToBody(record: AsteroidRecord): CelestialBody {
 
 export function getBodyIds(records: AsteroidRecord[]): BodyId[] {
   return records.map((record) => record.id)
+}
+
+export async function loadAllAsteroidRecords(params: {
+  manifest: AsteroidManifest
+  orbitClassCode: string
+  signal?: AbortSignal
+  onProgress?: (progress: number) => void
+}) {
+  const { manifest, orbitClassCode, signal, onProgress } = params
+  const records: AsteroidRecord[] = []
+  for (let chunkIndex = 0; chunkIndex < manifest.chunkCount; chunkIndex += 1) {
+    if (signal?.aborted) throw new DOMException('Catalog loading was cancelled', 'AbortError')
+    const chunk = await loadAsteroidChunk(getChunkIdFromIndex(chunkIndex))
+    records.push(...filterChunkByOrbitClass(chunk, orbitClassCode))
+    onProgress?.((chunkIndex + 1) / Math.max(manifest.chunkCount, 1))
+    if (chunkIndex % 4 === 3) await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  }
+  return records
 }
 
 export async function loadAsteroidSectionPage(params: {

@@ -98,9 +98,20 @@ function FrameView({
       const orbit = item.body.orbit.model === 'planetaryApprox' ? item.body.orbit.base : item.body.orbit
       const radii = computeInfluenceRadii(orbit.semiMajorAxisAU, orbit.eccentricity, physical.massKg, BODY_PHYSICAL.sun.massKg)
       if (!radii) return []
-      const radiusAU = simulation.showLaplaceSoi ? radii.laplaceSoiRadiusAU : radii.hillRadiusAU
-      if (!simulation.showHillSphere && !simulation.showLaplaceSoi) return []
-      return [{ body: item.body, position: item.planarPosition, radiusAU }]
+      return [
+        ...(simulation.showHillSphere ? [{
+          body: item.body,
+          position: item.planarPosition,
+          radiusAU: radii.hillRadiusAU,
+          definition: 'hill' as const,
+        }] : []),
+        ...(simulation.showLaplaceSoi ? [{
+          body: item.body,
+          position: item.planarPosition,
+          radiusAU: radii.laplaceSoiRadiusAU,
+          definition: 'laplace-soi' as const,
+        }] : []),
+      ]
     })
   }, [frame.currentPositions, referenceBody.id, simulation.showHillSphere, simulation.showLaplaceSoi])
 
@@ -137,7 +148,7 @@ function FrameView({
           onReferenceChange={(id) => { if (bodiesById.has(id)) simulationActions.patch({ referenceId: id }) }}
           onHover={(body, distance, x, y) => onHover(body ? { body, distance, x, y } : null)}
           lagrangePoints={lagrangePoints}
-          soiCircles={influenceCircles}
+          influenceCircles={influenceCircles}
         />
       )}
     </div>

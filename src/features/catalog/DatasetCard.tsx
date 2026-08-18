@@ -17,7 +17,9 @@ export function DatasetCard({ compact = false }: { compact?: boolean }) {
         {!compact && <>
           <div><dt>{t('source')}</dt><dd>MPCORB · Minor Planet Center</dd></div>
           <div><dt>{t('generated')}</dt><dd>{new Date(catalog.manifest.generatedAt).toLocaleString()}</dd></div>
-          <div><dt>{t('checksum')}</dt><dd className="checksum">{provenance?.sourceSha256 ?? catalog.manifest.sourceSha256 ?? 'legacy / unavailable'}</dd></div>
+          <div><dt>{t('checksum')} · source</dt><dd className="checksum">{provenance?.sourceSha256 ?? catalog.manifest.sourceSha256 ?? 'legacy / unavailable'}</dd></div>
+          <div><dt>{t('checksum')} · content</dt><dd className="checksum">{provenance?.contentSha256 ?? catalog.manifest.contentSha256 ?? 'legacy / unavailable'}</dd></div>
+          <div><dt>{t('selectionPolicy')}</dt><dd>{provenance?.selectionPolicy?.type ?? catalog.manifest.selectionPolicy?.type ?? 'legacy / unspecified'}</dd></div>
           <div><dt>{t('propagation')}</dt><dd>{provenance?.orbitModel ?? catalog.manifest.orbitModel}</dd></div>
         </>}
       </dl>

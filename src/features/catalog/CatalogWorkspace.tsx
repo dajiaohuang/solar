@@ -1,20 +1,22 @@
-import { useEffect, useMemo, useState } from 'react'
-import { TrajectoryCanvas } from '../../components/TrajectoryCanvas'
-import { majorBodiesWithPhysicalData } from '../../app/bodyRegistry'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { CatalogPointCanvas } from '../../components/CatalogPointCanvas'
+import { simulationClock } from '../../engine/clock/SimulationClock'
 import { useSimulationClock } from '../../engine/clock/useSimulationClock'
 import { useI18n } from '../../i18n/context'
+import { useCatalogPointWorker } from '../../hooks/useCatalogPointWorker'
 import {
   asteroidRecordToBody,
   getSearchBucketKey,
+  loadAllAsteroidRecords,
   loadAsteroidChunk,
   loadAsteroidSearchBucket,
   loadAsteroidSectionPage,
   normalizeSearchText,
 } from '../../lib/catalogLoader'
-import { buildCurrentPositions } from '../../lib/trajectory'
 import { catalogActions, catalogStore, filterCatalogRecords } from '../../state/catalog-store'
 import { selectionActions, selectionStore } from '../../state/selection-store'
-import type { AsteroidSectionCursor, BodyId, CelestialBody } from '../../types'
+import { uiActions } from '../../state/ui-store'
+import type { AsteroidSectionCursor } from '../../types'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { DatasetCard } from './DatasetCard'
 
@@ -25,13 +27,26 @@ export function CatalogWorkspace() {
   const selection = selectionStore.useStore()
   const clock = useSimulationClock()
   const { t, language } = useI18n()
+  const installedMode = catalog.manifest?.datasetMode ?? catalog.mode
   const [cursor, setCursor] = useState<AsteroidSectionCursor>({ chunkIndex: 0, recordOffset: 0 })
   const [hasMore, setHasMore] = useState(true)
+  const loadController = useRef<AbortController | null>(null)
+  const [playingEpoch, setPlayingEpoch] = useState(clock.julianDay)
+  const catalogEpoch = clock.isPlaying ? playingEpoch : clock.julianDay
+
+  useEffect(() => {
+    if (!clock.isPlaying) return
+    const timer = window.setInterval(() => setPlayingEpoch(simulationClock.getJulianDay()), 5000)
+    return () => window.clearInterval(timer)
+  }, [clock.isPlaying])
+
+  useEffect(() => () => loadController.current?.abort(), [])
 
   useEffect(() => {
     if (!catalog.manifest || catalog.filters.query.trim()) return
     let cancelled = false
-    catalogActions.patch({ isLoading: true, error: null, records: [] })
+    loadController.current?.abort()
+    catalogActions.patch({ isLoading: true, error: null, records: [], recordsComplete: false, loadProgress: 0 })
     void loadAsteroidSectionPage({
       manifest: catalog.manifest,
       orbitClassCode: catalog.filters.orbitClass,
@@ -51,7 +66,8 @@ export function CatalogWorkspace() {
     const query = catalog.filters.query.trim()
     if (!catalog.manifest || !query) return
     let cancelled = false
-    catalogActions.patch({ isLoading: true, error: null })
+    loadController.current?.abort()
+    catalogActions.patch({ isLoading: true, error: null, recordsComplete: false, loadProgress: 0 })
     void loadAsteroidSearchBucket(getSearchBucketKey(query)).then(async (entries) => {
       const normalized = normalizeSearchText(query)
       const matches = entries.filter((entry) => entry.searchKey.includes(normalized)).slice(0, 1200)
@@ -68,17 +84,42 @@ export function CatalogWorkspace() {
   }, [catalog.filters.query, catalog.manifest])
 
   const filtered = useMemo(() => filterCatalogRecords(catalog.records, catalog.filters), [catalog.filters, catalog.records])
-  const pointBodies = useMemo(() => filtered.slice(0, catalog.mode === 'lite' ? 1500 : 5000).map(asteroidRecordToBody), [catalog.mode, filtered])
-  const registry = useMemo(() => {
-    const all: CelestialBody[] = [...majorBodiesWithPhysicalData, ...pointBodies]
-    return new Map<BodyId, CelestialBody>(all.map((body) => [body.id, body]))
-  }, [pointBodies])
-  const pointFrame = useMemo(() => buildCurrentPositions({
-    bodies: pointBodies,
-    bodiesById: registry,
-    referenceId: 'sun',
-    julianDay: clock.julianDay,
-  }), [clock.julianDay, pointBodies, registry])
+  const pointCloud = useCatalogPointWorker(filtered, catalogEpoch)
+
+  async function loadEntireCatalog() {
+    if (!catalog.manifest) return []
+    loadController.current?.abort()
+    const controller = new AbortController()
+    loadController.current = controller
+    catalogActions.patch({ isLoading: true, error: null, loadProgress: 0 })
+    try {
+      const records = await loadAllAsteroidRecords({
+        manifest: catalog.manifest,
+        orbitClassCode: catalog.filters.orbitClass,
+        signal: controller.signal,
+        onProgress: (loadProgress) => catalogActions.patch({ loadProgress }),
+      })
+      if (controller.signal.aborted) return []
+      catalogActions.patch({ records, recordsComplete: true, loadProgress: 1, isLoading: false })
+      setCursor({ chunkIndex: catalog.manifest.chunkCount, recordOffset: 0 })
+      setHasMore(false)
+      return records
+    } catch (error) {
+      if (controller.signal.aborted) return []
+      catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
+      return []
+    } finally {
+      if (loadController.current === controller) loadController.current = null
+    }
+  }
+
+  async function selectAllFiltered() {
+    const source = catalog.recordsComplete ? catalog.records : await loadEntireCatalog()
+    if (!catalog.manifest || !source.length) return
+    const matches = filterCatalogRecords(source, catalog.filters)
+    catalogActions.selectAllFiltered(catalog.manifest.version, catalog.filters, matches.length)
+    uiActions.toast(`${matches.length.toLocaleString()} ${t('selectedCount')}`)
+  }
 
   async function loadMore() {
     if (!catalog.manifest || catalog.isLoading || !hasMore || catalog.filters.query.trim()) return
@@ -103,8 +144,8 @@ export function CatalogWorkspace() {
       <header className="page-heading">
         <div><span className="eyebrow">MPCORB / BINARY SHARDS / INDEXEDDB</span><h1>{t('catalog')}</h1><p>{t('tagline')}</p></div>
         <div className="mode-switch segmented-control">
-          <button className={catalog.mode === 'lite' ? 'active' : ''} onClick={() => catalogActions.patch({ mode: 'lite' })}>{t('lite')}</button>
-          <button className={catalog.mode === 'full' ? 'active' : ''} onClick={() => catalogActions.patch({ mode: 'full' })}>{t('full')}</button>
+          <button className={installedMode === 'lite' ? 'active' : ''} disabled={installedMode !== 'lite'}>{t('lite')}</button>
+          <button className={installedMode === 'full' ? 'active' : ''} disabled={installedMode !== 'full'}>{t('full')}</button>
         </div>
       </header>
 
@@ -120,27 +161,27 @@ export function CatalogWorkspace() {
           <RangeFields label="H" value={catalog.filters.absoluteMagnitude} onChange={(value) => catalogActions.patchFilters({ absoluteMagnitude: value })} step="0.5" />
           <RangeFields label="q (AU)" value={catalog.filters.perihelion} onChange={(value) => catalogActions.patchFilters({ perihelion: value })} step="0.1" />
           <button className="primary-button full-width" disabled={!filtered.length} onClick={() => selectionActions.addCatalogBodies(filtered.slice(0, 160).map(asteroidRecordToBody), true)}>{t('addSelection')} · {Math.min(filtered.length, 160)}</button>
+          <button className="secondary-button full-width" disabled={!catalog.manifest || catalog.isLoading} onClick={() => void selectAllFiltered()}>{catalog.recordsComplete ? t('selectAllCatalog') : `${t('loadAllCatalog')} · ${Math.round(catalog.loadProgress * 100)}%`}</button>
+          {catalog.selectionScope && <button className="text-button full-width" onClick={catalogActions.clearCatalogSelection}>{t('clearCatalogSelection')} · {catalog.selectionScope.count.toLocaleString()}</button>}
         </aside>
 
         <section className="catalog-map glass-panel">
-          <div className="map-caption"><span>CATALOG MODE · GPU POINTS</span><strong>{pointBodies.length.toLocaleString()} / {filtered.length.toLocaleString()}</strong></div>
-          {pointBodies.length ? <TrajectoryCanvas
-            referenceBody={registry.get('sun')!}
-            trajectories={[]}
-            currentPositions={pointFrame.currentPositions}
+          <div className="map-caption"><span>CATALOG MODE · GPU POINTS</span><strong>{Math.floor(pointCloud.positions.length / 2).toLocaleString()} / {filtered.length.toLocaleString()}</strong></div>
+          {pointCloud.positions.length === filtered.length * 2 && filtered.length ? <CatalogPointCanvas
+            records={filtered}
+            positions={pointCloud.positions}
             viewRadiusAU={catalog.filters.semiMajorAxis[1] || 50}
-            viewOffsetAU={{ x: 0, y: 0 }}
-            asteroidOpacity={0.88}
-            onHover={(body) => { if (body) selectionActions.focus(body.id) }}
           /> : <div className="empty-state"><span>◎</span><p>{catalog.manifest ? t('loading') : t('unavailable')}</p></div>}
+          {pointCloud.progress > 0 && pointCloud.progress < 1 && <div className="compute-progress"><i style={{ width: `${pointCloud.progress * 100}%` }} /></div>}
+          {pointCloud.error && <div className="error-banner">{pointCloud.error}</div>}
         </section>
 
         <section className="catalog-results glass-panel">
-          <div className="section-heading"><span>{filtered.length.toLocaleString()} {t('results')}</span><small>{selection.selectedIds.filter((id) => id.startsWith('asteroid:')).length} {t('selectedCount')}</small></div>
+          <div className="section-heading"><span>{filtered.length.toLocaleString()} {t('results')}</span><small>{(catalog.selectionScope?.count ?? selection.selectedIds.filter((id) => id.startsWith('asteroid:')).length).toLocaleString()} {t('selectedCount')}</small></div>
           {catalog.error && <div className="error-banner">{catalog.error}</div>}
           <div className="catalog-table" role="list">
             {filtered.slice(0, 240).map((record) => {
-              const selected = selection.selectedIds.includes(record.id)
+              const selected = Boolean(catalog.selectionScope) || selection.selectedIds.includes(record.id)
               return <button role="listitem" className={selected ? 'selected' : ''} key={record.id} onClick={() => {
                 selectionActions.addCatalogBodies([asteroidRecordToBody(record)])
                 selectionActions.toggle(record.id)

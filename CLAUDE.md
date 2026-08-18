@@ -20,7 +20,7 @@ npm run validate:data
 
 The Vite base path is `/solar/`. Playwright starts its own development server. The asteroid commands download or consume MPCORB, validate it, and publish versioned artifacts under `public/data/asteroids/releases/` plus an atomic `dataset-version.json` pointer.
 
-Useful pipeline environment variables are `MPCORB_SOURCE_FILE`, `MPCORB_SOURCE_URL`, `MPCORB_OUTPUT_DIR`, `MPCORB_DATASET_VERSION`, `MPCORB_CHUNK_SIZE`, `MPCORB_LIMIT`, and `MPCORB_REFRESH=1`.
+Useful pipeline environment variables are `MPCORB_SOURCE_FILE`, `MPCORB_SOURCE_URL`, `MPCORB_OUTPUT_DIR`, `MPCORB_DATASET_VERSION`, `MPCORB_CHUNK_SIZE`, `MPCORB_LITE_MAX_NUMBER`, and `MPCORB_REFRESH=1`.
 
 ## Architecture
 

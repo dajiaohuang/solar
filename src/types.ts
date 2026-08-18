@@ -141,8 +141,25 @@ export type TrajectoryWorkerResponse = {
   error?: string
 }
 
+export type CatalogPointWorkerRequest = {
+  type: 'compute'
+  requestId: number
+  julianDay: number
+  elements: Float64Array
+}
+
+export type CatalogPointWorkerResponse = {
+  type: 'progress' | 'result' | 'error'
+  requestId: number
+  progress?: number
+  positions?: Float32Array
+  error?: string
+}
+
 export type AsteroidIndexEntry = {
   id: BodyId
+  packedDesignation?: string
+  permanentNumber?: number
   label: string
   shortLabel: string
   searchKey: string
@@ -178,7 +195,10 @@ export type AsteroidManifest = {
   generatedAt: string
   sourceDownloadedAt?: string
   sourceSha256?: string
+  contentSha256?: string
   parserVersion?: string
+  parserCommit?: string
+  selectionPolicy?: DatasetSelectionPolicy
   orbitModel?: string
   precision?: string
   totalCount: number
@@ -199,6 +219,14 @@ export type DatasetVersion = {
   manifestPath: string
   generatedAt: string
   sourceSha256: string
+  contentSha256?: string
+  selectionPolicy?: DatasetSelectionPolicy
+}
+
+export type DatasetSelectionPolicy = {
+  type: 'all-valid-elliptic' | 'permanent-number-through-plus-featured'
+  maxPermanentNumber?: number
+  requiredFeaturedNames: string[]
 }
 
 export type DatasetProvenance = {
@@ -207,7 +235,10 @@ export type DatasetProvenance = {
   downloadedAt: string
   generatedAt: string
   sourceSha256: string
+  contentSha256?: string
   parserVersion: string
+  parserCommit?: string
+  selectionPolicy?: DatasetSelectionPolicy
   totalObjects: number
   mode: DatasetMode
   orbitModel: string

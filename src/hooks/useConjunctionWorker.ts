@@ -18,9 +18,50 @@ export type RunEventAnalysisParams = {
   sampleCount?: number
 }
 
+type CachedEventAnalysis = {
+  events: AnalysisEvent[]
+  params: RunEventAnalysisParams
+}
+
+const EVENT_CACHE_LIMIT = 8
+const eventAnalysisCache = new Map<string, CachedEventAnalysis>()
+
+function cloneParams(params: RunEventAnalysisParams): RunEventAnalysisParams {
+  return {
+    ...params,
+    bodies: [...params.bodies],
+    resolutionBodies: [...params.resolutionBodies],
+    eventKinds: [...params.eventKinds],
+  }
+}
+
+export function eventAnalysisCacheKey(params: RunEventAnalysisParams) {
+  return JSON.stringify({
+    bodies: params.bodies.map((body) => [body.id, body.parentId, body.orbit]),
+    resolution: params.resolutionBodies.map((body) => [body.id, body.parentId, body.orbit]),
+    referenceId: params.referenceId,
+    centerJulianDay: params.centerJulianDay,
+    windowDays: params.windowDays,
+    thresholdAU: params.thresholdAU,
+    eventKinds: [...params.eventKinds].sort(),
+    sampleCount: params.sampleCount ?? 240,
+  })
+}
+
+function cacheEventAnalysis(key: string, entry: CachedEventAnalysis) {
+  eventAnalysisCache.delete(key)
+  eventAnalysisCache.set(key, entry)
+  while (eventAnalysisCache.size > EVENT_CACHE_LIMIT) {
+    const oldestKey = eventAnalysisCache.keys().next().value
+    if (oldestKey === undefined) break
+    eventAnalysisCache.delete(oldestKey)
+  }
+}
+
 export function useConjunctionWorker() {
   const workerRef = useRef<Worker | null>(null)
   const latestRequestId = useRef(0)
+  const activeCacheKey = useRef('')
   const [events, setEvents] = useState<AnalysisEvent[]>([])
   const [status, setStatus] = useState<'idle' | 'running' | 'complete' | 'cancelled' | 'error'>('idle')
   const [progress, setProgress] = useState(0)
@@ -38,23 +79,42 @@ export function useConjunctionWorker() {
 
   const run = useCallback((params: RunEventAnalysisParams) => {
     if (workerRef.current) workerRef.current.terminate()
+    workerRef.current = null
+    const cacheKey = eventAnalysisCacheKey(params)
+    const cached = eventAnalysisCache.get(cacheKey)
+    if (cached) {
+      eventAnalysisCache.delete(cacheKey)
+      eventAnalysisCache.set(cacheKey, cached)
+      setEvents([...cached.events])
+      setLastRun(cloneParams(cached.params))
+      setProgress(1)
+      setError(null)
+      setStatus('complete')
+      return
+    }
     const worker = new Worker(new URL('../workers/conjunction.worker.ts', import.meta.url), { type: 'module' })
     workerRef.current = worker
+    activeCacheKey.current = cacheKey
     const requestId = latestRequestId.current + 1
     latestRequestId.current = requestId
     setStatus('running')
     setProgress(0)
     setError(null)
     setEvents([])
-    setLastRun({ ...params, bodies: [...params.bodies], resolutionBodies: [...params.resolutionBodies], eventKinds: [...params.eventKinds] })
+    const storedParams = cloneParams(params)
+    setLastRun(storedParams)
     worker.onmessage = (event: MessageEvent<EventAnalysisResponse>) => {
       const response = event.data
       if (response.requestId !== latestRequestId.current) return
       if (response.type === 'progress') setProgress(response.progress ?? 0)
       if (response.type === 'result') {
-        setEvents(response.events ?? [])
+        const resultEvents = response.events ?? []
+        setEvents(resultEvents)
+        cacheEventAnalysis(activeCacheKey.current, { events: [...resultEvents], params: storedParams })
         setProgress(1)
         setStatus('complete')
+        worker.terminate()
+        if (workerRef.current === worker) workerRef.current = null
       }
       if (response.type === 'cancelled') setStatus('cancelled')
       if (response.type === 'error') {

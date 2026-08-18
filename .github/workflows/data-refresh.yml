@@ -48,8 +48,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.package.outputs.version }}
         run: |
-          gh release create "dataset-$VERSION" asteroid-dataset.tar.gz \
-            --title "Asteroid dataset $VERSION" \
-            --notes "Immutable MPCORB-derived dataset. The archive contains provenance, SHA-256 checksums, a validation report, search indexes, and Float64 binary shards."
+          if gh release view "dataset-$VERSION" >/dev/null 2>&1; then
+            echo "Immutable dataset release dataset-$VERSION already exists; reusing it."
+          else
+            gh release create "dataset-$VERSION" asteroid-dataset.tar.gz \
+              --title "Asteroid dataset $VERSION" \
+              --notes "Immutable MPCORB-derived dataset. The archive contains provenance, SHA-256 checksums, a validation report, search indexes, and Float64 binary shards."
+          fi
           gh variable set ASTEROID_DATASET_TAG --body "dataset-$VERSION"
           gh workflow run deploy.yml

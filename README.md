@@ -71,6 +71,7 @@ lookup/*.json        # stable-ID buckets for deep-link hydration
 
 `dataset-version.json` is the small mutable pointer to the active immutable release. The GitHub Pages workflow never downloads a changing MPCORB file; it deploys the exact release named by the repository variable `ASTEROID_DATASET_TAG`.
 The publisher refuses to overwrite an existing release version and swaps the active pointer only after every artifact and validation report has been written.
+The default release identity includes the final data-artifact content SHA-256. Lite membership is a stable permanent-number cutoff plus a required curated target set, never the first N records in a mutable upstream ordering.
 
 Optional pipeline variables:
 
@@ -80,7 +81,8 @@ Optional pipeline variables:
 | `MPCORB_SOURCE_URL` | Alternate source URL |
 | `MPCORB_DATASET_VERSION` | Explicit immutable version string |
 | `MPCORB_CHUNK_SIZE` | Records per binary shard; default 5,000 |
-| `MPCORB_LIMIT` | Stop after N valid records |
+| `MPCORB_LITE_MAX_NUMBER` | Stable Lite cutoff by permanent number; featured targets are always added |
+| `MPCORB_REQUIRE_FEATURED=0` | Disable required-featured validation for isolated fixtures only |
 | `MPCORB_MODE` | `lite` or `full` |
 | `MPCORB_REFRESH=1` | Replace the cached raw snapshot |
 
@@ -111,8 +113,8 @@ pipeline data lives in scripts/preprocess-asteroids.mjs
 
 The render paths are intentionally different:
 
-- **Catalog Mode** draws thousands of current positions as GPU points without per-object React nodes or full trails.
-- **Focus Mode** is capped at 160 objects and adds full trajectories, labels, details, and bounded analysis.
+- **Catalog Mode** can load and draw every filtered catalog record as GPU points without full trails.
+- **Focus Mode** renders the first 160 selected objects with full trajectories, labels, details, and bounded analysis; the catalog selection itself may contain the complete filtered dataset.
 
 The simulation clock is not React state updated every animation frame. React receives a throttled snapshot, while trajectory history runs independently in a cancellable worker. Worker payloads use transferable typed arrays.
 

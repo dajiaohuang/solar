@@ -29,13 +29,14 @@ describe('immutable asteroid dataset publisher', () => {
     const temporaryRoot = await mkdtemp(resolve(process.cwd(), '.dataset-test-'))
     const sourcePath = resolve(temporaryRoot, 'MPCORB-mini.DAT')
     const outputPath = resolve(temporaryRoot, 'output')
+    const secondOutputPath = resolve(temporaryRoot, 'output-repeat')
     try {
       const source = [
         'MPCORB integration fixture',
         '---------------------------',
-        fixedWidthRecord('9990001', '999001 Atlas Alpha', 2.31),
-        fixedWidthRecord('9990002', '999002 Atlas Beta', 2.72),
-        fixedWidthRecord('9990003', '999003 Atlas Gamma', 3.14),
+        fixedWidthRecord('0001001', '1001 Atlas Alpha', 2.31),
+        fixedWidthRecord('0001002', '1002 Atlas Beta', 2.72),
+        fixedWidthRecord('0001003', '1003 Atlas Gamma', 3.14),
         '',
       ].join('\n')
       await writeFile(sourcePath, source)
@@ -43,28 +44,38 @@ describe('immutable asteroid dataset publisher', () => {
         ...process.env,
         MPCORB_SOURCE_FILE: sourcePath,
         MPCORB_OUTPUT_DIR: outputPath,
-        MPCORB_DATASET_VERSION: 'fixture-v1',
         MPCORB_MODE: 'lite',
+        MPCORB_LITE_MAX_NUMBER: '30000',
+        MPCORB_REQUIRE_FEATURED: '0',
         MPCORB_CHUNK_SIZE: '2',
       }
       await execFileAsync(process.execPath, [resolve('scripts/preprocess-asteroids.mjs')], { cwd: process.cwd(), env: environment })
-      const releasePath = resolve(outputPath, 'releases', 'fixture-v1')
       const pointer = JSON.parse(await readFile(resolve(outputPath, 'dataset-version.json'), 'utf8'))
+      const releasePath = resolve(outputPath, 'releases', pointer.activeVersion)
       const manifest = JSON.parse(await readFile(resolve(releasePath, 'manifest.json'), 'utf8'))
       const validation = JSON.parse(await readFile(resolve(releasePath, 'validation-report.json'), 'utf8'))
       const checksums = JSON.parse(await readFile(resolve(releasePath, 'checksums.json'), 'utf8'))
 
-      expect(pointer).toMatchObject({ activeVersion: 'fixture-v1', mode: 'lite' })
+      expect(pointer).toMatchObject({ mode: 'lite', contentSha256: manifest.contentSha256 })
       expect(manifest).toMatchObject({ schemaVersion: 2, totalCount: 3, chunkCount: 2, chunkSize: 2, format: 'binary-v1' })
+      expect(manifest.selectionPolicy).toMatchObject({ type: 'permanent-number-through-plus-featured', maxPermanentNumber: 30000 })
+      expect(manifest.contentSha256).toMatch(/^[a-f0-9]{64}$/)
       expect(validation).toMatchObject({ passed: true, validObjects: 3, rejectedObjects: 0 })
       expect(checksums.files).toHaveProperty('binary/chunk-0000.bin')
+      expect(checksums.files).toHaveProperty('search/digit-1.json')
       expect((await stat(resolve(releasePath, 'binary', 'chunk-0000.bin'))).size).toBe(2 * 8 * Float64Array.BYTES_PER_ELEMENT)
 
       await expect(execFileAsync(process.execPath, [resolve('scripts/preprocess-asteroids.mjs')], { cwd: process.cwd(), env: environment }))
         .rejects.toThrow(/Immutable dataset release already exists/)
 
       const verified = await execFileAsync(process.execPath, [resolve('scripts/validate-dataset.mjs')], { cwd: process.cwd(), env: environment })
-      expect(verified.stdout).toContain('Validated dataset fixture-v1: 3 objects')
+      expect(verified.stdout).toContain(`Validated dataset ${pointer.activeVersion}: 3 objects`)
+
+      const repeatEnvironment = { ...environment, MPCORB_OUTPUT_DIR: secondOutputPath }
+      await execFileAsync(process.execPath, [resolve('scripts/preprocess-asteroids.mjs')], { cwd: process.cwd(), env: repeatEnvironment })
+      const repeatPointer = JSON.parse(await readFile(resolve(secondOutputPath, 'dataset-version.json'), 'utf8'))
+      expect(repeatPointer.activeVersion).toBe(pointer.activeVersion)
+      expect(repeatPointer.contentSha256).toBe(pointer.contentSha256)
     } finally {
       await rm(temporaryRoot, { recursive: true, force: true })
     }
