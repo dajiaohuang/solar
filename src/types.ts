@@ -205,6 +205,11 @@ export type AsteroidManifest = {
   chunkCount: number
   chunkSize: number
   format?: 'json-v1' | 'binary-v1'
+  searchIndex?: {
+    permanentNumberBucketSize: number
+    provisionalYearBuckets: boolean
+    tokenInitialBuckets: boolean
+  }
   releasePath?: string
   lookupBucketCount?: number
   bucketCounts: Record<string, number>

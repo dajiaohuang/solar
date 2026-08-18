@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { promisify } from 'node:util'
@@ -60,9 +61,9 @@ describe('immutable asteroid dataset publisher', () => {
       expect(manifest).toMatchObject({ schemaVersion: 2, totalCount: 3, chunkCount: 2, chunkSize: 2, format: 'binary-v1' })
       expect(manifest.selectionPolicy).toMatchObject({ type: 'permanent-number-through-plus-featured', maxPermanentNumber: 30000 })
       expect(manifest.contentSha256).toMatch(/^[a-f0-9]{64}$/)
-      expect(validation).toMatchObject({ passed: true, validObjects: 3, rejectedObjects: 0 })
+      expect(validation).toMatchObject({ passed: true, validObjects: 3, parsedSourceObjects: 3, rejectedObjects: 0 })
       expect(checksums.files).toHaveProperty('binary/chunk-0000.bin')
-      expect(checksums.files).toHaveProperty('search/digit-1.json')
+      expect(checksums.files).toHaveProperty('search/number-000000-009999.json')
       expect((await stat(resolve(releasePath, 'binary', 'chunk-0000.bin'))).size).toBe(2 * 8 * Float64Array.BYTES_PER_ELEMENT)
 
       await expect(execFileAsync(process.execPath, [resolve('scripts/preprocess-asteroids.mjs')], { cwd: process.cwd(), env: environment }))
@@ -70,6 +71,14 @@ describe('immutable asteroid dataset publisher', () => {
 
       const verified = await execFileAsync(process.execPath, [resolve('scripts/validate-dataset.mjs')], { cwd: process.cwd(), env: environment })
       expect(verified.stdout).toContain(`Validated dataset ${pointer.activeVersion}: 3 objects`)
+
+      manifest.totalCount = 4
+      const modifiedManifest = JSON.stringify(manifest)
+      checksums.files['manifest.json'] = createHash('sha256').update(modifiedManifest).digest('hex')
+      await writeFile(resolve(releasePath, 'manifest.json'), modifiedManifest)
+      await writeFile(resolve(releasePath, 'checksums.json'), JSON.stringify(checksums))
+      await expect(execFileAsync(process.execPath, [resolve('scripts/validate-dataset.mjs')], { cwd: process.cwd(), env: environment }))
+        .rejects.toThrow(/metadata contains 3 objects; manifest declares 4/)
 
       const repeatEnvironment = { ...environment, MPCORB_OUTPUT_DIR: secondOutputPath }
       await execFileAsync(process.execPath, [resolve('scripts/preprocess-asteroids.mjs')], { cwd: process.cwd(), env: repeatEnvironment })

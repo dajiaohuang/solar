@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { buildBodyId, decodePackedEpoch, decodePackedPermanentNumber, findMissingFeatured, parseMpcorbLine } from '../../scripts/preprocess-asteroids.mjs'
+import {
+  buildBodyId,
+  decodePackedEpoch,
+  decodePackedPermanentNumber,
+  findMissingFeatured,
+  getPermanentNumberBucketKey,
+  getSearchBucketKeys,
+  parseMpcorbLine,
+} from '../../scripts/preprocess-asteroids.mjs'
 
 function fixedWidthLine() {
   const characters = Array(194).fill(' ')
@@ -38,6 +46,15 @@ describe('MPCORB pipeline parser', () => {
     const before = parseMpcorbLine(fixedWidthLine().replace('1 Ceres', '433 Eros'))
     const after = parseMpcorbLine(fixedWidthLine().replace('1 Ceres', '433 A-New-Name'))
     expect(before.record?.id).toBe(after.record?.id)
+  })
+
+  it('uses bounded numeric ranges and indexes every searchable token initial', () => {
+    expect(getPermanentNumberBucketKey(433)).toBe('number-000000-009999')
+    expect(getPermanentNumberBucketKey(101_955)).toBe('number-100000-109999')
+    expect([...getSearchBucketKeys({
+      permanentNumber: undefined,
+      searchKey: '2024 yr4 k24y04r',
+    })]).toEqual(expect.arrayContaining(['year-2024', 'y', 'k']))
   })
 
   it('makes missing curated targets a machine-checkable validation failure', () => {

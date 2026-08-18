@@ -65,13 +65,14 @@ checksums.json
 validation-report.json
 binary/*.bin         # eight Float64 orbital values per record
 meta/*.json          # names, classifications, H, NEO/PHA flags
-search/*.json        # normalized name/number/designation indexes
+search/*.json        # token initials, 10k-number ranges, provisional-year indexes
 lookup/*.json        # stable-ID buckets for deep-link hydration
 ```
 
-`dataset-version.json` is the small mutable pointer to the active immutable release. The GitHub Pages workflow never downloads a changing MPCORB file; it deploys the exact release named by the repository variable `ASTEROID_DATASET_TAG`.
+`dataset-version.json` is the small mutable pointer to the active immutable release. The GitHub Pages workflow never downloads a changing MPCORB file; it deploys the exact release named by the repository variable `ASTEROID_DATASET_TAG` and fails closed when that pin is missing.
 The publisher refuses to overwrite an existing release version and swaps the active pointer only after every artifact and validation report has been written.
 The default release identity includes the final data-artifact content SHA-256. Lite membership is a stable permanent-number cutoff plus a required curated target set, never the first N records in a mutable upstream ordering.
+Permanent-number search shards contain at most a 10,000-number range; provisional designations use year shards, and every normalized name/designation token is indexed by its own initial.
 
 Optional pipeline variables:
 

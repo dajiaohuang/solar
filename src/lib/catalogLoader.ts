@@ -16,6 +16,7 @@ const dataRoot = `${BASE}data/asteroids`
 const searchBucketCache = new Map<string, Promise<AsteroidIndexEntry[]>>()
 const chunkCache = new Map<string, Promise<AsteroidRecord[]>>()
 const lookupCache = new Map<string, Promise<AsteroidIndexEntry[]>>()
+const PERMANENT_NUMBER_BUCKET_SIZE = 10_000
 let activeManifest: AsteroidManifest | null = null
 let activeReleaseRoot = dataRoot
 let manifestPromise: Promise<AsteroidManifest | null> | null = null
@@ -33,11 +34,41 @@ export function normalizeSearchText(value: string) {
 }
 
 export function getSearchBucketKey(searchText: string) {
+  const packedExtended = searchText.trim().match(/^~([0-9A-Za-z]{4})/)
+  if (packedExtended) return `packed-tilde-${packedExtended[1][0].toLowerCase()}`
   const normalized = normalizeSearchText(searchText)
   if (!normalized) return 'misc'
+  const provisionalYear = normalized.match(/^(\d{4})\s+[a-z]/)?.[1]
+  if (provisionalYear) {
+    const year = Number(provisionalYear)
+    if (year >= 1800 && year <= 2199) return `year-${provisionalYear}`
+  }
+  const permanentNumber = normalized.match(/^(\d+)(?:\s|$)/)?.[1]
+  if (permanentNumber) return getPermanentNumberBucketKey(Number(permanentNumber))
   if (/[a-z]/.test(normalized[0])) return normalized[0]
-  if (/[0-9]/.test(normalized[0])) return `digit-${normalized[0]}`
   return 'misc'
+}
+
+export function getPermanentNumberBucketKey(permanentNumber: number) {
+  if (!Number.isSafeInteger(permanentNumber) || permanentNumber < 0) return 'number-misc'
+  const start = Math.floor(permanentNumber / PERMANENT_NUMBER_BUCKET_SIZE) * PERMANENT_NUMBER_BUCKET_SIZE
+  const end = start + PERMANENT_NUMBER_BUCKET_SIZE - 1
+  return `number-${String(start).padStart(6, '0')}-${String(end).padStart(6, '0')}`
+}
+
+function getLegacyNumericBucketKey(bucketKey: string) {
+  if (bucketKey.startsWith('packed-tilde-')) {
+    const firstCharacter = bucketKey.slice('packed-tilde-'.length)[0]
+    if (!firstCharacter) return null
+    return /\d/.test(firstCharacter) ? `digit-${firstCharacter}` : firstCharacter
+  }
+  const numericPart = bucketKey.startsWith('year-')
+    ? bucketKey.slice('year-'.length)
+    : bucketKey.startsWith('number-')
+      ? bucketKey.slice('number-'.length).split('-')[0]
+      : ''
+  const firstSignificantDigit = numericPart.replace(/^0+/, '')[0] ?? '0'
+  return numericPart ? `digit-${firstSignificantDigit}` : null
 }
 
 export function resetDatasetLoader() {
@@ -108,9 +139,13 @@ export function loadAsteroidSearchBucket(bucketKey: string) {
   if (existing) return existing
   const promise = fetchJson<AsteroidIndexEntry[]>(
     `${activeReleaseRoot}/search/${encodeURIComponent(normalizedBucket)}.json`,
-  ).catch(() => normalizedBucket.startsWith('digit-')
-    ? fetchJson<AsteroidIndexEntry[]>(`${activeReleaseRoot}/search/digit.json`).catch(() => [])
-    : [])
+  ).catch(async () => {
+    const legacyBucket = getLegacyNumericBucketKey(normalizedBucket)
+    if (!legacyBucket) return []
+    return fetchJson<AsteroidIndexEntry[]>(
+      `${activeReleaseRoot}/search/${encodeURIComponent(legacyBucket)}.json`,
+    ).catch(() => fetchJson<AsteroidIndexEntry[]>(`${activeReleaseRoot}/search/digit.json`).catch(() => []))
+  })
   searchBucketCache.set(cacheKey, promise)
   return promise
 }
