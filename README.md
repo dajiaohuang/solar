@@ -69,7 +69,7 @@ search/*.json        # token initials, 10k-number ranges, provisional-year index
 lookup/*.json        # stable-ID buckets for deep-link hydration
 ```
 
-`dataset-version.json` is the small mutable pointer to the active immutable release. The GitHub Pages workflow never downloads a changing MPCORB file; it deploys the exact release named by the repository variable `ASTEROID_DATASET_TAG` and fails closed when that pin is missing.
+`dataset-version.json` is the small mutable pointer inside the downloaded data package. The GitHub Pages workflow never downloads a changing MPCORB file; it deploys the exact immutable release committed in `.github/asteroid-dataset-tag` and fails closed when that audited pin is missing or invalid.
 The publisher refuses to overwrite an existing release version and swaps the active pointer only after every artifact and validation report has been written.
 The default release identity includes the final data-artifact content SHA-256. Lite membership is a stable permanent-number cutoff plus a required curated target set, never the first N records in a mutable upstream ordering.
 Permanent-number search shards contain at most a 10,000-number range; provisional designations use year shards, and every normalized name/designation token is indexed by its own initial.
