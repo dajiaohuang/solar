@@ -25,19 +25,20 @@ jobs:
           cache: npm
       - run: npm ci
 
-      - name: Require pinned immutable asteroid dataset
-        env:
-          DATASET_TAG: ${{ vars.ASTEROID_DATASET_TAG }}
+      - name: Resolve pinned immutable asteroid dataset
+        id: dataset
         run: |
-          if [ -z "$DATASET_TAG" ]; then
-            echo "ASTEROID_DATASET_TAG is not configured. Publish a validated dataset before deploying the application." >&2
+          DATASET_TAG=$(tr -d '\r\n' < .github/asteroid-dataset-tag)
+          if [[ ! "$DATASET_TAG" =~ ^dataset-mpcorb-[a-f0-9]{16}-(full|lite)$ ]]; then
+            echo "Invalid or missing .github/asteroid-dataset-tag. Publish a validated dataset before deploying the application." >&2
             exit 1
           fi
+          echo "tag=$DATASET_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Fetch pinned immutable asteroid dataset
         env:
           GH_TOKEN: ${{ github.token }}
-          DATASET_TAG: ${{ vars.ASTEROID_DATASET_TAG }}
+          DATASET_TAG: ${{ steps.dataset.outputs.tag }}
         run: |
           mkdir -p public/data/asteroids
           gh release download "$DATASET_TAG" --pattern asteroid-dataset.tar.gz
