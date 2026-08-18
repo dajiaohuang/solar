@@ -18,6 +18,7 @@ const LITE_MAX_PERMANENT_NUMBER = Number(process.env.MPCORB_LITE_MAX_NUMBER ?? L
 const DATASET_MODE = process.env.MPCORB_MODE === 'lite' || LEGACY_LITE_LIMIT ? 'lite' : 'full'
 const REQUIRE_FEATURED = process.env.MPCORB_REQUIRE_FEATURED !== '0'
 const PARSER_VERSION = '2.0.0'
+const PERMANENT_NUMBER_BUCKET_SIZE = 10_000
 const MONTH_CODES = '123456789ABC'
 const DAY_CODES = '123456789ABCDEFGHIJKLMNOPQRSTUV'
 const SKIPPED_DWARF_IDS = new Set(['1', '134340', '136199', '136108', '136472'])
@@ -87,16 +88,35 @@ export function classifyOrbit(flags) {
   }
 }
 
-function getBucketKey(searchKey) {
-  const firstAlpha = [...searchKey].find((character) => /[a-z]/.test(character))
-  if (firstAlpha) return firstAlpha
-  if (/^[0-9]/.test(searchKey)) return getDigitBucketKey(searchKey)
-  return 'misc'
+export function getPermanentNumberBucketKey(permanentNumber) {
+  if (!Number.isSafeInteger(permanentNumber) || permanentNumber < 0) return 'number-misc'
+  const start = Math.floor(permanentNumber / PERMANENT_NUMBER_BUCKET_SIZE) * PERMANENT_NUMBER_BUCKET_SIZE
+  const end = start + PERMANENT_NUMBER_BUCKET_SIZE - 1
+  return `number-${String(start).padStart(6, '0')}-${String(end).padStart(6, '0')}`
 }
 
-export function getDigitBucketKey(value) {
-  const firstDigit = value.match(/\d/)?.[0]
-  return firstDigit ? `digit-${firstDigit}` : 'digit-misc'
+/**
+ * Index every word initial so searches by a later name/designation token still
+ * work, while permanent numbers stay in bounded 10,000-object range shards.
+ */
+export function getSearchBucketKeys(indexEntry) {
+  const keys = new Set()
+  for (const token of indexEntry.searchKey.split(/\s+/).filter(Boolean)) {
+    const firstAlpha = token.match(/[a-z]/)?.[0]
+    if (firstAlpha) keys.add(firstAlpha)
+    if (/^\d{4}$/.test(token)) {
+      const possibleYear = Number(token)
+      if (possibleYear >= 1800 && possibleYear <= 2199) keys.add(`year-${token}`)
+    }
+  }
+  if (indexEntry.permanentNumber !== undefined) {
+    keys.add(getPermanentNumberBucketKey(indexEntry.permanentNumber))
+  }
+  if (indexEntry.packedDesignation?.startsWith('~') && indexEntry.packedDesignation.length >= 2) {
+    keys.add(`packed-tilde-${indexEntry.packedDesignation[1].toLowerCase()}`)
+  }
+  if (!keys.size) keys.add('misc')
+  return keys
 }
 
 export function decodePackedPermanentNumber(packedDesignation) {
@@ -250,6 +270,7 @@ async function main() {
   }
   let parsing = false
   let totalCount = 0
+  let parsedSourceCount = 0
   let invalidCount = 0
   let chunkIndex = 0
   let chunkRecords = []
@@ -304,6 +325,7 @@ async function main() {
       continue
     }
     const { record, indexEntry } = parsed
+    parsedSourceCount += 1
     const featuredName = normalizeSearchText(indexEntry.shortLabel)
     const isFeatured = FEATURED_NAMES.has(featuredName)
     const selectedForDataset = DATASET_MODE === 'full' || isFeatured ||
@@ -321,11 +343,7 @@ async function main() {
       ranges[name][0] = Math.min(ranges[name][0], value)
       ranges[name][1] = Math.max(ranges[name][1], value)
     }
-    const bucketKeys = new Set([getBucketKey(indexEntry.searchKey)])
-    for (const token of indexEntry.searchKey.split(/\s+/)) {
-      if (/^\d/.test(token)) bucketKeys.add(getDigitBucketKey(token))
-    }
-    for (const key of bucketKeys) {
+    for (const key of getSearchBucketKeys(indexEntry)) {
       const entries = searchBuckets.get(key) ?? []
       entries.push(indexEntry)
       searchBuckets.set(key, entries)
@@ -377,6 +395,11 @@ async function main() {
     chunkCount: chunkIndex,
     chunkSize: CHUNK_SIZE,
     format: 'binary-v1',
+    searchIndex: {
+      permanentNumberBucketSize: PERMANENT_NUMBER_BUCKET_SIZE,
+      provisionalYearBuckets: true,
+      tokenInitialBuckets: true,
+    },
     lookupBucketCount: lookupBuckets.size,
     bucketCounts: Object.fromEntries([...searchBuckets].map(([key, entries]) => [key, entries.length])),
     categoryCounts,
@@ -397,13 +420,15 @@ async function main() {
     orbitModel: manifest.orbitModel,
     precision: manifest.precision,
   }
+  const rejectedFraction = invalidCount / Math.max(parsedSourceCount + invalidCount, 1)
   const validation = {
     schemaVersion: 1,
     datasetVersion: version,
-    passed: totalCount > 0 && invalidCount / Math.max(totalCount + invalidCount, 1) < 0.05,
+    passed: totalCount > 0 && rejectedFraction < 0.05,
     validObjects: totalCount,
+    parsedSourceObjects: parsedSourceCount,
     rejectedObjects: invalidCount,
-    rejectedFraction: invalidCount / Math.max(totalCount + invalidCount, 1),
+    rejectedFraction,
     rejectionReasons: invalidReasons,
     rejectionExamples: invalidExamples,
     missingFeatured,
@@ -418,6 +443,9 @@ async function main() {
       featuredComplete: missingFeatured.length === 0,
       stablePackedDesignationIds: true,
       shardedNumericSearch: true,
+      permanentNumberBucketSize: PERMANENT_NUMBER_BUCKET_SIZE,
+      provisionalYearSearch: true,
+      tokenInitialSearch: true,
       binaryStride: 8,
     },
   }
