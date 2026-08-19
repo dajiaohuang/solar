@@ -4,7 +4,7 @@
 
 [在线演示](https://dajiaohuang.github.io/solar/) · [English](./README.md)
 
-当前预发布版本：**v0.8.0-beta.1** · [更新日志](./CHANGELOG.md) · [性能预算](./PERFORMANCE.md)
+当前预发布版本：**v0.9.0-beta.1** · [更新日志](./CHANGELOG.md) · [性能预算](./PERFORMANCE.md)
 
 ![Solar Atlas](./public/readme-screenshot.png)
 
@@ -13,10 +13,10 @@ Solar Atlas 把空间视图、轨道元素空间、时间事件与数据证据�
 ## 已实现能力
 
 - **空间探索：** 日心、地心和任意天体中心参考系；二维/三维视图；分屏参考系对比；时间推进、测距、拉格朗日点、希尔球与拉普拉斯影响球。
-- **小天体目录：** MPCORB 二进制分片；名称、编号和临时编号搜索；NEO/PHA 与分类筛选；按 `a/e/i/H/q` 过滤；Lite/Full 显示预算；不可变数据版本与 IndexedDB 缓存。
+- **小天体目录：** MPCORB 二进制分片；二字符前缀搜索；compact locator 精确筛选与对象回填；NEO/PHA 与分类筛选；Lite/Full 显示预算；不可变数据版本与 IndexedDB 缓存。
 - **轨道元素空间：** `a–e`、`a–i`、`a–H`、`q–Q`、`a–周期` 联动图；Kirkwood gap / 共振标记；框选后同步聚焦三维空间。
-- **事件实验室：** 显式、可取消的近距离、合、冲、近日点和远日点任务；进度、结果缓存、时间线跳转、CSV/JSON 导出。播放模拟时间不会自动重新计算。
-- **任务实验室：** 单位与方向正确的霍曼基线、相位角、通用变量 Lambert 解、出发/到达 `v∞`、C3 与 Worker 生成的 Porkchop 图。
+- **事件实验室：** 自适应采样、可取消的近距离、合、冲及中心天体拱点任务；明确区分数值细化区间与未估计的物理不确定性。
+- **任务实验室：** 单位与方向正确的霍曼基线、相位角、带基准夹具的通用变量 Lambert 解、出发/到达 `v∞`、C3 与分类的 Porkchop 求解失败。
 - **引导故事：** 逆行、参考系、Kirkwood gaps、木星特洛伊、NEO 分类、冥王星共振与旅行者时代等 JSON 场景。
 - **可复现链接：** URL 记录数据集版本、历元、参考系、天体集合、筛选器、语言与视图；当前部署包含对应数据版本时可完整重放，否则保留原始版本并显示恢复入口。
 - **可安装网页应用：** 响应式移动端 Lite 布局、离线运行时缓存、Web App Manifest、社交分享元信息与路由代码分割。
@@ -46,15 +46,16 @@ npm run data:full
 
 完整管线需要数 GB 可用内存。建议使用 `MPCORB_SOURCE_FILE=/path/to/MPCORB.DAT.gz` 固定源快照。
 
-## 数据发布 v2
+## 数据发布 v3
 
 应用部署与数据发布是两个独立流程：
 
 ```text
 应用：校验固定数据 → lint → unit test → build → E2E → 部署
 
-数据：下载源快照 → SHA-256 → 解析 → 校验
+数据：下载源快照 → SHA-256 → 解析 → 逐行语义校验
    → Float64 分片 + 元数据/搜索/ID 索引
+   → lint + unit + build + E2E + benchmark
    → 不可变 GitHub Release → 直接提交 pin 到 main → 显式触发部署
 ```
 
@@ -67,7 +68,7 @@ checksums.json
 validation-report.json
 binary/*.bin
 meta/*.json
-search/*.json        # 词首、每万号段及临时编号年份索引
+search/*.json        # 二字符前缀、每万号段及临时编号年份索引
 lookup/*.json
 catalog-index.bin    # 仅含数值筛选字段的紧凑索引
 catalog-sample-*.bin # 桌面 30,000 / 移动端 8,000 条预计算样本
@@ -75,13 +76,13 @@ catalog-sample-*.json
 catalog-summary.json
 ```
 
-数据包根目录的 `dataset-version.json` 只是指向当前不可变版本的小型指针。GitHub Pages 部署不会重新下载一个不断变化的 MPCORB 文件；它只使用 `.github/asteroid-dataset-tag` 中经过提交审计的固定发布资产，缺失或格式错误时部署会直接失败。
+数据包根目录的 `dataset-version.json` 只是指向当前不可变版本的小型指针。GitHub Pages 只使用 `.github/asteroid-dataset.json` 中经过提交审计的固定发布资产，解包前验证归档 SHA-256，随后验证内部数据；缺失或格式错误时部署会直接失败。
 发布器使用最终数据产物的内容 SHA-256 生成版本身份，记录解析器提交和稳定筛选策略，拒绝覆盖已经存在的版本，并且只在所有产物及校验报告写入完成后原子切换当前版本指针。Lite 数据集定义为“永久编号不大于 30,000，并强制包含策展目标”，不再是上游文件的前 N 条记录。
-永久编号搜索按每 10,000 个编号分片，临时编号按年份分片；名称和编号的每个规范化词项都按自身首字母建立索引。
+永久编号搜索按每 10,000 个编号分片，临时编号按年份分片；名称和编号的规范化词项使用二字符前缀与行 locator。
 
 ## 双分辨率架构
 
-- **Catalog Mode：** 首屏直接读取桌面 30,000 / 移动端 8,000 条预计算分层样本；精确数值筛选只在 Worker 中扫描一个紧凑索引，不下载全部名称与轨道分片；解码详情分片只保留在 8 项 LRU 中。
+- **Catalog Mode：** 仅进入 Catalog/Element 路由后读取桌面 30,000 / 移动端 8,000 条预计算分层样本；精确数值筛选由常驻 Worker 扫描紧凑索引，再按 locator 只回填命中的分片行；解码详情分片只保留在 8 项 LRU 中。
 - **Focus Mode：** 从目录选择中取前 160 个对象绘制轨迹、查看属性并参与有界分析；目录级全选保存“数据版本 + 筛选表达式 + 总数”，不会枚举全部 ID。
 
 绝对星等筛选明确区分“全部 / 仅已知 / 仅未知”。H 未知值不会被虚构为数值，`a–H` 数值散点图会排除这些对象。

@@ -2,6 +2,28 @@
 
 All notable changes to Solar Atlas are documented here. The project follows semantic versioning after the prototype phase.
 
+## 0.9.0-beta.1 — 2026-08-20
+
+### Added
+
+- Exact compact-index result hydration through deterministic locator sampling and bounded shard reads.
+- Schema-v3 dataset capabilities, row locators, two-character search prefixes, summary statistics, and full semantic validation.
+- JPL Horizons event fixtures, a classical Lambert benchmark, adaptive event sampling, and classified Lambert failure modes.
+- Structured dataset pin with archive SHA-256 verification and post-deployment production smoke tests.
+
+### Changed
+
+- Catalog samples load only in Catalog and Element Space; Explorer, Mission, and Stories no longer pay the catalog startup cost.
+- Catalog scans reuse a persistent worker and compact-index cache, while search candidates apply exact numeric filters through locators.
+- Event exports distinguish numerical refinement half-width from unestimated physical prediction uncertainty and identify each apsis central body.
+- Data publication runs lint, unit, build, E2E, and catalog benchmark gates before publishing or pinning a release.
+
+### Fixed
+
+- Exact filtered totals and visible records now come from the same full-data match set.
+- Filter changes immediately discard stale exact records and fall back to the immutable base sample.
+- Flat sampled extrema are collapsed so a sampling plateau cannot create duplicate physical events.
+
 ## 0.8.0-beta.1 — 2026-08-19
 
 ### Added
