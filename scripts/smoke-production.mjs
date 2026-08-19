@@ -44,7 +44,9 @@ if (!/javascript/i.test(serviceWorker.headers.get('content-type') ?? '')) throw 
 
 if (process.env.SMOKE_BROWSER === '1') {
   const { chromium } = await import('@playwright/test')
-  const browser = await chromium.launch()
+  const browser = await chromium.launch(process.env.SMOKE_BROWSER_CHANNEL
+    ? { channel: process.env.SMOKE_BROWSER_CHANNEL }
+    : undefined)
   try {
     const page = await browser.newPage()
     const pageErrors = []

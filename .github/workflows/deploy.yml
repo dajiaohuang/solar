@@ -89,9 +89,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - name: Verify hosted Chrome availability
+        run: google-chrome --version
       - name: Verify production deployment
         env:
           SITE_URL: ${{ needs.deploy.outputs.page_url }}
           SMOKE_BROWSER: 1
+          SMOKE_BROWSER_CHANNEL: chrome
         run: node scripts/smoke-production.mjs
