@@ -76,7 +76,7 @@ describe('MPCORB pipeline parser', () => {
     expect([...getSearchBucketKeys({
       permanentNumber: undefined,
       searchKey: '2024 yr4 k24y04r',
-    })]).toEqual(expect.arrayContaining(['year-2024', 'y', 'k']))
+    })]).toEqual(expect.arrayContaining(['year-2024', 'prefix-yr', 'prefix-k2']))
   })
 
   it('makes missing curated targets a machine-checkable validation failure', () => {

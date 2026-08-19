@@ -17,7 +17,7 @@ const LEGACY_LITE_LIMIT = process.env.MPCORB_LIMIT
 const LITE_MAX_PERMANENT_NUMBER = Number(process.env.MPCORB_LITE_MAX_NUMBER ?? LEGACY_LITE_LIMIT ?? 30_000)
 const DATASET_MODE = process.env.MPCORB_MODE === 'lite' || LEGACY_LITE_LIMIT ? 'lite' : 'full'
 const REQUIRE_FEATURED = process.env.MPCORB_REQUIRE_FEATURED !== '0'
-const PARSER_VERSION = '2.1.0'
+const PARSER_VERSION = '3.0.0'
 const PERMANENT_NUMBER_BUCKET_SIZE = 10_000
 const COMPACT_INDEX_STRIDE_BYTES = 24
 const DESKTOP_SAMPLE_LIMIT = 30_000
@@ -110,8 +110,11 @@ export function getPermanentNumberBucketKey(permanentNumber) {
 export function getSearchBucketKeys(indexEntry) {
   const keys = new Set()
   for (const token of indexEntry.searchKey.split(/\s+/).filter(Boolean)) {
-    const firstAlpha = token.match(/[a-z]/)?.[0]
-    if (firstAlpha) keys.add(firstAlpha)
+    const firstAlphaOffset = token.search(/[a-z]/)
+    if (firstAlphaOffset >= 0) {
+      const prefix = token.slice(firstAlphaOffset, firstAlphaOffset + 2)
+      keys.add(prefix.length >= 2 ? `prefix-${prefix}` : prefix)
+    }
     if (/^\d{4}$/.test(token)) {
       const possibleYear = Number(token)
       if (possibleYear >= 1800 && possibleYear <= 2199) keys.add(`year-${token}`)
@@ -321,7 +324,11 @@ class CompactIndexBuilder {
     this.current.writeDoubleLE(record.semiMajorAxisAU, offset)
     this.current.writeUInt32LE(Math.round(record.eccentricity * 1_000_000_000), offset + 8)
     this.current.writeUInt32LE(Math.round(record.inclinationDeg * 1_000_000), offset + 12)
-    this.current.writeInt16LE(record.absoluteMagnitude === undefined ? 0x7fff : Math.round(record.absoluteMagnitude * 100), offset + 16)
+    const magnitudeFixed = record.absoluteMagnitude === undefined ? 0x7fff : Math.round(record.absoluteMagnitude * 100)
+    if (record.absoluteMagnitude !== undefined && (magnitudeFixed < -0x8000 || magnitudeFixed >= 0x7fff)) {
+      throw new RangeError(`Absolute magnitude ${record.absoluteMagnitude} cannot be encoded as compact Int16 hundredths`)
+    }
+    this.current.writeInt16LE(magnitudeFixed, offset + 16)
     const classIndex = ORBIT_CLASS_CODES.indexOf(record.orbitClassCode)
     this.current.writeUInt8(classIndex >= 0 ? classIndex : ORBIT_CLASS_CODES.indexOf('OTHER'), offset + 18)
     this.current.writeUInt8((record.isNeo ? 1 : 0) | (record.isPha ? 2 : 0) | (record.absoluteMagnitude !== undefined ? 4 : 0), offset + 19)
@@ -345,6 +352,8 @@ function encodeSample(records) {
     shortLabel: record.shortLabel,
     searchKey: record.searchKey,
     chunkId: record.chunkId,
+    chunkIndex: record.chunkIndex,
+    rowIndex: record.rowIndex,
     orbitClassCode: record.orbitClassCode,
     orbitClassName: record.orbitClassName,
     absoluteMagnitude: record.absoluteMagnitude,
@@ -396,6 +405,7 @@ async function main() {
   const searchBuckets = new Map()
   const lookupBuckets = new Map()
   const categoryCounts = {}
+  let magnitudeKnownCount = 0
   const featured = []
   const featuredKeys = new Set()
   const invalidReasons = {}
@@ -425,6 +435,8 @@ async function main() {
       shortLabel: record.shortLabel,
       searchKey: record.searchKey,
       chunkId: record.chunkId,
+      chunkIndex: record.chunkIndex,
+      rowIndex: record.rowIndex,
       orbitClassCode: record.orbitClassCode,
       orbitClassName: record.orbitClassName,
       absoluteMagnitude: record.absoluteMagnitude,
@@ -470,12 +482,18 @@ async function main() {
     const selectedForDataset = DATASET_MODE === 'full' || isFeatured ||
       (indexEntry.permanentNumber !== undefined && indexEntry.permanentNumber <= LITE_MAX_PERMANENT_NUMBER)
     if (!selectedForDataset) continue
+    const rowIndex = chunkRecords.length
+    record.chunkIndex = chunkIndex
+    record.rowIndex = rowIndex
+    indexEntry.chunkIndex = chunkIndex
+    indexEntry.rowIndex = rowIndex
     chunkRecords.push(record)
-    compactIndex.add(record, chunkIndex, chunkRecords.length - 1)
+    compactIndex.add(record, chunkIndex, rowIndex)
     desktopSampler.add(record)
     mobileSampler.add(record)
     totalCount += 1
     categoryCounts[record.orbitClassCode] = (categoryCounts[record.orbitClassCode] ?? 0) + 1
+    if (record.absoluteMagnitude !== undefined) magnitudeKnownCount += 1
     for (const [name, value] of Object.entries({
       semiMajorAxisAU: record.semiMajorAxisAU,
       eccentricity: record.eccentricity,
@@ -514,10 +532,12 @@ async function main() {
     writeArtifact('catalog-sample-mobile.json', mobileSample.metadata),
     writeArtifact('catalog-sample-mobile.bin', mobileSample.binary),
     writeArtifact('catalog-summary.json', {
-      schemaVersion: 1,
+      schemaVersion: 2,
       datasetMode: DATASET_MODE,
       totalCount,
       categoryCounts,
+      magnitudeKnownCount,
+      magnitudeUnknownCount: totalCount - magnitudeKnownCount,
       numericRanges: ranges,
       sourceSha256,
     }),
@@ -538,7 +558,7 @@ async function main() {
   if (existsSync(releaseDir)) throw new Error(`Immutable dataset release already exists: ${releaseDir}`)
 
   const manifest = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     version,
     datasetMode: DATASET_MODE,
     source: SOURCE_URL,
@@ -548,6 +568,7 @@ async function main() {
     contentSha256,
     parserVersion: PARSER_VERSION,
     parserCommit,
+    capabilities: ['catalog-index-v1', 'catalog-locators-v1', 'precomputed-samples-v1', 'catalog-summary-v1', 'search-prefix-v2'],
     selectionPolicy,
     orbitModel: 'elliptic two-body propagation of MPCORB osculating elements',
     precision: 'MPCORB fixed-width source precision; Float64 binary shards',
@@ -570,7 +591,9 @@ async function main() {
     searchIndex: {
       permanentNumberBucketSize: PERMANENT_NUMBER_BUCKET_SIZE,
       provisionalYearBuckets: true,
-      tokenInitialBuckets: true,
+      tokenInitialBuckets: false,
+      tokenPrefixLength: 2,
+      locators: true,
     },
     lookupBucketCount: lookupBuckets.size,
     bucketCounts: Object.fromEntries([...searchBuckets].map(([key, entries]) => [key, entries.length])),
@@ -594,7 +617,7 @@ async function main() {
   }
   const rejectedFraction = invalidCount / Math.max(parsedSourceCount + invalidCount, 1)
   const validation = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     datasetVersion: version,
     passed: totalCount > 0 && rejectedFraction < 0.05,
     validObjects: totalCount,
@@ -617,7 +640,8 @@ async function main() {
       shardedNumericSearch: true,
       permanentNumberBucketSize: PERMANENT_NUMBER_BUCKET_SIZE,
       provisionalYearSearch: true,
-      tokenInitialSearch: true,
+      tokenPrefixSearch: true,
+      searchLocators: true,
       binaryStride: 8,
       compactIndexStrideBytes: COMPACT_INDEX_STRIDE_BYTES,
       desktopSampleBounded: desktopSample.metadata.length <= DESKTOP_SAMPLE_LIMIT,
@@ -635,7 +659,7 @@ async function main() {
   await rename(stagingDir, releaseDir)
   await mkdir(OUTPUT_ROOT, { recursive: true })
   const versionPointer = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     activeVersion: version,
     mode: DATASET_MODE,
     manifestPath: `releases/${version}/manifest.json`,

@@ -59,8 +59,8 @@ describe('immutable asteroid dataset publisher', () => {
 
       expect(pointer).toMatchObject({ mode: 'lite', contentSha256: manifest.contentSha256 })
       expect(manifest).toMatchObject({
-        schemaVersion: 2,
-        parserVersion: '2.1.0',
+        schemaVersion: 3,
+        parserVersion: '3.0.0',
         totalCount: 3,
         chunkCount: 2,
         chunkSize: 2,
@@ -72,6 +72,7 @@ describe('immutable asteroid dataset publisher', () => {
       expect(validation).toMatchObject({ passed: true, validObjects: 3, parsedSourceObjects: 3, rejectedObjects: 0 })
       expect(checksums.files).toHaveProperty('binary/chunk-0000.bin')
       expect(checksums.files).toHaveProperty('search/number-000000-009999.json')
+      expect(checksums.files).toHaveProperty('search/prefix-at.json')
       expect((await stat(resolve(releasePath, 'binary', 'chunk-0000.bin'))).size).toBe(2 * 8 * Float64Array.BYTES_PER_ELEMENT)
 
       await expect(execFileAsync(process.execPath, [resolve('scripts/preprocess-asteroids.mjs')], { cwd: process.cwd(), env: environment }))

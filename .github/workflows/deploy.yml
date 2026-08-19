@@ -28,22 +28,32 @@ jobs:
       - name: Resolve pinned immutable asteroid dataset
         id: dataset
         run: |
-          DATASET_TAG=$(tr -d '\r\n' < .github/asteroid-dataset-tag)
-          if [[ ! "$DATASET_TAG" =~ ^dataset-mpcorb-[a-f0-9]{16}-(full|lite)$ ]]; then
-            echo "Invalid or missing .github/asteroid-dataset-tag. Publish a validated dataset before deploying the application." >&2
-            exit 1
-          fi
-          echo "tag=$DATASET_TAG" >> "$GITHUB_OUTPUT"
+          node <<'NODE'
+          const fs = require('fs')
+          const pin = JSON.parse(fs.readFileSync('.github/asteroid-dataset.json', 'utf8'))
+          if (!/^dataset-mpcorb-[a-f0-9]{16}-(full|lite)$/.test(pin.tag) ||
+              pin.version !== pin.tag.slice('dataset-'.length) ||
+              pin.asset !== 'asteroid-dataset.tar.gz' ||
+              !/^[a-f0-9]{64}$/.test(pin.assetSha256)) {
+            throw new Error('Invalid asteroid dataset pin contract')
+          }
+          const output = process.env.GITHUB_OUTPUT
+          fs.appendFileSync(output, `tag=${pin.tag}\nasset=${pin.asset}\nasset_sha256=${pin.assetSha256}\nversion=${pin.version}\n`)
+          NODE
 
       - name: Fetch pinned immutable asteroid dataset
         env:
           GH_TOKEN: ${{ github.token }}
           DATASET_TAG: ${{ steps.dataset.outputs.tag }}
+          DATASET_ASSET: ${{ steps.dataset.outputs.asset }}
+          DATASET_ASSET_SHA256: ${{ steps.dataset.outputs.asset_sha256 }}
         run: |
           mkdir -p public/data/asteroids
-          gh release download "$DATASET_TAG" --pattern asteroid-dataset.tar.gz
-          tar -xzf asteroid-dataset.tar.gz -C public/data/asteroids
+          gh release download "$DATASET_TAG" --pattern "$DATASET_ASSET"
+          echo "$DATASET_ASSET_SHA256  $DATASET_ASSET" | sha256sum --check --strict
+          tar -xzf "$DATASET_ASSET" -C public/data/asteroids
           npm run validate:data
+          npm run benchmark:catalog
 
       - run: npm run lint
       - run: npm run test:unit
@@ -61,7 +71,22 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: build
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
+
+  smoke:
+    runs-on: ubuntu-latest
+    needs: deploy
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Verify production deployment
+        env:
+          SITE_URL: ${{ needs.deploy.outputs.page_url }}
+        run: node scripts/smoke-production.mjs

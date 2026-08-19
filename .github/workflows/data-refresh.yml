@@ -37,12 +37,22 @@ jobs:
         run: |
           if [ "$REQUESTED_MODE" = "lite" ]; then npm run data:lite; else npm run data:full; fi
       - run: npm run validate:data
+      - name: Validate application against generated dataset
+        run: |
+          npm run lint
+          npm run test:unit
+          npm run build
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+          npm run benchmark:catalog
       - name: Package immutable release
         id: package
         run: |
           VERSION=$(node -p "require('./public/data/asteroids/dataset-version.json').activeVersion")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           tar -czf asteroid-dataset.tar.gz -C public/data/asteroids .
+          ASSET_SHA256=$(sha256sum asteroid-dataset.tar.gz | awk '{print $1}')
+          echo "asset_sha256=$ASSET_SHA256" >> "$GITHUB_OUTPUT"
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -60,11 +70,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.package.outputs.version }}
+          ASSET_SHA256: ${{ steps.package.outputs.asset_sha256 }}
         run: |
-          printf '%s\n' "dataset-$VERSION" > .github/asteroid-dataset-tag
+          node -e "require('fs').writeFileSync('.github/asteroid-dataset.json', JSON.stringify({schemaVersion:1,tag:'dataset-'+process.env.VERSION,version:process.env.VERSION,asset:'asteroid-dataset.tar.gz',assetSha256:process.env.ASSET_SHA256}, null, 2)+'\n')"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/asteroid-dataset-tag
+          git add .github/asteroid-dataset.json
           if git diff --cached --quiet; then
             echo "Dataset pin already points to dataset-$VERSION."
             exit 0
