@@ -32,7 +32,13 @@ describe('sampled astronomical event extrema', () => {
     })
     expect(refined.julianDay).toBeCloseTo(101.25, 3)
     expect(refined.value).toBeCloseTo(3, 5)
-    expect(refined.estimatedTimingErrorDays).toBeLessThan(0.001)
+    expect(refined.numericalRefinementHalfWidthDays).toBeLessThan(0.001)
     expect(evaluations).toBeGreaterThan(10)
+  })
+
+  it('collapses a sampled plateau into one physical extremum candidate', () => {
+    const extrema = findSampledExtrema([4, 2, 2, 4], 'minimum')
+    expect(extrema).toHaveLength(1)
+    expect(extrema[0].sampleIndex).toBe(1)
   })
 })

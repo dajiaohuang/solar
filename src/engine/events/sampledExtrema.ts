@@ -14,23 +14,28 @@ export type SampledExtremum = {
 export function findSampledExtrema(values: readonly number[], mode: ExtremumMode): SampledExtremum[] {
   const extrema: SampledExtremum[] = []
   for (let index = 1; index < values.length - 1; index += 1) {
-    const before = values[index - 1]
-    const current = values[index]
-    const after = values[index + 1]
+    const plateauStart = index
+    let plateauEnd = index
+    while (plateauEnd + 1 < values.length - 1 && values[plateauEnd + 1] === values[plateauStart]) plateauEnd += 1
+    const sampleIndex = Math.floor((plateauStart + plateauEnd) / 2)
+    const before = values[plateauStart - 1]
+    const current = values[sampleIndex]
+    const after = values[plateauEnd + 1]
     if (![before, current, after].every(Number.isFinite)) continue
 
     const isMinimum = current <= before && current <= after && (current < before || current < after)
     const isMaximum = current >= before && current >= after && (current > before || current > after)
     if ((mode === 'minimum' && !isMinimum) || (mode === 'maximum' && !isMaximum)) continue
 
-    const curvature = before - 2 * current + after
+    const curvature = plateauStart === plateauEnd ? before - 2 * current + after : 0
     const hasExpectedCurvature = mode === 'minimum' ? curvature > 0 : curvature < 0
     const candidateOffset = hasExpectedCurvature ? (before - after) / (2 * curvature) : 0
     const sampleOffset = Number.isFinite(candidateOffset) && Math.abs(candidateOffset) <= 1
       ? candidateOffset
       : 0
     const refinedValue = current - 0.25 * (before - after) * sampleOffset
-    extrema.push({ sampleIndex: index, sampleOffset, value: refinedValue })
+    extrema.push({ sampleIndex, sampleOffset, value: refinedValue })
+    index = plateauEnd
   }
   return extrema
 }
@@ -50,14 +55,15 @@ export function extremumJulianDay(
 export type RefinedExtremum = {
   julianDay: number
   value: number
-  estimatedTimingErrorDays: number
+  numericalRefinementHalfWidthDays: number
   iterations: number
 }
 
 /**
  * Refines a coarse candidate bracket and re-evaluates the physical model at
  * every candidate time. The remaining bracket width is a conservative timing
- * error estimate for this exploratory result.
+ * numerical refinement interval for this exploratory result. It is not an
+ * estimate of physical prediction uncertainty.
  */
 export function refineBracketedExtremum(
   startJulianDay: number,
@@ -95,7 +101,7 @@ export function refineBracketedExtremum(
   return {
     julianDay,
     value: evaluate(julianDay),
-    estimatedTimingErrorDays: (right - left) / 2,
+    numericalRefinementHalfWidthDays: (right - left) / 2,
     iterations: boundedIterations,
   }
 }

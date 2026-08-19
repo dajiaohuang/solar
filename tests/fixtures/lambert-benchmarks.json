@@ -1,0 +1,14 @@
+{
+  "source": "Classical universal-variable Lambert benchmark (Vallado/Curtis)",
+  "cases": [
+    {
+      "name": "three-dimensional 3600-second transfer",
+      "departurePositionKm": [5000, 10000, 2100],
+      "arrivalPositionKm": [-14600, 2500, 7000],
+      "timeOfFlightSeconds": 3600,
+      "gravitationalParameterKm3S2": 398600,
+      "expectedDepartureVelocityKmS": [-5.9925, 1.9254, 3.2456],
+      "expectedArrivalVelocityKmS": [-3.3125, -4.1966, -0.3853]
+    }
+  ]
+}

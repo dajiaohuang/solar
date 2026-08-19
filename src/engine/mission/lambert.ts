@@ -23,6 +23,22 @@ export type LambertSolution = {
   iterations: number
 }
 
+export type LambertFailureCode = 'invalid-input' | 'singular-geometry' | 'no-solution' | 'non-convergence' | 'singular-coefficient' | 'unknown'
+
+export class LambertError extends RangeError {
+  readonly code: Exclude<LambertFailureCode, 'unknown'>
+
+  constructor(code: Exclude<LambertFailureCode, 'unknown'>, message: string) {
+    super(message)
+    this.name = 'LambertError'
+    this.code = code
+  }
+}
+
+export function classifyLambertFailure(error: unknown): LambertFailureCode {
+  return error instanceof LambertError ? error.code : 'unknown'
+}
+
 function stumpffC(z: number) {
   if (z > 1e-8) {
     const root = Math.sqrt(z)
@@ -68,7 +84,7 @@ export function solveLambertUniversal(params: {
   const r1 = vector3Magnitude(r1Vector)
   const r2 = vector3Magnitude(r2Vector)
   if (r1 <= 0 || r2 <= 0 || timeOfFlightDays <= 0 || gravitationalParameter <= 0) {
-    throw new RangeError('Lambert inputs require positive radii, time of flight, and gravitational parameter')
+    throw new LambertError('invalid-input', 'Lambert inputs require positive radii, time of flight, and gravitational parameter')
   }
 
   const cosTransfer = Math.max(-1, Math.min(1, dotVector3(r1Vector, r2Vector) / (r1 * r2)))
@@ -79,7 +95,7 @@ export function solveLambertUniversal(params: {
   }
   const denominator = 1 - cosTransfer
   if (Math.abs(sinTransfer) < 1e-12 || denominator < 1e-12) {
-    throw new RangeError('Lambert geometry is singular for collinear endpoint vectors')
+    throw new LambertError('singular-geometry', 'Lambert geometry is singular for collinear endpoint vectors')
   }
 
   const aParameter = sinTransfer * Math.sqrt(r1 * r2 / denominator)
@@ -142,7 +158,7 @@ export function solveLambertUniversal(params: {
       previous = current
     }
     if (!found) {
-      throw new RangeError('No zero-revolution Lambert solution was found for this geometry and flight time')
+      throw new LambertError('no-solution', 'No zero-revolution Lambert solution was found for this geometry and flight time')
     }
   }
 
@@ -168,13 +184,13 @@ export function solveLambertUniversal(params: {
   }
 
   if (!Number.isFinite(y) || y <= 0) {
-    throw new RangeError('Lambert iteration did not converge to a physical transfer')
+    throw new LambertError('non-convergence', 'Lambert iteration did not converge to a physical transfer')
   }
   const f = 1 - y / r1
   const g = aParameter * Math.sqrt(y / gravitationalParameter)
   const gDot = 1 - y / r2
   if (Math.abs(g) < 1e-12) {
-    throw new RangeError('Lambert solution has a singular Lagrange g coefficient')
+    throw new LambertError('singular-coefficient', 'Lambert solution has a singular Lagrange g coefficient')
   }
 
   return {
@@ -237,6 +253,7 @@ export type PorkchopPoint = {
   arrivalVInfinityKmS: number
   totalVInfinityKmS: number
   feasible: boolean
+  failureCode?: LambertFailureCode
 }
 
 export function computePorkchopGrid(params: {
@@ -275,7 +292,7 @@ export function computePorkchopGrid(params: {
           totalVInfinityKmS: solution.departureVInfinityKmS + solution.arrivalVInfinityKmS,
           feasible: true,
         })
-      } catch {
+      } catch (error) {
         points.push({
           departureJulianDay,
           arrivalJulianDay,
@@ -283,6 +300,7 @@ export function computePorkchopGrid(params: {
           arrivalVInfinityKmS: Number.NaN,
           totalVInfinityKmS: Number.NaN,
           feasible: false,
+          failureCode: classifyLambertFailure(error),
         })
       }
     }

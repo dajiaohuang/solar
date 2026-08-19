@@ -1,0 +1,14 @@
+{
+  "source": "JPL Horizons DE441, target Earth (399), center Sun (10), geometric ecliptic J2000 vectors",
+  "queryUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27399%27&OBJ_DATA=%27NO%27&MAKE_EPHEM=%27YES%27&EPHEM_TYPE=%27VECTORS%27&CENTER=%27500%4010%27&START_TIME=%272024-01-02%27&STOP_TIME=%272024-01-05%27&STEP_SIZE=%2715%20m%27&VEC_TABLE=%272%27&OUT_UNITS=%27AU-D%27",
+  "events": [
+    {
+      "bodyId": "earth",
+      "kind": "perihelion",
+      "julianDayTdb": 2460312.53125,
+      "distanceAu": 0.9833069935590742,
+      "timeToleranceDays": 3,
+      "distanceToleranceAu": 0.002
+    }
+  ]
+}

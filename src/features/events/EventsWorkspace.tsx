@@ -10,9 +10,10 @@ import type { EventKind } from '../../workers/conjunction.worker'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { catalogStore } from '../../state/catalog-store'
 import { jplApproxWindowWarning } from '../../engine/ephemeris/modelValidity'
+import { adaptiveEventSampleCount } from '../../engine/events/eventSampling'
 
 const ALL_KINDS: EventKind[] = ['close-approach', 'conjunction', 'opposition', 'perihelion', 'aphelion']
-const EVENT_ALGORITHM_VERSION = 'event-search-v2'
+const EVENT_ALGORITHM_VERSION = 'event-search-v3'
 
 function download(name: string, content: string, type: string) {
   const url = URL.createObjectURL(new Blob([content], { type }))
@@ -34,7 +35,7 @@ export function EventsWorkspace() {
   const analysisBodies = useMemo(() => selectedBodies.filter((body) => body.id !== simulation.referenceId).slice(0, 48), [selectedBodies, simulation.referenceId])
   const contractCenter = analysis.lastRun?.centerJulianDay ?? clock.julianDay
   const contractWindow = analysis.lastRun?.windowDays ?? windowDays
-  const contractSamples = analysis.lastRun?.sampleCount ?? 240
+  const contractSamples = adaptiveEventSampleCount(analysis.lastRun?.bodies ?? analysisBodies, contractWindow, analysis.lastRun?.sampleCount)
   const sampleIntervalDays = contractWindow / Math.max(contractSamples - 1, 1)
   const validityWarning = jplApproxWindowWarning(
     contractCenter - contractWindow / 2,
@@ -45,7 +46,7 @@ export function EventsWorkspace() {
     generatedAt: new Date().toISOString(),
     datasetVersion: catalog.datasetVersion !== 'unavailable' ? catalog.datasetVersion : catalog.requestedDatasetVersion,
     algorithmVersion: EVENT_ALGORITHM_VERSION,
-    model: 'sampled-two-body-local-refinement-v2',
+    model: 'sampled-two-body-local-refinement-v3',
     inputs: analysis.lastRun ? {
       bodyIds: analysis.lastRun.bodies.map((body) => body.id),
       referenceId: analysis.lastRun.referenceId,
@@ -90,7 +91,7 @@ export function EventsWorkspace() {
           uiActions.navigate('explorer')
         }}>
           <time>{formatJulianDayAsDate(event.julianDay)}</time><i className={`event-${event.kind}`} />
-          <div><strong>{event.kind.replace('-', ' ')}</strong><span>{event.bodyAName}{event.bodyBName ? ` ↔ ${event.bodyBName}` : ''}</span><small>{event.value.toFixed(event.unit === 'AU' ? 5 : 2)} {event.unit} · ±{event.estimatedTimingErrorDays.toFixed(4)} d</small></div>
+          <div><strong>{event.kind.replace('-', ' ')}</strong><span>{event.bodyAName}{event.bodyBName ? ` ↔ ${event.bodyBName}` : event.centralBodyName ? ` · ${event.centralBodyName}-centered` : ''}</span><small>{event.value.toFixed(event.unit === 'AU' ? 5 : 2)} {event.unit} · numerical interval ±{event.numericalRefinementHalfWidthDays.toFixed(4)} d · physical uncertainty not estimated</small></div>
         </button>)}</div>
       </section>
 
@@ -98,10 +99,10 @@ export function EventsWorkspace() {
         <div className="section-kicker">ANALYSIS CONTRACT</div>
         <dl><div><dt>{t('model')}</dt><dd>Coarse scan + local two-body re-propagation</dd></div><div><dt>{t('orbitEpoch')}</dt><dd>Per-object osculating epoch</dd></div><div><dt>{t('window')}</dt><dd>JD {(contractCenter - contractWindow / 2).toFixed(2)} — {(contractCenter + contractWindow / 2).toFixed(2)}</dd></div><div><dt>Sampling</dt><dd>{contractSamples} samples · {sampleIntervalDays.toFixed(4)} d interval</dd></div></dl>
         {validityWarning && <div className="error-banner">{validityWarning}</div>}
-        <p className="fine-print">A coarse grid identifies non-endpoint candidates; each bracket is refined and positions are propagated again at the refined Julian Day. Reported bracket error remains exploratory, not a certified prediction.</p>
+        <p className="fine-print">A cadence adapted to orbital and relative angular rates identifies non-endpoint candidates; each bracket is refined and positions are propagated again at the refined Julian Day. The numerical interval is not a physical prediction uncertainty, which is not estimated.</p>
         <div className="export-actions"><button disabled={!analysis.events.length} onClick={() => download('solar-atlas-events.json', JSON.stringify({ ...exportMetadata, events: analysis.events }, null, 2), 'application/json')}>{t('exportJson')}</button><button disabled={!analysis.events.length} onClick={() => {
-          const header = 'datasetVersion,algorithmVersion,kind,bodyA,bodyB,julianDay,value,unit,model,sampleIntervalDays,estimatedTimingErrorDays\n'
-          const rows = analysis.events.map((event) => [exportMetadata.datasetVersion ?? '', EVENT_ALGORITHM_VERSION, event.kind, event.bodyAName, event.bodyBName ?? '', event.julianDay, event.value, event.unit, event.model, event.sampleIntervalDays, event.estimatedTimingErrorDays].map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n')
+          const header = 'datasetVersion,algorithmVersion,kind,bodyA,bodyB,centralBodyId,julianDay,value,unit,model,sampleIntervalDays,numericalRefinementHalfWidthDays,physicalPredictionUncertainty\n'
+          const rows = analysis.events.map((event) => [exportMetadata.datasetVersion ?? '', EVENT_ALGORITHM_VERSION, event.kind, event.bodyAName, event.bodyBName ?? '', event.centralBodyId ?? '', event.julianDay, event.value, event.unit, event.model, event.sampleIntervalDays, event.numericalRefinementHalfWidthDays, event.physicalPredictionUncertainty].map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n')
           download('solar-atlas-events.csv', header + rows, 'text/csv')
         }}>{t('exportCsv')}</button></div>
       </aside>

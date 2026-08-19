@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CelestialBody } from '../types'
+import { adaptiveEventSampleCount } from '../engine/events/eventSampling'
 import type {
   AnalysisEvent,
   EventAnalysisRequest,
@@ -44,7 +45,7 @@ export function eventAnalysisCacheKey(params: RunEventAnalysisParams) {
     windowDays: params.windowDays,
     thresholdAU: params.thresholdAU,
     eventKinds: [...params.eventKinds].sort(),
-    sampleCount: params.sampleCount ?? 240,
+    sampleCount: adaptiveEventSampleCount(params.bodies, params.windowDays, params.sampleCount),
   })
 }
 

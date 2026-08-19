@@ -7,9 +7,10 @@ import {
   vector3Magnitude,
 } from '../lib/ephemeris'
 import { findSampledExtrema, refineBracketedExtremum, type ExtremumMode } from '../engine/events/sampledExtrema'
+import { adaptiveEventSampleCount } from '../engine/events/eventSampling'
 import type { BodyId, CelestialBody, Vector3 } from '../types'
 
-export type EventKind = 'close-approach' | 'conjunction' | 'opposition' | 'perihelion' | 'aphelion'
+export type EventKind = 'close-approach' | 'conjunction' | 'opposition' | 'perihelion' | 'aphelion' | 'periapsis' | 'apoapsis'
 
 export type EventAnalysisRequest = {
   type: 'run'
@@ -32,12 +33,15 @@ export type AnalysisEvent = {
   bodyAName: string
   bodyBId?: BodyId
   bodyBName?: string
+  centralBodyId?: BodyId
+  centralBodyName?: string
   value: number
   unit: 'AU' | 'deg'
   julianDay: number
-  model: 'sampled-two-body-local-refinement-v2'
+  model: 'sampled-two-body-local-refinement-v3'
   sampleIntervalDays: number
-  estimatedTimingErrorDays: number
+  numericalRefinementHalfWidthDays: number
+  physicalPredictionUncertainty: 'not-estimated'
   refinementIterations: number
 }
 
@@ -72,9 +76,11 @@ function angleDeg(a: Vector3, b: Vector3) {
 async function runAnalysis(request: EventAnalysisRequest) {
   activeRequestId = request.requestId
   const bodiesById = new Map<BodyId, CelestialBody>(request.resolutionBodies.map((body) => [body.id, body]))
-  const sampleCount = Math.max(40, Math.min(request.sampleCount ?? 240, 720))
+  const sampleCount = adaptiveEventSampleCount(request.bodies, request.windowDays, request.sampleCount)
   const startJulianDay = request.centerJulianDay - request.windowDays / 2
   const positions = new Map<BodyId, Vector3[]>(request.bodies.map((body) => [body.id, []]))
+  const centralBodyIds = new Set(request.bodies.filter((body) => body.id !== 'sun').map((body) => body.parentId ?? 'sun'))
+  const centralPositions = new Map<BodyId, Vector3[]>([...centralBodyIds].map((bodyId) => [bodyId, []]))
   const referencePositions: Vector3[] = []
   const julianDays: number[] = []
   const sampleIntervalDays = request.windowDays / Math.max(sampleCount - 1, 1)
@@ -90,7 +96,8 @@ async function runAnalysis(request: EventAnalysisRequest) {
       value: refined.value,
       julianDay: refined.julianDay,
       sampleIntervalDays,
-      estimatedTimingErrorDays: refined.estimatedTimingErrorDays,
+      numericalRefinementHalfWidthDays: refined.numericalRefinementHalfWidthDays,
+      physicalPredictionUncertainty: 'not-estimated' as const,
       refinementIterations: refined.iterations,
     }
   }
@@ -105,6 +112,7 @@ async function runAnalysis(request: EventAnalysisRequest) {
     julianDays.push(jd)
     referencePositions.push(resolve(request.referenceId))
     for (const body of request.bodies) positions.get(body.id)?.push(resolve(body.id))
+    for (const centralBodyId of centralBodyIds) centralPositions.get(centralBodyId)?.push(resolve(centralBodyId))
     if (sample % 12 === 0) {
       workerScope.postMessage({
         type: 'progress',
@@ -143,7 +151,7 @@ async function runAnalysis(request: EventAnalysisRequest) {
         bodyAName: bodyA.name,
         bodyBId: bodyB.id,
         bodyBName: bodyB.name,
-        model: 'sampled-two-body-local-refinement-v2' as const,
+        model: 'sampled-two-body-local-refinement-v3' as const,
       }
       if (request.eventKinds.includes('close-approach')) {
         for (const extremum of findSampledExtrema(distances, 'minimum')) {
@@ -193,34 +201,37 @@ async function runAnalysis(request: EventAnalysisRequest) {
     }
   }
 
-  if (request.eventKinds.includes('perihelion') || request.eventKinds.includes('aphelion')) {
-    const sunTrack = request.bodies.some((body) => body.id === 'sun')
-      ? positions.get('sun') ?? []
-      : julianDays.map((jd) => createBodyPositionResolver(bodiesById, jd)('sun'))
+  if (request.eventKinds.some((kind) => ['perihelion', 'aphelion', 'periapsis', 'apoapsis'].includes(kind))) {
     for (const body of request.bodies) {
       if (body.id === 'sun') continue
+      const centralBodyId = body.parentId ?? 'sun'
+      const centralBody = bodiesById.get(centralBodyId)
+      const centralTrack = centralPositions.get(centralBodyId) ?? []
       const track = positions.get(body.id) ?? []
       const radii: number[] = []
       for (let sample = 0; sample < sampleCount; sample += 1) {
-        radii.push(vector3Magnitude(subtractVector3(track[sample], sunTrack[sample])))
+        radii.push(vector3Magnitude(subtractVector3(track[sample], centralTrack[sample])))
       }
-      const base = { bodyAId: body.id, bodyAName: body.name, model: 'sampled-two-body-local-refinement-v2' as const }
-      if (request.eventKinds.includes('perihelion')) {
+      const base = {
+        bodyAId: body.id, bodyAName: body.name, centralBodyId, centralBodyName: centralBody?.name ?? centralBodyId,
+        model: 'sampled-two-body-local-refinement-v3' as const,
+      }
+      if (request.eventKinds.includes('perihelion') || request.eventKinds.includes('periapsis')) {
         for (const extremum of findSampledExtrema(radii, 'minimum')) {
           const refined = refine(extremum.sampleIndex, 'minimum', (julianDay) => {
             const resolve = createBodyPositionResolver(bodiesById, julianDay)
-            return vector3Magnitude(subtractVector3(resolve(body.id), resolve('sun')))
+            return vector3Magnitude(subtractVector3(resolve(body.id), resolve(centralBodyId)))
           })
-          events.push({ ...base, kind: 'perihelion', unit: 'AU', ...refined })
+          events.push({ ...base, kind: body.parentId ? 'periapsis' : 'perihelion', unit: 'AU', ...refined })
         }
       }
-      if (request.eventKinds.includes('aphelion')) {
+      if (request.eventKinds.includes('aphelion') || request.eventKinds.includes('apoapsis')) {
         for (const extremum of findSampledExtrema(radii, 'maximum')) {
           const refined = refine(extremum.sampleIndex, 'maximum', (julianDay) => {
             const resolve = createBodyPositionResolver(bodiesById, julianDay)
-            return vector3Magnitude(subtractVector3(resolve(body.id), resolve('sun')))
+            return vector3Magnitude(subtractVector3(resolve(body.id), resolve(centralBodyId)))
           })
-          events.push({ ...base, kind: 'aphelion', unit: 'AU', ...refined })
+          events.push({ ...base, kind: body.parentId ? 'apoapsis' : 'aphelion', unit: 'AU', ...refined })
         }
       }
     }

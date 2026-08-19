@@ -74,6 +74,13 @@ export function MissionWorkspace() {
     const arrivalMeanMotion = Math.sqrt(0.0002959122082855911 / arrivalRadius ** 3)
     return { actual, required: normalizeDegrees(180 - arrivalMeanMotion * hohmann.transferTimeDays * 180 / Math.PI) }
   }, [arrivalBody, arrivalId, bodiesById, departureId, departureJd, hohmann])
+  const porkchopFailures = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const point of porkchop?.points ?? []) {
+      if (!point.feasible) counts.set(point.failureCode ?? 'unknown', (counts.get(point.failureCode ?? 'unknown') ?? 0) + 1)
+    }
+    return [...counts.entries()].sort(([, left], [, right]) => right - left)
+  }, [porkchop])
 
   function computeTransfer() {
     setTransferError(null)
@@ -137,7 +144,7 @@ export function MissionWorkspace() {
             <div className="metric-grid"><Metric label="arrival v∞" value={`${lambert.arrivalVInfinityKmS.toFixed(3)} km/s`} /><Metric label="C3" value={`${lambert.c3Km2S2.toFixed(2)} km²/s²`} /><Metric label={t('timeOfFlight')} value={`${lambert.timeOfFlightDays.toFixed(1)} d`} /><Metric label="solver" value={`${lambert.iterations} iterations`} /></div>
           </> : <EmptyResult />}</article>
         </div>
-        <article className="porkchop-module glass-panel"><div className="module-heading"><span>{t('porkchop')}</span><button disabled={!hohmann || porkchopStatus === 'running'} onClick={computePorkchop}>{porkchopStatus === 'running' ? t('loading') : t('computePorkchop')}</button></div>{porkchop ? <PorkchopCanvas {...porkchop} /> : <div className="porkchop-placeholder"><div className="contours" /><p>Departure window × flight time · color = departure + arrival v∞</p></div>}</article>
+        <article className="porkchop-module glass-panel"><div className="module-heading"><span>{t('porkchop')}</span><button disabled={!hohmann || porkchopStatus === 'running'} onClick={computePorkchop}>{porkchopStatus === 'running' ? t('loading') : t('computePorkchop')}</button></div>{porkchop ? <><PorkchopCanvas {...porkchop} />{porkchopFailures.length > 0 && <p className="fine-print">Solver failures: {porkchopFailures.map(([code, count]) => `${code} ${count}`).join(' · ')}</p>}</> : <div className="porkchop-placeholder"><div className="contours" /><p>Departure window × flight time · color = departure + arrival v∞</p></div>}</article>
       </section>
 
       <aside className="mission-evidence glass-panel">
