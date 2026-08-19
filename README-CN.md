@@ -4,7 +4,9 @@
 
 [在线演示](https://dajiaohuang.github.io/solar/) · [English](./README.md)
 
-![Solar Atlas](./public/og-image.svg)
+当前预发布版本：**v0.8.0-beta.1** · [更新日志](./CHANGELOG.md) · [性能预算](./PERFORMANCE.md)
+
+![Solar Atlas](./public/readme-screenshot.png)
 
 Solar Atlas 把空间视图、轨道元素空间、时间事件与数据证据连接到同一个可复现工作台。它面向科学探索和教学，不是业务星历、近距离预警或航天导航产品。
 
@@ -16,7 +18,7 @@ Solar Atlas 把空间视图、轨道元素空间、时间事件与数据证据�
 - **事件实验室：** 显式、可取消的近距离、合、冲、近日点和远日点任务；进度、结果缓存、时间线跳转、CSV/JSON 导出。播放模拟时间不会自动重新计算。
 - **任务实验室：** 单位与方向正确的霍曼基线、相位角、通用变量 Lambert 解、出发/到达 `v∞`、C3 与 Worker 生成的 Porkchop 图。
 - **引导故事：** 逆行、参考系、Kirkwood gaps、木星特洛伊、NEO 分类、冥王星共振与旅行者时代等 JSON 场景。
-- **可复现链接：** URL 保存数据集版本、历元、参考系、天体集合、筛选器、语言与视图。
+- **可复现链接：** URL 记录数据集版本、历元、参考系、天体集合、筛选器、语言与视图；当前部署包含对应数据版本时可完整重放，否则保留原始版本并显示恢复入口。
 - **可安装网页应用：** 响应式移动端 Lite 布局、离线运行时缓存、Web App Manifest、社交分享元信息与路由代码分割。
 
 ## 快速开始
@@ -49,11 +51,11 @@ npm run data:full
 应用部署与数据发布是两个独立流程：
 
 ```text
-应用：lint → unit test → build → 部署指定的数据发布标签
+应用：校验固定数据 → lint → unit test → build → E2E → 部署
 
 数据：下载源快照 → SHA-256 → 解析 → 校验
    → Float64 分片 + 元数据/搜索/ID 索引
-   → 不可变 GitHub Release → 固定发布标签 → 部署
+   → 不可变 GitHub Release → 直接提交 pin 到 main → 显式触发部署
 ```
 
 每个 `public/data/asteroids/releases/<version>/` 都包含：
@@ -67,6 +69,10 @@ binary/*.bin
 meta/*.json
 search/*.json        # 词首、每万号段及临时编号年份索引
 lookup/*.json
+catalog-index.bin    # 仅含数值筛选字段的紧凑索引
+catalog-sample-*.bin # 桌面 30,000 / 移动端 8,000 条预计算样本
+catalog-sample-*.json
+catalog-summary.json
 ```
 
 数据包根目录的 `dataset-version.json` 只是指向当前不可变版本的小型指针。GitHub Pages 部署不会重新下载一个不断变化的 MPCORB 文件；它只使用 `.github/asteroid-dataset-tag` 中经过提交审计的固定发布资产，缺失或格式错误时部署会直接失败。
@@ -75,7 +81,7 @@ lookup/*.json
 
 ## 双分辨率架构
 
-- **Catalog Mode：** 专用 Worker 直接扫描二进制列，返回精确筛选总数，并只把有界分层 LOD 样本送回主线程用于 GPU points 与列表（桌面 30,000、移动端 8,000）；解码分片对象只保留在 8 项 LRU 中。
+- **Catalog Mode：** 首屏直接读取桌面 30,000 / 移动端 8,000 条预计算分层样本；精确数值筛选只在 Worker 中扫描一个紧凑索引，不下载全部名称与轨道分片；解码详情分片只保留在 8 项 LRU 中。
 - **Focus Mode：** 从目录选择中取前 160 个对象绘制轨迹、查看属性并参与有界分析；目录级全选保存“数据版本 + 筛选表达式 + 总数”，不会枚举全部 ID。
 
 绝对星等筛选明确区分“全部 / 仅已知 / 仅未知”。H 未知值不会被虚构为数值，`a–H` 数值散点图会排除这些对象。
@@ -86,7 +92,7 @@ lookup/*.json
 
 | 功能 | 模型与范围 |
 | --- | --- |
-| 主要行星 | JPL 近似平均轨道根数与长期变化率，适合大尺度可视化 |
+| 主要行星 | JPL 近似平均轨道根数与长期变化率，有效期 1800–2050；越界日期明确提示外推 |
 | 卫星与矮行星 | 标为 `curated-approx` 的取整教学根数，并递归叠加父天体 |
 | MPCORB / SBDB | 只接受 `0 ≤ e < 1` 的椭圆密切根数，明确拒绝抛物线/双曲线数据 |
 | 月相 | 日—地—月相位角与有符号地心日月距角 |
@@ -94,7 +100,7 @@ lookup/*.json
 | Laplace SOI | `a(m/M)^(2/5)`，不会再与希尔球混称 |
 | 霍曼转移 | 共面圆轨道端点、瞬时脉冲、太阳二体模型；输出有符号 km/s |
 | Lambert | 使用近似端点位置的零圈通用变量太阳二体解 |
-| 事件分析 | 有界网格上的非端点局部距离/角度极值，并用三点抛物线插值细化；只用于探索，不是认证预报 |
+| 事件分析 | 粗扫非端点候选后做局部细化，并在细化后的 Julian Day 重新执行二体传播；导出采样间隔与时间误差；只用于探索，不是认证预报 |
 | 航天器轨迹 | 按真实任务里程碑定时的示意折线，与 Horizons/传播星历分开标注 |
 
 JPL SBDB 严格读取官方结构 `orbit.elements[]` 中的 `name/value/units/sigma`，不会从不存在的扁平字段生成默认轨道。
@@ -113,6 +119,7 @@ npm run test:unit
 npm run test:e2e
 npm run build
 npm run ci
+npm run benchmark:catalog
 ```
 
 单元测试覆盖儒略日、开普勒传播、父天体/参考系、霍曼单位与方向、月相几何、Hill/SOI 定义、严格 JPL SBDB fixture、局部事件极值检测、Lambert 圆轨道弧、版本化深链接、MPCORB 定长解析、manifest/缓存隔离、百万行有界目录扫描，以及微型数据集发布/哈希复核。Playwright 在桌面和移动 Chromium 上覆盖核心路由、可复现故事、目录筛选与版本恢复、任务 Worker、Service Worker 缓存隔离与 2D/3D 渲染。

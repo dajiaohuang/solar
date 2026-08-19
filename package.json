@@ -1,7 +1,7 @@
 {
   "name": "solar",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.8.0-beta.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,7 +16,8 @@
     "preprocess:asteroids": "node --max-old-space-size=4096 ./scripts/preprocess-asteroids.mjs",
     "data:lite": "cross-env MPCORB_MODE=lite MPCORB_LITE_MAX_NUMBER=30000 node ./scripts/preprocess-asteroids.mjs",
     "data:full": "cross-env MPCORB_MODE=full node --max-old-space-size=4096 ./scripts/preprocess-asteroids.mjs",
-    "validate:data": "node ./scripts/validate-dataset.mjs"
+    "validate:data": "node ./scripts/validate-dataset.mjs",
+    "benchmark:catalog": "node ./scripts/benchmark-catalog-index.mjs"
   },
   "dependencies": {
     "@types/three": "^0.184.0",
