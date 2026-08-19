@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 
 const execFileAsync = promisify(execFile)
 
-function fixedWidthRecord(designation: string, label: string, semiMajorAxisAU: number) {
+function fixedWidthRecord(designation: string, label: string, semiMajorAxisAU: number, flags = '0000') {
   const characters = Array(194).fill(' ')
   const put = (start: number, value: string) => value.split('').forEach((character, index) => { characters[start + index] = character })
   put(0, designation.padStart(7, '0').slice(-7))
@@ -20,7 +20,7 @@ function fixedWidthRecord(designation: string, label: string, semiMajorAxisAU: n
   put(70, '0.0758000')
   put(80, '0.214000000')
   put(92, semiMajorAxisAU.toFixed(7).padStart(11, ' '))
-  put(161, '0000')
+  put(161, flags)
   put(166, label.slice(0, 28))
   return characters.join('')
 }
@@ -36,8 +36,8 @@ describe('immutable asteroid dataset publisher', () => {
         'MPCORB integration fixture',
         '---------------------------',
         fixedWidthRecord('0001001', '1001 Atlas Alpha', 2.31),
-        fixedWidthRecord('0001002', '1002 Atlas Beta', 2.72),
-        fixedWidthRecord('0001003', '1003 Atlas Gamma', 3.14),
+        fixedWidthRecord('0001002', '1002 Atlas Beta', 2.72, '0005'),
+        fixedWidthRecord('0001003', '1003 Atlas Gamma', 3.14, '0007'),
         '',
       ].join('\n')
       await writeFile(sourcePath, source)
@@ -58,7 +58,15 @@ describe('immutable asteroid dataset publisher', () => {
       const checksums = JSON.parse(await readFile(resolve(releasePath, 'checksums.json'), 'utf8'))
 
       expect(pointer).toMatchObject({ mode: 'lite', contentSha256: manifest.contentSha256 })
-      expect(manifest).toMatchObject({ schemaVersion: 2, totalCount: 3, chunkCount: 2, chunkSize: 2, format: 'binary-v1' })
+      expect(manifest).toMatchObject({
+        schemaVersion: 2,
+        parserVersion: '2.1.0',
+        totalCount: 3,
+        chunkCount: 2,
+        chunkSize: 2,
+        format: 'binary-v1',
+        categoryCounts: { MBA: 1, MCR: 1, OTHER: 1 },
+      })
       expect(manifest.selectionPolicy).toMatchObject({ type: 'permanent-number-through-plus-featured', maxPermanentNumber: 30000 })
       expect(manifest.contentSha256).toMatch(/^[a-f0-9]{64}$/)
       expect(validation).toMatchObject({ passed: true, validObjects: 3, parsedSourceObjects: 3, rejectedObjects: 0 })

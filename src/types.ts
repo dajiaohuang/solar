@@ -13,10 +13,11 @@ export type OrbitClassCode =
   | 'ATE'
   | 'AMO'
   | 'ATI'
+  | 'MCR'
   | 'HIL'
   | 'JTA'
   | 'HUN'
-  | 'other'
+  | 'OTHER'
   | string
 
 export type Vector2 = {

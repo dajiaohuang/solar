@@ -231,7 +231,8 @@ function filterChunkByOrbitClass(chunk: AsteroidRecord[], orbitClassCode: string
 function getOrbitClassName(code: OrbitClassCode) {
   const names: Record<string, string> = {
     MBA: 'Main-belt Asteroid', TNO: 'Trans-Neptunian Object', APO: 'Apollo',
-    ATE: 'Aten', AMO: 'Amor', ATI: 'Atira', HIL: 'Hilda', JTA: 'Jupiter Trojan', HUN: 'Hungaria',
+    ATE: 'Aten', AMO: 'Amor', ATI: 'Atira', MCR: 'Object with q < 1.665 AU',
+    HIL: 'Hilda', JTA: 'Jupiter Trojan', HUN: 'Hungaria', OTHER: 'Other or unknown orbit type',
   }
   return names[code] ?? 'Other small body'
 }

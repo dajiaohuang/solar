@@ -6,6 +6,7 @@ import {
   subtractVector3,
   vector3Magnitude,
 } from '../lib/ephemeris'
+import { extremumJulianDay, findSampledExtrema } from '../engine/events/sampledExtrema'
 import type { BodyId, CelestialBody, Vector3 } from '../types'
 
 export type EventKind = 'close-approach' | 'conjunction' | 'opposition' | 'perihelion' | 'aphelion'
@@ -34,7 +35,7 @@ export type AnalysisEvent = {
   value: number
   unit: 'AU' | 'deg'
   julianDay: number
-  model: 'sampled-two-body'
+  model: 'sampled-two-body-parabolic'
 }
 
 export type EventAnalysisResponse = {
@@ -107,29 +108,14 @@ async function runAnalysis(request: EventAnalysisRequest) {
       const bodyB = request.bodies[second]
       const trackA = positions.get(bodyA.id) ?? []
       const trackB = positions.get(bodyB.id) ?? []
-      let minDistance = Number.POSITIVE_INFINITY
-      let minDistanceIndex = 0
-      let minAngle = Number.POSITIVE_INFINITY
-      let minAngleIndex = 0
-      let maxAngle = Number.NEGATIVE_INFINITY
-      let maxAngleIndex = 0
+      const distances: number[] = []
+      const angles: number[] = []
       for (let sample = 0; sample < sampleCount; sample += 1) {
         const distance = vector3Magnitude(subtractVector3(trackA[sample], trackB[sample]))
-        if (distance < minDistance) {
-          minDistance = distance
-          minDistanceIndex = sample
-        }
+        distances.push(distance)
         const relativeA = subtractVector3(trackA[sample], referencePositions[sample])
         const relativeB = subtractVector3(trackB[sample], referencePositions[sample])
-        const angle = angleDeg(relativeA, relativeB)
-        if (Number.isFinite(angle) && angle < minAngle) {
-          minAngle = angle
-          minAngleIndex = sample
-        }
-        if (Number.isFinite(angle) && angle > maxAngle) {
-          maxAngle = angle
-          maxAngleIndex = sample
-        }
+        angles.push(angleDeg(relativeA, relativeB))
       }
 
       const base = {
@@ -137,16 +123,28 @@ async function runAnalysis(request: EventAnalysisRequest) {
         bodyAName: bodyA.name,
         bodyBId: bodyB.id,
         bodyBName: bodyB.name,
-        model: 'sampled-two-body' as const,
+        model: 'sampled-two-body-parabolic' as const,
       }
-      if (request.eventKinds.includes('close-approach') && minDistance <= request.thresholdAU) {
-        events.push({ ...base, kind: 'close-approach', value: minDistance, unit: 'AU', julianDay: julianDays[minDistanceIndex] })
+      if (request.eventKinds.includes('close-approach')) {
+        for (const extremum of findSampledExtrema(distances, 'minimum')) {
+          if (extremum.value <= request.thresholdAU) {
+            events.push({ ...base, kind: 'close-approach', value: extremum.value, unit: 'AU', julianDay: extremumJulianDay(julianDays, extremum) })
+          }
+        }
       }
-      if (request.eventKinds.includes('conjunction') && minAngle <= 2) {
-        events.push({ ...base, kind: 'conjunction', value: minAngle, unit: 'deg', julianDay: julianDays[minAngleIndex] })
+      if (request.eventKinds.includes('conjunction')) {
+        for (const extremum of findSampledExtrema(angles, 'minimum')) {
+          if (extremum.value <= 2) {
+            events.push({ ...base, kind: 'conjunction', value: extremum.value, unit: 'deg', julianDay: extremumJulianDay(julianDays, extremum) })
+          }
+        }
       }
-      if (request.eventKinds.includes('opposition') && maxAngle >= 178) {
-        events.push({ ...base, kind: 'opposition', value: maxAngle, unit: 'deg', julianDay: julianDays[maxAngleIndex] })
+      if (request.eventKinds.includes('opposition')) {
+        for (const extremum of findSampledExtrema(angles, 'maximum')) {
+          if (extremum.value >= 178) {
+            events.push({ ...base, kind: 'opposition', value: extremum.value, unit: 'deg', julianDay: extremumJulianDay(julianDays, extremum) })
+          }
+        }
       }
 
       processedPairs += 1
@@ -168,21 +166,20 @@ async function runAnalysis(request: EventAnalysisRequest) {
     for (const body of request.bodies) {
       if (body.id === 'sun') continue
       const track = positions.get(body.id) ?? []
-      let minRadius = Number.POSITIVE_INFINITY
-      let maxRadius = 0
-      let minIndex = 0
-      let maxIndex = 0
+      const radii: number[] = []
       for (let sample = 0; sample < sampleCount; sample += 1) {
-        const radius = vector3Magnitude(subtractVector3(track[sample], sunTrack[sample]))
-        if (radius < minRadius) { minRadius = radius; minIndex = sample }
-        if (radius > maxRadius) { maxRadius = radius; maxIndex = sample }
+        radii.push(vector3Magnitude(subtractVector3(track[sample], sunTrack[sample])))
       }
-      const base = { bodyAId: body.id, bodyAName: body.name, model: 'sampled-two-body' as const }
+      const base = { bodyAId: body.id, bodyAName: body.name, model: 'sampled-two-body-parabolic' as const }
       if (request.eventKinds.includes('perihelion')) {
-        events.push({ ...base, kind: 'perihelion', value: minRadius, unit: 'AU', julianDay: julianDays[minIndex] })
+        for (const extremum of findSampledExtrema(radii, 'minimum')) {
+          events.push({ ...base, kind: 'perihelion', value: extremum.value, unit: 'AU', julianDay: extremumJulianDay(julianDays, extremum) })
+        }
       }
       if (request.eventKinds.includes('aphelion')) {
-        events.push({ ...base, kind: 'aphelion', value: maxRadius, unit: 'AU', julianDay: julianDays[maxIndex] })
+        for (const extremum of findSampledExtrema(radii, 'maximum')) {
+          events.push({ ...base, kind: 'aphelion', value: extremum.value, unit: 'AU', julianDay: extremumJulianDay(julianDays, extremum) })
+        }
       }
     }
   }
