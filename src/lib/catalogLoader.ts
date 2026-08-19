@@ -5,6 +5,7 @@ import type {
   AsteroidRecord,
   AsteroidSectionCursor,
   BodyId,
+  CatalogSummary,
   CelestialBody,
   DatasetProvenance,
   DatasetVersion,
@@ -17,6 +18,7 @@ const searchBucketCache = new Map<string, Promise<AsteroidIndexEntry[]>>()
 const chunkCache = new Map<string, Promise<AsteroidRecord[]>>()
 const lookupCache = new Map<string, Promise<AsteroidIndexEntry[]>>()
 const sampleCache = new Map<string, Promise<AsteroidRecord[]>>()
+const summaryCache = new Map<string, Promise<CatalogSummary | null>>()
 const PERMANENT_NUMBER_BUCKET_SIZE = 10_000
 const MAX_SEARCH_BUCKET_CACHE_ENTRIES = 4
 export const MAX_CHUNK_CACHE_ENTRIES = 8
@@ -37,7 +39,7 @@ export function normalizeSearchText(value: string) {
     .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, ' ').trim()
 }
 
-export function getSearchBucketKey(searchText: string) {
+export function getSearchBucketKey(searchText: string, tokenPrefixLength = activeManifest?.searchIndex?.tokenPrefixLength ?? 1) {
   const packedExtended = searchText.trim().match(/^~([0-9A-Za-z]{4})/)
   if (packedExtended) return `packed-tilde-${packedExtended[1][0].toLowerCase()}`
   const normalized = normalizeSearchText(searchText)
@@ -49,7 +51,10 @@ export function getSearchBucketKey(searchText: string) {
   }
   const permanentNumber = normalized.match(/^(\d+)(?:\s|$)/)?.[1]
   if (permanentNumber) return getPermanentNumberBucketKey(Number(permanentNumber))
-  if (/[a-z]/.test(normalized[0])) return normalized[0]
+  if (/[a-z]/.test(normalized[0])) {
+    const token = normalized.split(' ')[0]
+    return tokenPrefixLength >= 2 && token.length >= 2 ? `prefix-${token.slice(0, tokenPrefixLength)}` : normalized[0]
+  }
   return 'misc'
 }
 
@@ -84,6 +89,7 @@ export function resetDatasetLoader() {
   chunkCache.clear()
   lookupCache.clear()
   sampleCache.clear()
+  summaryCache.clear()
 }
 
 export async function loadAsteroidManifest(requestedVersion?: string) {
@@ -164,6 +170,12 @@ export function loadAsteroidSearchBucket(bucketKey: string) {
   const promise = fetchJson<AsteroidIndexEntry[]>(
     `${activeReleaseRoot}/search/${encodeURIComponent(normalizedBucket)}.json`,
   ).catch(async () => {
+    if (normalizedBucket.startsWith('prefix-')) {
+      const legacyInitial = normalizedBucket.slice('prefix-'.length)[0]
+      if (legacyInitial) {
+        return fetchJson<AsteroidIndexEntry[]>(`${activeReleaseRoot}/search/${encodeURIComponent(legacyInitial)}.json`).catch(() => [])
+      }
+    }
     const legacyBucket = getLegacyNumericBucketKey(normalizedBucket)
     if (!legacyBucket) return []
     return fetchJson<AsteroidIndexEntry[]>(
@@ -276,7 +288,7 @@ function idLookupBucket(id: string) {
 
 export async function loadAsteroidBodiesByIds(ids: BodyId[]) {
   const asteroidIds = [...new Set(ids.filter((id) => id.startsWith('asteroid:')))]
-  if (!asteroidIds.length || !activeManifest || activeManifest.schemaVersion !== 2) return []
+  if (!asteroidIds.length || !activeManifest || (activeManifest.schemaVersion ?? 1) < 2) return []
   const groups = new Map<string, BodyId[]>()
   for (const id of asteroidIds) {
     const bucket = idLookupBucket(id)
@@ -332,6 +344,63 @@ export function loadAsteroidSample(manifest: AsteroidManifest, size: 'desktop' |
     sampleCache.set(cacheKey, promise)
   }
   return promise
+}
+
+export function loadCatalogSummary(manifest: AsteroidManifest) {
+  if (!manifest.summaryPath) return Promise.resolve<CatalogSummary | null>(null)
+  const cacheKey = `${manifest.version}:${manifest.summaryPath}`
+  let promise = summaryCache.get(cacheKey)
+  if (!promise) {
+    const root = manifest.releasePath ?? activeReleaseRoot
+    promise = fetchJson<CatalogSummary>(`${root}/${manifest.summaryPath}`).catch(() => null)
+    summaryCache.set(cacheKey, promise)
+  }
+  return promise
+}
+
+export async function loadAsteroidRecordsByLocators(manifest: AsteroidManifest, locators: Uint32Array) {
+  if (locators.length % 2 !== 0) throw new Error('Catalog locator array must contain chunk/row pairs')
+  const groups = new Map<number, { rowIndex: number; outputIndex: number }[]>()
+  for (let index = 0; index < locators.length; index += 2) {
+    const chunkIndex = locators[index]
+    const rowIndex = locators[index + 1]
+    if (chunkIndex >= manifest.chunkCount || rowIndex >= manifest.chunkSize) {
+      throw new Error(`Catalog locator is outside the declared dataset: ${chunkIndex}:${rowIndex}`)
+    }
+    groups.set(chunkIndex, [...(groups.get(chunkIndex) ?? []), { rowIndex, outputIndex: index / 2 }])
+  }
+  const records = new Array<AsteroidRecord>(locators.length / 2)
+  const queue = [...groups.entries()]
+  let queueIndex = 0
+  const hydrateNext = async () => {
+    while (queueIndex < queue.length) {
+      const [chunkIndex, requestedRows] = queue[queueIndex]
+      queueIndex += 1
+      const chunk = await loadAsteroidChunk(getChunkIdFromIndex(chunkIndex))
+      for (const { rowIndex, outputIndex } of requestedRows) {
+        const record = chunk[rowIndex]
+        if (!record) throw new Error(`Catalog locator does not resolve to a record: ${chunkIndex}:${rowIndex}`)
+        records[outputIndex] = record
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(4, queue.length) }, hydrateNext))
+  return records
+}
+
+export async function loadAsteroidSearchLocators(query: string, manifest: AsteroidManifest) {
+  if (!manifest.searchIndex?.locators) return null
+  const normalized = normalizeSearchText(query)
+  if (!normalized) return null
+  const entries = await loadAsteroidSearchBucket(getSearchBucketKey(query, manifest.searchIndex.tokenPrefixLength))
+  const matched = entries.filter((entry) => entry.searchKey.includes(normalized))
+  if (matched.some((entry) => !Number.isSafeInteger(entry.chunkIndex) || !Number.isSafeInteger(entry.rowIndex))) return null
+  const locators = new Uint32Array(matched.length * 2)
+  matched.forEach((entry, index) => {
+    locators[index * 2] = entry.chunkIndex!
+    locators[index * 2 + 1] = entry.rowIndex!
+  })
+  return locators
 }
 
 function getChunkIdFromIndex(index: number) {

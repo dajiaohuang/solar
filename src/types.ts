@@ -178,11 +178,18 @@ export type AsteroidIndexEntry = {
   shortLabel: string
   searchKey: string
   chunkId: string
+  chunkIndex?: number
+  rowIndex?: number
   orbitClassCode: OrbitClassCode
   orbitClassName: string
   absoluteMagnitude?: number
   isNeo: boolean
   isPha: boolean
+}
+
+export type CatalogLocator = {
+  chunkIndex: number
+  rowIndex: number
 }
 
 export type AsteroidRecord = AsteroidIndexEntry & {
@@ -212,6 +219,7 @@ export type AsteroidManifest = {
   contentSha256?: string
   parserVersion?: string
   parserCommit?: string
+  capabilities?: string[]
   selectionPolicy?: DatasetSelectionPolicy
   orbitModel?: string
   precision?: string
@@ -235,12 +243,25 @@ export type AsteroidManifest = {
     permanentNumberBucketSize: number
     provisionalYearBuckets: boolean
     tokenInitialBuckets: boolean
+    tokenPrefixLength?: number
+    locators?: boolean
   }
   releasePath?: string
   lookupBucketCount?: number
   bucketCounts: Record<string, number>
   categoryCounts: Record<string, number>
   featured: AsteroidIndexEntry[]
+}
+
+export type CatalogSummary = {
+  schemaVersion: number
+  datasetMode: DatasetMode
+  totalCount: number
+  categoryCounts: Record<string, number>
+  magnitudeKnownCount?: number
+  magnitudeUnknownCount?: number
+  numericRanges: Record<string, [number, number]>
+  sourceSha256: string
 }
 
 export type CatalogSampleArtifact = {
@@ -256,6 +277,12 @@ export type CatalogScanWorkerRequest = {
   manifest: AsteroidManifest
   filters: CatalogFilters
   sampleLimit: number
+  candidateLocators?: Uint32Array
+}
+
+export type CatalogScanWorkerCancelRequest = {
+  type: 'cancel'
+  requestId: number
 }
 
 export type CatalogScanWorkerResponse = {
@@ -265,6 +292,7 @@ export type CatalogScanWorkerResponse = {
   progress?: number
   total?: number
   records?: AsteroidRecord[]
+  locators?: Uint32Array
   error?: string
 }
 

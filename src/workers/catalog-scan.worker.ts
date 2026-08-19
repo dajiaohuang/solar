@@ -6,14 +6,27 @@ import { StratifiedCatalogSampler } from '../lib/catalogSampling'
 import type {
   AsteroidIndexEntry,
   AsteroidRecord,
+  CatalogLocator,
+  CatalogScanWorkerCancelRequest,
   CatalogScanWorkerRequest,
   CatalogScanWorkerResponse,
 } from '../types'
 
 const workerScope = self as DedicatedWorkerGlobalScope
+const compactIndexCache = new Map<string, Promise<ArrayBuffer>>()
+const cancelledRequests = new Set<number>()
+let activeRequestId = 0
 
 function chunkId(index: number) {
   return `chunk-${String(index).padStart(4, '0')}`
+}
+
+function yieldToWorker() {
+  return new Promise<void>((resolve) => setTimeout(resolve, 0))
+}
+
+function isCancelled(request: CatalogScanWorkerRequest) {
+  return cancelledRequests.has(request.requestId) || activeRequestId !== request.requestId
 }
 
 function binaryValues(metadata: AsteroidIndexEntry[], buffer: ArrayBuffer) {
@@ -23,20 +36,6 @@ function binaryValues(metadata: AsteroidIndexEntry[], buffer: ArrayBuffer) {
     throw new Error(`Binary asteroid shard has ${values.length} values; expected ${metadata.length * stride}`)
   }
   return values
-}
-
-function materializeRecord(entry: AsteroidIndexEntry, values: Float64Array, offset: number): AsteroidRecord {
-  return {
-    ...entry,
-    epochJd: values[offset],
-    semiMajorAxisAU: values[offset + 1],
-    eccentricity: values[offset + 2],
-    inclinationDeg: values[offset + 3],
-    ascendingNodeDeg: values[offset + 4],
-    argPeriapsisDeg: values[offset + 5],
-    meanAnomalyDeg: values[offset + 6],
-    meanMotionDegPerDay: values[offset + 7],
-  }
 }
 
 async function loadBinaryChunk(request: CatalogScanWorkerRequest, index: number) {
@@ -55,72 +54,89 @@ async function loadJsonChunk(request: CatalogScanWorkerRequest, index: number) {
   return fetchImmutableJson<AsteroidRecord[]>(`${root}/chunks/${id}.json`)
 }
 
-async function loadPrecomputedSample(request: CatalogScanWorkerRequest) {
-  const size = request.sampleLimit <= 8_000 ? 'mobile' : 'desktop'
-  const artifact = request.manifest.precomputedSamples?.[size]
-  if (!artifact) return []
-  const root = request.manifest.releasePath ?? `${import.meta.env.BASE_URL}data/asteroids`
-  const [metadata, buffer] = await Promise.all([
-    fetchImmutableJson<AsteroidIndexEntry[]>(`${root}/${artifact.metadataPath}`),
-    fetchImmutableArrayBuffer(`${root}/${artifact.binaryPath}`),
-  ])
-  const values = binaryValues(metadata, buffer)
-  return metadata.map((entry, index) => materializeRecord(entry, values, index * 8))
+function postLocatorResult(request: CatalogScanWorkerRequest, total: number, sampled: CatalogLocator[]) {
+  const locators = new Uint32Array(sampled.length * 2)
+  sampled.forEach((locator, index) => {
+    locators[index * 2] = locator.chunkIndex
+    locators[index * 2 + 1] = locator.rowIndex
+  })
+  workerScope.postMessage({
+    type: 'result', requestId: request.requestId, scanKey: request.scanKey,
+    progress: 1, total, locators,
+  } satisfies CatalogScanWorkerResponse, [locators.buffer])
 }
 
 async function scanCompactIndex(request: CatalogScanWorkerRequest) {
   const compactIndex = request.manifest.compactIndex
   if (!compactIndex) return false
   const root = request.manifest.releasePath ?? `${import.meta.env.BASE_URL}data/asteroids`
-  const [buffer, sample] = await Promise.all([
-    fetchImmutableArrayBuffer(`${root}/${compactIndex.path}`),
-    loadPrecomputedSample(request),
-  ])
+  const url = `${root}/${compactIndex.path}`
+  let promise = compactIndexCache.get(url)
+  if (!promise) {
+    promise = fetchImmutableArrayBuffer(url)
+    compactIndexCache.set(url, promise)
+  }
+  const buffer = await promise
   if (buffer.byteLength !== compactIndex.count * compactIndex.strideBytes) {
+    compactIndexCache.delete(url)
     throw new Error(`Compact catalog index has ${buffer.byteLength} bytes; expected ${compactIndex.count * compactIndex.strideBytes}`)
   }
-  const matches = createCatalogFieldMatcher(request.filters)
+
+  const filters = request.candidateLocators ? { ...request.filters, query: '' } : request.filters
+  const matches = createCatalogFieldMatcher(filters)
+  const sampler = new StratifiedCatalogSampler<CatalogLocator>(Math.max(1, request.sampleLimit))
   const view = new DataView(buffer)
+  const candidateCount = request.candidateLocators ? request.candidateLocators.length / 2 : compactIndex.count
+  const progressInterval = Math.max(1, Math.floor(candidateCount / 100))
   let total = 0
-  const progressInterval = Math.max(1, Math.floor(compactIndex.count / 100))
-  for (let index = 0; index < compactIndex.count; index += 1) {
-    const offset = index * compactIndex.strideBytes
+
+  for (let candidateIndex = 0; candidateIndex < candidateCount; candidateIndex += 1) {
+    const chunkIndex = request.candidateLocators
+      ? request.candidateLocators[candidateIndex * 2]
+      : Math.floor(candidateIndex / request.manifest.chunkSize)
+    const rowIndex = request.candidateLocators
+      ? request.candidateLocators[candidateIndex * 2 + 1]
+      : candidateIndex % request.manifest.chunkSize
+    const compactRow = chunkIndex * request.manifest.chunkSize + rowIndex
+    if (compactRow >= compactIndex.count) throw new Error(`Search locator is outside compact index: ${chunkIndex}:${rowIndex}`)
+    const offset = compactRow * compactIndex.strideBytes
     const semiMajorAxisAU = view.getFloat64(offset, true)
     const eccentricity = view.getUint32(offset + 8, true) / 1_000_000_000
     const inclinationDeg = view.getUint32(offset + 12, true) / 1_000_000
     const magnitudeFixed = view.getInt16(offset + 16, true)
     const magnitudeValue = magnitudeFixed === 0x7fff ? undefined : magnitudeFixed / 100
     const classIndex = view.getUint8(offset + 18)
-    if (matches(
-      '', compactIndex.classCodes[classIndex] ?? 'OTHER',
-      magnitudeValue,
-      semiMajorAxisAU, eccentricity, inclinationDeg,
-    )) total += 1
-    if (index > 0 && index % progressInterval === 0) {
+    const orbitClassCode = compactIndex.classCodes[classIndex] ?? 'OTHER'
+    if (matches('', orbitClassCode, magnitudeValue, semiMajorAxisAU, eccentricity, inclinationDeg)) {
+      total += 1
+      const decision = sampler.consider(
+        `${chunkIndex}:${rowIndex}`, orbitClassCode, semiMajorAxisAU, eccentricity, inclinationDeg, magnitudeValue,
+      )
+      if (decision) sampler.commit(decision, { chunkIndex, rowIndex })
+    }
+    if (candidateIndex > 0 && candidateIndex % progressInterval === 0) {
+      if (isCancelled(request)) return true
       workerScope.postMessage({
         type: 'progress', requestId: request.requestId, scanKey: request.scanKey,
-        progress: index / compactIndex.count,
+        progress: candidateIndex / Math.max(candidateCount, 1),
       } satisfies CatalogScanWorkerResponse)
+      await yieldToWorker()
     }
   }
-  const records = sample.filter((record) => matches(
-    record.searchKey, record.orbitClassCode, record.absoluteMagnitude,
-    record.semiMajorAxisAU, record.eccentricity, record.inclinationDeg,
-  )).slice(0, request.sampleLimit)
-  workerScope.postMessage({
-    type: 'result', requestId: request.requestId, scanKey: request.scanKey,
-    progress: 1, total, records,
-  } satisfies CatalogScanWorkerResponse)
+  if (!isCancelled(request)) postLocatorResult(request, total, sampler.values())
   return true
 }
 
 async function scan(request: CatalogScanWorkerRequest) {
-  if (!request.filters.query.trim() && await scanCompactIndex(request)) return
-  const sampler = new StratifiedCatalogSampler(Math.max(1, request.sampleLimit))
+  activeRequestId = request.requestId
+  if ((!request.filters.query.trim() || request.candidateLocators) && await scanCompactIndex(request)) return
+
   const matches = createCatalogFieldMatcher(request.filters)
   let total = 0
-  for (let index = 0; index < request.manifest.chunkCount; index += 1) {
-    if (request.manifest.format === 'binary-v1') {
+  if (request.manifest.format === 'binary-v1') {
+    const sampler = new StratifiedCatalogSampler<CatalogLocator>(Math.max(1, request.sampleLimit))
+    for (let index = 0; index < request.manifest.chunkCount; index += 1) {
+      if (isCancelled(request)) return
       const { metadata, values } = await loadBinaryChunk(request, index)
       for (let recordIndex = 0; recordIndex < metadata.length; recordIndex += 1) {
         const entry = metadata[recordIndex]
@@ -128,47 +144,58 @@ async function scan(request: CatalogScanWorkerRequest) {
         const semiMajorAxisAU = values[offset + 1]
         const eccentricity = values[offset + 2]
         const inclinationDeg = values[offset + 3]
-        if (!matches(
-          entry.searchKey, entry.orbitClassCode, entry.absoluteMagnitude,
-          semiMajorAxisAU, eccentricity, inclinationDeg,
-        )) continue
+        if (!matches(entry.searchKey, entry.orbitClassCode, entry.absoluteMagnitude, semiMajorAxisAU, eccentricity, inclinationDeg)) continue
         total += 1
         const decision = sampler.consider(
-          entry.id, entry.orbitClassCode, semiMajorAxisAU, eccentricity,
-          inclinationDeg, entry.absoluteMagnitude,
+          entry.id, entry.orbitClassCode, semiMajorAxisAU, eccentricity, inclinationDeg, entry.absoluteMagnitude,
         )
-        if (decision) sampler.commit(decision, materializeRecord(entry, values, offset))
+        if (decision) sampler.commit(decision, { chunkIndex: index, rowIndex: recordIndex })
       }
-    } else {
-      const records = await loadJsonChunk(request, index)
-      for (const record of records) {
-        if (!matches(
-          record.searchKey, record.orbitClassCode, record.absoluteMagnitude,
-          record.semiMajorAxisAU, record.eccentricity, record.inclinationDeg,
-        )) continue
-        total += 1
-        sampler.add(record)
-      }
+      workerScope.postMessage({
+        type: 'progress', requestId: request.requestId, scanKey: request.scanKey,
+        progress: (index + 1) / Math.max(request.manifest.chunkCount, 1),
+      } satisfies CatalogScanWorkerResponse)
+      await yieldToWorker()
+    }
+    if (!isCancelled(request)) postLocatorResult(request, total, sampler.values())
+    return
+  }
+
+  const sampler = new StratifiedCatalogSampler(Math.max(1, request.sampleLimit))
+  for (let index = 0; index < request.manifest.chunkCount; index += 1) {
+    if (isCancelled(request)) return
+    const records = await loadJsonChunk(request, index)
+    for (const record of records) {
+      if (!matches(record.searchKey, record.orbitClassCode, record.absoluteMagnitude, record.semiMajorAxisAU, record.eccentricity, record.inclinationDeg)) continue
+      total += 1
+      sampler.add(record)
     }
     workerScope.postMessage({
-      type: 'progress',
-      requestId: request.requestId,
-      scanKey: request.scanKey,
+      type: 'progress', requestId: request.requestId, scanKey: request.scanKey,
       progress: (index + 1) / Math.max(request.manifest.chunkCount, 1),
     } satisfies CatalogScanWorkerResponse)
+    await yieldToWorker()
   }
-  workerScope.postMessage({
-    type: 'result', requestId: request.requestId, scanKey: request.scanKey, progress: 1, total, records: sampler.values(),
+  if (!isCancelled(request)) workerScope.postMessage({
+    type: 'result', requestId: request.requestId, scanKey: request.scanKey,
+    progress: 1, total, records: sampler.values(),
   } satisfies CatalogScanWorkerResponse)
 }
 
-workerScope.onmessage = (event: MessageEvent<CatalogScanWorkerRequest>) => {
-  void scan(event.data).catch((error: unknown) => workerScope.postMessage({
-    type: 'error',
-    requestId: event.data.requestId,
-    scanKey: event.data.scanKey,
-    error: error instanceof Error ? error.message : String(error),
-  } satisfies CatalogScanWorkerResponse))
+workerScope.onmessage = (event: MessageEvent<CatalogScanWorkerRequest | CatalogScanWorkerCancelRequest>) => {
+  if (event.data.type === 'cancel') {
+    cancelledRequests.add(event.data.requestId)
+    return
+  }
+  const request = event.data
+  cancelledRequests.delete(request.requestId)
+  void scan(request).catch((error: unknown) => {
+    if (isCancelled(request)) return
+    workerScope.postMessage({
+      type: 'error', requestId: request.requestId, scanKey: request.scanKey,
+      error: error instanceof Error ? error.message : String(error),
+    } satisfies CatalogScanWorkerResponse)
+  })
 }
 
 export {}

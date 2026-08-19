@@ -1,5 +1,5 @@
 import { filterCatalogRecords } from '../lib/catalogFilters'
-import type { AsteroidManifest, AsteroidRecord, CatalogFilters, DatasetMode, DatasetProvenance } from '../types'
+import type { AsteroidManifest, AsteroidRecord, CatalogFilters, CatalogSummary, DatasetMode, DatasetProvenance } from '../types'
 import { createStore } from './createStore'
 
 export type { CatalogFilters } from '../types'
@@ -9,9 +9,13 @@ type CatalogState = {
   requestedDatasetVersion: string | null
   manifest: AsteroidManifest | null
   provenance: DatasetProvenance | null
-  records: AsteroidRecord[]
-  recordsComplete: boolean
-  filteredTotal: number | null
+  summary: CatalogSummary | null
+  baseSampleRecords: AsteroidRecord[]
+  baseSampleKey: string | null
+  browseRecords: AsteroidRecord[]
+  activeResultRecords: AsteroidRecord[]
+  activeResultScanKey: string | null
+  exactFilteredTotal: number | null
   recordsSampled: boolean
   loadProgress: number
   selectionScope: {
@@ -30,9 +34,13 @@ const initialCatalogState: CatalogState = {
   requestedDatasetVersion: null,
   manifest: null,
   provenance: null,
-  records: [],
-  recordsComplete: false,
-  filteredTotal: null,
+  summary: null,
+  baseSampleRecords: [],
+  baseSampleKey: null,
+  browseRecords: [],
+  activeResultRecords: [],
+  activeResultScanKey: null,
+  exactFilteredTotal: null,
   recordsSampled: false,
   loadProgress: 0,
   selectionScope: null,
@@ -57,12 +65,32 @@ export const catalogActions = {
   patchFilters(update: Partial<CatalogFilters>) {
     catalogStore.setState((state) => ({
       filters: { ...state.filters, ...update },
+      browseRecords: update.query !== undefined && update.query !== state.filters.query ? [] : state.browseRecords,
       selectionScope: null,
-      recordsComplete: false,
-      filteredTotal: null,
-      recordsSampled: false,
+      activeResultRecords: [],
+      activeResultScanKey: null,
+      exactFilteredTotal: null,
+      recordsSampled: Boolean(state.manifest && state.baseSampleRecords.length < state.manifest.totalCount),
       loadProgress: 0,
     }))
+  },
+  setBaseSample(key: string, records: AsteroidRecord[], summary: CatalogSummary | null) {
+    catalogStore.setState({
+      baseSampleKey: key,
+      baseSampleRecords: records,
+      summary,
+      recordsSampled: true,
+    })
+  },
+  setExactResult(scanKey: string, records: AsteroidRecord[], total: number) {
+    catalogStore.setState({
+      activeResultRecords: records,
+      activeResultScanKey: scanKey,
+      exactFilteredTotal: total,
+      recordsSampled: total > records.length,
+      loadProgress: 1,
+      isLoading: false,
+    })
   },
   selectAllFiltered(datasetVersion: string, filters: CatalogFilters, count: number) {
     catalogStore.setState({
@@ -76,6 +104,12 @@ export const catalogActions = {
   clearCatalogSelection() {
     catalogStore.setState({ selectionScope: null })
   },
+}
+
+export function catalogDisplayRecords(state: CatalogState, scanKey: string) {
+  if (state.activeResultScanKey === scanKey) return state.activeResultRecords
+  if (state.filters.query.trim()) return state.browseRecords
+  return state.baseSampleRecords.length ? state.baseSampleRecords : state.browseRecords
 }
 
 export { filterCatalogRecords }

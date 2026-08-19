@@ -4,14 +4,14 @@ import { simulationClock } from '../../engine/clock/SimulationClock'
 import { useSimulationClock } from '../../engine/clock/useSimulationClock'
 import { useI18n } from '../../i18n/context'
 import { useCatalogPointWorker } from '../../hooks/useCatalogPointWorker'
+import { catalogSampleSize, useCatalogSample } from '../../hooks/useCatalogSample'
 import {
   asteroidRecordToBody,
-  loadAsteroidSample,
   loadAsteroidSectionPage,
   searchAsteroidCatalogPage,
 } from '../../lib/catalogLoader'
 import { createCatalogScanKey, scanAsteroidCatalog } from '../../lib/catalogScan'
-import { catalogActions, catalogStore, filterCatalogRecords } from '../../state/catalog-store'
+import { catalogActions, catalogDisplayRecords, catalogStore, filterCatalogRecords } from '../../state/catalog-store'
 import { selectionActions, selectionStore } from '../../state/selection-store'
 import { uiActions } from '../../state/ui-store'
 import type { AsteroidSectionCursor, MagnitudeStatus } from '../../types'
@@ -21,6 +21,7 @@ import { DatasetCard } from './DatasetCard'
 const CLASS_OPTIONS = ['all', 'MBA', 'MCR', 'APO', 'ATE', 'AMO', 'ATI', 'HUN', 'HIL', 'JTA', 'TNO', 'OTHER']
 
 export function CatalogWorkspace() {
+  useCatalogSample()
   const catalog = catalogStore.useStore()
   const selection = selectionStore.useStore()
   const clock = useSimulationClock()
@@ -46,7 +47,7 @@ export function CatalogWorkspace() {
     activeScanController.current?.abort()
   }, [])
 
-  const sampleLimit = window.matchMedia('(max-width: 800px)').matches ? 8_000 : 30_000
+  const sampleLimit = catalogSampleSize() === 'mobile' ? 8_000 : 30_000
   const scanKey = catalog.manifest
     ? createCatalogScanKey(catalog.manifest.version, catalog.filters, sampleLimit)
     : ''
@@ -60,29 +61,14 @@ export function CatalogWorkspace() {
   useEffect(() => {
     if (!catalog.manifest || catalog.filters.query.trim()) return
     if (catalog.manifest.precomputedSamples) {
-      let cancelled = false
-      const size = window.matchMedia('(max-width: 800px)').matches ? 'mobile' : 'desktop'
-      loadController.current?.abort()
-      catalogActions.patch({ isLoading: true, error: null, recordsComplete: false, filteredTotal: null, loadProgress: 0 })
-      void loadAsteroidSample(catalog.manifest, size).then((records) => {
-        if (cancelled) return
-        catalogActions.patch({
-          records,
-          isLoading: false,
-          recordsSampled: records.length < catalog.manifest!.totalCount,
-        })
-        setCursor({ chunkIndex: catalog.manifest!.chunkCount, recordOffset: 0 })
-        setHasMore(false)
-      }).catch((error: unknown) => {
-        if (!cancelled) catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
-      })
-      return () => { cancelled = true }
+      return
     }
     let cancelled = false
     loadController.current?.abort()
     catalogActions.patch({
-      isLoading: true, error: null, records: [], recordsComplete: false,
-      filteredTotal: null, recordsSampled: false, loadProgress: 0,
+      isLoading: true, error: null, browseRecords: [],
+      activeResultRecords: [], activeResultScanKey: null, exactFilteredTotal: null,
+      recordsSampled: false, loadProgress: 0,
     })
     void loadAsteroidSectionPage({
       manifest: catalog.manifest,
@@ -90,7 +76,7 @@ export function CatalogWorkspace() {
       pageSize: 400,
     }).then((page) => {
       if (cancelled) return
-      catalogActions.patch({ records: page.records, isLoading: false })
+      catalogActions.patch({ browseRecords: page.records, isLoading: false })
       setCursor(page.endCursor)
       setHasMore(page.endCursor.chunkIndex < catalog.manifest!.chunkCount)
     }).catch((error: unknown) => {
@@ -105,12 +91,13 @@ export function CatalogWorkspace() {
     let cancelled = false
     loadController.current?.abort()
     catalogActions.patch({
-      isLoading: true, error: null, records: [], recordsComplete: false,
-      filteredTotal: null, recordsSampled: false, loadProgress: 0,
+      isLoading: true, error: null, browseRecords: [],
+      activeResultRecords: [], activeResultScanKey: null, exactFilteredTotal: null,
+      recordsSampled: false, loadProgress: 0,
     })
     void searchAsteroidCatalogPage({ query }).then((page) => {
       if (!cancelled) {
-        catalogActions.patch({ records: page.records, isLoading: false, recordsSampled: page.nextCursor !== null })
+        catalogActions.patch({ browseRecords: page.records, isLoading: false, recordsSampled: page.nextCursor !== null })
         setSearchPage({ total: page.total, nextCursor: page.nextCursor })
       }
     }).catch((error: unknown) => {
@@ -119,7 +106,8 @@ export function CatalogWorkspace() {
     return () => { cancelled = true }
   }, [catalog.filters.query, catalog.manifest])
 
-  const filtered = useMemo(() => filterCatalogRecords(catalog.records, catalog.filters), [catalog.filters, catalog.records])
+  const displayedRecords = catalogDisplayRecords(catalog, scanKey)
+  const filtered = useMemo(() => filterCatalogRecords(displayedRecords, catalog.filters), [catalog.filters, displayedRecords])
   const pointCloud = useCatalogPointWorker(filtered, catalogEpoch)
 
   async function scanEntireCatalog() {
@@ -140,14 +128,7 @@ export function CatalogWorkspace() {
         },
       })
       if (controller.signal.aborted || result.scanKey !== requestedScanKey || currentScanKey.current !== requestedScanKey) return null
-      catalogActions.patch({
-        records: result.records,
-        recordsComplete: true,
-        filteredTotal: result.total,
-        recordsSampled: result.total > result.records.length,
-        loadProgress: 1,
-        isLoading: false,
-      })
+      catalogActions.setExactResult(result.scanKey, result.records, result.total)
       setCursor({ chunkIndex: catalog.manifest.chunkCount, recordOffset: 0 })
       setHasMore(false)
       return result
@@ -162,8 +143,8 @@ export function CatalogWorkspace() {
 
   async function selectAllFiltered() {
     if (!catalog.manifest) return
-    const result = catalog.recordsComplete && catalog.filteredTotal !== null
-      ? { total: catalog.filteredTotal }
+    const result = catalog.activeResultScanKey === scanKey && catalog.exactFilteredTotal !== null
+      ? { total: catalog.exactFilteredTotal }
       : await scanEntireCatalog()
     if (!result) return
     catalogActions.selectAllFiltered(catalog.manifest.version, catalog.filters, result.total)
@@ -181,8 +162,8 @@ export function CatalogWorkspace() {
         pageSize: 400,
       })
       catalogActions.patch({
-        records: [...catalog.records, ...page.records], isLoading: false,
-        filteredTotal: null, recordsSampled: false,
+        browseRecords: [...catalog.browseRecords, ...page.records], isLoading: false,
+        exactFilteredTotal: null, recordsSampled: false,
       })
       setCursor(page.endCursor)
       setHasMore(page.endCursor.chunkIndex < catalog.manifest.chunkCount)
@@ -197,8 +178,8 @@ export function CatalogWorkspace() {
     catalogActions.patch({ isLoading: true, error: null })
     try {
       const page = await searchAsteroidCatalogPage({ query, cursor: searchPage.nextCursor })
-      const recordsById = new Map([...catalog.records, ...page.records].map((record) => [record.id, record]))
-      catalogActions.patch({ records: [...recordsById.values()], isLoading: false, recordsSampled: page.nextCursor !== null })
+      const recordsById = new Map([...catalog.browseRecords, ...page.records].map((record) => [record.id, record]))
+      catalogActions.patch({ browseRecords: [...recordsById.values()], isLoading: false, recordsSampled: page.nextCursor !== null })
       setSearchPage({ total: page.total, nextCursor: page.nextCursor })
     } catch (error) {
       catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
@@ -206,7 +187,7 @@ export function CatalogWorkspace() {
   }
 
   const textMatchTotal = catalog.filters.query.trim() ? searchPage.total : null
-  const exactFilteredTotal = catalog.filteredTotal
+  const exactFilteredTotal = catalog.activeResultScanKey === scanKey ? catalog.exactFilteredTotal : null
   const resultTotal = exactFilteredTotal ?? textMatchTotal ?? filtered.length
   const visibleTableCount = Math.min(filtered.length, 240)
 
@@ -237,7 +218,7 @@ export function CatalogWorkspace() {
           </select></label>
           <RangeFields label="q (AU)" value={catalog.filters.perihelion} onChange={(value) => catalogActions.patchFilters({ perihelion: value })} step="0.1" />
           <button className="primary-button full-width" disabled={!filtered.length} onClick={() => selectionActions.addCatalogBodies(filtered.slice(0, 160).map(asteroidRecordToBody), true)}>{t('addSelection')} · {Math.min(filtered.length, 160)}</button>
-          <button className="secondary-button full-width" disabled={!catalog.manifest || catalog.isLoading} onClick={() => void selectAllFiltered()}>{catalog.recordsComplete ? t('selectAllCatalog') : `${t('loadAllCatalog')} · ${Math.round(catalog.loadProgress * 100)}%`}</button>
+          <button className="secondary-button full-width" disabled={!catalog.manifest || catalog.isLoading} onClick={() => void selectAllFiltered()}>{catalog.activeResultScanKey === scanKey ? t('selectAllCatalog') : `${t('loadAllCatalog')} · ${Math.round(catalog.loadProgress * 100)}%`}</button>
           {catalog.selectionScope && <button className="text-button full-width" onClick={catalogActions.clearCatalogSelection}>{t('clearCatalogSelection')} · {catalog.selectionScope.count.toLocaleString()}</button>}
         </aside>
 
@@ -255,14 +236,14 @@ export function CatalogWorkspace() {
         <section className="catalog-results glass-panel">
           <div className="section-heading"><span>{resultTotal.toLocaleString()} {t('results')}</span><small>{(catalog.selectionScope?.count ?? selection.selectedIds.filter((id) => id.startsWith('asteroid:')).length).toLocaleString()} {t('selectedCount')}</small></div>
           <div className="catalog-counts" aria-label="Catalog result counts">
-            <span>{t('loadedCount')} <strong>{catalog.records.length.toLocaleString()}</strong></span>
+            <span>{t('loadedCount')} <strong>{displayedRecords.length.toLocaleString()}</strong></span>
             <span>{t('textMatches')} <strong>{textMatchTotal === null ? '—' : textMatchTotal.toLocaleString()}</strong></span>
             <span>{t('exactFilteredTotal')} <strong>{exactFilteredTotal === null ? '—' : exactFilteredTotal.toLocaleString()}</strong></span>
           </div>
           {catalog.error && <div className="error-banner">{catalog.error}</div>}
           {(catalog.recordsSampled || filtered.length > visibleTableCount) && <p className="catalog-result-note">
             {t('showing')} {visibleTableCount.toLocaleString()} / {resultTotal.toLocaleString()}
-            {catalog.recordsComplete ? ` · ${t('stratifiedSample')}` : catalog.recordsSampled ? ` · ${t('refineSearch')}` : ''}
+            {catalog.activeResultScanKey === scanKey ? ` · ${t('stratifiedSample')}` : catalog.recordsSampled ? ` · ${t('refineSearch')}` : ''}
           </p>}
           <div className="catalog-table" role="list">
             {filtered.slice(0, 240).map((record) => {
@@ -281,7 +262,7 @@ export function CatalogWorkspace() {
               </button>
             })}
           </div>
-          {catalog.manifest && !catalog.filters.query && hasMore && <button className="load-more" disabled={catalog.isLoading} onClick={() => void loadMore()}>{catalog.isLoading ? t('loading') : t('loadMore')}</button>}
+          {catalog.manifest && !catalog.manifest.precomputedSamples && !catalog.filters.query && hasMore && <button className="load-more" disabled={catalog.isLoading} onClick={() => void loadMore()}>{catalog.isLoading ? t('loading') : t('loadMore')}</button>}
           {catalog.manifest && catalog.filters.query && searchPage.nextCursor !== null && <button className="load-more" disabled={catalog.isLoading} onClick={() => void loadMoreSearchResults()}>{catalog.isLoading ? t('loading') : t('loadMore')}</button>}
         </section>
       </div>

@@ -42,7 +42,7 @@ export function catalogStratum(record: AsteroidRecord) {
   )
 }
 
-type Stratum = { seen: number; records: AsteroidRecord[] }
+type Stratum<T> = { seen: number; records: T[] }
 export type CatalogSampleDecision = {
   globalIndex: number | null
   classKey: string | null
@@ -50,10 +50,10 @@ export type CatalogSampleDecision = {
   stratumIndex: number | null
 }
 
-export class StratifiedCatalogSampler {
-  private readonly global: AsteroidRecord[] = []
-  private readonly strata = new Map<string, Stratum>()
-  private readonly classes = new Map<string, AsteroidRecord>()
+export class StratifiedCatalogSampler<T = AsteroidRecord> {
+  private readonly global: T[] = []
+  private readonly strata = new Map<string, Stratum<T>>()
+  private readonly classes = new Map<string, T>()
   private seen = 0
   private readonly limit: number
 
@@ -61,7 +61,7 @@ export class StratifiedCatalogSampler {
     this.limit = limit
   }
 
-  add(record: AsteroidRecord) {
+  add(record: AsteroidRecord & T) {
     const decision = this.consider(
       record.id,
       record.orbitClassCode,
@@ -107,7 +107,7 @@ export class StratifiedCatalogSampler {
       : { globalIndex, classKey, stratumKey: key, stratumIndex }
   }
 
-  commit(decision: CatalogSampleDecision, record: AsteroidRecord) {
+  commit(decision: CatalogSampleDecision, record: T) {
     if (decision.globalIndex !== null) this.global[decision.globalIndex] = record
     if (decision.classKey !== null) this.classes.set(decision.classKey, record)
     if (decision.stratumIndex !== null) {
@@ -118,28 +118,28 @@ export class StratifiedCatalogSampler {
 
   values() {
     if (this.seen <= this.limit) return this.global.slice(0, this.seen)
-    const result: AsteroidRecord[] = []
-    const included = new Set<string>()
+    const result: T[] = []
+    const included = new Set<T>()
     for (const [, record] of [...this.classes.entries()].sort(([left], [right]) => left.localeCompare(right))) {
       result.push(record)
-      included.add(record.id)
+      included.add(record)
       if (result.length >= this.limit) return result
     }
     const strata = [...this.strata.entries()].sort(([left], [right]) => left.localeCompare(right))
     for (let sampleIndex = 0; sampleIndex < STRATUM_SAMPLE_SIZE && result.length < this.limit; sampleIndex += 1) {
       for (const [, stratum] of strata) {
         const record = stratum.records[sampleIndex]
-        if (!record || included.has(record.id)) continue
+        if (!record || included.has(record)) continue
         result.push(record)
-        included.add(record.id)
+        included.add(record)
         if (result.length >= this.limit) break
       }
     }
     for (const record of this.global) {
       if (result.length >= this.limit) break
-      if (included.has(record.id)) continue
+      if (included.has(record)) continue
       result.push(record)
-      included.add(record.id)
+      included.add(record)
     }
     return result
   }

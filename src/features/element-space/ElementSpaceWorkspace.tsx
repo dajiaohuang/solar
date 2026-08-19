@@ -7,11 +7,12 @@ import { asteroidRecordToBody } from '../../lib/catalogLoader'
 import { createCatalogScanKey, scanAsteroidCatalog } from '../../lib/catalogScan'
 import { elementPlotCoordinates } from '../../lib/elementPlot'
 import { buildCurrentPositions } from '../../lib/trajectory'
-import { catalogActions, catalogStore, filterCatalogRecords } from '../../state/catalog-store'
+import { catalogActions, catalogDisplayRecords, catalogStore, filterCatalogRecords } from '../../state/catalog-store'
 import { selectionActions, selectionStore } from '../../state/selection-store'
 import { uiActions, uiStore, type ElementPlotMode } from '../../state/ui-store'
 import type { AsteroidRecord, BodyId, CelestialBody } from '../../types'
 import { bodyDisplayName } from '../../lib/bodyNames'
+import { catalogSampleSize, useCatalogSample } from '../../hooks/useCatalogSample'
 
 type PlotMode = ElementPlotMode
 type PlotDatum = { record: AsteroidRecord; x: number; y: number }
@@ -143,6 +144,7 @@ function ElementScatter({ data, mode, selectedIds, onSelect, onFocus }: ScatterP
 }
 
 export function ElementSpaceWorkspace() {
+  useCatalogSample()
   const mode = uiStore.useStore((state) => state.elementPlot)
   const catalog = catalogStore.useStore()
   const selection = selectionStore.useStore()
@@ -151,9 +153,9 @@ export function ElementSpaceWorkspace() {
   const { t, language } = useI18n()
 
   useEffect(() => {
-    if (!catalog.manifest || catalog.manifest.precomputedSamples || (catalog.recordsComplete && catalog.filteredTotal !== null)) return
+    if (!catalog.manifest || catalog.manifest.precomputedSamples) return
     const controller = new AbortController()
-    const sampleLimit = window.matchMedia('(max-width: 800px)').matches ? 8_000 : catalog.mode === 'lite' ? 8_000 : 30_000
+    const sampleLimit = catalogSampleSize() === 'mobile' ? 8_000 : catalog.mode === 'lite' ? 8_000 : 30_000
     const scanKey = createCatalogScanKey(catalog.manifest.version, catalog.filters, sampleLimit)
     const timer = window.setTimeout(() => {
       catalogActions.patch({ isLoading: true, error: null, loadProgress: 0 })
@@ -169,14 +171,7 @@ export function ElementSpaceWorkspace() {
           ? createCatalogScanKey(current.manifest.version, current.filters, sampleLimit)
           : ''
         if (controller.signal.aborted || result.scanKey !== scanKey || currentKey !== scanKey) return
-        catalogActions.patch({
-        records: result.records,
-        recordsComplete: true,
-        filteredTotal: result.total,
-        recordsSampled: result.total > result.records.length,
-        loadProgress: 1,
-        isLoading: false,
-        })
+        catalogActions.setExactResult(result.scanKey, result.records, result.total)
       }).catch((error: unknown) => {
         if (!controller.signal.aborted) catalogActions.patch({ error: error instanceof Error ? error.message : String(error), isLoading: false })
       })
@@ -185,9 +180,12 @@ export function ElementSpaceWorkspace() {
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [catalog.filteredTotal, catalog.filters, catalog.manifest, catalog.mode, catalog.recordsComplete])
+  }, [catalog.filters, catalog.manifest, catalog.mode])
 
-  const records = useMemo(() => filterCatalogRecords(catalog.records, catalog.filters), [catalog.filters, catalog.records])
+  const sampleLimit = catalogSampleSize() === 'mobile' ? 8_000 : catalog.mode === 'lite' ? 8_000 : 30_000
+  const scanKey = catalog.manifest ? createCatalogScanKey(catalog.manifest.version, catalog.filters, sampleLimit) : ''
+  const displayedRecords = catalogDisplayRecords(catalog, scanKey)
+  const records = useMemo(() => filterCatalogRecords(displayedRecords, catalog.filters), [catalog.filters, displayedRecords])
   const data = useMemo(() => records
     .map((record) => toPlotDatum(record, mode))
     .filter((datum): datum is PlotDatum => datum !== null), [mode, records])
@@ -204,7 +202,7 @@ export function ElementSpaceWorkspace() {
     </div>
     <div className="elements-layout">
       <section className="chart-panel glass-panel">
-        <div className="sample-caption">{t('showing')} {data.length.toLocaleString()} / {(catalog.filteredTotal ?? records.length).toLocaleString()} · {t('stratifiedSample')}{mode === 'a-H' ? ` · ${t('unknownMagnitudeExcluded')}` : ''}</div>
+        <div className="sample-caption">{t('showing')} {data.length.toLocaleString()} / {(catalog.activeResultScanKey === scanKey ? catalog.exactFilteredTotal ?? records.length : records.length).toLocaleString()} · {t('stratifiedSample')}{mode === 'a-H' ? ` · ${t('unknownMagnitudeExcluded')}` : ''}</div>
         <div className="axis-title y">{yLabel}</div><ElementScatter data={data} mode={mode} selectedIds={selectedSet} onSelect={(selected) => {
           const limited = selected.slice(0, 160)
           selectionActions.addCatalogBodies(limited.map(asteroidRecordToBody))
