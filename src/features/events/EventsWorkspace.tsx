@@ -8,8 +8,11 @@ import { simulationActions, simulationStore } from '../../state/simulation-store
 import { uiActions } from '../../state/ui-store'
 import type { EventKind } from '../../workers/conjunction.worker'
 import { bodyDisplayName } from '../../lib/bodyNames'
+import { catalogStore } from '../../state/catalog-store'
+import { jplApproxWindowWarning } from '../../engine/ephemeris/modelValidity'
 
 const ALL_KINDS: EventKind[] = ['close-approach', 'conjunction', 'opposition', 'perihelion', 'aphelion']
+const EVENT_ALGORITHM_VERSION = 'event-search-v2'
 
 function download(name: string, content: string, type: string) {
   const url = URL.createObjectURL(new Blob([content], { type }))
@@ -24,6 +27,7 @@ export function EventsWorkspace() {
   const clock = useSimulationClock()
   const { t, language } = useI18n()
   const analysis = useConjunctionWorker()
+  const catalog = catalogStore.useStore()
   const [windowDays, setWindowDays] = useState(365)
   const [thresholdAU, setThresholdAU] = useState(0.05)
   const [eventKinds, setEventKinds] = useState<EventKind[]>(['close-approach', 'conjunction', 'opposition'])
@@ -31,6 +35,28 @@ export function EventsWorkspace() {
   const contractCenter = analysis.lastRun?.centerJulianDay ?? clock.julianDay
   const contractWindow = analysis.lastRun?.windowDays ?? windowDays
   const contractSamples = analysis.lastRun?.sampleCount ?? 240
+  const sampleIntervalDays = contractWindow / Math.max(contractSamples - 1, 1)
+  const validityWarning = jplApproxWindowWarning(
+    contractCenter - contractWindow / 2,
+    contractCenter + contractWindow / 2,
+    language,
+  )
+  const exportMetadata = {
+    generatedAt: new Date().toISOString(),
+    datasetVersion: catalog.datasetVersion !== 'unavailable' ? catalog.datasetVersion : catalog.requestedDatasetVersion,
+    algorithmVersion: EVENT_ALGORITHM_VERSION,
+    model: 'sampled-two-body-local-refinement-v2',
+    inputs: analysis.lastRun ? {
+      bodyIds: analysis.lastRun.bodies.map((body) => body.id),
+      referenceId: analysis.lastRun.referenceId,
+      centerJulianDay: analysis.lastRun.centerJulianDay,
+      windowDays: analysis.lastRun.windowDays,
+      thresholdAU: analysis.lastRun.thresholdAU,
+      eventKinds: analysis.lastRun.eventKinds,
+      sampleCount: contractSamples,
+      sampleIntervalDays,
+    } : null,
+  }
 
   return <div className="workspace-page events-workspace">
     <header className="page-heading"><div><span className="eyebrow">EXPLICIT JOB / CANCELLABLE WORKER / CACHED RESULTS</span><h1>{t('events')}</h1><p>{t('analysisIdle')}</p></div><div className={`job-status status-${analysis.status}`}><i />{analysis.status.toUpperCase()}</div></header>
@@ -64,17 +90,18 @@ export function EventsWorkspace() {
           uiActions.navigate('explorer')
         }}>
           <time>{formatJulianDayAsDate(event.julianDay)}</time><i className={`event-${event.kind}`} />
-          <div><strong>{event.kind.replace('-', ' ')}</strong><span>{event.bodyAName}{event.bodyBName ? ` ↔ ${event.bodyBName}` : ''}</span><small>{event.value.toFixed(event.unit === 'AU' ? 5 : 2)} {event.unit} · {event.model}</small></div>
+          <div><strong>{event.kind.replace('-', ' ')}</strong><span>{event.bodyAName}{event.bodyBName ? ` ↔ ${event.bodyBName}` : ''}</span><small>{event.value.toFixed(event.unit === 'AU' ? 5 : 2)} {event.unit} · ±{event.estimatedTimingErrorDays.toFixed(4)} d</small></div>
         </button>)}</div>
       </section>
 
       <aside className="event-evidence glass-panel">
         <div className="section-kicker">ANALYSIS CONTRACT</div>
-        <dl><div><dt>{t('model')}</dt><dd>Sampled two-body positions</dd></div><div><dt>{t('orbitEpoch')}</dt><dd>Per-object osculating epoch</dd></div><div><dt>{t('window')}</dt><dd>JD {(contractCenter - contractWindow / 2).toFixed(2)} — {(contractCenter + contractWindow / 2).toFixed(2)}</dd></div><div><dt>Sampling</dt><dd>{contractSamples} samples, bounded to 48 objects</dd></div></dl>
-        <p className="fine-print">Events are non-endpoint local extrema refined by three-point parabolic interpolation. They remain exploratory two-body results, not certified predictions.</p>
-        <div className="export-actions"><button disabled={!analysis.events.length} onClick={() => download('solar-atlas-events.json', JSON.stringify({ generatedAt: new Date().toISOString(), model: 'sampled-two-body-parabolic', events: analysis.events }, null, 2), 'application/json')}>{t('exportJson')}</button><button disabled={!analysis.events.length} onClick={() => {
-          const header = 'kind,bodyA,bodyB,julianDay,value,unit,model\n'
-          const rows = analysis.events.map((event) => [event.kind, event.bodyAName, event.bodyBName ?? '', event.julianDay, event.value, event.unit, event.model].map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n')
+        <dl><div><dt>{t('model')}</dt><dd>Coarse scan + local two-body re-propagation</dd></div><div><dt>{t('orbitEpoch')}</dt><dd>Per-object osculating epoch</dd></div><div><dt>{t('window')}</dt><dd>JD {(contractCenter - contractWindow / 2).toFixed(2)} — {(contractCenter + contractWindow / 2).toFixed(2)}</dd></div><div><dt>Sampling</dt><dd>{contractSamples} samples · {sampleIntervalDays.toFixed(4)} d interval</dd></div></dl>
+        {validityWarning && <div className="error-banner">{validityWarning}</div>}
+        <p className="fine-print">A coarse grid identifies non-endpoint candidates; each bracket is refined and positions are propagated again at the refined Julian Day. Reported bracket error remains exploratory, not a certified prediction.</p>
+        <div className="export-actions"><button disabled={!analysis.events.length} onClick={() => download('solar-atlas-events.json', JSON.stringify({ ...exportMetadata, events: analysis.events }, null, 2), 'application/json')}>{t('exportJson')}</button><button disabled={!analysis.events.length} onClick={() => {
+          const header = 'datasetVersion,algorithmVersion,kind,bodyA,bodyB,julianDay,value,unit,model,sampleIntervalDays,estimatedTimingErrorDays\n'
+          const rows = analysis.events.map((event) => [exportMetadata.datasetVersion ?? '', EVENT_ALGORITHM_VERSION, event.kind, event.bodyAName, event.bodyBName ?? '', event.julianDay, event.value, event.unit, event.model, event.sampleIntervalDays, event.estimatedTimingErrorDays].map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n')
           download('solar-atlas-events.csv', header + rows, 'text/csv')
         }}>{t('exportCsv')}</button></div>
       </aside>

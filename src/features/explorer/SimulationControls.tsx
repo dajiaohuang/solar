@@ -2,6 +2,7 @@ import { useSimulationClock } from '../../engine/clock/useSimulationClock'
 import { julianDayToDate, dateToJulianDay } from '../../lib/julianDate'
 import { simulationActions, simulationStore } from '../../state/simulation-store'
 import { useI18n } from '../../i18n/context'
+import { jplApproxValidityWarning } from '../../engine/ephemeris/modelValidity'
 
 function toDateInput(julianDay: number) {
   return julianDayToDate(julianDay).toISOString().slice(0, 10)
@@ -10,9 +11,10 @@ function toDateInput(julianDay: number) {
 export function SimulationControls() {
   const clock = useSimulationClock()
   const simulation = simulationStore.useStore()
-  const { t } = useI18n()
+  const { t, language } = useI18n()
+  const validityWarning = jplApproxValidityWarning(clock.julianDay, language)
   return (
-    <div className="simulation-bar glass-panel">
+    <div className={`simulation-bar glass-panel${validityWarning ? ' has-model-warning' : ''}`}>
       <button type="button" className="primary-button" onClick={simulationActions.togglePlayback}>
         {clock.isPlaying ? `❚❚ ${t('pause')}` : `▶ ${t('play')}`}
       </button>
@@ -43,6 +45,7 @@ export function SimulationControls() {
         <button className={simulation.viewMode === '3d' ? 'active' : ''} onClick={() => simulationActions.patch({ viewMode: '3d' })}>3D</button>
       </div>
       <span className="jd-readout">JD {clock.julianDay.toFixed(3)}</span>
+      {validityWarning && <span className="model-validity-warning" role="status">⚠ {validityWarning}</span>}
     </div>
   )
 }

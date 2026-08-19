@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extremumJulianDay, findSampledExtrema } from '../../src/engine/events/sampledExtrema'
+import { extremumJulianDay, findSampledExtrema, refineBracketedExtremum } from '../../src/engine/events/sampledExtrema'
 
 describe('sampled astronomical event extrema', () => {
   it('never labels a time-window endpoint as an event', () => {
@@ -22,5 +22,17 @@ describe('sampled astronomical event extrema', () => {
     const [maximum] = findSampledExtrema([1, 4, 2], 'maximum')
     expect(maximum.value).toBeGreaterThan(4)
     expect(extremumJulianDay([100, 101, 102], maximum)).toBeGreaterThan(101)
+  })
+
+  it('re-evaluates the model while refining a coarse candidate bracket', () => {
+    let evaluations = 0
+    const refined = refineBracketedExtremum(100, 104, 'minimum', (julianDay) => {
+      evaluations += 1
+      return (julianDay - 101.25) ** 2 + 3
+    })
+    expect(refined.julianDay).toBeCloseTo(101.25, 3)
+    expect(refined.value).toBeCloseTo(3, 5)
+    expect(refined.estimatedTimingErrorDays).toBeLessThan(0.001)
+    expect(evaluations).toBeGreaterThan(10)
   })
 })

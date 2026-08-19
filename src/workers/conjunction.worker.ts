@@ -6,7 +6,7 @@ import {
   subtractVector3,
   vector3Magnitude,
 } from '../lib/ephemeris'
-import { extremumJulianDay, findSampledExtrema } from '../engine/events/sampledExtrema'
+import { findSampledExtrema, refineBracketedExtremum, type ExtremumMode } from '../engine/events/sampledExtrema'
 import type { BodyId, CelestialBody, Vector3 } from '../types'
 
 export type EventKind = 'close-approach' | 'conjunction' | 'opposition' | 'perihelion' | 'aphelion'
@@ -35,7 +35,10 @@ export type AnalysisEvent = {
   value: number
   unit: 'AU' | 'deg'
   julianDay: number
-  model: 'sampled-two-body-parabolic'
+  model: 'sampled-two-body-local-refinement-v2'
+  sampleIntervalDays: number
+  estimatedTimingErrorDays: number
+  refinementIterations: number
 }
 
 export type EventAnalysisResponse = {
@@ -74,6 +77,23 @@ async function runAnalysis(request: EventAnalysisRequest) {
   const positions = new Map<BodyId, Vector3[]>(request.bodies.map((body) => [body.id, []]))
   const referencePositions: Vector3[] = []
   const julianDays: number[] = []
+  const sampleIntervalDays = request.windowDays / Math.max(sampleCount - 1, 1)
+
+  const refine = (sampleIndex: number, mode: ExtremumMode, evaluate: (julianDay: number) => number) => {
+    const refined = refineBracketedExtremum(
+      julianDays[sampleIndex - 1],
+      julianDays[sampleIndex + 1],
+      mode,
+      evaluate,
+    )
+    return {
+      value: refined.value,
+      julianDay: refined.julianDay,
+      sampleIntervalDays,
+      estimatedTimingErrorDays: refined.estimatedTimingErrorDays,
+      refinementIterations: refined.iterations,
+    }
+  }
 
   for (let sample = 0; sample < sampleCount; sample += 1) {
     if (cancelledRequestId === request.requestId || activeRequestId !== request.requestId) {
@@ -123,26 +143,40 @@ async function runAnalysis(request: EventAnalysisRequest) {
         bodyAName: bodyA.name,
         bodyBId: bodyB.id,
         bodyBName: bodyB.name,
-        model: 'sampled-two-body-parabolic' as const,
+        model: 'sampled-two-body-local-refinement-v2' as const,
       }
       if (request.eventKinds.includes('close-approach')) {
         for (const extremum of findSampledExtrema(distances, 'minimum')) {
-          if (extremum.value <= request.thresholdAU) {
-            events.push({ ...base, kind: 'close-approach', value: extremum.value, unit: 'AU', julianDay: extremumJulianDay(julianDays, extremum) })
+          const refined = refine(extremum.sampleIndex, 'minimum', (julianDay) => {
+            const resolve = createBodyPositionResolver(bodiesById, julianDay)
+            return vector3Magnitude(subtractVector3(resolve(bodyA.id), resolve(bodyB.id)))
+          })
+          if (refined.value <= request.thresholdAU) {
+            events.push({ ...base, kind: 'close-approach', unit: 'AU', ...refined })
           }
         }
       }
       if (request.eventKinds.includes('conjunction')) {
         for (const extremum of findSampledExtrema(angles, 'minimum')) {
-          if (extremum.value <= 2) {
-            events.push({ ...base, kind: 'conjunction', value: extremum.value, unit: 'deg', julianDay: extremumJulianDay(julianDays, extremum) })
+          const refined = refine(extremum.sampleIndex, 'minimum', (julianDay) => {
+            const resolve = createBodyPositionResolver(bodiesById, julianDay)
+            const reference = resolve(request.referenceId)
+            return angleDeg(subtractVector3(resolve(bodyA.id), reference), subtractVector3(resolve(bodyB.id), reference))
+          })
+          if (refined.value <= 2) {
+            events.push({ ...base, kind: 'conjunction', unit: 'deg', ...refined })
           }
         }
       }
       if (request.eventKinds.includes('opposition')) {
         for (const extremum of findSampledExtrema(angles, 'maximum')) {
-          if (extremum.value >= 178) {
-            events.push({ ...base, kind: 'opposition', value: extremum.value, unit: 'deg', julianDay: extremumJulianDay(julianDays, extremum) })
+          const refined = refine(extremum.sampleIndex, 'maximum', (julianDay) => {
+            const resolve = createBodyPositionResolver(bodiesById, julianDay)
+            const reference = resolve(request.referenceId)
+            return angleDeg(subtractVector3(resolve(bodyA.id), reference), subtractVector3(resolve(bodyB.id), reference))
+          })
+          if (refined.value >= 178) {
+            events.push({ ...base, kind: 'opposition', unit: 'deg', ...refined })
           }
         }
       }
@@ -170,15 +204,23 @@ async function runAnalysis(request: EventAnalysisRequest) {
       for (let sample = 0; sample < sampleCount; sample += 1) {
         radii.push(vector3Magnitude(subtractVector3(track[sample], sunTrack[sample])))
       }
-      const base = { bodyAId: body.id, bodyAName: body.name, model: 'sampled-two-body-parabolic' as const }
+      const base = { bodyAId: body.id, bodyAName: body.name, model: 'sampled-two-body-local-refinement-v2' as const }
       if (request.eventKinds.includes('perihelion')) {
         for (const extremum of findSampledExtrema(radii, 'minimum')) {
-          events.push({ ...base, kind: 'perihelion', value: extremum.value, unit: 'AU', julianDay: extremumJulianDay(julianDays, extremum) })
+          const refined = refine(extremum.sampleIndex, 'minimum', (julianDay) => {
+            const resolve = createBodyPositionResolver(bodiesById, julianDay)
+            return vector3Magnitude(subtractVector3(resolve(body.id), resolve('sun')))
+          })
+          events.push({ ...base, kind: 'perihelion', unit: 'AU', ...refined })
         }
       }
       if (request.eventKinds.includes('aphelion')) {
         for (const extremum of findSampledExtrema(radii, 'maximum')) {
-          events.push({ ...base, kind: 'aphelion', value: extremum.value, unit: 'AU', julianDay: extremumJulianDay(julianDays, extremum) })
+          const refined = refine(extremum.sampleIndex, 'maximum', (julianDay) => {
+            const resolve = createBodyPositionResolver(bodiesById, julianDay)
+            return vector3Magnitude(subtractVector3(resolve(body.id), resolve('sun')))
+          })
+          events.push({ ...base, kind: 'aphelion', unit: 'AU', ...refined })
         }
       }
     }

@@ -46,3 +46,56 @@ export function extremumJulianDay(
   if (!Number.isFinite(neighbor)) return center
   return center + Math.abs(extremum.sampleOffset) * (neighbor - center)
 }
+
+export type RefinedExtremum = {
+  julianDay: number
+  value: number
+  estimatedTimingErrorDays: number
+  iterations: number
+}
+
+/**
+ * Refines a coarse candidate bracket and re-evaluates the physical model at
+ * every candidate time. The remaining bracket width is a conservative timing
+ * error estimate for this exploratory result.
+ */
+export function refineBracketedExtremum(
+  startJulianDay: number,
+  endJulianDay: number,
+  mode: ExtremumMode,
+  evaluate: (julianDay: number) => number,
+  iterations = 16,
+): RefinedExtremum {
+  if (!(endJulianDay > startJulianDay)) throw new RangeError('Extremum bracket must have positive width')
+  const boundedIterations = Math.max(1, Math.min(Math.trunc(iterations), 64))
+  const objective = mode === 'minimum' ? evaluate : (julianDay: number) => -evaluate(julianDay)
+  const ratio = (Math.sqrt(5) - 1) / 2
+  let left = startJulianDay
+  let right = endJulianDay
+  let innerLeft = right - ratio * (right - left)
+  let innerRight = left + ratio * (right - left)
+  let leftValue = objective(innerLeft)
+  let rightValue = objective(innerRight)
+  for (let iteration = 0; iteration < boundedIterations; iteration += 1) {
+    if (leftValue <= rightValue) {
+      right = innerRight
+      innerRight = innerLeft
+      rightValue = leftValue
+      innerLeft = right - ratio * (right - left)
+      leftValue = objective(innerLeft)
+    } else {
+      left = innerLeft
+      innerLeft = innerRight
+      leftValue = rightValue
+      innerRight = left + ratio * (right - left)
+      rightValue = objective(innerRight)
+    }
+  }
+  const julianDay = (left + right) / 2
+  return {
+    julianDay,
+    value: evaluate(julianDay),
+    estimatedTimingErrorDays: (right - left) / 2,
+    iterations: boundedIterations,
+  }
+}
