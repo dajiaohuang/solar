@@ -19,6 +19,10 @@ const DATASET_MODE = process.env.MPCORB_MODE === 'lite' || LEGACY_LITE_LIMIT ? '
 const REQUIRE_FEATURED = process.env.MPCORB_REQUIRE_FEATURED !== '0'
 const PARSER_VERSION = '2.1.0'
 const PERMANENT_NUMBER_BUCKET_SIZE = 10_000
+const COMPACT_INDEX_STRIDE_BYTES = 24
+const DESKTOP_SAMPLE_LIMIT = 30_000
+const MOBILE_SAMPLE_LIMIT = 8_000
+const ORBIT_CLASS_CODES = ['MBA', 'MCR', 'APO', 'ATE', 'AMO', 'ATI', 'HUN', 'HIL', 'JTA', 'TNO', 'OTHER']
 const MONTH_CODES = '123456789ABC'
 const DAY_CODES = '123456789ABCDEFGHIJKLMNOPQRSTUV'
 const SKIPPED_DWARF_IDS = new Set(['1', '134340', '136199', '136108', '136472'])
@@ -227,6 +231,134 @@ function serializeJson(value) {
   return Buffer.from(JSON.stringify(value))
 }
 
+function hashText(value) {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return hash >>> 0
+}
+
+function numericBin(value, boundaries) {
+  const index = boundaries.findIndex((boundary) => value < boundary)
+  return index < 0 ? boundaries.length : index
+}
+
+function sampleStratum(record) {
+  return [
+    record.orbitClassCode,
+    numericBin(record.semiMajorAxisAU, [1, 2, 3, 5, 10, 20, 40]),
+    numericBin(record.eccentricity, [0.1, 0.25, 0.5, 0.75]),
+    numericBin(record.inclinationDeg, [5, 15, 30, 60]),
+    record.absoluteMagnitude === undefined ? 'unknown' : numericBin(record.absoluteMagnitude, [5, 10, 15, 20, 25, 30]),
+  ].join('|')
+}
+
+class StratifiedRecordSampler {
+  constructor(limit) {
+    this.limit = limit
+    this.global = []
+    this.strata = new Map()
+    this.classes = new Map()
+    this.seen = 0
+  }
+
+  add(record) {
+    this.seen += 1
+    if (!this.classes.has(record.orbitClassCode)) this.classes.set(record.orbitClassCode, record)
+    if (this.global.length < this.limit) this.global.push(record)
+    else {
+      const replacement = hashText(`${record.id}:${this.seen}`) % this.seen
+      if (replacement < this.limit) this.global[replacement] = record
+    }
+    const key = sampleStratum(record)
+    const stratum = this.strata.get(key) ?? { seen: 0, records: [] }
+    stratum.seen += 1
+    if (stratum.records.length < 2) stratum.records.push(record)
+    else {
+      const replacement = hashText(`${record.id}:${stratum.seen}`) % stratum.seen
+      if (replacement < 2) stratum.records[replacement] = record
+    }
+    this.strata.set(key, stratum)
+  }
+
+  values() {
+    if (this.seen <= this.limit) return this.global.slice(0, this.seen)
+    const result = []
+    const included = new Set()
+    const add = (record) => {
+      if (!record || included.has(record.id) || result.length >= this.limit) return
+      result.push(record)
+      included.add(record.id)
+    }
+    for (const [, record] of [...this.classes].sort(([left], [right]) => left.localeCompare(right))) add(record)
+    const strata = [...this.strata].sort(([left], [right]) => left.localeCompare(right))
+    for (let sampleIndex = 0; sampleIndex < 2; sampleIndex += 1) {
+      for (const [, stratum] of strata) add(stratum.records[sampleIndex])
+    }
+    for (const record of this.global) add(record)
+    return result
+  }
+}
+
+class CompactIndexBuilder {
+  constructor() {
+    this.chunks = []
+    this.current = Buffer.alloc(COMPACT_INDEX_STRIDE_BYTES * 4096)
+    this.offset = 0
+    this.count = 0
+  }
+
+  add(record, chunkIndex, rowIndex) {
+    if (this.offset + COMPACT_INDEX_STRIDE_BYTES > this.current.length) {
+      this.chunks.push(this.current)
+      this.current = Buffer.alloc(COMPACT_INDEX_STRIDE_BYTES * 4096)
+      this.offset = 0
+    }
+    const offset = this.offset
+    if (chunkIndex > 0xffff || rowIndex > 0xffff) throw new Error('Compact catalog index exceeds its UInt16 shard locator capacity')
+    this.current.writeDoubleLE(record.semiMajorAxisAU, offset)
+    this.current.writeUInt32LE(Math.round(record.eccentricity * 1_000_000_000), offset + 8)
+    this.current.writeUInt32LE(Math.round(record.inclinationDeg * 1_000_000), offset + 12)
+    this.current.writeInt16LE(record.absoluteMagnitude === undefined ? 0x7fff : Math.round(record.absoluteMagnitude * 100), offset + 16)
+    const classIndex = ORBIT_CLASS_CODES.indexOf(record.orbitClassCode)
+    this.current.writeUInt8(classIndex >= 0 ? classIndex : ORBIT_CLASS_CODES.indexOf('OTHER'), offset + 18)
+    this.current.writeUInt8((record.isNeo ? 1 : 0) | (record.isPha ? 2 : 0) | (record.absoluteMagnitude !== undefined ? 4 : 0), offset + 19)
+    this.current.writeUInt16LE(chunkIndex, offset + 20)
+    this.current.writeUInt16LE(rowIndex, offset + 22)
+    this.offset += COMPACT_INDEX_STRIDE_BYTES
+    this.count += 1
+  }
+
+  buffer() {
+    return Buffer.concat([...this.chunks, this.current.subarray(0, this.offset)], this.count * COMPACT_INDEX_STRIDE_BYTES)
+  }
+}
+
+function encodeSample(records) {
+  const metadata = records.map((record) => ({
+    id: record.id,
+    packedDesignation: record.packedDesignation,
+    permanentNumber: record.permanentNumber,
+    label: record.label,
+    shortLabel: record.shortLabel,
+    searchKey: record.searchKey,
+    chunkId: record.chunkId,
+    orbitClassCode: record.orbitClassCode,
+    orbitClassName: record.orbitClassName,
+    absoluteMagnitude: record.absoluteMagnitude,
+    isNeo: record.isNeo,
+    isPha: record.isPha,
+  }))
+  const numeric = new Float64Array(records.length * 8)
+  records.forEach((record, index) => numeric.set([
+    record.epochJd, record.semiMajorAxisAU, record.eccentricity, record.inclinationDeg,
+    record.ascendingNodeDeg, record.argPeriapsisDeg, record.meanAnomalyDeg, record.meanMotionDegPerDay,
+  ], index * 8))
+  return { metadata, binary: Buffer.from(numeric.buffer) }
+}
+
 async function main() {
   assertSafeOutputPath(OUTPUT_ROOT)
   if (!Number.isInteger(CHUNK_SIZE) || CHUNK_SIZE <= 0) throw new Error('MPCORB_CHUNK_SIZE must be a positive integer')
@@ -278,6 +410,9 @@ async function main() {
   let invalidCount = 0
   let chunkIndex = 0
   let chunkRecords = []
+  const compactIndex = new CompactIndexBuilder()
+  const desktopSampler = new StratifiedRecordSampler(DESKTOP_SAMPLE_LIMIT)
+  const mobileSampler = new StratifiedRecordSampler(MOBILE_SAMPLE_LIMIT)
 
   const flushChunk = async () => {
     if (!chunkRecords.length) return
@@ -336,6 +471,9 @@ async function main() {
       (indexEntry.permanentNumber !== undefined && indexEntry.permanentNumber <= LITE_MAX_PERMANENT_NUMBER)
     if (!selectedForDataset) continue
     chunkRecords.push(record)
+    compactIndex.add(record, chunkIndex, chunkRecords.length - 1)
+    desktopSampler.add(record)
+    mobileSampler.add(record)
     totalCount += 1
     categoryCounts[record.orbitClassCode] = (categoryCounts[record.orbitClassCode] ?? 0) + 1
     for (const [name, value] of Object.entries({
@@ -366,6 +504,24 @@ async function main() {
   await flushChunk()
   for (const [bucket, entries] of searchBuckets) await writeArtifact(`search/${bucket}.json`, entries)
   for (const [bucket, entries] of lookupBuckets) await writeArtifact(`lookup/${bucket}.json`, entries)
+
+  const desktopSample = encodeSample(desktopSampler.values())
+  const mobileSample = encodeSample(mobileSampler.values())
+  await Promise.all([
+    writeArtifact('catalog-index.bin', compactIndex.buffer()),
+    writeArtifact('catalog-sample-desktop.json', desktopSample.metadata),
+    writeArtifact('catalog-sample-desktop.bin', desktopSample.binary),
+    writeArtifact('catalog-sample-mobile.json', mobileSample.metadata),
+    writeArtifact('catalog-sample-mobile.bin', mobileSample.binary),
+    writeArtifact('catalog-summary.json', {
+      schemaVersion: 1,
+      datasetMode: DATASET_MODE,
+      totalCount,
+      categoryCounts,
+      numericRanges: ranges,
+      sourceSha256,
+    }),
+  ])
 
   const missingFeatured = findMissingFeatured(featured.map((entry) => entry.shortLabel))
   if (REQUIRE_FEATURED && missingFeatured.length) {
@@ -399,6 +555,18 @@ async function main() {
     chunkCount: chunkIndex,
     chunkSize: CHUNK_SIZE,
     format: 'binary-v1',
+    compactIndex: {
+      path: 'catalog-index.bin',
+      format: 'catalog-index-v1',
+      strideBytes: COMPACT_INDEX_STRIDE_BYTES,
+      count: totalCount,
+      classCodes: ORBIT_CLASS_CODES,
+    },
+    precomputedSamples: {
+      desktop: { metadataPath: 'catalog-sample-desktop.json', binaryPath: 'catalog-sample-desktop.bin', count: desktopSample.metadata.length },
+      mobile: { metadataPath: 'catalog-sample-mobile.json', binaryPath: 'catalog-sample-mobile.bin', count: mobileSample.metadata.length },
+    },
+    summaryPath: 'catalog-summary.json',
     searchIndex: {
       permanentNumberBucketSize: PERMANENT_NUMBER_BUCKET_SIZE,
       provisionalYearBuckets: true,
@@ -451,6 +619,9 @@ async function main() {
       provisionalYearSearch: true,
       tokenInitialSearch: true,
       binaryStride: 8,
+      compactIndexStrideBytes: COMPACT_INDEX_STRIDE_BYTES,
+      desktopSampleBounded: desktopSample.metadata.length <= DESKTOP_SAMPLE_LIMIT,
+      mobileSampleBounded: mobileSample.metadata.length <= MOBILE_SAMPLE_LIMIT,
     },
   }
   await Promise.all([

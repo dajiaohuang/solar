@@ -128,8 +128,39 @@ for (const featured of manifest.featured ?? []) {
   }
 }
 
+const compactIndex = manifest.compactIndex
+if (!compactIndex || compactIndex.format !== 'catalog-index-v1' || compactIndex.count !== manifest.totalCount || compactIndex.strideBytes !== 24) {
+  throw new Error('Dataset manifest does not declare a valid compact catalog index')
+}
+const compactIndexData = await readFile(resolve(release, compactIndex.path))
+if (compactIndexData.byteLength !== compactIndex.count * compactIndex.strideBytes) {
+  throw new Error(`Compact catalog index has ${compactIndexData.byteLength} bytes; expected ${compactIndex.count * compactIndex.strideBytes}`)
+}
+
+for (const size of ['desktop', 'mobile']) {
+  const sample = manifest.precomputedSamples?.[size]
+  if (!sample || !Number.isSafeInteger(sample.count) || sample.count <= 0) {
+    throw new Error(`Dataset manifest does not declare a valid ${size} sample`)
+  }
+  const metadata = await readJson(resolve(release, sample.metadataPath), `${size} sample metadata`)
+  const binary = await readFile(resolve(release, sample.binaryPath))
+  if (!Array.isArray(metadata) || metadata.length !== sample.count || binary.byteLength !== sample.count * 8 * Float64Array.BYTES_PER_ELEMENT) {
+    throw new Error(`Precomputed ${size} sample does not match its manifest count`)
+  }
+  if (sample.count > (size === 'desktop' ? 30_000 : 8_000)) throw new Error(`Precomputed ${size} sample exceeds its display budget`)
+  const firstScreenBytes = Buffer.byteLength(JSON.stringify(metadata)) + binary.byteLength
+  const byteBudget = size === 'desktop' ? 15 * 1024 * 1024 : 5 * 1024 * 1024
+  if (firstScreenBytes > byteBudget) {
+    throw new Error(`Precomputed ${size} sample uses ${firstScreenBytes} bytes; budget is ${byteBudget}`)
+  }
+}
+
+if (!manifest.summaryPath || !(manifest.summaryPath in checksums.files)) {
+  throw new Error('Dataset manifest does not declare a checksummed catalog summary')
+}
+
 const contentFiles = Object.fromEntries(Object.entries(checksums.files)
-  .filter(([file]) => /^(binary|meta|search|lookup)\//.test(file))
+  .filter(([file]) => /^(binary|meta|search|lookup)\//.test(file) || /^catalog-(index|sample|summary)/.test(file))
   .sort(([left], [right]) => left.localeCompare(right)))
 const contentSha256 = createHash('sha256').update(JSON.stringify(contentFiles)).digest('hex')
 if (contentSha256 !== manifest.contentSha256) throw new Error('Dataset content identity does not match its data artifacts')
