@@ -8,6 +8,14 @@ import type {
 
 let nextRequestId = 0
 
+export function createCatalogScanKey(
+  datasetVersion: string,
+  filters: CatalogFilters,
+  sampleLimit: number,
+) {
+  return JSON.stringify({ datasetVersion, filters, sampleLimit })
+}
+
 export function scanAsteroidCatalog(params: {
   manifest: AsteroidManifest
   filters: CatalogFilters
@@ -15,7 +23,8 @@ export function scanAsteroidCatalog(params: {
   signal?: AbortSignal
   onProgress?: (progress: number) => void
 }) {
-  return new Promise<{ total: number; records: AsteroidRecord[] }>((resolve, reject) => {
+  const scanKey = createCatalogScanKey(params.manifest.version, params.filters, params.sampleLimit)
+  return new Promise<{ scanKey: string; total: number; records: AsteroidRecord[] }>((resolve, reject) => {
     if (params.signal?.aborted) {
       reject(new DOMException('Catalog scan was cancelled', 'AbortError'))
       return
@@ -29,12 +38,12 @@ export function scanAsteroidCatalog(params: {
     }
     params.signal?.addEventListener('abort', abort, { once: true })
     worker.onmessage = (event: MessageEvent<CatalogScanWorkerResponse>) => {
-      if (event.data.requestId !== requestId) return
+      if (event.data.requestId !== requestId || event.data.scanKey !== scanKey) return
       if (event.data.type === 'progress') params.onProgress?.(event.data.progress ?? 0)
       if (event.data.type === 'result') {
         params.signal?.removeEventListener('abort', abort)
         worker.terminate()
-        resolve({ total: event.data.total ?? 0, records: event.data.records ?? [] })
+        resolve({ scanKey, total: event.data.total ?? 0, records: event.data.records ?? [] })
       }
       if (event.data.type === 'error') {
         params.signal?.removeEventListener('abort', abort)
@@ -48,7 +57,7 @@ export function scanAsteroidCatalog(params: {
       reject(new Error(event.message || 'Catalog scan failed'))
     }
     const request: CatalogScanWorkerRequest = {
-      type: 'scan', requestId, manifest: params.manifest, filters: params.filters, sampleLimit: params.sampleLimit,
+      type: 'scan', requestId, scanKey, manifest: params.manifest, filters: params.filters, sampleLimit: params.sampleLimit,
     }
     worker.postMessage(request)
   })

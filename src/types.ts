@@ -219,6 +219,18 @@ export type AsteroidManifest = {
   chunkCount: number
   chunkSize: number
   format?: 'json-v1' | 'binary-v1'
+  compactIndex?: {
+    path: string
+    format: 'catalog-index-v1'
+    strideBytes: number
+    count: number
+    classCodes: string[]
+  }
+  precomputedSamples?: {
+    desktop: CatalogSampleArtifact
+    mobile: CatalogSampleArtifact
+  }
+  summaryPath?: string
   searchIndex?: {
     permanentNumberBucketSize: number
     provisionalYearBuckets: boolean
@@ -231,9 +243,16 @@ export type AsteroidManifest = {
   featured: AsteroidIndexEntry[]
 }
 
+export type CatalogSampleArtifact = {
+  metadataPath: string
+  binaryPath: string
+  count: number
+}
+
 export type CatalogScanWorkerRequest = {
   type: 'scan'
   requestId: number
+  scanKey: string
   manifest: AsteroidManifest
   filters: CatalogFilters
   sampleLimit: number
@@ -242,6 +261,7 @@ export type CatalogScanWorkerRequest = {
 export type CatalogScanWorkerResponse = {
   type: 'progress' | 'result' | 'error'
   requestId: number
+  scanKey: string
   progress?: number
   total?: number
   records?: AsteroidRecord[]

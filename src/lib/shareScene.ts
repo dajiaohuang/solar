@@ -12,7 +12,9 @@ export function encodeCurrentScene() {
   const ui = uiStore.getState()
   const query = encodeUrlState({
     route: ui.route,
-    dataset: catalog.datasetVersion === 'unavailable' ? undefined : catalog.datasetVersion,
+    dataset: catalog.datasetVersion !== 'unavailable'
+      ? catalog.datasetVersion
+      : catalog.requestedDatasetVersion ?? undefined,
     mode: catalog.mode,
     ref: simulation.referenceId,
     compareRef: simulation.comparisonReferenceId,

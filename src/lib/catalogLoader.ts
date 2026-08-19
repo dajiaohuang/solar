@@ -16,6 +16,7 @@ const dataRoot = `${BASE}data/asteroids`
 const searchBucketCache = new Map<string, Promise<AsteroidIndexEntry[]>>()
 const chunkCache = new Map<string, Promise<AsteroidRecord[]>>()
 const lookupCache = new Map<string, Promise<AsteroidIndexEntry[]>>()
+const sampleCache = new Map<string, Promise<AsteroidRecord[]>>()
 const PERMANENT_NUMBER_BUCKET_SIZE = 10_000
 const MAX_SEARCH_BUCKET_CACHE_ENTRIES = 4
 export const MAX_CHUNK_CACHE_ENTRIES = 8
@@ -82,6 +83,7 @@ export function resetDatasetLoader() {
   searchBucketCache.clear()
   chunkCache.clear()
   lookupCache.clear()
+  sampleCache.clear()
 }
 
 export async function loadAsteroidManifest(requestedVersion?: string) {
@@ -295,6 +297,41 @@ export async function loadAsteroidBodiesByIds(ids: BodyId[]) {
   const chunks = await Promise.all([...new Set(matchedEntries.map((entry) => entry.chunkId))].map(loadAsteroidChunk))
   const wanted = new Set(asteroidIds)
   return chunks.flat().filter((record) => wanted.has(record.id)).map(asteroidRecordToBody)
+}
+
+export function loadAsteroidSample(manifest: AsteroidManifest, size: 'desktop' | 'mobile') {
+  const artifact = manifest.precomputedSamples?.[size]
+  if (!artifact) return Promise.resolve<AsteroidRecord[]>([])
+  const cacheKey = `${manifest.version}:${size}`
+  let promise = sampleCache.get(cacheKey)
+  if (!promise) {
+    const root = manifest.releasePath ?? activeReleaseRoot
+    promise = Promise.all([
+      fetchJson<AsteroidIndexEntry[]>(`${root}/${artifact.metadataPath}`),
+      fetchImmutableArrayBuffer(`${root}/${artifact.binaryPath}`),
+    ]).then(([metadata, buffer]) => {
+      const values = new Float64Array(buffer)
+      if (metadata.length !== artifact.count || values.length !== artifact.count * 8) {
+        throw new Error(`Precomputed ${size} sample does not match its manifest count`)
+      }
+      return metadata.map((entry, index) => {
+        const offset = index * 8
+        return {
+          ...entry,
+          epochJd: values[offset],
+          semiMajorAxisAU: values[offset + 1],
+          eccentricity: values[offset + 2],
+          inclinationDeg: values[offset + 3],
+          ascendingNodeDeg: values[offset + 4],
+          argPeriapsisDeg: values[offset + 5],
+          meanAnomalyDeg: values[offset + 6],
+          meanMotionDegPerDay: values[offset + 7],
+        }
+      })
+    })
+    sampleCache.set(cacheKey, promise)
+  }
+  return promise
 }
 
 function getChunkIdFromIndex(index: number) {

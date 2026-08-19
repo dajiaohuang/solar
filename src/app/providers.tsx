@@ -2,7 +2,7 @@ import { useEffect, useRef, type ReactNode } from 'react'
 import { simulationClock } from '../engine/clock/SimulationClock'
 import { I18nProvider } from '../i18n/provider'
 import { fetchSbdbBody } from '../data/loaders/sbdb'
-import { loadAsteroidBodiesByIds, loadAsteroidManifest, loadDatasetProvenance } from '../lib/catalogLoader'
+import { loadAsteroidBodiesByIds, loadAsteroidManifest, loadAsteroidSample, loadDatasetProvenance } from '../lib/catalogLoader'
 import { encodeCurrentScene } from '../lib/shareScene'
 import { decodeUrlState } from '../lib/urlState'
 import { catalogActions, catalogStore } from '../state/catalog-store'
@@ -59,7 +59,12 @@ export function AppProviders({ children }: { children: ReactNode }) {
       error: null,
     })
     void loadAsteroidManifest(initial.dataset).then(async (manifest) => {
-      const provenance = manifest ? await loadDatasetProvenance() : null
+      const [provenance, sample] = manifest
+        ? await Promise.all([
+            loadDatasetProvenance(),
+            loadAsteroidSample(manifest, window.matchMedia('(max-width: 800px)').matches ? 'mobile' : 'desktop'),
+          ])
+        : [null, []]
       catalogActions.patch({
         manifest,
         provenance,
@@ -68,6 +73,8 @@ export function AppProviders({ children }: { children: ReactNode }) {
         mode: manifest?.datasetMode ?? initial.mode ?? 'lite',
         selectionScope: null,
         recordsComplete: false,
+        records: sample,
+        recordsSampled: Boolean(manifest && sample.length < manifest.totalCount),
         loadProgress: 0,
         isLoading: false,
         error: !manifest && initial.dataset

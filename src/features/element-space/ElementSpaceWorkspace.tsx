@@ -4,7 +4,7 @@ import { majorBodiesWithPhysicalData, useBodyRegistry } from '../../app/bodyRegi
 import { useSimulationClock } from '../../engine/clock/useSimulationClock'
 import { useI18n } from '../../i18n/context'
 import { asteroidRecordToBody } from '../../lib/catalogLoader'
-import { scanAsteroidCatalog } from '../../lib/catalogScan'
+import { createCatalogScanKey, scanAsteroidCatalog } from '../../lib/catalogScan'
 import { elementPlotCoordinates } from '../../lib/elementPlot'
 import { buildCurrentPositions } from '../../lib/trajectory'
 import { catalogActions, catalogStore, filterCatalogRecords } from '../../state/catalog-store'
@@ -151,24 +151,33 @@ export function ElementSpaceWorkspace() {
   const { t, language } = useI18n()
 
   useEffect(() => {
-    if (!catalog.manifest || (catalog.recordsComplete && catalog.filteredTotal !== null)) return
+    if (!catalog.manifest || catalog.manifest.precomputedSamples || (catalog.recordsComplete && catalog.filteredTotal !== null)) return
     const controller = new AbortController()
+    const sampleLimit = window.matchMedia('(max-width: 800px)').matches ? 8_000 : catalog.mode === 'lite' ? 8_000 : 30_000
+    const scanKey = createCatalogScanKey(catalog.manifest.version, catalog.filters, sampleLimit)
     const timer = window.setTimeout(() => {
       catalogActions.patch({ isLoading: true, error: null, loadProgress: 0 })
       void scanAsteroidCatalog({
         manifest: catalog.manifest!,
         filters: catalog.filters,
-        sampleLimit: window.matchMedia('(max-width: 800px)').matches ? 8_000 : catalog.mode === 'lite' ? 8_000 : 30_000,
+        sampleLimit,
         signal: controller.signal,
         onProgress: (loadProgress) => catalogActions.patch({ loadProgress }),
-      }).then((result) => catalogActions.patch({
+      }).then((result) => {
+        const current = catalogStore.getState()
+        const currentKey = current.manifest
+          ? createCatalogScanKey(current.manifest.version, current.filters, sampleLimit)
+          : ''
+        if (controller.signal.aborted || result.scanKey !== scanKey || currentKey !== scanKey) return
+        catalogActions.patch({
         records: result.records,
         recordsComplete: true,
         filteredTotal: result.total,
         recordsSampled: result.total > result.records.length,
         loadProgress: 1,
         isLoading: false,
-      })).catch((error: unknown) => {
+        })
+      }).catch((error: unknown) => {
         if (!controller.signal.aborted) catalogActions.patch({ error: error instanceof Error ? error.message : String(error), isLoading: false })
       })
     }, 250)
