@@ -131,7 +131,7 @@ The simulation clock is not React state updated every animation frame. React rec
 | Laplace SOI | `a(m/M)^(2/5)`; never labeled as a Hill sphere |
 | Hohmann | Coplanar circular endpoints, impulsive solar two-body model; signed burns and km/s conversion |
 | Lambert | Zero-revolution universal-variable solar two-body solution using approximate endpoint positions |
-| Event search | Bounded sampled minima/alignment extrema; exploratory, not certified close-approach prediction |
+| Event search | Non-endpoint local distance/alignment extrema on a bounded grid, refined by three-point parabolic interpolation; exploratory, not a certified prediction |
 | Spacecraft overlays | Milestone-dated schematic tracks labeled separately from Horizons and propagated ephemerides |
 
 JPL SBDB values are parsed from the documented `orbit.elements[]` records (`name`, `value`, `units`, and uncertainty fields), not from invented object properties.
@@ -152,7 +152,7 @@ npm run build
 npm run ci
 ```
 
-Unit coverage includes Julian dates, Kepler propagation, parent/reference frames, Hohmann units/direction, Moon phase geometry, Hill/SOI definitions, strict JPL SBDB fixtures, Lambert circular-arc recovery, versioned deep-link round trips, MPCORB parsing, and an end-to-end immutable dataset publication/checksum fixture. Playwright runs the core routes, reproducible stories, mission workers, and 2D/3D renderers on desktop and mobile Chromium.
+Unit coverage includes Julian dates, Kepler propagation, parent/reference frames, Hohmann units/direction, Moon phase geometry, Hill/SOI definitions, strict JPL SBDB fixtures, local event-extremum detection, Lambert circular-arc recovery, versioned deep-link round trips, MPCORB parsing, scoped persistence, and an end-to-end immutable dataset publication/checksum fixture. Playwright runs the core routes, reproducible stories, mission workers, Service Worker cache isolation, and 2D/3D renderers on desktop and mobile Chromium.
 
 ## Deployment
 

@@ -92,7 +92,7 @@ lookup/*.json
 | Laplace SOI | `a(m/M)^(2/5)`，不会再与希尔球混称 |
 | 霍曼转移 | 共面圆轨道端点、瞬时脉冲、太阳二体模型；输出有符号 km/s |
 | Lambert | 使用近似端点位置的零圈通用变量太阳二体解 |
-| 事件分析 | 有界采样的距离极小值和角度极值，只用于探索 |
+| 事件分析 | 有界网格上的非端点局部距离/角度极值，并用三点抛物线插值细化；只用于探索，不是认证预报 |
 | 航天器轨迹 | 按真实任务里程碑定时的示意折线，与 Horizons/传播星历分开标注 |
 
 JPL SBDB 严格读取官方结构 `orbit.elements[]` 中的 `name/value/units/sigma`，不会从不存在的扁平字段生成默认轨道。
@@ -113,7 +113,7 @@ npm run build
 npm run ci
 ```
 
-单元测试覆盖儒略日、开普勒传播、父天体/参考系、霍曼单位与方向、月相几何、Hill/SOI 定义、严格 JPL SBDB fixture、Lambert 圆轨道弧、版本化深链接、MPCORB 定长解析，以及微型数据集发布/哈希复核。Playwright 在桌面和移动 Chromium 上覆盖核心路由、可复现故事、任务 Worker 与 2D/3D 渲染。
+单元测试覆盖儒略日、开普勒传播、父天体/参考系、霍曼单位与方向、月相几何、Hill/SOI 定义、严格 JPL SBDB fixture、局部事件极值检测、Lambert 圆轨道弧、版本化深链接、MPCORB 定长解析、缓存作用域，以及微型数据集发布/哈希复核。Playwright 在桌面和移动 Chromium 上覆盖核心路由、可复现故事、任务 Worker、Service Worker 缓存隔离与 2D/3D 渲染。
 
 ## 开源许可
 

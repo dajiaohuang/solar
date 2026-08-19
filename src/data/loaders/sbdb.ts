@@ -14,7 +14,7 @@ export type SbdbResponse = {
     orbit_class?: { code?: string; name?: string }
   }
   orbit?: {
-    epoch?: string | number
+    epoch?: string | number | null
     elements?: SbdbElement[]
     condition_code?: string | number
   }
@@ -28,9 +28,16 @@ export class SbdbParseError extends Error {
   }
 }
 
-function finiteNumber(value: unknown, field: string) {
-  const parsed = typeof value === 'number' ? value : Number(value)
-  if (!Number.isFinite(parsed)) {
+export function finiteNumberOrNull(value: unknown) {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'string' && !value.trim()) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function requiredFiniteNumber(value: unknown, field: string) {
+  const parsed = finiteNumberOrNull(value)
+  if (parsed === null) {
     throw new SbdbParseError(`JPL SBDB response is missing a finite ${field} element`)
   }
   return parsed
@@ -53,7 +60,7 @@ function requiredElement(
       `JPL SBDB ${name} element uses unsupported units "${element.units ?? 'unitless'}"; expected ${acceptedUnits.map((unit) => unit || 'unitless').join(' or ')}`,
     )
   }
-  return finiteNumber(element.value, name)
+  return requiredFiniteNumber(element.value, name)
 }
 
 export function parseSbdbBody(response: SbdbResponse, fallbackDesignation: string): CelestialBody {
@@ -72,7 +79,7 @@ export function parseSbdbBody(response: SbdbResponse, fallbackDesignation: strin
   }
   if (a <= 0) throw new SbdbParseError(`The selected object has semi-major axis ${a}; elliptic SBDB orbits require a > 0`)
 
-  const epochJd = finiteNumber(orbit.epoch, 'epoch')
+  const epochJd = requiredFiniteNumber(orbit.epoch, 'epoch')
   if (epochJd < 2_000_000 || epochJd > 3_000_000) {
     throw new SbdbParseError(`JPL SBDB epoch ${epochJd} is outside the supported Julian Date range`)
   }
@@ -86,9 +93,7 @@ export function parseSbdbBody(response: SbdbResponse, fallbackDesignation: strin
   const argPeriapsisDeg = requiredElement(elements, 'w', ['deg'])
   const meanAnomalyDeg = requiredElement(elements, 'ma', ['deg'])
   const absoluteMagnitudeEntry = response.phys_par?.find((entry) => entry.name === 'H')
-  const absoluteMagnitude = absoluteMagnitudeEntry
-    ? Number(absoluteMagnitudeEntry.value)
-    : undefined
+  const absoluteMagnitude = finiteNumberOrNull(absoluteMagnitudeEntry?.value) ?? undefined
   const designation = response.object?.des || fallbackDesignation
   const fullName = response.object?.fullname?.trim() || designation
 

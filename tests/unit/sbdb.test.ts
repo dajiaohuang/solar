@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import fixture from '../fixtures/sbdb-bennu.json'
-import { parseSbdbBody, SbdbParseError, type SbdbResponse } from '../../src/data/loaders/sbdb'
+import { finiteNumberOrNull, parseSbdbBody, SbdbParseError, type SbdbResponse } from '../../src/data/loaders/sbdb'
 
 describe('JPL SBDB parser', () => {
   it('reads values from orbit.elements rather than invented orbit properties', () => {
@@ -18,6 +18,23 @@ describe('JPL SBDB parser', () => {
     const hyperbolic = structuredClone(fixture) as SbdbResponse
     hyperbolic.orbit!.elements!.find((element) => element.name === 'e')!.value = '1.2'
     expect(() => parseSbdbBody(hyperbolic, 'test')).toThrow(SbdbParseError)
+  })
+
+  it('does not coerce null or blank SBDB values to zero', () => {
+    expect(finiteNumberOrNull(null)).toBeNull()
+    expect(finiteNumberOrNull('  ')).toBeNull()
+
+    const missingEpoch = structuredClone(fixture) as SbdbResponse
+    missingEpoch.orbit!.epoch = ' '
+    expect(() => parseSbdbBody(missingEpoch, 'test')).toThrow(/finite epoch/)
+
+    const missingElement = structuredClone(fixture) as SbdbResponse
+    missingElement.orbit!.elements!.find((element) => element.name === 'e')!.value = null
+    expect(() => parseSbdbBody(missingElement, 'test')).toThrow(/finite e element/)
+
+    const missingMagnitude = structuredClone(fixture) as SbdbResponse
+    missingMagnitude.phys_par!.find((entry) => entry.name === 'H')!.value = ' '
+    expect(parseSbdbBody(missingMagnitude, 'test').absoluteMagnitude).toBeUndefined()
   })
 
   it.each([['e', '-0.1'], ['a', '0'], ['n', '0']] as const)(

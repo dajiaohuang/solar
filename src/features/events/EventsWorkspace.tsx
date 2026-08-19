@@ -71,8 +71,8 @@ export function EventsWorkspace() {
       <aside className="event-evidence glass-panel">
         <div className="section-kicker">ANALYSIS CONTRACT</div>
         <dl><div><dt>{t('model')}</dt><dd>Sampled two-body positions</dd></div><div><dt>{t('orbitEpoch')}</dt><dd>Per-object osculating epoch</dd></div><div><dt>{t('window')}</dt><dd>JD {(contractCenter - contractWindow / 2).toFixed(2)} — {(contractCenter + contractWindow / 2).toFixed(2)}</dd></div><div><dt>Sampling</dt><dd>{contractSamples} samples, bounded to 48 objects</dd></div></dl>
-        <p className="fine-print">Results are exploratory minima on a sampled grid. They are not certified close-approach predictions.</p>
-        <div className="export-actions"><button disabled={!analysis.events.length} onClick={() => download('solar-atlas-events.json', JSON.stringify({ generatedAt: new Date().toISOString(), model: 'sampled-two-body', events: analysis.events }, null, 2), 'application/json')}>{t('exportJson')}</button><button disabled={!analysis.events.length} onClick={() => {
+        <p className="fine-print">Events are non-endpoint local extrema refined by three-point parabolic interpolation. They remain exploratory two-body results, not certified predictions.</p>
+        <div className="export-actions"><button disabled={!analysis.events.length} onClick={() => download('solar-atlas-events.json', JSON.stringify({ generatedAt: new Date().toISOString(), model: 'sampled-two-body-parabolic', events: analysis.events }, null, 2), 'application/json')}>{t('exportJson')}</button><button disabled={!analysis.events.length} onClick={() => {
           const header = 'kind,bodyA,bodyB,julianDay,value,unit,model\n'
           const rows = analysis.events.map((event) => [event.kind, event.bodyAName, event.bodyBName ?? '', event.julianDay, event.value, event.unit, event.model].map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n')
           download('solar-atlas-events.csv', header + rows, 'text/csv')

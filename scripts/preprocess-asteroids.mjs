@@ -17,7 +17,7 @@ const LEGACY_LITE_LIMIT = process.env.MPCORB_LIMIT
 const LITE_MAX_PERMANENT_NUMBER = Number(process.env.MPCORB_LITE_MAX_NUMBER ?? LEGACY_LITE_LIMIT ?? 30_000)
 const DATASET_MODE = process.env.MPCORB_MODE === 'lite' || LEGACY_LITE_LIMIT ? 'lite' : 'full'
 const REQUIRE_FEATURED = process.env.MPCORB_REQUIRE_FEATURED !== '0'
-const PARSER_VERSION = '2.0.0'
+const PARSER_VERSION = '2.1.0'
 const PERMANENT_NUMBER_BUCKET_SIZE = 10_000
 const MONTH_CODES = '123456789ABC'
 const DAY_CODES = '123456789ABCDEFGHIJKLMNOPQRSTUV'
@@ -69,22 +69,26 @@ export function decodePackedEpoch(packedDate) {
   return gregorianToJulianDay(century + yearSuffix, monthIndex + 1, dayIndex + 1)
 }
 
-function parseNumber(value) {
-  const parsed = Number(value.trim())
+export function finiteNumberOrNull(value) {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'string' && !value.trim()) return null
+  const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
 }
 
 export function classifyOrbit(flags) {
   const classMap = {
-    1: ['ATI', 'Atira'], 2: ['ATE', 'Aten'], 3: ['APO', 'Apollo'], 4: ['AMO', 'Amor'],
+    0: ['MBA', 'Main-belt Asteroid'], 1: ['ATI', 'Atira'], 2: ['ATE', 'Aten'], 3: ['APO', 'Apollo'], 4: ['AMO', 'Amor'],
+    5: ['MCR', 'Object with q < 1.665 AU'],
     6: ['HUN', 'Hungaria'], 8: ['HIL', 'Hilda'], 9: ['JTA', 'Jupiter Trojan'], 10: ['TNO', 'Distant Object'],
   }
-  const [orbitClassCode, orbitClassName] = classMap[flags & 63] ?? ['MBA', 'Main-belt Asteroid']
+  const validFlags = Number.isInteger(flags) && flags >= 0 ? flags : null
+  const [orbitClassCode, orbitClassName] = classMap[validFlags === null ? -1 : validFlags & 63] ?? ['OTHER', 'Other or unknown orbit type']
   return {
     orbitClassCode,
     orbitClassName,
-    isNeo: (flags & 2048) !== 0,
-    isPha: (flags & 32768) !== 0,
+    isNeo: validFlags !== null && (validFlags & 2048) !== 0,
+    isPha: validFlags !== null && (validFlags & 32768) !== 0,
   }
 }
 
@@ -152,23 +156,23 @@ export function parseMpcorbLine(line, chunkId = 'chunk-0000') {
   if (!packedDesignation || isSkippedDwarf(readableDesignation, packedDesignation)) return { skip: true }
   const numeric = {
     epochJd: decodePackedEpoch(line.slice(20, 25).trim()),
-    meanAnomalyDeg: parseNumber(line.slice(26, 35)),
-    argPeriapsisDeg: parseNumber(line.slice(37, 46)),
-    ascendingNodeDeg: parseNumber(line.slice(48, 57)),
-    inclinationDeg: parseNumber(line.slice(59, 68)),
-    eccentricity: parseNumber(line.slice(70, 79)),
-    meanMotionDegPerDay: parseNumber(line.slice(80, 91)),
-    semiMajorAxisAU: parseNumber(line.slice(92, 103)),
+    meanAnomalyDeg: finiteNumberOrNull(line.slice(26, 35)),
+    argPeriapsisDeg: finiteNumberOrNull(line.slice(37, 46)),
+    ascendingNodeDeg: finiteNumberOrNull(line.slice(48, 57)),
+    inclinationDeg: finiteNumberOrNull(line.slice(59, 68)),
+    eccentricity: finiteNumberOrNull(line.slice(70, 79)),
+    meanMotionDegPerDay: finiteNumberOrNull(line.slice(80, 91)),
+    semiMajorAxisAU: finiteNumberOrNull(line.slice(92, 103)),
   }
   if (Object.values(numeric).some((value) => value === null)) return { error: 'missing-element' }
   if (numeric.eccentricity < 0 || numeric.eccentricity >= 1) return { error: 'non-elliptic' }
   if (numeric.semiMajorAxisAU <= 0 || numeric.meanMotionDegPerDay <= 0) return { error: 'non-positive-orbit' }
   if (numeric.inclinationDeg < 0 || numeric.inclinationDeg > 180) return { error: 'inclination-range' }
 
-  const absoluteMagnitude = parseNumber(line.slice(8, 13)) ?? undefined
+  const absoluteMagnitude = finiteNumberOrNull(line.slice(8, 13)) ?? undefined
   const flagsText = line.slice(161, 165).trim()
   const flags = flagsText ? Number.parseInt(flagsText, 16) : 0
-  const classification = classifyOrbit(Number.isFinite(flags) ? flags : 0)
+  const classification = classifyOrbit(flags)
   const shortLabel = readableDesignation.replace(/^\(?\d+\)?\s*/, '').trim() || readableDesignation
   const shortSearchKey = normalizeSearchText(shortLabel)
   const searchKey = [shortSearchKey, normalizeSearchText(readableDesignation), normalizeSearchText(packedDesignation)]

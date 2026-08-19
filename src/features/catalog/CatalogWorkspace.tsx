@@ -20,7 +20,7 @@ import type { AsteroidSectionCursor } from '../../types'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { DatasetCard } from './DatasetCard'
 
-const CLASS_OPTIONS = ['all', 'MBA', 'APO', 'ATE', 'AMO', 'ATI', 'HUN', 'HIL', 'JTA', 'TNO']
+const CLASS_OPTIONS = ['all', 'MBA', 'MCR', 'APO', 'ATE', 'AMO', 'ATI', 'HUN', 'HIL', 'JTA', 'TNO', 'OTHER']
 
 export function CatalogWorkspace() {
   const catalog = catalogStore.useStore()

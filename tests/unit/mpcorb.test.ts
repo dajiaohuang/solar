@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildBodyId,
+  classifyOrbit,
   decodePackedEpoch,
   decodePackedPermanentNumber,
   findMissingFeatured,
+  finiteNumberOrNull,
   getPermanentNumberBucketKey,
   getSearchBucketKeys,
   parseMpcorbLine,
@@ -38,6 +40,26 @@ describe('MPCORB pipeline parser', () => {
       meanMotionDegPerDay: 0.214,
     })
     expect(parsed.indexEntry?.searchKey).toContain('sample')
+  })
+
+  it('treats blank numeric fields as missing instead of zero', () => {
+    expect(finiteNumberOrNull('   ')).toBeNull()
+    expect(finiteNumberOrNull(null)).toBeNull()
+
+    const requiredBlank = fixedWidthLine().replace('1 Ceres', '999 Sample').split('')
+    requiredBlank.splice(70, 9, ...'         ')
+    expect(parseMpcorbLine(requiredBlank.join('')).error).toBe('missing-element')
+
+    const optionalBlank = fixedWidthLine().replace('1 Ceres', '999 Sample').split('')
+    optionalBlank.splice(8, 5, ...'     ')
+    expect(parseMpcorbLine(optionalBlank.join('')).record?.absoluteMagnitude).toBeUndefined()
+  })
+
+  it('classifies q < 1.665 AU objects and keeps unknown flags out of the main belt', () => {
+    expect(classifyOrbit(0)).toMatchObject({ orbitClassCode: 'MBA' })
+    expect(classifyOrbit(5)).toMatchObject({ orbitClassCode: 'MCR' })
+    expect(classifyOrbit(7)).toMatchObject({ orbitClassCode: 'OTHER', isNeo: false, isPha: false })
+    expect(classifyOrbit(Number.NaN)).toMatchObject({ orbitClassCode: 'OTHER', isNeo: false, isPha: false })
   })
 
   it('uses the packed designation as a rename-stable identity', () => {

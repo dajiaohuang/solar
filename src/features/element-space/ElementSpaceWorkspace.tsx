@@ -21,7 +21,7 @@ const RESONANCE_BANDS = [
 
 const CLASS_COLORS: Record<string, string> = {
   MBA: '#72a6c9', APO: '#ff745f', ATE: '#ffad55', AMO: '#e78fd8', ATI: '#f4d35e',
-  HUN: '#6fd0a8', HIL: '#9e8cff', JTA: '#c9a66b', TNO: '#8eaeff', other: '#8795a5',
+  MCR: '#f08f6a', HUN: '#6fd0a8', HIL: '#9e8cff', JTA: '#c9a66b', TNO: '#8eaeff', OTHER: '#8795a5',
 }
 
 function toPlotDatum(record: AsteroidRecord, mode: PlotMode): PlotDatum {
@@ -105,7 +105,7 @@ function ElementScatter({ data, mode, selectedIds, onSelect, onFocus }: ScatterP
     for (const point of data) {
       const selected = selectedIds.has(point.record.id)
       context.beginPath(); context.arc(px(point.x), py(point.y), selected ? 4.4 : 2.2, 0, Math.PI * 2)
-      context.fillStyle = selected ? '#fff2bd' : CLASS_COLORS[point.record.orbitClassCode] ?? CLASS_COLORS.other
+      context.fillStyle = selected ? '#fff2bd' : CLASS_COLORS[point.record.orbitClassCode] ?? CLASS_COLORS.OTHER
       context.globalAlpha = selected ? 1 : 0.62; context.fill()
     }
     context.globalAlpha = 1
