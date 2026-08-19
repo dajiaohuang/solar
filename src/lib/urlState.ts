@@ -1,11 +1,12 @@
 import type { AppRoute, ElementPlotMode } from '../state/ui-store'
 import type { BodyId, DatasetMode, MagnitudeStatus } from '../types'
 
-export const SCENE_URL_VERSION = 2 as const
+export const SCENE_URL_VERSION = 3 as const
+export const LEGACY_SCENE_URL_VERSION = 2 as const
 export type ScientificLayer = 'ecliptic' | 'orbits' | 'lagrange' | 'hill' | 'soi' | 'spacecraft'
 
 export type AppUrlState = {
-  version?: typeof SCENE_URL_VERSION
+  version?: typeof SCENE_URL_VERSION | typeof LEGACY_SCENE_URL_VERSION
   route?: AppRoute
   dataset?: string
   mode?: DatasetMode
@@ -21,6 +22,12 @@ export type AppUrlState = {
   filter?: string
   search?: string
   preset?: string
+  story?: string
+  step?: number
+  missionFrom?: BodyId
+  missionTo?: BodyId
+  departureDate?: string
+  arrivalDate?: string
   focused?: BodyId
   plot?: ElementPlotMode
   aRange?: [number, number]
@@ -61,7 +68,7 @@ function setRange(params: URLSearchParams, key: string, range?: [number, number]
 export function encodeUrlState(state: AppUrlState) {
   const params = new URLSearchParams()
   params.set('v', String(SCENE_URL_VERSION))
-  if (state.route && state.route !== 'explorer') params.set('page', state.route)
+  if (state.route && state.route !== 'home') params.set('page', state.route)
   if (state.dataset) params.set('dataset', state.dataset)
   if (state.mode) params.set('mode', state.mode)
   if (state.ref && state.ref !== 'sun') params.set('ref', state.ref)
@@ -76,6 +83,12 @@ export function encodeUrlState(state: AppUrlState) {
   if (state.filter && state.filter !== 'all') params.set('filter', state.filter)
   if (state.search) params.set('search', state.search)
   if (state.preset) params.set('preset', state.preset)
+  if (state.story) params.set('story', state.story)
+  if (state.step !== undefined && state.step > 0) params.set('step', String(Math.floor(state.step)))
+  if (state.missionFrom) params.set('from', state.missionFrom)
+  if (state.missionTo) params.set('to', state.missionTo)
+  if (state.departureDate) params.set('depart', state.departureDate)
+  if (state.arrivalDate) params.set('arrive', state.arrivalDate)
   if (state.focused) params.set('focused', state.focused)
   if (state.plot) params.set('plot', state.plot)
   setRange(params, 'a', state.aRange)
@@ -93,9 +106,10 @@ export function encodeUrlState(state: AppUrlState) {
 export function decodeUrlState(search = typeof window === 'undefined' ? '' : window.location.search): AppUrlState {
   const params = new URLSearchParams(search)
   const encodedVersion = params.get('v')
-  if (encodedVersion && encodedVersion !== String(SCENE_URL_VERSION)) return {}
-  const state: AppUrlState = { version: SCENE_URL_VERSION }
-  const routes: AppRoute[] = ['explorer', 'catalog', 'elements', 'events', 'mission', 'stories', 'about']
+  if (encodedVersion && encodedVersion !== String(SCENE_URL_VERSION) && encodedVersion !== String(LEGACY_SCENE_URL_VERSION)) return {}
+  const version = encodedVersion === String(LEGACY_SCENE_URL_VERSION) ? LEGACY_SCENE_URL_VERSION : SCENE_URL_VERSION
+  const state: AppUrlState = { version }
+  const routes: AppRoute[] = ['home', 'explorer', 'catalog', 'elements', 'events', 'mission', 'stories', 'about']
   const route = params.get('page') as AppRoute | null
   if (route && routes.includes(route)) state.route = route
   const dataset = params.get('dataset')
@@ -121,6 +135,19 @@ export function decodeUrlState(search = typeof window === 'undefined' ? '' : win
   if (searchText) state.search = searchText
   const preset = params.get('preset')
   if (preset) state.preset = preset
+  const story = params.get('story')
+  if (story) state.story = story
+  const step = finite(params.get('step'))
+  if (step !== undefined && step >= 0) state.step = Math.floor(step)
+  const missionFrom = params.get('from')
+  if (missionFrom) state.missionFrom = missionFrom
+  const missionTo = params.get('to')
+  if (missionTo) state.missionTo = missionTo
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/
+  const departureDate = params.get('depart')
+  if (departureDate && datePattern.test(departureDate)) state.departureDate = departureDate
+  const arrivalDate = params.get('arrive')
+  if (arrivalDate && datePattern.test(arrivalDate)) state.arrivalDate = arrivalDate
   const focused = params.get('focused')
   if (focused) state.focused = focused
   const plot = params.get('plot') as ElementPlotMode | null

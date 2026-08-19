@@ -4,7 +4,7 @@
 
 [Live demo](https://dajiaohuang.github.io/solar/) · [中文文档](./README-CN.md) · [Scientific contract](#scientific-contract)
 
-Current prerelease: **v0.9.0-beta.2** · [Changelog](./CHANGELOG.md) · [Performance budgets](./PERFORMANCE.md)
+Current release: **v0.9.1** · [Changelog](./CHANGELOG.md) · [Roadmap](./ROADMAP.md) · [Performance budgets](./PERFORMANCE.md)
 
 ![Solar Atlas overview](./public/readme-screenshot.png)
 
@@ -12,14 +12,24 @@ Solar Atlas connects spatial views, orbital-element space, time events, and data
 
 ## What is implemented
 
+- **Visitor layer:** a bilingual first-visit home, three clear starting paths, a four-step in-context guide, browser-history navigation, descriptive route titles, and a four-item mobile navigation model.
 - **Solar Explorer:** heliocentric, geocentric, and arbitrary body-centered frames; linked 2D/3D views; bounded simulation clock; split-frame comparison; distance measurement; time travel; Lagrange points; Hill spheres and Laplace SOIs.
 - **Small-Body Catalog:** MPCORB binary shards, two-character prefix search, exact compact-index filters with bounded locator hydration pages, NEO/PHA and orbit-class filters, Lite/Full display budgets, immutable dataset versions, and IndexedDB caching.
 - **Orbital Element Space:** linked `a–e`, `a–i`, `a–H`, `q–Q`, and `a–period` plots, Kirkwood/resonance markers, brush selection, and synchronized 3D highlighting.
 - **Events Lab:** adaptive, cancellable close-approach, conjunction, opposition, and central-body apsis jobs with local numerical refinement, sampling-adequacy warnings, explicit uncertainty semantics, timeline navigation, and CSV/JSON export.
 - **Mission Lab:** directionally correct Hohmann baselines in km/s, phase-angle guidance, a residual-checked universal-variable Lambert solver, departure/arrival `v∞`, C3, and classified porkchop solver failures.
 - **Guided Stories:** reproducible JSON stories for retrograde motion, reference frames, Kirkwood gaps, Trojans, NEO types, Pluto’s resonance, and Voyager-era trajectories.
-- **Reproducibility:** scene URLs record dataset version, epoch, reference frames, focus set, filters, language, and view settings. A scene fully replays when the current deployment contains that dataset; otherwise the app preserves the requested version and offers recovery links.
-- **Installable web app:** responsive/mobile Lite layout, runtime offline cache, Web App Manifest, Open Graph metadata, and code-split workspaces.
+- **Reproducibility:** v3 scene URLs record dataset version, epoch, reference frames, focus set, filters, story step, mission endpoints/dates, language, and view settings. Browser Back/Forward restores discrete scenes; legacy v2 links still replay.
+- **Installable and discoverable web app:** first-install offline shell, update prompt, Web App Manifest, Open Graph image, JSON-LD, bilingual static knowledge/object pages, sitemap, and code-split workspaces.
+- **Release evidence:** every build exposes application version, commit SHA, build time, pinned dataset, parser identity, validation status, asset hashes, and a Pages capacity report.
+
+## Explore a reproducible scene
+
+- [Explain Mars retrograde motion](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=retrograde-mars&step=2&lang=en)
+- [Read the Kirkwood gaps in element space](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=kirkwood-gaps&step=1&lang=en)
+- [Compare the four NEO orbit classes](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=neo-types&lang=en)
+- [Inspect Pluto and Neptune's 3:2 geometry](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=pluto-resonance&step=1&lang=en)
+- [Open an Earth-to-Mars mission setup](https://dajiaohuang.github.io/solar/?v=3&page=mission&from=earth&to=mars&depart=2026-11-15&arrive=2027-08-01&lang=en)
 
 ## Quick start
 
@@ -45,6 +55,13 @@ npm run data:full
 ```
 
 The full pipeline needs several GB of free memory and downloads the current MPCORB source snapshot once. You can supply a pinned source file with `MPCORB_SOURCE_FILE=/path/to/MPCORB.DAT.gz`.
+
+Local application builds omit the generated catalog by default. To reproduce the deployable GitHub Pages artifact, including only the pinned active release with large JSON shards delivered as `.json.gz`, run:
+
+```bash
+npm run build:deploy
+npm run check:capacity
+```
 
 ## Data publication v3
 
@@ -159,17 +176,21 @@ npm run test:e2e
 npm run build
 npm run ci
 npm run benchmark:catalog
+npm run check:capacity
 ```
 
-Unit coverage includes Julian dates, Kepler propagation, parent/reference frames, Hohmann units/direction, Moon phase geometry, Hill/SOI definitions, strict JPL SBDB fixtures, local event-extremum detection, Lambert circular-arc recovery, versioned deep-link round trips, MPCORB parsing, scoped persistence, manifest/cache isolation, and a one-million-row bounded catalog scan. Playwright runs the core routes, reproducible stories, catalog filtering/recovery, mission workers, Service Worker cache isolation, and 2D/3D renderers on desktop and mobile Chromium.
+Unit coverage includes Julian dates, Kepler propagation, parent/reference frames, Hohmann units/direction, Moon phase geometry, Hill/SOI definitions, strict JPL SBDB fixtures, local event-extremum detection, Lambert circular-arc recovery, v2/v3 deep-link round trips, MPCORB parsing, scoped persistence, manifest/cache isolation, and a one-million-row bounded catalog scan. Playwright covers browser history, story/mission URLs, core routes, catalog filtering/recovery, mission workers, first-install offline behavior, cache isolation, 2D/3D rendering, and serious/critical axe violations on desktop and mobile Chromium. A scheduled matrix repeats the suite in Firefox and WebKit.
 
 ## Deployment
 
 - The project is maintained directly on `main`; local changes should pass `npm run ci` before they are pushed.
 - `.github/workflows/data-refresh.yml` publishes a monthly/manual immutable dataset release, commits its pin directly to `main`, and explicitly dispatches deployment.
-- `.github/workflows/deploy.yml` is the single production gate. It validates the pinned data, runs lint, unit tests, build, and E2E, then deploys with the official GitHub Pages actions.
+- `.github/workflows/deploy.yml` is the single production gate. It validates the pinned data, builds its compressed delivery form, enforces the 700 MiB Pages budget, runs lint/unit/E2E, archives release evidence, deploys, and opens a deduplicated incident if production smoke fails.
+- `.github/workflows/rollback.yml` restores the exact tested `github-pages` artifact from a successful deployment run ID; deployment artifacts are retained for 30 days.
 - `main` allows normal and Actions pushes, rejects force pushes and deletion, and does not require pull requests or pre-merge status checks.
 
 ## License
 
 Source code is available under the [MIT License](./LICENSE). Astronomical source data remains subject to its originating institution’s terms and attribution.
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md), [SECURITY.md](./SECURITY.md), and [CITATION.cff](./CITATION.cff) for contribution, disclosure, and citation guidance.

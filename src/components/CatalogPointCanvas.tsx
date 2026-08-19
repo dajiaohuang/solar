@@ -6,6 +6,7 @@ type Props = {
   positions: Float32Array
   viewRadiusAU: number
   opacity?: number
+  ariaLabel?: string
 }
 
 const CLASS_COLORS: Record<string, [number, number, number]> = {
@@ -55,7 +56,7 @@ function program(gl: WebGLRenderingContext) {
   return result
 }
 
-export function CatalogPointCanvas({ records, positions, viewRadiusAU, opacity = 0.82 }: Props) {
+export function CatalogPointCanvas({ records, positions, viewRadiusAU, opacity = 0.82, ariaLabel = 'GPU small-body catalog view' }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const appearance = useMemo(() => {
     const colors = new Float32Array(records.length * 4)
@@ -106,5 +107,5 @@ export function CatalogPointCanvas({ records, positions, viewRadiusAU, opacity =
     }
   }, [appearance, positions, records.length, viewRadiusAU])
 
-  return <canvas ref={canvasRef} className="viz-canvas catalog-point-canvas" role="img" aria-label={`GPU catalog view with ${records.length.toLocaleString()} small bodies`} />
+  return <canvas ref={canvasRef} className="viz-canvas catalog-point-canvas" role="img" aria-label={`${ariaLabel}: ${records.length.toLocaleString()}`} />
 }

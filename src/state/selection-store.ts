@@ -16,9 +16,12 @@ function loadCollections() {
   }
 }
 
+export const DEFAULT_SELECTED_IDS: BodyId[] = ['mercury', 'venus', 'earth', 'moon', 'mars', 'jupiter', 'saturn']
+export const DEFAULT_FOCUSED_ID: BodyId = 'earth'
+
 const initialSelectionState: SelectionState = {
-  selectedIds: ['mercury', 'venus', 'earth', 'moon', 'mars', 'jupiter', 'saturn'],
-  focusedId: 'earth',
+  selectedIds: DEFAULT_SELECTED_IDS,
+  focusedId: DEFAULT_FOCUSED_ID,
   catalogBodies: {},
   savedCollections: typeof window === 'undefined' ? {} : loadCollections(),
 }

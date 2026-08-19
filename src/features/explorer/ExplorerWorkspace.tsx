@@ -56,6 +56,7 @@ function FrameView({
   onHover,
 }: FrameViewProps) {
   const simulation = simulationStore.useStore()
+  const { t } = useI18n()
   const referenceBody = bodiesById.get(referenceId) ?? bodiesById.get('sun')!
   const { frame: baseFrame, progress, isComputing, error } = useTrajectoryWorker({
     bodies: selectedBodies,
@@ -135,6 +136,7 @@ function FrameView({
           onHover={(body, distance, x, y) => onHover(body ? { body, distance, x, y } : null)}
           lagrangePoints={lagrangePoints}
           showEcliptic={simulation.showEcliptic}
+          ariaLabel={t('interactive3d')}
         />
       ) : (
         <TrajectoryCanvas
@@ -149,6 +151,10 @@ function FrameView({
           onHover={(body, distance, x, y) => onHover(body ? { body, distance, x, y } : null)}
           lagrangePoints={lagrangePoints}
           influenceCircles={influenceCircles}
+          ariaLabel={t('interactive2d')}
+          emptyLabel={t('selectBodyPrompt')}
+          webglUnavailableLabel={t('webglUnavailable')}
+          influenceLabels={{ hill: t('hill'), soi: t('soi') }}
         />
       )}
     </div>
@@ -222,6 +228,19 @@ export function ExplorerWorkspace() {
           <select value={measuredBodyB} onChange={(event) => setMeasureB(event.target.value)}>{selectedBodies.map((body) => <option key={body.id} value={body.id}>{bodyDisplayName(body, language)}</option>)}</select>
           <strong>{measuredDistance === null ? '—' : `${measuredDistance.toFixed(5)} AU · ${(measuredDistance * 149_597_870.7).toLocaleString(undefined, { maximumFractionDigits: 0 })} km`}</strong>
         </div>
+        <details className="accessible-scene-controls glass-panel">
+          <summary>{t('keyboardControls')}</summary>
+          <div className="accessible-view-actions" aria-label={t('view')}>
+            <button onClick={() => simulationActions.patch({ zoom: Math.min(12, simulation.zoom * 1.25) })}>{t('zoomIn')} +</button>
+            <button onClick={() => simulationActions.patch({ zoom: Math.max(.15, simulation.zoom / 1.25) })}>{t('zoomOut')} −</button>
+            <button onClick={() => simulationActions.patch({ zoom: 1, viewOffset: { x: 0, y: 0 } })}>{t('resetView')}</button>
+          </div>
+          <ul aria-label={t('selectedObjectList')}>{selectedBodies.map((body) => <li key={body.id}>
+            <span><i style={{ background: body.color }} />{bodyDisplayName(body, language)}</span>
+            <button onClick={() => selectionActions.focus(body.id)}>{t('focusObject')}</button>
+            <button onClick={() => simulationActions.patch({ referenceId: body.id })}>{t('setReference')}</button>
+          </li>)}</ul>
+        </details>
         {hovered && <div className="atlas-tooltip" style={{ left: hovered.x + 14, top: hovered.y + 12 }}>
           <strong>{bodyDisplayName(hovered.body, language)}</strong><span>{hovered.distance.toFixed(4)} AU</span>
         </div>}

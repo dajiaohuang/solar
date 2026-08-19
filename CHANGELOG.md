@@ -2,6 +2,28 @@
 
 All notable changes to Solar Atlas are documented here. The project follows semantic versioning after the prototype phase.
 
+## 0.9.1 — 2026-08-20
+
+### Added
+
+- A bilingual visitor home, three intent-based starting paths, a one-time guide, four-item mobile navigation, keyboard scene controls, route focus restoration, and dynamic object/story/mission titles.
+- URL schema v3 with browser Back/Forward semantics, shareable story steps and mission setups, legacy v2 replay, and build identity in Evidence and exports.
+- Seven four-step observation-first stories with primary sources and explicit limits for two-body, coordinate-frame, resonance, Trojan, NEO, Pluto, and spacecraft claims.
+- Bilingual crawlable story/object/model/data/about pages, sitemap, hreflang, canonical/OG metadata, JSON-LD, generated raster icons, and social preview.
+- First-install offline regression coverage, an update-ready prompt, axe checks, a scheduled Chromium/Firefox/WebKit matrix, community templates, and an audited rollback workflow.
+
+### Changed
+
+- Production builds copy only the pinned active asteroid release and gzip large JSON shards, keeping the full GitHub Pages artifact under an enforced 700 MiB ceiling.
+- The deployment gate reuses the exact tested build, archives build/capacity evidence, and creates a deduplicated incident when the production smoke test fails.
+- User-facing workspace labels, scientific contracts, result states, and accessibility names now share the English/Chinese translation system.
+
+### Fixed
+
+- Discrete route, story, focus, and mission changes now create history entries while continuous camera/time/filter updates replace the current entry.
+- Service Worker activation removes only Solar Atlas caches, preserves unrelated same-origin projects, and keeps the application shell usable on the first offline reload.
+- Runtime failures now preserve the scene URL and provide safe reload/home recovery actions.
+
 ## 0.9.0-beta.2 — 2026-08-20
 
 ### Added

@@ -15,6 +15,7 @@ type Props = {
   showEcliptic?: boolean
   showSaturnRings?: boolean
   showGlow?: boolean
+  ariaLabel?: string
 }
 
 type SceneResources = {
@@ -81,6 +82,7 @@ export function TrajectoryCanvas3D({
   showEcliptic = true,
   showSaturnRings = true,
   showGlow = true,
+  ariaLabel = 'Interactive three-dimensional Solar System trajectory view',
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const resourcesRef = useRef<SceneResources | null>(null)
@@ -342,7 +344,7 @@ export function TrajectoryCanvas3D({
       className="viz-canvas canvas-mode"
       data-testid="trajectory-canvas-3d"
       role="img"
-      aria-label="Interactive three-dimensional Solar System trajectory view"
+      aria-label={ariaLabel}
       onClick={(event) => { const id = intersectBody(event); if (id) onBodySelect?.(id) }}
       onDoubleClick={(event) => { const id = intersectBody(event); if (id) onReferenceChange?.(id) }}
       onMouseMove={(event) => {

@@ -1,10 +1,10 @@
 const OWN_PREFIX = 'solar-atlas-'
-const SHELL_CACHE = 'solar-atlas-shell-v3'
+const SHELL_CACHE = 'solar-atlas-shell-__BUILD_SHA__'
+const PRECACHE_URLS = ['./'] // __SOLAR_ATLAS_PRECACHE__
 const EXPECTED_KEYS = new Set([SHELL_CACHE])
 
 self.addEventListener('install', (event) => {
-  const shellUrl = new URL('./', self.location.href).href
-  event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.add(shellUrl)).then(() => self.skipWaiting()))
+  event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.addAll(PRECACHE_URLS)))
 })
 
 self.addEventListener('activate', (event) => {
@@ -15,6 +15,10 @@ self.addEventListener('activate', (event) => {
   )).then(() => self.clients.claim()))
 })
 
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') void self.skipWaiting()
+})
+
 self.addEventListener('fetch', (event) => {
   const request = event.request
   if (request.method !== 'GET') return
@@ -22,18 +26,14 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return
 
   // Immutable MPCORB responses are persisted only by the bounded IndexedDB
-  // cache, while the mutable version pointer stays network-only. Keeping the
-  // entire data tree out of Cache Storage avoids duplicates and stale pins.
+  // cache. This avoids duplicating large scientific assets in Cache Storage.
   if (url.pathname.includes('/data/asteroids/')) return
 
   if (request.mode === 'navigate') {
     event.respondWith(fetch(request).then(async (response) => {
-      if (response.ok) {
+      if (response.ok && url.pathname.endsWith('/solar/')) {
         const cache = await caches.open(SHELL_CACHE)
-        await Promise.all([
-          cache.put(request, response.clone()),
-          cache.put(new URL('./', self.location.href).href, response.clone()),
-        ])
+        await cache.put(new URL('./', self.location.href).href, response.clone())
       }
       return response
     }).catch(async () => {
@@ -45,10 +45,9 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(caches.open(SHELL_CACHE).then(async (cache) => {
     const cached = await cache.match(request)
-    const network = fetch(request).then((response) => {
-      if (response.ok) void cache.put(request, response.clone())
-      return response
-    }).catch(() => cached)
-    return cached || network
+    if (cached) return cached
+    const response = await fetch(request)
+    if (response.ok) void cache.put(request, response.clone())
+    return response
   }))
 })

@@ -20,7 +20,7 @@ export type SimulationState = {
   zoom: number
   viewOffset: { x: number; y: number }
 }
-const initialSimulationState: SimulationState = {
+export const DEFAULT_SIMULATION_STATE: SimulationState = {
   referenceId: 'sun',
   comparisonReferenceId: 'earth',
   comparisonEnabled: false,
@@ -37,7 +37,7 @@ const initialSimulationState: SimulationState = {
   viewOffset: { x: 0, y: 0 },
 }
 
-export const simulationStore = createStore(initialSimulationState)
+export const simulationStore = createStore(DEFAULT_SIMULATION_STATE)
 
 export const simulationActions = {
   patch: simulationStore.setState,

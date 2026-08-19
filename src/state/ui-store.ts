@@ -1,6 +1,6 @@
 import { createStore } from './createStore'
 
-export type AppRoute = 'explorer' | 'catalog' | 'elements' | 'events' | 'mission' | 'stories' | 'about'
+export type AppRoute = 'home' | 'explorer' | 'catalog' | 'elements' | 'events' | 'mission' | 'stories' | 'about'
 export type Language = 'zh' | 'en'
 export type ElementPlotMode = 'a-e' | 'a-i' | 'a-H' | 'q-Q' | 'a-period'
 
@@ -20,14 +20,18 @@ type UiState = {
   sidebarOpen: boolean
   toast: string | null
   elementPlot: ElementPlotMode
+  storyId: string
+  storyStep: number
 }
 
 const initialUiState: UiState = {
-  route: 'explorer',
+  route: 'home',
   language: typeof window === 'undefined' ? 'en' : initialLanguage(),
   sidebarOpen: true,
   toast: null,
   elementPlot: 'a-e',
+  storyId: 'retrograde-mars',
+  storyStep: 0,
 }
 
 export const uiStore = createStore(initialUiState)
@@ -42,6 +46,12 @@ export const uiActions = {
   },
   setElementPlot(elementPlot: ElementPlotMode) {
     uiStore.setState({ elementPlot })
+  },
+  selectStory(storyId: string, storyStep = 0) {
+    uiStore.setState({ storyId, storyStep: Math.max(0, Math.floor(storyStep)) })
+  },
+  setStoryStep(storyStep: number) {
+    uiStore.setState({ storyStep: Math.max(0, Math.floor(storyStep)) })
   },
   toast(message: string) {
     uiStore.setState({ toast: message })

@@ -1,0 +1,69 @@
+name: Roll back GitHub Pages
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_run_id:
+        description: Successful Deploy application run ID whose exact artifact should be restored
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  recover-artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify source deployment run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.deployment_run_id }}
+        run: |
+          if ! [[ "$RUN_ID" =~ ^[0-9]+$ ]]; then echo "Run ID must be numeric" >&2; exit 1; fi
+          CONCLUSION=$(gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)
+          WORKFLOW=$(gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json workflowName --jq .workflowName)
+          if [ "$CONCLUSION" != "success" ] || [ "$WORKFLOW" != "Deploy application" ]; then
+            echo "Rollback source must be a successful Deploy application run" >&2
+            exit 1
+          fi
+      - name: Download exact prior Pages artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: github-pages
+          path: rollback-artifact
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.deployment_run_id }}
+      - name: Inspect and unpack prior artifact
+        run: |
+          test -f rollback-artifact/artifact.tar
+          mkdir dist
+          tar -xf rollback-artifact/artifact.tar -C dist
+          test -f dist/build-info.json
+          test -f dist/health.json
+          test -f dist/capacity-report.json
+          node -e "const r=require('./dist/capacity-report.json'); if(!r.withinBudget || r.distTotalBytes>734003200) process.exit(1); console.log(r)"
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+          retention-days: 30
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: recover-artifact
+    steps:
+      - name: Deploy exact prior artifact
+        id: deployment
+        uses: actions/deploy-pages@v5

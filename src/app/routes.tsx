@@ -1,10 +1,12 @@
 import { lazy, Suspense, type ComponentType } from 'react'
+import { useI18n } from '../i18n/context'
 import type { AppRoute } from '../state/ui-store'
 
 function lazyNamed<T extends Record<string, ComponentType>>(loader: () => Promise<T>, name: keyof T) {
   return lazy(async () => ({ default: (await loader())[name] }))
 }
 const ExplorerWorkspace = lazyNamed(() => import('../features/explorer/ExplorerWorkspace'), 'ExplorerWorkspace')
+const WelcomeWorkspace = lazyNamed(() => import('../features/home/WelcomeWorkspace'), 'WelcomeWorkspace')
 const CatalogWorkspace = lazyNamed(() => import('../features/catalog/CatalogWorkspace'), 'CatalogWorkspace')
 const ElementSpaceWorkspace = lazyNamed(() => import('../features/element-space/ElementSpaceWorkspace'), 'ElementSpaceWorkspace')
 const EventsWorkspace = lazyNamed(() => import('../features/events/EventsWorkspace'), 'EventsWorkspace')
@@ -13,8 +15,10 @@ const StoriesWorkspace = lazyNamed(() => import('../features/stories/StoriesWork
 const EvidenceWorkspace = lazyNamed(() => import('../features/about/EvidenceWorkspace'), 'EvidenceWorkspace')
 
 export function AppRouteView({ route }: { route: AppRoute }) {
+  const { t } = useI18n()
   let View: ComponentType
   switch (route) {
+    case 'home': View = WelcomeWorkspace; break
     case 'catalog': View = CatalogWorkspace; break
     case 'elements': View = ElementSpaceWorkspace; break
     case 'events': View = EventsWorkspace; break
@@ -24,5 +28,5 @@ export function AppRouteView({ route }: { route: AppRoute }) {
     case 'explorer':
     default: View = ExplorerWorkspace
   }
-  return <Suspense fallback={<div className="route-loading"><i /><span>Loading workspace…</span></div>}><View /></Suspense>
+  return <Suspense fallback={<div className="route-loading"><i /><span aria-live="polite">{t('loading')}</span></div>}><View /></Suspense>
 }

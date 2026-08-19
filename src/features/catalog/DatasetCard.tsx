@@ -42,12 +42,15 @@ export function DatasetCard({ compact = false }: { compact?: boolean }) {
           <div><dt>{t('selectionPolicy')}</dt><dd>{provenance?.selectionPolicy?.type ?? catalog.manifest.selectionPolicy?.type ?? 'legacy / unspecified'}</dd></div>
           <div><dt>{t('propagation')}</dt><dd>{provenance?.orbitModel ?? catalog.manifest.orbitModel}</dd></div>
           {summary && <>
-            <div><dt>H coverage</dt><dd>{summary.magnitudeKnownCount?.toLocaleString() ?? '—'} known · {summary.magnitudeUnknownCount?.toLocaleString() ?? '—'} unknown</dd></div>
-            <div><dt>Largest classes</dt><dd>{leadingClasses.map(([code, count]) => `${code} ${count.toLocaleString()}`).join(' · ')}</dd></div>
-            <div><dt>a / i range</dt><dd>{summary.numericRanges.semiMajorAxisAU?.map((value) => value.toFixed(2)).join('–')} AU · {summary.numericRanges.inclinationDeg?.map((value) => value.toFixed(1)).join('–')}°</dd></div>
+          <div><dt>{t('hCoverage')}</dt><dd>{summary.magnitudeKnownCount?.toLocaleString() ?? '—'} {t('known')} · {summary.magnitudeUnknownCount?.toLocaleString() ?? '—'} {t('unknown')}</dd></div>
+            <div><dt>{t('largestClasses')}</dt><dd>{leadingClasses.map(([code, count]) => `${code} ${count.toLocaleString()}`).join(' · ')}</dd></div>
+            <div><dt>{t('rangeLabel')}</dt><dd>{summary.numericRanges.semiMajorAxisAU?.map((value) => value.toFixed(2)).join('–')} AU · {summary.numericRanges.inclinationDeg?.map((value) => value.toFixed(1)).join('–')}°</dd></div>
           </>}
         </>}
       </dl>
+      {!compact && catalog.manifest.capabilities?.includes('gzip-json-v1') && <div className="inline-actions">
+        <a href={`${catalog.manifest.releasePath}/delivery-manifest.json`} target="_blank" rel="noreferrer">{t('deliveryManifest')}</a>
+      </div>}
     </div>
   )
 }

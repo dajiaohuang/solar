@@ -1,0 +1,25 @@
+name: Browser or accessibility problem
+description: Report rendering, input, offline, mobile, assistive-technology, or performance regressions.
+title: "[Browser]: "
+labels: [browser]
+body:
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: Browser/version, OS, device, viewport, assistive technology
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Include the full scene URL and whether the app was installed or offline.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true

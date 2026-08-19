@@ -1,4 +1,4 @@
-import { fetchImmutableArrayBuffer, fetchImmutableJson } from '../data/cache/indexedDb'
+import { fetchImmutableArrayBuffer, fetchImmutableGzipJson, fetchImmutableJson } from '../data/cache/indexedDb'
 import type {
   AsteroidIndexEntry,
   AsteroidManifest,
@@ -28,7 +28,12 @@ let manifestRequestGeneration = 0
 const manifestPromises = new Map<string, Promise<{ manifest: AsteroidManifest; releaseRoot: string } | null>>()
 
 async function fetchJson<T>(url: string, immutable = true) {
-  if (immutable) return fetchImmutableJson<T>(url)
+  if (immutable) {
+    const compressed = activeManifest?.capabilities?.includes('gzip-json-v1') && (
+      /\/(search|lookup|meta|chunks)\/.+\.json$/.test(url) || /\/catalog-sample-(desktop|mobile)\.json$/.test(url)
+    )
+    return compressed ? fetchImmutableGzipJson<T>(`${url}.gz`) : fetchImmutableJson<T>(url)
+  }
   const response = await fetch(url, { cache: 'no-store' })
   if (!response.ok) throw new Error(`Failed to load ${url}: ${response.status}`)
   return response.json() as Promise<T>

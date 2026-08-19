@@ -3,6 +3,7 @@ import { catalogStore } from '../state/catalog-store'
 import { selectionStore } from '../state/selection-store'
 import { simulationStore } from '../state/simulation-store'
 import { uiStore } from '../state/ui-store'
+import { missionStore } from '../state/mission-store'
 import { encodeUrlState } from './urlState'
 
 export function encodeCurrentScene() {
@@ -10,6 +11,11 @@ export function encodeCurrentScene() {
   const selection = selectionStore.getState()
   const catalog = catalogStore.getState()
   const ui = uiStore.getState()
+  const mission = missionStore.getState()
+  if (ui.route === 'home') {
+    const language = ui.language === 'zh' ? '?lang=zh' : ''
+    return `${window.location.origin}${window.location.pathname}${language}`
+  }
   const query = encodeUrlState({
     route: ui.route,
     dataset: catalog.datasetVersion !== 'unavailable'
@@ -27,6 +33,12 @@ export function encodeCurrentScene() {
     view: simulation.viewMode,
     filter: catalog.filters.orbitClass,
     search: catalog.filters.query,
+    story: ui.route === 'stories' ? ui.storyId : undefined,
+    step: ui.route === 'stories' ? ui.storyStep : undefined,
+    missionFrom: ui.route === 'mission' ? mission.departureId : undefined,
+    missionTo: ui.route === 'mission' ? mission.arrivalId : undefined,
+    departureDate: ui.route === 'mission' ? mission.departureDate : undefined,
+    arrivalDate: ui.route === 'mission' ? mission.arrivalDate : undefined,
     focused: selection.focusedId ?? undefined,
     plot: ui.elementPlot,
     aRange: catalog.filters.semiMajorAxis,

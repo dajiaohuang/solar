@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
     <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
+    <link rel="canonical" href="https://dajiaohuang.github.io/solar/" />
+    <link rel="alternate" hreflang="en" href="https://dajiaohuang.github.io/solar/?lang=en" />
+    <link rel="alternate" hreflang="zh-CN" href="https://dajiaohuang.github.io/solar/?lang=zh" />
+    <link rel="alternate" hreflang="x-default" href="https://dajiaohuang.github.io/solar/" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#05080c" />
     <meta name="description" content="Solar Atlas is a browser-native Solar System dynamics and small-body atlas with traceable data, linked orbital-element views, event analysis, and mission design tools." />
@@ -11,8 +15,50 @@
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Solar Atlas — Solar System dynamics & small-body atlas" />
     <meta property="og:description" content="Explore reference frames, asteroid architecture, orbital events, and interplanetary transfers in the browser." />
-    <meta property="og:image" content="%BASE_URL%og-image.svg" />
+    <meta property="og:url" content="https://dajiaohuang.github.io/solar/" />
+    <meta property="og:site_name" content="Solar Atlas" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="zh_CN" />
+    <meta property="og:image" content="https://dajiaohuang.github.io/solar/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Solar Atlas orbital map" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Solar Atlas — Solar System dynamics & small-body atlas" />
+    <meta name="twitter:description" content="Traceable data, reproducible scenes, orbital events, and mission geometry in the browser." />
+    <meta name="twitter:image" content="https://dajiaohuang.github.io/solar/og-image.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "SoftwareApplication",
+            "name": "Solar Atlas",
+            "applicationCategory": "EducationalApplication",
+            "operatingSystem": "Any modern web browser",
+            "url": "https://dajiaohuang.github.io/solar/",
+            "codeRepository": "https://github.com/dajiaohuang/solar",
+            "license": "https://opensource.org/licenses/MIT",
+            "inLanguage": ["en", "zh-CN"],
+            "description": "A traceable, browser-native Solar System dynamics and small-body atlas."
+          },
+          {
+            "@type": "Dataset",
+            "name": "Solar Atlas MPCORB-derived asteroid catalog",
+            "description": "Versioned elliptic MPCORB records with provenance, checksums, validation reports, search indexes, and binary orbital shards.",
+            "creator": { "@type": "Organization", "name": "Minor Planet Center", "url": "https://www.minorplanetcenter.net/" },
+            "isPartOf": { "@type": "SoftwareApplication", "name": "Solar Atlas" }
+          },
+          {
+            "@type": "LearningResource",
+            "name": "Solar Atlas guided orbital stories",
+            "educationalUse": "Interactive scientific exploration",
+            "inLanguage": ["en", "zh-CN"],
+            "url": "https://dajiaohuang.github.io/solar/stories/retrograde-mars/"
+          }
+        ]
+      }
+    </script>
     <title>Solar Atlas — Solar System dynamics & small-body atlas</title>
   </head>
   <body>

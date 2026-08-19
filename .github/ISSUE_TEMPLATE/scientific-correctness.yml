@@ -1,0 +1,29 @@
+name: Scientific correctness
+description: Report a model, unit, frame, interpretation, or scientific-boundary problem.
+title: "[Science]: "
+labels: [science]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping keep the atlas scientifically honest. Please cite primary evidence where possible.
+  - type: textarea
+    id: claim
+    attributes:
+      label: Claim or output in question
+      description: Quote the UI claim or describe the plotted/exported result.
+    validations:
+      required: true
+  - type: textarea
+    id: replay
+    attributes:
+      label: Reproducible scene
+      description: Paste the full Solar Atlas URL, build identity, dataset version, and relevant object/date.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Expected result and primary source
+      description: Include units, tolerance, reference frame, epoch, and a primary-source URL or calculation.
+    validations:
+      required: true

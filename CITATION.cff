@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If Solar Atlas supports your teaching or research, cite the software and the specific immutable dataset version shown in Evidence."
+title: "Solar Atlas"
+type: software
+version: 0.9.1
+date-released: 2026-08-20
+authors:
+  - name: "Solar Atlas contributors"
+repository-code: "https://github.com/dajiaohuang/solar"
+url: "https://dajiaohuang.github.io/solar/"
+license: MIT
+abstract: "A browser-native, bilingual, reproducible Solar System dynamics and small-body atlas for teaching and exploration."
+keywords:
+  - solar-system
+  - orbital-mechanics
+  - minor-planets
+  - astronomy-education

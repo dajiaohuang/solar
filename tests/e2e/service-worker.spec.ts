@@ -2,6 +2,18 @@ import { expect, test } from '@playwright/test'
 
 test.use({ serviceWorkers: 'allow' })
 
+test('first install can reload the application shell offline', async ({ page, context, browserName }) => {
+  test.skip(browserName === 'webkit', 'Playwright WebKit cannot reliably reload while its context is forced offline')
+  await page.goto('./')
+  await page.evaluate(async () => { await navigator.serviceWorker.ready })
+  await page.reload()
+  await expect(page.getByRole('heading', { name: /See the Solar System|把太阳系看成/ })).toBeVisible()
+  await context.setOffline(true)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: /See the Solar System|把太阳系看成/ })).toBeVisible()
+  await context.setOffline(false)
+})
+
 test('service worker preserves unrelated same-origin caches', async ({ page }) => {
   await page.goto('./')
   const cacheKeys = await page.evaluate(async () => {
@@ -11,8 +23,6 @@ test('service worker preserves unrelated same-origin caches', async ({ page }) =
     const staleOwnCache = await caches.open('solar-atlas-shell-v0')
     await staleOwnCache.put('./stale-response', new Response('remove'))
 
-    const currentRegistrations = await navigator.serviceWorker.getRegistrations()
-    await Promise.all(currentRegistrations.map((registration) => registration.unregister()))
     const scriptUrl = new URL(`./sw.js?cache-regression=${Date.now()}`, window.location.href).href
     const registration = await navigator.serviceWorker.register(scriptUrl, { scope: './' })
     await new Promise<void>((resolve, reject) => {
@@ -25,6 +35,9 @@ test('service worker preserves unrelated same-origin caches', async ({ page }) =
         if (Date.now() >= deadline) {
           reject(new Error('Timed out waiting for service worker activation'))
           return
+        }
+        if (registration.waiting?.scriptURL === scriptUrl) {
+          registration.waiting.postMessage({ type: 'SKIP_WAITING' })
         }
         window.setTimeout(checkActivation, 100)
       }

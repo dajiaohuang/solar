@@ -1,7 +1,8 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { gzipSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
-import { datasetVersionFromUrl } from '../../src/data/cache/indexedDb'
+import { datasetVersionFromUrl, parseMaybeGzipJson } from '../../src/data/cache/indexedDb'
 
 describe('versioned dataset persistence', () => {
   it('derives an immutable release version from encoded data URLs', () => {
@@ -21,5 +22,14 @@ describe('versioned dataset persistence', () => {
     const source = await readFile(resolve('src/data/cache/indexedDb.ts'), 'utf8')
     expect(source).toContain("database.transaction(STORE_NAME, 'readwrite')")
     expect(source).toContain('store.put({ ...request.result, lastAccessed: Date.now() }')
+  })
+
+  it('accepts both raw gzip bytes and host-decoded JSON responses', async () => {
+    const value = { version: 'fixture', count: 3 }
+    const plain = new TextEncoder().encode(JSON.stringify(value))
+    const gzipped = gzipSync(plain)
+    const gzipBuffer = gzipped.buffer.slice(gzipped.byteOffset, gzipped.byteOffset + gzipped.byteLength)
+    expect(await parseMaybeGzipJson(gzipBuffer)).toEqual(value)
+    expect(await parseMaybeGzipJson(plain.buffer)).toEqual(value)
   })
 })

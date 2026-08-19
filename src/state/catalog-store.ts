@@ -29,6 +29,17 @@ type CatalogState = {
   error: string | null
 }
 
+export const DEFAULT_CATALOG_FILTERS: CatalogFilters = {
+  query: '',
+  orbitClass: 'all',
+  semiMajorAxis: [0, 80],
+  eccentricity: [0, 0.999],
+  inclination: [0, 180],
+  absoluteMagnitude: [-5, 40],
+  magnitudeStatus: 'all',
+  perihelion: [0, 80],
+}
+
 const initialCatalogState: CatalogState = {
   mode: 'lite',
   datasetVersion: 'unavailable',
@@ -46,16 +57,7 @@ const initialCatalogState: CatalogState = {
   recordsSampled: false,
   loadProgress: 0,
   selectionScope: null,
-  filters: {
-    query: '',
-    orbitClass: 'all',
-    semiMajorAxis: [0, 80],
-    eccentricity: [0, 0.999],
-    inclination: [0, 180],
-    absoluteMagnitude: [-5, 40],
-    magnitudeStatus: 'all',
-    perihelion: [0, 80],
-  },
+  filters: DEFAULT_CATALOG_FILTERS,
   isLoading: false,
   error: null,
 }

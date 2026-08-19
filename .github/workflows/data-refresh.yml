@@ -41,9 +41,10 @@ jobs:
         run: |
           npm run lint
           npm run test:unit
-          npm run build
+          npm run build:candidate
+          npm run check:capacity
           npx playwright install --with-deps chromium
-          npm run test:e2e
+          PLAYWRIGHT_REUSE_BUILD=1 PLAYWRIGHT_EXPECT_DATASET=1 npm run test:e2e
           npm run benchmark:catalog
       - name: Package immutable release
         id: package

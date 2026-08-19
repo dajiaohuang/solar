@@ -14,16 +14,22 @@ Solar Atlas treats the million-object catalog as a columnar filtering problem, n
 | Exact-result hydration per page | 480 records / 32 unique shards | loader paging unit coverage |
 | Decoded detail-shard LRU | 8 | loader constant and unit coverage |
 | Obsolete scan cancellation | 300 ms | persistent worker yields at progress checkpoints and accepts explicit cancellation |
+| GitHub Pages artifact | 700 MiB maximum / 600 MiB warning | `npm run check:capacity` and deployment gate |
+| Initial application shell transfer | reported, regression-reviewed | generated `dist/capacity-report.json` |
+| Typical Catalog session transfer | reported, regression-reviewed | shell + compact index + desktop sample + manifest/provenance |
 
 Run the repeatable catalog benchmark with:
 
 ```bash
 npm run benchmark:catalog
+npm run check:capacity
 ```
 
 When a v3 dataset is installed, the command measures its compact index and reports actual sample sizes. Without one, it scans a deterministic 1.55-million-row synthetic index so code-path regressions remain visible in development.
 
 The timing is a local diagnostic, not a cross-machine performance guarantee. Release acceptance is based on the byte, object-count, request-count, and cancellation budgets above.
+
+Production uses `npm run build:deploy`. The builder excludes stale releases, copies only the audited active version, keeps binary numeric artifacts byte-identical, and deterministically gzip-compresses large search, lookup, metadata, legacy chunk, and sample JSON. The generated capacity report separates application shell, total dataset, cold-load, and typical Catalog-session bytes; it fails closed above the Pages budget.
 
 ## v0.9.0-beta.1 reference run
 

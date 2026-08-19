@@ -41,13 +41,18 @@ export function BodyInspector({ body, currentPositions, bodiesById }: Props) {
   const position = body ? currentPositions.find((item) => item.body.id === body.id) : null
   const modelDescription = !body?.orbit
     ? body?.kind === 'star'
-      ? 'Heliocentric coordinate origin'
+      ? t('heliocentricOrigin')
       : body?.kind === 'spacecraft'
-        ? 'Schematic sampled teaching trajectory; not an operational ephemeris'
-        : 'No orbital propagation model'
+        ? t('schematicTrajectoryModel')
+        : t('noPropagationModel')
     : body.orbit.model === 'planetaryApprox'
-      ? 'JPL approximate mean elements + secular rates'
-      : 'Elliptic two-body Kepler propagation'
+      ? t('jplApproxModel')
+      : t('ellipticTwoBodyModel')
+  const phaseNames = {
+    'new': t('phaseNew'), 'waxing-crescent': t('phaseWaxingCrescent'), 'first-quarter': t('phaseFirstQuarter'),
+    'waxing-gibbous': t('phaseWaxingGibbous'), 'full': t('phaseFull'), 'waning-gibbous': t('phaseWaningGibbous'),
+    'last-quarter': t('phaseLastQuarter'), 'waning-crescent': t('phaseWaningCrescent'),
+  }
 
   return (
     <aside className="inspector-panel glass-panel">
@@ -67,14 +72,14 @@ export function BodyInspector({ body, currentPositions, bodiesById }: Props) {
               <Metric label={t('inclination')} value={`${details.inclinationDeg.toFixed(3)}°`} />
               <Metric label={t('perihelion')} value={`${details.perihelionAU.toFixed(4)} AU`} />
               <Metric label={t('aphelion')} value={`${details.aphelionAU.toFixed(4)} AU`} />
-              <Metric label={t('timeOfFlight')} value={`${details.periodDays.toFixed(1)} d`} />
+              <Metric label={t('orbitalPeriod')} value={`${details.periodDays.toFixed(1)} d`} />
             </>}
             {body.absoluteMagnitude !== undefined && <Metric label={t('absoluteMagnitude')} value={body.absoluteMagnitude.toFixed(2)} />}
           </div>
           {moonPhase && (
             <div className="science-callout moon-callout">
               <span className="moon-disc" style={{ '--illumination': moonPhase.illuminatedFraction } as React.CSSProperties}>◐</span>
-              <div><strong>{t('moonPhase')}</strong><p>{(moonPhase.illuminatedFraction * 100).toFixed(1)}% {t('illuminated')} · {moonPhase.name}</p></div>
+              <div><strong>{t('moonPhase')}</strong><p>{(moonPhase.illuminatedFraction * 100).toFixed(1)}% {t('illuminated')} · {phaseNames[moonPhase.name]}</p></div>
             </div>
           )}
           {details?.influence && (
@@ -86,7 +91,7 @@ export function BodyInspector({ body, currentPositions, bodiesById }: Props) {
           <div className="model-note">
             <b>{t('model')}</b>
             <p>{modelDescription}</p>
-            <small>{body.dataEpochLabel ?? (body.orbit?.model === 'keplerian' ? `JD ${body.orbit.epochJd}` : body.orbit?.model === 'planetaryApprox' ? 'J2000 secular approximation' : 'Model-specific reference')}</small>
+            <small>{body.dataEpochLabel ?? (body.orbit?.model === 'keplerian' ? `JD ${body.orbit.epochJd}` : body.orbit?.model === 'planetaryApprox' ? t('j2000Approximation') : t('modelSpecificReference'))}</small>
           </div>
         </>
       )}

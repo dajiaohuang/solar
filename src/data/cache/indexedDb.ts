@@ -220,3 +220,19 @@ export async function fetchImmutableJson<T>(url: string): Promise<T> {
   const buffer = await fetchImmutableArrayBuffer(url)
   return JSON.parse(new TextDecoder().decode(buffer)) as T
 }
+
+export async function parseMaybeGzipJson<T>(buffer: ArrayBuffer): Promise<T> {
+  const header = new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 2))
+  const isGzip = header[0] === 0x1f && header[1] === 0x8b
+  if (!isGzip) return JSON.parse(new TextDecoder().decode(buffer)) as T
+  if (typeof DecompressionStream === 'undefined') {
+    throw new Error('This browser does not support streamed gzip dataset delivery.')
+  }
+  const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'))
+  const decompressed = await new Response(stream).arrayBuffer()
+  return JSON.parse(new TextDecoder().decode(decompressed)) as T
+}
+
+export async function fetchImmutableGzipJson<T>(url: string): Promise<T> {
+  return parseMaybeGzipJson<T>(await fetchImmutableArrayBuffer(url))
+}

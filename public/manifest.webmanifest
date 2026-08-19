@@ -1,13 +1,27 @@
 {
+  "id": "./",
   "name": "Solar Atlas — Solar System dynamics & small-body atlas",
   "short_name": "Solar Atlas",
-  "description": "A traceable, browser-native Solar System dynamics and small-body atlas.",
+  "description": "A traceable, bilingual, browser-native Solar System dynamics and small-body atlas.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#05080c",
   "theme_color": "#05080c",
+  "categories": ["education", "science", "utilities"],
   "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
     { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Solar Explorer", "short_name": "Explorer", "url": "./?v=3&page=explorer", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Guided Stories", "short_name": "Stories", "url": "./?v=3&page=stories", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Small-Body Catalog", "short_name": "Catalog", "url": "./?v=3&page=catalog", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+  ],
+  "screenshots": [
+    { "src": "readme-screenshot.png", "sizes": "1440x900", "type": "image/png", "form_factor": "wide", "label": "Solar Atlas linked scientific workspaces" }
   ]
 }

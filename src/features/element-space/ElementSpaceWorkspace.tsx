@@ -51,9 +51,10 @@ type ScatterProps = {
   selectedIds: Set<BodyId>
   onSelect: (records: AsteroidRecord[]) => void
   onFocus: (record: AsteroidRecord) => void
+  ariaLabel: string
 }
 
-function ElementScatter({ data, mode, selectedIds, onSelect, onFocus }: ScatterProps) {
+function ElementScatter({ data, mode, selectedIds, onSelect, onFocus, ariaLabel }: ScatterProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [brush, setBrush] = useState<{ startX: number; startY: number; x: number; y: number } | null>(null)
@@ -139,7 +140,7 @@ function ElementScatter({ data, mode, selectedIds, onSelect, onFocus }: ScatterP
       setBrush(null)
     }}
   >
-    <canvas ref={canvasRef} role="img" aria-label={`Orbital element scatter plot ${mode}`} />
+    <canvas ref={canvasRef} role="img" aria-label={`${ariaLabel} ${mode}`} />
   </div>
 }
 
@@ -199,7 +200,7 @@ export function ElementSpaceWorkspace() {
   const [xLabel, yLabel] = labelsFor(mode)
 
   return <div className="workspace-page elements-workspace">
-    <header className="page-heading"><div><span className="eyebrow">LINKED VIEWS / BRUSH SELECTION / RESONANCE MAP</span><h1>{t('elements')}</h1><p>{t('brushHint')}</p></div><strong className="selection-stat">{selection.selectedIds.length} {t('selectedCount')}</strong></header>
+    <header className="page-heading"><div><span className="eyebrow">{t('elementsKicker')}</span><h1>{t('elements')}</h1><p>{t('brushHint')}</p></div><strong className="selection-stat">{selection.selectedIds.length} {t('selectedCount')}</strong></header>
     <div className="elements-toolbar glass-panel">
       <div className="segmented-control">{(['a-e', 'a-i', 'a-H', 'q-Q', 'a-period'] as PlotMode[]).map((item) => <button key={item} className={mode === item ? 'active' : ''} onClick={() => uiActions.setElementPlot(item)}>{item}</button>)}</div>
       <div className="legend">{Object.entries(CLASS_COLORS).slice(0, 9).map(([key, color]) => <span key={key}><i style={{ background: color }} />{key}</span>)}</div>
@@ -216,11 +217,11 @@ export function ElementSpaceWorkspace() {
           selectionActions.addCatalogBodies([asteroidRecordToBody(record)])
           selectionActions.focus(record.id)
           if (!selection.selectedIds.includes(record.id)) selectionActions.toggle(record.id)
-        }} /><div className="axis-title x">{xLabel}</div>
+        }} ariaLabel={t('elementScatterAria')} /><div className="axis-title x">{xLabel}</div>
       </section>
       <section className="linked-space-panel glass-panel">
-        <div className="map-caption"><span>LINKED HELIOCENTRIC 3D</span><strong>{miniBodies.length}</strong></div>
-        <TrajectoryCanvas3D referenceBody={majorBodiesWithPhysicalData[0]} trajectories={[]} currentPositions={miniFrame.currentPositions} onBodySelect={selectionActions.focus} showEcliptic />
+        <div className="map-caption"><span>{t('linkedHeliocentric3d')}</span><strong>{miniBodies.length}</strong></div>
+        <TrajectoryCanvas3D referenceBody={majorBodiesWithPhysicalData[0]} trajectories={[]} currentPositions={miniFrame.currentPositions} onBodySelect={selectionActions.focus} showEcliptic ariaLabel={t('interactive3d')} />
       </section>
       <aside className="selection-panel glass-panel">
         <div className="section-heading"><span>{t('selectedBodies')}</span><button onClick={() => selectionActions.setSelectedIds([])}>{t('clear')}</button></div>

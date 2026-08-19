@@ -7,6 +7,7 @@ import { simulationActions, simulationStore } from '../../state/simulation-store
 import { uiActions } from '../../state/ui-store'
 import type { CelestialBody } from '../../types'
 import { bodyDisplayName } from '../../lib/bodyNames'
+import { exportAnnotatedScenePng } from '../../lib/sceneExport'
 
 type Props = {
   bodies: CelestialBody[]
@@ -27,7 +28,7 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
   return (
     <aside className="control-drawer glass-panel">
       <section className="drawer-section">
-        <div className="section-kicker">FRAME</div>
+        <div className="section-kicker">{t('referenceFrame').toUpperCase()}</div>
         <label className="field">
           <span>{t('referenceFrame')}</span>
           <select value={simulation.referenceId} onChange={(event) => simulationActions.patch({ referenceId: event.target.value })}>
@@ -49,7 +50,7 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
         <label className="field">
           <span>{t('trail')}</span>
           <select value={simulation.historyDays} onChange={(event) => simulationActions.patch({ historyDays: Number(event.target.value) })}>
-            {(!HISTORY_OPTIONS.includes(simulation.historyDays) ? [simulation.historyDays, ...HISTORY_OPTIONS] : HISTORY_OPTIONS).map((days) => <option value={days} key={days}>{days < 365 ? `${days} days` : `${Math.round(days / 365)} years`}</option>)}
+            {(!HISTORY_OPTIONS.includes(simulation.historyDays) ? [simulation.historyDays, ...HISTORY_OPTIONS] : HISTORY_OPTIONS).map((days) => <option value={days} key={days}>{days < 365 ? `${days} ${t('days')}` : `${Math.round(days / 365)} ${t('years')}`}</option>)}
           </select>
         </label>
       </section>
@@ -94,7 +95,7 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
         {Object.entries(selection.savedCollections).map(([name, ids]) => (
           <div className="saved-row" key={name}>
             <button onClick={() => selectionActions.setSelectedIds(ids)}>{name} <small>{ids.length}</small></button>
-            <button aria-label={`Delete ${name}`} onClick={() => selectionActions.removeCollection(name)}>×</button>
+            <button aria-label={`${t('deleteCollection')}: ${name}`} onClick={() => selectionActions.removeCollection(name)}>×</button>
           </div>
         ))}
       </section>
@@ -120,11 +121,14 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
         </div>
       </section>
 
-      <button className="share-button" onClick={async () => {
-        const url = encodeCurrentScene()
-        await navigator.clipboard.writeText(url)
-        uiActions.toast(t('linkCopied'))
-      }}>↗ {t('share')}</button>
+      <div className="drawer-export-actions">
+        <button className="share-button" onClick={async () => {
+          const url = encodeCurrentScene()
+          await navigator.clipboard.writeText(url)
+          uiActions.toast(t('linkCopied'))
+        }}>↗ {t('share')}</button>
+        <button className="share-button" onClick={() => void exportAnnotatedScenePng(language).catch((error: unknown) => uiActions.toast(error instanceof Error ? error.message : String(error)))}>▣ {t('exportPng')}</button>
+      </div>
     </aside>
   )
 }

@@ -226,7 +226,7 @@ export function CatalogWorkspace() {
   return (
     <div className="workspace-page catalog-workspace">
       <header className="page-heading">
-        <div><span className="eyebrow">MPCORB / BINARY SHARDS / INDEXEDDB</span><h1>{t('catalog')}</h1><p>{t('tagline')}</p></div>
+        <div><span className="eyebrow">{t('catalogKicker')}</span><h1>{t('catalog')}</h1><p>{t('tagline')}</p></div>
         <div className="mode-switch segmented-control">
           <button className={installedMode === 'lite' ? 'active' : ''} disabled={installedMode !== 'lite'}>{t('lite')}</button>
           <button className={installedMode === 'full' ? 'active' : ''} disabled={installedMode !== 'full'}>{t('full')}</button>
@@ -259,11 +259,12 @@ export function CatalogWorkspace() {
         </aside>
 
         <section className="catalog-map glass-panel">
-          <div className="map-caption"><span>CATALOG MODE · GPU POINTS</span><strong>{Math.floor(pointCloud.positions.length / 2).toLocaleString()} / {resultTotal.toLocaleString()}</strong></div>
+          <div className="map-caption"><span>{t('catalogModeCaption')}</span><strong>{Math.floor(pointCloud.positions.length / 2).toLocaleString()} / {resultTotal.toLocaleString()}</strong></div>
           {pointCloud.positions.length === pointRecords.length * 2 && pointRecords.length ? <CatalogPointCanvas
             records={pointRecords}
             positions={pointCloud.positions}
             viewRadiusAU={catalog.filters.semiMajorAxis[1] || 50}
+            ariaLabel={t('catalogPointAria')}
           /> : <div className="empty-state"><span>◎</span><p>{catalog.manifest ? t('loading') : t('unavailable')}</p></div>}
           {pointCloud.progress > 0 && pointCloud.progress < 1 && <div className="compute-progress"><i style={{ width: `${pointCloud.progress * 100}%` }} /></div>}
           {pointCloud.error && <div className="error-banner">{pointCloud.error}</div>}
@@ -271,7 +272,7 @@ export function CatalogWorkspace() {
 
         <section className="catalog-results glass-panel">
           <div className="section-heading"><span>{resultTotal.toLocaleString()} {t('results')}</span><small>{(catalog.selectionScope?.count ?? selection.selectedIds.filter((id) => id.startsWith('asteroid:')).length).toLocaleString()} {t('selectedCount')}</small></div>
-          <div className="catalog-counts" aria-label="Catalog result counts">
+          <div className="catalog-counts" aria-label={t('catalogResultCounts')}>
             <span>{t('loadedCount')} <strong>{displayedRecords.length.toLocaleString()}</strong></span>
             <span>{t('textMatches')} <strong>{textMatchTotal === null ? '—' : textMatchTotal.toLocaleString()}</strong></span>
             <span>{t('exactFilteredTotal')} <strong>{exactFilteredTotal === null ? '—' : exactFilteredTotal.toLocaleString()}</strong></span>

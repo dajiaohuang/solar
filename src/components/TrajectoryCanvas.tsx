@@ -28,6 +28,10 @@ type Props = {
   planetOpacity?: number
   asteroidOpacity?: number
   moonOpacity?: number
+  ariaLabel?: string
+  emptyLabel?: string
+  webglUnavailableLabel?: string
+  influenceLabels?: { hill: string; soi: string }
 }
 
 type Geometry = {
@@ -535,6 +539,10 @@ export function TrajectoryCanvas({
   planetOpacity = 1,
   asteroidOpacity = 1,
   moonOpacity = 1,
+  ariaLabel = 'Interactive two-dimensional Solar System trajectory view',
+  emptyLabel = 'Select at least one celestial object to display.',
+  webglUnavailableLabel = 'WebGL acceleration is unavailable in this browser.',
+  influenceLabels = { hill: 'Hill Sphere', soi: 'Laplace SOI' },
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const resourcesRef = useRef<GlResources | null>(null)
@@ -714,7 +722,7 @@ export function TrajectoryCanvas({
       onMouseMove={handleMouseMove}
       onMouseLeave={() => onHover?.(null, 0, 0, 0)}
     >
-      <canvas ref={canvasRef} className="trajectory-canvas" role="img" aria-label="太阳系轨迹平面图" />
+      <canvas ref={canvasRef} className="trajectory-canvas" role="img" aria-label={ariaLabel} />
 
       <div className="canvas-label-layer" aria-hidden="true">
         <span
@@ -789,7 +797,7 @@ export function TrajectoryCanvas({
         {influenceCircles?.map((influence) => {
           const center = projectPoint(influence.position, projection)
           const radiusPx = influence.radiusAU * projection.scale
-          const label = influence.definition === 'hill' ? 'Hill Sphere' : 'Laplace SOI'
+          const label = influence.definition === 'hill' ? influenceLabels.hill : influenceLabels.soi
 
           return (
             <div
@@ -806,8 +814,8 @@ export function TrajectoryCanvas({
           )
         })}
 
-        {!currentPositions.length && <span className="empty-overlay-copy">请先选择至少一个要显示的天体</span>}
-        {webglUnavailable && <span className="empty-overlay-copy">当前浏览器不支持 WebGL 加速渲染</span>}
+        {!currentPositions.length && <span className="empty-overlay-copy">{emptyLabel}</span>}
+        {webglUnavailable && <span className="empty-overlay-copy">{webglUnavailableLabel}</span>}
       </div>
     </div>
   )

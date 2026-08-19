@@ -4,7 +4,7 @@
 
 [在线演示](https://dajiaohuang.github.io/solar/) · [English](./README.md)
 
-当前预发布版本：**v0.9.0-beta.2** · [更新日志](./CHANGELOG.md) · [性能预算](./PERFORMANCE.md)
+当前版本：**v0.9.1** · [更新日志](./CHANGELOG.md) · [路线图](./ROADMAP.md) · [性能预算](./PERFORMANCE.md)
 
 ![Solar Atlas](./public/readme-screenshot.png)
 
@@ -12,14 +12,24 @@ Solar Atlas 把空间视图、轨道元素空间、时间事件与数据证据�
 
 ## 已实现能力
 
+- **访客层：** 双语首次访问首页、三条清晰起点、四步情境引导、浏览器前进/后退、描述性页面标题，以及四项移动端主导航。
 - **空间探索：** 日心、地心和任意天体中心参考系；二维/三维视图；分屏参考系对比；时间推进、测距、拉格朗日点、希尔球与拉普拉斯影响球。
 - **小天体目录：** MPCORB 二进制分片；二字符前缀搜索；compact locator 精确筛选与有界分页回填；NEO/PHA 与分类筛选；Lite/Full 显示预算；不可变数据版本与 IndexedDB 缓存。
 - **轨道元素空间：** `a–e`、`a–i`、`a–H`、`q–Q`、`a–周期` 联动图；Kirkwood gap / 共振标记；框选后同步聚焦三维空间。
 - **事件实验室：** 自适应采样、可取消的近距离、合、冲及中心天体拱点任务；显示采样是否充分，并明确区分数值细化区间与未估计的物理不确定性。
 - **任务实验室：** 单位与方向正确的霍曼基线、相位角、强制残差收敛的通用变量 Lambert 解、出发/到达 `v∞`、C3 与分类的 Porkchop 求解失败。
 - **引导故事：** 逆行、参考系、Kirkwood gaps、木星特洛伊、NEO 分类、冥王星共振与旅行者时代等 JSON 场景。
-- **可复现链接：** URL 记录数据集版本、历元、参考系、天体集合、筛选器、语言与视图；当前部署包含对应数据版本时可完整重放，否则保留原始版本并显示恢复入口。
-- **可安装网页应用：** 响应式移动端 Lite 布局、离线运行时缓存、Web App Manifest、社交分享元信息与路由代码分割。
+- **可复现链接：** v3 URL 记录数据集版本、历元、参考系、天体集合、筛选器、故事步骤、任务端点/日期、语言与视图；浏览器前进/后退会恢复离散场景，旧 v2 链接仍可重放。
+- **可安装且可发现：** 首次安装即可离线使用应用壳、更新提示、Web App Manifest、Open Graph 图、JSON-LD、中英静态知识/天体页、sitemap 与路由代码分割。
+- **发布证据：** 每次构建显示应用版本、提交 SHA、构建时间、固定数据集、解析器身份、验证状态、资产哈希与 Pages 容量报告。
+
+## 打开可复现场景
+
+- [解释火星逆行](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=retrograde-mars&step=2&lang=zh)
+- [在元素空间观察柯克伍德空隙](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=kirkwood-gaps&step=1&lang=zh)
+- [比较四类 NEO 轨道](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=neo-types&lang=zh)
+- [检查冥王星—海王星 3:2 几何](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=pluto-resonance&step=1&lang=zh)
+- [打开地球到火星任务设置](https://dajiaohuang.github.io/solar/?v=3&page=mission&from=earth&to=mars&depart=2026-11-15&arrive=2027-08-01&lang=zh)
 
 ## 快速开始
 
@@ -45,6 +55,13 @@ npm run data:full
 ```
 
 完整管线需要数 GB 可用内存。建议使用 `MPCORB_SOURCE_FILE=/path/to/MPCORB.DAT.gz` 固定源快照。
+
+本地应用构建默认不复制生成的目录数据。要复现可部署的 GitHub Pages 成品（只包含固定的活动版本，并把大型 JSON 分片作为 `.json.gz` 交付），运行：
+
+```bash
+npm run build:deploy
+npm run check:capacity
+```
 
 ## 数据发布 v3
 
@@ -121,10 +138,13 @@ npm run test:e2e
 npm run build
 npm run ci
 npm run benchmark:catalog
+npm run check:capacity
 ```
 
-单元测试覆盖儒略日、开普勒传播、父天体/参考系、霍曼单位与方向、月相几何、Hill/SOI 定义、严格 JPL SBDB fixture、局部事件极值检测、Lambert 圆轨道弧、版本化深链接、MPCORB 定长解析、manifest/缓存隔离、百万行有界目录扫描，以及微型数据集发布/哈希复核。Playwright 在桌面和移动 Chromium 上覆盖核心路由、可复现故事、目录筛选与版本恢复、任务 Worker、Service Worker 缓存隔离与 2D/3D 渲染。
+单元测试覆盖儒略日、开普勒传播、父天体/参考系、霍曼单位与方向、月相几何、Hill/SOI 定义、严格 JPL SBDB fixture、局部事件极值检测、Lambert 圆轨道弧、v2/v3 深链接、MPCORB 定长解析、manifest/缓存隔离、百万行有界目录扫描，以及微型数据集发布/哈希复核。Playwright 覆盖浏览器历史、故事/任务 URL、核心路由、目录筛选与版本恢复、任务 Worker、首次安装离线、缓存隔离、2D/3D 渲染，以及桌面/移动 Chromium 的严重或致命 axe 问题；定时任务还会在 Firefox 与 WebKit 重跑。
 
 ## 开源许可
 
 源代码使用 [MIT License](./LICENSE)。上游天文数据仍适用其来源机构的条款与署名要求。
+
+贡献、安全披露与引用说明见 [CONTRIBUTING.md](./CONTRIBUTING.md)、[SECURITY.md](./SECURITY.md) 和 [CITATION.cff](./CITATION.cff)。

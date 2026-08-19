@@ -1,12 +1,14 @@
 {
   "name": "solar",
   "private": true,
-  "version": "0.9.0-beta.2",
+  "version": "0.9.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "build": "node ./scripts/build-artifacts.mjs prepare && tsc -b && vite build && node ./scripts/build-artifacts.mjs finalize && node ./scripts/verify-build.mjs",
+    "build:deploy": "cross-env SOLAR_ATLAS_INCLUDE_DATASET=1 npm run build",
+    "build:candidate": "cross-env SOLAR_ATLAS_INCLUDE_DATASET=1 SOLAR_ATLAS_ALLOW_UNPINNED_DATASET=1 SOLAR_ATLAS_BUILD_ENV=dataset-candidate npm run build",
+    "lint": "eslint . && node ./scripts/validate-yaml.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
@@ -18,7 +20,8 @@
     "data:full": "cross-env MPCORB_MODE=full node --max-old-space-size=4096 ./scripts/preprocess-asteroids.mjs",
     "package:data": "node ./scripts/package-dataset.mjs ./public/data/asteroids ./asteroid-dataset.tar.gz",
     "validate:data": "node --max-old-space-size=4096 ./scripts/validate-dataset.mjs",
-    "benchmark:catalog": "node ./scripts/benchmark-catalog-index.mjs"
+    "benchmark:catalog": "node ./scripts/benchmark-catalog-index.mjs",
+    "check:capacity": "node ./scripts/check-capacity.mjs"
   },
   "dependencies": {
     "@types/three": "^0.184.0",
@@ -27,6 +30,7 @@
     "three": "^0.184.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.55.0",
     "@types/node": "^24.12.2",
@@ -41,6 +45,7 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.2",
     "vite": "^8.0.10",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "yaml": "^2.9.0"
   }
 }

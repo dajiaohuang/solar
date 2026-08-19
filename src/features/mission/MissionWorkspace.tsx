@@ -8,15 +8,15 @@ import { dateToJulianDay, julianDayToDate } from '../../lib/julianDate'
 import type { BodyId, CelestialBody } from '../../types'
 import type { PorkchopWorkerRequest, PorkchopWorkerResponse } from '../../workers/porkchop.worker'
 import { bodyDisplayName } from '../../lib/bodyNames'
+import { missionActions, missionStore } from '../../state/mission-store'
 
-function dateValue(date: Date) { return date.toISOString().slice(0, 10) }
 function orbitRadius(body: CelestialBody) {
   if (!body.orbit) return null
   return body.orbit.model === 'planetaryApprox' ? body.orbit.base.semiMajorAxisAU : body.orbit.semiMajorAxisAU
 }
 function normalizeDegrees(value: number) { const wrapped = value % 360; return wrapped < 0 ? wrapped + 360 : wrapped }
 
-function PorkchopCanvas({ points, columns, rows }: { points: PorkchopPoint[]; columns: number; rows: number }) {
+function PorkchopCanvas({ points, columns, rows, ariaLabel }: { points: PorkchopPoint[]; columns: number; rows: number; ariaLabel: string }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   useEffect(() => {
     const canvas = canvasRef.current
@@ -41,16 +41,13 @@ function PorkchopCanvas({ points, columns, rows }: { points: PorkchopPoint[]; co
     context.fillStyle = 'rgba(5,8,12,.78)'; context.fillRect(12, 12, 176, 26)
     context.fillStyle = '#d8e4e8'; context.font = '12px ui-monospace, monospace'; context.fillText(`Σv∞ ${low.toFixed(1)} — ${high.toFixed(1)} km/s`, 22, 29)
   }, [columns, points, rows])
-  return <canvas ref={canvasRef} className="porkchop-canvas" role="img" aria-label="Porkchop transfer opportunity heatmap" />
+  return <canvas ref={canvasRef} className="porkchop-canvas" role="img" aria-label={ariaLabel} />
 }
 
 export function MissionWorkspace() {
   const candidates = useMemo(() => majorBodiesWithPhysicalData.filter((body) => body.orbit && !body.parentId), [])
   const bodiesById = useMemo(() => new Map<BodyId, CelestialBody>(majorBodiesWithPhysicalData.map((body) => [body.id, body])), [])
-  const [departureId, setDepartureId] = useState('earth')
-  const [arrivalId, setArrivalId] = useState('mars')
-  const [departureDate, setDepartureDate] = useState(dateValue(new Date('2026-11-15T12:00:00Z')))
-  const [arrivalDate, setArrivalDate] = useState(dateValue(new Date('2027-08-01T12:00:00Z')))
+  const { departureId, arrivalId, departureDate, arrivalDate } = missionStore.useStore()
   const [hohmann, setHohmann] = useState<HohmannResult | null>(null)
   const [lambert, setLambert] = useState<LambertSolution | null>(null)
   const [transferError, setTransferError] = useState<string | null>(null)
@@ -86,7 +83,7 @@ export function MissionWorkspace() {
     setTransferError(null)
     try {
       const departureRadius = orbitRadius(departureBody), arrivalRadius = orbitRadius(arrivalBody)
-      if (!departureRadius || !arrivalRadius) throw new Error('Both endpoints require heliocentric elliptic orbits')
+      if (!departureRadius || !arrivalRadius) throw new Error(t('endpointsRequireElliptic'))
       setHohmann(computeHohmann(departureRadius, arrivalRadius))
       setLambert(solveBodyToBodyLambert({ departureBodyId: departureId, arrivalBodyId: arrivalId, bodiesById, departureJulianDay: departureJd, arrivalJulianDay: arrivalJd }))
     } catch (error) {
@@ -103,7 +100,7 @@ export function MissionWorkspace() {
     worker.onmessage = (event: MessageEvent<PorkchopWorkerResponse>) => {
       if (event.data.requestId !== requestId) return
       if (event.data.result) { setPorkchop(event.data.result); setPorkchopStatus('idle') }
-      else { setTransferError(event.data.error ?? 'Porkchop calculation failed'); setPorkchopStatus('error') }
+      else { setTransferError(event.data.error ?? t('porkchopFailed')); setPorkchopStatus('error') }
     }
     const hohmannTime = hohmann?.transferTimeDays ?? Math.max(60, arrivalJd - departureJd)
     const request: PorkchopWorkerRequest = {
@@ -120,42 +117,42 @@ export function MissionWorkspace() {
   }
 
   return <div className="workspace-page mission-workspace">
-    <header className="page-heading"><div><span className="eyebrow">TWO-BODY / PATCHED CONICS / UNIVERSAL VARIABLES</span><h1>{t('mission')}</h1><p>{t('educationalWarning')}</p></div></header>
+    <header className="page-heading"><div><span className="eyebrow">{t('missionKicker')}</span><h1>{t('mission')}</h1><p>{t('educationalWarning')}</p></div></header>
     <div className="mission-layout">
       <aside className="mission-config glass-panel">
-        <div className="section-kicker">TRANSFER ENDPOINTS</div>
-        <label className="field"><span>{t('depart')}</span><select value={departureId} onChange={(event) => setDepartureId(event.target.value)}>{candidates.map((body) => <option key={body.id} value={body.id}>{bodyDisplayName(body, language)}</option>)}</select></label>
-        <label className="field"><span>{t('arrive')}</span><select value={arrivalId} onChange={(event) => setArrivalId(event.target.value)}>{candidates.map((body) => <option key={body.id} value={body.id}>{bodyDisplayName(body, language)}</option>)}</select></label>
-        <label className="field"><span>{t('departureDate')}</span><input type="date" value={departureDate} onChange={(event) => setDepartureDate(event.target.value)} /></label>
-        <label className="field"><span>{t('arrivalDate')}</span><input type="date" value={arrivalDate} onChange={(event) => setArrivalDate(event.target.value)} /></label>
+        <div className="section-kicker">{t('transferEndpoints').toUpperCase()}</div>
+        <label className="field"><span>{t('depart')}</span><select value={departureId} onChange={(event) => missionActions.patch({ departureId: event.target.value })}>{candidates.map((body) => <option key={body.id} value={body.id}>{bodyDisplayName(body, language)}</option>)}</select></label>
+        <label className="field"><span>{t('arrive')}</span><select value={arrivalId} onChange={(event) => missionActions.patch({ arrivalId: event.target.value })}>{candidates.map((body) => <option key={body.id} value={body.id}>{bodyDisplayName(body, language)}</option>)}</select></label>
+        <label className="field"><span>{t('departureDate')}</span><input type="date" value={departureDate} onChange={(event) => missionActions.patch({ departureDate: event.target.value })} /></label>
+        <label className="field"><span>{t('arrivalDate')}</span><input type="date" value={arrivalDate} onChange={(event) => missionActions.patch({ arrivalDate: event.target.value })} /></label>
         <button className="primary-button full-width" disabled={departureId === arrivalId || arrivalJd <= departureJd} onClick={computeTransfer}>{t('computeTransfer')}</button>
         {transferError && <div className="error-banner">{transferError}</div>}
-        <div className="phase-gauge"><span>ACTUAL PHASE</span><strong>{phase.actual.toFixed(1)}°</strong>{phase.required !== null && <small>Hohmann target {phase.required.toFixed(1)}°</small>}<div><i style={{ transform: `rotate(${phase.actual}deg)` }} /></div></div>
+        <div className="phase-gauge"><span>{t('actualPhase').toUpperCase()}</span><strong>{phase.actual.toFixed(1)}°</strong>{phase.required !== null && <small>{t('hohmannTarget')} {phase.required.toFixed(1)}°</small>}<div><i style={{ transform: `rotate(${phase.actual}deg)` }} /></div></div>
       </aside>
 
       <section className="mission-results">
         <div className="transfer-summary-grid">
-          <article className="result-module glass-panel"><div className="module-heading"><span>{t('hohmann')}</span><em>LEVEL 1</em></div>{hohmann ? <>
+          <article className="result-module glass-panel"><div className="module-heading"><span>{t('hohmann')}</span><em>{t('level').toUpperCase()} 1</em></div>{hohmann ? <>
             <div className="hero-metric"><strong>{hohmann.totalDeltaVKmS.toFixed(3)}</strong><span>km/s · {t('deltaV')}</span></div>
-            <div className="metric-grid"><Metric label="Δv departure" value={`${hohmann.departureDeltaVKmS.toFixed(3)} km/s`} /><Metric label="Δv arrival" value={`${hohmann.arrivalDeltaVKmS.toFixed(3)} km/s`} /><Metric label={t('timeOfFlight')} value={`${hohmann.transferTimeDays.toFixed(1)} d`} /><Metric label="transfer e" value={hohmann.eccentricity.toFixed(4)} /></div>
-          </> : <EmptyResult />}</article>
-          <article className="result-module glass-panel"><div className="module-heading"><span>{t('lambert')}</span><em>LEVEL 2</em></div>{lambert ? <>
-            <div className="hero-metric"><strong>{lambert.departureVInfinityKmS.toFixed(3)}</strong><span>km/s · departure v∞</span></div>
-            <div className="metric-grid"><Metric label="arrival v∞" value={`${lambert.arrivalVInfinityKmS.toFixed(3)} km/s`} /><Metric label="C3" value={`${lambert.c3Km2S2.toFixed(2)} km²/s²`} /><Metric label={t('timeOfFlight')} value={`${lambert.timeOfFlightDays.toFixed(1)} d`} /><Metric label="solver" value={`${lambert.iterations} iter · |r| ${Math.abs(lambert.residual).toExponential(1)}`} /></div>
-          </> : <EmptyResult />}</article>
+            <div className="metric-grid"><Metric label={t('departureBurn')} value={`${hohmann.departureDeltaVKmS.toFixed(3)} km/s`} /><Metric label={t('arrivalBurn')} value={`${hohmann.arrivalDeltaVKmS.toFixed(3)} km/s`} /><Metric label={t('timeOfFlight')} value={`${hohmann.transferTimeDays.toFixed(1)} d`} /><Metric label={t('transferEccentricity')} value={hohmann.eccentricity.toFixed(4)} /></div>
+          </> : <EmptyResult label={t('configureEndpoints')} />}</article>
+          <article className="result-module glass-panel"><div className="module-heading"><span>{t('lambert')}</span><em>{t('level').toUpperCase()} 2</em></div>{lambert ? <>
+            <div className="hero-metric"><strong>{lambert.departureVInfinityKmS.toFixed(3)}</strong><span>km/s · {t('departureVInfinity')}</span></div>
+            <div className="metric-grid"><Metric label={t('arrivalVInfinity')} value={`${lambert.arrivalVInfinityKmS.toFixed(3)} km/s`} /><Metric label="C3" value={`${lambert.c3Km2S2.toFixed(2)} km²/s²`} /><Metric label={t('timeOfFlight')} value={`${lambert.timeOfFlightDays.toFixed(1)} d`} /><Metric label={t('solver')} value={`${lambert.iterations} iter · |r| ${Math.abs(lambert.residual).toExponential(1)}`} /></div>
+          </> : <EmptyResult label={t('configureEndpoints')} />}</article>
         </div>
-        <article className="porkchop-module glass-panel"><div className="module-heading"><span>{t('porkchop')}</span><button disabled={!hohmann || porkchopStatus === 'running'} onClick={computePorkchop}>{porkchopStatus === 'running' ? t('loading') : t('computePorkchop')}</button></div>{porkchop ? <><PorkchopCanvas {...porkchop} />{porkchopFailures.length > 0 && <p className="fine-print">Solver failures: {porkchopFailures.map(([code, count]) => `${code} ${count}`).join(' · ')}</p>}</> : <div className="porkchop-placeholder"><div className="contours" /><p>Departure window × flight time · color = departure + arrival v∞</p></div>}</article>
+        <article className="porkchop-module glass-panel"><div className="module-heading"><span>{t('porkchop')}</span><button disabled={!hohmann || porkchopStatus === 'running'} onClick={computePorkchop}>{porkchopStatus === 'running' ? t('loading') : t('computePorkchop')}</button></div>{porkchop ? <><PorkchopCanvas {...porkchop} ariaLabel={t('porkchopAria')} />{porkchopFailures.length > 0 && <p className="fine-print">{t('solverFailures')}: {porkchopFailures.map(([code, count]) => `${code} ${count}`).join(' · ')}</p>}</> : <div className="porkchop-placeholder"><div className="contours" /><p>{t('porkchopDescription')}</p></div>}</article>
       </section>
 
       <aside className="mission-evidence glass-panel">
         <div className="section-kicker">{t('assumptions').toUpperCase()}</div>
-        <ol className="model-ladder"><li className="active"><i>1</i><div><strong>Circular Hohmann</strong><span>Coplanar circular endpoints; analytic baseline.</span></div></li><li className="active"><i>2</i><div><strong>Lambert / two-body</strong><span>Uses actual approximate endpoint positions and time of flight.</span></div></li><li><i>3</i><div><strong>Patched conics</strong><span>v∞ values expose the planet encounter boundaries.</span></div></li><li><i>4</i><div><strong>N-body validation</strong><span>Out of scope for this browser atlas.</span></div></li></ol>
-        <div className="assist-diagram"><span className="sun-node">☉</span><span className="planet-node earth-node">Earth</span><span className="planet-node jupiter-node">Jupiter</span><span className="planet-node target-node">Target</span><svg viewBox="0 0 260 160"><path d="M35 125 C78 62 116 45 150 78 S214 76 236 30" /><circle cx="150" cy="78" r="16" /></svg><small>Teaching view: a gravity assist rotates the heliocentric velocity vector at an encounter. It is not an optimizer.</small></div>
-        {hohmann && <div className="model-note"><b>{t('model')}</b><p>{hohmann.model} · central body {hohmann.centralBody} · {hohmann.direction}</p><small>Epoch {julianDayToDate(departureJd).toISOString()} · endpoint eccentricity ignored by Hohmann baseline</small></div>}
+        <ol className="model-ladder"><li className="active"><i>1</i><div><strong>{t('circularHohmann')}</strong><span>{t('circularHohmannDescription')}</span></div></li><li className="active"><i>2</i><div><strong>{t('lambertTwoBody')}</strong><span>{t('lambertDescription')}</span></div></li><li><i>3</i><div><strong>{t('patchedConics')}</strong><span>{t('patchedConicsDescription')}</span></div></li><li><i>4</i><div><strong>{t('nBodyValidation')}</strong><span>{t('nBodyOutOfScope')}</span></div></li></ol>
+        <div className="assist-diagram"><span className="sun-node">☉</span><span className="planet-node earth-node">{language === 'zh' ? '地球' : 'Earth'}</span><span className="planet-node jupiter-node">{language === 'zh' ? '木星' : 'Jupiter'}</span><span className="planet-node target-node">{t('target')}</span><svg viewBox="0 0 260 160"><path d="M35 125 C78 62 116 45 150 78 S214 76 236 30" /><circle cx="150" cy="78" r="16" /></svg><small>{t('gravityAssistTeaching')}</small></div>
+        {hohmann && <div className="model-note"><b>{t('model')}</b><p>{hohmann.model} · {t('centralBody')} {hohmann.centralBody} · {hohmann.direction}</p><small>{t('epoch')} {julianDayToDate(departureJd).toISOString()} · {t('hohmannIgnoresEccentricity')}</small></div>}
       </aside>
     </div>
   </div>
 }
 
 function Metric({ label, value }: { label: string; value: string }) { return <div className="metric"><span>{label}</span><strong>{value}</strong></div> }
-function EmptyResult() { return <div className="empty-result"><span>∿</span><p>Configure endpoints and compute.</p></div> }
+function EmptyResult({ label }: { label: string }) { return <div className="empty-result"><span>∿</span><p>{label}</p></div> }

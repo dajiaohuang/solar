@@ -1,88 +1,143 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, type ReactNode } from 'react'
+import { fetchSbdbBody } from '../data/loaders/sbdb'
 import { simulationClock } from '../engine/clock/SimulationClock'
 import { I18nProvider } from '../i18n/provider'
-import { fetchSbdbBody } from '../data/loaders/sbdb'
 import { loadAsteroidBodiesByIds, loadAsteroidManifest, loadDatasetProvenance } from '../lib/catalogLoader'
 import { encodeCurrentScene } from '../lib/shareScene'
-import { decodeUrlState } from '../lib/urlState'
-import { catalogActions, catalogStore } from '../state/catalog-store'
-import { selectionActions, selectionStore } from '../state/selection-store'
-import { simulationActions, simulationStore } from '../state/simulation-store'
+import { decodeUrlState, LEGACY_SCENE_URL_VERSION, type AppUrlState } from '../lib/urlState'
+import { catalogActions, catalogStore, DEFAULT_CATALOG_FILTERS } from '../state/catalog-store'
+import { DEFAULT_FOCUSED_ID, DEFAULT_SELECTED_IDS, selectionActions, selectionStore } from '../state/selection-store'
+import { DEFAULT_SIMULATION_STATE, simulationActions, simulationStore } from '../state/simulation-store'
 import { uiActions, uiStore } from '../state/ui-store'
+import { DEFAULT_MISSION_STATE, missionActions, missionStore } from '../state/mission-store'
+
+const DEFAULT_STORY = 'retrograde-mars'
+
+function routeForState(state: AppUrlState) {
+  if (state.route) return state.route
+  return state.version === LEGACY_SCENE_URL_VERSION ? 'explorer' : 'home'
+}
+
+function discreteSceneKey() {
+  const ui = uiStore.getState()
+  const selection = selectionStore.getState()
+  const mission = missionStore.getState()
+  return JSON.stringify({
+    route: ui.route,
+    story: ui.route === 'stories' ? ui.storyId : null,
+    step: ui.route === 'stories' ? ui.storyStep : null,
+    focused: selection.focusedId,
+    mission: ui.route === 'mission' ? mission : null,
+  })
+}
+
+function currentRelativeUrl() {
+  return `${window.location.pathname}${window.location.search}${window.location.hash}`
+}
+
+function nextRelativeUrl() {
+  const url = new URL(encodeCurrentScene())
+  return `${url.pathname}${url.search}${url.hash}`
+}
 
 export function AppProviders({ children }: { children: ReactNode }) {
   const initialized = useRef(false)
+  const restoringHistory = useRef(false)
+  const datasetLoadGeneration = useRef(0)
 
-  useEffect(() => {
-    if (initialized.current) return
-    initialized.current = true
-    const initial = decodeUrlState()
-    if (initial.route) uiActions.navigate(initial.route)
-    if (initial.lang) uiActions.setLanguage(initial.lang)
-    if (initial.plot) uiActions.setElementPlot(initial.plot)
-    if (initial.bodies) selectionActions.setSelectedIds(initial.bodies)
-    if (initial.focused) selectionActions.focus(initial.focused)
-    simulationActions.patch({
-      ...(initial.ref ? { referenceId: initial.ref } : {}),
-      ...(initial.compareRef ? { comparisonReferenceId: initial.compareRef } : {}),
-      comparisonEnabled: initial.compare ?? false,
-      ...(initial.zoom ? { zoom: initial.zoom } : {}),
-      ...(initial.history ? { historyDays: initial.history } : {}),
-      ...(initial.view ? { viewMode: initial.view } : {}),
-      ...(initial.offset ? { viewOffset: { x: initial.offset[0], y: initial.offset[1] } } : {}),
-      ...(initial.layers !== undefined ? {
-        showEcliptic: initial.layers.includes('ecliptic'),
-        showOrbits: initial.layers.includes('orbits'),
-        showLagrange: initial.layers.includes('lagrange'),
-        showHillSphere: initial.layers.includes('hill'),
-        showLaplaceSoi: initial.layers.includes('soi'),
-        showSpacecraft: initial.layers.includes('spacecraft'),
-      } : {}),
+  const applyUrlState = useCallback((initial: AppUrlState) => {
+    const route = routeForState(initial)
+    const selectedIds = initial.bodies ?? DEFAULT_SELECTED_IDS
+    const focusedId = initial.focused ?? (selectedIds.includes(DEFAULT_FOCUSED_ID) ? DEFAULT_FOCUSED_ID : selectedIds[0] ?? null)
+    const language = initial.lang ?? uiStore.getState().language
+
+    uiActions.navigate(route)
+    uiActions.setLanguage(language)
+    uiActions.setElementPlot(initial.plot ?? 'a-e')
+    uiActions.selectStory(initial.story ?? DEFAULT_STORY, initial.step ?? 0)
+    missionActions.patch({
+      departureId: initial.missionFrom ?? DEFAULT_MISSION_STATE.departureId,
+      arrivalId: initial.missionTo ?? DEFAULT_MISSION_STATE.arrivalId,
+      departureDate: initial.departureDate ?? DEFAULT_MISSION_STATE.departureDate,
+      arrivalDate: initial.arrivalDate ?? DEFAULT_MISSION_STATE.arrivalDate,
     })
-    if (initial.jd) simulationActions.seek(initial.jd)
-    if (initial.speed) simulationActions.setRate(initial.speed)
+    selectionActions.setSelectedIds(selectedIds)
+    selectionActions.focus(focusedId)
+    simulationActions.patch({
+      ...DEFAULT_SIMULATION_STATE,
+      viewOffset: initial.offset
+        ? { x: initial.offset[0], y: initial.offset[1] }
+        : { ...DEFAULT_SIMULATION_STATE.viewOffset },
+      referenceId: initial.ref ?? DEFAULT_SIMULATION_STATE.referenceId,
+      comparisonReferenceId: initial.compareRef ?? DEFAULT_SIMULATION_STATE.comparisonReferenceId,
+      comparisonEnabled: initial.compare ?? DEFAULT_SIMULATION_STATE.comparisonEnabled,
+      zoom: initial.zoom ?? DEFAULT_SIMULATION_STATE.zoom,
+      historyDays: initial.history ?? DEFAULT_SIMULATION_STATE.historyDays,
+      viewMode: initial.view ?? DEFAULT_SIMULATION_STATE.viewMode,
+      showEcliptic: initial.layers?.includes('ecliptic') ?? DEFAULT_SIMULATION_STATE.showEcliptic,
+      showOrbits: initial.layers?.includes('orbits') ?? DEFAULT_SIMULATION_STATE.showOrbits,
+      showLagrange: initial.layers?.includes('lagrange') ?? DEFAULT_SIMULATION_STATE.showLagrange,
+      showHillSphere: initial.layers?.includes('hill') ?? DEFAULT_SIMULATION_STATE.showHillSphere,
+      showLaplaceSoi: initial.layers?.includes('soi') ?? DEFAULT_SIMULATION_STATE.showLaplaceSoi,
+      showSpacecraft: initial.layers?.includes('spacecraft') ?? DEFAULT_SIMULATION_STATE.showSpacecraft,
+    })
+    simulationClock.pause()
+    if (initial.jd !== undefined) simulationActions.seek(initial.jd)
+    else simulationActions.resetTime()
+    simulationActions.setRate(initial.speed ?? 30)
+
     catalogActions.patch({
-      ...(initial.mode ? { mode: initial.mode } : {}),
+      mode: initial.mode ?? 'lite',
       filters: {
-        ...catalogStore.getState().filters,
-        ...(initial.filter ? { orbitClass: initial.filter } : {}),
-        ...(initial.search ? { query: initial.search } : {}),
-        ...(initial.aRange ? { semiMajorAxis: initial.aRange } : {}),
-        ...(initial.eRange ? { eccentricity: initial.eRange } : {}),
-        ...(initial.iRange ? { inclination: initial.iRange } : {}),
-        ...(initial.hRange ? { absoluteMagnitude: initial.hRange } : {}),
-        ...(initial.hStatus ? { magnitudeStatus: initial.hStatus } : {}),
-        ...(initial.qRange ? { perihelion: initial.qRange } : {}),
+        ...DEFAULT_CATALOG_FILTERS,
+        semiMajorAxis: initial.aRange ?? DEFAULT_CATALOG_FILTERS.semiMajorAxis,
+        eccentricity: initial.eRange ?? DEFAULT_CATALOG_FILTERS.eccentricity,
+        inclination: initial.iRange ?? DEFAULT_CATALOG_FILTERS.inclination,
+        absoluteMagnitude: initial.hRange ?? DEFAULT_CATALOG_FILTERS.absoluteMagnitude,
+        perihelion: initial.qRange ?? DEFAULT_CATALOG_FILTERS.perihelion,
+        orbitClass: initial.filter ?? DEFAULT_CATALOG_FILTERS.orbitClass,
+        query: initial.search ?? DEFAULT_CATALOG_FILTERS.query,
+        magnitudeStatus: initial.hStatus ?? DEFAULT_CATALOG_FILTERS.magnitudeStatus,
       },
-      isLoading: true,
+      manifest: null,
+      provenance: null,
+      summary: null,
+      datasetVersion: 'unavailable',
       requestedDatasetVersion: initial.dataset ?? null,
+      selectionScope: null,
+      baseSampleRecords: [],
+      baseSampleKey: null,
+      browseRecords: [],
+      activeResultRecords: [],
+      activeResultScanKey: null,
+      exactFilteredTotal: null,
+      exactHydrationHasMore: false,
+      recordsSampled: false,
+      loadProgress: 0,
+      isLoading: true,
       error: null,
     })
+
+    const loadGeneration = datasetLoadGeneration.current + 1
+    datasetLoadGeneration.current = loadGeneration
     void loadAsteroidManifest(initial.dataset).then(async (manifest) => {
       const provenance = manifest ? await loadDatasetProvenance() : null
+      if (datasetLoadGeneration.current !== loadGeneration) return
       catalogActions.patch({
         manifest,
         provenance,
-        summary: null,
         datasetVersion: manifest?.version ?? 'unavailable',
         requestedDatasetVersion: initial.dataset ?? null,
         mode: manifest?.datasetMode ?? initial.mode ?? 'lite',
-        selectionScope: null,
-        baseSampleRecords: [],
-        baseSampleKey: null,
-        browseRecords: [],
-        activeResultRecords: [],
-        activeResultScanKey: null,
-        exactFilteredTotal: null,
-        exactHydrationHasMore: false,
-        recordsSampled: false,
-        loadProgress: 0,
         isLoading: false,
         error: !manifest && initial.dataset
-          ? `Requested dataset version "${initial.dataset}" is not available.`
-          : !manifest ? 'The current asteroid dataset is not available.' : null,
+          ? language === 'zh'
+            ? `请求的数据集版本“${initial.dataset}”不可用。`
+            : `Requested dataset version “${initial.dataset}” is not available.`
+          : !manifest
+            ? language === 'zh' ? '当前小行星数据集不可用。' : 'The current asteroid dataset is not available.'
+            : null,
       })
-      const selectedIds = initial.bodies ?? []
       const [datasetBodies, sbdbBodies] = await Promise.all([
         manifest && selectedIds.some((id) => id.startsWith('asteroid:'))
           ? loadAsteroidBodiesByIds(selectedIds)
@@ -90,29 +145,72 @@ export function AppProviders({ children }: { children: ReactNode }) {
         Promise.all(selectedIds.filter((id) => id.startsWith('sbdb:')).map((id) =>
           fetchSbdbBody(id.slice('sbdb:'.length).replaceAll('_', ' ')).catch(() => null))),
       ])
+      if (datasetLoadGeneration.current !== loadGeneration) return
       selectionActions.addCatalogBodies([...datasetBodies, ...sbdbBodies.filter((body) => body !== null)])
     })
   }, [])
 
   useEffect(() => {
+    if (initialized.current) return
+    initialized.current = true
+    applyUrlState(decodeUrlState())
+  }, [applyUrlState])
+
+  useEffect(() => {
     let timeout: number | null = null
-    const schedule = () => {
-      if (timeout !== null) return
-      timeout = window.setTimeout(() => {
-        timeout = null
-        const url = new URL(encodeCurrentScene())
-        window.history.replaceState(null, '', `${url.pathname}${url.search}`)
-      }, 900)
+    let pendingPush = false
+    let lastDiscreteKey = discreteSceneKey()
+    let lastUrl = currentRelativeUrl()
+
+    const flush = () => {
+      timeout = null
+      if (restoringHistory.current) return
+      const url = nextRelativeUrl()
+      const discreteKey = discreteSceneKey()
+      if (url !== lastUrl) {
+        if (pendingPush) window.history.pushState({ solarAtlas: true }, '', url)
+        else window.history.replaceState({ solarAtlas: true }, '', url)
+        lastUrl = url
+      }
+      lastDiscreteKey = discreteKey
+      pendingPush = false
     }
+
+    const schedule = () => {
+      if (restoringHistory.current) return
+      pendingPush = pendingPush || discreteSceneKey() !== lastDiscreteKey
+      if (timeout !== null) window.clearTimeout(timeout)
+      timeout = window.setTimeout(flush, pendingPush ? 60 : 500)
+    }
+
+    const handlePopState = () => {
+      if (timeout !== null) window.clearTimeout(timeout)
+      timeout = null
+      pendingPush = false
+      restoringHistory.current = true
+      applyUrlState(decodeUrlState())
+      queueMicrotask(() => {
+        lastDiscreteKey = discreteSceneKey()
+        lastUrl = currentRelativeUrl()
+        restoringHistory.current = false
+      })
+    }
+
     const unsubscribers = [
-      simulationStore.subscribe(schedule), selectionStore.subscribe(schedule), catalogStore.subscribe(schedule),
-      uiStore.subscribe(schedule), simulationClock.subscribe(schedule),
+      simulationStore.subscribe(schedule),
+      selectionStore.subscribe(schedule),
+      catalogStore.subscribe(schedule),
+      missionStore.subscribe(schedule),
+      uiStore.subscribe(schedule),
+      simulationClock.subscribe(schedule),
     ]
+    window.addEventListener('popstate', handlePopState)
     return () => {
       if (timeout !== null) window.clearTimeout(timeout)
+      window.removeEventListener('popstate', handlePopState)
       unsubscribers.forEach((unsubscribe) => unsubscribe())
     }
-  }, [])
+  }, [applyUrlState])
 
   return <I18nProvider>{children}</I18nProvider>
 }
