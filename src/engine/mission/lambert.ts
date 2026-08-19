@@ -21,6 +21,9 @@ export type LambertSolution = {
   c3Km2S2: number
   prograde: boolean
   iterations: number
+  residual: number
+  bracketWidth: number
+  converged: boolean
 }
 
 export type LambertFailureCode = 'invalid-input' | 'singular-geometry' | 'no-solution' | 'non-convergence' | 'singular-coefficient' | 'unknown'
@@ -73,6 +76,7 @@ export function solveLambertUniversal(params: {
   timeOfFlightDays: number
   prograde?: boolean
   gravitationalParameter?: number
+  maxIterations?: number
 }): Omit<LambertSolution, 'departureVInfinityKmS' | 'arrivalVInfinityKmS' | 'c3Km2S2'> {
   const {
     departurePositionAU: r1Vector,
@@ -80,10 +84,13 @@ export function solveLambertUniversal(params: {
     timeOfFlightDays,
     prograde = true,
     gravitationalParameter = SOLAR_GM_AU3_PER_DAY2,
+    maxIterations = 100,
   } = params
   const r1 = vector3Magnitude(r1Vector)
   const r2 = vector3Magnitude(r2Vector)
-  if (r1 <= 0 || r2 <= 0 || timeOfFlightDays <= 0 || gravitationalParameter <= 0) {
+  if (![r1, r2, timeOfFlightDays, gravitationalParameter].every(Number.isFinite) ||
+      r1 <= 0 || r2 <= 0 || timeOfFlightDays <= 0 || gravitationalParameter <= 0 ||
+      !Number.isSafeInteger(maxIterations) || maxIterations <= 0 || maxIterations > 1_000) {
     throw new LambertError('invalid-input', 'Lambert inputs require positive radii, time of flight, and gravitational parameter')
   }
 
@@ -164,7 +171,10 @@ export function solveLambertUniversal(params: {
 
   let y = Number.NaN
   let iterations = 0
-  for (; iterations < 100; iterations += 1) {
+  let residual = Number.NaN
+  let bracketWidth = Math.abs(upper - lower)
+  let converged = false
+  for (; iterations < maxIterations; iterations += 1) {
     const midpoint = (lower + upper) / 2
     const current = evaluate(midpoint)
     if (!Number.isFinite(current.residual)) {
@@ -172,7 +182,11 @@ export function solveLambertUniversal(params: {
       continue
     }
     y = current.y
-    if (Math.abs(current.residual) < 1e-10 || Math.abs(upper - lower) < 1e-12) {
+    residual = current.residual
+    bracketWidth = Math.abs(upper - lower)
+    if (Math.abs(residual) < 1e-10) {
+      converged = true
+      iterations += 1
       break
     }
     if (current.residual * lowerEval.residual <= 0) {
@@ -181,10 +195,11 @@ export function solveLambertUniversal(params: {
       lower = midpoint
       lowerEval = current
     }
+    bracketWidth = Math.abs(upper - lower)
   }
 
-  if (!Number.isFinite(y) || y <= 0) {
-    throw new LambertError('non-convergence', 'Lambert iteration did not converge to a physical transfer')
+  if (!converged || !Number.isFinite(residual) || !Number.isFinite(y) || y <= 0) {
+    throw new LambertError('non-convergence', `Lambert iteration did not converge after ${iterations} iterations (residual ${residual})`)
   }
   const f = 1 - y / r1
   const g = aParameter * Math.sqrt(y / gravitationalParameter)
@@ -200,7 +215,10 @@ export function solveLambertUniversal(params: {
     departureVelocityAUPerDay: scaleVector3(addScaled(r2Vector, r1Vector, -f), 1 / g),
     arrivalVelocityAUPerDay: scaleVector3(addScaled(scaleVector3(r2Vector, gDot), r1Vector, -1), 1 / g),
     prograde,
-    iterations: iterations + 1,
+    iterations,
+    residual,
+    bracketWidth,
+    converged,
   }
 }
 

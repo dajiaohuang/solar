@@ -16,6 +16,7 @@ type CatalogState = {
   activeResultRecords: AsteroidRecord[]
   activeResultScanKey: string | null
   exactFilteredTotal: number | null
+  exactHydrationHasMore: boolean
   recordsSampled: boolean
   loadProgress: number
   selectionScope: {
@@ -41,6 +42,7 @@ const initialCatalogState: CatalogState = {
   activeResultRecords: [],
   activeResultScanKey: null,
   exactFilteredTotal: null,
+  exactHydrationHasMore: false,
   recordsSampled: false,
   loadProgress: 0,
   selectionScope: null,
@@ -70,6 +72,7 @@ export const catalogActions = {
       activeResultRecords: [],
       activeResultScanKey: null,
       exactFilteredTotal: null,
+      exactHydrationHasMore: false,
       recordsSampled: Boolean(state.manifest && state.baseSampleRecords.length < state.manifest.totalCount),
       loadProgress: 0,
     }))
@@ -82,15 +85,24 @@ export const catalogActions = {
       recordsSampled: true,
     })
   },
-  setExactResult(scanKey: string, records: AsteroidRecord[], total: number) {
+  setExactResult(scanKey: string, records: AsteroidRecord[], total: number, hasMore: boolean) {
     catalogStore.setState({
       activeResultRecords: records,
       activeResultScanKey: scanKey,
       exactFilteredTotal: total,
-      recordsSampled: total > records.length,
+      exactHydrationHasMore: hasMore,
+      recordsSampled: total > records.length || hasMore,
       loadProgress: 1,
       isLoading: false,
     })
+  },
+  setExactPage(records: AsteroidRecord[], hasMore: boolean) {
+    catalogStore.setState((state) => ({
+      activeResultRecords: records,
+      exactHydrationHasMore: hasMore,
+      recordsSampled: Boolean(state.exactFilteredTotal && (state.exactFilteredTotal > records.length || hasMore)),
+      isLoading: false,
+    }))
   },
   selectAllFiltered(datasetVersion: string, filters: CatalogFilters, count: number) {
     catalogStore.setState({

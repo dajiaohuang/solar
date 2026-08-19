@@ -4,7 +4,7 @@ import { majorBodiesWithPhysicalData, useBodyRegistry } from '../../app/bodyRegi
 import { useSimulationClock } from '../../engine/clock/useSimulationClock'
 import { useI18n } from '../../i18n/context'
 import { asteroidRecordToBody } from '../../lib/catalogLoader'
-import { createCatalogScanKey, scanAsteroidCatalog } from '../../lib/catalogScan'
+import { EXACT_CATALOG_LOCATOR_LIMIT, createCatalogScanKey, scanAsteroidCatalog } from '../../lib/catalogScan'
 import { elementPlotCoordinates } from '../../lib/elementPlot'
 import { buildCurrentPositions } from '../../lib/trajectory'
 import { catalogActions, catalogDisplayRecords, catalogStore, filterCatalogRecords } from '../../state/catalog-store'
@@ -12,7 +12,7 @@ import { selectionActions, selectionStore } from '../../state/selection-store'
 import { uiActions, uiStore, type ElementPlotMode } from '../../state/ui-store'
 import type { AsteroidRecord, BodyId, CelestialBody } from '../../types'
 import { bodyDisplayName } from '../../lib/bodyNames'
-import { catalogSampleSize, useCatalogSample } from '../../hooks/useCatalogSample'
+import { useCatalogSample } from '../../hooks/useCatalogSample'
 
 type PlotMode = ElementPlotMode
 type PlotDatum = { record: AsteroidRecord; x: number; y: number }
@@ -155,7 +155,7 @@ export function ElementSpaceWorkspace() {
   useEffect(() => {
     if (!catalog.manifest || catalog.manifest.precomputedSamples) return
     const controller = new AbortController()
-    const sampleLimit = catalogSampleSize() === 'mobile' ? 8_000 : catalog.mode === 'lite' ? 8_000 : 30_000
+    const sampleLimit = EXACT_CATALOG_LOCATOR_LIMIT
     const scanKey = createCatalogScanKey(catalog.manifest.version, catalog.filters, sampleLimit)
     const timer = window.setTimeout(() => {
       catalogActions.patch({ isLoading: true, error: null, loadProgress: 0 })
@@ -171,7 +171,7 @@ export function ElementSpaceWorkspace() {
           ? createCatalogScanKey(current.manifest.version, current.filters, sampleLimit)
           : ''
         if (controller.signal.aborted || result.scanKey !== scanKey || currentKey !== scanKey) return
-        catalogActions.setExactResult(result.scanKey, result.records, result.total)
+        catalogActions.setExactResult(result.scanKey, result.records, result.total, result.hasMore)
       }).catch((error: unknown) => {
         if (!controller.signal.aborted) catalogActions.patch({ error: error instanceof Error ? error.message : String(error), isLoading: false })
       })
@@ -180,11 +180,15 @@ export function ElementSpaceWorkspace() {
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [catalog.filters, catalog.manifest, catalog.mode])
+  }, [catalog.filters, catalog.manifest])
 
-  const sampleLimit = catalogSampleSize() === 'mobile' ? 8_000 : catalog.mode === 'lite' ? 8_000 : 30_000
+  const sampleLimit = EXACT_CATALOG_LOCATOR_LIMIT
   const scanKey = catalog.manifest ? createCatalogScanKey(catalog.manifest.version, catalog.filters, sampleLimit) : ''
-  const displayedRecords = catalogDisplayRecords(catalog, scanKey)
+  const exactResultIsPartial = catalog.activeResultScanKey === scanKey && catalog.exactFilteredTotal !== null &&
+    catalog.exactFilteredTotal > catalog.activeResultRecords.length
+  const displayedRecords = exactResultIsPartial && catalog.baseSampleRecords.length
+    ? catalog.baseSampleRecords
+    : catalogDisplayRecords(catalog, scanKey)
   const records = useMemo(() => filterCatalogRecords(displayedRecords, catalog.filters), [catalog.filters, displayedRecords])
   const data = useMemo(() => records
     .map((record) => toPlotDatum(record, mode))

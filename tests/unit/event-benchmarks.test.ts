@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import fixture from '../fixtures/jpl-horizons-events.json'
 import { majorBodies } from '../../src/data/majorBodies'
-import { adaptiveEventSampleCount } from '../../src/engine/events/eventSampling'
+import { adaptiveEventSampleCount, eventSamplingPlan } from '../../src/engine/events/eventSampling'
 import { findSampledExtrema, refineBracketedExtremum } from '../../src/engine/events/sampledExtrema'
 import { createBodyPositionResolver, subtractVector3, vector3Magnitude } from '../../src/lib/ephemeris'
 
@@ -36,5 +36,14 @@ describe('JPL Horizons event fixture', () => {
     const earth = majorBodies.find((body) => body.id === 'earth')!
     const moon = majorBodies.find((body) => body.id === 'moon')!
     expect(adaptiveEventSampleCount([earth, moon], 365)).toBeGreaterThan(adaptiveEventSampleCount([earth], 365))
+  })
+
+  it.each(['moon', 'io', 'europa'])('reports a capped five-year window for fast satellite %s', (bodyId) => {
+    const body = majorBodies.find((candidate) => candidate.id === bodyId)!
+    const plan = eventSamplingPlan([body], 1_825)
+    expect(plan.actualSamples).toBe(720)
+    expect(plan.requiredSamples).toBeGreaterThan(plan.actualSamples)
+    expect(plan.capped).toBe(true)
+    expect(plan.maximumResolvablePeriodDays).toBeGreaterThan(80)
   })
 })

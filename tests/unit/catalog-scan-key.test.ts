@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createCatalogScanKey } from '../../src/lib/catalogScan'
+import { createCatalogScanKey, takeCatalogLocatorPage } from '../../src/lib/catalogScan'
 import type { CatalogFilters } from '../../src/types'
 
 const filters: CatalogFilters = {
@@ -20,5 +20,18 @@ describe('catalog scan identity', () => {
     expect(createCatalogScanKey('dataset-b', filters, 30_000)).not.toBe(key)
     expect(createCatalogScanKey('dataset-a', { ...filters, query: 'Ceres' }, 30_000)).not.toBe(key)
     expect(createCatalogScanKey('dataset-a', filters, 8_000)).not.toBe(key)
+  })
+})
+
+describe('catalog locator hydration pages', () => {
+  it('bounds records and unique chunks while retaining later pages', () => {
+    const locators = Uint32Array.from(Array.from({ length: 60 }, (_, index) => [index % 6, index]).flat())
+    const first = takeCatalogLocatorPage(locators, 20, 3)
+    expect(first.locators.length / 2).toBe(20)
+    expect(new Set(Array.from(first.locators).filter((_, index) => index % 2 === 0)).size).toBeLessThanOrEqual(3)
+    expect(first.remaining.length / 2).toBe(40)
+    const second = takeCatalogLocatorPage(first.remaining, 20, 3)
+    expect(second.locators.length / 2).toBe(20)
+    expect(new Set(Array.from(second.locators).filter((_, index) => index % 2 === 0)).size).toBeLessThanOrEqual(3)
   })
 })

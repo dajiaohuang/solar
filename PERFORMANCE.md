@@ -10,6 +10,8 @@ Solar Atlas treats the million-object catalog as a columnar filtering problem, n
 | Mobile main-thread `AsteroidRecord` count | 8,000 | precomputed sample manifest + validator |
 | Explorer catalog sample requests | 0 | Playwright network assertion |
 | Catalog first-screen full-shard requests | 0 | first screen reads two sample artifacts; locator detail shards are lazy |
+| Exact-result locators retained | 2,000 | deterministic worker sample |
+| Exact-result hydration per page | 480 records / 32 unique shards | loader paging unit coverage |
 | Decoded detail-shard LRU | 8 | loader constant and unit coverage |
 | Obsolete scan cancellation | 300 ms | persistent worker yields at progress checkpoints and accepts explicit cancellation |
 
@@ -35,4 +37,4 @@ Measured on 2026-08-20 with `mpcorb-919b585f403b185a-full` (1,557,710 valid obje
 | Mobile first-screen sample | 3.00 MiB / 8,000 records |
 | Explorer catalog sample transfer | 0 bytes / 0 requests |
 
-Explorer does not download either sample or the 35.65 MiB index. Catalog and Element Space fetch a cached route-level sample; the compact index is fetched only for an exact scan, and visible exact results are hydrated by bounded row locators.
+Explorer does not download either sample or the 35.65 MiB index. Catalog and Element Space fetch a cached route-level sample; the compact index is fetched only for an exact scan. Each explicit exact-result page hydrates no more than 480 row locators from 32 unique shards, while broad-filter point clouds continue to use the cached route sample.

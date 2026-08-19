@@ -10,10 +10,10 @@ import type { EventKind } from '../../workers/conjunction.worker'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { catalogStore } from '../../state/catalog-store'
 import { jplApproxWindowWarning } from '../../engine/ephemeris/modelValidity'
-import { adaptiveEventSampleCount } from '../../engine/events/eventSampling'
+import { eventSamplingPlan } from '../../engine/events/eventSampling'
 
 const ALL_KINDS: EventKind[] = ['close-approach', 'conjunction', 'opposition', 'perihelion', 'aphelion']
-const EVENT_ALGORITHM_VERSION = 'event-search-v3'
+const EVENT_ALGORITHM_VERSION = 'event-search-v4'
 
 function download(name: string, content: string, type: string) {
   const url = URL.createObjectURL(new Blob([content], { type }))
@@ -35,7 +35,8 @@ export function EventsWorkspace() {
   const analysisBodies = useMemo(() => selectedBodies.filter((body) => body.id !== simulation.referenceId).slice(0, 48), [selectedBodies, simulation.referenceId])
   const contractCenter = analysis.lastRun?.centerJulianDay ?? clock.julianDay
   const contractWindow = analysis.lastRun?.windowDays ?? windowDays
-  const contractSamples = adaptiveEventSampleCount(analysis.lastRun?.bodies ?? analysisBodies, contractWindow, analysis.lastRun?.sampleCount)
+  const samplingPlan = eventSamplingPlan(analysis.lastRun?.bodies ?? analysisBodies, contractWindow, analysis.lastRun?.sampleCount)
+  const contractSamples = samplingPlan.actualSamples
   const sampleIntervalDays = contractWindow / Math.max(contractSamples - 1, 1)
   const validityWarning = jplApproxWindowWarning(
     contractCenter - contractWindow / 2,
@@ -56,6 +57,7 @@ export function EventsWorkspace() {
       eventKinds: analysis.lastRun.eventKinds,
       sampleCount: contractSamples,
       sampleIntervalDays,
+      samplingPlan,
     } : null,
   }
 
@@ -81,6 +83,7 @@ export function EventsWorkspace() {
         })}>{t('runAnalysis')}</button>}
         <div className="analysis-progress"><span>{t('progress')}</span><strong>{Math.round(analysis.progress * 100)}%</strong><div><i style={{ width: `${analysis.progress * 100}%` }} /></div></div>
         {analysis.error && <div className="error-banner">{analysis.error}</div>}
+        {samplingPlan.capped && <div className="error-banner">{t('samplingInadequate')}</div>}
       </aside>
 
       <section className="timeline-panel glass-panel">
@@ -97,7 +100,7 @@ export function EventsWorkspace() {
 
       <aside className="event-evidence glass-panel">
         <div className="section-kicker">ANALYSIS CONTRACT</div>
-        <dl><div><dt>{t('model')}</dt><dd>Coarse scan + local two-body re-propagation</dd></div><div><dt>{t('orbitEpoch')}</dt><dd>Per-object osculating epoch</dd></div><div><dt>{t('window')}</dt><dd>JD {(contractCenter - contractWindow / 2).toFixed(2)} — {(contractCenter + contractWindow / 2).toFixed(2)}</dd></div><div><dt>Sampling</dt><dd>{contractSamples} samples · {sampleIntervalDays.toFixed(4)} d interval</dd></div></dl>
+        <dl><div><dt>{t('model')}</dt><dd>Coarse scan + local two-body re-propagation</dd></div><div><dt>{t('orbitEpoch')}</dt><dd>Per-object osculating epoch</dd></div><div><dt>{t('window')}</dt><dd>JD {(contractCenter - contractWindow / 2).toFixed(2)} — {(contractCenter + contractWindow / 2).toFixed(2)}</dd></div><div><dt>Sampling</dt><dd>{contractSamples} / {samplingPlan.requiredSamples} samples · {sampleIntervalDays.toFixed(4)} d interval · {samplingPlan.capped ? 'capped' : 'adequate cadence'}</dd></div></dl>
         {validityWarning && <div className="error-banner">{validityWarning}</div>}
         <p className="fine-print">A cadence adapted to orbital and relative angular rates identifies non-endpoint candidates; each bracket is refined and positions are propagated again at the refined Julian Day. The numerical interval is not a physical prediction uncertainty, which is not estimated.</p>
         <div className="export-actions"><button disabled={!analysis.events.length} onClick={() => download('solar-atlas-events.json', JSON.stringify({ ...exportMetadata, events: analysis.events }, null, 2), 'application/json')}>{t('exportJson')}</button><button disabled={!analysis.events.length} onClick={() => {

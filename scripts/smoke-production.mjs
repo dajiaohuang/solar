@@ -4,11 +4,11 @@ const pin = JSON.parse(await readFile(new URL('../.github/asteroid-dataset.json'
 const site = new URL(process.env.SITE_URL ?? 'https://dajiaohuang.github.io/solar/')
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
 
-async function fetchWithRetry(path, attempts = 12) {
+async function fetchWithRetry(path, attempts = 12, init = {}) {
   let lastError
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const response = await fetch(new URL(path, site), { cache: 'no-store' })
+      const response = await fetch(new URL(path, site), { cache: 'no-store', ...init })
       if (response.ok) return response
       lastError = new Error(`${path} returned HTTP ${response.status}`)
     } catch (error) {
@@ -26,6 +26,10 @@ if (pointer.activeVersion !== pin.version) throw new Error(`Production dataset $
 const manifestUrl = new URL(`./data/asteroids/${pointer.manifestPath}`, site)
 const manifest = await (await fetchWithRetry(manifestUrl)).json()
 if (manifest.version !== pin.version) throw new Error('Production manifest does not match the pinned dataset version')
+if (!manifest.compactIndex?.path || !manifest.summaryPath) throw new Error('Production manifest omits compact-index or summary artifacts')
+await fetchWithRetry(new URL(manifest.compactIndex.path, manifestUrl), 12, { method: 'HEAD' })
+const summary = await (await fetchWithRetry(new URL(manifest.summaryPath, manifestUrl))).json()
+if (summary.totalCount !== manifest.totalCount) throw new Error('Production catalog summary does not match the manifest count')
 for (const path of [
   manifest.precomputedSamples?.desktop?.metadataPath,
   manifest.precomputedSamples?.desktop?.binaryPath,
@@ -37,4 +41,23 @@ for (const path of [
 }
 const serviceWorker = await fetchWithRetry('./sw.js')
 if (!/javascript/i.test(serviceWorker.headers.get('content-type') ?? '')) throw new Error('Production service worker is not served as JavaScript')
+
+if (process.env.SMOKE_BROWSER === '1') {
+  const { chromium } = await import('@playwright/test')
+  const browser = await chromium.launch()
+  try {
+    const page = await browser.newPage()
+    const pageErrors = []
+    page.on('pageerror', (error) => pageErrors.push(error.message))
+    await page.addInitScript(() => localStorage.setItem('solar-atlas-language', 'en'))
+    await page.goto(site.toString(), { waitUntil: 'domcontentloaded', timeout: 60_000 })
+    await page.getByTestId('trajectory-canvas-3d').waitFor({ state: 'visible', timeout: 60_000 })
+    await page.locator('.primary-navigation button', { hasText: 'Catalog' }).click()
+    await page.getByRole('heading', { name: 'Catalog' }).waitFor({ state: 'visible', timeout: 60_000 })
+    await page.locator('.catalog-counts').waitFor({ state: 'visible', timeout: 60_000 })
+    if (pageErrors.length) throw new Error(`Production browser reported errors: ${pageErrors.join(' | ')}`)
+  } finally {
+    await browser.close()
+  }
+}
 console.log(`Production smoke test passed for ${site} with ${pin.version}`)

@@ -73,7 +73,11 @@ async function scanCompactIndex(request: CatalogScanWorkerRequest) {
   const url = `${root}/${compactIndex.path}`
   let promise = compactIndexCache.get(url)
   if (!promise) {
-    promise = fetchImmutableArrayBuffer(url)
+    const request = fetchImmutableArrayBuffer(url)
+    promise = request.catch((error: unknown) => {
+      if (compactIndexCache.get(url) === promise) compactIndexCache.delete(url)
+      throw error
+    })
     compactIndexCache.set(url, promise)
   }
   const buffer = await promise
@@ -195,7 +199,7 @@ workerScope.onmessage = (event: MessageEvent<CatalogScanWorkerRequest | CatalogS
       type: 'error', requestId: request.requestId, scanKey: request.scanKey,
       error: error instanceof Error ? error.message : String(error),
     } satisfies CatalogScanWorkerResponse)
-  })
+  }).finally(() => cancelledRequests.delete(request.requestId))
 }
 
 export {}

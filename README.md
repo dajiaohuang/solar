@@ -4,7 +4,7 @@
 
 [Live demo](https://dajiaohuang.github.io/solar/) · [中文文档](./README-CN.md) · [Scientific contract](#scientific-contract)
 
-Current prerelease: **v0.9.0-beta.1** · [Changelog](./CHANGELOG.md) · [Performance budgets](./PERFORMANCE.md)
+Current prerelease: **v0.9.0-beta.2** · [Changelog](./CHANGELOG.md) · [Performance budgets](./PERFORMANCE.md)
 
 ![Solar Atlas overview](./public/readme-screenshot.png)
 
@@ -13,10 +13,10 @@ Solar Atlas connects spatial views, orbital-element space, time events, and data
 ## What is implemented
 
 - **Solar Explorer:** heliocentric, geocentric, and arbitrary body-centered frames; linked 2D/3D views; bounded simulation clock; split-frame comparison; distance measurement; time travel; Lagrange points; Hill spheres and Laplace SOIs.
-- **Small-Body Catalog:** MPCORB binary shards, two-character prefix search, exact compact-index filters with locator hydration, NEO/PHA and orbit-class filters, Lite/Full display budgets, immutable dataset versions, and IndexedDB caching.
+- **Small-Body Catalog:** MPCORB binary shards, two-character prefix search, exact compact-index filters with bounded locator hydration pages, NEO/PHA and orbit-class filters, Lite/Full display budgets, immutable dataset versions, and IndexedDB caching.
 - **Orbital Element Space:** linked `a–e`, `a–i`, `a–H`, `q–Q`, and `a–period` plots, Kirkwood/resonance markers, brush selection, and synchronized 3D highlighting.
-- **Events Lab:** adaptive, cancellable close-approach, conjunction, opposition, and central-body apsis jobs with local numerical refinement, explicit uncertainty semantics, timeline navigation, and CSV/JSON export.
-- **Mission Lab:** directionally correct Hohmann baselines in km/s, phase-angle guidance, a benchmarked universal-variable Lambert solver, departure/arrival `v∞`, C3, and classified porkchop solver failures.
+- **Events Lab:** adaptive, cancellable close-approach, conjunction, opposition, and central-body apsis jobs with local numerical refinement, sampling-adequacy warnings, explicit uncertainty semantics, timeline navigation, and CSV/JSON export.
+- **Mission Lab:** directionally correct Hohmann baselines in km/s, phase-angle guidance, a residual-checked universal-variable Lambert solver, departure/arrival `v∞`, C3, and classified porkchop solver failures.
 - **Guided Stories:** reproducible JSON stories for retrograde motion, reference frames, Kirkwood gaps, Trojans, NEO types, Pluto’s resonance, and Voyager-era trajectories.
 - **Reproducibility:** scene URLs record dataset version, epoch, reference frames, focus set, filters, language, and view settings. A scene fully replays when the current deployment contains that dataset; otherwise the app preserves the requested version and offers recovery links.
 - **Installable web app:** responsive/mobile Lite layout, runtime offline cache, Web App Manifest, Open Graph metadata, and code-split workspaces.
@@ -76,9 +76,9 @@ catalog-summary.json
 ```
 
 `dataset-version.json` is the small mutable pointer inside the downloaded data package. GitHub Pages deploys the exact immutable release described by `.github/asteroid-dataset.json`, verifies the archive SHA-256 before extraction, validates internal data, and fails closed when the audited pin is missing or invalid.
-The publisher refuses to overwrite an existing release version and swaps the active pointer only after every artifact and validation report has been written.
-The default release identity includes the final data-artifact content SHA-256. Lite membership is a stable permanent-number cutoff plus a required curated target set, never the first N records in a mutable upstream ordering.
-Permanent-number search shards contain at most a 10,000-number range; provisional designations use year shards, and normalized name/designation tokens use two-character prefixes with row locators.
+The publisher creates a deterministic tar/gzip archive, refuses to overwrite an existing release version, verifies any reused Release asset against the locally expected SHA-256, and swaps the active pointer only after every artifact and validation report has been written.
+The default release identity includes the final data-artifact content SHA-256 and parser version. Lite membership is a stable permanent-number cutoff plus a required curated target set, never the first N records in a mutable upstream ordering.
+Permanent-number search shards contain at most a 10,000-number range; provisional designations use year shards, and normalized name/designation tokens use two-character prefixes with row locators. The validator binds every search and lookup locator back to its exact source metadata row and semantic bucket.
 
 Optional pipeline variables:
 
@@ -120,7 +120,7 @@ pipeline data lives in scripts/preprocess-asteroids.mjs
 
 The render paths are intentionally different:
 
-- **Catalog Mode** loads its precomputed 30,000 desktop / 8,000 mobile stratified sample only after Catalog or Element Space opens. A persistent worker scans the compact index, then locator hydration fetches only matching shard rows. Text search uses two-character locator indexes; decoded detail shards remain in an eight-entry LRU.
+- **Catalog Mode** loads its precomputed 30,000 desktop / 8,000 mobile stratified sample only after Catalog or Element Space opens. A persistent worker scans the compact index, then each explicit exact-result page hydrates at most 480 records from 32 unique shards. Broad-filter point clouds keep using the precomputed sample; text search uses two-character locator indexes, and decoded detail shards remain in an eight-entry LRU.
 - **Focus Mode** renders the first 160 selected objects with full trajectories, labels, details, and bounded analysis. Catalog-wide selection stores the dataset version plus filter expression and count instead of enumerating every ID.
 
 Absolute-magnitude filtering has an explicit known/unknown/all state. Unknown H values are never fabricated as a numeric value and are excluded from the numeric `a–H` scatter plot.
@@ -138,8 +138,8 @@ The simulation clock is not React state updated every animation frame. React rec
 | Hill sphere | `a(1-e)(m/3M)^(1/3)` |
 | Laplace SOI | `a(m/M)^(2/5)`; never labeled as a Hill sphere |
 | Hohmann | Coplanar circular endpoints, impulsive solar two-body model; signed burns and km/s conversion |
-| Lambert | Zero-revolution universal-variable solar two-body solution using approximate endpoint positions |
-| Event search | Adaptive non-endpoint candidates followed by bounded local refinement and fresh two-body propagation; exports the numerical refinement half-width separately from physical uncertainty, which is not estimated |
+| Lambert | Zero-revolution universal-variable solar two-body solution using approximate endpoint positions; only residual-converged solutions are returned |
+| Event search | Adaptive non-endpoint candidates followed by bounded local refinement and fresh two-body propagation; reports capped/insufficient sampling and exports numerical refinement half-width separately from physical uncertainty, which is not estimated |
 | Spacecraft overlays | Milestone-dated schematic tracks labeled separately from Horizons and propagated ephemerides |
 
 JPL SBDB values are parsed from the documented `orbit.elements[]` records (`name`, `value`, `units`, and uncertainty fields), not from invented object properties.

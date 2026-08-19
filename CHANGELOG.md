@@ -2,6 +2,28 @@
 
 All notable changes to Solar Atlas are documented here. The project follows semantic versioning after the prototype phase.
 
+## 0.9.0-beta.2 — 2026-08-20
+
+### Added
+
+- Cross-platform deterministic dataset archives with byte-for-byte repeatability tests and immutable Release asset verification.
+- Bounded exact-result hydration pages, worker reset/retry controls, event sampling adequacy diagnostics, and browser-based production smoke coverage.
+- Full search/lookup locator-to-metadata validation, including semantic bucket membership and duplicate detection.
+- Lambert residual, bracket width, convergence status, and extreme-geometry regression tests.
+
+### Changed
+
+- Exact compact-index scans materialize at most 480 records from 32 unique shards per page; broad-filter point clouds keep using the precomputed sample.
+- English name search requires two letters under prefix-v2, while permanent and provisional designations remain available immediately.
+- Dataset release identity now includes parser version, and parser provenance uses a stable script-content digest.
+
+### Fixed
+
+- Re-running an existing dataset release can no longer pin a locally computed SHA for different Release bytes.
+- Failed compact-index requests are evicted so retries work, and completed/cancelled worker request IDs are cleaned up.
+- Lambert solutions that exhaust the iteration limit no longer appear feasible.
+- Long event windows now warn when the 720-sample ceiling cannot resolve the selected fast bodies.
+
 ## 0.9.0-beta.1 — 2026-08-20
 
 ### Added

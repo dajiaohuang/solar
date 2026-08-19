@@ -9,12 +9,39 @@ import type {
 
 let nextRequestId = 0
 let catalogWorker: Worker | null = null
+export const EXACT_CATALOG_LOCATOR_LIMIT = 2_000
+export const EXACT_HYDRATION_RECORD_LIMIT = 480
+export const EXACT_HYDRATION_CHUNK_LIMIT = 32
+
+type LocatorPage = { locators: Uint32Array; remaining: Uint32Array }
+type HydrationQueue = { manifestVersion: string; remaining: Uint32Array }
+const hydrationQueues = new Map<string, HydrationQueue>()
+
+export function takeCatalogLocatorPage(
+  locators: Uint32Array,
+  recordLimit = EXACT_HYDRATION_RECORD_LIMIT,
+  chunkLimit = EXACT_HYDRATION_CHUNK_LIMIT,
+): LocatorPage {
+  if (locators.length % 2 !== 0) throw new Error('Catalog locator array must contain chunk/row pairs')
+  const selectedChunks = new Set<number>()
+  for (let index = 0; index < locators.length && selectedChunks.size < chunkLimit; index += 2) {
+    selectedChunks.add(locators[index])
+  }
+  const selected: number[] = []
+  const remaining: number[] = []
+  for (let index = 0; index < locators.length; index += 2) {
+    const pair = [locators[index], locators[index + 1]]
+    if (selected.length / 2 < recordLimit && selectedChunks.has(pair[0])) selected.push(...pair)
+    else remaining.push(...pair)
+  }
+  return { locators: Uint32Array.from(selected), remaining: Uint32Array.from(remaining) }
+}
 
 type PendingScan = {
   manifest: AsteroidManifest
   scanKey: string
   onProgress?: (progress: number) => void
-  resolve: (result: { scanKey: string; total: number; records: AsteroidRecord[] }) => void
+  resolve: (result: { scanKey: string; total: number; records: AsteroidRecord[]; hasMore: boolean }) => void
   reject: (error: Error) => void
 }
 
@@ -33,14 +60,24 @@ function ensureCatalogWorker() {
     if (event.data.type === 'progress') pending.onProgress?.(event.data.progress ?? 0)
     if (event.data.type === 'result') {
       pendingScans.delete(event.data.requestId)
-      const hydrate = event.data.locators
-        ? loadAsteroidRecordsByLocators(pending.manifest, event.data.locators)
+      const page = event.data.locators ? takeCatalogLocatorPage(event.data.locators) : null
+      if (page?.remaining.length) {
+        hydrationQueues.set(pending.scanKey, { manifestVersion: pending.manifest.version, remaining: page.remaining })
+      } else {
+        hydrationQueues.delete(pending.scanKey)
+      }
+      const hydrate = page
+        ? loadAsteroidRecordsByLocators(pending.manifest, page.locators)
         : Promise.resolve(event.data.records ?? [])
       void hydrate.then((records) => pending.resolve({
         scanKey: pending.scanKey,
         total: event.data.total ?? 0,
         records,
-      })).catch((error: unknown) => pending.reject(error instanceof Error ? error : new Error(String(error))))
+        hasMore: Boolean(page?.remaining.length),
+      })).catch((error: unknown) => {
+        hydrationQueues.delete(pending.scanKey)
+        pending.reject(error instanceof Error ? error : new Error(String(error)))
+      })
     }
     if (event.data.type === 'error') {
       pendingScans.delete(event.data.requestId)
@@ -55,6 +92,25 @@ function ensureCatalogWorker() {
   }
   catalogWorker = worker
   return worker
+}
+
+export function resetCatalogScanWorker() {
+  const error = new Error('Catalog worker was reset')
+  for (const pending of pendingScans.values()) pending.reject(error)
+  pendingScans.clear()
+  hydrationQueues.clear()
+  catalogWorker?.terminate()
+  catalogWorker = null
+}
+
+export async function loadNextCatalogScanPage(scanKey: string, manifest: AsteroidManifest) {
+  const queue = hydrationQueues.get(scanKey)
+  if (!queue || queue.manifestVersion !== manifest.version) return { records: [], hasMore: false }
+  const page = takeCatalogLocatorPage(queue.remaining)
+  const records = await loadAsteroidRecordsByLocators(manifest, page.locators)
+  if (page.remaining.length) hydrationQueues.set(scanKey, { ...queue, remaining: page.remaining })
+  else hydrationQueues.delete(scanKey)
+  return { records, hasMore: page.remaining.length > 0 }
 }
 
 export async function scanAsteroidCatalog(params: {
@@ -73,7 +129,8 @@ export async function scanAsteroidCatalog(params: {
   const requestId = ++nextRequestId
   const worker = ensureCatalogWorker()
 
-  return new Promise<{ scanKey: string; total: number; records: AsteroidRecord[] }>((resolve, reject) => {
+  hydrationQueues.delete(scanKey)
+  return new Promise<{ scanKey: string; total: number; records: AsteroidRecord[]; hasMore: boolean }>((resolve, reject) => {
     const abort = () => {
       worker.postMessage({ type: 'cancel', requestId })
       pendingScans.delete(requestId)

@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
+import { createDeterministicDatasetArchive, sha256File } from '../../scripts/package-dataset.mjs'
 
 const execFileAsync = promisify(execFile)
 
@@ -60,7 +61,7 @@ describe('immutable asteroid dataset publisher', () => {
       expect(pointer).toMatchObject({ mode: 'lite', contentSha256: manifest.contentSha256 })
       expect(manifest).toMatchObject({
         schemaVersion: 3,
-        parserVersion: '3.0.0',
+        parserVersion: '3.1.0',
         totalCount: 3,
         chunkCount: 2,
         chunkSize: 2,
@@ -80,6 +81,42 @@ describe('immutable asteroid dataset publisher', () => {
 
       const verified = await execFileAsync(process.execPath, [resolve('scripts/validate-dataset.mjs')], { cwd: process.cwd(), env: environment })
       expect(verified.stdout).toContain(`Validated dataset ${pointer.activeVersion}: 3 objects`)
+
+      const firstArchive = resolve(temporaryRoot, 'dataset-first.tar.gz')
+      const secondArchive = resolve(temporaryRoot, 'dataset-second.tar.gz')
+      await createDeterministicDatasetArchive(outputPath, firstArchive)
+      await createDeterministicDatasetArchive(outputPath, secondArchive)
+      expect(await sha256File(secondArchive)).toBe(await sha256File(firstArchive))
+
+      const searchArtifact = 'search/prefix-at.json'
+      const searchPath = resolve(releasePath, searchArtifact)
+      const originalSearch = await readFile(searchPath)
+      const corruptSearch = JSON.parse(originalSearch.toString('utf8'))
+      corruptSearch[0].rowIndex = 1
+      const corruptSearchData = JSON.stringify(corruptSearch)
+      checksums.files[searchArtifact] = createHash('sha256').update(corruptSearchData).digest('hex')
+      await writeFile(searchPath, corruptSearchData)
+      await writeFile(resolve(releasePath, 'checksums.json'), JSON.stringify(checksums))
+      await expect(execFileAsync(process.execPath, [resolve('scripts/validate-dataset.mjs')], { cwd: process.cwd(), env: environment }))
+        .rejects.toThrow(/Index entry disagrees with source metadata/)
+      await writeFile(searchPath, originalSearch)
+      checksums.files[searchArtifact] = createHash('sha256').update(originalSearch).digest('hex')
+      await writeFile(resolve(releasePath, 'checksums.json'), JSON.stringify(checksums))
+
+      const lookupArtifact = Object.keys(checksums.files).find((file) => file.startsWith('lookup/'))!
+      const lookupPath = resolve(releasePath, lookupArtifact)
+      const originalLookup = await readFile(lookupPath)
+      const corruptLookup = JSON.parse(originalLookup.toString('utf8'))
+      corruptLookup[0].searchKey = `${corruptLookup[0].searchKey} wrong`
+      const corruptLookupData = JSON.stringify(corruptLookup)
+      checksums.files[lookupArtifact] = createHash('sha256').update(corruptLookupData).digest('hex')
+      await writeFile(lookupPath, corruptLookupData)
+      await writeFile(resolve(releasePath, 'checksums.json'), JSON.stringify(checksums))
+      await expect(execFileAsync(process.execPath, [resolve('scripts/validate-dataset.mjs')], { cwd: process.cwd(), env: environment }))
+        .rejects.toThrow(/Index entry disagrees with source metadata/)
+      await writeFile(lookupPath, originalLookup)
+      checksums.files[lookupArtifact] = createHash('sha256').update(originalLookup).digest('hex')
+      await writeFile(resolve(releasePath, 'checksums.json'), JSON.stringify(checksums))
 
       manifest.totalCount = 4
       const modifiedManifest = JSON.stringify(manifest)

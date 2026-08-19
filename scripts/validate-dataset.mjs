@@ -33,8 +33,41 @@ const provenance = await readJson(resolve(release, 'provenance.json'), 'dataset 
 const report = await readJson(resolve(release, 'validation-report.json'), 'dataset validation report')
 const checksums = await readJson(resolve(release, 'checksums.json'), 'dataset checksums')
 
-if (manifest.schemaVersion !== 3 || manifest.parserVersion !== '3.0.0') {
-  throw new Error(`Dataset must use schema v3 and parser 3.0.0; received schema ${manifest.schemaVersion} / parser ${manifest.parserVersion}`)
+if (manifest.schemaVersion !== 3 || !/^3\.\d+\.\d+$/.test(manifest.parserVersion ?? '')) {
+  throw new Error(`Dataset must use schema v3 and a compatible parser 3.x; received schema ${manifest.schemaVersion} / parser ${manifest.parserVersion}`)
+}
+
+function idLookupBucket(id) {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < id.length; index += 1) {
+    hash ^= id.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16).slice(-2).padStart(2, '0')
+}
+
+function permanentNumberBucket(permanentNumber) {
+  const size = 10_000
+  const start = Math.floor(permanentNumber / size) * size
+  return `number-${String(start).padStart(6, '0')}-${String(start + size - 1).padStart(6, '0')}`
+}
+
+function expectedSearchBuckets(entry) {
+  const buckets = new Set()
+  for (const token of entry.searchKey.split(/\s+/).filter(Boolean)) {
+    const firstAlphaOffset = token.search(/[a-z]/)
+    if (firstAlphaOffset >= 0) {
+      const prefix = token.slice(firstAlphaOffset, firstAlphaOffset + 2)
+      buckets.add(prefix.length >= 2 ? `prefix-${prefix}` : prefix)
+    }
+    if (/^\d{4}$/.test(token) && Number(token) >= 1800 && Number(token) <= 2199) buckets.add(`year-${token}`)
+  }
+  if (Number.isSafeInteger(entry.permanentNumber)) buckets.add(permanentNumberBucket(entry.permanentNumber))
+  if (entry.packedDesignation?.startsWith('~') && entry.packedDesignation.length >= 2) {
+    buckets.add(`packed-tilde-${entry.packedDesignation[1].toLowerCase()}`)
+  }
+  if (!buckets.size) buckets.add('misc')
+  return buckets
 }
 for (const capability of ['catalog-index-v1', 'catalog-locators-v1', 'precomputed-samples-v1', 'catalog-summary-v1', 'search-prefix-v2']) {
   if (!manifest.capabilities?.includes(capability)) throw new Error(`Dataset manifest omits required capability: ${capability}`)
@@ -62,7 +95,8 @@ for (const artifact of ['manifest.json', 'provenance.json', 'validation-report.j
 
 const metadataCounts = new Map()
 const binarySizes = new Map()
-const seenIds = new Set()
+const metadataById = new Map()
+const indexArtifacts = []
 let metadataTotal = 0
 
 for (const [file, expected] of Object.entries(checksums.files)) {
@@ -86,8 +120,8 @@ for (const [file, expected] of Object.entries(checksums.files)) {
       if (!entry || typeof entry.id !== 'string' || entry.chunkId !== metadataMatch[1]) {
         throw new Error(`Metadata shard contains an invalid entry: ${file}`)
       }
-      if (seenIds.has(entry.id)) throw new Error(`Duplicate asteroid ID across metadata shards: ${entry.id}`)
-      seenIds.add(entry.id)
+      if (metadataById.has(entry.id)) throw new Error(`Duplicate asteroid ID across metadata shards: ${entry.id}`)
+      metadataById.set(entry.id, entry)
     }
     metadataCounts.set(metadataMatch[1], entries.length)
     metadataTotal += entries.length
@@ -96,16 +130,9 @@ for (const [file, expected] of Object.entries(checksums.files)) {
   const binaryMatch = file.match(/^binary\/(chunk-\d{4,})\.bin$/)
   if (binaryMatch) binarySizes.set(binaryMatch[1], data.byteLength)
 
-  if (/^(search|lookup)\/.+\.json$/.test(file)) {
-    const entries = JSON.parse(data.toString('utf8'))
-    if (!Array.isArray(entries)) throw new Error(`Index artifact is not an array: ${file}`)
-    for (const entry of entries) {
-      if (!Number.isSafeInteger(entry?.chunkIndex) || !Number.isSafeInteger(entry?.rowIndex) ||
-          entry.chunkIndex < 0 || entry.chunkIndex >= manifest.chunkCount ||
-          entry.rowIndex < 0 || entry.rowIndex >= manifest.chunkSize) {
-        throw new Error(`Index artifact contains an invalid locator: ${file}`)
-      }
-    }
+  const indexMatch = file.match(/^(search|lookup)\/(.+)\.json$/)
+  if (indexMatch) {
+    indexArtifacts.push({ type: indexMatch[1], bucket: indexMatch[2], file })
   }
 }
 
@@ -141,8 +168,37 @@ for (let index = 0; index < manifest.chunkCount; index += 1) {
   }
 }
 
+for (const artifact of indexArtifacts) {
+  const entries = await readJson(resolve(release, artifact.file), artifact.file)
+  if (!Array.isArray(entries)) throw new Error(`Index artifact is not an array: ${artifact.file}`)
+  const bucketIds = new Set()
+  for (const entry of entries) {
+    if (typeof entry?.id !== 'string' || bucketIds.has(entry.id)) {
+      throw new Error(`Index artifact contains an invalid or duplicate ID: ${artifact.file}`)
+    }
+    bucketIds.add(entry.id)
+    if (!Number.isSafeInteger(entry?.chunkIndex) || !Number.isSafeInteger(entry?.rowIndex) ||
+        entry.chunkIndex < 0 || entry.chunkIndex >= manifest.chunkCount ||
+        entry.rowIndex < 0 || entry.rowIndex >= manifest.chunkSize) {
+      throw new Error(`Index artifact contains an invalid locator: ${artifact.file}`)
+    }
+    const source = metadataById.get(entry.id)
+    if (!source || entry.chunkId !== source.chunkId || entry.chunkIndex !== source.chunkIndex || entry.rowIndex !== source.rowIndex ||
+        entry.searchKey !== source.searchKey || entry.permanentNumber !== source.permanentNumber) {
+      throw new Error(`Index entry disagrees with source metadata: ${artifact.file} / ${entry.id}`)
+    }
+    if (artifact.type === 'lookup') {
+      if (artifact.bucket !== idLookupBucket(entry.id)) {
+        throw new Error(`Lookup entry is stored in the wrong ID bucket: ${artifact.file} / ${entry.id}`)
+      }
+    } else if (!expectedSearchBuckets(source).has(artifact.bucket)) {
+      throw new Error(`Search entry is stored in the wrong semantic bucket: ${artifact.file} / ${entry.id}`)
+    }
+  }
+}
+
 for (const featured of manifest.featured ?? []) {
-  if (!featured?.id || !seenIds.has(featured.id)) {
+  if (!featured?.id || !metadataById.has(featured.id)) {
     throw new Error(`Featured object is absent from metadata shards: ${featured?.id ?? 'unknown'}`)
   }
 }
@@ -241,7 +297,7 @@ for (const size of ['desktop', 'mobile']) {
   metadata.forEach((entry, sampleIndex) => {
     if (sampleIds.has(entry.id)) throw new Error(`Precomputed ${size} sample contains duplicate ID: ${entry.id}`)
     sampleIds.add(entry.id)
-    if (!seenIds.has(entry.id)) throw new Error(`Precomputed ${size} sample ID is absent from full metadata: ${entry.id}`)
+    if (!metadataById.has(entry.id)) throw new Error(`Precomputed ${size} sample ID is absent from full metadata: ${entry.id}`)
     if (!Number.isSafeInteger(entry.chunkIndex) || !Number.isSafeInteger(entry.rowIndex)) {
       throw new Error(`Precomputed ${size} sample omits locator for ${entry.id}`)
     }

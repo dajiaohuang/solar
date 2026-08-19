@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { createReadStream, createWriteStream, existsSync } from 'node:fs'
-import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, rename, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { dirname, extname, isAbsolute, relative, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { pipeline } from 'node:stream/promises'
@@ -17,7 +17,7 @@ const LEGACY_LITE_LIMIT = process.env.MPCORB_LIMIT
 const LITE_MAX_PERMANENT_NUMBER = Number(process.env.MPCORB_LITE_MAX_NUMBER ?? LEGACY_LITE_LIMIT ?? 30_000)
 const DATASET_MODE = process.env.MPCORB_MODE === 'lite' || LEGACY_LITE_LIMIT ? 'lite' : 'full'
 const REQUIRE_FEATURED = process.env.MPCORB_REQUIRE_FEATURED !== '0'
-const PARSER_VERSION = '3.0.0'
+const PARSER_VERSION = '3.1.0'
 const PERMANENT_NUMBER_BUCKET_SIZE = 10_000
 const COMPACT_INDEX_STRIDE_BYTES = 24
 const DESKTOP_SAMPLE_LIMIT = 30_000
@@ -209,6 +209,11 @@ async function downloadFile(url, outputPath) {
   if (!response.ok || !response.body) throw new Error(`Failed to download ${url}: ${response.status}`)
   await mkdir(dirname(outputPath), { recursive: true })
   await pipeline(response.body, createWriteStream(outputPath))
+  const lastModified = response.headers.get('last-modified')
+  if (lastModified) {
+    const sourceTimestamp = new Date(lastModified)
+    if (Number.isFinite(sourceTimestamp.getTime())) await utimes(outputPath, sourceTimestamp, sourceTimestamp)
+  }
 }
 
 async function resolveRawCatalog() {
@@ -377,10 +382,11 @@ async function main() {
   const rawFile = await resolveRawCatalog()
   const sourceSha256 = await sha256File(rawFile)
   const sourceInfo = await stat(rawFile)
-  const generatedAt = new Date().toISOString()
+  const sourceTimestamp = sourceInfo.mtime.toISOString()
+  const generatedAt = process.env.MPCORB_GENERATED_AT ?? sourceTimestamp
   const releasesRoot = resolve(OUTPUT_ROOT, 'releases')
   const stagingDir = resolve(releasesRoot, `.staging-${process.pid}-${Date.now()}`)
-  const parserCommit = process.env.MPCORB_PARSER_COMMIT ?? process.env.GITHUB_SHA ?? 'working-tree'
+  const parserCommit = process.env.MPCORB_PARSER_COMMIT ?? await sha256File(resolve(import.meta.dirname, 'preprocess-asteroids.mjs'))
   const selectionPolicy = DATASET_MODE === 'full'
     ? { type: 'all-valid-elliptic', requiredFeaturedNames: [...FEATURED_NAMES].sort() }
     : {
@@ -549,7 +555,8 @@ async function main() {
   }
   const contentDescriptor = Object.fromEntries(Object.entries(checksums).sort(([left], [right]) => left.localeCompare(right)))
   const contentSha256 = createHash('sha256').update(JSON.stringify(contentDescriptor)).digest('hex')
-  const version = process.env.MPCORB_DATASET_VERSION ?? `mpcorb-${contentSha256.slice(0, 16)}-${DATASET_MODE}`
+  const releaseIdentity = createHash('sha256').update(`${contentSha256}:${PARSER_VERSION}`).digest('hex')
+  const version = process.env.MPCORB_DATASET_VERSION ?? `mpcorb-${releaseIdentity.slice(0, 16)}-${DATASET_MODE}`
   const releaseDir = resolve(releasesRoot, version)
   assertSafeOutputPath(releaseDir)
   if (!releaseDir.startsWith(`${releasesRoot}\\`) && !releaseDir.startsWith(`${releasesRoot}/`)) {
@@ -562,7 +569,7 @@ async function main() {
     version,
     datasetMode: DATASET_MODE,
     source: SOURCE_URL,
-    sourceDownloadedAt: sourceInfo.mtime.toISOString(),
+    sourceDownloadedAt: sourceTimestamp,
     generatedAt,
     sourceSha256,
     contentSha256,
@@ -603,7 +610,7 @@ async function main() {
   const provenance = {
     datasetVersion: version,
     source: SOURCE_URL,
-    downloadedAt: sourceInfo.mtime.toISOString(),
+    downloadedAt: sourceTimestamp,
     generatedAt,
     sourceSha256,
     contentSha256,

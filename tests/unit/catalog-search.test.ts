@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getSearchBucketKey } from '../../src/lib/catalogLoader'
+import { getSearchBucketKey, isNameSearchTooShort } from '../../src/lib/catalogLoader'
 import { filterCatalogRecords, type CatalogFilters } from '../../src/state/catalog-store'
 import type { AsteroidRecord } from '../../src/types'
 
@@ -45,6 +45,14 @@ describe('catalog search sharding', () => {
 
   it('normalizes punctuation and diacritics consistently after loading a bucket', () => {
     expect(filterCatalogRecords([record], { ...filters, query: 'Á-New' })).toEqual([record])
+  })
+
+  it('requires two characters only for English name searches in prefix-v2 datasets', () => {
+    const manifest = { searchIndex: { tokenPrefixLength: 2 } } as Parameters<typeof isNameSearchTooShort>[1]
+    expect(isNameSearchTooShort('a', manifest)).toBe(true)
+    expect(isNameSearchTooShort('Ap', manifest)).toBe(false)
+    expect(isNameSearchTooShort('433', manifest)).toBe(false)
+    expect(isNameSearchTooShort('2024 Y', manifest)).toBe(false)
   })
 
   it('makes unknown absolute magnitude inclusion explicit', () => {

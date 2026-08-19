@@ -74,6 +74,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
         activeResultRecords: [],
         activeResultScanKey: null,
         exactFilteredTotal: null,
+        exactHydrationHasMore: false,
         recordsSampled: false,
         loadProgress: 0,
         isLoading: false,

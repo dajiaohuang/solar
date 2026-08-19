@@ -92,6 +92,12 @@ export function resetDatasetLoader() {
   summaryCache.clear()
 }
 
+export function isNameSearchTooShort(searchText: string, manifest = activeManifest) {
+  const requiredLength = manifest?.searchIndex?.tokenPrefixLength ?? 1
+  const normalized = normalizeSearchText(searchText)
+  return requiredLength >= 2 && /^[a-z]$/.test(normalized)
+}
+
 export async function loadAsteroidManifest(requestedVersion?: string) {
   const generation = manifestRequestGeneration + 1
   manifestRequestGeneration = generation
@@ -248,6 +254,7 @@ export async function searchAsteroidCatalogPage(params: {
 }) {
   const normalized = normalizeSearchText(params.query)
   if (!normalized) return { records: [], total: 0, nextCursor: null as number | null }
+  if (isNameSearchTooShort(params.query)) return { records: [], total: 0, nextCursor: null as number | null }
   const entries = await loadAsteroidSearchBucket(getSearchBucketKey(params.query))
   const cursor = Math.max(0, params.cursor ?? 0)
   const pageSize = Math.max(1, params.pageSize ?? 1_200)
@@ -392,6 +399,7 @@ export async function loadAsteroidSearchLocators(query: string, manifest: Astero
   if (!manifest.searchIndex?.locators) return null
   const normalized = normalizeSearchText(query)
   if (!normalized) return null
+  if (isNameSearchTooShort(query, manifest)) return new Uint32Array(0)
   const entries = await loadAsteroidSearchBucket(getSearchBucketKey(query, manifest.searchIndex.tokenPrefixLength))
   const matched = entries.filter((entry) => entry.searchKey.includes(normalized))
   if (matched.some((entry) => !Number.isSafeInteger(entry.chunkIndex) || !Number.isSafeInteger(entry.rowIndex))) return null

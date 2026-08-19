@@ -4,13 +4,20 @@ import { simulationClock } from '../../engine/clock/SimulationClock'
 import { useSimulationClock } from '../../engine/clock/useSimulationClock'
 import { useI18n } from '../../i18n/context'
 import { useCatalogPointWorker } from '../../hooks/useCatalogPointWorker'
-import { catalogSampleSize, useCatalogSample } from '../../hooks/useCatalogSample'
+import { useCatalogSample } from '../../hooks/useCatalogSample'
 import {
   asteroidRecordToBody,
+  isNameSearchTooShort,
   loadAsteroidSectionPage,
   searchAsteroidCatalogPage,
 } from '../../lib/catalogLoader'
-import { createCatalogScanKey, scanAsteroidCatalog } from '../../lib/catalogScan'
+import {
+  EXACT_CATALOG_LOCATOR_LIMIT,
+  createCatalogScanKey,
+  loadNextCatalogScanPage,
+  resetCatalogScanWorker,
+  scanAsteroidCatalog,
+} from '../../lib/catalogScan'
 import { catalogActions, catalogDisplayRecords, catalogStore, filterCatalogRecords } from '../../state/catalog-store'
 import { selectionActions, selectionStore } from '../../state/selection-store'
 import { uiActions } from '../../state/ui-store'
@@ -47,7 +54,7 @@ export function CatalogWorkspace() {
     activeScanController.current?.abort()
   }, [])
 
-  const sampleLimit = catalogSampleSize() === 'mobile' ? 8_000 : 30_000
+  const sampleLimit = EXACT_CATALOG_LOCATOR_LIMIT
   const scanKey = catalog.manifest
     ? createCatalogScanKey(catalog.manifest.version, catalog.filters, sampleLimit)
     : ''
@@ -68,6 +75,7 @@ export function CatalogWorkspace() {
     catalogActions.patch({
       isLoading: true, error: null, browseRecords: [],
       activeResultRecords: [], activeResultScanKey: null, exactFilteredTotal: null,
+      exactHydrationHasMore: false,
       recordsSampled: false, loadProgress: 0,
     })
     void loadAsteroidSectionPage({
@@ -88,11 +96,20 @@ export function CatalogWorkspace() {
   useEffect(() => {
     const query = catalog.filters.query.trim()
     if (!catalog.manifest || !query) return
+    if (isNameSearchTooShort(query, catalog.manifest)) {
+      catalogActions.patch({
+        isLoading: false, error: null, browseRecords: [], recordsSampled: false,
+        activeResultRecords: [], activeResultScanKey: null, exactFilteredTotal: null,
+        exactHydrationHasMore: false,
+      })
+      return
+    }
     let cancelled = false
     loadController.current?.abort()
     catalogActions.patch({
       isLoading: true, error: null, browseRecords: [],
       activeResultRecords: [], activeResultScanKey: null, exactFilteredTotal: null,
+      exactHydrationHasMore: false,
       recordsSampled: false, loadProgress: 0,
     })
     void searchAsteroidCatalogPage({ query }).then((page) => {
@@ -108,7 +125,12 @@ export function CatalogWorkspace() {
 
   const displayedRecords = catalogDisplayRecords(catalog, scanKey)
   const filtered = useMemo(() => filterCatalogRecords(displayedRecords, catalog.filters), [catalog.filters, displayedRecords])
-  const pointCloud = useCatalogPointWorker(filtered, catalogEpoch)
+  const exactResultIsPartial = catalog.activeResultScanKey === scanKey && catalog.exactFilteredTotal !== null &&
+    catalog.exactFilteredTotal > catalog.activeResultRecords.length
+  const pointRecords = useMemo(() => exactResultIsPartial && !catalog.filters.query.trim()
+    ? filterCatalogRecords(catalog.baseSampleRecords, catalog.filters)
+    : filtered, [catalog.baseSampleRecords, catalog.filters, exactResultIsPartial, filtered])
+  const pointCloud = useCatalogPointWorker(pointRecords, catalogEpoch)
 
   async function scanEntireCatalog() {
     if (!catalog.manifest) return null
@@ -128,7 +150,7 @@ export function CatalogWorkspace() {
         },
       })
       if (controller.signal.aborted || result.scanKey !== requestedScanKey || currentScanKey.current !== requestedScanKey) return null
-      catalogActions.setExactResult(result.scanKey, result.records, result.total)
+      catalogActions.setExactResult(result.scanKey, result.records, result.total, result.hasMore)
       setCursor({ chunkIndex: catalog.manifest.chunkCount, recordOffset: 0 })
       setHasMore(false)
       return result
@@ -143,12 +165,20 @@ export function CatalogWorkspace() {
 
   async function selectAllFiltered() {
     if (!catalog.manifest) return
-    const result = catalog.activeResultScanKey === scanKey && catalog.exactFilteredTotal !== null
-      ? { total: catalog.exactFilteredTotal }
-      : await scanEntireCatalog()
-    if (!result) return
-    catalogActions.selectAllFiltered(catalog.manifest.version, catalog.filters, result.total)
-    uiActions.toast(`${result.total.toLocaleString()} ${t('selectedCount')}`)
+    if (catalog.activeResultScanKey !== scanKey || catalog.exactFilteredTotal === null) return
+    catalogActions.selectAllFiltered(catalog.manifest.version, catalog.filters, catalog.exactFilteredTotal)
+    uiActions.toast(`${catalog.exactFilteredTotal.toLocaleString()} ${t('selectedCount')}`)
+  }
+
+  async function loadNextExactPage() {
+    if (!catalog.manifest || !catalog.exactHydrationHasMore || catalog.isLoading) return
+    catalogActions.patch({ isLoading: true, error: null })
+    try {
+      const page = await loadNextCatalogScanPage(scanKey, catalog.manifest)
+      if (currentScanKey.current === scanKey) catalogActions.setExactPage(page.records, page.hasMore)
+    } catch (error) {
+      catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
+    }
   }
 
   async function loadMore() {
@@ -164,6 +194,7 @@ export function CatalogWorkspace() {
       catalogActions.patch({
         browseRecords: [...catalog.browseRecords, ...page.records], isLoading: false,
         exactFilteredTotal: null, recordsSampled: false,
+        exactHydrationHasMore: false,
       })
       setCursor(page.endCursor)
       setHasMore(page.endCursor.chunkIndex < catalog.manifest.chunkCount)
@@ -186,7 +217,8 @@ export function CatalogWorkspace() {
     }
   }
 
-  const textMatchTotal = catalog.filters.query.trim() ? searchPage.total : null
+  const nameSearchTooShort = Boolean(catalog.manifest && isNameSearchTooShort(catalog.filters.query, catalog.manifest))
+  const textMatchTotal = catalog.filters.query.trim() ? nameSearchTooShort ? 0 : searchPage.total : null
   const exactFilteredTotal = catalog.activeResultScanKey === scanKey ? catalog.exactFilteredTotal : null
   const resultTotal = exactFilteredTotal ?? textMatchTotal ?? filtered.length
   const visibleTableCount = Math.min(filtered.length, 240)
@@ -205,6 +237,7 @@ export function CatalogWorkspace() {
         <aside className="filter-panel glass-panel">
           <DatasetCard />
           <label className="field"><span>{t('query')}</span><input type="search" value={catalog.filters.query} onChange={(event) => catalogActions.patchFilters({ query: event.target.value })} placeholder="Ceres / 433 Eros / 2024 YR4" /></label>
+          {nameSearchTooShort && <p className="catalog-result-note">{t('minimumNameSearch')}</p>}
           <label className="field"><span>{t('orbitClass')}</span><select value={catalog.filters.orbitClass} onChange={(event) => catalogActions.patchFilters({ orbitClass: event.target.value })}>{CLASS_OPTIONS.map((value) => <option value={value} key={value}>{value}</option>)}</select></label>
           <div className="section-kicker">{t('filters').toUpperCase()}</div>
           <RangeFields label="a (AU)" value={catalog.filters.semiMajorAxis} onChange={(value) => catalogActions.patchFilters({ semiMajorAxis: value })} step="0.1" />
@@ -218,14 +251,17 @@ export function CatalogWorkspace() {
           </select></label>
           <RangeFields label="q (AU)" value={catalog.filters.perihelion} onChange={(value) => catalogActions.patchFilters({ perihelion: value })} step="0.1" />
           <button className="primary-button full-width" disabled={!filtered.length} onClick={() => selectionActions.addCatalogBodies(filtered.slice(0, 160).map(asteroidRecordToBody), true)}>{t('addSelection')} · {Math.min(filtered.length, 160)}</button>
-          <button className="secondary-button full-width" disabled={!catalog.manifest || catalog.isLoading} onClick={() => void selectAllFiltered()}>{catalog.activeResultScanKey === scanKey ? t('selectAllCatalog') : `${t('loadAllCatalog')} · ${Math.round(catalog.loadProgress * 100)}%`}</button>
+          <button className="secondary-button full-width" disabled={!catalog.manifest || catalog.isLoading || nameSearchTooShort} onClick={() => {
+            if (catalog.activeResultScanKey === scanKey) selectAllFiltered()
+            else void scanEntireCatalog()
+          }}>{catalog.activeResultScanKey === scanKey ? t('selectAllCatalog') : `${t('loadAllCatalog')} · ${Math.round(catalog.loadProgress * 100)}%`}</button>
           {catalog.selectionScope && <button className="text-button full-width" onClick={catalogActions.clearCatalogSelection}>{t('clearCatalogSelection')} · {catalog.selectionScope.count.toLocaleString()}</button>}
         </aside>
 
         <section className="catalog-map glass-panel">
           <div className="map-caption"><span>CATALOG MODE · GPU POINTS</span><strong>{Math.floor(pointCloud.positions.length / 2).toLocaleString()} / {resultTotal.toLocaleString()}</strong></div>
-          {pointCloud.positions.length === filtered.length * 2 && filtered.length ? <CatalogPointCanvas
-            records={filtered}
+          {pointCloud.positions.length === pointRecords.length * 2 && pointRecords.length ? <CatalogPointCanvas
+            records={pointRecords}
             positions={pointCloud.positions}
             viewRadiusAU={catalog.filters.semiMajorAxis[1] || 50}
           /> : <div className="empty-state"><span>◎</span><p>{catalog.manifest ? t('loading') : t('unavailable')}</p></div>}
@@ -240,7 +276,10 @@ export function CatalogWorkspace() {
             <span>{t('textMatches')} <strong>{textMatchTotal === null ? '—' : textMatchTotal.toLocaleString()}</strong></span>
             <span>{t('exactFilteredTotal')} <strong>{exactFilteredTotal === null ? '—' : exactFilteredTotal.toLocaleString()}</strong></span>
           </div>
-          {catalog.error && <div className="error-banner">{catalog.error}</div>}
+          {catalog.error && <div className="error-banner">{catalog.error}{catalog.manifest && <div className="export-actions">
+            <button onClick={() => { resetCatalogScanWorker(); void scanEntireCatalog() }}>{t('retryExactScan')}</button>
+            <button onClick={() => { resetCatalogScanWorker(); catalogActions.patch({ error: null, isLoading: false }) }}>{t('resetCatalogWorker')}</button>
+          </div>}</div>}
           {(catalog.recordsSampled || filtered.length > visibleTableCount) && <p className="catalog-result-note">
             {t('showing')} {visibleTableCount.toLocaleString()} / {resultTotal.toLocaleString()}
             {catalog.activeResultScanKey === scanKey ? ` · ${t('stratifiedSample')}` : catalog.recordsSampled ? ` · ${t('refineSearch')}` : ''}
@@ -263,7 +302,8 @@ export function CatalogWorkspace() {
             })}
           </div>
           {catalog.manifest && !catalog.manifest.precomputedSamples && !catalog.filters.query && hasMore && <button className="load-more" disabled={catalog.isLoading} onClick={() => void loadMore()}>{catalog.isLoading ? t('loading') : t('loadMore')}</button>}
-          {catalog.manifest && catalog.filters.query && searchPage.nextCursor !== null && <button className="load-more" disabled={catalog.isLoading} onClick={() => void loadMoreSearchResults()}>{catalog.isLoading ? t('loading') : t('loadMore')}</button>}
+          {catalog.manifest && catalog.filters.query && !nameSearchTooShort && searchPage.nextCursor !== null && <button className="load-more" disabled={catalog.isLoading} onClick={() => void loadMoreSearchResults()}>{catalog.isLoading ? t('loading') : t('loadMore')}</button>}
+          {catalog.activeResultScanKey === scanKey && catalog.exactHydrationHasMore && <button className="load-more" disabled={catalog.isLoading} onClick={() => void loadNextExactPage()}>{catalog.isLoading ? t('loading') : t('loadNextExactPage')}</button>}
         </section>
       </div>
     </div>
