@@ -13,19 +13,23 @@ test('service worker preserves unrelated same-origin caches', async ({ page }) =
 
     const currentRegistrations = await navigator.serviceWorker.getRegistrations()
     await Promise.all(currentRegistrations.map((registration) => registration.unregister()))
-    const registration = await navigator.serviceWorker.register(`./sw.js?cache-regression=${Date.now()}`, { scope: './' })
-    const worker = registration.installing ?? registration.waiting ?? registration.active
-    if (worker?.state !== 'activated') {
-      await new Promise<void>((resolve, reject) => {
-        const timeout = window.setTimeout(() => reject(new Error('Timed out waiting for service worker activation')), 10_000)
-        worker?.addEventListener('statechange', () => {
-          if (worker.state === 'activated') {
-            window.clearTimeout(timeout)
-            resolve()
-          }
-        })
-      })
-    }
+    const scriptUrl = new URL(`./sw.js?cache-regression=${Date.now()}`, window.location.href).href
+    const registration = await navigator.serviceWorker.register(scriptUrl, { scope: './' })
+    await new Promise<void>((resolve, reject) => {
+      const deadline = Date.now() + 30_000
+      const checkActivation = () => {
+        if (registration.active?.state === 'activated' && registration.active.scriptURL === scriptUrl) {
+          resolve()
+          return
+        }
+        if (Date.now() >= deadline) {
+          reject(new Error('Timed out waiting for service worker activation'))
+          return
+        }
+        window.setTimeout(checkActivation, 100)
+      }
+      checkActivation()
+    })
     return caches.keys()
   })
 
