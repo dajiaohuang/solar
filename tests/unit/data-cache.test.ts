@@ -16,4 +16,10 @@ describe('versioned dataset persistence', () => {
     expect(source).toContain("url.pathname.includes('/data/asteroids/')")
     expect(source).not.toContain('caches.open(IMMUTABLE_DATA_CACHE)')
   })
+
+  it('refreshes IndexedDB LRU access time when cached data is read', async () => {
+    const source = await readFile(resolve('src/data/cache/indexedDb.ts'), 'utf8')
+    expect(source).toContain("database.transaction(STORE_NAME, 'readwrite')")
+    expect(source).toContain('store.put({ ...request.result, lastAccessed: Date.now() }')
+  })
 })

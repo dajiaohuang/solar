@@ -131,6 +131,7 @@ async function readCache(key: string) {
   if (!database) return null
   return new Promise<ArrayBuffer | null>((resolve) => {
     let settled = false
+    let cached: ArrayBuffer | null = null
     const finish = (value: ArrayBuffer | null) => {
       if (settled) return
       settled = true
@@ -138,14 +139,27 @@ async function readCache(key: string) {
       resolve(value)
     }
     try {
-      const transaction = database.transaction(STORE_NAME, 'readonly')
-      const request = transaction.objectStore(STORE_NAME).get(key)
+      const transaction = database.transaction(STORE_NAME, 'readwrite')
+      const store = transaction.objectStore(STORE_NAME)
+      const request = store.get(key)
       request.onsuccess = () => {
-        if (request.result instanceof ArrayBuffer) finish(request.result)
-        else finish(isCacheRecord(request.result) ? request.result.buffer : null)
+        if (request.result instanceof ArrayBuffer) {
+          cached = request.result
+          store.put({
+            buffer: request.result,
+            datasetVersion: datasetVersionFromUrl(key),
+            byteLength: request.result.byteLength,
+            lastAccessed: Date.now(),
+          } satisfies CacheRecord, key)
+        } else if (isCacheRecord(request.result)) {
+          cached = request.result.buffer
+          store.put({ ...request.result, lastAccessed: Date.now() } satisfies CacheRecord, key)
+        }
       }
       request.onerror = () => finish(null)
       transaction.onabort = () => finish(null)
+      transaction.onerror = () => finish(null)
+      transaction.oncomplete = () => finish(cached)
     } catch {
       finish(null)
     }

@@ -8,7 +8,7 @@ describe('reproducible scene URLs', () => {
       compareRef: 'jupiter', compare: true, bodies: ['mars', 'asteroid:mpc:00433'], jd: 2461040.5,
       history: 730, speed: 30, view: '2d', filter: 'APO', search: 'eros', focused: 'mars', lang: 'en',
       plot: 'q-Q', aRange: [0.5, 5], eRange: [0, 0.8], iRange: [0, 40], hRange: [5, 30],
-      qRange: [0.2, 4], layers: ['ecliptic', 'lagrange', 'spacecraft'], offset: [1.25, -0.5],
+      hStatus: 'known', qRange: [0.2, 4], layers: ['ecliptic', 'lagrange', 'spacecraft'], offset: [1.25, -0.5],
     })
     const decoded = decodeUrlState(`?${encoded}`)
     expect(encoded).toContain('v=2')
@@ -22,6 +22,7 @@ describe('reproducible scene URLs', () => {
     expect(decoded.aRange).toEqual([0.5, 5])
     expect(decoded.layers).toEqual(['ecliptic', 'lagrange', 'spacecraft'])
     expect(decoded.offset).toEqual([1.25, -0.5])
+    expect(decoded.hStatus).toBe('known')
   })
 
   it('fails closed for a future scene schema instead of misreading its fields', () => {

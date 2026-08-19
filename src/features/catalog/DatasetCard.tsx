@@ -5,7 +5,23 @@ export function DatasetCard({ compact = false }: { compact?: boolean }) {
   const catalog = catalogStore.useStore()
   const { t } = useI18n()
   if (!catalog.manifest) {
-    return <div className={`dataset-card ${compact ? 'compact' : ''}`}><strong>{t('unavailable')}</strong><p>{t('buildHint')}</p></div>
+    const requestedVersion = catalog.requestedDatasetVersion
+    const openCurrent = () => {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('dataset')
+      window.location.assign(url)
+    }
+    return <div className={`dataset-card ${compact ? 'compact' : ''}`}>
+      <strong>{requestedVersion ? t('requestedDatasetUnavailable') : t('unavailable')}</strong>
+      {requestedVersion ? <>
+        <p className="checksum">{requestedVersion}</p>
+        <div className="inline-actions">
+          <button onClick={openCurrent}>{t('openCurrentDataset')}</button>
+          <button onClick={() => window.location.reload()}>{t('retry')}</button>
+          <a href={`https://github.com/dajiaohuang/solar/releases/tag/dataset-${encodeURIComponent(requestedVersion)}`} target="_blank" rel="noreferrer">{t('releaseMetadata')}</a>
+        </div>
+      </> : <p>{t('buildHint')}</p>}
+    </div>
   }
   const provenance = catalog.provenance
   return (

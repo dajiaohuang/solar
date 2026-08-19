@@ -107,15 +107,17 @@ src/
     mission/           unit-safe Hohmann and Lambert calculations
   state/               independent simulation/selection/catalog/UI stores
   data/                curated bodies, loaders, IndexedDB cache
-  workers/             cancellable trajectory, event, porkchop workers
+  workers/             cancellable catalog scan, trajectory, event, porkchop workers
   i18n/                one English/Chinese translation system
 pipeline data lives in scripts/preprocess-asteroids.mjs
 ```
 
 The render paths are intentionally different:
 
-- **Catalog Mode** can load and draw every filtered catalog record as GPU points without full trails.
-- **Focus Mode** renders the first 160 selected objects with full trajectories, labels, details, and bounded analysis; the catalog selection itself may contain the complete filtered dataset.
+- **Catalog Mode** scans binary columns in a dedicated worker, returns an exact filtered count, and sends only a bounded stratified LOD sample to the main thread (30,000 desktop / 8,000 mobile) for GPU points and tables. Decoded shard objects are retained in an eight-entry LRU only.
+- **Focus Mode** renders the first 160 selected objects with full trajectories, labels, details, and bounded analysis. Catalog-wide selection stores the dataset version plus filter expression and count instead of enumerating every ID.
+
+Absolute-magnitude filtering has an explicit known/unknown/all state. Unknown H values are never fabricated as a numeric value and are excluded from the numeric `a–H` scatter plot.
 
 The simulation clock is not React state updated every animation frame. React receives a throttled snapshot, while trajectory history runs independently in a cancellable worker. Worker payloads use transferable typed arrays.
 
@@ -152,7 +154,7 @@ npm run build
 npm run ci
 ```
 
-Unit coverage includes Julian dates, Kepler propagation, parent/reference frames, Hohmann units/direction, Moon phase geometry, Hill/SOI definitions, strict JPL SBDB fixtures, local event-extremum detection, Lambert circular-arc recovery, versioned deep-link round trips, MPCORB parsing, scoped persistence, and an end-to-end immutable dataset publication/checksum fixture. Playwright runs the core routes, reproducible stories, mission workers, Service Worker cache isolation, and 2D/3D renderers on desktop and mobile Chromium.
+Unit coverage includes Julian dates, Kepler propagation, parent/reference frames, Hohmann units/direction, Moon phase geometry, Hill/SOI definitions, strict JPL SBDB fixtures, local event-extremum detection, Lambert circular-arc recovery, versioned deep-link round trips, MPCORB parsing, scoped persistence, manifest/cache isolation, and a one-million-row bounded catalog scan. Playwright runs the core routes, reproducible stories, catalog filtering/recovery, mission workers, Service Worker cache isolation, and 2D/3D renderers on desktop and mobile Chromium.
 
 ## Deployment
 

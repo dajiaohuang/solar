@@ -75,8 +75,10 @@ lookup/*.json
 
 ## 双分辨率架构
 
-- **Catalog Mode：** 可加载、筛选、目录级全选并绘制全部覆盖对象；一颗天体对应一个 GPU point，不绘制完整轨迹。
-- **Focus Mode：** 从目录选择中取前 160 个对象绘制轨迹、查看属性并参与有界分析，目录级选择本身不受这个渲染上限影响。
+- **Catalog Mode：** 专用 Worker 直接扫描二进制列，返回精确筛选总数，并只把有界分层 LOD 样本送回主线程用于 GPU points 与列表（桌面 30,000、移动端 8,000）；解码分片对象只保留在 8 项 LRU 中。
+- **Focus Mode：** 从目录选择中取前 160 个对象绘制轨迹、查看属性并参与有界分析；目录级全选保存“数据版本 + 筛选表达式 + 总数”，不会枚举全部 ID。
+
+绝对星等筛选明确区分“全部 / 仅已知 / 仅未知”。H 未知值不会被虚构为数值，`a–H` 数值散点图会排除这些对象。
 
 模拟时钟独立于 React 的逐帧渲染；React 只接收限频快照。轨迹、事件和 Porkchop 计算运行在可取消 Worker 中，轨迹结果通过 transferable typed arrays 返回。
 
@@ -113,7 +115,7 @@ npm run build
 npm run ci
 ```
 
-单元测试覆盖儒略日、开普勒传播、父天体/参考系、霍曼单位与方向、月相几何、Hill/SOI 定义、严格 JPL SBDB fixture、局部事件极值检测、Lambert 圆轨道弧、版本化深链接、MPCORB 定长解析、缓存作用域，以及微型数据集发布/哈希复核。Playwright 在桌面和移动 Chromium 上覆盖核心路由、可复现故事、任务 Worker、Service Worker 缓存隔离与 2D/3D 渲染。
+单元测试覆盖儒略日、开普勒传播、父天体/参考系、霍曼单位与方向、月相几何、Hill/SOI 定义、严格 JPL SBDB fixture、局部事件极值检测、Lambert 圆轨道弧、版本化深链接、MPCORB 定长解析、manifest/缓存隔离、百万行有界目录扫描，以及微型数据集发布/哈希复核。Playwright 在桌面和移动 Chromium 上覆盖核心路由、可复现故事、目录筛选与版本恢复、任务 Worker、Service Worker 缓存隔离与 2D/3D 渲染。
 
 ## 开源许可
 

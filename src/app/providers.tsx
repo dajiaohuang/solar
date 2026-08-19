@@ -51,9 +51,12 @@ export function AppProviders({ children }: { children: ReactNode }) {
         ...(initial.eRange ? { eccentricity: initial.eRange } : {}),
         ...(initial.iRange ? { inclination: initial.iRange } : {}),
         ...(initial.hRange ? { absoluteMagnitude: initial.hRange } : {}),
+        ...(initial.hStatus ? { magnitudeStatus: initial.hStatus } : {}),
         ...(initial.qRange ? { perihelion: initial.qRange } : {}),
       },
       isLoading: true,
+      requestedDatasetVersion: initial.dataset ?? null,
+      error: null,
     })
     void loadAsteroidManifest(initial.dataset).then(async (manifest) => {
       const provenance = manifest ? await loadDatasetProvenance() : null
@@ -61,11 +64,15 @@ export function AppProviders({ children }: { children: ReactNode }) {
         manifest,
         provenance,
         datasetVersion: manifest?.version ?? 'unavailable',
+        requestedDatasetVersion: initial.dataset ?? null,
         mode: manifest?.datasetMode ?? initial.mode ?? 'lite',
         selectionScope: null,
         recordsComplete: false,
         loadProgress: 0,
         isLoading: false,
+        error: !manifest && initial.dataset
+          ? `Requested dataset version "${initial.dataset}" is not available.`
+          : !manifest ? 'The current asteroid dataset is not available.' : null,
       })
       const selectedIds = initial.bodies ?? []
       const [datasetBodies, sbdbBodies] = await Promise.all([

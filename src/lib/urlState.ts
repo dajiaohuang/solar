@@ -1,5 +1,5 @@
 import type { AppRoute, ElementPlotMode } from '../state/ui-store'
-import type { BodyId, DatasetMode } from '../types'
+import type { BodyId, DatasetMode, MagnitudeStatus } from '../types'
 
 export const SCENE_URL_VERSION = 2 as const
 export type ScientificLayer = 'ecliptic' | 'orbits' | 'lagrange' | 'hill' | 'soi' | 'spacecraft'
@@ -27,6 +27,7 @@ export type AppUrlState = {
   eRange?: [number, number]
   iRange?: [number, number]
   hRange?: [number, number]
+  hStatus?: MagnitudeStatus
   qRange?: [number, number]
   layers?: ScientificLayer[]
   offset?: [number, number]
@@ -81,6 +82,7 @@ export function encodeUrlState(state: AppUrlState) {
   setRange(params, 'e', state.eRange)
   setRange(params, 'i', state.iRange)
   setRange(params, 'h', state.hRange)
+  if (state.hStatus && state.hStatus !== 'all') params.set('hStatus', state.hStatus)
   setRange(params, 'q', state.qRange)
   if (state.layers !== undefined) params.set('layers', state.layers.join(','))
   if (state.offset && (state.offset[0] !== 0 || state.offset[1] !== 0)) setRange(params, 'pan', state.offset)
@@ -127,6 +129,8 @@ export function decodeUrlState(search = typeof window === 'undefined' ? '' : win
   state.eRange = parseRange(params.get('e'))
   state.iRange = parseRange(params.get('i'))
   state.hRange = parseRange(params.get('h'))
+  const hStatus = params.get('hStatus')
+  if (hStatus === 'all' || hStatus === 'known' || hStatus === 'unknown') state.hStatus = hStatus
   state.qRange = parseRange(params.get('q'))
   state.offset = parsePair(params.get('pan'))
   if (params.has('layers')) {

@@ -3,9 +3,9 @@ import type { Page } from '@playwright/test'
 
 async function installMockCatalog(page: Page) {
   const entries = [
-    { id: 'asteroid:mpc:01001', packedDesignation: '01001', permanentNumber: 1001, label: '1001 Alpha', shortLabel: 'Alpha', searchKey: 'alpha 1001 01001', chunkId: 'chunk-0000', orbitClassCode: 'MBA', orbitClassName: 'Main-belt Asteroid', isNeo: false, isPha: false },
+    { id: 'asteroid:mpc:01001', packedDesignation: '01001', permanentNumber: 1001, label: '1001 Alpha', shortLabel: 'Alpha', searchKey: 'alpha 1001 01001', chunkId: 'chunk-0000', orbitClassCode: 'MBA', orbitClassName: 'Main-belt Asteroid', absoluteMagnitude: 12, isNeo: false, isPha: false },
     { id: 'asteroid:mpc:01002', packedDesignation: '01002', permanentNumber: 1002, label: '1002 Beta', shortLabel: 'Beta', searchKey: 'beta 1002 01002', chunkId: 'chunk-0000', orbitClassCode: 'APO', orbitClassName: 'Apollo', isNeo: true, isPha: false },
-    { id: 'asteroid:mpc:01003', packedDesignation: '01003', permanentNumber: 1003, label: '1003 Gamma', shortLabel: 'Gamma', searchKey: 'gamma 1003 01003', chunkId: 'chunk-0000', orbitClassCode: 'ATE', orbitClassName: 'Aten', isNeo: true, isPha: true },
+    { id: 'asteroid:mpc:01003', packedDesignation: '01003', permanentNumber: 1003, label: '1003 Gamma', shortLabel: 'Gamma', searchKey: 'gamma 1003 01003', chunkId: 'chunk-0000', orbitClassCode: 'ATE', orbitClassName: 'Aten', absoluteMagnitude: 18, isNeo: true, isPha: true },
   ]
   const numeric = new Float64Array(entries.length * 8)
   entries.forEach((_, index) => numeric.set([2451545, 2.1 + index * 0.2, 0.08 + index * 0.03, 4 + index, 20, 40, 60, 0.25], index * 8))
@@ -86,4 +86,24 @@ test('loads and selects the complete filtered catalog separately from focus mode
   await page.getByRole('button', { name: /Load complete filtered catalog|加载完整筛选目录/ }).click()
   await expect(page.getByRole('button', { name: /Clear catalog-wide selection|清除目录级全选/ })).toContainText('3')
   await expect(page.locator('.catalog-results .section-heading small')).toContainText('3')
+})
+
+test('separates known and unknown absolute-magnitude records', async ({ page }) => {
+  await installMockCatalog(page)
+  await page.goto('./')
+  await page.getByRole('button', { name: /Catalog|小天体目录/ }).first().click()
+  const magnitudeStatus = page.getByLabel(/H status|H 状态/)
+  await magnitudeStatus.selectOption('known')
+  await expect(page.locator('.catalog-results .section-heading span')).toContainText('2')
+  await magnitudeStatus.selectOption('unknown')
+  await expect(page.locator('.catalog-results .section-heading span')).toContainText('1')
+})
+
+test('shows recovery actions when a shared dataset version is unavailable', async ({ page }) => {
+  await page.route('**/data/asteroids/releases/missing-version/manifest.json', (route) => route.fulfill({ status: 404 }))
+  await page.goto('./?v=2&page=catalog&dataset=missing-version')
+  await expect(page.getByText(/requested immutable dataset version is not available|请求的不可变数据集版本当前不可用/)).toBeVisible()
+  await expect(page.getByRole('button', { name: /Open current dataset|打开当前数据集/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Retry|重试/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /Release metadata|查看发布元数据/ })).toBeVisible()
 })

@@ -14,7 +14,6 @@ on:
 
 permissions:
   contents: write
-  actions: write
 
 concurrency:
   group: asteroid-data-release
@@ -56,7 +55,7 @@ jobs:
               --notes "Immutable MPCORB-derived dataset. The archive contains provenance, SHA-256 checksums, a validation report, search indexes, and Float64 binary shards."
           fi
 
-      - name: Pin dataset release and deploy
+      - name: Pin dataset release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.package.outputs.version }}
@@ -71,4 +70,3 @@ jobs:
             git rebase origin/main
             git push origin HEAD:main
           fi
-          gh workflow run deploy.yml

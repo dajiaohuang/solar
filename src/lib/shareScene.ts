@@ -31,6 +31,7 @@ export function encodeCurrentScene() {
     eRange: catalog.filters.eccentricity,
     iRange: catalog.filters.inclination,
     hRange: catalog.filters.absoluteMagnitude,
+    hStatus: catalog.filters.magnitudeStatus,
     qRange: catalog.filters.perihelion,
     layers: [
       ...(simulation.showEcliptic ? ['ecliptic' as const] : []),

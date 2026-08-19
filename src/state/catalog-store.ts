@@ -1,23 +1,18 @@
-import type { AsteroidManifest, AsteroidRecord, DatasetMode, DatasetProvenance } from '../types'
-import { normalizeSearchText } from '../lib/catalogLoader'
+import { filterCatalogRecords } from '../lib/catalogFilters'
+import type { AsteroidManifest, AsteroidRecord, CatalogFilters, DatasetMode, DatasetProvenance } from '../types'
 import { createStore } from './createStore'
 
-export type CatalogFilters = {
-  query: string
-  orbitClass: string
-  semiMajorAxis: [number, number]
-  eccentricity: [number, number]
-  inclination: [number, number]
-  absoluteMagnitude: [number, number]
-  perihelion: [number, number]
-}
+export type { CatalogFilters } from '../types'
 type CatalogState = {
   mode: DatasetMode
   datasetVersion: string
+  requestedDatasetVersion: string | null
   manifest: AsteroidManifest | null
   provenance: DatasetProvenance | null
   records: AsteroidRecord[]
   recordsComplete: boolean
+  filteredTotal: number | null
+  recordsSampled: boolean
   loadProgress: number
   selectionScope: {
     datasetVersion: string
@@ -32,10 +27,13 @@ type CatalogState = {
 const initialCatalogState: CatalogState = {
   mode: 'lite',
   datasetVersion: 'unavailable',
+  requestedDatasetVersion: null,
   manifest: null,
   provenance: null,
   records: [],
   recordsComplete: false,
+  filteredTotal: null,
+  recordsSampled: false,
   loadProgress: 0,
   selectionScope: null,
   filters: {
@@ -45,6 +43,7 @@ const initialCatalogState: CatalogState = {
     eccentricity: [0, 0.999],
     inclination: [0, 180],
     absoluteMagnitude: [-5, 40],
+    magnitudeStatus: 'all',
     perihelion: [0, 80],
   },
   isLoading: false,
@@ -59,6 +58,10 @@ export const catalogActions = {
     catalogStore.setState((state) => ({
       filters: { ...state.filters, ...update },
       selectionScope: null,
+      recordsComplete: false,
+      filteredTotal: null,
+      recordsSampled: false,
+      loadProgress: 0,
     }))
   },
   selectAllFiltered(datasetVersion: string, filters: CatalogFilters, count: number) {
@@ -75,17 +78,4 @@ export const catalogActions = {
   },
 }
 
-export function filterCatalogRecords(records: AsteroidRecord[], filters: CatalogFilters) {
-  const query = normalizeSearchText(filters.query)
-  return records.filter((record) => {
-    const perihelion = record.semiMajorAxisAU * (1 - record.eccentricity)
-    return (!query || record.searchKey.includes(query)) &&
-      (filters.orbitClass === 'all' || record.orbitClassCode === filters.orbitClass) &&
-      record.semiMajorAxisAU >= filters.semiMajorAxis[0] && record.semiMajorAxisAU <= filters.semiMajorAxis[1] &&
-      record.eccentricity >= filters.eccentricity[0] && record.eccentricity <= filters.eccentricity[1] &&
-      record.inclinationDeg >= filters.inclination[0] && record.inclinationDeg <= filters.inclination[1] &&
-      (record.absoluteMagnitude === undefined ||
-        (record.absoluteMagnitude >= filters.absoluteMagnitude[0] && record.absoluteMagnitude <= filters.absoluteMagnitude[1])) &&
-      perihelion >= filters.perihelion[0] && perihelion <= filters.perihelion[1]
-  })
-}
+export { filterCatalogRecords }

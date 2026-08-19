@@ -10,6 +10,7 @@ const filters: CatalogFilters = {
   eccentricity: [0, 0.999],
   inclination: [0, 180],
   absoluteMagnitude: [-5, 40],
+  magnitudeStatus: 'all',
   perihelion: [0, 80],
 }
 
@@ -44,5 +45,12 @@ describe('catalog search sharding', () => {
 
   it('normalizes punctuation and diacritics consistently after loading a bucket', () => {
     expect(filterCatalogRecords([record], { ...filters, query: 'Á-New' })).toEqual([record])
+  })
+
+  it('makes unknown absolute magnitude inclusion explicit', () => {
+    const known = { ...record, id: 'asteroid:known', absoluteMagnitude: 12 }
+    expect(filterCatalogRecords([record, known], { ...filters, absoluteMagnitude: [10, 15], magnitudeStatus: 'known' })).toEqual([known])
+    expect(filterCatalogRecords([record, known], { ...filters, absoluteMagnitude: [10, 15], magnitudeStatus: 'unknown' })).toEqual([record])
+    expect(filterCatalogRecords([record, known], { ...filters, absoluteMagnitude: [10, 15], magnitudeStatus: 'all' })).toEqual([record, known])
   })
 })

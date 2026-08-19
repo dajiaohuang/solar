@@ -6,6 +6,19 @@ export type OrbitSource = 'jpl-approx' | 'jpl-sbdb' | 'mpcorb' | 'horizons' | 'c
 
 export type DatasetMode = 'lite' | 'full'
 
+export type MagnitudeStatus = 'all' | 'known' | 'unknown'
+
+export type CatalogFilters = {
+  query: string
+  orbitClass: string
+  semiMajorAxis: [number, number]
+  eccentricity: [number, number]
+  inclination: [number, number]
+  absoluteMagnitude: [number, number]
+  magnitudeStatus: MagnitudeStatus
+  perihelion: [number, number]
+}
+
 export type OrbitClassCode =
   | 'MBA'
   | 'TNO'
@@ -216,6 +229,23 @@ export type AsteroidManifest = {
   bucketCounts: Record<string, number>
   categoryCounts: Record<string, number>
   featured: AsteroidIndexEntry[]
+}
+
+export type CatalogScanWorkerRequest = {
+  type: 'scan'
+  requestId: number
+  manifest: AsteroidManifest
+  filters: CatalogFilters
+  sampleLimit: number
+}
+
+export type CatalogScanWorkerResponse = {
+  type: 'progress' | 'result' | 'error'
+  requestId: number
+  progress?: number
+  total?: number
+  records?: AsteroidRecord[]
+  error?: string
 }
 
 export type DatasetVersion = {

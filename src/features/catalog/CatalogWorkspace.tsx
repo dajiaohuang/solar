@@ -6,17 +6,14 @@ import { useI18n } from '../../i18n/context'
 import { useCatalogPointWorker } from '../../hooks/useCatalogPointWorker'
 import {
   asteroidRecordToBody,
-  getSearchBucketKey,
-  loadAllAsteroidRecords,
-  loadAsteroidChunk,
-  loadAsteroidSearchBucket,
   loadAsteroidSectionPage,
-  normalizeSearchText,
+  searchAsteroidCatalogPage,
 } from '../../lib/catalogLoader'
+import { scanAsteroidCatalog } from '../../lib/catalogScan'
 import { catalogActions, catalogStore, filterCatalogRecords } from '../../state/catalog-store'
 import { selectionActions, selectionStore } from '../../state/selection-store'
 import { uiActions } from '../../state/ui-store'
-import type { AsteroidSectionCursor } from '../../types'
+import type { AsteroidSectionCursor, MagnitudeStatus } from '../../types'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { DatasetCard } from './DatasetCard'
 
@@ -30,6 +27,7 @@ export function CatalogWorkspace() {
   const installedMode = catalog.manifest?.datasetMode ?? catalog.mode
   const [cursor, setCursor] = useState<AsteroidSectionCursor>({ chunkIndex: 0, recordOffset: 0 })
   const [hasMore, setHasMore] = useState(true)
+  const [searchPage, setSearchPage] = useState<{ total: number; nextCursor: number | null }>({ total: 0, nextCursor: null })
   const loadController = useRef<AbortController | null>(null)
   const [playingEpoch, setPlayingEpoch] = useState(clock.julianDay)
   const catalogEpoch = clock.isPlaying ? playingEpoch : clock.julianDay
@@ -46,7 +44,10 @@ export function CatalogWorkspace() {
     if (!catalog.manifest || catalog.filters.query.trim()) return
     let cancelled = false
     loadController.current?.abort()
-    catalogActions.patch({ isLoading: true, error: null, records: [], recordsComplete: false, loadProgress: 0 })
+    catalogActions.patch({
+      isLoading: true, error: null, records: [], recordsComplete: false,
+      filteredTotal: null, recordsSampled: false, loadProgress: 0,
+    })
     void loadAsteroidSectionPage({
       manifest: catalog.manifest,
       orbitClassCode: catalog.filters.orbitClass,
@@ -67,16 +68,15 @@ export function CatalogWorkspace() {
     if (!catalog.manifest || !query) return
     let cancelled = false
     loadController.current?.abort()
-    catalogActions.patch({ isLoading: true, error: null, recordsComplete: false, loadProgress: 0 })
-    void loadAsteroidSearchBucket(getSearchBucketKey(query)).then(async (entries) => {
-      const normalized = normalizeSearchText(query)
-      const matches = entries.filter((entry) => entry.searchKey.includes(normalized)).slice(0, 1200)
-      const chunkIds = [...new Set(matches.map((entry) => entry.chunkId))].slice(0, 30)
-      const chunks = await Promise.all(chunkIds.map(loadAsteroidChunk))
-      const matchIds = new Set(matches.map((entry) => entry.id))
-      return chunks.flat().filter((record) => matchIds.has(record.id))
-    }).then((records) => {
-      if (!cancelled) catalogActions.patch({ records, isLoading: false })
+    catalogActions.patch({
+      isLoading: true, error: null, records: [], recordsComplete: false,
+      filteredTotal: null, recordsSampled: false, loadProgress: 0,
+    })
+    void searchAsteroidCatalogPage({ query }).then((page) => {
+      if (!cancelled) {
+        catalogActions.patch({ records: page.records, isLoading: false, recordsSampled: page.nextCursor !== null })
+        setSearchPage({ total: page.total, nextCursor: page.nextCursor })
+      }
     }).catch((error: unknown) => {
       if (!cancelled) catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
     })
@@ -86,39 +86,49 @@ export function CatalogWorkspace() {
   const filtered = useMemo(() => filterCatalogRecords(catalog.records, catalog.filters), [catalog.filters, catalog.records])
   const pointCloud = useCatalogPointWorker(filtered, catalogEpoch)
 
-  async function loadEntireCatalog() {
-    if (!catalog.manifest) return []
+  async function scanEntireCatalog() {
+    if (!catalog.manifest) return null
     loadController.current?.abort()
     const controller = new AbortController()
     loadController.current = controller
     catalogActions.patch({ isLoading: true, error: null, loadProgress: 0 })
     try {
-      const records = await loadAllAsteroidRecords({
+      const result = await scanAsteroidCatalog({
         manifest: catalog.manifest,
-        orbitClassCode: catalog.filters.orbitClass,
+        filters: catalog.filters,
+        sampleLimit: window.matchMedia('(max-width: 800px)').matches ? 8_000 : 30_000,
         signal: controller.signal,
         onProgress: (loadProgress) => catalogActions.patch({ loadProgress }),
       })
-      if (controller.signal.aborted) return []
-      catalogActions.patch({ records, recordsComplete: true, loadProgress: 1, isLoading: false })
+      if (controller.signal.aborted) return null
+      catalogActions.patch({
+        records: result.records,
+        recordsComplete: true,
+        filteredTotal: result.total,
+        recordsSampled: result.total > result.records.length,
+        loadProgress: 1,
+        isLoading: false,
+      })
       setCursor({ chunkIndex: catalog.manifest.chunkCount, recordOffset: 0 })
       setHasMore(false)
-      return records
+      return result
     } catch (error) {
-      if (controller.signal.aborted) return []
+      if (controller.signal.aborted) return null
       catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
-      return []
+      return null
     } finally {
       if (loadController.current === controller) loadController.current = null
     }
   }
 
   async function selectAllFiltered() {
-    const source = catalog.recordsComplete ? catalog.records : await loadEntireCatalog()
-    if (!catalog.manifest || !source.length) return
-    const matches = filterCatalogRecords(source, catalog.filters)
-    catalogActions.selectAllFiltered(catalog.manifest.version, catalog.filters, matches.length)
-    uiActions.toast(`${matches.length.toLocaleString()} ${t('selectedCount')}`)
+    if (!catalog.manifest) return
+    const result = catalog.recordsComplete && catalog.filteredTotal !== null
+      ? { total: catalog.filteredTotal }
+      : await scanEntireCatalog()
+    if (!result) return
+    catalogActions.selectAllFiltered(catalog.manifest.version, catalog.filters, result.total)
+    uiActions.toast(`${result.total.toLocaleString()} ${t('selectedCount')}`)
   }
 
   async function loadMore() {
@@ -131,13 +141,35 @@ export function CatalogWorkspace() {
         cursor,
         pageSize: 400,
       })
-      catalogActions.patch({ records: [...catalog.records, ...page.records], isLoading: false })
+      catalogActions.patch({
+        records: [...catalog.records, ...page.records], isLoading: false,
+        filteredTotal: null, recordsSampled: false,
+      })
       setCursor(page.endCursor)
       setHasMore(page.endCursor.chunkIndex < catalog.manifest.chunkCount)
     } catch (error) {
       catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
     }
   }
+
+  async function loadMoreSearchResults() {
+    const query = catalog.filters.query.trim()
+    if (!query || searchPage.nextCursor === null || catalog.isLoading) return
+    catalogActions.patch({ isLoading: true, error: null })
+    try {
+      const page = await searchAsteroidCatalogPage({ query, cursor: searchPage.nextCursor })
+      const recordsById = new Map([...catalog.records, ...page.records].map((record) => [record.id, record]))
+      catalogActions.patch({ records: [...recordsById.values()], isLoading: false, recordsSampled: page.nextCursor !== null })
+      setSearchPage({ total: page.total, nextCursor: page.nextCursor })
+    } catch (error) {
+      catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  const resultTotal = catalog.recordsComplete && catalog.filteredTotal !== null
+    ? catalog.filteredTotal
+    : catalog.filters.query.trim() ? searchPage.total : filtered.length
+  const visibleTableCount = Math.min(filtered.length, 240)
 
   return (
     <div className="workspace-page catalog-workspace">
@@ -159,6 +191,11 @@ export function CatalogWorkspace() {
           <RangeFields label="e" value={catalog.filters.eccentricity} onChange={(value) => catalogActions.patchFilters({ eccentricity: value })} step="0.01" />
           <RangeFields label="i (°)" value={catalog.filters.inclination} onChange={(value) => catalogActions.patchFilters({ inclination: value })} step="1" />
           <RangeFields label="H" value={catalog.filters.absoluteMagnitude} onChange={(value) => catalogActions.patchFilters({ absoluteMagnitude: value })} step="0.5" />
+          <label className="field"><span>{t('magnitudeStatus')}</span><select value={catalog.filters.magnitudeStatus} onChange={(event) => catalogActions.patchFilters({ magnitudeStatus: event.target.value as MagnitudeStatus })}>
+            <option value="all">{t('magnitudeAll')}</option>
+            <option value="known">{t('magnitudeKnown')}</option>
+            <option value="unknown">{t('magnitudeUnknown')}</option>
+          </select></label>
           <RangeFields label="q (AU)" value={catalog.filters.perihelion} onChange={(value) => catalogActions.patchFilters({ perihelion: value })} step="0.1" />
           <button className="primary-button full-width" disabled={!filtered.length} onClick={() => selectionActions.addCatalogBodies(filtered.slice(0, 160).map(asteroidRecordToBody), true)}>{t('addSelection')} · {Math.min(filtered.length, 160)}</button>
           <button className="secondary-button full-width" disabled={!catalog.manifest || catalog.isLoading} onClick={() => void selectAllFiltered()}>{catalog.recordsComplete ? t('selectAllCatalog') : `${t('loadAllCatalog')} · ${Math.round(catalog.loadProgress * 100)}%`}</button>
@@ -166,7 +203,7 @@ export function CatalogWorkspace() {
         </aside>
 
         <section className="catalog-map glass-panel">
-          <div className="map-caption"><span>CATALOG MODE · GPU POINTS</span><strong>{Math.floor(pointCloud.positions.length / 2).toLocaleString()} / {filtered.length.toLocaleString()}</strong></div>
+          <div className="map-caption"><span>CATALOG MODE · GPU POINTS</span><strong>{Math.floor(pointCloud.positions.length / 2).toLocaleString()} / {resultTotal.toLocaleString()}</strong></div>
           {pointCloud.positions.length === filtered.length * 2 && filtered.length ? <CatalogPointCanvas
             records={filtered}
             positions={pointCloud.positions}
@@ -177,8 +214,12 @@ export function CatalogWorkspace() {
         </section>
 
         <section className="catalog-results glass-panel">
-          <div className="section-heading"><span>{filtered.length.toLocaleString()} {t('results')}</span><small>{(catalog.selectionScope?.count ?? selection.selectedIds.filter((id) => id.startsWith('asteroid:')).length).toLocaleString()} {t('selectedCount')}</small></div>
+          <div className="section-heading"><span>{resultTotal.toLocaleString()} {t('results')}</span><small>{(catalog.selectionScope?.count ?? selection.selectedIds.filter((id) => id.startsWith('asteroid:')).length).toLocaleString()} {t('selectedCount')}</small></div>
           {catalog.error && <div className="error-banner">{catalog.error}</div>}
+          {(catalog.recordsSampled || filtered.length > visibleTableCount) && <p className="catalog-result-note">
+            {t('showing')} {visibleTableCount.toLocaleString()} / {resultTotal.toLocaleString()}
+            {catalog.recordsComplete ? ` · ${t('stratifiedSample')}` : catalog.recordsSampled ? ` · ${t('refineSearch')}` : ''}
+          </p>}
           <div className="catalog-table" role="list">
             {filtered.slice(0, 240).map((record) => {
               const selected = Boolean(catalog.selectionScope) || selection.selectedIds.includes(record.id)
@@ -197,6 +238,7 @@ export function CatalogWorkspace() {
             })}
           </div>
           {catalog.manifest && !catalog.filters.query && hasMore && <button className="load-more" disabled={catalog.isLoading} onClick={() => void loadMore()}>{catalog.isLoading ? t('loading') : t('loadMore')}</button>}
+          {catalog.manifest && catalog.filters.query && searchPage.nextCursor !== null && <button className="load-more" disabled={catalog.isLoading} onClick={() => void loadMoreSearchResults()}>{catalog.isLoading ? t('loading') : t('loadMore')}</button>}
         </section>
       </div>
     </div>

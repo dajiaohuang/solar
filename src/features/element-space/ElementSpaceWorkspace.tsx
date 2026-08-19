@@ -3,7 +3,9 @@ import { TrajectoryCanvas3D } from '../../components/TrajectoryCanvas3D'
 import { majorBodiesWithPhysicalData, useBodyRegistry } from '../../app/bodyRegistry'
 import { useSimulationClock } from '../../engine/clock/useSimulationClock'
 import { useI18n } from '../../i18n/context'
-import { asteroidRecordToBody, loadAsteroidSectionPage } from '../../lib/catalogLoader'
+import { asteroidRecordToBody } from '../../lib/catalogLoader'
+import { scanAsteroidCatalog } from '../../lib/catalogScan'
+import { elementPlotCoordinates } from '../../lib/elementPlot'
 import { buildCurrentPositions } from '../../lib/trajectory'
 import { catalogActions, catalogStore, filterCatalogRecords } from '../../state/catalog-store'
 import { selectionActions, selectionStore } from '../../state/selection-store'
@@ -24,17 +26,10 @@ const CLASS_COLORS: Record<string, string> = {
   MCR: '#f08f6a', HUN: '#6fd0a8', HIL: '#9e8cff', JTA: '#c9a66b', TNO: '#8eaeff', OTHER: '#8795a5',
 }
 
-function toPlotDatum(record: AsteroidRecord, mode: PlotMode): PlotDatum {
-  const a = record.semiMajorAxisAU
-  const e = record.eccentricity
-  const values: Record<PlotMode, [number, number]> = {
-    'a-e': [a, e],
-    'a-i': [a, record.inclinationDeg],
-    'a-H': [a, record.absoluteMagnitude ?? 30],
-    'q-Q': [a * (1 - e), a * (1 + e)],
-    'a-period': [a, Math.sqrt(a ** 3)],
-  }
-  const [x, y] = values[mode]
+function toPlotDatum(record: AsteroidRecord, mode: PlotMode): PlotDatum | null {
+  const coordinates = elementPlotCoordinates(record, mode)
+  if (!coordinates) return null
+  const [x, y] = coordinates
   return { record, x, y }
 }
 
@@ -156,15 +151,37 @@ export function ElementSpaceWorkspace() {
   const { t, language } = useI18n()
 
   useEffect(() => {
-    if (!catalog.manifest || catalog.records.length) return
-    catalogActions.patch({ isLoading: true })
-    void loadAsteroidSectionPage({ manifest: catalog.manifest, orbitClassCode: 'all', pageSize: 1200 })
-      .then((page) => catalogActions.patch({ records: page.records, isLoading: false }))
-      .catch((error: unknown) => catalogActions.patch({ error: error instanceof Error ? error.message : String(error), isLoading: false }))
-  }, [catalog.manifest, catalog.records.length])
+    if (!catalog.manifest || (catalog.recordsComplete && catalog.filteredTotal !== null)) return
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => {
+      catalogActions.patch({ isLoading: true, error: null, loadProgress: 0 })
+      void scanAsteroidCatalog({
+        manifest: catalog.manifest!,
+        filters: catalog.filters,
+        sampleLimit: window.matchMedia('(max-width: 800px)').matches ? 8_000 : catalog.mode === 'lite' ? 8_000 : 30_000,
+        signal: controller.signal,
+        onProgress: (loadProgress) => catalogActions.patch({ loadProgress }),
+      }).then((result) => catalogActions.patch({
+        records: result.records,
+        recordsComplete: true,
+        filteredTotal: result.total,
+        recordsSampled: result.total > result.records.length,
+        loadProgress: 1,
+        isLoading: false,
+      })).catch((error: unknown) => {
+        if (!controller.signal.aborted) catalogActions.patch({ error: error instanceof Error ? error.message : String(error), isLoading: false })
+      })
+    }, 250)
+    return () => {
+      window.clearTimeout(timer)
+      controller.abort()
+    }
+  }, [catalog.filteredTotal, catalog.filters, catalog.manifest, catalog.mode, catalog.recordsComplete])
 
   const records = useMemo(() => filterCatalogRecords(catalog.records, catalog.filters), [catalog.filters, catalog.records])
-  const data = useMemo(() => records.slice(0, catalog.mode === 'lite' ? 8000 : 30_000).map((record) => toPlotDatum(record, mode)), [catalog.mode, mode, records])
+  const data = useMemo(() => records
+    .map((record) => toPlotDatum(record, mode))
+    .filter((datum): datum is PlotDatum => datum !== null), [mode, records])
   const selectedSet = useMemo(() => new Set(selection.selectedIds), [selection.selectedIds])
   const miniBodies = useMemo(() => selection.selectedIds.map((id) => bodiesById.get(id)).filter((body): body is CelestialBody => Boolean(body)).slice(0, 160), [bodiesById, selection.selectedIds])
   const miniFrame = useMemo(() => buildCurrentPositions({ bodies: miniBodies, bodiesById, referenceId: 'sun', julianDay: clock.julianDay }), [bodiesById, clock.julianDay, miniBodies])
@@ -178,6 +195,7 @@ export function ElementSpaceWorkspace() {
     </div>
     <div className="elements-layout">
       <section className="chart-panel glass-panel">
+        <div className="sample-caption">{t('showing')} {data.length.toLocaleString()} / {(catalog.filteredTotal ?? records.length).toLocaleString()} · {t('stratifiedSample')}{mode === 'a-H' ? ` · ${t('unknownMagnitudeExcluded')}` : ''}</div>
         <div className="axis-title y">{yLabel}</div><ElementScatter data={data} mode={mode} selectedIds={selectedSet} onSelect={(selected) => {
           const limited = selected.slice(0, 160)
           selectionActions.addCatalogBodies(limited.map(asteroidRecordToBody))
