@@ -27,8 +27,10 @@ for (const path of [
   'index.html', 'manifest.webmanifest', 'sw.js', 'build-info.json', 'health.json',
   'capacity-report.json', 'asset-manifest.json', 'sitemap.xml', 'robots.txt',
   'scientific-validation.json', 'validation/index.html', 'zh/validation/index.html',
+  'stories/geocentric-model/index.html', 'zh/stories/geocentric-model/index.html',
   'stories/retrograde-mars/index.html', 'zh/stories/retrograde-mars/index.html',
   'objects/ceres/index.html', 'zh/objects/ceres/index.html', 'og-image.png',
+  'og/stories/geocentric-model-en.png', 'og/stories/geocentric-model-zh.png',
   'og/stories/retrograde-mars-en.png', 'og/stories/retrograde-mars-zh.png',
   'og/objects/ceres-en.png', 'og/objects/ceres-zh.png',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'readme-screenshot.png',
@@ -36,6 +38,8 @@ for (const path of [
 
 await Promise.all([
   requirePngDimensions('og-image.png', 1200, 630),
+  requirePngDimensions('og/stories/geocentric-model-en.png', 1200, 630),
+  requirePngDimensions('og/stories/geocentric-model-zh.png', 1200, 630),
   requirePngDimensions('og/stories/retrograde-mars-en.png', 1200, 630),
   requirePngDimensions('og/objects/ceres-zh.png', 1200, 630),
   requirePngDimensions('icons/icon-192.png', 192, 192),

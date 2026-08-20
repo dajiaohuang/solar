@@ -39,12 +39,12 @@ export function StoriesWorkspace() {
   return <div className="workspace-page stories-workspace">
     <header className="page-heading"><div><span className="eyebrow">{t('storiesKicker')}</span><h1>{t('stories')}</h1><p>{t('storiesDescription')}</p></div><button className="quiet-button" onClick={copyStepLink}>↗ {t('copyStoryLink')}</button></header>
     <div className="stories-layout">
-      <aside className="story-index glass-panel" aria-label={t('stories')}>{stories.map((item, index) => <button aria-current={item.id === story.id ? 'true' : undefined} className={item.id === story.id ? 'active' : ''} key={item.id} onClick={() => selectStory(item.id)}><em>{String(index + 1).padStart(2, '0')}</em><span><strong>{item.title[language]}</strong><small>{item.summary[language]}</small></span></button>)}</aside>
+      <aside className="story-index glass-panel" aria-label={t('stories')}>{stories.map((item, index) => <button aria-current={item.id === story.id ? 'true' : undefined} className={`${item.id === story.id ? 'active' : ''}${item.core ? ' core' : ''}`} key={item.id} onClick={() => selectStory(item.id)}><em>{String(index + 1).padStart(2, '0')}</em><span><strong>{item.title[language]}{item.core && <i className="story-core-badge">{t('coreCourse')}</i>}</strong><small>{item.summary[language]}</small></span></button>)}</aside>
       <section className={`story-hero story-${story.id} glass-panel`}>
         <div className="story-orbit-art" aria-hidden="true"><i className="orbit orbit-one" /><i className="orbit orbit-two" /><i className="orbit orbit-three" /><b className="story-sun">☉</b><b className="story-body-one" /><b className="story-body-two" /></div>
         <div className="story-copy">
           <span className="eyebrow">{step.stage.toUpperCase()} · {stepIndex + 1}/{story.steps.length}</span>
-          <h2>{story.title[language]}</h2><h3>{step.title[language]}</h3>
+          {story.core && <span className="story-core-label">{t('coreCourse')}</span>}<h2>{story.title[language]}</h2><h3>{step.title[language]}</h3>
           <div className="story-observation"><strong>{t('storyQuestion')}</strong><p>{step.prompt[language]}</p></div>
           <button className="story-reveal" aria-expanded={explanationOpen} onClick={() => setRevealedStep(explanationOpen ? null : stepKey)}>{explanationOpen ? t('hideExplanation') : t('revealExplanation')} <span>{explanationOpen ? '−' : '+'}</span></button>
           {explanationOpen && <p className="story-explanation">{step.body[language]}</p>}

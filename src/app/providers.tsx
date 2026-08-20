@@ -11,7 +11,7 @@ import { DEFAULT_SIMULATION_STATE, simulationActions, simulationStore } from '..
 import { uiActions, uiStore } from '../state/ui-store'
 import { DEFAULT_MISSION_STATE, missionActions, missionStore } from '../state/mission-store'
 
-const DEFAULT_STORY = 'retrograde-mars'
+const DEFAULT_STORY = 'geocentric-model'
 
 function routeForState(state: AppUrlState) {
   if (state.route) return state.route

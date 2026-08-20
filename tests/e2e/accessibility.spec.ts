@@ -16,7 +16,7 @@ test('visitor, story, and evidence surfaces have no serious automated accessibil
   await expect(page.getByRole('heading', { name: /Stories|引导故事/ })).toBeVisible()
   await expectNoSeriousViolations(page)
   await page.getByRole('button', { name: /Open this scene|打开此场景/ }).click()
-  await expect(page.getByRole('dialog', { name: /Why Mars moves backward|为什么火星会逆行/ })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: /From geocentrism to the geocentric frame|从地心说到地心参考系/ })).toBeVisible()
   await expectNoSeriousViolations(page)
 
   await page.goto('./?v=3&page=about')

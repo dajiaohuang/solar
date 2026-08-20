@@ -31,7 +31,7 @@ const initialUiState: UiState = {
   sidebarOpen: true,
   toast: null,
   elementPlot: 'a-e',
-  storyId: 'retrograde-mars',
+  storyId: 'geocentric-model',
   storyStep: 0,
   storyGuideOpen: false,
 }

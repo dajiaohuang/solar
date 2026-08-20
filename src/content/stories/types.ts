@@ -39,6 +39,7 @@ export type StoryCheckpoint = {
 
 export type Story = {
   id: string
+  core?: boolean
   title: LocalizedText
   summary: LocalizedText
   boundary: LocalizedText

@@ -375,10 +375,14 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 .story-index { grid-row: 1 / 3; padding: 8px; overflow-y: auto; }
 .story-index button { width: 100%; display: grid; grid-template-columns: 30px 1fr; gap: 7px; border: 0; border-bottom: 1px solid var(--line); background: transparent; padding: 13px 7px; text-align: left; cursor: pointer; }
 .story-index button.active { background: rgba(98,208,181,.07); }
+.story-index button.core { border-left: 2px solid rgba(227,187,104,.72); }
 .story-index em { font: normal 9px var(--font-mono); color: var(--subtle); }
 .story-index button.active em { color: var(--accent); }
 .story-index button span { display: grid; gap: 5px; }
 .story-index strong { font-size: 11px; font-weight: 500; }
+.story-core-badge, .story-core-label { display: inline-block; border: 1px solid rgba(227,187,104,.42); color: var(--accent-2); background: rgba(227,187,104,.07); font: normal 7px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+.story-core-badge { margin-left: 7px; padding: 2px 4px; vertical-align: 1px; }
+.story-core-label { margin: 0 0 8px; padding: 4px 6px; }
 .story-index small { color: var(--muted); font-size: 9px; line-height: 1.45; }
 .story-hero { position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(420px, 1.2fr) minmax(310px, .8fr); }
 .story-orbit-art { position: relative; min-height: 500px; background: radial-gradient(circle at 46% 50%, rgba(227,187,104,.14), transparent 3%, transparent 18%, rgba(98,208,181,.03) 19%, transparent 45%); }

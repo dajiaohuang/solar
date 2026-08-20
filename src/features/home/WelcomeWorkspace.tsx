@@ -24,7 +24,7 @@ export function WelcomeWorkspace() {
   }
 
   function openStories() {
-    uiActions.selectStory('retrograde-mars', 0)
+    uiActions.selectStory('geocentric-model', 0)
     uiActions.navigate('stories')
   }
 

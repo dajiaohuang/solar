@@ -2,6 +2,18 @@
 
 All notable changes to Solar Atlas are documented here. The project follows semantic versioning after the prototype phase.
 
+## 0.11.0 — 2026-08-20
+
+### Added
+
+- A bilingual six-stage core course, “From geocentrism to the geocentric frame,” covering the historical model’s predictive power, heliocentric evidence, the model/frame distinction, and modern GCRS use with Library of Congress, NASA, IAU, and JPL sources.
+- A dedicated core-course badge, static bilingual knowledge pages, independent social cards, and regression coverage for course structure and both guided-learning entry points.
+
+### Changed
+
+- The visitor Learn path, default Stories selection, and final first-run onboarding action now begin with the geocentrism course before learners continue to retrograde motion, resonances, small-body structure, and missions.
+- Deployment Lighthouse coverage now audits the core geocentrism knowledge page.
+
 ## 0.10.0 — 2026-08-20
 
 ### Added

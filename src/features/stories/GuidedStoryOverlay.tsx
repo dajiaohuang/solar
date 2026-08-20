@@ -61,7 +61,7 @@ export function GuidedStoryOverlay() {
 
   return <aside className="guided-story-overlay glass-panel" role="dialog" aria-labelledby="guided-story-title">
     <header>
-      <div><span className="eyebrow">{stageLabel(step.stage, language)} · {stepIndex + 1}/{story.steps.length}</span><strong id="guided-story-title">{story.title[language]}</strong></div>
+      <div><span className="eyebrow">{story.core ? `${t('coreCourse')} · ` : ''}{stageLabel(step.stage, language)} · {stepIndex + 1}/{story.steps.length}</span><strong id="guided-story-title">{story.title[language]}</strong></div>
       <div><button aria-label={t('minimizeGuide')} onClick={() => setMinimized(true)}>—</button><button aria-label={t('closeGuide')} onClick={uiActions.stopStory}>×</button></div>
     </header>
     <div className="story-guide-progress" aria-hidden="true"><i style={{ width: `${(stepIndex + 1) / story.steps.length * 100}%` }} /></div>

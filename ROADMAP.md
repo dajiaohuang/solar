@@ -2,6 +2,11 @@
 
 The roadmap records intent, not a promise of dates. Scientific correctness, reproducibility, and bounded browser performance take priority over feature count.
 
+## 0.11.0 — geocentrism as the core guide
+
+- A dedicated six-stage course now connects the predictive power of historical geocentrism, the evidence for a moving Earth, and the continuing scientific value of modern geocentric coordinates.
+- The course is the default Learn path and first-run handoff, with an explicit distinction between a physical theory, a translated teaching frame, and the relativistic IAU GCRS.
+
 ## 0.10.0 — guided atlas and public validation
 
 - Persistent six-stage guided stories, checkpoints, highlighted controls, global search, local scene libraries, and five-section object profiles.
@@ -21,7 +26,7 @@ The roadmap records intent, not a promise of dates. Scientific correctness, repr
 
 - Visitor home, mobile navigation, bilingual titles, browser history, URL schema v3, and legacy v2 replay.
 - Immutable MPCORB releases, compressed bounded delivery, build identity, Pages capacity evidence, smoke incidents, rollback, offline shell, and scheduled Chromium/Firefox/WebKit accessibility checks.
-- Seven observation-first stories with primary sources and explicit limits for two-body, coordinate-frame, resonance, Trojan, NEO, Pluto, and spacecraft claims.
+- Eight observation-first stories with primary sources and explicit limits for geocentrism, two-body propagation, coordinate frames, resonance, Trojans, NEOs, Pluto, and spacecraft claims.
 
 ## Longer-term investigations
 

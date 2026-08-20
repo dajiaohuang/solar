@@ -134,7 +134,7 @@ test('navigates through the atlas workspaces without console errors', async ({ p
 })
 
 test('applies a reproducible story scene with the requested frame and view', async ({ page }) => {
-  await page.goto('./?v=3&page=stories')
+  await page.goto('./?v=3&page=stories&story=retrograde-mars')
   await expect(page.getByRole('heading', { name: /Stories|引导故事/ })).toBeVisible()
   await page.getByRole('button', { name: /Next|下一步/ }).click()
   await page.getByRole('button', { name: /Next|下一步/ }).click()
@@ -153,6 +153,34 @@ test('applies a reproducible story scene with the requested frame and view', asy
   await expect(page.getByLabel(/Trajectory window|轨迹时间窗/)).toHaveValue('7300')
   await expect(page.locator('.measure-ribbon select').nth(0)).toHaveValue('jupiter')
   await expect(page.locator('.measure-ribbon select').nth(1)).toHaveValue('saturn')
+})
+
+test('makes geocentrism the core guided-learning entry point', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=3&page=home&lang=en')
+  await page.getByRole('button', { name: /Start with geocentrism/ }).first().click()
+  await expect(page.getByRole('heading', { name: 'Stories' })).toBeVisible()
+  await expect(page).toHaveURL(/[?&]story=geocentric-model(?:&|$)/)
+  await expect(page.getByText('Core course').first()).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'From geocentrism to the geocentric frame' })).toBeVisible()
+  await page.getByRole('button', { name: 'Open this scene' }).click()
+  await expect(page.getByRole('dialog', { name: 'From geocentrism to the geocentric frame' })).toBeVisible()
+  await expect(page).toHaveURL(/[?&]ref=earth(?:&|$)/)
+  await expect(page).toHaveURL(/[?&]guide=1(?:&|$)/)
+})
+
+test('finishes first-run onboarding by opening the geocentrism core course', async ({ page }) => {
+  await page.goto('./?v=3&page=home&lang=en')
+  await page.getByRole('button', { name: /The Solar System now/ }).first().click()
+  const onboarding = page.getByRole('dialog', { name: 'Four controls, then you’re free' })
+  await expect(onboarding).toBeVisible()
+  await onboarding.getByRole('button', { name: /Next tip/ }).click()
+  await onboarding.getByRole('button', { name: /Next tip/ }).click()
+  await onboarding.getByRole('button', { name: /Next tip/ }).click()
+  await expect(onboarding).toContainText('core course on geocentrism')
+  await onboarding.getByRole('button', { name: 'Start core course' }).click()
+  await expect(page.getByRole('heading', { name: 'Stories' })).toBeVisible()
+  await expect(page).toHaveURL(/[?&]story=geocentric-model(?:&|$)/)
 })
 
 test('computes the Earth-to-Mars transfer and worker porkchop map', async ({ page }) => {

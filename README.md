@@ -4,7 +4,7 @@
 
 [Live demo](https://dajiaohuang.github.io/solar/) · [中文文档](./README-CN.md) · [Scientific contract](#scientific-contract)
 
-Current release: **v0.10.0** · [Changelog](./CHANGELOG.md) · [Roadmap](./ROADMAP.md) · [Performance budgets](./PERFORMANCE.md)
+Current release: **v0.11.0** · [Changelog](./CHANGELOG.md) · [Roadmap](./ROADMAP.md) · [Performance budgets](./PERFORMANCE.md)
 
 ![Solar Atlas overview](./public/readme-screenshot.png)
 
@@ -18,7 +18,7 @@ Solar Atlas connects spatial views, orbital-element space, time events, and data
 - **Orbital Element Space:** linked `a–e`, `a–i`, `a–H`, `q–Q`, and `a–period` plots, Kirkwood/resonance markers, brush selection, keyboard point inspection, distribution histograms, and synchronized 3D highlighting.
 - **Events Lab:** adaptive, cancellable close-approach, conjunction, opposition, and central-body apsis jobs with local refinement curves, sampling-adequacy warnings, explicit uncertainty semantics, timeline navigation, and CSV/JSON export.
 - **Mission Lab:** directionally correct Hohmann baselines in km/s, phase-angle guidance, a residual-checked universal-variable Lambert solver, departure/arrival `v∞`, C3, and a keyboard/click-selectable porkchop map that can apply an opportunity’s dates.
-- **Guided Stories:** seven six-stage, observation-first courses that persist across workspaces, highlight relevant controls, reveal explanations on demand, state model boundaries, and finish with a checkpoint.
+- **Guided Stories:** eight six-stage, observation-first courses. The core course separates historical geocentrism from the modern geocentric frame; every course persists across workspaces, highlights relevant controls, states model boundaries, and finishes with a checkpoint.
 - **Object atlas:** tabbed Overview, Orbit, Physical, Context, and Sources profiles for major and catalog bodies, with provenance-aware deep links and explicit NEO risk wording.
 - **Reproducibility:** v3 scene URLs record dataset version, epoch, reference frames, focus set, filters, active guided-story step, mission endpoints/dates, language, and view settings. Complete scenes can also be saved locally and exported/imported as versioned JSON.
 - **Installable and discoverable web app:** first-install offline shell, update prompt, Web App Manifest, Open Graph image, JSON-LD, bilingual static knowledge/object pages, sitemap, and code-split workspaces.
@@ -26,6 +26,7 @@ Solar Atlas connects spatial views, orbital-element space, time events, and data
 
 ## Explore a reproducible scene
 
+- [Start the core course: geocentrism vs. the geocentric frame](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=geocentric-model&lang=en)
 - [Explain Mars retrograde motion](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=retrograde-mars&step=2&lang=en)
 - [Read the Kirkwood gaps in element space](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=kirkwood-gaps&step=1&lang=en)
 - [Compare the four NEO orbit classes](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=neo-types&lang=en)

@@ -4,7 +4,7 @@
 
 [在线演示](https://dajiaohuang.github.io/solar/) · [English](./README.md)
 
-当前版本：**v0.10.0** · [更新日志](./CHANGELOG.md) · [路线图](./ROADMAP.md) · [性能预算](./PERFORMANCE.md)
+当前版本：**v0.11.0** · [更新日志](./CHANGELOG.md) · [路线图](./ROADMAP.md) · [性能预算](./PERFORMANCE.md)
 
 ![Solar Atlas](./public/readme-screenshot.png)
 
@@ -18,7 +18,7 @@ Solar Atlas 把空间视图、轨道元素空间、时间事件与数据证据�
 - **轨道元素空间：** `a–e`、`a–i`、`a–H`、`q–Q`、`a–周期` 联动图；Kirkwood gap / 共振标记；键盘逐点检查、分布直方图、框选与三维同步聚焦。
 - **事件实验室：** 自适应采样、可取消的近距离、合、冲及中心天体拱点任务；显示事件局部细化曲线与采样充分性，并明确区分数值区间与未估计的物理不确定性。
 - **任务实验室：** 单位与方向正确的霍曼基线、相位角、强制残差收敛的通用变量 Lambert 解、出发/到达 `v∞`、C3，以及可点击/键盘选择并回填日期的 Porkchop 图。
-- **引导故事：** 七门六阶段、观察优先的课程，可跨工作区持续、突出相关控件、按需揭示解释、陈述模型边界并以检查题收尾。
+- **引导故事：** 八门六阶段、观察优先的课程；核心课程专门区分历史地心说与现代地心参考系。所有课程均可跨工作区持续、突出相关控件、陈述模型边界并以检查题收尾。
 - **对象图谱：** 主要天体与目录对象均有“概览 / 轨道 / 物理 / 背景 / 来源”档案，并为 NEO 分类与风险判断设置明确边界。
 - **可复现链接：** v3 URL 记录数据集版本、历元、参考系、天体集合、筛选器、活动课程步骤、任务端点/日期、语言与视图；完整场景还可保存在本地，并以带版本的 JSON 导入/导出。
 - **可安装且可发现：** 首次安装即可离线使用应用壳、更新提示、Web App Manifest、Open Graph 图、JSON-LD、中英静态知识/天体页、sitemap 与路由代码分割。
@@ -26,6 +26,7 @@ Solar Atlas 把空间视图、轨道元素空间、时间事件与数据证据�
 
 ## 打开可复现场景
 
+- [开始核心课程：地心说与地心参考系](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=geocentric-model&lang=zh)
 - [解释火星逆行](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=retrograde-mars&step=2&lang=zh)
 - [在元素空间观察柯克伍德空隙](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=kirkwood-gaps&step=1&lang=zh)
 - [比较四类 NEO 轨道](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=neo-types&lang=zh)

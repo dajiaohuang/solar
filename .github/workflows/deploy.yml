@@ -75,7 +75,7 @@ jobs:
         with:
           urls: |
             http://127.0.0.1:4188/solar/?v=3&page=home&lang=en
-            http://127.0.0.1:4188/solar/stories/retrograde-mars/
+            http://127.0.0.1:4188/solar/stories/geocentric-model/
           runs: 3
           configPath: ./.lighthouserc.json
           uploadArtifacts: true
