@@ -9,6 +9,7 @@ import { pipeline } from 'node:stream/promises'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const CACHE_FILE = join(ROOT, '.cache', 'solar-build-info.json')
+const SCIENTIFIC_VALIDATION_CACHE = join(ROOT, '.cache', 'scientific-validation.json')
 const DIST = join(ROOT, 'dist')
 const PUBLIC = join(ROOT, 'public')
 const SITE_BASE = 'https://dajiaohuang.github.io/solar/'
@@ -179,7 +180,7 @@ function pageStyles() {
   return `:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#05080c;color:#dbe5e8}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 72% 0,rgba(41,89,98,.25),transparent 38%),#05080c}main{width:min(900px,calc(100% - 40px));margin:auto;padding:64px 0 96px}.brand{color:#e3bb68;letter-spacing:.14em;text-transform:uppercase;text-decoration:none}.eyebrow{color:#62d0b5;font:12px ui-monospace,monospace;letter-spacing:.16em}h1{font-size:clamp(42px,8vw,76px);font-weight:300;line-height:1;margin:.25em 0}h2{font-weight:450;margin-top:42px}p,li{color:#9eb0b8;line-height:1.75}.lead{font-size:19px;max-width:760px}.card{border:1px solid rgba(152,186,202,.18);background:rgba(12,18,24,.9);padding:24px;margin:16px 0}.card span{color:#62d0b5;font:11px ui-monospace,monospace;text-transform:uppercase}.cta{display:inline-block;margin-top:28px;padding:14px 19px;background:#62d0b5;color:#06110f;text-decoration:none;font-weight:700;border-radius:3px}.sources a{display:block;color:#dbe5e8;padding:10px 0}footer{border-top:1px solid rgba(152,186,202,.18);margin-top:56px;padding-top:22px;color:#71858f;font-size:13px}`
 }
 
-function staticPageHtml({ lang, path, title, description, sections, appUrl, schemaType = 'LearningResource', boundary, sources = [] }) {
+function staticPageHtml({ lang, path, title, description, sections, appUrl, schemaType = 'LearningResource', boundary, sources = [], imagePath = 'og-image.png' }) {
   const isZh = lang === 'zh'
   const canonical = `${SITE_BASE}${path}/`
   const englishPath = path.replace(/^zh\//, '')
@@ -198,7 +199,7 @@ function staticPageHtml({ lang, path, title, description, sections, appUrl, sche
   }).replaceAll('<', '\\u003c')
   const boundaryCard = boundary ? `<section class="card"><span>${isZh ? '模型边界' : 'MODEL BOUNDARY'}</span><h2>${isZh ? '这页不能证明什么' : 'What this page does not prove'}</h2><p>${escapeHtml(boundary)}</p></section>` : ''
   const sourceList = sources.length ? `<section class="card sources"><span>${isZh ? '一手来源' : 'PRIMARY SOURCES'}</span><h2>${isZh ? '继续核验' : 'Continue the evidence trail'}</h2>${sources.map((source) => `<a href="${escapeHtml(source.url)}" rel="noreferrer">${escapeHtml(source.label)} ↗</a>`).join('')}</section>` : ''
-  return `<!doctype html><html lang="${isZh ? 'zh-CN' : 'en'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} — Solar Atlas</title><meta name="description" content="${escapeHtml(description)}"><link rel="canonical" href="${canonical}"><link rel="alternate" hreflang="en" href="${englishUrl}"><link rel="alternate" hreflang="zh-CN" href="${chineseUrl}"><link rel="alternate" hreflang="x-default" href="${englishUrl}"><meta property="og:type" content="article"><meta property="og:title" content="${escapeHtml(title)} — Solar Atlas"><meta property="og:description" content="${escapeHtml(description)}"><meta property="og:url" content="${canonical}"><meta property="og:image" content="${SITE_BASE}og-image.png"><meta name="twitter:card" content="summary_large_image"><style>${pageStyles()}</style><script type="application/ld+json">${jsonLd}</script></head><body><main><a class="brand" href="${SITE_BASE}">☉ Solar Atlas</a><p class="eyebrow">${isZh ? '可复现的太阳系知识页' : 'REPRODUCIBLE SOLAR SYSTEM KNOWLEDGE'}</p><h1>${escapeHtml(title)}</h1><p class="lead">${escapeHtml(description)}</p>${sections.map((section, index) => `<section class="card"><span>${String(index + 1).padStart(2, '0')}</span><h2>${escapeHtml(section.title)}</h2><p>${escapeHtml(section.body)}</p></section>`).join('')}${boundaryCard}${sourceList}<a class="cta" href="${appUrl}">${isZh ? '在 Solar Atlas 中打开 ↗' : 'Open in Solar Atlas ↗'}</a><footer>${isZh ? '教学与探索工具；不是业务星历、导航或碰撞预警产品。' : 'Educational exploration; not an operational ephemeris, navigation, or collision-warning product.'}</footer></main></body></html>`
+  return `<!doctype html><html lang="${isZh ? 'zh-CN' : 'en'}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} — Solar Atlas</title><meta name="description" content="${escapeHtml(description)}"><link rel="canonical" href="${canonical}"><link rel="alternate" hreflang="en" href="${englishUrl}"><link rel="alternate" hreflang="zh-CN" href="${chineseUrl}"><link rel="alternate" hreflang="x-default" href="${englishUrl}"><meta property="og:type" content="article"><meta property="og:title" content="${escapeHtml(title)} — Solar Atlas"><meta property="og:description" content="${escapeHtml(description)}"><meta property="og:url" content="${canonical}"><meta property="og:image" content="${SITE_BASE}${imagePath}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="${escapeHtml(title)} — Solar Atlas"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="${SITE_BASE}${imagePath}"><style>${pageStyles()}</style><script type="application/ld+json">${jsonLd}</script></head><body><main><a class="brand" href="${SITE_BASE}">☉ Solar Atlas</a><p class="eyebrow">${isZh ? '可复现的太阳系知识页' : 'REPRODUCIBLE SOLAR SYSTEM KNOWLEDGE'}</p><h1>${escapeHtml(title)}</h1><p class="lead">${escapeHtml(description)}</p>${sections.map((section, index) => `<section class="card"><span>${String(index + 1).padStart(2, '0')}</span><h2>${escapeHtml(section.title)}</h2><p>${escapeHtml(section.body)}</p></section>`).join('')}${boundaryCard}${sourceList}<a class="cta" href="${appUrl}">${isZh ? '在 Solar Atlas 中打开 ↗' : 'Open in Solar Atlas ↗'}</a><footer>${isZh ? '教学与探索工具；不是业务星历、导航或碰撞预警产品。' : 'Educational exploration; not an operational ephemeris, navigation, or collision-warning product.'}</footer></main></body></html>`
 }
 
 async function writeStaticKnowledgePages() {
@@ -220,14 +221,90 @@ async function writeStaticKnowledgePages() {
         sections: story.steps.map((step) => ({ title: step.title[lang], body: step.body[lang] })),
         boundary: story.boundary[lang],
         sources: story.sources,
+        imagePath: `og/stories/${story.id}-${lang}.png`,
         appUrl: `${SITE_BASE}?v=3&page=stories&story=${encodeURIComponent(story.id)}&lang=${lang}`,
       })
     }
   }
   const objects = [
-    { slug: 'ceres', query: 'Ceres', en: ['Ceres', 'Explore the largest object in the main asteroid belt through its orbit, catalog record, and element-space neighborhood.'], zh: ['谷神星', '通过轨道、目录记录与元素空间邻域探索主小行星带中最大的天体。'] },
-    { slug: 'bennu', query: 'Bennu', en: ['Bennu', 'Inspect a well-studied near-Earth asteroid and follow its traceable MPCORB or SBDB orbital elements.'], zh: ['贝努', '检查一颗研究充分的近地小行星，并追踪其可溯源的 MPCORB 或 SBDB 轨道根数。'] },
-    { slug: 'apophis', query: 'Apophis', en: ['Apophis', 'Study an Aten-class near-Earth orbit while keeping orbit class separate from impact-risk assessment.'], zh: ['阿波菲斯', '研究一条阿登型近地轨道，同时明确区分轨道分类与撞击风险评估。'] },
+    {
+      slug: 'ceres', query: 'Ceres',
+      en: ['Ceres', 'Explore the largest object in the main asteroid belt through its orbit, physical context, evidence, and element-space neighborhood.'],
+      zh: ['谷神星', '通过轨道、物理背景、证据与元素空间邻域探索主小行星带中最大的天体。'],
+      sections: {
+        en: [
+          ['Overview', 'Ceres is the only dwarf planet in the inner Solar System and the largest body in the main asteroid belt.'],
+          ['Orbit', 'Its multi-year heliocentric orbit places it inside the dense main-belt population; open the atlas to compare its semi-major axis and eccentricity with nearby objects.'],
+          ['Physical', 'Ceres is roughly 940 km across and has a differentiated, water-rich interior inferred from multiple observations.'],
+          ['Context', 'NASA’s Dawn mission orbited Ceres and connected its global shape, composition, gravity, topography, and bright salt deposits.'],
+          ['Sources', 'Use the linked NASA record for physical interpretation and the atlas provenance panel for the exact orbital dataset, epoch, and parser identity.'],
+        ],
+        zh: [
+          ['概览', '谷神星是内太阳系唯一的矮行星，也是主小行星带中最大的天体。'],
+          ['轨道', '它以多年周期绕太阳运行，位于密集的主带族群中；可在图谱里把其半长轴与偏心率同邻近天体比较。'],
+          ['物理', '谷神星直径约 940 千米，多类观测表明它具有分异且富水的内部。'],
+          ['背景', 'NASA 黎明号曾环绕谷神星，并测量其整体形状、成分、重力、地形和明亮盐沉积。'],
+          ['来源', '物理解读请沿用下方 NASA 资料；精确轨道数据集、历元和解析器身份请在图谱的来源面板核验。'],
+        ],
+      },
+      boundary: {
+        en: 'The browser trajectory is an educational approximation. It does not reproduce Dawn navigation, a gravity field, surface geology, or a precision Ceres ephemeris.',
+        zh: '浏览器轨迹是教学近似，不能复现黎明号导航、非球形重力场、表面地质或高精度谷神星星历。',
+      },
+      sources: [{ label: 'NASA Science — Ceres facts', url: 'https://science.nasa.gov/dwarf-planets/ceres/facts/' }, { label: 'NASA Dawn science at Ceres', url: 'https://science.nasa.gov/mission/dawn/science/ceres/' }],
+    },
+    {
+      slug: 'bennu', query: 'Bennu',
+      en: ['Bennu', 'Inspect a well-studied near-Earth asteroid and follow its traceable orbital elements, mission context, and interpretation limits.'],
+      zh: ['贝努', '检查这颗研究充分的近地小行星，并追踪其可溯源轨道根数、任务背景与解读边界。'],
+      sections: {
+        en: [
+          ['Overview', 'Bennu is a small carbon-rich near-Earth asteroid and the sample-return target of NASA’s OSIRIS-REx mission.'],
+          ['Orbit', 'Its roughly 1.2-year solar orbit brings it into Earth’s orbital neighborhood; orbit class describes geometry, not a collision forecast.'],
+          ['Physical', 'Bennu is about half a kilometer wide, rotates in about 4.3 hours, and has a rubble-rich spinning-top shape.'],
+          ['Context', 'OSIRIS-REx mapped Bennu, collected material in 2020, and delivered a pristine sample to Earth in 2023.'],
+          ['Sources', 'Use NASA for mission and physical results; use the atlas data panel to distinguish pinned MPCORB elements from an on-demand JPL SBDB record.'],
+        ],
+        zh: [
+          ['概览', '贝努是一颗富碳的小型近地小行星，也是 NASA OSIRIS-REx 采样返回任务的目标。'],
+          ['轨道', '它约每 1.2 年绕太阳一周并进入地球轨道邻域；轨道类别描述几何关系，不是碰撞预报。'],
+          ['物理', '贝努宽约半千米，自转周期约 4.3 小时，呈碎石堆形成的陀螺状。'],
+          ['背景', 'OSIRIS-REx 对贝努完成测绘，2020 年采样，并于 2023 年把原始样本送回地球。'],
+          ['来源', '任务和物理结果沿用 NASA 资料；图谱数据面板会区分固定 MPCORB 根数与按需查询的 JPL SBDB 记录。'],
+        ],
+      },
+      boundary: {
+        en: 'Two-body osculating elements can illustrate orbit shape but cannot estimate future encounter uncertainty or impact probability. Use JPL’s operational products for risk assessment.',
+        zh: '二体密切根数可以说明轨道形状，但不能估计未来交会不确定性或撞击概率；风险评估必须使用 JPL 的业务产品。',
+      },
+      sources: [{ label: 'NASA Science — Bennu facts', url: 'https://science.nasa.gov/solar-system/asteroids/101955-bennu/facts/' }, { label: 'NASA OSIRIS-REx mission', url: 'https://science.nasa.gov/mission/osiris-rex/' }, { label: 'JPL SBDB API documentation', url: 'https://ssd-api.jpl.nasa.gov/doc/sbdb.html' }],
+    },
+    {
+      slug: 'apophis', query: 'Apophis',
+      en: ['Apophis', 'Study a near-Earth orbit and the 2029 observing context while keeping orbit class separate from impact-risk assessment.'],
+      zh: ['阿波菲斯', '研究这条近地轨道及 2029 年观测背景，同时明确区分轨道分类与撞击风险评估。'],
+      sections: {
+        en: [
+          ['Overview', 'Apophis is a stony near-Earth asteroid whose unusually close, safe 2029 flyby will create a rare observing opportunity.'],
+          ['Orbit', 'It currently follows an Aten-type Earth-crossing orbit; Earth’s 2029 gravity assist will substantially change its subsequent solar orbit.'],
+          ['Physical', 'Radar observations indicate a roughly 340 m, elongated body in non-principal-axis rotation.'],
+          ['Context', 'The encounter is valuable because Earth’s tides can change the object’s rotation, surface, and orbit while instruments observe the response.'],
+          ['Sources', 'Use NASA and JPL for the current encounter solution. The atlas profile identifies its element source and never converts an orbit-class label into a hazard claim.'],
+        ],
+        zh: [
+          ['概览', '阿波菲斯是一颗石质近地小行星；它将在 2029 年安全地近距离飞掠地球，形成罕见观测机会。'],
+          ['轨道', '它目前处于穿越地球轨道的阿登型轨道；2029 年地球引力将显著改变它此后的日心轨道。'],
+          ['物理', '雷达观测显示其平均尺度约 340 米，形状细长并处于非主轴自转。'],
+          ['背景', '这次交会的科学价值在于，可在仪器观测下研究地球潮汐如何改变其自转、表面和轨道。'],
+          ['来源', '当前交会解应以 NASA 与 JPL 为准；图谱档案会标明根数来源，并绝不会把轨道类别直接转换成危险结论。'],
+        ],
+      },
+      boundary: {
+        en: 'Solar Atlas does not model the 2029 close encounter with a precision planetary ephemeris, covariance propagation, or perturbations. It is not an impact-monitoring service.',
+        zh: 'Solar Atlas 未用高精度行星星历、协方差传播和摄动模型计算 2029 年近距离交会，也不是撞击监测服务。',
+      },
+      sources: [{ label: 'NASA Science — Apophis facts', url: 'https://science.nasa.gov/solar-system/asteroids/apophis-facts/' }, { label: 'JPL SBDB API documentation', url: 'https://ssd-api.jpl.nasa.gov/doc/sbdb.html' }],
+    },
   ]
   for (const object of objects) {
     for (const lang of ['en', 'zh']) {
@@ -237,8 +314,12 @@ async function writeStaticKnowledgePages() {
         lang,
         title,
         description,
-        sections: [{ title: lang === 'zh' ? '可追溯对象页' : 'Traceable object profile', body: description }],
+        sections: object.sections[lang].map(([sectionTitle, body]) => ({ title: sectionTitle, body })),
+        boundary: object.boundary[lang],
+        sources: object.sources,
+        schemaType: 'Thing',
         appUrl: `${SITE_BASE}?v=3&page=catalog&search=${encodeURIComponent(object.query)}&lang=${lang}`,
+        imagePath: `og/objects/${object.slug}-${lang}.png`,
       })
     }
   }
@@ -246,6 +327,19 @@ async function writeStaticKnowledgePages() {
     { slug: 'models', schemaType: 'TechArticle', en: ['Models & limits', 'Understand the two-body, planetary approximation, event-refinement, Hohmann, and Lambert models—and what they do not claim.'], zh: ['模型与边界', '了解二体、行星近似、事件细化、霍曼与 Lambert 模型，以及它们不作出的主张。'] },
     { slug: 'data', schemaType: 'Dataset', en: ['Data & provenance', 'Trace immutable MPCORB releases through source hashes, parser identity, validation rules, and content-addressed artifacts.'], zh: ['数据与来源', '通过源哈希、解析器身份、校验规则与内容寻址产物追踪不可变 MPCORB 发布。'] },
     { slug: 'about', schemaType: 'AboutPage', en: ['About Solar Atlas', 'A browser-native, bilingual, reproducible Solar System dynamics and small-body atlas for teaching and exploration.'], zh: ['关于太阳系图谱', '用于教学与探索的浏览器原生、双语、可复现太阳系动力学与小天体图谱。'] },
+    {
+      slug: 'validation', schemaType: 'TechArticle',
+      en: ['Scientific validation', 'Inspect the public CI contract for Horizons event tolerance, universal-variable Lambert benchmarks, elliptic propagation, and model validity.'],
+      zh: ['科学验证', '检查 Horizons 事件容差、通用变量 Lambert 基准、椭圆传播与模型有效范围的公开 CI 契约。'],
+      sources: [
+        { label: 'Machine-readable scientific validation', url: `${SITE_BASE}scientific-validation.json` },
+        { label: 'Versioned validation tests and fixtures', url: 'https://github.com/dajiaohuang/solar/tree/main/tests' },
+      ],
+      boundary: {
+        en: 'Passing these deterministic benchmarks supports the stated numerical contracts; it does not certify Solar Atlas as an operational ephemeris, navigation system, or impact-monitoring service.',
+        zh: '通过这些确定性基准只能支持已声明的数值契约，并不把 Solar Atlas 认证为业务星历、导航系统或撞击监测服务。',
+      },
+    },
   ]
   for (const item of generic) {
     for (const lang of ['en', 'zh']) {
@@ -258,6 +352,8 @@ async function writeStaticKnowledgePages() {
         sections: [{ title, body: description }],
         appUrl: `${SITE_BASE}?v=3&page=about&lang=${lang}`,
         schemaType: item.schemaType,
+        sources: item.sources ?? [],
+        boundary: item.boundary?.[lang],
       })
     }
   }
@@ -300,7 +396,12 @@ async function writeManifestsAndCapacity(buildInfo, dataset) {
   }
   await writeFile(join(DIST, 'asset-manifest.json'), `${JSON.stringify({ schemaVersion: 1, build: buildInfo, assets }, null, 2)}\n`)
   await writeFile(join(DIST, 'build-info.json'), `${JSON.stringify(buildInfo, null, 2)}\n`)
-  await writeFile(join(DIST, 'health.json'), `${JSON.stringify({ status: 'ok', checkedAt: buildInfo.buildTime, build: buildInfo, dataset }, null, 2)}\n`)
+  const scientificValidation = await exists(SCIENTIFIC_VALIDATION_CACHE)
+    ? await readJson(SCIENTIFIC_VALIDATION_CACHE)
+    : { schemaVersion: 1, generatedAt: buildInfo.buildTime, passed: null, runner: { totalTests: 0, passedTests: 0, failedTests: 0 }, benchmarks: {}, suites: [], status: 'not-run-in-this-build' }
+  const publishedScientificValidation = { ...scientificValidation, build: buildInfo, dataset }
+  await writeFile(join(DIST, 'scientific-validation.json'), `${JSON.stringify(publishedScientificValidation, null, 2)}\n`)
+  await writeFile(join(DIST, 'health.json'), `${JSON.stringify({ status: scientificValidation.passed === false ? 'degraded' : 'ok', checkedAt: buildInfo.buildTime, build: buildInfo, dataset, scientificValidation: { passed: scientificValidation.passed, passedTests: scientificValidation.runner?.passedTests ?? 0, totalTests: scientificValidation.runner?.totalTests ?? 0 } }, null, 2)}\n`)
 
   const files = await walkFiles(DIST)
   const entries = await Promise.all(files.map(async (file) => {

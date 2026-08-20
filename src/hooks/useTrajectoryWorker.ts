@@ -92,10 +92,21 @@ export function useTrajectoryWorker(params: Params) {
         setTrajectories(unpackTrajectories(response.packed, bodiesById))
         setProgress(1)
         setIsComputing(false)
+        worker.terminate()
+        if (workerRef.current === worker) workerRef.current = null
       } else if (response.type === 'error') {
         setError(response.error ?? 'Trajectory worker failed')
         setIsComputing(false)
+        worker.terminate()
+        if (workerRef.current === worker) workerRef.current = null
       }
+    }
+    worker.onerror = (event) => {
+      if (requestId !== latestRequestId.current) return
+      setError(event.message || 'Trajectory worker failed')
+      setIsComputing(false)
+      worker.terminate()
+      if (workerRef.current === worker) workerRef.current = null
     }
 
     const request: TrajectoryWorkerRequest = {
@@ -111,9 +122,11 @@ export function useTrajectoryWorker(params: Params) {
     worker.postMessage(request)
 
     return () => {
-      worker.postMessage({ type: 'cancel', requestId })
-      worker.terminate()
-      if (workerRef.current === worker) workerRef.current = null
+      if (workerRef.current === worker) {
+        worker.postMessage({ type: 'cancel', requestId })
+        worker.terminate()
+        workerRef.current = null
+      }
     }
   }, [bodies, bodiesById, historyDays, referenceId, resolutionBodies, sampleCount, trajectoryJulianDay])
 

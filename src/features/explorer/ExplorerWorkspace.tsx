@@ -137,6 +137,8 @@ function FrameView({
           lagrangePoints={lagrangePoints}
           showEcliptic={simulation.showEcliptic}
           ariaLabel={t('interactive3d')}
+          fallbackLabel={t('webgl3dUnavailable')}
+          onUnavailable={() => simulationActions.patch({ viewMode: '2d' })}
         />
       ) : (
         <TrajectoryCanvas
@@ -197,7 +199,7 @@ export function ExplorerWorkspace() {
       <ControlDrawer bodies={allBodies} referenceOptions={allBodies.filter((body) => body.kind !== 'spacecraft')} />
       <main className="explorer-stage">
         <SimulationControls />
-        <div className={`frames-grid ${simulation.comparisonEnabled ? 'split' : ''}`}>
+        <div className={`frames-grid ${simulation.comparisonEnabled ? 'split' : ''}`} data-story-target="scene">
           <FrameView
             referenceId={simulation.referenceId}
             selectedBodies={selectedBodies}
@@ -245,7 +247,7 @@ export function ExplorerWorkspace() {
           <strong>{bodyDisplayName(hovered.body, language)}</strong><span>{hovered.distance.toFixed(4)} AU</span>
         </div>}
       </main>
-      <BodyInspector body={focusedBody} currentPositions={simulation.comparisonEnabled ? secondaryFrame.currentPositions : primaryFrame.currentPositions} bodiesById={bodiesById} />
+      <BodyInspector key={focusedBody?.id ?? 'none'} body={focusedBody} currentPositions={simulation.comparisonEnabled ? secondaryFrame.currentPositions : primaryFrame.currentPositions} bodiesById={bodiesById} />
     </div>
   )
 }

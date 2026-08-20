@@ -22,6 +22,7 @@ type UiState = {
   elementPlot: ElementPlotMode
   storyId: string
   storyStep: number
+  storyGuideOpen: boolean
 }
 
 const initialUiState: UiState = {
@@ -32,6 +33,7 @@ const initialUiState: UiState = {
   elementPlot: 'a-e',
   storyId: 'retrograde-mars',
   storyStep: 0,
+  storyGuideOpen: false,
 }
 
 export const uiStore = createStore(initialUiState)
@@ -52,6 +54,12 @@ export const uiActions = {
   },
   setStoryStep(storyStep: number) {
     uiStore.setState({ storyStep: Math.max(0, Math.floor(storyStep)) })
+  },
+  startStory(storyId: string, storyStep = 0) {
+    uiStore.setState({ storyId, storyStep: Math.max(0, Math.floor(storyStep)), storyGuideOpen: true })
+  },
+  stopStory() {
+    uiStore.setState({ storyGuideOpen: false })
   },
   toast(message: string) {
     uiStore.setState({ toast: message })

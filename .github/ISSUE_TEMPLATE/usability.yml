@@ -1,0 +1,31 @@
+name: Usability or learning feedback
+description: Report friction in finding, understanding, comparing, saving, or sharing a scene.
+title: "[UX]: "
+body:
+  - type: dropdown
+    id: task
+    attributes:
+      label: Intended task
+      options:
+        - Explore a body or orbit
+        - Learn from a guided story
+        - Search or compare catalog objects
+        - Run an event or mission analysis
+        - Save, export, or share evidence
+        - Use the app on mobile or with assistive technology
+    validations:
+      required: true
+  - type: textarea
+    id: friction
+    attributes:
+      label: Where did the experience break down?
+      description: Include the full scene URL and what you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: Browser/version, OS, device, viewport, input method, assistive technology
+    validations:
+      required: true

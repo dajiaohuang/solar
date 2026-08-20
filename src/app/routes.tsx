@@ -1,6 +1,7 @@
 import { lazy, Suspense, type ComponentType } from 'react'
 import { useI18n } from '../i18n/context'
 import type { AppRoute } from '../state/ui-store'
+import { WorkspaceErrorBoundary } from './WorkspaceErrorBoundary'
 
 function lazyNamed<T extends Record<string, ComponentType>>(loader: () => Promise<T>, name: keyof T) {
   return lazy(async () => ({ default: (await loader())[name] }))
@@ -28,5 +29,5 @@ export function AppRouteView({ route }: { route: AppRoute }) {
     case 'explorer':
     default: View = ExplorerWorkspace
   }
-  return <Suspense fallback={<div className="route-loading"><i /><span aria-live="polite">{t('loading')}</span></div>}><View /></Suspense>
+  return <WorkspaceErrorBoundary route={route} title={t('workspaceErrorTitle')} description={t('workspaceErrorDescription')} retry={t('retryWorkspace')} home={t('home')}><Suspense fallback={<div className="route-loading"><i /><span aria-live="polite">{t('loading')}</span></div>}><View /></Suspense></WorkspaceErrorBoundary>
 }

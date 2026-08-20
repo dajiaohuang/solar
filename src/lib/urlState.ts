@@ -24,6 +24,7 @@ export type AppUrlState = {
   preset?: string
   story?: string
   step?: number
+  guide?: boolean
   missionFrom?: BodyId
   missionTo?: BodyId
   departureDate?: string
@@ -85,6 +86,7 @@ export function encodeUrlState(state: AppUrlState) {
   if (state.preset) params.set('preset', state.preset)
   if (state.story) params.set('story', state.story)
   if (state.step !== undefined && state.step > 0) params.set('step', String(Math.floor(state.step)))
+  if (state.guide) params.set('guide', '1')
   if (state.missionFrom) params.set('from', state.missionFrom)
   if (state.missionTo) params.set('to', state.missionTo)
   if (state.departureDate) params.set('depart', state.departureDate)
@@ -139,6 +141,7 @@ export function decodeUrlState(search = typeof window === 'undefined' ? '' : win
   if (story) state.story = story
   const step = finite(params.get('step'))
   if (step !== undefined && step >= 0) state.step = Math.floor(step)
+  state.guide = params.get('guide') === '1'
   const missionFrom = params.get('from')
   if (missionFrom) state.missionFrom = missionFrom
   const missionTo = params.get('to')

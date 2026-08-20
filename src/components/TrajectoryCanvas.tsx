@@ -549,6 +549,16 @@ export function TrajectoryCanvas({
   const [containerRef, size] = useElementSize<HTMLDivElement>()
   const [webglUnavailable, setWebglUnavailable] = useState(false)
 
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const onLost = (event: Event) => { event.preventDefault(); setWebglUnavailable(true) }
+    const onRestored = () => { resourcesRef.current = null; setWebglUnavailable(false) }
+    canvas.addEventListener('webglcontextlost', onLost)
+    canvas.addEventListener('webglcontextrestored', onRestored)
+    return () => { canvas.removeEventListener('webglcontextlost', onLost); canvas.removeEventListener('webglcontextrestored', onRestored) }
+  }, [])
+
   const projection = useMemo(
     () =>
       createProjection(
@@ -619,7 +629,7 @@ export function TrajectoryCanvas({
 
     drawLines(resources, geometry)
     drawPoints(resources, geometry, pixelRatio)
-  }, [geometry, size.height, size.width])
+  }, [geometry, size.height, size.width, webglUnavailable])
 
   useEffect(() => {
     return () => {

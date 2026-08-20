@@ -24,8 +24,9 @@ function discreteSceneKey() {
   const mission = missionStore.getState()
   return JSON.stringify({
     route: ui.route,
-    story: ui.route === 'stories' ? ui.storyId : null,
-    step: ui.route === 'stories' ? ui.storyStep : null,
+    story: ui.route === 'stories' || ui.storyGuideOpen ? ui.storyId : null,
+    step: ui.route === 'stories' || ui.storyGuideOpen ? ui.storyStep : null,
+    guide: ui.storyGuideOpen,
     focused: selection.focusedId,
     mission: ui.route === 'mission' ? mission : null,
   })
@@ -55,6 +56,8 @@ export function AppProviders({ children }: { children: ReactNode }) {
     uiActions.setLanguage(language)
     uiActions.setElementPlot(initial.plot ?? 'a-e')
     uiActions.selectStory(initial.story ?? DEFAULT_STORY, initial.step ?? 0)
+    if (initial.guide) uiActions.startStory(initial.story ?? DEFAULT_STORY, initial.step ?? 0)
+    else uiActions.stopStory()
     missionActions.patch({
       departureId: initial.missionFrom ?? DEFAULT_MISSION_STATE.departureId,
       arrivalId: initial.missionTo ?? DEFAULT_MISSION_STATE.arrivalId,

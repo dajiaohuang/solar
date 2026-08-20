@@ -6,12 +6,14 @@ import { useI18n } from '../../i18n/context'
 import { formatJulianDayAsDate } from '../../lib/julianDate'
 import { simulationActions, simulationStore } from '../../state/simulation-store'
 import { uiActions } from '../../state/ui-store'
-import type { EventKind } from '../../workers/conjunction.worker'
+import type { AnalysisEvent, EventKind } from '../../workers/conjunction.worker'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { catalogStore } from '../../state/catalog-store'
 import { jplApproxWindowWarning } from '../../engine/ephemeris/modelValidity'
 import { eventSamplingPlan } from '../../engine/events/eventSampling'
 import { BUILD_INFO } from '../../lib/buildInfo'
+import { createBodyPositionResolver, dotVector3, subtractVector3, vector3Magnitude } from '../../lib/ephemeris'
+import type { CelestialBody, Vector3 } from '../../types'
 
 const ALL_KINDS: EventKind[] = ['close-approach', 'conjunction', 'opposition', 'perihelion', 'aphelion']
 const EVENT_ALGORITHM_VERSION = 'event-search-v4'
@@ -21,6 +23,48 @@ function download(name: string, content: string, type: string) {
   const anchor = document.createElement('a')
   anchor.href = url; anchor.download = name; anchor.click()
   URL.revokeObjectURL(url)
+}
+
+function angularSeparation(a: Vector3, b: Vector3) {
+  const denominator = vector3Magnitude(a) * vector3Magnitude(b)
+  if (denominator < 1e-15) return Number.NaN
+  return Math.acos(Math.max(-1, Math.min(1, dotVector3(a, b) / denominator))) * 180 / Math.PI
+}
+
+function EventDetailCurve({ event, bodies, referenceId, onOpen, label }: { event: AnalysisEvent; bodies: CelestialBody[]; referenceId: string; onOpen: () => void; label: string }) {
+  const curve = useMemo(() => {
+    const bodiesById = new Map(bodies.map((body) => [body.id, body]))
+    const halfWindow = Math.min(60, Math.max(event.sampleIntervalDays * 1.25, event.numericalRefinementHalfWidthDays * 10, .25))
+    const samples = Array.from({ length: 81 }, (_, index) => event.julianDay - halfWindow + index / 80 * halfWindow * 2)
+    const values = samples.map((julianDay) => {
+      const resolve = createBodyPositionResolver(bodiesById, julianDay)
+      if (event.kind === 'conjunction' || event.kind === 'opposition') {
+        const reference = resolve(referenceId)
+        return angularSeparation(subtractVector3(resolve(event.bodyAId), reference), subtractVector3(resolve(event.bodyBId!), reference))
+      }
+      const otherId = event.bodyBId ?? event.centralBodyId ?? 'sun'
+      return vector3Magnitude(subtractVector3(resolve(event.bodyAId), resolve(otherId)))
+    })
+    const finiteValues = values.filter(Number.isFinite)
+    const minimum = finiteValues.length ? Math.min(...finiteValues) : 0
+    const maximum = finiteValues.length ? Math.max(...finiteValues) : 1
+    const yFor = (value: number) => 92 - ((Number.isFinite(value) ? value : minimum) - minimum) / Math.max(maximum - minimum, 1e-12) * 78
+    const points = values.map((value, index) => `${(index / 80 * 100).toFixed(2)},${yFor(value).toFixed(2)}`).join(' ')
+    const coarseOffset = Math.min(45, event.sampleIntervalDays / halfWindow * 50)
+    const refinementHalfWidth = Math.max(.25, Math.min(45, event.numericalRefinementHalfWidthDays / halfWindow * 50))
+    return { halfWindow, minimum, maximum, points, centerY: yFor(values[40]), coarseOffset, refinementHalfWidth }
+  }, [bodies, event, referenceId])
+  return <article className="event-detail-curve">
+    <header><div><span>{label}</span><strong>{event.bodyAName}{event.bodyBName ? ` ↔ ${event.bodyBName}` : ''}</strong></div><button aria-label={`${label}: ${event.bodyAName}${event.bodyBName ? ` ${event.bodyBName}` : ''}`} onClick={onOpen}>↗</button></header>
+    <svg viewBox="0 0 100 100" role="img" aria-label={`${label}: ${event.value.toFixed(5)} ${event.unit}`} preserveAspectRatio="none">
+      <rect x={50 - curve.refinementHalfWidth} y="5" width={curve.refinementHalfWidth * 2} height="91" className="refined-window" />
+      <line x1="50" y1="5" x2="50" y2="96" className="refined-marker" />
+      <line x1={50 - curve.coarseOffset} y1="5" x2={50 - curve.coarseOffset} y2="96" className="coarse-marker" /><line x1={50 + curve.coarseOffset} y1="5" x2={50 + curve.coarseOffset} y2="96" className="coarse-marker" />
+      <polyline points={curve.points} />
+      <circle cx="50" cy={curve.centerY} r="2.4" />
+    </svg>
+    <dl><div><dt>−{curve.halfWindow.toFixed(3)} d</dt><dd>{curve.minimum.toFixed(event.unit === 'AU' ? 6 : 3)}–{curve.maximum.toFixed(event.unit === 'AU' ? 6 : 3)} {event.unit}</dd><dt>+{curve.halfWindow.toFixed(3)} d</dt></div></dl>
+  </article>
 }
 
 export function EventsWorkspace() {
@@ -33,6 +77,7 @@ export function EventsWorkspace() {
   const [windowDays, setWindowDays] = useState(365)
   const [thresholdAU, setThresholdAU] = useState(0.05)
   const [eventKinds, setEventKinds] = useState<EventKind[]>(['close-approach', 'conjunction', 'opposition'])
+  const [selectedEventIndex, setSelectedEventIndex] = useState(0)
   const analysisBodies = useMemo(() => selectedBodies.filter((body) => body.id !== simulation.referenceId).slice(0, 48), [selectedBodies, simulation.referenceId])
   const contractCenter = analysis.lastRun?.centerJulianDay ?? clock.julianDay
   const contractWindow = analysis.lastRun?.windowDays ?? windowDays
@@ -44,6 +89,8 @@ export function EventsWorkspace() {
     contractCenter + contractWindow / 2,
     language,
   )
+  const activeEventIndex = Math.min(selectedEventIndex, Math.max(analysis.events.length - 1, 0))
+  const selectedEvent = analysis.events[activeEventIndex] ?? null
   const exportMetadata = {
     generatedAt: new Date().toISOString(),
     datasetVersion: catalog.datasetVersion !== 'unavailable' ? catalog.datasetVersion : catalog.requestedDatasetVersion,
@@ -72,7 +119,7 @@ export function EventsWorkspace() {
     cancelled: t('statusCancelled'), error: t('statusError'),
   }
 
-  return <div className="workspace-page events-workspace">
+  return <div className="workspace-page events-workspace" data-story-target="events">
     <header className="page-heading"><div><span className="eyebrow">{t('eventsKicker')}</span><h1>{t('events')}</h1><p>{t('analysisIdle')}</p></div><div className={`job-status status-${analysis.status}`}><i />{statusLabels[analysis.status]}</div></header>
     <div className="events-layout">
       <aside className="event-config glass-panel">
@@ -99,11 +146,9 @@ export function EventsWorkspace() {
 
       <section className="timeline-panel glass-panel">
         <div className="section-heading"><span>{t('eventTimeline').toUpperCase()}</span><strong>{analysis.events.length}</strong></div>
+        {selectedEvent && analysis.lastRun && <EventDetailCurve event={selectedEvent} bodies={analysis.lastRun.resolutionBodies} referenceId={analysis.lastRun.referenceId} label={t('localRefinementCurve')} onOpen={() => { simulationActions.seek(selectedEvent.julianDay); uiActions.navigate('explorer') }} />}
         {!analysis.events.length && analysis.status !== 'running' && <div className="empty-state"><span>⌁</span><p>{t('noEvents')}</p></div>}
-        <div className="event-timeline">{analysis.events.map((event, index) => <button key={`${event.kind}-${event.bodyAId}-${event.bodyBId}-${index}`} onClick={() => {
-          simulationActions.seek(event.julianDay)
-          uiActions.navigate('explorer')
-        }}>
+        <div className="event-timeline">{analysis.events.map((event, index) => <button className={index === activeEventIndex ? 'selected' : ''} key={`${event.kind}-${event.bodyAId}-${event.bodyBId}-${index}`} onClick={() => setSelectedEventIndex(index)}>
           <time>{formatJulianDayAsDate(event.julianDay)}</time><i className={`event-${event.kind}`} />
           <div><strong>{eventLabels[event.kind]}</strong><span>{event.bodyAName}{event.bodyBName ? ` ↔ ${event.bodyBName}` : event.centralBodyName ? ` · ${event.centralBodyName} ${t('centered')}` : ''}</span><small>{event.value.toFixed(event.unit === 'AU' ? 5 : 2)} {event.unit} · {t('numericalInterval')} ±{event.numericalRefinementHalfWidthDays.toFixed(4)} d · {t('physicalUncertaintyMissing')}</small></div>
         </button>)}</div>

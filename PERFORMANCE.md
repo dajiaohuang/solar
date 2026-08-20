@@ -17,6 +17,11 @@ Solar Atlas treats the million-object catalog as a columnar filtering problem, n
 | GitHub Pages artifact | 700 MiB maximum / 600 MiB warning | `npm run check:capacity` and deployment gate |
 | Initial application shell transfer | reported, regression-reviewed | generated `dist/capacity-report.json` |
 | Typical Catalog session transfer | reported, regression-reviewed | shell + compact index + desktop sample + manifest/provenance |
+| Lighthouse script transfer | 1,500,000 bytes | deployment Lighthouse CI assertion |
+| Lighthouse total first-load transfer | 3,500,000 bytes | deployment Lighthouse CI assertion |
+| Lighthouse total blocking time | 600 ms | median of three deployment runs |
+| Lighthouse cumulative layout shift | 0.10 | median of three deployment runs |
+| Lighthouse accessibility / SEO | 0.90 minimum | median of three deployment runs |
 
 Run the repeatable catalog benchmark with:
 
@@ -27,7 +32,7 @@ npm run check:capacity
 
 When a v3 dataset is installed, the command measures its compact index and reports actual sample sizes. Without one, it scans a deterministic 1.55-million-row synthetic index so code-path regressions remain visible in development.
 
-The timing is a local diagnostic, not a cross-machine performance guarantee. Release acceptance is based on the byte, object-count, request-count, and cancellation budgets above.
+The local compact-index timing is a diagnostic, not a cross-machine performance guarantee. Stable byte, object-count, request-count, cancellation, accessibility, and layout budgets are hard release gates. Performance score and largest-contentful-paint thresholds begin as warnings because hosted-runner timing is noisy; their reports are retained for regression review.
 
 Production uses `npm run build:deploy`. The builder excludes stale releases, copies only the audited active version, keeps binary numeric artifacts byte-identical, and deterministically gzip-compresses large search, lookup, metadata, legacy chunk, and sample JSON. The generated capacity report separates application shell, total dataset, cold-load, and typical Catalog-session bytes; it fails closed above the Pages budget.
 

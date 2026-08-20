@@ -58,6 +58,7 @@ jobs:
 
       - run: npm run lint
       - run: npm run test:unit
+      - run: npm run test:scientific
       - name: Build deployable application and compressed pinned dataset
         run: npm run build:deploy
       - run: npm run check:capacity
@@ -69,6 +70,15 @@ jobs:
           PLAYWRIGHT_REUSE_BUILD: 1
           PLAYWRIGHT_EXPECT_DATASET: 1
         run: npm run test:e2e
+      - name: Enforce Lighthouse accessibility and performance budgets
+        uses: treosh/lighthouse-ci-action@3e7e23fb74242897f95c0ba9cabad3d0227b9b18 # v12.6.2
+        with:
+          urls: |
+            http://127.0.0.1:4188/solar/?v=3&page=home&lang=en
+            http://127.0.0.1:4188/solar/exhibits/retrograde-mars/
+          runs: 3
+          configPath: ./.lighthouserc.json
+          uploadArtifacts: true
       - name: Upload browser diagnostics
         if: always()
         uses: actions/upload-artifact@v6
@@ -88,6 +98,7 @@ jobs:
             dist/health.json
             dist/capacity-report.json
             dist/asset-manifest.json
+            dist/scientific-validation.json
           retention-days: 30
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5

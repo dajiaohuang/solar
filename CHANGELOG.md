@@ -2,6 +2,28 @@
 
 All notable changes to Solar Atlas are documented here. The project follows semantic versioning after the prototype phase.
 
+## 0.10.0 — 2026-08-20
+
+### Added
+
+- Seven six-stage guided courses that remain open across workspaces, highlight the relevant view or controls, reveal explanations on demand, expose terms and primary sources, and close with a knowledge checkpoint.
+- Global keyboard search across workspaces, curated bodies, featured catalog records, stories, and glossary terms; a local versioned scene library with JSON import/export; and full five-section body profiles.
+- Local event-refinement curves, keyboard-accessible element-space inspection and distribution summaries, and a click/keyboard-selectable porkchop opportunity card that applies its dates to the mission solver.
+- A public machine-readable scientific-validation report backed by JPL Horizons fixtures, Lambert benchmarks, and ephemeris contracts, plus bilingual crawlable validation pages.
+- Per-story and per-object 1200×630 social cards, complete static object knowledge pages, Lighthouse CI budgets, and dedicated guided-story and usability issue forms.
+
+### Changed
+
+- Story links now preserve an active guide outside the Stories workspace, so “open this scene” begins a continuous question → observation → operation → evidence → boundary → follow-up flow instead of dropping the lesson context.
+- Deployments publish scientific-validation evidence and run Lighthouse against the visitor home and a static exhibit in addition to lint, unit, browser, capacity, and production-smoke gates.
+- Evidence, the README, the bilingual documentation, and the roadmap now describe model validation separately from dataset validation.
+
+### Fixed
+
+- WebGL creation or context loss now falls back to a usable 2D Explorer, worker exceptions surface recovery state, and lazy workspaces have route-local retry/home error boundaries.
+- Story-guide, command-palette, element-chart, porkchop, and profile interactions preserve keyboard and automated accessibility coverage.
+- Windows asset generation reads UTF-8 story data explicitly and fails on errors, preventing corrupted Chinese social-card labels.
+
 ## 0.9.1 — 2026-08-20
 
 ### Added

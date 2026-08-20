@@ -13,13 +13,36 @@ async function requireFile(relativePath) {
   return path
 }
 
+async function requirePngDimensions(relativePath, expectedWidth, expectedHeight) {
+  const content = await readFile(await requireFile(relativePath))
+  const pngSignature = '89504e470d0a1a0a'
+  if (content.length < 24 || content.subarray(0, 8).toString('hex') !== pngSignature) throw new Error(`${relativePath} is not a valid PNG`)
+  const width = content.readUInt32BE(16), height = content.readUInt32BE(20)
+  if (width !== expectedWidth || height !== expectedHeight) {
+    throw new Error(`${relativePath} is ${width}x${height}; expected ${expectedWidth}x${expectedHeight}`)
+  }
+}
+
 for (const path of [
   'index.html', 'manifest.webmanifest', 'sw.js', 'build-info.json', 'health.json',
   'capacity-report.json', 'asset-manifest.json', 'sitemap.xml', 'robots.txt',
+  'scientific-validation.json', 'validation/index.html', 'zh/validation/index.html',
   'stories/retrograde-mars/index.html', 'zh/stories/retrograde-mars/index.html',
   'objects/ceres/index.html', 'zh/objects/ceres/index.html', 'og-image.png',
-  'icons/icon-192.png', 'icons/icon-512.png',
+  'og/stories/retrograde-mars-en.png', 'og/stories/retrograde-mars-zh.png',
+  'og/objects/ceres-en.png', 'og/objects/ceres-zh.png',
+  'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'readme-screenshot.png',
 ]) await requireFile(path)
+
+await Promise.all([
+  requirePngDimensions('og-image.png', 1200, 630),
+  requirePngDimensions('og/stories/retrograde-mars-en.png', 1200, 630),
+  requirePngDimensions('og/objects/ceres-zh.png', 1200, 630),
+  requirePngDimensions('icons/icon-192.png', 192, 192),
+  requirePngDimensions('icons/icon-512.png', 512, 512),
+  requirePngDimensions('icons/icon-maskable-512.png', 512, 512),
+  requirePngDimensions('readme-screenshot.png', 1440, 900),
+])
 
 const sw = await readFile(join(dist, 'sw.js'), 'utf8')
 if (sw.includes('__BUILD_SHA__') || sw.includes('const PRECACHE_URLS = ["./"]')) {
@@ -30,6 +53,9 @@ const capacity = JSON.parse(await readFile(join(dist, 'capacity-report.json'), '
 if (!capacity.withinBudget) throw new Error('Generated artifact exceeds its declared capacity budget')
 
 const health = JSON.parse(await readFile(join(dist, 'health.json'), 'utf8'))
+const scientificValidation = JSON.parse(await readFile(join(dist, 'scientific-validation.json'), 'utf8'))
+if (scientificValidation.passed === false) throw new Error('Scientific validation report contains failures')
+if (!scientificValidation.build?.commitSha) throw new Error('Scientific validation report is missing build identity')
 if (health.dataset?.included) {
   const version = health.dataset.version
   const release = `data/asteroids/releases/${version}`

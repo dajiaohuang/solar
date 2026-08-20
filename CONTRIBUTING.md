@@ -20,6 +20,7 @@ Before submitting a change, run:
 ```bash
 npm run lint
 npm run test:unit
+npm run test:scientific
 npm run build
 npm run test:e2e
 npm run check:capacity
@@ -34,4 +35,4 @@ Scientific changes should add a unit fixture or a reproducible scene, cite a pri
 - Application builds and datasets have separate identities. Keep both visible in Evidence and exports.
 - Do not label two-body or schematic output as an operational ephemeris, N-body result, risk assessment, or navigation product.
 
-Use the issue templates for scientific correctness, data, or browser-compatibility reports. Pull requests should be small enough to review and should explain any model, URL-schema, storage, or artifact-size change.
+Use the issue templates for scientific correctness, data, browser compatibility, usability, or a guided-story proposal. A story proposal must define a learner question, reproducible observation sequence, primary sources, and the boundary between what the current model shows and what it cannot prove. Pull requests should be small enough to review and should explain any model, URL-schema, storage, or artifact-size change.

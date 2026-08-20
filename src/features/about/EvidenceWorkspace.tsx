@@ -13,10 +13,20 @@ type ValidationReport = {
   invariants?: Record<string, boolean | number>
 }
 
+type ScientificValidationReport = {
+  passed: boolean | null
+  generatedAt: string
+  runner: { totalTests: number; passedTests: number; failedTests: number }
+  modelWindow?: { planetaryApproximation: string; outsideWindow: string }
+  benchmarks?: Record<string, { passed?: boolean; count?: number; source?: string; contract?: string; residualContract?: string }>
+  build?: { commitSha?: string }
+}
+
 export function EvidenceWorkspace() {
   const catalog = catalogStore.useStore()
   const { t, language } = useI18n()
   const [validation, setValidation] = useState<ValidationReport | null>(null)
+  const [scientificValidation, setScientificValidation] = useState<ScientificValidationReport | null>(null)
   const validationRoot = catalog.manifest?.releasePath
   useEffect(() => {
     if (!validationRoot) return
@@ -29,6 +39,14 @@ export function EvidenceWorkspace() {
       })
     return () => controller.abort()
   }, [validationRoot])
+  useEffect(() => {
+    const controller = new AbortController()
+    void fetch(`${import.meta.env.BASE_URL}scientific-validation.json`, { signal: controller.signal })
+      .then((response) => response.ok ? response.json() as Promise<ScientificValidationReport> : null)
+      .then(setScientificValidation)
+      .catch((error: unknown) => { if (!(error instanceof DOMException && error.name === 'AbortError')) setScientificValidation(null) })
+    return () => controller.abort()
+  }, [])
   const activeValidation = validationRoot ? validation : null
   const validationRuleCount = useMemo(() => Object.values(activeValidation?.invariants ?? {}).filter((value) => value === true || (typeof value === 'number' && value > 0)).length, [activeValidation])
 
@@ -42,6 +60,8 @@ export function EvidenceWorkspace() {
         <div className="metric-grid"><Metric label={t('rejected')} value={(activeValidation.rejectedObjects ?? 0).toLocaleString()} /><Metric label={t('rejectedFraction')} value={`${((activeValidation.rejectedFraction ?? 0) * 100).toFixed(3)}%`} /></div>
         <div className="invariant-list">{Object.entries(activeValidation.invariants ?? {}).map(([key, value]) => <div key={key}><i className={value ? 'pass' : 'fail'} />{key}<strong>{String(value)}</strong></div>)}</div>
       </> : <p className="muted-copy">{t('installV3Dataset')}</p>}</section>
+
+      <section className="evidence-module scientific-validation glass-panel"><div className="module-heading"><span>{t('modelValidation')}</span><em className={scientificValidation?.passed ? 'pass' : ''}>{scientificValidation ? scientificValidation.passed === null ? t('validationMissing') : scientificValidation.passed ? t('validationPass') : t('validationReview') : t('loading')}</em></div>{scientificValidation ? <><div className="hero-metric"><strong>{scientificValidation.runner.passedTests}/{scientificValidation.runner.totalTests}</strong><span>{t('publicScientificChecks')}</span></div><div className="scientific-check-list">{Object.entries(scientificValidation.benchmarks ?? {}).map(([name, benchmark]) => <div key={name}><i className={benchmark.passed ? 'pass' : ''} /><span><strong>{name}</strong><small>{benchmark.source ?? benchmark.contract ?? benchmark.residualContract}</small></span><b>{benchmark.passed ? t('validationPass') : t('validationReview')}</b></div>)}</div><p className="fine-print">{t('modelValidityWindow')}: {scientificValidation.modelWindow?.planetaryApproximation ?? '—'} · {t('generated')} {new Date(scientificValidation.generatedAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en')}</p><a className="validation-page-link" href={`${import.meta.env.BASE_URL}${language === 'zh' ? 'zh/' : ''}validation/`}>{t('openValidationPage')} ↗</a></> : <p className="muted-copy">{t('scientificValidationUnavailable')}</p>}</section>
 
       <section className="evidence-module build-identity glass-panel">
         <div className="module-heading"><span>{t('buildIdentity')}</span><em>BUILD</em></div>

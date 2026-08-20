@@ -1,0 +1,40 @@
+name: Guided story proposal
+description: Propose a reproducible lesson, exhibit, or checkpoint for Solar Atlas.
+title: "[Story]: "
+body:
+  - type: input
+    id: question
+    attributes:
+      label: Learner question
+      description: What should a visitor be able to observe or explain?
+      placeholder: Why does Mars appear to reverse direction?
+    validations:
+      required: true
+  - type: textarea
+    id: sequence
+    attributes:
+      label: Observation sequence
+      description: Outline the question, view changes, controls, evidence, model boundary, and checkpoint.
+    validations:
+      required: true
+  - type: textarea
+    id: sources
+    attributes:
+      label: Primary sources
+      description: Link the institutional data, documentation, or paper that supports the lesson.
+    validations:
+      required: true
+  - type: textarea
+    id: scene
+    attributes:
+      label: Reproducible scene or object IDs
+      description: Paste an existing Solar Atlas URL or list the bodies and epoch needed.
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: Scientific boundary
+      options:
+        - label: The proposal distinguishes what the current model can demonstrate from what it cannot prove.
+          required: true

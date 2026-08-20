@@ -14,7 +14,7 @@ export function SimulationControls() {
   const { t, language } = useI18n()
   const validityWarning = jplApproxValidityWarning(clock.julianDay, language)
   return (
-    <div className={`simulation-bar glass-panel${validityWarning ? ' has-model-warning' : ''}`}>
+    <div className={`simulation-bar glass-panel${validityWarning ? ' has-model-warning' : ''}`} data-story-target="time">
       <button type="button" className="primary-button" onClick={simulationActions.togglePlayback}>
         {clock.isPlaying ? `❚❚ ${t('pause')}` : `▶ ${t('play')}`}
       </button>

@@ -224,7 +224,7 @@ export function CatalogWorkspace() {
   const visibleTableCount = Math.min(filtered.length, 240)
 
   return (
-    <div className="workspace-page catalog-workspace">
+    <div className="workspace-page catalog-workspace" data-story-target="catalog">
       <header className="page-heading">
         <div><span className="eyebrow">{t('catalogKicker')}</span><h1>{t('catalog')}</h1><p>{t('tagline')}</p></div>
         <div className="mode-switch segmented-control">

@@ -42,6 +42,11 @@ export function useCatalogPointWorker(records: AsteroidRecord[], julianDay: numb
         worker.terminate()
       }
     }
+    worker.onerror = (event) => {
+      if (currentRequestId !== requestId.current) return
+      setError(event.message || 'Catalog point propagation failed')
+      worker.terminate()
+    }
     const request: CatalogPointWorkerRequest = {
       type: 'compute', requestId: currentRequestId, julianDay, elements,
     }

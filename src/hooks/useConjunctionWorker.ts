@@ -117,11 +117,24 @@ export function useConjunctionWorker() {
         worker.terminate()
         if (workerRef.current === worker) workerRef.current = null
       }
-      if (response.type === 'cancelled') setStatus('cancelled')
+      if (response.type === 'cancelled') {
+        setStatus('cancelled')
+        worker.terminate()
+        if (workerRef.current === worker) workerRef.current = null
+      }
       if (response.type === 'error') {
         setError(response.error ?? 'Event analysis failed')
         setStatus('error')
+        worker.terminate()
+        if (workerRef.current === worker) workerRef.current = null
       }
+    }
+    worker.onerror = (event) => {
+      if (requestId !== latestRequestId.current) return
+      setError(event.message || 'Event worker failed')
+      setStatus('error')
+      worker.terminate()
+      if (workerRef.current === worker) workerRef.current = null
     }
     const request: EventAnalysisRequest = { type: 'run', requestId, ...params }
     worker.postMessage(request)

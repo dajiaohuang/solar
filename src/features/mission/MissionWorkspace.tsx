@@ -16,7 +16,7 @@ function orbitRadius(body: CelestialBody) {
 }
 function normalizeDegrees(value: number) { const wrapped = value % 360; return wrapped < 0 ? wrapped + 360 : wrapped }
 
-function PorkchopCanvas({ points, columns, rows, ariaLabel }: { points: PorkchopPoint[]; columns: number; rows: number; ariaLabel: string }) {
+function PorkchopCanvas({ points, columns, rows, ariaLabel, selectedIndex, onSelect }: { points: PorkchopPoint[]; columns: number; rows: number; ariaLabel: string; selectedIndex: number; onSelect: (index: number) => void }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   useEffect(() => {
     const canvas = canvasRef.current
@@ -26,7 +26,8 @@ function PorkchopCanvas({ points, columns, rows, ariaLabel }: { points: Porkchop
     const context = canvas.getContext('2d'); if (!context) return
     context.scale(ratio, ratio); context.clearRect(0, 0, width, height)
     const finite = points.filter((point) => point.feasible).map((point) => point.totalVInfinityKmS)
-    const low = Math.min(...finite), high = Math.min(Math.max(...finite), low + 35)
+    const low = finite.length ? Math.min(...finite) : 0
+    const high = finite.length ? Math.min(Math.max(...finite), low + 35) : 1
     const cellWidth = width / columns, cellHeight = height / rows
     points.forEach((point, index) => {
       const column = index % columns, row = Math.floor(index / columns)
@@ -38,10 +39,28 @@ function PorkchopCanvas({ points, columns, rows, ariaLabel }: { points: Porkchop
       }
       context.fillRect(column * cellWidth, height - (row + 1) * cellHeight, cellWidth + 0.5, cellHeight + 0.5)
     })
-    context.fillStyle = 'rgba(5,8,12,.78)'; context.fillRect(12, 12, 176, 26)
-    context.fillStyle = '#d8e4e8'; context.font = '12px ui-monospace, monospace'; context.fillText(`Σv∞ ${low.toFixed(1)} — ${high.toFixed(1)} km/s`, 22, 29)
-  }, [columns, points, rows])
-  return <canvas ref={canvasRef} className="porkchop-canvas" role="img" aria-label={ariaLabel} />
+    if (selectedIndex >= 0) {
+      const column = selectedIndex % columns, row = Math.floor(selectedIndex / columns)
+      context.strokeStyle = '#fff2bd'; context.lineWidth = 2
+      context.strokeRect(column * cellWidth + 1, height - (row + 1) * cellHeight + 1, Math.max(1, cellWidth - 2), Math.max(1, cellHeight - 2))
+    }
+    if (finite.length) {
+      context.fillStyle = 'rgba(5,8,12,.78)'; context.fillRect(12, 12, 176, 26)
+      context.fillStyle = '#d8e4e8'; context.font = '12px ui-monospace, monospace'; context.fillText(`Σv∞ ${low.toFixed(1)} — ${high.toFixed(1)} km/s`, 22, 29)
+    }
+  }, [columns, points, rows, selectedIndex])
+  return <canvas ref={canvasRef} className="porkchop-canvas" role="img" tabIndex={0} aria-label={ariaLabel} onClick={(event) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const column = Math.max(0, Math.min(columns - 1, Math.floor((event.clientX - rect.left) / rect.width * columns)))
+    const row = Math.max(0, Math.min(rows - 1, rows - 1 - Math.floor((event.clientY - rect.top) / rect.height * rows)))
+    onSelect(row * columns + column)
+  }} onKeyDown={(event) => {
+    const deltas: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: columns, ArrowDown: -columns }
+    const delta = deltas[event.key]
+    if (delta === undefined) return
+    event.preventDefault()
+    onSelect(Math.max(0, Math.min(points.length - 1, selectedIndex + delta)))
+  }} />
 }
 
 export function MissionWorkspace() {
@@ -53,6 +72,7 @@ export function MissionWorkspace() {
   const [transferError, setTransferError] = useState<string | null>(null)
   const [porkchop, setPorkchop] = useState<{ columns: number; rows: number; points: PorkchopPoint[] } | null>(null)
   const [porkchopStatus, setPorkchopStatus] = useState<'idle' | 'running' | 'error'>('idle')
+  const [selectedPorkchopIndex, setSelectedPorkchopIndex] = useState(-1)
   const workerRef = useRef<Worker | null>(null)
   const requestIdRef = useRef(0)
   const { t, language } = useI18n()
@@ -78,6 +98,7 @@ export function MissionWorkspace() {
     }
     return [...counts.entries()].sort(([, left], [, right]) => right - left)
   }, [porkchop])
+  const selectedPorkchopPoint = porkchop?.points[selectedPorkchopIndex] ?? null
 
   function computeTransfer() {
     setTransferError(null)
@@ -96,12 +117,23 @@ export function MissionWorkspace() {
     const worker = new Worker(new URL('../../workers/porkchop.worker.ts', import.meta.url), { type: 'module' })
     workerRef.current = worker
     const requestId = requestIdRef.current + 1; requestIdRef.current = requestId
-    setPorkchopStatus('running'); setPorkchop(null)
+    setTransferError(null); setSelectedPorkchopIndex(-1); setPorkchopStatus('running'); setPorkchop(null)
     worker.onmessage = (event: MessageEvent<PorkchopWorkerResponse>) => {
       if (event.data.requestId !== requestId) return
-      if (event.data.result) { setPorkchop(event.data.result); setPorkchopStatus('idle') }
+      if (event.data.result) {
+        setPorkchop(event.data.result)
+        let best = -1
+        for (const [index, point] of event.data.result.points.entries()) {
+          if (point.feasible && (best < 0 || point.totalVInfinityKmS < event.data.result.points[best].totalVInfinityKmS)) best = index
+        }
+        setSelectedPorkchopIndex(best)
+        setPorkchopStatus('idle')
+      }
       else { setTransferError(event.data.error ?? t('porkchopFailed')); setPorkchopStatus('error') }
+      worker.terminate()
+      if (workerRef.current === worker) workerRef.current = null
     }
+    worker.onerror = (event) => { setTransferError(event.message || t('porkchopFailed')); setPorkchopStatus('error'); worker.terminate(); if (workerRef.current === worker) workerRef.current = null }
     const hohmannTime = hohmann?.transferTimeDays ?? Math.max(60, arrivalJd - departureJd)
     const request: PorkchopWorkerRequest = {
       requestId,
@@ -116,7 +148,7 @@ export function MissionWorkspace() {
     worker.postMessage(request)
   }
 
-  return <div className="workspace-page mission-workspace">
+  return <div className="workspace-page mission-workspace" data-story-target="mission">
     <header className="page-heading"><div><span className="eyebrow">{t('missionKicker')}</span><h1>{t('mission')}</h1><p>{t('educationalWarning')}</p></div></header>
     <div className="mission-layout">
       <aside className="mission-config glass-panel">
@@ -141,7 +173,17 @@ export function MissionWorkspace() {
             <div className="metric-grid"><Metric label={t('arrivalVInfinity')} value={`${lambert.arrivalVInfinityKmS.toFixed(3)} km/s`} /><Metric label="C3" value={`${lambert.c3Km2S2.toFixed(2)} km²/s²`} /><Metric label={t('timeOfFlight')} value={`${lambert.timeOfFlightDays.toFixed(1)} d`} /><Metric label={t('solver')} value={`${lambert.iterations} iter · |r| ${Math.abs(lambert.residual).toExponential(1)}`} /></div>
           </> : <EmptyResult label={t('configureEndpoints')} />}</article>
         </div>
-        <article className="porkchop-module glass-panel"><div className="module-heading"><span>{t('porkchop')}</span><button disabled={!hohmann || porkchopStatus === 'running'} onClick={computePorkchop}>{porkchopStatus === 'running' ? t('loading') : t('computePorkchop')}</button></div>{porkchop ? <><PorkchopCanvas {...porkchop} ariaLabel={t('porkchopAria')} />{porkchopFailures.length > 0 && <p className="fine-print">{t('solverFailures')}: {porkchopFailures.map(([code, count]) => `${code} ${count}`).join(' · ')}</p>}</> : <div className="porkchop-placeholder"><div className="contours" /><p>{t('porkchopDescription')}</p></div>}</article>
+        <article className="porkchop-module glass-panel"><div className="module-heading"><span>{t('porkchop')}</span><button disabled={!hohmann || porkchopStatus === 'running'} onClick={computePorkchop}>{porkchopStatus === 'running' ? t('loading') : t('computePorkchop')}</button></div>{porkchop ? <><PorkchopCanvas {...porkchop} selectedIndex={selectedPorkchopIndex} onSelect={setSelectedPorkchopIndex} ariaLabel={t('porkchopAria')} />{selectedPorkchopPoint && <div className={`porkchop-selection ${selectedPorkchopPoint.feasible ? '' : 'infeasible'}`}><div><span>{t('selectedOpportunity')}</span><strong>{selectedPorkchopPoint.feasible ? `${selectedPorkchopPoint.totalVInfinityKmS.toFixed(3)} km/s · Σv∞` : selectedPorkchopPoint.failureCode}</strong><small>{julianDayToDate(selectedPorkchopPoint.departureJulianDay).toISOString().slice(0, 10)} → {julianDayToDate(selectedPorkchopPoint.arrivalJulianDay).toISOString().slice(0, 10)} · {(selectedPorkchopPoint.arrivalJulianDay - selectedPorkchopPoint.departureJulianDay).toFixed(1)} d</small></div><button disabled={!selectedPorkchopPoint.feasible} onClick={() => {
+            const nextDepartureDate = julianDayToDate(selectedPorkchopPoint.departureJulianDay).toISOString().slice(0, 10)
+            const nextArrivalDate = julianDayToDate(selectedPorkchopPoint.arrivalJulianDay).toISOString().slice(0, 10)
+            missionActions.patch({ departureDate: nextDepartureDate, arrivalDate: nextArrivalDate })
+            try {
+              const departureRadius = orbitRadius(departureBody), arrivalRadius = orbitRadius(arrivalBody)
+              if (departureRadius && arrivalRadius) setHohmann(computeHohmann(departureRadius, arrivalRadius))
+              setLambert(solveBodyToBodyLambert({ departureBodyId: departureId, arrivalBodyId: arrivalId, bodiesById, departureJulianDay: selectedPorkchopPoint.departureJulianDay, arrivalJulianDay: selectedPorkchopPoint.arrivalJulianDay }))
+              setTransferError(null)
+            } catch (error) { setTransferError(error instanceof Error ? error.message : String(error)) }
+          }}>{t('applyOpportunity')}</button></div>}{porkchopFailures.length > 0 && <p className="fine-print">{t('solverFailures')}: {porkchopFailures.map(([code, count]) => `${code} ${count}`).join(' · ')}</p>}</> : <div className="porkchop-placeholder"><div className="contours" /><p>{t('porkchopDescription')}</p></div>}</article>
       </section>
 
       <aside className="mission-evidence glass-panel">

@@ -4,7 +4,7 @@
 
 [Live demo](https://dajiaohuang.github.io/solar/) · [中文文档](./README-CN.md) · [Scientific contract](#scientific-contract)
 
-Current release: **v0.9.1** · [Changelog](./CHANGELOG.md) · [Roadmap](./ROADMAP.md) · [Performance budgets](./PERFORMANCE.md)
+Current release: **v0.10.0** · [Changelog](./CHANGELOG.md) · [Roadmap](./ROADMAP.md) · [Performance budgets](./PERFORMANCE.md)
 
 ![Solar Atlas overview](./public/readme-screenshot.png)
 
@@ -12,16 +12,17 @@ Solar Atlas connects spatial views, orbital-element space, time events, and data
 
 ## What is implemented
 
-- **Visitor layer:** a bilingual first-visit home, three clear starting paths, a four-step in-context guide, browser-history navigation, descriptive route titles, and a four-item mobile navigation model.
+- **Visitor layer:** a bilingual first-visit home, three clear starting paths, global object/story/term search (`Ctrl/⌘ K` or `/`), browser-history navigation, descriptive route titles, and a four-item mobile navigation model.
 - **Solar Explorer:** heliocentric, geocentric, and arbitrary body-centered frames; linked 2D/3D views; bounded simulation clock; split-frame comparison; distance measurement; time travel; Lagrange points; Hill spheres and Laplace SOIs.
 - **Small-Body Catalog:** MPCORB binary shards, two-character prefix search, exact compact-index filters with bounded locator hydration pages, NEO/PHA and orbit-class filters, Lite/Full display budgets, immutable dataset versions, and IndexedDB caching.
-- **Orbital Element Space:** linked `a–e`, `a–i`, `a–H`, `q–Q`, and `a–period` plots, Kirkwood/resonance markers, brush selection, and synchronized 3D highlighting.
-- **Events Lab:** adaptive, cancellable close-approach, conjunction, opposition, and central-body apsis jobs with local numerical refinement, sampling-adequacy warnings, explicit uncertainty semantics, timeline navigation, and CSV/JSON export.
-- **Mission Lab:** directionally correct Hohmann baselines in km/s, phase-angle guidance, a residual-checked universal-variable Lambert solver, departure/arrival `v∞`, C3, and classified porkchop solver failures.
-- **Guided Stories:** reproducible JSON stories for retrograde motion, reference frames, Kirkwood gaps, Trojans, NEO types, Pluto’s resonance, and Voyager-era trajectories.
-- **Reproducibility:** v3 scene URLs record dataset version, epoch, reference frames, focus set, filters, story step, mission endpoints/dates, language, and view settings. Browser Back/Forward restores discrete scenes; legacy v2 links still replay.
+- **Orbital Element Space:** linked `a–e`, `a–i`, `a–H`, `q–Q`, and `a–period` plots, Kirkwood/resonance markers, brush selection, keyboard point inspection, distribution histograms, and synchronized 3D highlighting.
+- **Events Lab:** adaptive, cancellable close-approach, conjunction, opposition, and central-body apsis jobs with local refinement curves, sampling-adequacy warnings, explicit uncertainty semantics, timeline navigation, and CSV/JSON export.
+- **Mission Lab:** directionally correct Hohmann baselines in km/s, phase-angle guidance, a residual-checked universal-variable Lambert solver, departure/arrival `v∞`, C3, and a keyboard/click-selectable porkchop map that can apply an opportunity’s dates.
+- **Guided Stories:** seven six-stage, observation-first courses that persist across workspaces, highlight relevant controls, reveal explanations on demand, state model boundaries, and finish with a checkpoint.
+- **Object atlas:** tabbed Overview, Orbit, Physical, Context, and Sources profiles for major and catalog bodies, with provenance-aware deep links and explicit NEO risk wording.
+- **Reproducibility:** v3 scene URLs record dataset version, epoch, reference frames, focus set, filters, active guided-story step, mission endpoints/dates, language, and view settings. Complete scenes can also be saved locally and exported/imported as versioned JSON.
 - **Installable and discoverable web app:** first-install offline shell, update prompt, Web App Manifest, Open Graph image, JSON-LD, bilingual static knowledge/object pages, sitemap, and code-split workspaces.
-- **Release evidence:** every build exposes application version, commit SHA, build time, pinned dataset, parser identity, validation status, asset hashes, and a Pages capacity report.
+- **Release evidence:** every build exposes application version, commit SHA, build time, pinned dataset, parser identity, machine-readable scientific benchmark results, asset hashes, and a Pages capacity report. Deployment also preserves Lighthouse reports and enforces stable byte, accessibility, and responsiveness budgets.
 
 ## Explore a reproducible scene
 
@@ -68,7 +69,7 @@ npm run check:capacity
 Application deployment and data publication are separate workflows.
 
 ```text
-application: validate pinned data → lint → unit tests → build → E2E → deploy
+application: validate pinned data → lint → unit + scientific tests → build → E2E + Lighthouse → deploy
 
 dataset: download source snapshot → SHA-256 → parse → semantic validation
        → lint + unit + build + E2E + benchmark → immutable GitHub release → commit pin directly to main
@@ -172,6 +173,7 @@ Primary sources:
 ```bash
 npm run lint
 npm run test:unit
+npm run test:scientific
 npm run test:e2e
 npm run build
 npm run ci
@@ -179,13 +181,13 @@ npm run benchmark:catalog
 npm run check:capacity
 ```
 
-Unit coverage includes Julian dates, Kepler propagation, parent/reference frames, Hohmann units/direction, Moon phase geometry, Hill/SOI definitions, strict JPL SBDB fixtures, local event-extremum detection, Lambert circular-arc recovery, v2/v3 deep-link round trips, MPCORB parsing, scoped persistence, manifest/cache isolation, and a one-million-row bounded catalog scan. Playwright covers browser history, story/mission URLs, core routes, catalog filtering/recovery, mission workers, first-install offline behavior, cache isolation, 2D/3D rendering, and serious/critical axe violations on desktop and mobile Chromium. A scheduled matrix repeats the suite in Firefox and WebKit.
+Unit coverage includes Julian dates, Kepler propagation, parent/reference frames, Hohmann units/direction, Moon phase geometry, Hill/SOI definitions, strict JPL SBDB fixtures, local event-extremum detection, Lambert circular-arc recovery, v2/v3 deep-link round trips, versioned scene-library persistence, MPCORB parsing, scoped persistence, manifest/cache isolation, and a one-million-row bounded catalog scan. The scientific subset publishes its exact JPL Horizons, Lambert, and ephemeris status into the build. Playwright covers browser history, persistent guided stories, global search, saved scenes, story/mission URLs, interactive porkchop selection, catalog filtering/recovery, worker and WebGL fallback, first-install offline behavior, cache isolation, and serious/critical axe violations. A scheduled matrix repeats the suite in Firefox and WebKit; the deploy gate additionally audits the home and a static exhibit with Lighthouse CI.
 
 ## Deployment
 
 - The project is maintained directly on `main`; local changes should pass `npm run ci` before they are pushed.
 - `.github/workflows/data-refresh.yml` publishes a monthly/manual immutable dataset release, commits its pin directly to `main`, and explicitly dispatches deployment.
-- `.github/workflows/deploy.yml` is the single production gate. It validates the pinned data, builds its compressed delivery form, enforces the 700 MiB Pages budget, runs lint/unit/E2E, archives release evidence, deploys, and opens a deduplicated incident if production smoke fails.
+- `.github/workflows/deploy.yml` is the single production gate. It validates the pinned data, builds its compressed delivery form, enforces Pages and browser budgets, runs lint/unit/scientific/E2E/Lighthouse checks, archives release evidence, deploys, and opens a deduplicated incident if production smoke fails.
 - `.github/workflows/rollback.yml` restores the exact tested `github-pages` artifact from a successful deployment run ID; deployment artifacts are retained for 30 days.
 - `main` allows normal and Actions pushes, rejects force pushes and deletion, and does not require pull requests or pre-merge status checks.
 

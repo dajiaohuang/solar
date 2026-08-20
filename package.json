@@ -1,7 +1,7 @@
 {
   "name": "solar",
   "private": true,
-  "version": "0.9.1",
+  "version": "0.10.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,9 +12,10 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
+    "test:scientific": "vitest run tests/unit/event-benchmarks.test.ts tests/unit/lambert.test.ts tests/unit/ephemeris.test.ts --reporter=json --outputFile=.cache/scientific-tests.json && node ./scripts/summarize-scientific-validation.mjs",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "ci": "npm run lint && npm run test:unit && npm run build",
+    "ci": "npm run lint && npm run test:unit && npm run test:scientific && npm run build",
     "preprocess:asteroids": "node --max-old-space-size=4096 ./scripts/preprocess-asteroids.mjs",
     "data:lite": "cross-env MPCORB_MODE=lite MPCORB_LITE_MAX_NUMBER=30000 node ./scripts/preprocess-asteroids.mjs",
     "data:full": "cross-env MPCORB_MODE=full node --max-old-space-size=4096 ./scripts/preprocess-asteroids.mjs",

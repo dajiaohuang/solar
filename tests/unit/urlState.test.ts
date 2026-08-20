@@ -9,7 +9,7 @@ describe('reproducible scene URLs', () => {
       history: 730, speed: 30, view: '2d', filter: 'APO', search: 'eros', focused: 'mars', lang: 'en',
       plot: 'q-Q', aRange: [0.5, 5], eRange: [0, 0.8], iRange: [0, 40], hRange: [5, 30],
       hStatus: 'known', qRange: [0.2, 4], layers: ['ecliptic', 'lagrange', 'spacecraft'], offset: [1.25, -0.5],
-      story: 'retrograde-mars', step: 2, missionFrom: 'earth', missionTo: 'mars', departureDate: '2026-11-15', arrivalDate: '2027-08-01',
+      story: 'retrograde-mars', step: 2, guide: true, missionFrom: 'earth', missionTo: 'mars', departureDate: '2026-11-15', arrivalDate: '2027-08-01',
     })
     const decoded = decodeUrlState(`?${encoded}`)
     expect(encoded).toContain('v=3')
@@ -26,6 +26,7 @@ describe('reproducible scene URLs', () => {
     expect(decoded.hStatus).toBe('known')
     expect(decoded.story).toBe('retrograde-mars')
     expect(decoded.step).toBe(2)
+    expect(decoded.guide).toBe(true)
     expect(decoded.missionFrom).toBe('earth')
     expect(decoded.arrivalDate).toBe('2027-08-01')
   })

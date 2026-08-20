@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import storiesData from '../content/stories/stories.json'
 import { useI18n } from '../i18n/context'
 import { bodyDisplayName } from '../lib/bodyNames'
@@ -7,8 +7,10 @@ import { selectionStore } from '../state/selection-store'
 import { uiActions, uiStore, type AppRoute } from '../state/ui-store'
 import { missionStore } from '../state/mission-store'
 import { FirstRunGuide } from '../features/home/FirstRunGuide'
+import { GuidedStoryOverlay } from '../features/stories/GuidedStoryOverlay'
 import { useBodyRegistry } from './bodyRegistry'
 import { AppRouteView } from './routes'
+import { CommandPalette } from './CommandPalette'
 
 type NavLabel = 'explorer' | 'catalog' | 'elements' | 'events' | 'mission' | 'stories' | 'about'
 type NavItem = { route: AppRoute; icon: string; label: NavLabel }
@@ -41,6 +43,8 @@ export function AppShell() {
   const { t, language, toggleLanguage } = useI18n()
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null)
+  const [commandOpen, setCommandOpen] = useState(false)
+  const closeCommand = useCallback(() => setCommandOpen(false), [])
   const routeContainerRef = useRef<HTMLDivElement | null>(null)
   const previousRouteRef = useRef(ui.route)
 
@@ -82,6 +86,19 @@ export function AppShell() {
     return () => window.removeEventListener('solar-atlas-update', onUpdate)
   }, [])
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      const isTyping = target?.matches('input, textarea, select, [contenteditable="true"]')
+      if (((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') || (event.key === '/' && !isTyping)) {
+        event.preventDefault()
+        setCommandOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   function navigate(route: AppRoute) {
     uiActions.navigate(route)
     setMobileMoreOpen(false)
@@ -106,6 +123,7 @@ export function AppShell() {
       </button>
       <nav className="primary-navigation" aria-label={t('primaryNavigation')}>{NAVIGATION.map((item) => <button key={item.route} aria-current={ui.route === item.route ? 'page' : undefined} className={ui.route === item.route ? 'active' : ''} onClick={() => navigate(item.route)}><span>{item.icon}</span>{t(item.label)}</button>)}</nav>
       <div className="header-actions">
+        <button className="command-button" onClick={() => setCommandOpen(true)} aria-label={t('globalSearch')}><span>⌕</span><kbd>⌘K</kbd></button>
         <button className="dataset-pill" onClick={() => navigate('about')} aria-label={`${t('dataset')}: ${catalog.manifest?.version ?? t('noDataset')}`}><i className={catalog.manifest ? 'online' : ''} /><span>{catalog.manifest?.version ?? t('noDataset').toUpperCase()}</span><b>{(catalog.manifest?.datasetMode ?? catalog.mode).toUpperCase()}</b></button>
         <button className="language-button" onClick={toggleLanguage} aria-label={language === 'zh' ? 'Switch to English' : '切换为中文'}>{language === 'zh' ? 'EN' : '中文'}</button>
       </div>
@@ -122,6 +140,8 @@ export function AppShell() {
     </div>}
 
     {ui.route === 'explorer' && <FirstRunGuide />}
+    <GuidedStoryOverlay key={`${ui.storyId}:${ui.storyGuideOpen ? 'open' : 'closed'}`} />
+    {commandOpen && <CommandPalette onClose={closeCommand} />}
     {waitingWorker && <aside className="update-banner glass-panel" role="status">
       <div><strong>{t('updateAvailable')}</strong><span>{t('updateDescription')}</span></div>
       <button className="primary-button" onClick={activateUpdate}>{t('refreshNow')}</button>

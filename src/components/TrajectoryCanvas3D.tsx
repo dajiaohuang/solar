@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { LagrangePoint } from '../lib/lagrange'
@@ -16,6 +16,8 @@ type Props = {
   showSaturnRings?: boolean
   showGlow?: boolean
   ariaLabel?: string
+  fallbackLabel?: string
+  onUnavailable?: () => void
 }
 
 type SceneResources = {
@@ -83,12 +85,18 @@ export function TrajectoryCanvas3D({
   showSaturnRings = true,
   showGlow = true,
   ariaLabel = 'Interactive three-dimensional Solar System trajectory view',
+  fallbackLabel = 'Three-dimensional WebGL rendering is unavailable.',
+  onUnavailable,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const resourcesRef = useRef<SceneResources | null>(null)
   const raycasterRef = useRef(new THREE.Raycaster())
   const positionsRef = useRef(currentPositions)
   const fitKeyRef = useRef('')
+  const onUnavailableRef = useRef(onUnavailable)
+  const fallbackLabelRef = useRef(fallbackLabel)
+  const [unavailable, setUnavailable] = useState<string | null>(null)
+  useEffect(() => { onUnavailableRef.current = onUnavailable; fallbackLabelRef.current = fallbackLabel }, [fallbackLabel, onUnavailable])
   useEffect(() => { positionsRef.current = currentPositions }, [currentPositions])
 
   useEffect(() => {
@@ -99,11 +107,26 @@ export function TrajectoryCanvas3D({
     scene.fog = new THREE.FogExp2(0x05070b, 0.012)
     const camera = new THREE.PerspectiveCamera(42, container.clientWidth / Math.max(container.clientHeight, 1), 0.005, 500)
     camera.position.set(0, 4.2, 7.5)
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true })
+    let renderer: THREE.WebGLRenderer
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true })
+    } catch (error) {
+      const failureFrame = window.requestAnimationFrame(() => {
+        setUnavailable(error instanceof Error ? error.message : fallbackLabelRef.current)
+        onUnavailableRef.current?.()
+      })
+      return () => window.cancelAnimationFrame(failureFrame)
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setSize(container.clientWidth, container.clientHeight)
     renderer.outputColorSpace = THREE.SRGBColorSpace
     container.appendChild(renderer.domElement)
+    const handleContextLost = (event: Event) => {
+      event.preventDefault()
+      setUnavailable(fallbackLabelRef.current)
+      onUnavailableRef.current?.()
+    }
+    renderer.domElement.addEventListener('webglcontextlost', handleContextLost)
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
     controls.dampingFactor = 0.075
@@ -174,6 +197,7 @@ export function TrajectoryCanvas3D({
 
     return () => {
       observer.disconnect()
+      renderer.domElement.removeEventListener('webglcontextlost', handleContextLost)
       renderer.setAnimationLoop(null)
       controls.dispose()
       for (const line of resources.trajectoryLines.values()) disposeObject(line)
@@ -354,6 +378,6 @@ export function TrajectoryCanvas3D({
         else onHover?.(null, 0, 0, 0)
       }}
       onMouseLeave={() => onHover?.(null, 0, 0, 0)}
-    />
+    >{unavailable && <div className="webgl-fallback" role="status"><span>◌</span><p>{fallbackLabel}</p></div>}</div>
   )
 }

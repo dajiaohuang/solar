@@ -1,38 +1,11 @@
 import { useState } from 'react'
 import storiesData from '../../content/stories/stories.json'
+import type { Story, StoryScene } from '../../content/stories/types'
 import { useI18n } from '../../i18n/context'
-import { dateToJulianDay } from '../../lib/julianDate'
 import { encodeCurrentScene } from '../../lib/shareScene'
-import { catalogActions } from '../../state/catalog-store'
-import { selectionActions } from '../../state/selection-store'
-import { simulationActions } from '../../state/simulation-store'
-import { uiActions, uiStore, type AppRoute, type ElementPlotMode } from '../../state/ui-store'
-
-type Localized = { en: string; zh: string }
-type StoryScene = {
-  date: string
-  referenceId: string
-  bodies: string[]
-  historyDays: number
-  view: '2d' | '3d'
-  route?: AppRoute
-  showLagrange?: boolean
-  showSpacecraft?: boolean
-  filter?: string
-  plot?: ElementPlotMode
-  aRange?: [number, number]
-  eRange?: [number, number]
-  qRange?: [number, number]
-}
-type StoryStep = { stage: string; title: Localized; prompt: Localized; body: Localized; scene: StoryScene }
-type Story = {
-  id: string
-  title: Localized
-  summary: Localized
-  boundary: Localized
-  sources: Array<{ label: string; url: string }>
-  steps: StoryStep[]
-}
+import { applyStoryScene } from '../../lib/storyScene'
+import { uiActions, uiStore } from '../../state/ui-store'
+import { StoryCheckpoint } from './StoryCheckpoint'
 const stories = storiesData as Story[]
 
 export function StoriesWorkspace() {
@@ -46,34 +19,8 @@ export function StoriesWorkspace() {
   const explanationOpen = revealedStep === stepKey
 
   function applyScene(scene: StoryScene) {
-    const selectedIds = scene.bodies.filter((id) => id !== 'sun')
-    selectionActions.setSelectedIds(selectedIds)
-    selectionActions.focus(scene.referenceId !== 'sun' ? scene.referenceId : selectedIds[0] ?? 'sun')
-    simulationActions.patch({
-      referenceId: scene.referenceId,
-      comparisonEnabled: false,
-      historyDays: scene.historyDays,
-      viewMode: scene.view,
-      viewOffset: { x: 0, y: 0 },
-      zoom: 1,
-      showEcliptic: true,
-      showOrbits: false,
-      showHillSphere: false,
-      showLaplaceSoi: false,
-      showLagrange: scene.showLagrange ?? false,
-      showSpacecraft: scene.showSpacecraft ?? false,
-    })
-    if (scene.filter || scene.aRange || scene.eRange || scene.qRange) {
-      catalogActions.patchFilters({
-        ...(scene.filter ? { orbitClass: scene.filter } : {}),
-        ...(scene.aRange ? { semiMajorAxis: scene.aRange } : {}),
-        ...(scene.eRange ? { eccentricity: scene.eRange } : {}),
-        ...(scene.qRange ? { perihelion: scene.qRange } : {}),
-      })
-    }
-    if (scene.plot) uiActions.setElementPlot(scene.plot)
-    simulationActions.seek(dateToJulianDay(new Date(`${scene.date}T12:00:00Z`)))
-    uiActions.navigate(scene.route ?? 'explorer')
+    uiActions.startStory(story.id, stepIndex)
+    applyStoryScene(scene)
   }
 
   async function copyStepLink() {
@@ -107,8 +54,10 @@ export function StoriesWorkspace() {
       </section>
       <aside className="story-evidence glass-panel">
         <div><span className="section-kicker">{t('storyBoundary')}</span><p>{story.boundary[language]}</p></div>
+        {story.glossary?.length ? <div><span className="section-kicker">{t('storyGlossary')}</span>{story.glossary.map((item) => <p key={item.term.en}><strong>{item.term[language]}</strong><br />{item.definition[language]}</p>)}</div> : null}
         <div><span className="section-kicker">{t('storySources')}</span>{story.sources.map((source) => <a href={source.url} target="_blank" rel="noreferrer" key={source.url}>{source.label}<b>↗</b></a>)}</div>
       </aside>
+      {stepIndex === story.steps.length - 1 && story.checkpoint && <StoryCheckpoint key={story.id} checkpoint={story.checkpoint} />}
       <footer className="story-pagination glass-panel"><button disabled={stepIndex === 0} onClick={() => setStep(stepIndex - 1)}>← {t('previous')}</button><div>{story.steps.map((_, index) => <button aria-label={`${index + 1}`} className={index === stepIndex ? 'active' : ''} onClick={() => setStep(index)} key={index} />)}</div><button disabled={stepIndex >= story.steps.length - 1} onClick={() => setStep(stepIndex + 1)}>{t('next')} →</button></footer>
     </div>
   </div>

@@ -15,8 +15,16 @@ test('visitor, story, and evidence surfaces have no serious automated accessibil
   await page.goto('./?v=3&page=stories')
   await expect(page.getByRole('heading', { name: /Stories|引导故事/ })).toBeVisible()
   await expectNoSeriousViolations(page)
+  await page.getByRole('button', { name: /Open this scene|打开此场景/ }).click()
+  await expect(page.getByRole('dialog', { name: /Why Mars moves backward|为什么火星会逆行/ })).toBeVisible()
+  await expectNoSeriousViolations(page)
 
   await page.goto('./?v=3&page=about')
   await expect(page.getByRole('heading', { name: /Evidence|证据与数据/ })).toBeVisible()
+  await expectNoSeriousViolations(page)
+
+  if ((page.viewportSize()?.width ?? 1280) > 980) await page.keyboard.press('Control+K')
+  else await page.getByRole('button', { name: /Search Solar Atlas|搜索太阳系图谱/ }).click()
+  await expect(page.getByRole('dialog', { name: /Search Solar Atlas|搜索太阳系图谱/ })).toBeVisible()
   await expectNoSeriousViolations(page)
 })
