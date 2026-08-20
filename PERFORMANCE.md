@@ -19,6 +19,7 @@ Solar Atlas treats the million-object catalog as a columnar filtering problem, n
 | Typical Catalog session transfer | reported, regression-reviewed | shell + compact index + desktop sample + manifest/provenance |
 | Lighthouse script transfer | 1,500,000 bytes | deployment Lighthouse CI assertion |
 | Lighthouse total first-load transfer | 3,500,000 bytes | deployment Lighthouse CI assertion |
+| Third-party first-load requests | 0 | deployment Lighthouse CI assertion |
 | Lighthouse total blocking time | 600 ms | median of three deployment runs |
 | Lighthouse cumulative layout shift | 0.10 | median of three deployment runs |
 | Lighthouse accessibility / SEO | 0.90 minimum | median of three deployment runs |

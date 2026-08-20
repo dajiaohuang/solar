@@ -23,6 +23,7 @@ All notable changes to Solar Atlas are documented here. The project follows sema
 - WebGL creation or context loss now falls back to a usable 2D Explorer, worker exceptions surface recovery state, and lazy workspaces have route-local retry/home error boundaries.
 - Story-guide, command-palette, element-chart, porkchop, and profile interactions preserve keyboard and automated accessibility coverage.
 - Windows asset generation reads UTF-8 story data explicitly and fails on errors, preventing corrupted Chinese social-card labels.
+- The application shell no longer depends on cross-origin web fonts, keeping the first-install offline experience and zero-third-party Lighthouse budget deterministic.
 
 ## 0.9.1 — 2026-08-20
 

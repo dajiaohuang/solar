@@ -2,7 +2,7 @@
   "ci": {
     "collect": {
       "startServerCommand": "npm run preview -- --host 127.0.0.1 --port 4188",
-      "startServerReadyPattern": "http://127.0.0.1:4188",
+      "startServerReadyPattern": "Local",
       "startServerReadyTimeout": 20000,
       "settings": {
         "chromeFlags": "--no-sandbox"
