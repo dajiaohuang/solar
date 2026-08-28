@@ -73,7 +73,7 @@ test('lazy-loads catalog samples only inside catalog workspaces and only once', 
   await page.goto('./')
   await expect(page.getByRole('heading', { name: /See the Solar System|把太阳系看成/ })).toBeVisible()
   expect(sampleRequests).toEqual([])
-  await page.getByRole('button', { name: /The Solar System now|现在的太阳系/ }).first().click()
+  await page.getByRole('button', { name: /Open the observation deck|打开综合观测台/ }).first().click()
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
   expect(sampleRequests).toEqual([])
   await openCatalog(page)
@@ -112,7 +112,7 @@ test('navigates through the atlas workspaces without console errors', async ({ p
   await page.goto('./')
   await expect(page.getByText(/Solar Atlas|太阳系图谱/).first()).toBeVisible()
   await expect(page.getByRole('heading', { name: /See the Solar System|把太阳系看成/ })).toBeVisible()
-  await page.getByRole('button', { name: /The Solar System now|现在的太阳系/ }).first().click()
+  await page.getByRole('button', { name: /Open the observation deck|打开综合观测台/ }).first().click()
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
   await openCatalog(page)
   await expect(page.getByRole('heading', { name: /Catalog|小天体目录/ })).toBeVisible()
@@ -155,6 +155,35 @@ test('applies a reproducible story scene with the requested frame and view', asy
   await expect(page.locator('.measure-ribbon select').nth(1)).toHaveValue('saturn')
 })
 
+test('offers a complete reproducible observation deck on desktop and mobile', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=3&page=explorer&lang=en')
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
+
+  const presetSelect = page.getByLabel('Preset scene')
+  await expect(presetSelect.locator('option')).toHaveCount(8)
+  await presetSelect.selectOption('mars-opposition')
+  await page.getByRole('button', { name: /Load preset/ }).click()
+  await expect(page.getByLabel('Date')).toHaveValue('2027-02-19')
+  await expect(page.getByLabel('Reference frame')).toHaveValue('sun')
+  await expect(page.getByLabel('Trajectory window')).toHaveValue('180')
+  await expect(page.getByLabel('Trajectory samples')).toHaveValue('180')
+  await expect(page.getByRole('checkbox', { name: /^Mars planet$/ })).toBeChecked()
+  await expect(page.getByRole('checkbox', { name: /^Mercury planet$/ })).not.toBeChecked()
+
+  const viewSwitch = page.locator('.simulation-bar .segmented-control')
+  await expect(viewSwitch).toBeVisible()
+  await viewSwitch.getByRole('button', { name: '2D' }).click()
+  await expect(page.locator('.trajectory-canvas')).toBeVisible()
+  await expect(page).toHaveURL(/[?&]view=2d(?:&|$)/)
+
+  await page.getByLabel('Trajectory samples').selectOption('240')
+  await expect(page).toHaveURL(/[?&]samples=240(?:&|$)/)
+  await page.getByLabel('Search renderable bodies').fill('Neptune')
+  await page.getByRole('checkbox', { name: /^Neptune planet$/ }).check()
+  await expect(page).toHaveURL(/[?&]bodies=[^&]*neptune/)
+})
+
 test('makes geocentrism the core guided-learning entry point', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=3&page=home&lang=en')
@@ -171,7 +200,7 @@ test('makes geocentrism the core guided-learning entry point', async ({ page }) 
 
 test('finishes first-run onboarding by opening the geocentrism core course', async ({ page }) => {
   await page.goto('./?v=3&page=home&lang=en')
-  await page.getByRole('button', { name: /The Solar System now/ }).first().click()
+  await page.getByRole('button', { name: /Open the observation deck/ }).first().click()
   const onboarding = page.getByRole('dialog', { name: 'Four controls, then you’re free' })
   await expect(onboarding).toBeVisible()
   await onboarding.getByRole('button', { name: /Next tip/ }).click()
@@ -240,7 +269,7 @@ test('separates known and unknown absolute-magnitude records', async ({ page }) 
 
 test('restores discrete workspace history and updates the page title', async ({ page }) => {
   await page.goto('./')
-  await page.getByRole('button', { name: /The Solar System now|现在的太阳系/ }).first().click()
+  await page.getByRole('button', { name: /Open the observation deck|打开综合观测台/ }).first().click()
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
   await expect(page).toHaveTitle(/Earth|地球/)
   await openCatalog(page)

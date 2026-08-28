@@ -1,14 +1,16 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { fetchSbdbBody } from '../../data/loaders/sbdb'
+import { SCENE_PRESETS } from '../../data/presets'
 import { useI18n } from '../../i18n/context'
+import { bodyDisplayName } from '../../lib/bodyNames'
+import { buildScenePresetApplication } from '../../lib/scenePreset'
+import { exportAnnotatedScenePng } from '../../lib/sceneExport'
+import { loadSavedScenes, localizeSavedSceneUrl, mergeSceneLibrary, parseSceneLibrary, removeSavedScene, saveCurrentScene, sceneLibraryDocument } from '../../lib/sceneLibrary'
 import { encodeCurrentScene } from '../../lib/shareScene'
 import { selectionActions, selectionStore } from '../../state/selection-store'
 import { simulationActions, simulationStore } from '../../state/simulation-store'
 import { uiActions } from '../../state/ui-store'
 import type { CelestialBody } from '../../types'
-import { bodyDisplayName } from '../../lib/bodyNames'
-import { exportAnnotatedScenePng } from '../../lib/sceneExport'
-import { loadSavedScenes, localizeSavedSceneUrl, mergeSceneLibrary, parseSceneLibrary, removeSavedScene, saveCurrentScene, sceneLibraryDocument } from '../../lib/sceneLibrary'
 
 type Props = {
   bodies: CelestialBody[]
@@ -26,11 +28,46 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
   const [sbdbState, setSbdbState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [sceneTitle, setSceneTitle] = useState('')
   const [savedScenes, setSavedScenes] = useState(loadSavedScenes)
+  const [selectedPresetId, setSelectedPresetId] = useState(SCENE_PRESETS[0].id)
+  const [bodyQuery, setBodyQuery] = useState('')
   const sceneImportRef = useRef<HTMLInputElement | null>(null)
-  const sortedBodies = [...bodies].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))
+  const sortedBodies = useMemo(() => [...bodies].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name)), [bodies])
+  const selectedPreset = SCENE_PRESETS.find((preset) => preset.id === selectedPresetId) ?? SCENE_PRESETS[0]
+  const filteredBodies = useMemo(() => {
+    const query = bodyQuery.trim().toLocaleLowerCase()
+    if (!query) return sortedBodies
+    return sortedBodies.filter((body) => [bodyDisplayName(body, language), body.name, body.id, body.kind, body.orbitClassCode]
+      .filter(Boolean)
+      .some((value) => String(value).toLocaleLowerCase().includes(query)))
+  }, [bodyQuery, language, sortedBodies])
+
+  function applySelectedPreset() {
+    const application = buildScenePresetApplication(selectedPreset)
+    simulationActions.pause()
+    simulationActions.seek(application.julianDay)
+    simulationActions.patch(application.simulation)
+    selectionActions.setSelectedIds(application.selectedIds)
+    selectionActions.focus(application.focusedId)
+    uiActions.toast(`${t('presetApplied')}: ${selectedPreset.name[language]}`)
+  }
 
   return (
     <aside className="control-drawer glass-panel">
+      <section className="drawer-section preset-console" data-story-target="preset">
+        <div className="preset-console-heading">
+          <div className="section-kicker">{t('scenePresets').toUpperCase()}</div>
+          <span className="preset-index">{String(SCENE_PRESETS.indexOf(selectedPreset) + 1).padStart(2, '0')} / {String(SCENE_PRESETS.length).padStart(2, '0')}</span>
+        </div>
+        <label className="field">
+          <span>{t('scenePreset')}</span>
+          <select aria-label={t('scenePreset')} value={selectedPreset.id} onChange={(event) => setSelectedPresetId(event.target.value)}>
+            {SCENE_PRESETS.map((preset) => <option value={preset.id} key={preset.id}>{preset.name[language]}</option>)}
+          </select>
+        </label>
+        <p className="preset-description">{selectedPreset.description[language]}</p>
+        <button type="button" className="preset-apply" onClick={applySelectedPreset}>{t('applyPreset')} ↗</button>
+      </section>
+
       <section className="drawer-section" data-story-target="frame">
         <div className="section-kicker">{t('referenceFrame').toUpperCase()}</div>
         <label className="field">
@@ -59,6 +96,31 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
         </label>
       </section>
 
+      <section className="drawer-section view-parameters">
+        <div className="section-kicker">{t('viewParameters').toUpperCase()}</div>
+        <label className="field range-field">
+          <span>{t('zoom2d')} <strong>{simulation.zoom.toFixed(2)}×</strong></span>
+          <input aria-label={t('zoom2d')} type="range" min="0.15" max="12" step="0.05" value={simulation.zoom} onChange={(event) => simulationActions.patch({ zoom: Number(event.target.value) })} />
+        </label>
+        <label className="field">
+          <span>{t('trajectorySamples')}</span>
+          <select value={simulation.sampleCount} onChange={(event) => simulationActions.patch({ sampleCount: Number(event.target.value) })}>
+            {[64, 120, 180, 240, 360].map((count) => <option value={count} key={count}>{count} {t('samples')}</option>)}
+          </select>
+        </label>
+        <div className="view-offset-grid">
+          <label className="field">
+            <span>{t('offsetX')}</span>
+            <input type="number" step="0.1" value={simulation.viewOffset.x} onChange={(event) => simulationActions.patch({ viewOffset: { ...simulation.viewOffset, x: Number(event.target.value) || 0 } })} />
+          </label>
+          <label className="field">
+            <span>{t('offsetY')}</span>
+            <input type="number" step="0.1" value={simulation.viewOffset.y} onChange={(event) => simulationActions.patch({ viewOffset: { ...simulation.viewOffset, y: Number(event.target.value) || 0 } })} />
+          </label>
+        </div>
+        <button type="button" className="view-reset" onClick={() => simulationActions.patch({ zoom: 1, viewOffset: { x: 0, y: 0 } })}>{t('resetView')}</button>
+      </section>
+
       <section className="drawer-section" data-story-target="layers">
         <div className="section-kicker">{t('layers').toUpperCase()}</div>
         {([
@@ -74,8 +136,13 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
 
       <section className="drawer-section focus-list-section">
         <div className="section-heading"><span>{t('selectedBodies')}</span><strong>{selection.selectedIds.length}/160</strong></div>
+        <label className="field body-filter">
+          <span>{t('filterBodies')}</span>
+          <input type="search" value={bodyQuery} onChange={(event) => setBodyQuery(event.target.value)} placeholder={t('filterBodies')} />
+        </label>
+        <div className="body-match-count">{filteredBodies.length} {t('matchingBodies')}</div>
         <div className="body-check-list">
-          {sortedBodies.map((body) => (
+          {filteredBodies.map((body) => (
             <label className="body-check-row" key={body.id}>
               <input type="checkbox" checked={selection.selectedIds.includes(body.id)} onChange={() => selectionActions.toggle(body.id)} />
               <i style={{ backgroundColor: body.color }} />
@@ -84,8 +151,9 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
             </label>
           ))}
         </div>
-        <div className="inline-actions">
-          <button onClick={() => selectionActions.setSelectedIds(referenceOptions.filter((body) => body.id !== 'sun').map((body) => body.id))}>{t('selectAll')}</button>
+        <div className="inline-actions body-selection-actions">
+          <button onClick={() => selectionActions.setSelectedIds(referenceOptions.filter((body) => body.id !== 'sun' && body.kind !== 'spacecraft').map((body) => body.id).slice(0, 160))}>{t('selectMajorBodies')}</button>
+          <button onClick={() => selectionActions.setSelectedIds(sortedBodies.slice(0, 160).map((body) => body.id))}>{t('selectAllAvailable')}</button>
           <button onClick={() => selectionActions.setSelectedIds([])}>{t('clear')}</button>
         </div>
       </section>

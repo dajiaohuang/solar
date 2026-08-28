@@ -30,6 +30,7 @@ export function encodeCurrentScene() {
     zoom: simulation.zoom,
     speed: simulationClock.getSnapshot().rateDaysPerSecond,
     history: simulation.historyDays,
+    samples: simulation.sampleCount,
     view: simulation.viewMode,
     filter: catalog.filters.orbitClass,
     search: catalog.filters.query,
