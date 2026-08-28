@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, type ReactNode } from 'react'
+import { majorBodiesWithPhysicalData } from './bodyRegistry'
 import { fetchSbdbBody } from '../data/loaders/sbdb'
 import { simulationClock } from '../engine/clock/SimulationClock'
 import { I18nProvider } from '../i18n/provider'
@@ -12,6 +13,7 @@ import { uiActions, uiStore } from '../state/ui-store'
 import { DEFAULT_MISSION_STATE, missionActions, missionStore } from '../state/mission-store'
 
 const DEFAULT_STORY = 'geocentric-model'
+const MISSION_BODY_IDS = new Set(majorBodiesWithPhysicalData.filter((body) => body.orbit && !body.parentId).map((body) => body.id))
 
 function routeForState(state: AppUrlState) {
   if (state.route) return state.route
@@ -59,8 +61,8 @@ export function AppProviders({ children }: { children: ReactNode }) {
     if (initial.guide) uiActions.startStory(initial.story ?? DEFAULT_STORY, initial.step ?? 0)
     else uiActions.stopStory()
     missionActions.patch({
-      departureId: initial.missionFrom ?? DEFAULT_MISSION_STATE.departureId,
-      arrivalId: initial.missionTo ?? DEFAULT_MISSION_STATE.arrivalId,
+      departureId: initial.missionFrom && MISSION_BODY_IDS.has(initial.missionFrom) ? initial.missionFrom : DEFAULT_MISSION_STATE.departureId,
+      arrivalId: initial.missionTo && MISSION_BODY_IDS.has(initial.missionTo) ? initial.missionTo : DEFAULT_MISSION_STATE.arrivalId,
       departureDate: initial.departureDate ?? DEFAULT_MISSION_STATE.departureDate,
       arrivalDate: initial.arrivalDate ?? DEFAULT_MISSION_STATE.arrivalDate,
     })

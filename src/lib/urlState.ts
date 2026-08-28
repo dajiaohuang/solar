@@ -62,6 +62,12 @@ function parsePair(value: string | null): [number, number] | undefined {
   return !extra.length && Number.isFinite(first) && Number.isFinite(second) ? [first, second] : undefined
 }
 
+function parseIsoDate(value: string | null) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined
+  const date = new Date(`${value}T00:00:00Z`)
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : undefined
+}
+
 function setRange(params: URLSearchParams, key: string, range?: [number, number]) {
   if (range) params.set(key, `${range[0]},${range[1]}`)
 }
@@ -146,11 +152,8 @@ export function decodeUrlState(search = typeof window === 'undefined' ? '' : win
   if (missionFrom) state.missionFrom = missionFrom
   const missionTo = params.get('to')
   if (missionTo) state.missionTo = missionTo
-  const datePattern = /^\d{4}-\d{2}-\d{2}$/
-  const departureDate = params.get('depart')
-  if (departureDate && datePattern.test(departureDate)) state.departureDate = departureDate
-  const arrivalDate = params.get('arrive')
-  if (arrivalDate && datePattern.test(arrivalDate)) state.arrivalDate = arrivalDate
+  state.departureDate = parseIsoDate(params.get('depart'))
+  state.arrivalDate = parseIsoDate(params.get('arrive'))
   const focused = params.get('focused')
   if (focused) state.focused = focused
   const plot = params.get('plot') as ElementPlotMode | null

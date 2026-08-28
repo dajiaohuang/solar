@@ -200,6 +200,16 @@ test('computes the Earth-to-Mars transfer and worker porkchop map', async ({ pag
   expect(errors).toEqual([])
 })
 
+test('falls back safely when a shared mission URL has invalid parameters', async ({ page }) => {
+  await page.goto('./?v=3&page=mission&from=bogus&to=mars&depart=2026-99-99&arrive=2027-02-30')
+  await expect(page.getByRole('heading', { name: /Mission Lab|任务实验室/ })).toBeVisible()
+  await expect(page.getByLabel(/Departure body|出发天体/)).toHaveValue('earth')
+  await expect(page.getByLabel(/Arrival body|到达天体/)).toHaveValue('mars')
+  await expect(page.getByLabel(/Departure date|出发日期/)).toHaveValue('2026-11-15')
+  await expect(page.getByLabel(/Arrival date|到达日期/)).toHaveValue('2027-08-01')
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})
+
 test('shows Hill and Laplace influence definitions independently', async ({ page }) => {
   await page.goto('./?v=2&view=2d')
   await page.getByLabel(/Hill sphere|希尔球/, { exact: true }).check()
