@@ -18,6 +18,10 @@ export function SimulationControls() {
       <button type="button" className="primary-button" onClick={simulationActions.togglePlayback}>
         {clock.isPlaying ? `❚❚ ${t('pause')}` : `▶ ${t('play')}`}
       </button>
+      <div className="segmented-control" aria-label={t('view')}>
+        <button className={simulation.viewMode === '2d' ? 'active' : ''} onClick={() => simulationActions.patch({ viewMode: '2d' })}>2D</button>
+        <button className={simulation.viewMode === '3d' ? 'active' : ''} onClick={() => simulationActions.patch({ viewMode: '3d' })}>3D</button>
+      </div>
       <label className="compact-field">
         <span>{t('date')}</span>
         <input
@@ -40,10 +44,6 @@ export function SimulationControls() {
         </select>
       </label>
       <button type="button" className="quiet-button" onClick={simulationActions.resetTime}>{t('today')}</button>
-      <div className="segmented-control" aria-label={t('view')}>
-        <button className={simulation.viewMode === '2d' ? 'active' : ''} onClick={() => simulationActions.patch({ viewMode: '2d' })}>2D</button>
-        <button className={simulation.viewMode === '3d' ? 'active' : ''} onClick={() => simulationActions.patch({ viewMode: '3d' })}>3D</button>
-      </div>
       <span className="jd-readout">JD {clock.julianDay.toFixed(3)}</span>
       {validityWarning && <span className="model-validity-warning" role="status">⚠ {validityWarning}</span>}
     </div>

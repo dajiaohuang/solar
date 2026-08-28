@@ -18,6 +18,7 @@ export type AppUrlState = {
   zoom?: number
   speed?: number
   history?: number
+  samples?: number
   view?: '2d' | '3d'
   filter?: string
   search?: string
@@ -86,6 +87,7 @@ export function encodeUrlState(state: AppUrlState) {
   if (state.zoom !== undefined && state.zoom !== 1) params.set('zoom', state.zoom.toFixed(2))
   if (state.speed !== undefined && state.speed !== 30) params.set('speed', String(state.speed))
   if (state.history !== undefined && state.history !== 365) params.set('history', String(state.history))
+  if (state.samples !== undefined && state.samples !== 180) params.set('samples', String(Math.floor(state.samples)))
   if (state.view && state.view !== '3d') params.set('view', state.view)
   if (state.filter && state.filter !== 'all') params.set('filter', state.filter)
   if (state.search) params.set('search', state.search)
@@ -135,6 +137,8 @@ export function decodeUrlState(search = typeof window === 'undefined' ? '' : win
   state.zoom = finite(params.get('zoom'))
   state.speed = finite(params.get('speed'))
   state.history = finite(params.get('history'))
+  const samples = finite(params.get('samples'))
+  if (samples !== undefined && samples >= 32 && samples <= 480) state.samples = Math.floor(samples)
   const view = params.get('view')
   if (view === '2d' || view === '3d') state.view = view
   const filter = params.get('filter')

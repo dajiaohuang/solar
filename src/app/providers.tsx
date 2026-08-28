@@ -78,6 +78,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
       comparisonEnabled: initial.compare ?? DEFAULT_SIMULATION_STATE.comparisonEnabled,
       zoom: initial.zoom ?? DEFAULT_SIMULATION_STATE.zoom,
       historyDays: initial.history ?? DEFAULT_SIMULATION_STATE.historyDays,
+      sampleCount: initial.samples ?? DEFAULT_SIMULATION_STATE.sampleCount,
       viewMode: initial.view ?? DEFAULT_SIMULATION_STATE.viewMode,
       showEcliptic: initial.layers?.includes('ecliptic') ?? DEFAULT_SIMULATION_STATE.showEcliptic,
       showOrbits: initial.layers?.includes('orbits') ?? DEFAULT_SIMULATION_STATE.showOrbits,
