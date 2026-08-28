@@ -41,4 +41,10 @@ describe('reproducible scene URLs', () => {
   it('fails closed for a future scene schema instead of misreading its fields', () => {
     expect(decodeUrlState('?v=99&ref=earth&view=2d')).toEqual({})
   })
+
+  it('ignores impossible mission dates while preserving valid calendar dates', () => {
+    const decoded = decodeUrlState('?v=3&depart=2026-99-99&arrive=2028-02-29')
+    expect(decoded.departureDate).toBeUndefined()
+    expect(decoded.arrivalDate).toBe('2028-02-29')
+  })
 })
