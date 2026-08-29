@@ -2,6 +2,26 @@
 
 All notable changes to Solar Atlas are documented here. The project follows semantic versioning after the prototype phase.
 
+## Unreleased
+
+### Added
+
+- An optional worker-propagated asteroid catalog cloud in the Observation Deck, rendered as one GPU point buffer instead of one mesh or trajectory per catalog object.
+- Auto, Balanced, and Maximum 3D performance profiles with separate mobile/desktop budgets, conservative capability hints, frame-time adaptation, and deterministic unit coverage.
+- Reproducible v4 scene fields for catalog-cloud intent and quality profile, plus browser coverage for the default no-download path and 2D/3D replay.
+
+### Changed
+
+- The application now opens directly in the 3D Observation Deck; advanced controls remain collapsed, first-time visitors choose between the tutorial and immediate exploration, and WebGL failure still falls back to 2D.
+- Focus trajectories are capped independently at 160 bodies in 3D and 320 in 2D, while catalog points use larger view- and device-specific budgets and share their total across split views.
+- Paused 3D scenes render on demand. Continuous animation is limited to a playing simulation with the catalog cloud enabled, and the renderer no longer preserves its drawing buffer.
+- The Moon remains derived from JPL mean elements and DE440 Earth–Moon mass partitioning; Io, Europa, Ganymede, Callisto, and Titan now use reproducible parent-centered JPL Horizons osculating-element queries at JD 2451545.0 TDB with explicit fixed-ellipse limitations.
+
+### Documentation
+
+- Rebuilt the English and Chinese README as mirrored product, science, data, performance, validation, deployment, and contribution references, with a current runtime screenshot and explicit guarantee boundaries.
+- Expanded the performance guide to distinguish immutable sample size, catalog-point budget, and focus-trajectory budget without making hardware-specific smoothness guarantees.
+
 ## 0.11.0 — 2026-08-20
 
 ### Added

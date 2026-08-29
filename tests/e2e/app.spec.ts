@@ -119,11 +119,52 @@ test('lazy-loads catalog samples only inside catalog workspaces and only once', 
   await installMockCatalog(page, { precomputed: true })
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./')
-  await expect(page.locator('.trajectory-canvas')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
   expect(sampleRequests).toEqual([])
   await openCatalog(page)
   await expect.poll(() => sampleRequests.length).toBe(2)
   expect(new Set(sampleRequests).size).toBe(2)
+})
+
+test('renders an explicitly enabled reproducible catalog cloud without reloading it across view changes', async ({ page }, testInfo) => {
+  const sampleRequests: string[] = []
+  page.on('request', (request) => {
+    if (/catalog-sample-(desktop|mobile)\.(json|bin)$/.test(request.url())) sampleRequests.push(request.url())
+  })
+  await installMockCatalog(page, { precomputed: true, profileSamples: { desktop: [0, 2], mobile: [1] } })
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  const profile = testInfo.project.name.startsWith('mobile') ? 'mobile' : 'desktop'
+  const sampleCount = profile === 'mobile' ? 1 : 2
+  await page.goto(`./?v=4&catalogCloud=1&quality=max&dataset=mock-content-lite&catalogSample=${profile}&catalogSampleCount=${sampleCount}&lang=en`)
+
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
+  await expect.poll(() => sampleRequests.length).toBe(2)
+  expect(new Set(sampleRequests).size).toBe(2)
+  await expect(page.locator('.frame-label small')).toContainText(`catalog ${sampleCount.toLocaleString()} / ${sampleCount.toLocaleString()} · Maximum`)
+  await expect(page).toHaveURL(/[?&]catalogCloud=1(?:&|$)/)
+  await expect(page).toHaveURL(/[?&]quality=max(?:&|$)/)
+
+  const viewSwitch = page.locator('.simulation-bar .segmented-control')
+  await viewSwitch.getByRole('button', { name: '2D' }).click()
+  await expect(page.locator('.trajectory-canvas')).toBeVisible()
+  await viewSwitch.getByRole('button', { name: '3D' }).click()
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
+  expect(sampleRequests).toHaveLength(2)
+})
+
+test('fails closed visibly when an enabled catalog cloud has an invalid sample tuple', async ({ page }) => {
+  const sampleRequests: string[] = []
+  page.on('request', (request) => {
+    if (/catalog-sample-(desktop|mobile)\.(json|bin)$/.test(request.url())) sampleRequests.push(request.url())
+  })
+  await installMockCatalog(page, { precomputed: true })
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&catalogCloud=1&dataset=mock-content-lite&catalogSample=mobile&catalogSampleCount=oops&lang=en')
+
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText('catalogSampleCount must be a positive integer: oops')).toBeVisible()
+  expect(sampleRequests).toEqual([])
+  await expect(page.locator('.frame-label small')).toContainText('catalog 0 / 0')
 })
 
 test('loads the same pinned catalog sample on desktop and mobile', async ({ page }) => {
@@ -211,7 +252,7 @@ test('navigates through the atlas workspaces without console errors', async ({ p
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./')
   await expect(page.getByText(/Solar Atlas|太阳系图谱/).first()).toBeVisible()
-  await expect(page.locator('.trajectory-canvas')).toBeVisible({ timeout: 15_000 })
+  await expect(page.locator('.trajectory-canvas, [data-testid="trajectory-canvas-3d"]')).toBeVisible({ timeout: 15_000 })
   await openCatalog(page)
   await expect(page.getByRole('heading', { name: /Catalog|小天体目录/ })).toBeVisible()
   const missionButton = page.getByRole('button', { name: /Mission Lab|任务实验室/ }).first()
@@ -237,7 +278,7 @@ test('applies a reproducible story scene with the requested frame and view', asy
   await page.getByRole('button', { name: /Next|下一步/ }).click()
   await page.getByRole('button', { name: /Next|下一步/ }).click()
   await page.getByRole('button', { name: /Open this scene|打开此场景/ }).click()
-  await expect(page.locator('.trajectory-canvas')).toBeVisible()
+  await expect(page.locator('.trajectory-canvas, [data-testid="trajectory-canvas-3d"]')).toBeVisible()
   await expect(page.getByRole('dialog', { name: /Why Mars moves backward|为什么火星会逆行/ })).toBeVisible()
   await expect(page).toHaveURL(/[?&]guide=1(?:&|$)/)
   await expect(page).toHaveURL(/view=2d/)
@@ -278,7 +319,7 @@ test('offers a complete reproducible observation deck on desktop and mobile', as
   const viewSwitch = page.locator('.simulation-bar .segmented-control')
   await expect(viewSwitch).toBeVisible()
   await viewSwitch.getByRole('button', { name: '2D' }).click()
-  await expect(page.locator('.trajectory-canvas')).toBeVisible()
+  await expect(page.locator('.trajectory-canvas, [data-testid="trajectory-canvas-3d"]')).toBeVisible()
   await expect(page).toHaveURL(/[?&]view=2d(?:&|$)/)
   await expect(page.getByRole('button', { name: 'Load preset: Mars opposition 2027' })).toHaveAttribute('aria-pressed', 'false')
 
@@ -334,7 +375,7 @@ test('loads and replays both pinned main-belt presets on desktop and mobile', as
 test('routes legacy home URLs to the deck and lets visitors reopen the tutorial', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=3&page=home&lang=en')
-  await expect(page.locator('.trajectory-canvas')).toBeVisible({ timeout: 15_000 })
+  await expect(page.locator('.trajectory-canvas, [data-testid="trajectory-canvas-3d"]')).toBeVisible({ timeout: 15_000 })
   await page.getByRole('button', { name: 'Start tutorial' }).click()
   await expect(page.getByRole('dialog', { name: 'How would you like to begin?' })).toBeFocused()
 })
@@ -353,7 +394,7 @@ test('offers a first-run choice and finishes the tutorial on the deck', async ({
   await expect(onboarding).toContainText('Preset scenes')
   await onboarding.getByRole('button', { name: 'Start exploring' }).click()
   await expect(onboarding).toHaveCount(0)
-  await expect(page.locator('.trajectory-canvas')).toBeVisible()
+  await expect(page.locator('.trajectory-canvas, [data-testid="trajectory-canvas-3d"]')).toBeVisible()
   await page.reload()
   await expect(page.getByRole('dialog', { name: 'How would you like to begin?' })).toHaveCount(0)
 })
@@ -490,7 +531,7 @@ test('separates known and unknown absolute-magnitude records', async ({ page }) 
 test('restores discrete workspace history and updates the page title', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./')
-  await expect(page.locator('.trajectory-canvas')).toBeVisible({ timeout: 15_000 })
+  await expect(page.locator('.trajectory-canvas, [data-testid="trajectory-canvas-3d"]')).toBeVisible({ timeout: 15_000 })
   await expect(page).toHaveTitle(/Earth|地球/)
   await openCatalog(page)
   await expect(page.getByRole('heading', { name: /Catalog|小天体目录/ })).toBeVisible()
@@ -505,7 +546,7 @@ test('restores discrete workspace history and updates the page title', async ({ 
   await page.goBack()
   await expect(page.getByRole('heading', { name: /Catalog|小天体目录/ })).toBeVisible()
   await page.goBack()
-  await expect(page.locator('.trajectory-canvas')).toBeVisible({ timeout: 15_000 })
+  await expect(page.locator('.trajectory-canvas, [data-testid="trajectory-canvas-3d"]')).toBeVisible({ timeout: 15_000 })
   await page.goForward()
   await expect(page.getByRole('heading', { name: /Catalog|小天体目录/ })).toBeVisible()
 })
@@ -529,7 +570,7 @@ test('keeps a guided story active across workspaces and advances its reproducibl
   await page.getByRole('button', { name: 'Open this scene' }).click()
   const guide = page.getByRole('dialog', { name: 'Why Mars moves backward' })
   await expect(guide).toBeVisible()
-  await expect(page.locator('.trajectory-canvas')).toBeVisible()
+  await expect(page.locator('.trajectory-canvas, [data-testid="trajectory-canvas-3d"]')).toBeVisible()
   await expect(page).toHaveURL(/[?&]guide=1(?:&|$)/)
   await guide.getByRole('button', { name: /Next/ }).click()
   await expect(page).toHaveURL(/[?&]step=1(?:&|$)/)
@@ -547,7 +588,7 @@ test('keeps a guided story active across workspaces and advances its reproducibl
 
 test('searches workspaces, objects, stories, and terms from the keyboard palette', async ({ page }) => {
   await page.goto('./?v=3&page=home&lang=en')
-  await expect(page.locator('.trajectory-canvas')).toBeVisible({ timeout: 15_000 })
+  await expect(page.locator('.trajectory-canvas, [data-testid="trajectory-canvas-3d"]')).toBeVisible({ timeout: 15_000 })
   if ((page.viewportSize()?.width ?? 1280) > 980) await page.keyboard.press('Control+K')
   else await page.getByRole('button', { name: 'Search Solar Atlas' }).click()
   const dialog = page.getByRole('dialog', { name: 'Search Solar Atlas' })
@@ -564,7 +605,7 @@ test('searches workspaces, objects, stories, and terms from the keyboard palette
   else await page.getByRole('button', { name: 'Search Solar Atlas' }).click()
   await page.getByRole('dialog', { name: 'Search Solar Atlas' }).getByRole('searchbox').fill('Mars')
   await page.getByRole('option', { name: /Mars Object/ }).click()
-  await expect(page.locator('.trajectory-canvas')).toBeVisible({ timeout: 15_000 })
+  await expect(page.locator('.trajectory-canvas, [data-testid="trajectory-canvas-3d"]')).toBeVisible({ timeout: 15_000 })
   await expect(page).toHaveURL(/[?&]focused=mars(?:&|$)/)
 })
 
@@ -586,7 +627,7 @@ test('falls back to the 2D explorer when the WebGL context is lost', async ({ pa
   const threeDimensional = page.getByTestId('trajectory-canvas-3d')
   await expect(threeDimensional).toBeVisible({ timeout: 15_000 })
   await threeDimensional.locator('canvas').evaluate((canvas) => canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true })))
-  await expect(page.locator('.trajectory-canvas')).toBeVisible()
+  await expect(page.locator('.trajectory-canvas, [data-testid="trajectory-canvas-3d"]')).toBeVisible()
   await expect(page).toHaveURL(/[?&]view=2d(?:&|$)/)
 })
 

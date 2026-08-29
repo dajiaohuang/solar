@@ -42,6 +42,8 @@ export function encodeCurrentScene() {
     history: simulation.historyDays,
     samples: simulation.sampleCount,
     view: simulation.viewMode,
+    catalogCloud: simulation.showCatalogCloud,
+    quality: simulation.renderQuality,
     filter: catalog.filters.orbitClass,
     search: catalog.filters.query,
     story: ui.route === 'stories' || ui.storyGuideOpen ? ui.storyId : undefined,

@@ -1,14 +1,18 @@
 import { useEffect } from 'react'
 import { loadAsteroidSample, loadCatalogSummary } from '../lib/catalogLoader'
 import { resolveCatalogSampleProfile } from '../lib/catalogSampleProfile'
+import { classifyRenderDevice } from '../lib/renderBudget'
 import { catalogActions, catalogStore } from '../state/catalog-store'
 import type { CatalogSampleProfile } from '../types'
 
 export function catalogSampleSize(): CatalogSampleProfile {
-  return window.matchMedia('(max-width: 800px)').matches ? 'mobile' as const : 'desktop' as const
+  return classifyRenderDevice(
+    window.innerWidth,
+    window.matchMedia('(pointer: coarse) and (max-width: 1180px)').matches,
+  )
 }
 
-export function useCatalogSample() {
+export function useCatalogSample(enabled = true) {
   const manifest = catalogStore.useStore((state) => state.manifest)
   const baseSampleKey = catalogStore.useStore((state) => state.baseSampleKey)
   const requestedSampleProfile = catalogStore.useStore((state) => state.requestedSampleProfile)
@@ -17,7 +21,7 @@ export function useCatalogSample() {
   const requestedSampleInvalid = catalogStore.useStore((state) => state.requestedSampleInvalid)
 
   useEffect(() => {
-    if (!manifest) return
+    if (!enabled || !manifest) return
     const resolution = resolveCatalogSampleProfile(manifest, {
       profile: requestedSampleProfile,
       count: requestedSampleCount,
@@ -56,5 +60,5 @@ export function useCatalogSample() {
       })
     })
     return () => { cancelled = true }
-  }, [baseSampleKey, manifest, requestedSampleCount, requestedSampleCountRaw, requestedSampleInvalid, requestedSampleProfile])
+  }, [baseSampleKey, enabled, manifest, requestedSampleCount, requestedSampleCountRaw, requestedSampleInvalid, requestedSampleProfile])
 }

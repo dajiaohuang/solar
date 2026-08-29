@@ -17,7 +17,7 @@ function solveEccentricAnomaly(meanAnomaly: number, eccentricity: number) {
   return eccentricAnomaly
 }
 
-export function propagateCatalogElements(
+export function propagateCatalogElementPositions(
   elements: Float64Array,
   julianDay: number,
   onProgress?: (progress: number) => void,
@@ -25,6 +25,7 @@ export function propagateCatalogElements(
   if (elements.length % CATALOG_ELEMENT_STRIDE !== 0) throw new Error('Catalog element buffer has an invalid stride')
   const count = elements.length / CATALOG_ELEMENT_STRIDE
   const positions = new Float32Array(count * 2)
+  const positions3D = new Float32Array(count * 3)
   for (let index = 0; index < count; index += 1) {
     const offset = index * CATALOG_ELEMENT_STRIDE
     const epochJd = elements[offset]
@@ -41,12 +42,22 @@ export function propagateCatalogElements(
     const orbitalX = semiMajorAxisAU * (Math.cos(eccentricAnomaly) - eccentricity)
     const orbitalY = semiMajorAxisAU * Math.sqrt(1 - eccentricity ** 2) * Math.sin(eccentricAnomaly)
     const cosW = Math.cos(argPeriapsis), sinW = Math.sin(argPeriapsis)
-    const cosO = Math.cos(ascendingNode), sinO = Math.sin(ascendingNode), cosI = Math.cos(inclination)
-    positions[index * 2] = (cosW * cosO - sinW * sinO * cosI) * orbitalX +
+    const cosO = Math.cos(ascendingNode), sinO = Math.sin(ascendingNode), cosI = Math.cos(inclination), sinI = Math.sin(inclination)
+    const x = (cosW * cosO - sinW * sinO * cosI) * orbitalX +
       (-sinW * cosO - cosW * sinO * cosI) * orbitalY
-    positions[index * 2 + 1] = (cosW * sinO + sinW * cosO * cosI) * orbitalX +
+    const y = (cosW * sinO + sinW * cosO * cosI) * orbitalX +
       (-sinW * sinO + cosW * cosO * cosI) * orbitalY
+    const z = sinW * sinI * orbitalX + cosW * sinI * orbitalY
+    positions[index * 2] = x
+    positions[index * 2 + 1] = y
+    positions3D[index * 3] = x
+    positions3D[index * 3 + 1] = y
+    positions3D[index * 3 + 2] = z
     if (index > 0 && index % 50_000 === 0) onProgress?.(index / count)
   }
-  return positions
+  return { positions, positions3D }
+}
+
+export function propagateCatalogElements(elements: Float64Array, julianDay: number, onProgress?: (progress: number) => void) {
+  return propagateCatalogElementPositions(elements, julianDay, onProgress).positions
 }

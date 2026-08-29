@@ -1,6 +1,7 @@
 import { simulationClock } from '../engine/clock/SimulationClock'
 import { todayJulianDay } from '../lib/julianDate'
 import { createStore } from './createStore'
+import type { RenderQuality } from '../types'
 
 export type ViewMode = '2d' | '3d'
 
@@ -11,6 +12,8 @@ export type SimulationState = {
   historyDays: number
   sampleCount: number
   viewMode: ViewMode
+  renderQuality: RenderQuality
+  showCatalogCloud: boolean
   showEcliptic: boolean
   showHillSphere: boolean
   showLaplaceSoi: boolean
@@ -26,7 +29,9 @@ export const DEFAULT_SIMULATION_STATE: SimulationState = {
   comparisonEnabled: false,
   historyDays: 365,
   sampleCount: 180,
-  viewMode: '2d',
+  viewMode: '3d',
+  renderQuality: 'auto',
+  showCatalogCloud: false,
   showEcliptic: true,
   showHillSphere: false,
   showLaplaceSoi: false,

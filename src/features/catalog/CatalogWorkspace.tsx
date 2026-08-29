@@ -21,6 +21,7 @@ import {
 import { catalogActions, catalogDisplayRecords, catalogStore, filterCatalogRecords } from '../../state/catalog-store'
 import { selectionActions, selectionStore } from '../../state/selection-store'
 import { uiActions } from '../../state/ui-store'
+import { simulationStore } from '../../state/simulation-store'
 import type { AsteroidSectionCursor, MagnitudeStatus } from '../../types'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { catalogSampleErrorMessage } from '../../lib/catalogSampleProfile'
@@ -31,6 +32,7 @@ export function CatalogWorkspace() {
   useCatalogSample()
   const catalog = catalogStore.useStore()
   const selection = selectionStore.useStore()
+  const simulation = simulationStore.useStore()
   const clock = useSimulationClock()
   const { t, language } = useI18n()
   const installedMode = catalog.manifest?.datasetMode ?? catalog.mode
@@ -222,6 +224,7 @@ export function CatalogWorkspace() {
   const exactFilteredTotal = catalog.activeResultScanKey === scanKey ? catalog.exactFilteredTotal : null
   const resultTotal = exactFilteredTotal ?? textMatchTotal ?? filtered.length
   const visibleTableCount = Math.min(filtered.length, 240)
+  const focusBodyLimit = simulation.viewMode === '2d' ? 320 : 160
 
   return (
     <div className="workspace-page catalog-workspace" data-story-target="catalog">
@@ -250,7 +253,7 @@ export function CatalogWorkspace() {
             <option value="unknown">{t('magnitudeUnknown')}</option>
           </select></label>
           <RangeFields label="q (AU)" value={catalog.filters.perihelion} onChange={(value) => catalogActions.patchFilters({ perihelion: value })} step="0.1" />
-          <button className="primary-button full-width" disabled={!filtered.length} onClick={() => selectionActions.addCatalogBodies(filtered.slice(0, 160).map(asteroidRecordToBody), true)}>{t('addSelection')} · {Math.min(filtered.length, 160)}</button>
+          <button className="primary-button full-width" disabled={!filtered.length} onClick={() => selectionActions.addCatalogBodies(filtered.slice(0, focusBodyLimit).map(asteroidRecordToBody), true)}>{t('addSelection')} · {Math.min(filtered.length, focusBodyLimit)}</button>
           <button className="secondary-button full-width" disabled={!catalog.manifest || catalog.isLoading || nameSearchTooShort} onClick={() => {
             if (catalog.activeResultScanKey === scanKey) selectAllFiltered()
             else void scanEntireCatalog()

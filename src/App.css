@@ -194,6 +194,7 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 .drawer-export-actions { display: grid; grid-template-columns: 1fr; gap: 7px; margin-top: 18px; }.drawer-export-actions .share-button { margin-top: 0; }
 .explorer-stage { min-width: 0; position: relative; background: #030609; overflow: hidden; }
 .explorer-stage::before { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2; background: radial-gradient(circle at center, transparent 44%, rgba(0,0,0,.28)); }
+.catalog-cloud-error { position: absolute; z-index: 14; top: 72px; left: 50%; width: min(520px, calc(100% - 32px)); transform: translateX(-50%); }
 .simulation-bar { position: absolute; z-index: 12; top: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: end; gap: 9px; padding: 8px; width: max-content; max-width: calc(100% - 28px); }
 .simulation-bar .compact-field { grid-template-columns: auto auto; align-items: center; gap: 7px; }
 .simulation-bar .compact-field input, .simulation-bar .compact-field select { padding: 7px 8px; width: 126px; }
@@ -206,9 +207,9 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 .frames-grid.split { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .frame-view { min-width: 0; min-height: 0; position: relative; border-right: 1px solid var(--line); }
 .frame-view:last-child { border-right: 0; }
-.frame-label { position: absolute; z-index: 9; left: 16px; top: 78px; display: flex; align-items: center; gap: 8px; font: 10px var(--font-mono); color: var(--text); }
-.frame-label::before { content: ""; width: 5px; height: 5px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 8px var(--accent); }
-.frame-label small { color: var(--muted); }
+.frame-label { position: absolute; z-index: 9; left: 16px; top: 78px; max-width: calc(100% - 32px); display: flex; align-items: center; gap: 8px; font: 10px var(--font-mono); color: var(--text); }
+.frame-label::before { content: ""; width: 5px; height: 5px; flex: 0 0 5px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 8px var(--accent); }
+.frame-label small { min-width: 0; color: var(--muted); overflow-wrap: anywhere; }
 .compute-progress { position: absolute; left: 0; right: 0; top: 0; height: 2px; z-index: 15; background: rgba(255,255,255,.03); }
 .compute-progress i { display: block; height: 100%; background: var(--accent); box-shadow: 0 0 9px var(--accent); transition: width .12s linear; }
 .canvas-error { position: absolute; z-index: 15; top: 100px; left: 16px; max-width: 360px; }

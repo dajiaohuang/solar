@@ -7,6 +7,9 @@ import { useSimulationClock } from '../../engine/clock/useSimulationClock'
 import { buildSpacecraftFrame } from '../../engine/ephemeris/spacecraft'
 import { computeInfluenceRadii } from '../../engine/ephemeris/spheresOfInfluence'
 import { useTrajectoryWorker } from '../../hooks/useTrajectoryWorker'
+import { useCatalogPointWorker } from '../../hooks/useCatalogPointWorker'
+import { useCatalogSample } from '../../hooks/useCatalogSample'
+import { useAdaptiveRenderBudget } from '../../hooks/useAdaptiveRenderBudget'
 import { useI18n } from '../../i18n/context'
 import { createBodyPositionResolver, vector3Magnitude, subtractVector3 } from '../../lib/ephemeris'
 import { computeLagrangePoints } from '../../lib/lagrange'
@@ -14,11 +17,13 @@ import { computeOrbitEllipses } from '../../lib/orbitEllipse'
 import { getSuggestedViewRadius } from '../../lib/referenceFrame'
 import { selectionActions, selectionStore } from '../../state/selection-store'
 import { simulationActions, simulationStore } from '../../state/simulation-store'
-import type { BodyId, CelestialBody, TrajectoryFrameData } from '../../types'
+import { catalogStore, filterCatalogRecords } from '../../state/catalog-store'
+import type { AsteroidRecord, BodyId, CelestialBody, TrajectoryFrameData } from '../../types'
 import { useBodyRegistry } from '../../app/bodyRegistry'
 import { BodyInspector } from '../body-inspector/BodyInspector'
 import { ControlDrawer } from './ControlDrawer'
 import { bodyDisplayName } from '../../lib/bodyNames'
+import { catalogSampleErrorMessage } from '../../lib/catalogSampleProfile'
 import { SimulationControls } from './SimulationControls'
 
 function useTrajectoryAnchor(julianDay: number, isPlaying: boolean) {
@@ -43,6 +48,15 @@ type FrameViewProps = {
   trajectoryAnchor: number
   onFrame: (frame: TrajectoryFrameData) => void
   onHover: (item: { body: CelestialBody; distance: number; x: number; y: number } | null) => void
+  catalogRecords: AsteroidRecord[]
+  catalogPositions: Float32Array
+  catalogPositions3D: Float32Array
+  catalogDrawCount: number
+  catalogSampleTotal: number
+  catalogFitKey: string
+  pixelRatioLimit: number
+  onFrameDuration: (durationMs: number) => void
+  isPlaying: boolean
 }
 
 function FrameView({
@@ -54,10 +68,25 @@ function FrameView({
   trajectoryAnchor,
   onFrame,
   onHover,
+  catalogRecords,
+  catalogPositions,
+  catalogPositions3D,
+  catalogDrawCount,
+  catalogSampleTotal,
+  catalogFitKey,
+  pixelRatioLimit,
+  onFrameDuration,
+  isPlaying,
 }: FrameViewProps) {
   const simulation = simulationStore.useStore()
   const { t, language } = useI18n()
   const referenceBody = bodiesById.get(referenceId) ?? bodiesById.get('sun')!
+  const qualityLabel = simulation.renderQuality === 'max'
+    ? t('renderQualityMax')
+    : simulation.renderQuality === 'balanced'
+      ? t('renderQualityBalanced')
+      : t('renderQualityAuto')
+  const catalogOrigin = useMemo(() => createBodyPositionResolver(bodiesById, julianDay)(referenceBody.id), [bodiesById, referenceBody.id, julianDay])
   const { frame: baseFrame, progress, isComputing, error } = useTrajectoryWorker({
     bodies: selectedBodies,
     resolutionBodies,
@@ -77,9 +106,21 @@ function FrameView({
     maxDistance: Math.max(baseFrame.maxDistance, ...spacecraftFrame.currentPositions.map((item) => item.distance), 0),
   }), [baseFrame, spacecraftFrame])
   useEffect(() => onFrame(frame), [frame, onFrame])
-  const suggested = useMemo(() => getSuggestedViewRadius(
+  const focusSuggested = useMemo(() => getSuggestedViewRadius(
     selectedBodies.map((body) => body.id), referenceBody.id, bodiesById,
   ), [bodiesById, referenceBody.id, selectedBodies])
+  const catalogSuggested = useMemo(() => {
+    const count = Math.min(catalogDrawCount, Math.floor(catalogPositions.length / 2))
+    let radius = 0
+    for (let index = 0; index < count; index += 1) {
+      radius = Math.max(radius, Math.hypot(
+        catalogPositions[index * 2] - catalogOrigin.x,
+        catalogPositions[index * 2 + 1] - catalogOrigin.y,
+      ))
+    }
+    return radius > 0 ? radius * 1.08 : 0
+  }, [catalogDrawCount, catalogOrigin.x, catalogOrigin.y, catalogPositions])
+  const suggested = Math.max(focusSuggested, catalogSuggested)
   const orbitEllipses = useMemo(() => simulation.showOrbits
     ? computeOrbitEllipses(selectedBodies.slice(0, 40), bodiesById, referenceBody.id, trajectoryAnchor)
     : [], [bodiesById, referenceBody.id, selectedBodies, simulation.showOrbits, trajectoryAnchor])
@@ -123,7 +164,7 @@ function FrameView({
       const factor = event.deltaY < 0 ? 1.12 : 0.89
       simulationActions.patch({ zoom: Math.max(0.15, Math.min(12, simulation.zoom * factor)) })
     }}>
-      <div className="frame-label"><span>{bodyDisplayName(referenceBody, language)}</span><small>{simulation.viewMode.toUpperCase()}</small></div>
+      <div className="frame-label"><span>{bodyDisplayName(referenceBody, language)}</span><small>{simulation.viewMode.toUpperCase()}{simulation.showCatalogCloud ? ` · ${t('catalogCloudRendered')} ${catalogDrawCount.toLocaleString()} / ${catalogSampleTotal.toLocaleString()} · ${qualityLabel} · JD ${julianDay.toFixed(3)}` : ''}</small></div>
       {isComputing && <div className="compute-progress"><i style={{ width: `${progress * 100}%` }} /></div>}
       {error && <div className="canvas-error">{error}</div>}
       {simulation.viewMode === '3d' ? (
@@ -139,6 +180,14 @@ function FrameView({
           ariaLabel={t('interactive3d')}
           fallbackLabel={t('webgl3dUnavailable')}
           onUnavailable={() => simulationActions.patch({ viewMode: '2d' })}
+          catalogRecords={catalogRecords}
+          catalogPositions3D={catalogPositions3D}
+          catalogDrawCount={catalogDrawCount}
+          catalogOrigin={catalogOrigin}
+          catalogFitKey={catalogFitKey}
+          continuous={isPlaying && simulation.showCatalogCloud}
+          pixelRatioLimit={pixelRatioLimit}
+          onFrameDuration={onFrameDuration}
         />
       ) : (
         <TrajectoryCanvas
@@ -157,6 +206,11 @@ function FrameView({
           emptyLabel={t('selectBodyPrompt')}
           webglUnavailableLabel={t('webglUnavailable')}
           influenceLabels={{ hill: t('hill'), soi: t('soi') }}
+          catalogRecords={catalogRecords}
+          catalogPositions={catalogPositions}
+          catalogDrawCount={catalogDrawCount}
+          catalogOrigin={catalogOrigin}
+          pixelRatioLimit={pixelRatioLimit}
         />
       )}
     </div>
@@ -168,13 +222,39 @@ export function ExplorerWorkspace() {
   const simulation = simulationStore.useStore()
   const selection = selectionStore.useStore()
   const clock = useSimulationClock()
+  const catalog = catalogStore.useStore()
   const { t, language } = useI18n()
-  const selectedBodies = useMemo(() => selectedFromStore.slice(0, 160), [selectedFromStore])
+  useCatalogSample(simulation.showCatalogCloud)
+  const focusBodyLimit = simulation.viewMode === '2d' ? 320 : 160
+  const selectedBodies = useMemo(() => selectedFromStore.slice(0, focusBodyLimit), [focusBodyLimit, selectedFromStore])
+  const catalogRecords = useMemo(() => simulation.showCatalogCloud
+    ? filterCatalogRecords(catalog.baseSampleRecords, catalog.filters)
+    : [], [catalog.baseSampleRecords, catalog.filters, simulation.showCatalogCloud])
   const resolutionBodies = useMemo(() => {
     const required = new Map(allBodies.map((body) => [body.id, body]))
     return [...required.values()]
   }, [allBodies])
   const trajectoryAnchor = useTrajectoryAnchor(clock.julianDay, clock.isPlaying)
+  // Keep catalog points and named bodies on the exact same published clock
+  // snapshot. Trajectories may use a slower anchor because they are historical
+  // context, but mixing that anchor into the point cloud is scientifically false
+  // at high simulation rates.
+  const catalogPointCloud = useCatalogPointWorker(catalogRecords, clock.julianDay)
+  const displayJulianDay = simulation.showCatalogCloud && catalogPointCloud.positions.length > 0
+    ? catalogPointCloud.computedJulianDay
+    : clock.julianDay
+  const renderBudget = useAdaptiveRenderBudget({
+    viewMode: simulation.viewMode,
+    quality: simulation.renderQuality,
+    comparisonEnabled: simulation.comparisonEnabled,
+    availableCount: catalogRecords.length,
+    samplingActive: clock.isPlaying && simulation.showCatalogCloud && simulation.viewMode === '3d',
+  })
+  const primaryCatalogDrawCount = Math.min(renderBudget.primary, catalogPointCloud.readyCount)
+  const secondaryCatalogDrawCount = Math.min(renderBudget.secondary, catalogPointCloud.readyCount)
+  const catalogFitKey = simulation.showCatalogCloud
+    ? `${catalog.baseSampleKey ?? 'unloaded'}|${JSON.stringify(catalog.filters)}`
+    : ''
   const [primaryFrame, setPrimaryFrame] = useState<TrajectoryFrameData>({ currentPositions: [], trajectories: [], maxDistance: 0 })
   const [secondaryFrame, setSecondaryFrame] = useState<TrajectoryFrameData>({ currentPositions: [], trajectories: [], maxDistance: 0 })
   const [hovered, setHovered] = useState<{ body: CelestialBody; distance: number; x: number; y: number } | null>(null)
@@ -190,16 +270,25 @@ export function ExplorerWorkspace() {
     ? measureB
     : selectedBodyIds.find((id) => id !== measuredBodyA) ?? measuredBodyA
   const measuredDistance = useMemo(() => {
-    const resolver = createBodyPositionResolver(bodiesById, clock.julianDay)
+    const resolver = createBodyPositionResolver(bodiesById, displayJulianDay)
     if (!bodiesById.has(measuredBodyA) || !bodiesById.has(measuredBodyB)) return null
     return vector3Magnitude(subtractVector3(resolver(measuredBodyA), resolver(measuredBodyB)))
-  }, [bodiesById, clock.julianDay, measuredBodyA, measuredBodyB])
+  }, [bodiesById, displayJulianDay, measuredBodyA, measuredBodyB])
 
   return (
     <div className={`explorer-workspace ${inspectorOpen ? 'inspector-open' : ''}`}>
       <ControlDrawer bodies={allBodies} referenceOptions={allBodies.filter((body) => body.kind !== 'spacecraft')} />
       <main className="explorer-stage">
         <SimulationControls />
+        {simulation.showCatalogCloud && catalog.sampleError && (
+          <div className="error-banner catalog-cloud-error" role="alert">{catalogSampleErrorMessage(catalog.sampleError, t)}</div>
+        )}
+        {simulation.showCatalogCloud && catalog.error && (
+          <div className="error-banner catalog-cloud-error" role="alert">{catalog.error}</div>
+        )}
+        {simulation.showCatalogCloud && catalogPointCloud.error && (
+          <div className="error-banner catalog-cloud-error" role="alert">{catalogPointCloud.error}</div>
+        )}
         <button className="inspector-toggle glass-panel" aria-expanded={inspectorOpen} onClick={() => setInspectorOpen((value) => !value)}>
           <span>{inspectorOpen ? t('hideBodyDetails') : t('showBodyDetails')}</span>
           <strong>{focusedBody ? bodyDisplayName(focusedBody, language) : t('noBody')}</strong>
@@ -210,10 +299,19 @@ export function ExplorerWorkspace() {
             selectedBodies={selectedBodies}
             resolutionBodies={resolutionBodies}
             bodiesById={bodiesById}
-            julianDay={clock.julianDay}
+            julianDay={displayJulianDay}
             trajectoryAnchor={trajectoryAnchor}
             onFrame={setPrimaryFrame}
             onHover={setHovered}
+            catalogRecords={catalogRecords}
+            catalogPositions={catalogPointCloud.positions}
+            catalogPositions3D={catalogPointCloud.positions3D}
+            catalogDrawCount={primaryCatalogDrawCount}
+            catalogSampleTotal={renderBudget.sampleTotal}
+            catalogFitKey={catalogFitKey}
+            pixelRatioLimit={renderBudget.pixelRatioLimit}
+            onFrameDuration={renderBudget.onFrameDuration}
+            isPlaying={clock.isPlaying}
           />
           {simulation.comparisonEnabled && (
             <FrameView
@@ -221,10 +319,19 @@ export function ExplorerWorkspace() {
               selectedBodies={selectedBodies}
               resolutionBodies={resolutionBodies}
               bodiesById={bodiesById}
-              julianDay={clock.julianDay}
+              julianDay={displayJulianDay}
               trajectoryAnchor={trajectoryAnchor}
               onFrame={setSecondaryFrame}
               onHover={setHovered}
+              catalogRecords={catalogRecords}
+              catalogPositions={catalogPointCloud.positions}
+              catalogPositions3D={catalogPointCloud.positions3D}
+              catalogDrawCount={secondaryCatalogDrawCount}
+              catalogSampleTotal={renderBudget.sampleTotal}
+              catalogFitKey={catalogFitKey}
+              pixelRatioLimit={renderBudget.pixelRatioLimit}
+              onFrameDuration={renderBudget.onFrameDuration}
+              isPlaying={clock.isPlaying}
             />
           )}
         </div>

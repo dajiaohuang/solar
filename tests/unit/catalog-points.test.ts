@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { propagateCatalogElements } from '../../src/engine/ephemeris/catalogPoints'
+import { propagateCatalogElementPositions, propagateCatalogElements } from '../../src/engine/ephemeris/catalogPoints'
 import { orbitToHeliocentricVector } from '../../src/lib/ephemeris'
 
 describe('catalog point propagation', () => {
@@ -17,5 +17,13 @@ describe('catalog point propagation', () => {
     const expected = orbitToHeliocentricVector(orbit, jd)
     expect(points[0]).toBeCloseTo(expected.x, 5)
     expect(points[1]).toBeCloseTo(expected.y, 5)
+    const both = propagateCatalogElementPositions(new Float64Array([
+      orbit.epochJd, orbit.semiMajorAxisAU, orbit.eccentricity, orbit.inclinationDeg,
+      orbit.ascendingNodeDeg, orbit.argPeriapsisDeg, orbit.meanAnomalyDeg, orbit.meanMotionDegPerDay,
+    ]), jd)
+    expect(both.positions).toEqual(points)
+    expect(both.positions3D[0]).toBeCloseTo(expected.x, 5)
+    expect(both.positions3D[1]).toBeCloseTo(expected.y, 5)
+    expect(both.positions3D[2]).toBeCloseTo(expected.z, 5)
   })
 })

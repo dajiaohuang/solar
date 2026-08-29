@@ -1,5 +1,5 @@
 import type { AppRoute, ElementPlotMode } from '../state/ui-store'
-import type { BodyId, DatasetMode, MagnitudeStatus } from '../types'
+import type { BodyId, DatasetMode, MagnitudeStatus, RenderQuality } from '../types'
 
 export const SCENE_URL_VERSION = 4 as const
 export const LEGACY_SCENE_URL_VERSIONS = [2, 3] as const
@@ -25,6 +25,8 @@ export type AppUrlState = {
   history?: number
   samples?: number
   view?: '2d' | '3d'
+  catalogCloud?: boolean
+  quality?: RenderQuality
   filter?: string
   search?: string
   preset?: string
@@ -100,6 +102,8 @@ export function encodeUrlState(state: AppUrlState) {
   if (state.history !== undefined && state.history !== 365) params.set('history', String(state.history))
   if (state.samples !== undefined && state.samples !== 180) params.set('samples', String(Math.floor(state.samples)))
   if (state.view) params.set('view', state.view)
+  if (state.catalogCloud) params.set('catalogCloud', '1')
+  if (state.quality && state.quality !== 'auto') params.set('quality', state.quality)
   if (state.filter && state.filter !== 'all') params.set('filter', state.filter)
   if (state.search) params.set('search', state.search)
   if (state.preset) params.set('preset', state.preset)
@@ -172,6 +176,11 @@ export function decodeUrlState(search = typeof window === 'undefined' ? '' : win
     route === 'explorer'
     || ['ref', 'bodies', 'jd', 'zoom', 'history', 'samples', 'pan'].some((key) => params.has(key))
   ) state.view = '3d'
+  if (version === SCENE_URL_VERSION) {
+    state.catalogCloud = params.get('catalogCloud') === '1'
+    const quality = params.get('quality')
+    if (quality === 'auto' || quality === 'balanced' || quality === 'max') state.quality = quality
+  }
   const filter = params.get('filter')
   if (filter) state.filter = filter
   const searchText = params.get('search')
