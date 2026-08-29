@@ -16,25 +16,55 @@ async function openElements(page: Page) {
   }
 }
 
+async function openExplorer(page: Page) {
+  const desktop = page.locator('.primary-navigation').getByRole('button', { name: 'Observation Deck' })
+  if (await desktop.isVisible()) await desktop.click()
+  else await page.locator('.mobile-navigation').getByRole('button', { name: 'Observation Deck' }).click()
+}
+
 async function installMockCatalog(page: Page, options: {
   precomputed?: boolean
   sampleCount?: number
   profileSamples?: { desktop: number[]; mobile: number[] }
+  presetDataset?: boolean
 } = {}) {
   const precomputed = options.precomputed ?? false
-  const entries = [
+  const fixtureEntries = [
     { id: 'asteroid:mpc:01001', packedDesignation: '01001', permanentNumber: 1001, label: '1001 Alpha', shortLabel: 'Alpha', searchKey: 'alpha 1001 01001', chunkId: 'chunk-0000', orbitClassCode: 'MBA', orbitClassName: 'Main-belt Asteroid', absoluteMagnitude: 12, isNeo: false, isPha: false },
     { id: 'asteroid:mpc:01002', packedDesignation: '01002', permanentNumber: 1002, label: '1002 Beta', shortLabel: 'Beta', searchKey: 'beta 1002 01002', chunkId: 'chunk-0000', orbitClassCode: 'APO', orbitClassName: 'Apollo', isNeo: true, isPha: false },
     { id: 'asteroid:mpc:01003', packedDesignation: '01003', permanentNumber: 1003, label: '1003 Gamma', shortLabel: 'Gamma', searchKey: 'gamma 1003 01003', chunkId: 'chunk-0000', orbitClassCode: 'TNO', orbitClassName: 'Trans-Neptunian Object', absoluteMagnitude: 18, isNeo: false, isPha: false },
   ]
+  const entries = options.presetDataset
+    ? Array.from({ length: 8_000 }, (_, index) => {
+      const permanentNumber = index + 2
+      const packedDesignation = String(permanentNumber).padStart(5, '0')
+      return {
+        id: `asteroid:mpc:${packedDesignation}`,
+        packedDesignation,
+        permanentNumber,
+        label: `(${permanentNumber}) Belt ${permanentNumber}`,
+        shortLabel: `Belt ${permanentNumber}`,
+        searchKey: `belt ${permanentNumber} ${packedDesignation}`,
+        chunkId: 'chunk-0000',
+        orbitClassCode: 'MBA',
+        orbitClassName: 'Main-belt Asteroid',
+        absoluteMagnitude: 10 + index % 12,
+        isNeo: false,
+        isPha: false,
+      }
+    })
+    : fixtureEntries
   const numeric = new Float64Array(entries.length * 8)
-  entries.forEach((_, index) => numeric.set([2451545, 2.1 + index * 0.2, 0.08 + index * 0.03, 4 + index, 20, 40, 60, 0.25], index * 8))
+  entries.forEach((_, index) => numeric.set([2451545, 2.1 + index % 600 / 500, 0.05 + index % 20 / 100, index % 30, 20, 40, 60, 0.25], index * 8))
   const defaultSampleIndexes = entries.slice(0, options.sampleCount ?? entries.length).map((_, index) => index)
   const sampleIndexes = options.profileSamples ?? { desktop: defaultSampleIndexes, mobile: defaultSampleIndexes }
   const manifest = {
-    schemaVersion: 2, version: 'mock-content-lite', datasetMode: 'lite', source: 'fixture', generatedAt: '2026-08-18T00:00:00Z',
-    sourceSha256: 'a'.repeat(64), contentSha256: 'b'.repeat(64), parserVersion: 'test', totalCount: 3,
-    chunkCount: 1, chunkSize: 5000, format: 'binary-v1', bucketCounts: { 'digit-1': 3 }, categoryCounts: { MBA: 1, APO: 1, TNO: 1 }, featured: [],
+    schemaVersion: 2,
+    version: options.presetDataset ? 'mpcorb-919b585f403b185a-full' : 'mock-content-lite',
+    datasetMode: options.presetDataset ? 'full' : 'lite',
+    source: 'fixture', generatedAt: '2026-08-18T00:00:00Z',
+    sourceSha256: 'a'.repeat(64), contentSha256: 'b'.repeat(64), parserVersion: 'test', totalCount: entries.length,
+    chunkCount: 1, chunkSize: 10_000, format: 'binary-v1', bucketCounts: { 'digit-1': entries.length }, categoryCounts: options.presetDataset ? { MBA: entries.length } : { MBA: 1, APO: 1, TNO: 1 }, featured: [],
     selectionPolicy: { type: 'permanent-number-through-plus-featured', maxPermanentNumber: 30000, requiredFeaturedNames: [] },
   }
   if (precomputed) Object.assign(manifest, {
@@ -47,9 +77,9 @@ async function installMockCatalog(page: Page, options: {
     summaryPath: 'catalog-summary.json',
     compactIndex: { path: 'catalog-index.bin', format: 'catalog-index-v1', strideBytes: 24, count: entries.length, classCodes: ['MBA', 'APO', 'TNO'] },
   })
-  await page.route('**/data/asteroids/dataset-version.json', (route) => route.fulfill({ json: { schemaVersion: 1, activeVersion: manifest.version, mode: 'lite', manifestPath: `releases/${manifest.version}/manifest.json`, generatedAt: manifest.generatedAt, sourceSha256: manifest.sourceSha256, contentSha256: manifest.contentSha256 } }))
+  await page.route('**/data/asteroids/dataset-version.json', (route) => route.fulfill({ json: { schemaVersion: 1, activeVersion: manifest.version, mode: manifest.datasetMode, manifestPath: `releases/${manifest.version}/manifest.json`, generatedAt: manifest.generatedAt, sourceSha256: manifest.sourceSha256, contentSha256: manifest.contentSha256 } }))
   await page.route(`**/data/asteroids/releases/${manifest.version}/manifest.json`, (route) => route.fulfill({ json: manifest }))
-  await page.route(`**/data/asteroids/releases/${manifest.version}/provenance.json`, (route) => route.fulfill({ json: { datasetVersion: manifest.version, downloadedAt: manifest.generatedAt, mode: 'lite', totalObjects: 3, orbitModel: 'fixture', precision: 'fixture', parserVersion: 'test', ...manifest } }))
+  await page.route(`**/data/asteroids/releases/${manifest.version}/provenance.json`, (route) => route.fulfill({ json: { datasetVersion: manifest.version, downloadedAt: manifest.generatedAt, mode: manifest.datasetMode, totalObjects: entries.length, orbitModel: 'fixture', precision: 'fixture', parserVersion: 'test', ...manifest } }))
   await page.route(`**/data/asteroids/releases/${manifest.version}/meta/chunk-0000.json`, (route) => route.fulfill({ json: entries }))
   await page.route(`**/data/asteroids/releases/${manifest.version}/binary/chunk-0000.bin`, (route) => route.fulfill({ body: Buffer.from(numeric.buffer), contentType: 'application/octet-stream' }))
   const compact = Buffer.alloc(entries.length * 24)
@@ -74,8 +104,8 @@ async function installMockCatalog(page: Page, options: {
     await page.route(`**/data/asteroids/releases/${manifest.version}/catalog-sample-${size}.bin`, (route) => route.fulfill({ body: Buffer.from(profileNumeric.buffer), contentType: 'application/octet-stream' }))
   }
   await page.route(`**/data/asteroids/releases/${manifest.version}/catalog-summary.json`, (route) => route.fulfill({ json: {
-    schemaVersion: 2, datasetMode: 'lite', totalCount: entries.length,
-    categoryCounts: { MBA: 1, APO: 1, TNO: 1 }, magnitudeKnownCount: 2, magnitudeUnknownCount: 1,
+    schemaVersion: 2, datasetMode: manifest.datasetMode, totalCount: entries.length,
+    categoryCounts: manifest.categoryCounts, magnitudeKnownCount: entries.length, magnitudeUnknownCount: 0,
     numericRanges: { semiMajorAxisAU: [2.1, 2.5], eccentricity: [0.08, 0.14], inclinationDeg: [4, 6], epochJd: [2451545, 2451545] },
     sourceSha256: manifest.sourceSha256,
   } }))
@@ -229,7 +259,7 @@ test('offers a complete reproducible observation deck on desktop and mobile', as
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
 
   const presets = page.locator('.preset-list')
-  await expect(presets.locator(':scope > button')).toHaveCount(11)
+  await expect(presets.locator(':scope > button')).toHaveCount(12)
   const marsPreset = page.getByRole('button', { name: 'Load preset: Mars opposition 2027' })
   await marsPreset.click()
   await expect(marsPreset).toHaveAttribute('aria-pressed', 'true')
@@ -257,6 +287,48 @@ test('offers a complete reproducible observation deck on desktop and mobile', as
   await page.getByLabel('Search renderable bodies').fill('Neptune')
   await page.getByRole('checkbox', { name: /^Neptune Planet$/ }).check()
   await expect(page).toHaveURL(/[?&]bodies=[^&]*neptune/)
+})
+
+test('loads and replays both pinned main-belt presets on desktop and mobile', async ({ page }) => {
+  const sampleRequests: string[] = []
+  page.on('request', (request) => {
+    if (/catalog-sample-(desktop|mobile)\.(json|bin)$/.test(request.url())) sampleRequests.push(request.url())
+  })
+  await installMockCatalog(page, { precomputed: true, presetDataset: true })
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&page=explorer&lang=en')
+
+  await page.getByRole('button', { name: 'Load preset: Mars–main belt–Jupiter' }).click()
+  await expect(page.locator('.element-scatter')).toBeVisible({ timeout: 15_000 })
+  await expect(page).toHaveURL(/[?&]page=elements(?:&|$)/)
+  await expect(page).toHaveURL(/[?&]dataset=mpcorb-919b585f403b185a-full(?:&|$)/)
+  await expect(page).toHaveURL(/[?&]mode=full(?:&|$)/)
+  await expect(page).toHaveURL(/[?&]catalogSample=mobile(?:&|$)/)
+  await expect(page).toHaveURL(/[?&]catalogSampleCount=8000(?:&|$)/)
+  await expect(page).toHaveURL(/[?&]filter=MBA(?:&|$)/)
+  await expect(page).toHaveURL(/[?&]plot=a-e(?:&|$)/)
+  await expect(page).toHaveURL(/[?&]bodies=mars%2Cceres%2Cjupiter(?:&|$)/)
+  expect(sampleRequests.length).toBeGreaterThanOrEqual(2)
+  expect(sampleRequests.every((url) => url.includes('catalog-sample-mobile.'))).toBe(true)
+
+  const replayUrl = page.url()
+  await page.reload()
+  await expect(page.locator('.element-scatter')).toBeVisible({ timeout: 15_000 })
+  expect(page.url()).toBe(replayUrl)
+
+  await page.goto('./?v=4&page=explorer&lang=en')
+  await page.getByRole('button', { name: 'Load preset: Main-belt element comparison' }).click()
+  await expect(page.locator('.element-scatter')).toBeVisible({ timeout: 15_000 })
+  await expect(page).toHaveURL(/[?&]plot=a-i(?:&|$)/)
+  await expect(page).toHaveURL(/[?&]catalogSampleCount=8000(?:&|$)/)
+
+  await openExplorer(page)
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
+  await expect(page).toHaveURL(/[?&]catalogSample=mobile(?:&|$)/)
+  await page.getByRole('button', { name: 'Load preset: Mars opposition 2027' }).click()
+  await expect(page).not.toHaveURL(/[?&]catalogSample=/)
+  await expect(page).not.toHaveURL(/[?&]catalogSampleCount=/)
+  await expect(page).not.toHaveURL(/[?&]filter=MBA(?:&|$)/)
 })
 
 test('routes legacy home URLs to the deck and lets visitors reopen the tutorial', async ({ page }) => {

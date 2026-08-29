@@ -1,6 +1,8 @@
 import type { AsteroidRecord, CatalogFilters } from '../types'
 import { normalizeSearchText } from './catalogLoader'
 
+export const CATALOG_ORBIT_CLASS_FILTERS = ['all', 'MBA', 'MCR', 'APO', 'ATE', 'AMO', 'ATI', 'HUN', 'HIL', 'JTA', 'TNO', 'OTHER'] as const
+
 export function createCatalogFieldMatcher(filters: CatalogFilters) {
   const query = normalizeSearchText(filters.query)
   return (

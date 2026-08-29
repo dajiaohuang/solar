@@ -4,11 +4,13 @@ import { SCENE_PRESETS } from '../../data/presets'
 import { useSimulationClock } from '../../engine/clock/useSimulationClock'
 import { useI18n } from '../../i18n/context'
 import { bodyDisplayName } from '../../lib/bodyNames'
-import { buildScenePresetApplication } from '../../lib/scenePreset'
+import { buildScenePresetApplication, buildScenePresetUrlState } from '../../lib/scenePreset'
 import { requestOnboarding } from '../../lib/onboarding'
 import { exportAnnotatedScenePng } from '../../lib/sceneExport'
 import { loadSavedScenes, localizeSavedSceneUrl, mergeSceneLibrary, parseSceneLibrary, removeSavedScene, saveCurrentScene, sceneLibraryDocument } from '../../lib/sceneLibrary'
 import { encodeCurrentScene } from '../../lib/shareScene'
+import { encodeUrlState } from '../../lib/urlState'
+import { catalogActions, DEFAULT_CATALOG_FILTERS } from '../../state/catalog-store'
 import { selectionActions, selectionStore } from '../../state/selection-store'
 import { simulationActions, simulationStore } from '../../state/simulation-store'
 import { uiActions } from '../../state/ui-store'
@@ -52,6 +54,8 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
   const selectedPresetId = useMemo(() => {
     const selectedIds = new Set(selection.selectedIds)
     return SCENE_PRESETS.find((preset) => (
+      !preset.catalogSelection
+      && (
       Math.abs(preset.julianDay - clock.julianDay) < 0.00001
       && preset.referenceId === simulation.referenceId
       && preset.viewMode === simulation.viewMode
@@ -62,16 +66,44 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
       && simulation.viewOffset.y === 0
       && selectedIds.size === preset.selectedMajorBodyIds.length
       && preset.selectedMajorBodyIds.every((bodyId) => selectedIds.has(bodyId))
+      )
     ))?.id ?? null
   }, [clock.julianDay, selection.selectedIds, simulation.comparisonEnabled, simulation.historyDays, simulation.referenceId, simulation.viewMode, simulation.viewOffset.x, simulation.viewOffset.y, simulation.zoom])
 
   function applySelectedPreset(preset: typeof SCENE_PRESETS[number]) {
+    if (preset.catalogSelection) {
+      const query = encodeUrlState(buildScenePresetUrlState(preset, language))
+      window.location.assign(`${window.location.pathname}?${query}`)
+      return
+    }
     const application = buildScenePresetApplication(preset)
+    catalogActions.patch({
+      requestedSampleProfile: null,
+      requestedSampleCount: null,
+      requestedSampleCountRaw: null,
+      requestedSampleInvalid: false,
+      filters: structuredClone(DEFAULT_CATALOG_FILTERS),
+      baseSampleRecords: [],
+      baseSampleKey: null,
+      baseSampleProfile: null,
+      browseRecords: [],
+      activeResultRecords: [],
+      activeResultScanKey: null,
+      exactFilteredTotal: null,
+      exactHydrationHasMore: false,
+      selectionScope: null,
+      recordsSampled: false,
+      loadProgress: 0,
+      isLoading: false,
+      error: null,
+      sampleError: null,
+    })
     simulationActions.pause()
     simulationActions.seek(application.julianDay)
     simulationActions.patch(application.simulation)
     selectionActions.setSelectedIds(application.selectedIds)
     selectionActions.focus(application.focusedId)
+    uiActions.navigate(application.route ?? 'explorer')
     uiActions.toast(`${t('presetApplied')}: ${preset.name[language]}`)
   }
 
@@ -95,7 +127,7 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
               onClick={() => applySelectedPreset(preset)}
             >
               <span><strong>{preset.name[language]}</strong><small>{preset.description[language]}</small></span>
-              <em>{reference ? bodyDisplayName(reference, language) : preset.referenceId} · {preset.selectedMajorBodyIds.length}</em>
+              <em>{reference ? bodyDisplayName(reference, language) : preset.referenceId} · {preset.catalogSelection ? preset.catalogSelection.sampleCount.toLocaleString() : preset.selectedMajorBodyIds.length}</em>
             </button>
           })}
         </div>
