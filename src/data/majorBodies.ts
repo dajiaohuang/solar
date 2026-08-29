@@ -2,6 +2,19 @@ import type { CelestialBody, ElementSet } from '../types'
 
 const J2000 = 2451545
 const DEFAULT_SMALL_BODY_EPOCH = 2461000.5
+const JPL_SATELLITE_MEAN_ELEMENTS_URL = 'https://ssd.jpl.nasa.gov/sats/elem/'
+
+const illustrativeSatelliteEvidence = {
+  sourceFrame: 'undocumented-illustrative' as const,
+  appliedFrame: 'scene-j2000-ecliptic' as const,
+  sourceCenter: 'undocumented-parent-center' as const,
+  appliedCenter: 'parent-rendered-point' as const,
+  centerHandling: 'direct-parent-addition' as const,
+  epochLabel: `JD ${DEFAULT_SMALL_BODY_EPOCH}`,
+  epochTimeScale: 'unspecified' as const,
+  phaseProvenance: 'illustrative-zero-at-epoch' as const,
+  precision: 'illustrative-fixed-ellipse' as const,
+}
 
 function elements(
   semiMajorAxisAU: number,
@@ -76,18 +89,30 @@ export const majorBodies: CelestialBody[] = [
     kind: 'moon',
     color: '#e8ebf0',
     size: 2.7,
-    source: 'curated-approx',
+    source: 'jpl-satellite-mean',
     parentId: 'earth',
+    satelliteOrbitEvidence: {
+      sourceFrame: 'jpl-ecliptic',
+      appliedFrame: 'scene-j2000-ecliptic',
+      sourceCenter: 'earth-geocenter',
+      appliedCenter: 'earth-moon-barycenter-seed',
+      centerHandling: 'untransformed-center-offset',
+      epochLabel: '2000-01-01.5',
+      epochTimeScale: 'TDB',
+      phaseProvenance: 'jpl-mean-elements',
+      precision: 'fixed-mean-ellipse-not-ephemeris',
+      sourceUrl: JPL_SATELLITE_MEAN_ELEMENTS_URL,
+    },
     orbit: {
       model: 'keplerian',
       epochJd: J2000,
-      semiMajorAxisAU: 0.00256955529,
-      eccentricity: 0.0549,
-      inclinationDeg: 5.145,
+      semiMajorAxisAU: 384400 / 149597870.7,
+      eccentricity: 0.0554,
+      inclinationDeg: 5.16,
       ascendingNodeDeg: 125.08,
       argPeriapsisDeg: 318.15,
-      meanAnomalyDeg: 115.3654,
-      meanMotionDegPerDay: 13.176358,
+      meanAnomalyDeg: 135.27,
+      meanMotionDegPerDay: 360 / 27.322,
     },
   },
   {
@@ -273,6 +298,7 @@ export const majorBodies: CelestialBody[] = [
     size: 2.2,
     source: 'curated-approx',
     parentId: 'jupiter',
+    satelliteOrbitEvidence: illustrativeSatelliteEvidence,
     orbit: {
       model: 'keplerian',
       epochJd: DEFAULT_SMALL_BODY_EPOCH,
@@ -293,6 +319,7 @@ export const majorBodies: CelestialBody[] = [
     size: 2.1,
     source: 'curated-approx',
     parentId: 'jupiter',
+    satelliteOrbitEvidence: illustrativeSatelliteEvidence,
     orbit: {
       model: 'keplerian',
       epochJd: DEFAULT_SMALL_BODY_EPOCH,
@@ -313,6 +340,7 @@ export const majorBodies: CelestialBody[] = [
     size: 2.5,
     source: 'curated-approx',
     parentId: 'jupiter',
+    satelliteOrbitEvidence: illustrativeSatelliteEvidence,
     orbit: {
       model: 'keplerian',
       epochJd: DEFAULT_SMALL_BODY_EPOCH,
@@ -333,6 +361,7 @@ export const majorBodies: CelestialBody[] = [
     size: 2.4,
     source: 'curated-approx',
     parentId: 'jupiter',
+    satelliteOrbitEvidence: illustrativeSatelliteEvidence,
     orbit: {
       model: 'keplerian',
       epochJd: DEFAULT_SMALL_BODY_EPOCH,
@@ -353,6 +382,7 @@ export const majorBodies: CelestialBody[] = [
     size: 2.8,
     source: 'curated-approx',
     parentId: 'saturn',
+    satelliteOrbitEvidence: illustrativeSatelliteEvidence,
     orbit: {
       model: 'keplerian',
       epochJd: DEFAULT_SMALL_BODY_EPOCH,

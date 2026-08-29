@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { JPL_APPROX_MODEL_EVIDENCE } from '../../engine/ephemeris/modelValidity'
+import { majorBodiesById } from '../../data/majorBodies'
+import { JPL_APPROX_MODEL_EVIDENCE, SATELLITE_ORBIT_MODEL_EVIDENCE } from '../../engine/ephemeris/modelValidity'
 import { useI18n } from '../../i18n/context'
+import { bodyDisplayName } from '../../lib/bodyNames'
 import { BUILD_INFO } from '../../lib/buildInfo'
 import { catalogStore } from '../../state/catalog-store'
 import { DatasetCard } from '../catalog/DatasetCard'
@@ -28,6 +30,10 @@ export function EvidenceWorkspace() {
   const { t, language } = useI18n()
   const [validation, setValidation] = useState<ValidationReport | null>(null)
   const [scientificValidation, setScientificValidation] = useState<ScientificValidationReport | null>(null)
+  const satelliteNames = (bodyIds: string[]) => bodyIds.map((bodyId) => {
+    const body = majorBodiesById.get(bodyId)
+    return body ? bodyDisplayName(body, language) : bodyId
+  }).join(' · ')
   const validationRoot = catalog.manifest?.releasePath
   useEffect(() => {
     if (!validationRoot) return
@@ -66,6 +72,8 @@ export function EvidenceWorkspace() {
 
       <section className="evidence-module model-provenance glass-panel"><div className="module-heading"><span>{t('planetaryApproximationId')}</span><em>JPL</em></div><dl className="identity-list"><div><dt>{t('model')}</dt><dd>{JPL_APPROX_MODEL_EVIDENCE.id}</dd></div><div><dt>{t('approximationType')}</dt><dd>{t('fittedKeplerianWithRates')}</dd></div><div><dt>{t('coordinateFrame')}</dt><dd>{t('j2000MeanEclipticFrame')}</dd></div><div><dt>{t('sourceTimeScale')}</dt><dd>{JPL_APPROX_MODEL_EVIDENCE.sourceTimeScale}</dd></div><div><dt>{t('applicationTimeHandling')}</dt><dd>{t('utcDerivedNumericJd')}</dd></div><div><dt>{t('modelValidityWindow')}</dt><dd>{JPL_APPROX_MODEL_EVIDENCE.validFrom} / {JPL_APPROX_MODEL_EVIDENCE.validTo}</dd></div><div><dt>{t('earthPointRepresentation')}</dt><dd>{t('earthMoonBarycenterPoint')}</dd></div></dl><a className="validation-page-link" href={JPL_APPROX_MODEL_EVIDENCE.sourceUrl} target="_blank" rel="noreferrer">{JPL_APPROX_MODEL_EVIDENCE.source} ↗</a></section>
 
+      <section className="evidence-module model-provenance glass-panel"><div className="module-heading"><span>{t('satelliteOrbitModelId')}</span><em>{t('meanElements')}</em></div><dl className="identity-list"><div><dt>{t('model')}</dt><dd>{SATELLITE_ORBIT_MODEL_EVIDENCE.id}</dd></div><div><dt>{t('satellitePropagation')}</dt><dd>{t('meanAnomalyOnly')}</dd></div><div><dt>{t('satelliteSourcedBodies')}</dt><dd>{satelliteNames(SATELLITE_ORBIT_MODEL_EVIDENCE.sourcedBodies)}</dd></div><div><dt>{t('satelliteIllustrativeBodies')}</dt><dd>{satelliteNames(SATELLITE_ORBIT_MODEL_EVIDENCE.illustrativeBodies)}</dd></div><div><dt>{t('moonCenterHandling')}</dt><dd>{t('moonCenterMismatch')}</dd></div><div><dt>{t('omittedEffects')}</dt><dd>{t('satelliteOmittedEffects')}</dd></div><div><dt>{t('precisionBoundary')}</dt><dd>{t('satelliteMeanElementsWarning')}</dd></div></dl><a className="validation-page-link" href={SATELLITE_ORBIT_MODEL_EVIDENCE.sourceUrl} target="_blank" rel="noreferrer">{SATELLITE_ORBIT_MODEL_EVIDENCE.source} ↗</a><a className="validation-page-link" href={SATELLITE_ORBIT_MODEL_EVIDENCE.centerCorrectionIssue} target="_blank" rel="noreferrer">{t('centerCorrectionTracking')} #21 ↗</a></section>
+
       <section className="evidence-module build-identity glass-panel">
         <div className="module-heading"><span>{t('buildIdentity')}</span><em>BUILD</em></div>
         <dl className="identity-list">
@@ -85,7 +93,7 @@ export function EvidenceWorkspace() {
 
       <section className="evidence-module contract-module glass-panel"><div className="module-heading"><span>{t('scientificContract')}</span><em>MODELS</em></div><dl className="contract-list"><div><dt>{t('majorPlanets')}</dt><dd>{t('majorPlanetsContract')}</dd></div><div><dt>{t('curatedBodies')}</dt><dd>{t('curatedBodiesContract')}</dd></div><div><dt>{t('smallBodies')}</dt><dd>{t('smallBodiesContract')}</dd></div><div><dt>{t('spacecraft')}</dt><dd>{t('spacecraftContract')}</dd></div><div><dt>{t('events')}</dt><dd>{t('eventsContract')}</dd></div><div><dt>{t('mission')}</dt><dd>{t('missionsContract')}</dd></div><div><dt>{t('sceneLinks')}</dt><dd>{t('sceneLinksContract')}</dd></div></dl></section>
 
-      <section className="evidence-module source-links glass-panel"><div className="module-heading"><span>{t('source')}</span><em>PRIMARY</em></div><a href="https://www.minorplanetcenter.net/iau/MPCORB.html" target="_blank" rel="noreferrer"><span>MPCORB</span><small>{t('mpcSourceDescription')}</small><b>↗</b></a><a href="https://ssd-api.jpl.nasa.gov/doc/sbdb.html" target="_blank" rel="noreferrer"><span>JPL SBDB API</span><small>{t('sbdbSourceDescription')}</small><b>↗</b></a><a href="https://ssd.jpl.nasa.gov/planets/approx_pos.html" target="_blank" rel="noreferrer"><span>JPL approximate positions</span><small>{t('jplSourceDescription')}</small><b>↗</b></a></section>
+      <section className="evidence-module source-links glass-panel"><div className="module-heading"><span>{t('source')}</span><em>PRIMARY</em></div><a href="https://www.minorplanetcenter.net/iau/MPCORB.html" target="_blank" rel="noreferrer"><span>MPCORB</span><small>{t('mpcSourceDescription')}</small><b>↗</b></a><a href="https://ssd-api.jpl.nasa.gov/doc/sbdb.html" target="_blank" rel="noreferrer"><span>JPL SBDB API</span><small>{t('sbdbSourceDescription')}</small><b>↗</b></a><a href="https://ssd.jpl.nasa.gov/planets/approx_pos.html" target="_blank" rel="noreferrer"><span>JPL approximate positions</span><small>{t('jplSourceDescription')}</small><b>↗</b></a><a href="https://ssd.jpl.nasa.gov/sats/elem/" target="_blank" rel="noreferrer"><span>JPL satellite mean elements</span><small>{t('jplSatelliteSourceDescription')}</small><b>↗</b></a></section>
 
       <section className="evidence-module glass-panel"><div className="module-heading"><span>{t('openSource')}</span><em>MIT</em></div><p className="large-copy">{t('openSourceCopy')}</p><p className="fine-print">{t('copyrightCopy')}</p></section>
     </div>

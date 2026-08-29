@@ -13,7 +13,7 @@ describe('modeled orbital periods', () => {
   // The regression values come from the curated mean motions. Primary-source
   // comparison for satellite mean elements: https://ssd.jpl.nasa.gov/sats/elem/
   it.each([
-    ['moon', 27.32166202527284],
+    ['moon', 27.322],
     ['io', 1.7691287041132242],
     ['titan', 15.943312666076174],
   ])('uses declared parent-centered mean motion for %s', (bodyId, expectedDays) => {

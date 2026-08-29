@@ -10,5 +10,24 @@
     "source": "JPL Solar System Dynamics — Approximate Positions of the Planets, Table 1",
     "sourceUrl": "https://ssd.jpl.nasa.gov/planets/approx_pos.html",
     "earthPoint": "earth-moon-barycenter"
+  },
+  "satelliteOrbits": {
+    "id": "satellite-two-body-contract-v1",
+    "source": "JPL Solar System Dynamics — Planetary Satellite Mean Elements",
+    "sourceUrl": "https://ssd.jpl.nasa.gov/sats/elem/",
+    "sourceWarning": "mean-elements-not-intended-for-ephemeris-computation",
+    "propagation": "fixed-ellipse-mean-anomaly-only",
+    "moonSourceCenter": "earth-geocenter",
+    "moonAppliedCenter": "earth-moon-barycenter-seed",
+    "moonCenterHandling": "untransformed-pending-geocenter-correction",
+    "approximateMeanCenterOffsetKm": 4700,
+    "centerCorrectionIssue": "https://github.com/dajiaohuang/solar/issues/21",
+    "omittedEffects": [
+      "nodal-precession",
+      "apsidal-precession",
+      "n-body-perturbations"
+    ],
+    "sourcedBodies": ["moon"],
+    "illustrativeBodies": ["io", "europa", "ganymede", "callisto", "titan"]
   }
 }

@@ -275,6 +275,36 @@ test('publishes the exact planetary model provenance in Evidence and the Earth p
   await expect(page.getByText('Earth–Moon barycenter (not geocenter)')).toBeVisible()
 })
 
+test('discloses sourced and illustrative satellite orbit models without false attribution', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=3&page=explorer&focused=moon&bodies=earth%2Cmoon&lang=en')
+  await page.getByRole('button', { name: 'Show body details' }).click()
+  await page.getByRole('tab', { name: 'Context' }).click()
+  await expect(page.getByText('JPL planet-centered ecliptic', { exact: true })).toBeVisible()
+  await expect(page.getByText('Earth geocenter', { exact: true })).toBeVisible()
+  await expect(page.getByText('Earth–Moon barycenter seed', { exact: true })).toBeVisible()
+  await expect(page.getByText(/Untransformed center offset.*#21/)).toBeVisible()
+  await expect(page.getByText('JPL mean-elements phase', { exact: true })).toBeVisible()
+  await expect(page.getByText(/Fixed mean ellipse;.*not an ephemeris.*#21/)).toBeVisible()
+  await page.getByRole('tab', { name: 'Sources' }).click()
+  await expect(page.getByRole('link', { name: /JPL satellite mean elements/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /JPL approximate positions/ })).toHaveCount(0)
+
+  await page.goto('./?v=3&page=explorer&focused=io&bodies=jupiter%2Cio&lang=zh')
+  await page.getByRole('button', { name: '查看天体详情' }).click()
+  await page.getByRole('tab', { name: '背景' }).click()
+  await expect(page.getByText('来源未记录；示意平面', { exact: true })).toBeVisible()
+  await expect(page.getByText('示意性的共享零相位', { exact: true })).toBeVisible()
+  await expect(page.getByText('示意固定椭圆；不是当前天空位置', { exact: true })).toBeVisible()
+
+  await page.goto('./?v=3&page=about&lang=zh')
+  await expect(page.getByText('satellite-two-body-contract-v1')).toBeVisible()
+  await expect(page.getByText(/不用于星历计算/)).toBeVisible()
+  await expect(page.getByText(/巨行星卫星的平面与历元相位仍明确标为示意/)).toBeVisible()
+  await expect(page.getByText(/地心为中心.*地月质心种子.*#21/)).toBeVisible()
+  await expect(page.getByRole('link', { name: /中心校正跟踪 #21/ })).toBeVisible()
+})
+
 test('shows Hill and Laplace influence definitions independently', async ({ page }) => {
   await page.goto('./?v=2&view=2d')
   await page.locator('.advanced-controls > summary').click()

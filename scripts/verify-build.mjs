@@ -62,6 +62,14 @@ if (scientificValidation.passed === false) throw new Error('Scientific validatio
 if (!scientificValidation.build?.commitSha) throw new Error('Scientific validation report is missing build identity')
 if (scientificValidation.modelEvidence?.planetaryApproximation?.id !== 'jpl-approx-table-1') throw new Error('Scientific validation report is missing the planetary model identity')
 if (scientificValidation.modelEvidence?.planetaryApproximation?.earthPoint !== 'earth-moon-barycenter') throw new Error('Scientific validation report is missing the Earth–Moon barycenter representation')
+if (scientificValidation.modelEvidence?.satelliteOrbits?.id !== 'satellite-two-body-contract-v1') throw new Error('Scientific validation report is missing the satellite model identity')
+if (scientificValidation.modelEvidence?.satelliteOrbits?.sourceWarning !== 'mean-elements-not-intended-for-ephemeris-computation') throw new Error('Scientific validation report is missing the satellite mean-element precision boundary')
+if (scientificValidation.modelEvidence?.satelliteOrbits?.moonSourceCenter !== 'earth-geocenter') throw new Error('Scientific validation report is missing the Moon source center')
+if (scientificValidation.modelEvidence?.satelliteOrbits?.moonAppliedCenter !== 'earth-moon-barycenter-seed') throw new Error('Scientific validation report is missing the Moon applied center')
+if (scientificValidation.modelEvidence?.satelliteOrbits?.moonCenterHandling !== 'untransformed-pending-geocenter-correction') throw new Error('Scientific validation report does not disclose the Moon center mismatch')
+if (scientificValidation.modelEvidence?.satelliteOrbits?.centerCorrectionIssue !== 'https://github.com/dajiaohuang/solar/issues/21') throw new Error('Scientific validation report is missing the Moon center correction tracker')
+if (scientificValidation.modelEvidence?.satelliteOrbits?.sourcedBodies?.join(',') !== 'moon') throw new Error('Scientific validation report does not identify the sourced Moon model')
+if (scientificValidation.modelEvidence?.satelliteOrbits?.illustrativeBodies?.length !== 5) throw new Error('Scientific validation report does not identify every illustrative satellite model')
 const planetaryModelEvidence = scientificValidation.modelEvidence.planetaryApproximation
 const expectedPlanetaryModelWindow = `${planetaryModelEvidence.validFrom}/${planetaryModelEvidence.validTo}`
 if (scientificValidation.modelWindow?.planetaryApproximation !== expectedPlanetaryModelWindow) throw new Error('Scientific validation model window is inconsistent with the canonical model evidence')
