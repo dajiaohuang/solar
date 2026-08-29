@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import type { AsteroidRecord, CatalogPointWorkerRequest, CatalogPointWorkerResponse } from '../types'
 
+const EMPTY_POSITIONS = new Float32Array()
+
 export function useCatalogPointWorker(records: AsteroidRecord[], julianDay: number) {
   const requestId = useRef(0)
-  const [positions, setPositions] = useState<Float32Array>(new Float32Array())
+  const [positions, setPositions] = useState<Float32Array>(EMPTY_POSITIONS)
+  const [positions3D, setPositions3D] = useState<Float32Array>(EMPTY_POSITIONS)
+  const [computedRecords, setComputedRecords] = useState(records)
+  const [computedJulianDay, setComputedJulianDay] = useState(julianDay)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
@@ -13,7 +18,10 @@ export function useCatalogPointWorker(records: AsteroidRecord[], julianDay: numb
     if (!records.length) {
       queueMicrotask(() => {
         if (requestId.current !== currentRequestId) return
-        setPositions(new Float32Array())
+        setPositions(EMPTY_POSITIONS)
+        setPositions3D(EMPTY_POSITIONS)
+        setComputedRecords(records)
+        setComputedJulianDay(julianDay)
         setProgress(0)
       })
       return
@@ -33,7 +41,10 @@ export function useCatalogPointWorker(records: AsteroidRecord[], julianDay: numb
       if (event.data.requestId !== requestId.current) return
       if (event.data.type === 'progress') setProgress(event.data.progress ?? 0)
       if (event.data.type === 'result') {
-        setPositions(event.data.positions ?? new Float32Array())
+        setPositions(event.data.positions ?? EMPTY_POSITIONS)
+        setPositions3D(event.data.positions3D ?? EMPTY_POSITIONS)
+        setComputedRecords(records)
+        setComputedJulianDay(julianDay)
         setProgress(1)
         worker.terminate()
       }
@@ -54,5 +65,13 @@ export function useCatalogPointWorker(records: AsteroidRecord[], julianDay: numb
     return () => worker.terminate()
   }, [julianDay, records])
 
-  return { positions, progress, error }
+  const ready = computedRecords === records
+  return {
+    positions: ready ? positions : EMPTY_POSITIONS,
+    positions3D: ready ? positions3D : EMPTY_POSITIONS,
+    computedJulianDay,
+    readyCount: ready ? Math.min(records.length, Math.floor(positions.length / 2), Math.floor(positions3D.length / 3)) : 0,
+    progress,
+    error,
+  }
 }

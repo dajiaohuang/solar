@@ -22,6 +22,7 @@ export type SatelliteOrbitEvidence = {
 export type DatasetMode = 'lite' | 'full'
 
 export type CatalogSampleProfile = 'desktop' | 'mobile'
+export type RenderQuality = 'auto' | 'balanced' | 'max'
 
 export type MagnitudeStatus = 'all' | 'known' | 'unknown'
 
@@ -187,6 +188,7 @@ export type CatalogPointWorkerResponse = {
   requestId: number
   progress?: number
   positions?: Float32Array
+  positions3D?: Float32Array
   error?: string
 }
 

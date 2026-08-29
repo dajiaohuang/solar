@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { LagrangePoint } from '../lib/lagrange'
-import type { CelestialBody, RenderedBodyPosition, TrajectorySample } from '../types'
+import type { AsteroidRecord, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector3 } from '../types'
 
 type Props = {
   referenceBody: CelestialBody
@@ -18,6 +18,14 @@ type Props = {
   ariaLabel?: string
   fallbackLabel?: string
   onUnavailable?: () => void
+  catalogRecords?: AsteroidRecord[]
+  catalogPositions3D?: Float32Array
+  catalogDrawCount?: number
+  catalogOrigin?: Vector3
+  catalogFitKey?: string
+  continuous?: boolean
+  pixelRatioLimit?: number
+  onFrameDuration?: (durationMs: number) => void
 }
 
 type SceneResources = {
@@ -35,8 +43,13 @@ type SceneResources = {
   eclipticGroup: THREE.Group
   glow: THREE.Sprite
   glowTexture: THREE.Texture
+  catalogPoints: THREE.Points
   bodyScale: number
 }
+
+const EMPTY_CATALOG_RECORDS: AsteroidRecord[] = []
+const EMPTY_CATALOG_POSITIONS = new Float32Array()
+const HELIOCENTRIC_ORIGIN = { x: 0, y: 0, z: 0 }
 
 function radiusFor(body: CelestialBody) {
   const base = body.kind === 'star' ? 0.12 : body.kind === 'planet' ? 0.075 : body.kind === 'moon' ? 0.042 : 0.032
@@ -49,7 +62,7 @@ function toThree(position: { x: number; y: number; z: number }) {
 }
 
 function disposeObject(object: THREE.Object3D) {
-  if (object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.Points) {
+  if (object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.LineSegments || object instanceof THREE.Points) {
     object.geometry.dispose()
     const materials = Array.isArray(object.material) ? object.material : [object.material]
     for (const material of materials) material.dispose()
@@ -87,6 +100,14 @@ export function TrajectoryCanvas3D({
   ariaLabel = 'Interactive three-dimensional Solar System trajectory view',
   fallbackLabel = 'Three-dimensional WebGL rendering is unavailable.',
   onUnavailable,
+  catalogRecords = EMPTY_CATALOG_RECORDS,
+  catalogPositions3D = EMPTY_CATALOG_POSITIONS,
+  catalogDrawCount = 0,
+  catalogOrigin = HELIOCENTRIC_ORIGIN,
+  catalogFitKey = '',
+  continuous = false,
+  pixelRatioLimit = 1.75,
+  onFrameDuration,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const resourcesRef = useRef<SceneResources | null>(null)
@@ -109,7 +130,7 @@ export function TrajectoryCanvas3D({
     camera.position.set(0, 4.2, 7.5)
     let renderer: THREE.WebGLRenderer
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true })
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' })
     } catch (error) {
       const failureFrame = window.requestAnimationFrame(() => {
         setUnavailable(error instanceof Error ? error.message : fallbackLabelRef.current)
@@ -117,7 +138,7 @@ export function TrajectoryCanvas3D({
       })
       return () => window.cancelAnimationFrame(failureFrame)
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    renderer.setPixelRatio(1)
     renderer.setSize(container.clientWidth, container.clientHeight)
     renderer.outputColorSpace = THREE.SRGBColorSpace
     container.appendChild(renderer.domElement)
@@ -128,8 +149,7 @@ export function TrajectoryCanvas3D({
     }
     renderer.domElement.addEventListener('webglcontextlost', handleContextLost)
     const controls = new OrbitControls(camera, renderer.domElement)
-    controls.enableDamping = true
-    controls.dampingFactor = 0.075
+    controls.enableDamping = false
     controls.minDistance = 0.08
     controls.maxDistance = 220
 
@@ -166,6 +186,12 @@ export function TrajectoryCanvas3D({
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture, transparent: true, blending: THREE.AdditiveBlending }))
     glow.scale.setScalar(0.9)
     scene.add(glow)
+    const catalogPoints = new THREE.Points(
+      new THREE.BufferGeometry(),
+      new THREE.PointsMaterial({ size: 0.018, sizeAttenuation: true, vertexColors: true, transparent: true, opacity: 0.72 }),
+    )
+    catalogPoints.frustumCulled = false
+    scene.add(catalogPoints)
 
     const resources: SceneResources = {
       scene,
@@ -182,23 +208,27 @@ export function TrajectoryCanvas3D({
       eclipticGroup,
       glow,
       glowTexture,
+      catalogPoints,
       bodyScale: 1,
     }
     resourcesRef.current = resources
-    renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera) })
+    const render = () => renderer.render(scene, camera)
+    controls.addEventListener('change', render)
+    render()
     const observer = new ResizeObserver(() => {
       const width = Math.max(container.clientWidth, 1)
       const height = Math.max(container.clientHeight, 1)
       camera.aspect = width / height
       camera.updateProjectionMatrix()
       renderer.setSize(width, height)
+      render()
     })
     observer.observe(container)
 
     return () => {
       observer.disconnect()
       renderer.domElement.removeEventListener('webglcontextlost', handleContextLost)
-      renderer.setAnimationLoop(null)
+      controls.removeEventListener('change', render)
       controls.dispose()
       for (const line of resources.trajectoryLines.values()) disposeObject(line)
       for (const mesh of resources.bodyMeshes.values()) (mesh.material as THREE.Material).dispose()
@@ -207,13 +237,80 @@ export function TrajectoryCanvas3D({
       resources.lagrangeGeometry.dispose()
       disposeObject(resources.saturnRing)
       for (const object of [...resources.eclipticGroup.children]) disposeObject(object)
+      disposeObject(grid)
       ;(resources.glow.material as THREE.Material).dispose()
       resources.glowTexture.dispose()
+      disposeObject(resources.catalogPoints)
       renderer.dispose()
       container.removeChild(renderer.domElement)
       resourcesRef.current = null
     }
   }, [])
+
+  useEffect(() => {
+    const resources = resourcesRef.current
+    const container = containerRef.current
+    if (!resources || !container) return
+    resources.renderer.setPixelRatio(Math.min(window.devicePixelRatio, pixelRatioLimit))
+    resources.renderer.setSize(Math.max(container.clientWidth, 1), Math.max(container.clientHeight, 1))
+    resources.renderer.render(resources.scene, resources.camera)
+  }, [pixelRatioLimit])
+
+  useEffect(() => {
+    if (!continuous) return
+    let animationFrame = 0
+    let previous = performance.now()
+    const renderFrame = (timestamp: number) => {
+      const resources = resourcesRef.current
+      if (!resources) return
+      if (!document.hidden) {
+        resources.renderer.render(resources.scene, resources.camera)
+        onFrameDuration?.(timestamp - previous)
+      }
+      previous = timestamp
+      animationFrame = window.requestAnimationFrame(renderFrame)
+    }
+    animationFrame = window.requestAnimationFrame(renderFrame)
+    return () => window.cancelAnimationFrame(animationFrame)
+  }, [continuous, onFrameDuration])
+
+  useEffect(() => {
+    const resources = resourcesRef.current
+    if (!resources) return
+    const count = Math.min(catalogRecords.length, Math.floor(catalogPositions3D.length / 3))
+    const cloudPositions = new Float32Array(count * 3)
+    const cloudColors = new Float32Array(count * 3)
+    for (let index = 0; index < count; index += 1) {
+      cloudPositions[index * 3] = catalogPositions3D[index * 3]
+      cloudPositions[index * 3 + 1] = catalogPositions3D[index * 3 + 2]
+      cloudPositions[index * 3 + 2] = catalogPositions3D[index * 3 + 1]
+      const record = catalogRecords[index]
+      const color = record.isPha ? [1, 0.35, 0.3] : record.isNeo ? [1, 0.62, 0.5] : [0.62, 0.7, 0.76]
+      cloudColors.set(color, index * 3)
+    }
+    resources.catalogPoints.geometry.dispose()
+    resources.catalogPoints.geometry = new THREE.BufferGeometry()
+    resources.catalogPoints.geometry.setAttribute('position', new THREE.BufferAttribute(cloudPositions, 3))
+    resources.catalogPoints.geometry.setAttribute('color', new THREE.BufferAttribute(cloudColors, 3))
+    resources.catalogPoints.visible = count > 0
+    resources.renderer.render(resources.scene, resources.camera)
+  }, [catalogPositions3D, catalogRecords])
+
+  useEffect(() => {
+    const resources = resourcesRef.current
+    if (!resources) return
+    const available = Math.min(catalogRecords.length, Math.floor(catalogPositions3D.length / 3))
+    resources.catalogPoints.geometry.setDrawRange(0, Math.min(catalogDrawCount, available))
+    resources.catalogPoints.visible = catalogDrawCount > 0 && available > 0
+    resources.renderer.render(resources.scene, resources.camera)
+  }, [catalogDrawCount, catalogPositions3D.length, catalogRecords.length])
+
+  useEffect(() => {
+    const resources = resourcesRef.current
+    if (!resources) return
+    resources.catalogPoints.position.copy(toThree({ x: -catalogOrigin.x, y: -catalogOrigin.y, z: -catalogOrigin.z }))
+    resources.renderer.render(resources.scene, resources.camera)
+  }, [catalogOrigin])
 
   useEffect(() => {
     const resources = resourcesRef.current
@@ -293,7 +390,8 @@ export function TrajectoryCanvas3D({
     // Reframe only when the scene composition changes, preserving deliberate
     // user camera moves during clock playback while keeping story/catalog
     // scenes (including outbound spacecraft paths) discoverable.
-    const fitKey = `${referenceBody.id}|${[...bodyPositions.keys()].sort().join(',')}|${trajectories.map((item) => `${item.body.id}:${item.points3D?.length ?? 0}`).sort().join(',')}`
+    const catalogReady = catalogDrawCount > 0 && catalogPositions3D.length >= 3
+    const fitKey = `${referenceBody.id}|${[...bodyPositions.keys()].sort().join(',')}|${trajectories.map((item) => `${item.body.id}:${item.points3D?.length ?? 0}`).sort().join(',')}|${catalogReady ? catalogFitKey : ''}`
     if (fitKeyRef.current !== fitKey) {
       fitKeyRef.current = fitKey
       let radius = 0
@@ -303,6 +401,16 @@ export function TrajectoryCanvas3D({
       for (const trajectory of trajectories) {
         if (trajectory.body.kind === 'spacecraft') continue
         for (const point of trajectory.points3D ?? []) radius = Math.max(radius, Math.hypot(point.x, point.y, point.z))
+      }
+      // Fit the complete ready sample once so later adaptive draw-range growth
+      // cannot introduce points outside the user's initial catalog framing.
+      const catalogCount = Math.min(catalogRecords.length, Math.floor(catalogPositions3D.length / 3))
+      for (let index = 0; index < catalogCount; index += 1) {
+        radius = Math.max(radius, Math.hypot(
+          catalogPositions3D[index * 3] - catalogOrigin.x,
+          catalogPositions3D[index * 3 + 1] - catalogOrigin.y,
+          catalogPositions3D[index * 3 + 2] - catalogOrigin.z,
+        ))
       }
       const distance = Math.max(2.8, Math.min(260, radius * 1.45 + 1.4))
       resources.bodyScale = Math.max(1, Math.min(4.5, Math.sqrt(Math.max(radius, 1) / 7)))
@@ -346,7 +454,8 @@ export function TrajectoryCanvas3D({
         resources.saturnRing.visible = true
       }
     }
-  }, [currentPositions, lagrangePoints, referenceBody, showEcliptic, showGlow, showSaturnRings, trajectories])
+    resources.renderer.render(resources.scene, resources.camera)
+  }, [catalogDrawCount, catalogFitKey, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z, catalogPositions3D, catalogRecords.length, currentPositions, lagrangePoints, referenceBody, showEcliptic, showGlow, showSaturnRings, trajectories])
 
   const intersectBody = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     const container = containerRef.current

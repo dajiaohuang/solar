@@ -28,11 +28,14 @@ npm run check:capacity
 
 Scientific changes should add a unit fixture or a reproducible scene, cite a primary source, state the model and validity range, and distinguish numerical precision from physical uncertainty. UI changes must preserve English and Chinese coverage, keyboard access, mobile behavior, and reduced-motion preferences.
 
+Renderer changes must keep the focus layer and catalog cloud separate. Named focus bodies may carry trajectories, labels, picking, and analysis; bulk catalog objects belong in shared typed arrays and a bounded GPU point buffer. Preserve the default zero-sample-request Observation Deck, the 3D-to-2D fallback, and both mobile and desktop Playwright coverage. Treat memory and CPU APIs as conservative hints only; require measured real-device evidence before claiming that a hardware tier is guaranteed smooth.
+
 ## Data and release boundaries
 
 - Never commit generated MPCORB releases or raw source snapshots.
 - Do not mutate an immutable release. Publish a new content-addressed dataset and update `.github/asteroid-dataset.json` only after validation.
 - Application builds and datasets have separate identities. Keep both visible in Evidence and exports.
+- Keep immutable catalog-sample identity separate from the locally effective point count. Share URLs may record sample and quality intent, but adaptive frame-time decisions are device-local.
 - Do not label two-body or schematic output as an operational ephemeris, N-body result, risk assessment, or navigation product.
 
 Use the issue templates for scientific correctness, data, browser compatibility, usability, or a guided-story proposal. A story proposal must define a learner question, reproducible observation sequence, primary sources, and the boundary between what the current model shows and what it cannot prove. Pull requests should be small enough to review and should explain any model, URL-schema, storage, or artifact-size change.

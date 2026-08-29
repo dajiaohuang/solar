@@ -81,6 +81,8 @@ export function AppProviders({ children }: { children: ReactNode }) {
       historyDays: initial.history ?? DEFAULT_SIMULATION_STATE.historyDays,
       sampleCount: initial.samples ?? DEFAULT_SIMULATION_STATE.sampleCount,
       viewMode: initial.view ?? DEFAULT_SIMULATION_STATE.viewMode,
+      renderQuality: initial.quality ?? DEFAULT_SIMULATION_STATE.renderQuality,
+      showCatalogCloud: initial.catalogCloud ?? DEFAULT_SIMULATION_STATE.showCatalogCloud,
       showEcliptic: initial.layers?.includes('ecliptic') ?? DEFAULT_SIMULATION_STATE.showEcliptic,
       showOrbits: initial.layers?.includes('orbits') ?? DEFAULT_SIMULATION_STATE.showOrbits,
       showLagrange: initial.layers?.includes('lagrange') ?? DEFAULT_SIMULATION_STATE.showLagrange,

@@ -32,6 +32,7 @@ Useful pipeline environment variables are `MPCORB_SOURCE_FILE`, `MPCORB_SOURCE_U
 - `src/data/` — curated major-body/spacecraft data, physical properties, catalog loaders, and IndexedDB cache support.
 - `src/components/TrajectoryCanvas.tsx` — raw WebGL 2D renderer and GPU point-catalog view.
 - `src/components/TrajectoryCanvas3D.tsx` — persistent Three.js scene graph; do not recreate the renderer or scene on each clock tick.
+- `src/lib/renderBudget.ts` — pure mobile/desktop and 2D/3D point-budget policies plus the frame-window adaptation state machine.
 - `src/i18n/` — the single bilingual translation source. Add keys to both `en.ts` and `zh.ts`.
 - `scripts/preprocess-asteroids.mjs` — strict fixed-width MPCORB parser and immutable binary-shard publisher.
 
@@ -41,6 +42,8 @@ Useful pipeline environment variables are `MPCORB_SOURCE_FILE`, `MPCORB_SOURCE_U
 - MPCORB and SBDB production paths accept bound elliptic solutions only (`0 <= e < 1`, `a > 0`). Unsupported conics must fail visibly.
 - Position resolution is heliocentric first, including parent-body chaining, then transformed into the chosen reference frame. Do not mix frame-relative and absolute coordinates.
 - The simulation clock lives outside React and publishes throttled snapshots. Do not drive orbital recomputation with a component-level `requestAnimationFrame` loop.
+- Keep focus trajectories separate from the catalog cloud: 3D focus is capped at 160, 2D focus at 320, while bulk catalog points use one worker-produced typed buffer and a view-specific budget. The default Explorer must not fetch a catalog sample until the cloud is explicitly enabled.
+- Browser memory and CPU values may only lower an initial adaptive budget. Frame timing is authoritative, and hardware-specific smoothness claims require measured evidence.
 - Heavy analyses are explicit, cancellable worker jobs. UI parameter changes must not silently rerun them.
 - Results and exports must state their model, epoch/window, units, and approximation limits.
 - Share URLs are a versioned scene contract. Extend `src/lib/urlState.ts` compatibly when new shareable state is added.

@@ -7,6 +7,7 @@ describe('reproducible scene URLs', () => {
       route: 'elements', dataset: '2026.08.18.deadbeef-full', mode: 'full', catalogSample: 'mobile', catalogSampleCount: 8_000, ref: 'earth',
       compareRef: 'jupiter', compare: true, bodies: ['mars', 'asteroid:mpc:00433'], jd: 2461040.5,
       history: 730, samples: 240, speed: 30, view: '2d', filter: 'APO', search: 'eros', focused: 'mars', lang: 'en',
+      catalogCloud: true, quality: 'max',
       plot: 'q-Q', aRange: [0.5, 5], eRange: [0, 0.8], iRange: [0, 40], hRange: [5, 30],
       hStatus: 'known', qRange: [0.2, 4], layers: ['ecliptic', 'lagrange', 'spacecraft'], offset: [1.25, -0.5],
       story: 'retrograde-mars', step: 2, guide: true, missionFrom: 'earth', missionTo: 'mars', departureDate: '2026-11-15', arrivalDate: '2027-08-01',
@@ -18,6 +19,8 @@ describe('reproducible scene URLs', () => {
     expect(decoded.catalogSample).toBe('mobile')
     expect(decoded.catalogSampleCount).toBe(8_000)
     expect(decoded.catalogSampleCountRaw).toBeUndefined()
+    expect(decoded.catalogCloud).toBe(true)
+    expect(decoded.quality).toBe('max')
     expect(decoded.jd).toBe(2461040.5)
     expect(decoded.bodies).toEqual(['mars', 'asteroid:mpc:00433'])
     expect(decoded.compare).toBe(true)
@@ -37,12 +40,14 @@ describe('reproducible scene URLs', () => {
 
   it('keeps legacy v2 and v3 scene links readable without reading v4 catalog fields', () => {
     for (const version of [2, 3]) {
-      const decoded = decodeUrlState(`?v=${version}&ref=earth&view=2d&catalogSample=mobile&catalogSampleCount=8000`)
+      const decoded = decodeUrlState(`?v=${version}&ref=earth&view=2d&catalogSample=mobile&catalogSampleCount=8000&catalogCloud=1&quality=max`)
       expect(decoded.version).toBe(version)
       expect(decoded.ref).toBe('earth')
       expect(decoded.view).toBe('2d')
       expect(decoded.catalogSample).toBeUndefined()
       expect(decoded.catalogSampleCount).toBeUndefined()
+      expect(decoded.catalogCloud).toBeUndefined()
+      expect(decoded.quality).toBeUndefined()
     }
   })
 

@@ -14,7 +14,7 @@ import { catalogActions, DEFAULT_CATALOG_FILTERS } from '../../state/catalog-sto
 import { selectionActions, selectionStore } from '../../state/selection-store'
 import { simulationActions, simulationStore } from '../../state/simulation-store'
 import { uiActions } from '../../state/ui-store'
-import type { CelestialBody } from '../../types'
+import type { CelestialBody, RenderQuality } from '../../types'
 
 type Props = {
   bodies: CelestialBody[]
@@ -202,10 +202,23 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
             <span>{t(label)}</span>
           </label>
         ))}
+        <label className="toggle-row">
+          <input type="checkbox" checked={simulation.showCatalogCloud} onChange={(event) => simulationActions.patch({ showCatalogCloud: event.target.checked })} />
+          <span>{t('catalogCloud')}</span>
+        </label>
+        <label className="field">
+          <span>{t('renderQuality')}</span>
+          <select value={simulation.renderQuality} onChange={(event) => simulationActions.patch({ renderQuality: event.target.value as RenderQuality })}>
+            <option value="auto">{t('renderQualityAuto')}</option>
+            <option value="balanced">{t('renderQualityBalanced')}</option>
+            <option value="max">{t('renderQualityMax')}</option>
+          </select>
+        </label>
+        <p className="fine-print">{t('renderQualityBoundary')}</p>
       </section>
 
       <section className="drawer-section focus-list-section">
-        <div className="section-heading"><span>{t('selectedBodies')}</span><strong>{selection.selectedIds.length}/160</strong></div>
+        <div className="section-heading"><span>{t('selectedBodies')}</span><strong>{selection.selectedIds.length}/{simulation.viewMode === '2d' ? 320 : 160}</strong></div>
         <label className="field body-filter">
           <span>{t('filterBodies')}</span>
           <input type="search" value={bodyQuery} onChange={(event) => setBodyQuery(event.target.value)} placeholder={t('filterBodies')} />
@@ -222,8 +235,8 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
           ))}
         </div>
         <div className="inline-actions body-selection-actions">
-          <button onClick={() => selectionActions.setSelectedIds(referenceOptions.filter((body) => body.id !== 'sun' && body.kind !== 'spacecraft').map((body) => body.id).slice(0, 160))}>{t('selectMajorBodies')}</button>
-          <button onClick={() => selectionActions.setSelectedIds(sortedBodies.slice(0, 160).map((body) => body.id))}>{t('selectAllAvailable')}</button>
+          <button onClick={() => selectionActions.setSelectedIds(referenceOptions.filter((body) => body.id !== 'sun' && body.kind !== 'spacecraft').map((body) => body.id).slice(0, simulation.viewMode === '2d' ? 320 : 160))}>{t('selectMajorBodies')}</button>
+          <button onClick={() => selectionActions.setSelectedIds(sortedBodies.slice(0, simulation.viewMode === '2d' ? 320 : 160).map((body) => body.id))}>{t('selectAllAvailable')}</button>
           <button onClick={() => selectionActions.setSelectedIds([])}>{t('clear')}</button>
         </div>
       </section>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { GRID_LEVELS, SVG_PADDING, createProjection, projectPoint, unprojectPoint, type Projection } from '../lib/viewProjection'
 import type { LagrangePoint } from '../lib/lagrange'
-import type { CelestialBody, RenderedBodyPosition, TrajectorySample, Vector2 } from '../types'
+import type { AsteroidRecord, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector2 } from '../types'
 
 type OrbitEllipse = {
   body: CelestialBody
@@ -32,6 +32,11 @@ type Props = {
   emptyLabel?: string
   webglUnavailableLabel?: string
   influenceLabels?: { hill: string; soi: string }
+  catalogRecords?: AsteroidRecord[]
+  catalogPositions?: Float32Array
+  catalogDrawCount?: number
+  catalogOrigin?: Vector2
+  pixelRatioLimit?: number
 }
 
 type Geometry = {
@@ -57,6 +62,9 @@ const CANVAS_SIZE = 880
 const MAJOR_LABEL_LIMIT = 18
 const ASTEROID_LABEL_LIMIT = 6
 const RING_SEGMENTS = 72
+const EMPTY_CATALOG_RECORDS: AsteroidRecord[] = []
+const EMPTY_CATALOG_POSITIONS = new Float32Array()
+const HELIOCENTRIC_ORIGIN = { x: 0, y: 0 }
 
 function useElementSize<T extends HTMLElement>() {
   const ref = useRef<T | null>(null)
@@ -310,6 +318,10 @@ function buildGeometry(
   planetOpacity: number,
   asteroidOpacity: number,
   moonOpacity: number,
+  catalogRecords: AsteroidRecord[],
+  catalogPositions: Float32Array,
+  catalogDrawCount: number,
+  catalogOrigin: Vector2,
 ): Geometry {
   const linePositions: number[] = []
   const lineColors: number[] = []
@@ -438,6 +450,19 @@ function buildGeometry(
 
   const referenceColor = hexToRgba(referenceBody.color, 1)
   const referencePoint = toClipSpace(projectedReferencePoint, projection)
+
+  const cloudCount = Math.min(catalogDrawCount, catalogRecords.length, Math.floor(catalogPositions.length / 2))
+  for (let index = 0; index < cloudCount; index += 1) {
+    const record = catalogRecords[index]
+    const projected = toClipSpace(projectPoint({
+      x: catalogPositions[index * 2] - catalogOrigin.x,
+      y: catalogPositions[index * 2 + 1] - catalogOrigin.y,
+    }, projection), projection)
+    const color = record.isPha ? [1, 0.35, 0.3, 0.82] : record.isNeo ? [1, 0.62, 0.5, 0.76] : [0.62, 0.7, 0.76, 0.52]
+    pushVertex(pointPositions, pointColors, projected.x, projected.y, color)
+    pointSizes.push(record.isPha ? 2.8 : record.isNeo ? 2.2 : 1.4)
+  }
+
   pushVertex(pointPositions, pointColors, referencePoint.x, referencePoint.y, referenceColor)
   pointSizes.push(7)
 
@@ -543,6 +568,11 @@ export function TrajectoryCanvas({
   emptyLabel = 'Select at least one celestial object to display.',
   webglUnavailableLabel = 'WebGL acceleration is unavailable in this browser.',
   influenceLabels = { hill: 'Hill Sphere', soi: 'Laplace SOI' },
+  catalogRecords = EMPTY_CATALOG_RECORDS,
+  catalogPositions = EMPTY_CATALOG_POSITIONS,
+  catalogDrawCount = 0,
+  catalogOrigin = HELIOCENTRIC_ORIGIN,
+  pixelRatioLimit = 1.75,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const resourcesRef = useRef<GlResources | null>(null)
@@ -589,8 +619,12 @@ export function TrajectoryCanvas({
         planetOpacity,
         asteroidOpacity,
         moonOpacity,
+        catalogRecords,
+        catalogPositions,
+        catalogDrawCount,
+        catalogOrigin,
       ),
-    [asteroidOpacity, currentPositions, moonOpacity, orbitEllipses, planetOpacity, projection, referenceBody, showOrbits, trajectories],
+    [asteroidOpacity, catalogDrawCount, catalogOrigin, catalogPositions, catalogRecords, currentPositions, moonOpacity, orbitEllipses, planetOpacity, projection, referenceBody, showOrbits, trajectories],
   )
 
   useEffect(() => {
@@ -601,7 +635,7 @@ export function TrajectoryCanvas({
 
     const width = Math.max(size.width, 1)
     const height = Math.max(size.height, 1)
-    const pixelRatio = window.devicePixelRatio || 1
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, pixelRatioLimit)
 
     canvas.width = Math.round(width * pixelRatio)
     canvas.height = Math.round(height * pixelRatio)
@@ -629,7 +663,7 @@ export function TrajectoryCanvas({
 
     drawLines(resources, geometry)
     drawPoints(resources, geometry, pixelRatio)
-  }, [geometry, size.height, size.width, webglUnavailable])
+  }, [geometry, pixelRatioLimit, size.height, size.width, webglUnavailable])
 
   useEffect(() => {
     return () => {

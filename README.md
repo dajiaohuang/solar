@@ -1,105 +1,188 @@
 # Solar Atlas
 
-**A browser-native Solar System dynamics and small-body atlas.**
+**A browser-native Solar System dynamics and small-body atlas with reproducible scenes, traceable data, and explicit model boundaries.**
 
-[Live demo](https://dajiaohuang.github.io/solar/) · [中文文档](./README-CN.md) · [Scientific contract](#scientific-contract)
+[Open Solar Atlas](https://dajiaohuang.github.io/solar/) · [中文文档](./README-CN.md) · [Scientific contract](#scientific-contract) · [Contributing](#contributing)
 
-Current release: **v0.11.0** · [Changelog](./CHANGELOG.md) · [Roadmap](./ROADMAP.md) · [Performance budgets](./PERFORMANCE.md)
+Application version: **v0.11.0** · [Live build identity](https://dajiaohuang.github.io/solar/health.json) · [Changelog](./CHANGELOG.md) · [Roadmap](./ROADMAP.md) · [Performance budgets](./PERFORMANCE.md)
 
-![Solar Atlas overview](./public/readme-screenshot.png)
+![The Solar Atlas Observation Deck with its 3D scene and preset switchboard](./docs/screenshots/observation-deck.png)
 
-Solar Atlas connects spatial views, orbital-element space, time events, and data evidence in one reproducible browser workspace. It is built for exploration and teaching—not operational navigation or certified ephemerides.
+Solar Atlas connects a spatial workbench, orbital-element space, event analysis, mission geometry, guided stories, and data evidence in one client-side application. It is built for exploration and teaching. It is **not** an operational ephemeris, a collision-warning service, an N-body integrator, or a navigation product.
 
-## What is implemented
+## What opens first
 
-- **Visitor layer:** the bilingual Observation Deck opens immediately, first-time visitors can choose a short tutorial or independent exploration, advanced controls stay collapsed until requested, and global object/story/term search (`Ctrl/⌘ K` or `/`) remains available alongside browser-history navigation, descriptive route titles, and a four-item mobile navigation model.
-- **Observation Deck:** twelve one-click scene presets, including Earth–Moon, Jupiter’s four modeled Galilean moons, Saturn–Titan, and two main-belt element views backed by the pinned 8,000-object mobile catalog sample; a fast 2D first view with immediate 3D switching; a bounded simulation clock; arbitrary body-centered and split reference frames; searchable render-body selection; trajectory, layer, zoom, and camera controls; distance measurement; Lagrange points; Hill spheres and Laplace SOIs.
-- **Small-Body Catalog:** MPCORB binary shards, two-character prefix search, exact compact-index filters with bounded locator hydration pages, NEO/PHA and orbit-class filters, Lite/Full display budgets, immutable dataset versions, and IndexedDB caching.
-- **Orbital Element Space:** linked `a–e`, `a–i`, `a–H`, `q–Q`, and `a–period` plots, Kirkwood/resonance markers, brush selection, keyboard point inspection, distribution histograms, and synchronized 3D highlighting.
-- **Events Lab:** adaptive, cancellable close-approach, conjunction, opposition, and central-body apsis jobs with local refinement curves, sampling-adequacy warnings, explicit uncertainty semantics, timeline navigation, and CSV/JSON export.
-- **Mission Lab:** directionally correct Hohmann baselines in km/s, phase-angle guidance, a residual-checked universal-variable Lambert solver, departure/arrival `v∞`, C3, and a keyboard/click-selectable porkchop map that can apply an opportunity’s dates.
-- **Guided Stories:** eight six-stage, observation-first courses. The core course separates historical geocentrism from the modern geocentric frame; every course persists across workspaces, highlights relevant controls, states model boundaries, and finishes with a checkpoint.
-- **Object atlas:** tabbed Overview, Orbit, Physical, Context, and Sources profiles for major and catalog bodies, with provenance-aware deep links and explicit NEO risk wording.
-- **Reproducibility:** v4 scene URLs record dataset version, epoch, reference frames, focus set, filters, trajectory sampling, active guided-story step, mission endpoints/dates, language, and view settings. Catalog workspaces and dataset-backed presets additionally pin `catalogSample=mobile|desktop` together with the manifest-declared `catalogSampleCount`, so the same immutable sample is used across devices; incomplete, unsupported, or mismatched tuples fail closed where the sample is loaded. v2/v3 links remain readable and upgrade after their responsive sample loads. Complete scenes can also be saved locally and exported/imported as versioned JSON.
-- **Installable and discoverable web app:** first-install offline shell, update prompt, Web App Manifest, Open Graph image, JSON-LD, bilingual static knowledge/object pages, sitemap, and code-split workspaces.
-- **Release evidence:** every build exposes application version, commit SHA, build time, pinned dataset, parser identity, machine-readable scientific benchmark results, asset hashes, and a Pages capacity report. Deployment also preserves Lighthouse reports and enforces stable byte, accessibility, and responsiveness budgets.
+The root URL opens directly into the **Observation Deck**. There is no marketing page between the visitor and the visualization.
 
-## Explore a reproducible scene
+1. A first-time visitor chooses **Start tutorial** or **Explore independently** over the ready Observation Deck.
+2. The four-tip tutorial introduces camera movement, reference frames, object selection, and preset scenes. It is shown once and can be reopened from the preset panel.
+3. The preset switchboard is open by default. Reference-frame, rendering, body, saved-scene, and export controls remain collapsed under **Advanced controls** until requested.
 
-- [Start the core course: geocentrism vs. the geocentric frame](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=geocentric-model&lang=en)
+The initial spatial view is **3D**. Visitors can switch to the batched 2D ecliptic view at any time. If 3D WebGL creation fails or its context is lost, the same scene remains usable through the automatic 2D fallback.
+
+The default deck loads only the curated major-body model and does **not** download an asteroid display sample. Catalog data is requested only after the visitor opens Catalog or Element Space, selects a dataset-backed preset, restores a catalog scene, or explicitly enables the Catalog point cloud.
+
+## Built-in scene presets
+
+Solar Atlas currently ships twelve one-click presets. Every preset defines an epoch, reference frame, focus set, view, zoom, and trajectory window; dataset-backed presets additionally pin a complete dataset/sample/filter tuple.
+
+| Preset | Reference and epoch | Default view | What it shows and what it does not claim |
+| --- | --- | --- | --- |
+| Solar System today | Sun · current date | 3D | Major planets, Moon, Ceres, and Pluto at the current approximate epoch |
+| Earth–Moon system | Earth · 2026-07-01 | 2D | Earth and the modeled Moon in an Earth-centered frame; not a DE440 position ephemeris |
+| Inner Solar System | Sun · 2026-07-01 | 3D | Mercury through Mars and the Moon across a 180-day trajectory window |
+| Outer Solar System | Sun · 2026-07-01 | 3D | Jupiter through Neptune across a twelve-year window |
+| Dwarf-planet orbits | Sun · 2026-07-01 | 3D | Ceres, Pluto, Eris, Haumea, and Makemake across a 33-year window |
+| Mars opposition 2027 | Sun · 2027-02-19 | 3D | Heliocentric Earth–Mars–Jupiter geometry near the February 2027 opposition |
+| Jupiter and its modeled Galilean moons | Jupiter · 2026-07-01 | 2D | Jupiter, Io, Europa, Ganymede, and Callisto using auditable fixed-ellipse approximations |
+| Saturn–Titan system | Saturn · 2026-07-01 | 2D | Saturn and Titan using the same bounded satellite-model contract |
+| Mars–main belt–Jupiter | Sun · 2026-07-01 | Element Space / `a–e` | The MBA subset of a pinned 8,000-object display sample, with Mars, Ceres, and Jupiter as heliocentric landmarks; not the complete main belt |
+| Main-belt element comparison | Sun · 2026-07-01 | Element Space / `a–i` | The MBA subset of the same pinned sample, comparing semi-major axis and inclination; not the complete main belt |
+| Near-Earth region | Sun · 2026-07-01 | 3D | An inner-system focus set ready for explicitly loaded NEOs |
+| Voyager era | Sun · 1980-01-01 | 3D | The approximate outer-planet arrangement during the 1977–1989 flyby era; spacecraft overlays remain schematic |
+
+The list is intentionally extensible. New presets should remain one-click, bilingual, URL-replayable, honest about sample versus complete data, and explicit about the model used for every included body.
+
+## Workspaces
+
+- **Observation Deck** — 2D/3D spatial views, bounded simulation clock, arbitrary loaded-body reference frames, split-frame comparison, searchable focus selection, trajectories, camera controls, distance measurement, Lagrange points, Hill spheres, Laplace SOIs, and optional catalog point clouds.
+- **Small-Body Catalog** — immutable MPCORB releases, name/number/designation search, exact compact-index filters, NEO/PHA and orbit-class filters, bounded locator hydration, and IndexedDB caches isolated by dataset version.
+- **Orbital Element Space** — linked `a–e`, `a–i`, `a–H`, `q–Q`, and `a–period` plots with resonances, Kirkwood gaps, brushing, keyboard point inspection, histograms, and linked heliocentric 3D focus.
+- **Events Lab** — explicit, cancellable close-approach, conjunction, opposition, periapsis, and apoapsis jobs with adaptive sampling, local refinement curves, and sampling-adequacy warnings.
+- **Mission Lab** — directionally correct Hohmann baselines, phase-angle guidance, a residual-checked universal-variable Lambert solver, departure/arrival `v∞`, C3, and an interactive porkchop map.
+- **Guided Stories** — eight six-stage, observation-first courses. The core course separates historical geocentrism from the modern use of a geocentric reference frame.
+- **Object atlas and Evidence** — five-section body profiles, source links, model validity, dataset provenance, build identity, scientific validation, and release evidence.
+
+Global object/story/term search is available with `Ctrl/⌘ K` or `/`. Browser Back/Forward, bilingual route titles, keyboard scene controls, a four-button mobile navigation surface, and reduced-motion behavior are part of the supported interface.
+
+## Reproducible scenes
+
+Scene URL schema **v4** carries the scientific and interaction state needed to replay a workspace: route, immutable dataset version, dataset mode, epoch, reference and comparison frames, focus set, filters, trajectory sampling, view mode, catalog-cloud choice, 3D quality profile, plot, guided-story step, mission endpoints/dates, language, and view settings.
+
+Catalog workspaces and dataset-backed presets pin `catalogSample=mobile|desktop` together with the manifest-declared `catalogSampleCount`. Incomplete, unavailable, unsupported, or count-mismatched tuples fail closed where the sample is loaded. v2 and v3 links remain readable and upgrade to v4 after their responsive sample resolves. Complete scenes can also be saved locally and exported or imported as versioned JSON libraries.
+
+| Reproducibility guarantee | Explicit non-guarantee |
+| --- | --- |
+| Dataset release, sample profile/count, filters, selection order, epoch, frame, view, and analysis inputs are encoded or content-addressed | A shared scene does not promise identical FPS, GPU throughput, or network latency |
+| Catalog filters and exact totals are independent of the locally visible point budget | Auto/Maximum may draw a deterministic prefix of different length on different devices or at different times |
+| The selected 3D quality profile is shareable | The current adaptive point count is runtime state and is deliberately not serialized |
+| Model identity, validity warnings, and build evidence remain visible | External JPL SBDB availability and uncached remote data are not controlled by the scene URL |
+
+Try a reproducible entry point:
+
+- [Core course: geocentrism vs. the geocentric frame](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=geocentric-model&lang=en)
 - [Explain Mars retrograde motion](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=retrograde-mars&step=2&lang=en)
 - [Read the Kirkwood gaps in element space](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=kirkwood-gaps&step=1&lang=en)
 - [Compare the four NEO orbit classes](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=neo-types&lang=en)
 - [Inspect Pluto and Neptune's 3:2 geometry](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=pluto-resonance&step=1&lang=en)
 - [Open an Earth-to-Mars mission setup](https://dajiaohuang.github.io/solar/?v=4&page=mission&from=earth&to=mars&depart=2026-11-15&arrive=2027-08-01&lang=en)
 
-## Quick start
+## Rendering and device policy
+
+Solar Atlas separates three limits that answer different questions:
+
+1. **Catalog sample size** — immutable data available to a catalog scene: currently 8,000 mobile or 30,000 desktop records.
+2. **Visible catalog-point budget** — the prefix drawn in the Observation Deck when Catalog point cloud is explicitly enabled.
+3. **Focus-body limit** — bodies with individual trajectories, interaction, and detail: 160 in 3D or 320 in the batched 2D view.
+
+The initial device class comes from viewport width, while coarse-pointer landscape devices up to 1,180 px remain on the mobile policy. Optional browser memory and concurrency hints can only make an adaptive first frame more conservative; they never promote a device beyond its class. Runtime frame measurements are authoritative after startup, and both renderers cap device pixel ratio. Split-frame comparison gives both frames the same deterministic prefix within one shared total budget.
+
+| View and profile | Mobile visible points | Desktop visible points | Runtime behavior |
+| --- | ---: | ---: | --- |
+| 2D, any profile | 8,000 | 30,000 | Fixed; batched WebGL points |
+| 3D Auto | nominal start 4,000; range 2,000–6,000 | nominal start 12,000; range 6,000–20,000 | Reduces after repeated slow frame windows and increases only after sustained headroom |
+| 3D Balanced | 4,000 | 12,000 | Fixed, conservative budget |
+| 3D Maximum | nominal start 6,000; range 2,000–8,000 | nominal start 20,000; range 8,000–30,000 | Higher adaptive target; still allowed to protect responsiveness |
+
+Adaptive changes occur in 500-point steps with hysteresis and cooldown while the 3D catalog cloud is actively animating. The current `visible / sample` count is shown in the frame label. Turning the cloud off releases the catalog workload from the deck.
+
+These are bounded policies, not RAM-based performance promises. A device with 12, 16, or 32 GB of system memory can still differ substantially in browser limits, GPU, thermal state, display resolution, extensions, and background load. See [PERFORMANCE.md](./PERFORMANCE.md) for measured byte, request, artifact, and browser budgets.
+
+## Scientific contract
+
+| Capability | Model and scope |
+| --- | --- |
+| Major planets | JPL Table 1 fitted Keplerian elements and secular rates in the mean ecliptic/equinox of J2000, valid for 1800–2050. The Earth entry seeds the internal Earth–Moon barycenter; the rendered Earth point is a derived geocenter. Out-of-range dates show an extrapolation warning. The source uses JDTDB; browser UTC dates currently become numeric JD without UTC→TDB conversion |
+| Moons and dwarfs | The Moon uses JPL Earth-geocentric ecliptic mean elements for 2000-01-01.5 TDB. Io, Europa, Ganymede, Callisto, and Titan use [NASA/JPL Horizons](https://ssd-api.jpl.nasa.gov/doc/horizons.html) geometric osculating elements and phases at JD 2451545.0 TDB, queried from each parent body center in the J2000 ecliptic plane. All six moons advance mean anomaly on a fixed ellipse: an auditable epoch approximation, not a continuous ephemeris; UTC→TDB conversion, precession, and N-body perturbations are omitted. Earth and Moon centers are partitioned around the EMB seed using checksum-pinned [NAIF/JPL DE440 gravitational parameters](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc). Dwarf planets use rounded `curated-approx` elements |
+| MPCORB and SBDB bodies | Elliptic (`0 ≤ e < 1`, `a > 0`) osculating elements only; parabolic and hyperbolic records are rejected explicitly |
+| Moon phase | Sun–Earth–Moon phase angle plus signed geocentric elongation |
+| Hill sphere | `a(1-e)(m/3M)^(1/3)` |
+| Laplace SOI | `a(m/M)^(2/5)`; never labeled as a Hill sphere |
+| Hohmann | Coplanar circular endpoints, impulsive solar two-body model; signed burns and km/s conversion |
+| Lambert | Zero-revolution universal-variable solar two-body solution using approximate endpoint positions; only residual-converged solutions are returned |
+| Event search | Adaptive non-endpoint candidates followed by bounded local refinement and fresh two-body propagation. The exported numerical refinement half-width is not physical uncertainty, which is not estimated |
+| Spacecraft overlays | Milestone-dated schematic tracks labeled separately from Horizons and propagated ephemerides |
+
+JPL SBDB values are read from the documented `orbit.elements[]` records (`name`, `value`, `units`, and uncertainty fields), not invented flat properties. Absolute-magnitude filters have explicit all/known/unknown states; an unknown H is never fabricated as a number and is excluded from numeric `a–H` plots.
+
+Primary sources:
+
+- [Minor Planet Center MPCORB](https://www.minorplanetcenter.net/iau/MPCORB.html)
+- [JPL SBDB API](https://ssd-api.jpl.nasa.gov/doc/sbdb.html)
+- [JPL approximate planetary positions](https://ssd.jpl.nasa.gov/planets/approx_pos.html)
+- [JPL planetary satellite mean elements](https://ssd.jpl.nasa.gov/sats/elem/)
+- [NASA/JPL Horizons API](https://ssd-api.jpl.nasa.gov/doc/horizons.html)
+- [NAIF/JPL DE440 gravitational parameters](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc)
+
+## Data and publication
+
+The curated major-body atlas works without a local MPCORB release. The production dataset is a separately versioned, immutable artifact pinned by [`.github/asteroid-dataset.json`](./.github/asteroid-dataset.json). Application version, Git commit, dataset version, parser identity, validation report, and delivery hashes remain separate in Evidence and build artifacts.
+
+Each schema-v3 release contains:
+
+```text
+manifest.json            provenance.json          checksums.json
+validation-report.json  binary/*.bin             meta/*.json
+search/*.json           lookup/*.json            catalog-index.bin
+catalog-sample-*.bin    catalog-sample-*.json    catalog-summary.json
+```
+
+- Binary shards contain eight Float64 orbital values per record.
+- Search indexes use two-character normalized prefixes, 10,000-number permanent ranges, and provisional-designation year shards.
+- The compact index supports exact numeric scans without materializing the whole catalog as JavaScript objects.
+- Display samples are precomputed and stratified: 30,000 desktop and 8,000 mobile records.
+- Exact-result hydration is paged and bounded to 480 records from at most 32 unique shards; decoded detail shards use an eight-entry LRU.
+- The validator binds every search/lookup locator back to the exact metadata row and semantic bucket.
+
+Application deployment and data publication are independent workflows:
+
+```text
+application: validate pin → lint → unit + scientific tests → build
+             → E2E + Lighthouse + capacity → deploy → production smoke
+
+dataset: source snapshot + SHA-256 → parse + semantic validation
+         → binary/meta/search/lookup/index/sample artifacts
+         → tests + benchmark → immutable GitHub Release → audited pin → deploy
+```
+
+The publisher refuses to overwrite an immutable version, verifies a reused Release asset against the expected SHA-256, and switches the active pointer only after all artifacts and validation reports exist. Lite membership is a permanent-number cutoff plus required curated targets—not the first N records in mutable upstream order.
+
+## Local development
 
 Requirements: Node.js 22+ and npm 10+.
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-The app works without a local asteroid dataset using the curated major-body model. To add a reproducible Lite dataset:
+The application runs with curated bodies when no local asteroid release is installed. To generate Lite data from the current source snapshot:
 
 ```bash
 npm run data:lite
 npm run validate:data
-npm run dev
 ```
 
-To build all valid elliptic MPCORB records:
+`MPCORB_LITE_MAX_NUMBER=30000` is a permanent-number cutoff, not a promise of exactly 30,000 output records. For a reproducible generation run, provide the exact pinned source archive with `MPCORB_SOURCE_FILE=/path/to/MPCORB.DAT.gz` and retain its SHA-256. `npm run data:full` parses all valid elliptic MPCORB records and requires several GB of available memory.
 
-```bash
-npm run data:full
-```
-
-The full pipeline needs several GB of free memory and downloads the current MPCORB source snapshot once. You can supply a pinned source file with `MPCORB_SOURCE_FILE=/path/to/MPCORB.DAT.gz`.
-
-Local application builds omit the generated catalog by default. To reproduce the deployable GitHub Pages artifact, including only the pinned active release with large JSON shards delivered as `.json.gz`, run:
+Local application builds omit generated catalog data by default. To reproduce the deployable Pages artifact containing only the audited active release:
 
 ```bash
 npm run build:deploy
 npm run check:capacity
 ```
 
-## Data publication v3
-
-Application deployment and data publication are separate workflows.
-
-```text
-application: validate pinned data → lint → unit + scientific tests → build → E2E + Lighthouse → deploy
-
-dataset: download source snapshot → SHA-256 → parse → semantic validation
-       → lint + unit + build + E2E + benchmark → immutable GitHub release → commit pin directly to main
-       → explicitly dispatch the production deployment
-```
-
-Each release lives under `public/data/asteroids/releases/<version>/` and contains:
-
-```text
-manifest.json
-provenance.json
-checksums.json
-validation-report.json
-binary/*.bin         # eight Float64 orbital values per record
-meta/*.json          # names, classifications, H, NEO/PHA flags
-search/*.json        # two-character prefixes, 10k-number ranges, provisional-year indexes
-lookup/*.json        # stable-ID buckets for deep-link hydration
-catalog-index.bin    # compact numeric filter/count index; no name metadata
-catalog-sample-*.bin # precomputed 30k desktop / 8k mobile orbital samples
-catalog-sample-*.json
-catalog-summary.json
-```
-
-`dataset-version.json` is the small mutable pointer inside the downloaded data package. GitHub Pages deploys the exact immutable release described by `.github/asteroid-dataset.json`, verifies the archive SHA-256 before extraction, validates internal data, and fails closed when the audited pin is missing or invalid.
-The publisher creates a deterministic tar/gzip archive, refuses to overwrite an existing release version, verifies any reused Release asset against the locally expected SHA-256, and swaps the active pointer only after every artifact and validation report has been written.
-The default release identity includes the final data-artifact content SHA-256 and parser version. Lite membership is a stable permanent-number cutoff plus a required curated target set, never the first N records in a mutable upstream ordering.
-Permanent-number search shards contain at most a 10,000-number range; provisional designations use year shards, and normalized name/designation tokens use two-character prefixes with row locators. The validator binds every search and lookup locator back to its exact source metadata row and semantic bucket.
-
-Optional pipeline variables:
+Useful pipeline variables:
 
 | Variable | Meaning |
 | --- | --- |
@@ -107,7 +190,7 @@ Optional pipeline variables:
 | `MPCORB_SOURCE_URL` | Alternate source URL |
 | `MPCORB_DATASET_VERSION` | Explicit immutable version string |
 | `MPCORB_CHUNK_SIZE` | Records per binary shard; default 5,000 |
-| `MPCORB_LITE_MAX_NUMBER` | Stable Lite cutoff by permanent number; featured targets are always added |
+| `MPCORB_LITE_MAX_NUMBER` | Stable Lite cutoff by permanent number; featured targets are added |
 | `MPCORB_REQUIRE_FEATURED=0` | Disable required-featured validation for isolated fixtures only |
 | `MPCORB_MODE` | `lite` or `full` |
 | `MPCORB_REFRESH=1` | Replace the cached raw snapshot |
@@ -117,85 +200,68 @@ Optional pipeline variables:
 ```text
 src/
   app/                 shell, route loading, providers, body registry
+  components/          batched WebGL 2D and persistent Three.js 3D renderers
   features/
-    explorer/          2D/3D spatial workbench and controls
-    catalog/           small-body discovery and GPU catalog mode
+    explorer/          Observation Deck and adaptive catalog cloud
+    catalog/           small-body discovery and exact-result hydration
     element-space/     linked quantitative plots and brushing
     events/            explicit analysis jobs and timeline
     mission/           Hohmann, Lambert, porkchop, model ladder
     stories/           JSON-guided scenes
     body-inspector/    elements, phase, influence radii, provenance
     about/             dataset evidence and scientific contract
-  engine/
-    clock/             external simulation clock (8 Hz UI publication)
-    ephemeris/         phase, spacecraft, influence definitions
-    mission/           unit-safe Hohmann and Lambert calculations
-  state/               independent simulation/selection/catalog/UI stores
+  engine/              clock, ephemeris, units, event and mission math
+  hooks/               workers, catalog loading, adaptive render budget
+  state/               independent simulation, selection, catalog, UI stores
   data/                curated bodies, loaders, IndexedDB cache
-  workers/             cancellable catalog scan, trajectory, event, porkchop workers
+  workers/             cancellable catalog, trajectory, event, porkchop jobs
   i18n/                one English/Chinese translation system
-pipeline data lives in scripts/preprocess-asteroids.mjs
+scripts/               dataset, build-evidence, benchmark, capacity tooling
 ```
 
-The render paths are intentionally different:
+The simulation clock is external to React and publishes throttled snapshots. Trajectory, catalog-point, event, and porkchop work runs in cancellable workers; large numeric payloads use transferable typed arrays. The 3D renderer keeps a persistent scene graph and renders on state/control changes unless active catalog animation requires continuous frames.
 
-- **Catalog Mode** loads its precomputed 30,000 desktop / 8,000 mobile stratified sample only after Catalog or Element Space opens. A persistent worker scans the compact index, then each explicit exact-result page hydrates at most 480 records from 32 unique shards. Broad-filter point clouds keep using the precomputed sample; text search uses two-character locator indexes, and decoded detail shards remain in an eight-entry LRU.
-- **Focus Mode** renders the first 160 selected objects with full trajectories, labels, details, and bounded analysis. Catalog-wide selection stores the dataset version plus filter expression and count instead of enumerating every ID.
+## Verification and deployment
 
-Absolute-magnitude filtering has an explicit known/unknown/all state. Unknown H values are never fabricated as a numeric value and are excluded from the numeric `a–H` scatter plot.
-
-The simulation clock is not React state updated every animation frame. React receives a throttled snapshot, while trajectory history runs independently in a cancellable worker. Worker payloads use transferable typed arrays.
-
-## Scientific contract
-
-| Capability | Model and scope |
-| --- | --- |
-| Major planets | JPL Table 1 fitted Keplerian elements and secular rates in the mean ecliptic/equinox of J2000, valid for 1800–2050; the Earth entry remains the internal Earth–Moon barycenter seed, while the rendered Earth point is a derived geocenter. Out-of-range dates show an extrapolation warning. The source uses JDTDB; browser UTC dates currently become numeric JD without a UTC→TDB conversion |
-| Moons/dwarfs | The Moon uses JPL Earth-geocentric ecliptic mean elements for 2000-01-01.5 TDB. Io, Europa, Ganymede, Callisto, and Titan use [NASA/JPL Horizons](https://ssd-api.jpl.nasa.gov/doc/horizons.html) geometric osculating elements and phases at JD 2451545.0 TDB, queried from each parent planet's body center in the J2000 ecliptic plane with the x-axis aligned to the ICRF reference direction. All six moons advance mean anomaly on a fixed ellipse: this is an auditable epoch approximation, not a continuous ephemeris, and it omits UTC→TDB conversion, precession, and N-body perturbations. Earth and Moon centers are partitioned around the EMB seed using checksum-pinned [NAIF/JPL DE440 gravitational parameters](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc). Dwarf planets use rounded `curated-approx` elements |
-| MPCORB/SBDB bodies | Elliptic (`0 ≤ e < 1`) osculating elements only; parabolic/hyperbolic records are rejected explicitly |
-| Moon phase | Sun–Earth–Moon phase angle plus signed geocentric elongation |
-| Hill sphere | `a(1-e)(m/3M)^(1/3)` |
-| Laplace SOI | `a(m/M)^(2/5)`; never labeled as a Hill sphere |
-| Hohmann | Coplanar circular endpoints, impulsive solar two-body model; signed burns and km/s conversion |
-| Lambert | Zero-revolution universal-variable solar two-body solution using approximate endpoint positions; only residual-converged solutions are returned |
-| Event search | Adaptive non-endpoint candidates followed by bounded local refinement and fresh two-body propagation; reports capped/insufficient sampling and exports numerical refinement half-width separately from physical uncertainty, which is not estimated |
-| Spacecraft overlays | Milestone-dated schematic tracks labeled separately from Horizons and propagated ephemerides |
-
-JPL SBDB values are parsed from the documented `orbit.elements[]` records (`name`, `value`, `units`, and uncertainty fields), not from invented object properties.
-
-Primary sources:
-
-- [Minor Planet Center MPCORB](https://www.minorplanetcenter.net/iau/MPCORB.html)
-- [JPL SBDB API](https://ssd-api.jpl.nasa.gov/doc/sbdb.html)
-- [JPL approximate planetary positions](https://ssd.jpl.nasa.gov/planets/approx_pos.html)
-- [JPL planetary satellite mean elements](https://ssd.jpl.nasa.gov/sats/elem/)
-- [NASA/JPL Horizons API](https://ssd-api.jpl.nasa.gov/doc/horizons.html)
-
-## Quality gates
+Run the focused and release-relevant checks:
 
 ```bash
 npm run lint
 npm run test:unit
 npm run test:scientific
-npm run test:e2e
 npm run build
-npm run ci
+npm run test:e2e
 npm run benchmark:catalog
 npm run check:capacity
 ```
 
-Unit coverage includes Julian dates, Kepler propagation, parent/reference frames, Hohmann units/direction, Moon phase geometry, Hill/SOI definitions, strict JPL SBDB fixtures, local event-extremum detection, Lambert circular-arc recovery, v2/v3 compatibility and v4 catalog-sample round trips, versioned scene-library persistence, MPCORB parsing, scoped persistence, manifest/cache isolation, and a one-million-row bounded catalog scan. The scientific subset publishes its exact JPL Horizons, Lambert, and ephemeris status into the build. Playwright covers browser history, persistent guided stories, global search, saved scenes, story/mission URLs, cross-device pinned catalog samples, malformed-tuple recovery boundaries, interactive porkchop selection, catalog filtering/recovery, worker and WebGL fallback, first-install offline behavior, cache isolation, and serious/critical axe violations. A scheduled matrix repeats the suite in Firefox and WebKit; the deploy gate additionally audits the home and a static exhibit with Lighthouse CI.
+`npm run ci` combines lint, unit, scientific, and build checks. Unit coverage includes Julian dates, Kepler propagation, reference frames, render-budget hysteresis, Hohmann/Lambert math, Moon phase, Hill/SOI definitions, satellite evidence, v2/v3 compatibility, v4 scene round trips, MPCORB parsing, cache isolation, and bounded million-row scans. Playwright covers first-run UX, default 3D and 2D fallback, explicit catalog-cloud loading, desktop/mobile samples, URL recovery, browser history, stories, missions, offline shell behavior, WebGL/Worker failures, and serious/critical automated accessibility findings.
 
-## Deployment
+`.github/workflows/deploy.yml` is the single production gate: it validates the pin, builds compressed delivery assets, enforces Pages/browser budgets, runs tests and Lighthouse, archives evidence, deploys, and executes a production smoke test. `.github/workflows/data-refresh.yml` publishes monthly/manual immutable datasets. `.github/workflows/rollback.yml` restores the exact tested Pages artifact from a successful retained run.
 
-- The project is maintained directly on `main`; local changes should pass `npm run ci` before they are pushed.
-- `.github/workflows/data-refresh.yml` publishes a monthly/manual immutable dataset release, commits its pin directly to `main`, and explicitly dispatches deployment.
-- `.github/workflows/deploy.yml` is the single production gate. It validates the pinned data, builds its compressed delivery form, enforces Pages and browser budgets, runs lint/unit/scientific/E2E/Lighthouse checks, archives release evidence, deploys, and opens a deduplicated incident if production smoke fails.
-- `.github/workflows/rollback.yml` restores the exact tested `github-pages` artifact from a successful deployment run ID; deployment artifacts are retained for 30 days.
-- `main` allows normal and Actions pushes, rejects force pushes and deletion, and does not require pull requests or pre-merge status checks.
+The [health endpoint](https://dajiaohuang.github.io/solar/health.json) reports the currently deployed commit, build time, dataset, delivery manifest, and scientific-validation status.
 
-## License
+## Installable app and offline boundary
 
-Source code is available under the [MIT License](./LICENSE). Astronomical source data remains subject to its originating institution’s terms and attribution.
+Solar Atlas provides a Web App Manifest, installable application shell, update-ready prompt, sitemap, JSON-LD, Open Graph metadata, bilingual static knowledge pages, and route-level code splitting.
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md), [SECURITY.md](./SECURITY.md), and [CITATION.cff](./CITATION.cff) for contribution, disclosure, and citation guidance.
+After one successful online load, the service worker can reopen the cached application shell offline. This is not a promise that the complete MPCORB release, an uncached sample/detail shard, a newly visited route asset, or a live JPL SBDB request is available offline. Dataset/version errors remain visible instead of silently substituting different data.
+
+## Contributing
+
+Focused scientific corrections, accessibility improvements, performance work, and reproducible teaching stories are welcome. Open an issue before a large architecture or data-format change.
+
+Before a pull request:
+
+- start from `npm ci` and run the relevant checks above;
+- accompany scientific changes with a primary source, model/validity statement, and deterministic regression fixture;
+- preserve v4 URL compatibility or provide an explicit migration path;
+- keep English and Chinese copy in sync;
+- verify keyboard access, desktop/mobile behavior, reduced motion, and the 2D/WebGL fallback for UI changes; and
+- do not label two-body or schematic output as an operational ephemeris, N-body result, risk assessment, or navigation product.
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the complete workflow and [SECURITY.md](./SECURITY.md) for private vulnerability reporting.
+
+## Citation and license
+
+Source code is available under the [MIT License](./LICENSE). Astronomical source data remains subject to its originating institution's terms and attribution. Cite the project using [CITATION.cff](./CITATION.cff).
