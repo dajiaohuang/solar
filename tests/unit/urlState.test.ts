@@ -39,6 +39,13 @@ describe('reproducible scene URLs', () => {
     expect(decoded.view).toBe('2d')
   })
 
+  it('writes the view explicitly while preserving old implicit-3D scene links', () => {
+    expect(encodeUrlState({ route: 'explorer', view: '2d' })).toContain('view=2d')
+    expect(encodeUrlState({ route: 'explorer', view: '3d' })).toContain('view=3d')
+    expect(decodeUrlState('?v=3&page=explorer&bodies=earth,mars').view).toBe('3d')
+    expect(decodeUrlState('?v=3&page=home&lang=en').view).toBeUndefined()
+  })
+
   it('fails closed for a future scene schema instead of misreading its fields', () => {
     expect(decodeUrlState('?v=99&ref=earth&view=2d')).toEqual({})
   })

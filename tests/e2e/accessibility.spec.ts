@@ -9,7 +9,7 @@ async function expectNoSeriousViolations(page: Page) {
 
 test('first-run deck, story, and evidence surfaces have no serious automated accessibility violations', async ({ page }) => {
   await page.goto('./')
-  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
+  await expect(page.locator('.trajectory-canvas')).toBeVisible({ timeout: 15_000 })
   const firstRun = page.getByRole('dialog', { name: /How would you like to begin|你想从哪里开始/ })
   await expect(firstRun).toBeVisible()
   await expectNoSeriousViolations(page)

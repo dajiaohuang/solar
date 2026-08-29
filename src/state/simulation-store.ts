@@ -26,7 +26,7 @@ export const DEFAULT_SIMULATION_STATE: SimulationState = {
   comparisonEnabled: false,
   historyDays: 365,
   sampleCount: 180,
-  viewMode: '3d',
+  viewMode: '2d',
   showEcliptic: true,
   showHillSphere: false,
   showLaplaceSoi: false,

@@ -88,7 +88,7 @@ export function encodeUrlState(state: AppUrlState) {
   if (state.speed !== undefined && state.speed !== 30) params.set('speed', String(state.speed))
   if (state.history !== undefined && state.history !== 365) params.set('history', String(state.history))
   if (state.samples !== undefined && state.samples !== 180) params.set('samples', String(Math.floor(state.samples)))
-  if (state.view && state.view !== '3d') params.set('view', state.view)
+  if (state.view) params.set('view', state.view)
   if (state.filter && state.filter !== 'all') params.set('filter', state.filter)
   if (state.search) params.set('search', state.search)
   if (state.preset) params.set('preset', state.preset)
@@ -141,6 +141,10 @@ export function decodeUrlState(search = typeof window === 'undefined' ? '' : win
   if (samples !== undefined && samples >= 32 && samples <= 480) state.samples = Math.floor(samples)
   const view = params.get('view')
   if (view === '2d' || view === '3d') state.view = view
+  else if (
+    route === 'explorer'
+    || ['ref', 'bodies', 'jd', 'zoom', 'history', 'samples', 'pan'].some((key) => params.has(key))
+  ) state.view = '3d'
   const filter = params.get('filter')
   if (filter) state.filter = filter
   const searchText = params.get('search')
