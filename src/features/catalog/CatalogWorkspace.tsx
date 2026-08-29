@@ -24,9 +24,8 @@ import { uiActions } from '../../state/ui-store'
 import type { AsteroidSectionCursor, MagnitudeStatus } from '../../types'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { catalogSampleErrorMessage } from '../../lib/catalogSampleProfile'
+import { CATALOG_ORBIT_CLASS_FILTERS } from '../../lib/catalogFilters'
 import { DatasetCard } from './DatasetCard'
-
-const CLASS_OPTIONS = ['all', 'MBA', 'MCR', 'APO', 'ATE', 'AMO', 'ATI', 'HUN', 'HIL', 'JTA', 'TNO', 'OTHER']
 
 export function CatalogWorkspace() {
   useCatalogSample()
@@ -239,7 +238,7 @@ export function CatalogWorkspace() {
           <DatasetCard />
           <label className="field"><span>{t('query')}</span><input type="search" value={catalog.filters.query} onChange={(event) => catalogActions.patchFilters({ query: event.target.value })} placeholder="Ceres / 433 Eros / 2024 YR4" /></label>
           {nameSearchTooShort && <p className="catalog-result-note">{t('minimumNameSearch')}</p>}
-          <label className="field"><span>{t('orbitClass')}</span><select value={catalog.filters.orbitClass} onChange={(event) => catalogActions.patchFilters({ orbitClass: event.target.value })}>{CLASS_OPTIONS.map((value) => <option value={value} key={value}>{value}</option>)}</select></label>
+          <label className="field"><span>{t('orbitClass')}</span><select value={catalog.filters.orbitClass} onChange={(event) => catalogActions.patchFilters({ orbitClass: event.target.value })}>{CATALOG_ORBIT_CLASS_FILTERS.map((value) => <option value={value} key={value}>{value}</option>)}</select></label>
           <div className="section-kicker">{t('filters').toUpperCase()}</div>
           <RangeFields label="a (AU)" value={catalog.filters.semiMajorAxis} onChange={(value) => catalogActions.patchFilters({ semiMajorAxis: value })} step="0.1" />
           <RangeFields label="e" value={catalog.filters.eccentricity} onChange={(value) => catalogActions.patchFilters({ eccentricity: value })} step="0.01" />

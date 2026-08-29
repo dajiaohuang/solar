@@ -1,16 +1,24 @@
 import { describe, expect, it } from 'vitest'
 import { SCENE_PRESETS } from '../../src/data/presets'
 import { majorBodies, majorBodiesById } from '../../src/data/majorBodies'
-import { buildScenePresetApplication, validateScenePresets } from '../../src/lib/scenePreset'
+import { buildScenePresetApplication, buildScenePresetUrlState, validateScenePresets } from '../../src/lib/scenePreset'
+import { decodeUrlState, encodeUrlState } from '../../src/lib/urlState'
 
 describe('observation-deck scene presets', () => {
   it('maps every built-in preset to a deterministic, bounded scene update', () => {
-    expect(SCENE_PRESETS).toHaveLength(11)
+    expect(SCENE_PRESETS).toHaveLength(12)
     for (const preset of SCENE_PRESETS) {
       const application = buildScenePresetApplication(preset)
       expect(application.julianDay).toBe(preset.julianDay)
       expect(application.selectedIds).toEqual(preset.selectedMajorBodyIds)
       expect(application.selectedIds).not.toBe(preset.selectedMajorBodyIds)
+      if (preset.catalogSelection) {
+        expect(application.catalogSelection).toEqual(preset.catalogSelection)
+        expect(application.catalogSelection).not.toBe(preset.catalogSelection)
+        expect(application.catalogSelection?.filters).not.toBe(preset.catalogSelection.filters)
+      }
+      expect(application.route).toBe(preset.route)
+      expect(application.elementPlot).toBe(preset.elementPlot)
       expect(application.selectedIds.length).toBeGreaterThan(0)
       expect(application.simulation).toEqual({
         referenceId: preset.referenceId,
@@ -30,8 +38,24 @@ describe('observation-deck scene presets', () => {
 
   it('reports malformed preset ids, copy and body references', () => {
     const valid = SCENE_PRESETS[0]
+    const beltSelection = SCENE_PRESETS.find((preset) => preset.id === 'mars-main-belt-jupiter')!.catalogSelection!
     const issues = validateScenePresets([
-      { ...valid, id: '', name: { en: '', zh: '' }, referenceId: 'missing-reference', selectedMajorBodyIds: ['missing-body', 'missing-body'] },
+      {
+        ...valid,
+        id: '',
+        name: { en: '', zh: '' },
+        referenceId: 'missing-reference',
+        selectedMajorBodyIds: ['missing-body', 'missing-body'],
+        catalogSelection: {
+          ...beltSelection,
+          datasetVersion: '../unsafe',
+          datasetMode: 'archive' as never,
+          sampleProfile: 'tablet' as never,
+          sampleCount: 0,
+          sampleKind: 'selection' as never,
+          filters: { ...beltSelection.filters, orbitClass: 'UNSUPPORTED', magnitudeStatus: 'maybe' as never, semiMajorAxis: [3, 2] },
+        },
+      },
       { ...valid },
       { ...valid },
     ], majorBodiesById)
@@ -43,7 +67,29 @@ describe('observation-deck scene presets', () => {
       expect.stringContaining('unknown reference body'),
       expect.stringContaining('duplicate selected body id'),
       expect.stringContaining('unknown selected body'),
+      expect.stringContaining('invalid catalog dataset version'),
+      expect.stringContaining('invalid catalog dataset mode'),
+      expect.stringContaining('invalid catalog sample profile'),
+      expect.stringContaining('invalid catalog sample count'),
+      expect.stringContaining('invalid catalog sample kind'),
+      expect.stringContaining('unsupported catalog orbit class'),
+      expect.stringContaining('invalid magnitude status'),
+      expect.stringContaining('invalid semiMajorAxis range'),
+      expect.stringContaining('catalog preset requires a catalog workspace route'),
       expect.stringContaining('duplicate preset id'),
+    ]))
+
+    const unavailable = SCENE_PRESETS.find((preset) => preset.id === 'mars-main-belt-jupiter')!
+    expect(validateScenePresets([{
+      ...unavailable,
+      catalogSelection: { ...unavailable.catalogSelection!, datasetVersion: 'missing-release-v1' },
+    }], majorBodiesById)).toContain('mars-main-belt-jupiter: unavailable catalog dataset version')
+    expect(validateScenePresets([{
+      ...unavailable,
+      catalogSelection: { ...unavailable.catalogSelection!, datasetMode: 'lite', sampleCount: 7_999 },
+    }], majorBodiesById)).toEqual(expect.arrayContaining([
+      'mars-main-belt-jupiter: catalog dataset mode mismatch',
+      'mars-main-belt-jupiter: catalog sample count mismatch',
     ]))
   })
 
@@ -72,12 +118,51 @@ describe('observation-deck scene presets', () => {
     expect(saturn.description.zh).toContain('已建模卫星')
   })
 
-  it('describes the Mars–Ceres–Jupiter preset as a corridor, not the full asteroid belt', () => {
-    const corridor = SCENE_PRESETS.find((preset) => preset.id === 'mars-ceres-jupiter')!
-    expect(corridor.referenceId).toBe('sun')
-    expect(corridor.selectedMajorBodyIds).toEqual(['mars', 'ceres', 'jupiter'])
-    expect(corridor.description.en).toContain('not the full asteroid belt')
-    expect(corridor.description.zh).toContain('不代表完整小行星带')
+  it('defines a bounded, viewport-independent main-belt catalog selection', () => {
+    const belt = SCENE_PRESETS.find((preset) => preset.id === 'mars-main-belt-jupiter')!
+    expect(belt.referenceId).toBe('sun')
+    expect(belt.selectedMajorBodyIds).toEqual(['mars', 'ceres', 'jupiter'])
+    expect(belt.catalogSelection).toMatchObject({
+      datasetVersion: 'mpcorb-919b585f403b185a-full',
+      datasetMode: 'full',
+      sampleProfile: 'mobile',
+      sampleCount: 8_000,
+      sampleKind: 'display',
+      filters: { orbitClass: 'MBA' },
+    })
+    expect(belt.route).toBe('elements')
+    expect(belt.elementPlot).toBe('a-e')
+    expect(belt.description.en).toContain('display sample')
+    expect(belt.description.zh).toContain('展示样本')
+
+    const comparison = SCENE_PRESETS.find((preset) => preset.id === 'main-belt-elements')!
+    expect(comparison.route).toBe('elements')
+    expect(comparison.elementPlot).toBe('a-i')
+    expect(comparison.catalogSelection).toMatchObject({
+      datasetVersion: belt.catalogSelection!.datasetVersion,
+      sampleProfile: 'mobile',
+      sampleCount: 8_000,
+      filters: { orbitClass: 'MBA' },
+    })
+
+    for (const preset of [belt, comparison]) {
+      const urlState = buildScenePresetUrlState(preset, 'en')
+      expect(urlState.ref).toBe('sun')
+      const encoded = encodeUrlState(urlState)
+      expect(decodeUrlState(`?${encoded}`)).toMatchObject({
+        version: 4,
+        route: 'elements',
+        dataset: 'mpcorb-919b585f403b185a-full',
+        mode: 'full',
+        catalogSample: 'mobile',
+        catalogSampleCount: 8_000,
+        filter: 'MBA',
+        bodies: ['mars', 'ceres', 'jupiter'],
+        preset: preset.id,
+        plot: preset.elementPlot,
+        lang: 'en',
+      })
+    }
   })
 
   it('focuses Earth when present and otherwise the first rendered body', () => {

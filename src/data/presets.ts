@@ -1,5 +1,16 @@
 import { dateToJulianDay } from '../lib/julianDate'
-import type { BodyId } from '../types'
+import datasetPin from '../../.github/asteroid-dataset.json'
+import type { AppRoute, ElementPlotMode } from '../state/ui-store'
+import type { BodyId, CatalogFilters, CatalogSampleProfile, DatasetMode } from '../types'
+
+export type ScenePresetCatalogSelection = {
+  datasetVersion: string
+  datasetMode: DatasetMode
+  sampleProfile: CatalogSampleProfile
+  sampleCount: number
+  sampleKind: 'display'
+  filters: CatalogFilters
+}
 
 export type ScenePreset = {
   id: string
@@ -11,6 +22,39 @@ export type ScenePreset = {
   viewMode: '2d' | '3d'
   zoomLevel: number
   historyDays: number
+  route?: AppRoute
+  elementPlot?: ElementPlotMode
+  catalogSelection?: ScenePresetCatalogSelection
+}
+
+export const PRESET_DATASET_RELEASES: Record<string, {
+  datasetMode: DatasetMode
+  samples: Record<CatalogSampleProfile, number>
+}> = {
+  [datasetPin.version]: {
+    datasetMode: 'full',
+    samples: { desktop: 30_000, mobile: 8_000 },
+  },
+}
+
+const BELT_RELEASE = PRESET_DATASET_RELEASES[datasetPin.version]
+
+const PINNED_BELT_SAMPLE = {
+  datasetVersion: datasetPin.version,
+  datasetMode: BELT_RELEASE.datasetMode,
+  sampleProfile: 'mobile' as const,
+  sampleCount: BELT_RELEASE.samples.mobile,
+  sampleKind: 'display' as const,
+  filters: {
+    query: '',
+    orbitClass: 'MBA',
+    semiMajorAxis: [0, 80] as [number, number],
+    eccentricity: [0, 0.999] as [number, number],
+    inclination: [0, 180] as [number, number],
+    absoluteMagnitude: [-5, 40] as [number, number],
+    magnitudeStatus: 'all' as const,
+    perihelion: [0, 80] as [number, number],
+  },
 }
 
 function dateToJD(dateString: string) {
@@ -107,15 +151,32 @@ export const SCENE_PRESETS: ScenePreset[] = [
     historyDays: 32,
   },
   {
-    id: 'mars-ceres-jupiter',
-    name: { en: 'Mars–Ceres–Jupiter corridor', zh: '火星—谷神星—木星走廊' },
-    description: { en: 'A heliocentric corridor from Mars through Ceres to Jupiter; Ceres is a landmark, not the full asteroid belt.', zh: '从火星经谷神星到木星的日心走廊；谷神星只是地标，不代表完整小行星带。' },
+    id: 'mars-main-belt-jupiter',
+    name: { en: 'Mars–main belt–Jupiter', zh: '火星—主带—木星' },
+    description: { en: 'Compare the MBA subset of a pinned 8,000-object display sample in a–e space, with Mars, Ceres and Jupiter retained as heliocentric landmarks.', zh: '在 a–e 空间比较固定 8,000 条展示样本中的主带小行星子集，并保留火星、谷神星和木星作为日心地标。' },
     referenceId: 'sun',
     julianDay: dateToJD('2026-07-01'),
     selectedMajorBodyIds: ['mars', 'ceres', 'jupiter'],
     viewMode: '3d',
     zoomLevel: 1,
     historyDays: 365 * 5,
+    route: 'elements',
+    elementPlot: 'a-e',
+    catalogSelection: PINNED_BELT_SAMPLE,
+  },
+  {
+    id: 'main-belt-elements',
+    name: { en: 'Main-belt element comparison', zh: '主带轨道元素对比' },
+    description: { en: 'Compare semi-major axis and inclination for the MBA subset of the same pinned 8,000-object display sample; not the complete belt.', zh: '比较同一固定 8,000 条展示样本中主带小行星子集的半长轴与倾角；并非完整小行星带。' },
+    referenceId: 'sun',
+    julianDay: dateToJD('2026-07-01'),
+    selectedMajorBodyIds: ['mars', 'ceres', 'jupiter'],
+    viewMode: '3d',
+    zoomLevel: 1,
+    historyDays: 365 * 5,
+    route: 'elements',
+    elementPlot: 'a-i',
+    catalogSelection: PINNED_BELT_SAMPLE,
   },
   {
     id: 'neo-overview',
