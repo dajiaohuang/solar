@@ -80,26 +80,37 @@ if (process.env.SMOKE_BROWSER === '1') {
     ? { channel: process.env.SMOKE_BROWSER_CHANNEL }
     : undefined)
   try {
-    const page = await browser.newPage()
+    const context = await browser.newContext()
+    await context.addInitScript(() => localStorage.setItem('solar-atlas-language', 'en'))
+    const page = await context.newPage()
     const pageErrors = []
+    const rendererRequests = []
     page.on('pageerror', (error) => pageErrors.push(error.message))
-    await page.addInitScript(() => {
-      localStorage.setItem('solar-atlas-language', 'en')
-      localStorage.setItem('solar-atlas-first-run-v1', 'complete')
+    page.on('request', (request) => {
+      if (request.url().includes('TrajectoryCanvas3D-')) rendererRequests.push(request.url())
     })
     await page.goto(site.toString(), { waitUntil: 'domcontentloaded', timeout: 60_000 })
-    await page.locator('.trajectory-canvas').waitFor({ state: 'visible', timeout: 60_000 })
+    await page.locator('.trajectory-3d-placeholder').waitFor({ state: 'visible', timeout: 60_000 })
+    await page.locator('.first-run-choice').waitFor({ state: 'visible', timeout: 60_000 })
+    if (rendererRequests.length) throw new Error('Production first-visit choice requested the deferred 3D renderer')
+    await page.locator('.first-run-choice .quiet-button').click()
+    await page.getByTestId('trajectory-canvas-3d').waitFor({ state: 'visible', timeout: 60_000 })
+    if (rendererRequests.length !== 1) throw new Error(`Production requested the 3D renderer ${rendererRequests.length} times after the onboarding choice`)
     const presetCount = await page.locator('.preset-list > button').count()
     if (presetCount < 11) throw new Error(`Production deck exposes only ${presetCount} preset scenes`)
     if (await page.locator('.advanced-controls').evaluate((element) => element.hasAttribute('open'))) {
       throw new Error('Production deck opens advanced controls by default')
     }
-    console.log(`Confirmed preset-first 2D Observation Deck with ${presetCount} scenes`)
+    await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 })
+    await page.getByTestId('trajectory-canvas-3d').waitFor({ state: 'visible', timeout: 60_000 })
+    if (await page.locator('.first-run-choice').count()) throw new Error('Production showed the first-run choice after onboarding completion')
+    console.log(`Confirmed deferred first visit and returning 3D Observation Deck with ${presetCount} scenes`)
     await page.locator('.primary-navigation button', { hasText: 'Catalog' }).click()
     await page.getByRole('heading', { name: 'Catalog' }).waitFor({ state: 'visible', timeout: 60_000 })
     await page.locator('.catalog-counts').waitFor({ state: 'visible', timeout: 60_000 })
     console.log('Confirmed production catalog hydration')
     if (pageErrors.length) throw new Error(`Production browser reported errors: ${pageErrors.join(' | ')}`)
+    await context.close()
   } finally {
     await browser.close()
   }
