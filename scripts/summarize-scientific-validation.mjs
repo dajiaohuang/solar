@@ -7,6 +7,8 @@ const cache = resolve(root, '.cache')
 const testReport = JSON.parse(await readFile(resolve(cache, 'scientific-tests.json'), 'utf8'))
 const horizons = JSON.parse(await readFile(resolve(root, 'tests/fixtures/jpl-horizons-events.json'), 'utf8'))
 const lambert = JSON.parse(await readFile(resolve(root, 'tests/fixtures/lambert-benchmarks.json'), 'utf8'))
+const modelEvidence = JSON.parse(await readFile(resolve(root, 'src/data/modelEvidence.json'), 'utf8'))
+const planetaryModelEvidence = modelEvidence.planetaryApproximation
 
 const suites = testReport.testResults.map((suite) => ({
   file: suite.name.replaceAll('\\', '/').split('/').slice(-2).join('/'),
@@ -19,7 +21,8 @@ const report = {
   generatedAt: new Date().toISOString(),
   passed: Boolean(testReport.success),
   runner: { node: process.version, totalTests: testReport.numTotalTests, passedTests: testReport.numPassedTests, failedTests: testReport.numFailedTests },
-  modelWindow: { planetaryApproximation: '1800-01-01/2050-12-31', outsideWindow: 'explicitly-labelled-extrapolation' },
+  modelWindow: { planetaryApproximation: `${planetaryModelEvidence.validFrom}/${planetaryModelEvidence.validTo}`, outsideWindow: 'explicitly-labelled-extrapolation' },
+  modelEvidence,
   benchmarks: {
     horizonsEvents: {
       passed: suites.find((suite) => suite.file.endsWith('event-benchmarks.test.ts'))?.passed ?? false,

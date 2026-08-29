@@ -1,0 +1,14 @@
+{
+  "planetaryApproximation": {
+    "id": "jpl-approx-table-1",
+    "approximationType": "fitted-keplerian-elements-with-secular-rates",
+    "coordinateFrame": "mean-ecliptic-and-equinox-of-j2000",
+    "sourceTimeScale": "JDTDB",
+    "applicationTimeHandling": "utc-derived-numeric-jd-without-tdb-conversion",
+    "validFrom": "1800-01-01",
+    "validTo": "2050-12-31",
+    "source": "JPL Solar System Dynamics — Approximate Positions of the Planets, Table 1",
+    "sourceUrl": "https://ssd.jpl.nasa.gov/planets/approx_pos.html",
+    "earthPoint": "earth-moon-barycenter"
+  }
+}

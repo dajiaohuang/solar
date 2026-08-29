@@ -1,4 +1,5 @@
 import { catalogStore } from '../state/catalog-store'
+import { JPL_APPROX_MODEL_EVIDENCE } from '../engine/ephemeris/modelValidity'
 import { encodeCurrentScene } from './shareScene'
 
 export const SCENE_LIBRARY_SCHEMA_VERSION = 1 as const
@@ -110,6 +111,7 @@ export function sceneLibraryDocument(scenes: SavedScene[]) {
     schemaVersion: SCENE_LIBRARY_SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
     application: 'Solar Atlas',
+    evidence: { planetaryApproximation: JPL_APPROX_MODEL_EVIDENCE },
     scenes,
   }, null, 2)
 }

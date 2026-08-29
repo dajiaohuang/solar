@@ -60,6 +60,11 @@ const health = JSON.parse(await readFile(join(dist, 'health.json'), 'utf8'))
 const scientificValidation = JSON.parse(await readFile(join(dist, 'scientific-validation.json'), 'utf8'))
 if (scientificValidation.passed === false) throw new Error('Scientific validation report contains failures')
 if (!scientificValidation.build?.commitSha) throw new Error('Scientific validation report is missing build identity')
+if (scientificValidation.modelEvidence?.planetaryApproximation?.id !== 'jpl-approx-table-1') throw new Error('Scientific validation report is missing the planetary model identity')
+if (scientificValidation.modelEvidence?.planetaryApproximation?.earthPoint !== 'earth-moon-barycenter') throw new Error('Scientific validation report is missing the Earth–Moon barycenter representation')
+const planetaryModelEvidence = scientificValidation.modelEvidence.planetaryApproximation
+const expectedPlanetaryModelWindow = `${planetaryModelEvidence.validFrom}/${planetaryModelEvidence.validTo}`
+if (scientificValidation.modelWindow?.planetaryApproximation !== expectedPlanetaryModelWindow) throw new Error('Scientific validation model window is inconsistent with the canonical model evidence')
 if (health.dataset?.included) {
   const version = health.dataset.version
   const release = `data/asteroids/releases/${version}`
