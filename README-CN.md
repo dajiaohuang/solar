@@ -113,7 +113,7 @@ catalog-summary.json
 | 功能 | 模型与范围 |
 | --- | --- |
 | 主要行星 | JPL 表 1 的拟合开普勒根数与长期变化率，基于 J2000 平均黄道/春分点，有效期 1800–2050；“地球”条目传播地月质心，越界日期明确提示外推。来源使用 JDTDB；浏览器 UTC 日期目前直接生成数值 JD，未做 UTC→TDB 转换 |
-| 卫星与矮行星 | 标为 `curated-approx` 的取整教学根数，并递归叠加父天体 |
+| 卫星与矮行星 | 月球使用 JPL 在 2000-01-01.5 TDB、地心黄道平面下的均值根数，仅在固定椭圆上推进平近点角。当前将来源向量围绕地月质心种子应用，未做质量比校正（平均距离下约 4,700 km；由 [#21](https://github.com/dajiaohuang/solar/issues/21) 跟踪）；JPL 明确警告均值根数不是星历。木卫一至木卫四和土卫六仍明确采用场景黄道示意椭圆与共享零相位；矮行星使用取整的 `curated-approx` 根数 |
 | MPCORB / SBDB | 只接受 `0 ≤ e < 1` 的椭圆密切根数，明确拒绝抛物线/双曲线数据 |
 | 月相 | 日—地—月相位角与有符号地心日月距角 |
 | 希尔球 | `a(1-e)(m/3M)^(1/3)` |
@@ -130,6 +130,7 @@ JPL SBDB 严格读取官方结构 `orbit.elements[]` 中的 `name/value/units/si
 - [Minor Planet Center MPCORB](https://www.minorplanetcenter.net/iau/MPCORB.html)
 - [JPL SBDB API](https://ssd-api.jpl.nasa.gov/doc/sbdb.html)
 - [JPL 近似行星位置](https://ssd.jpl.nasa.gov/planets/approx_pos.html)
+- [JPL 行星卫星均值根数](https://ssd.jpl.nasa.gov/sats/elem/)
 
 ## 验证
 

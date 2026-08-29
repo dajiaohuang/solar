@@ -400,7 +400,13 @@ async function writeManifestsAndCapacity(buildInfo, dataset) {
     ? await readJson(SCIENTIFIC_VALIDATION_CACHE)
     : { schemaVersion: 1, generatedAt: buildInfo.buildTime, passed: null, runner: { totalTests: 0, passedTests: 0, failedTests: 0 }, benchmarks: {}, suites: [], status: 'not-run-in-this-build' }
   const modelEvidence = await readJson(join(ROOT, 'src', 'data', 'modelEvidence.json'))
-  const publishedScientificValidation = { ...scientificValidation, modelEvidence, build: buildInfo, dataset }
+  const planetaryModelEvidence = modelEvidence.planetaryApproximation
+  const modelWindow = {
+    ...scientificValidation.modelWindow,
+    planetaryApproximation: `${planetaryModelEvidence.validFrom}/${planetaryModelEvidence.validTo}`,
+    outsideWindow: scientificValidation.modelWindow?.outsideWindow ?? 'explicitly-labelled-extrapolation',
+  }
+  const publishedScientificValidation = { ...scientificValidation, modelWindow, modelEvidence, build: buildInfo, dataset }
   await writeFile(join(DIST, 'scientific-validation.json'), `${JSON.stringify(publishedScientificValidation, null, 2)}\n`)
   await writeFile(join(DIST, 'health.json'), `${JSON.stringify({ status: scientificValidation.passed === false ? 'degraded' : 'ok', checkedAt: buildInfo.buildTime, build: buildInfo, dataset, scientificValidation: { passed: scientificValidation.passed, passedTests: scientificValidation.runner?.passedTests ?? 0, totalTests: scientificValidation.runner?.totalTests ?? 0 } }, null, 2)}\n`)
 

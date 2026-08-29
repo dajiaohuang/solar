@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   JPL_APPROX_MODEL_EVIDENCE,
   JPL_APPROX_VALIDITY_LABEL,
+  SATELLITE_ORBIT_MODEL_EVIDENCE,
   jplApproxValidityState,
   jplApproxValidityWarning,
   jplApproxWindowState,
@@ -41,5 +42,31 @@ describe('JPL approximate element validity', () => {
     expect(majorBodiesById.get('earth')?.positionRepresents).toBe('earth-moon-barycenter')
     expect(en.earthMoonBarycenterDisclosure).toContain('Earth–Moon barycenter')
     expect(zh.earthMoonBarycenterDisclosure).toContain('地月质心')
+  })
+
+  it('publishes the fixed-ellipse satellite propagation and precision boundary', () => {
+    expect(SATELLITE_ORBIT_MODEL_EVIDENCE).toMatchObject({
+      id: 'satellite-two-body-contract-v1',
+      sourceUrl: 'https://ssd.jpl.nasa.gov/sats/elem/',
+      sourceWarning: 'mean-elements-not-intended-for-ephemeris-computation',
+      propagation: 'fixed-ellipse-mean-anomaly-only',
+      moonSourceCenter: 'earth-geocenter',
+      moonAppliedCenter: 'earth-moon-barycenter-seed',
+      moonCenterHandling: 'untransformed-pending-geocenter-correction',
+      approximateMeanCenterOffsetKm: 4700,
+      centerCorrectionIssue: 'https://github.com/dajiaohuang/solar/issues/21',
+      sourcedBodies: ['moon'],
+      illustrativeBodies: ['io', 'europa', 'ganymede', 'callisto', 'titan'],
+    })
+    expect(en.satelliteMeanElementsWarning).toContain('not intended for ephemeris')
+    expect(en.satelliteMeanElementsWarning).toContain('illustrative')
+    expect(en.satelliteMeanElementsWarning).toContain('Earth-geocentric')
+    expect(en.satelliteMeanElementsWarning).toContain('Earth–Moon barycenter')
+    expect(en.satelliteMeanElementsWarning).toContain('#21')
+    expect(zh.satelliteMeanElementsWarning).toContain('不用于星历')
+    expect(zh.satelliteMeanElementsWarning).toContain('示意')
+    expect(zh.satelliteMeanElementsWarning).toContain('地心')
+    expect(zh.satelliteMeanElementsWarning).toContain('地月质心')
+    expect(zh.satelliteMeanElementsWarning).toContain('#21')
   })
 })

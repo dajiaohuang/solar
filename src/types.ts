@@ -2,7 +2,20 @@ export type BodyId = string
 
 export type BodyKind = 'star' | 'planet' | 'moon' | 'dwarfPlanet' | 'asteroid' | 'spacecraft'
 
-export type OrbitSource = 'jpl-approx' | 'jpl-sbdb' | 'mpcorb' | 'horizons' | 'curated-approx' | 'schematic' | 'custom'
+export type OrbitSource = 'jpl-approx' | 'jpl-satellite-mean' | 'jpl-sbdb' | 'mpcorb' | 'horizons' | 'curated-approx' | 'schematic' | 'custom'
+
+export type SatelliteOrbitEvidence = {
+  sourceFrame: 'jpl-ecliptic' | 'undocumented-illustrative'
+  appliedFrame: 'scene-j2000-ecliptic'
+  sourceCenter: 'earth-geocenter' | 'undocumented-parent-center'
+  appliedCenter: 'earth-moon-barycenter-seed' | 'parent-rendered-point'
+  centerHandling: 'untransformed-center-offset' | 'direct-parent-addition'
+  epochLabel: string
+  epochTimeScale: 'TDB' | 'unspecified'
+  phaseProvenance: 'jpl-mean-elements' | 'illustrative-zero-at-epoch'
+  precision: 'fixed-mean-ellipse-not-ephemeris' | 'illustrative-fixed-ellipse'
+  sourceUrl?: string
+}
 
 export type DatasetMode = 'lite' | 'full'
 
@@ -89,6 +102,7 @@ export type CelestialBody = {
   color: string
   size: number
   source: OrbitSource
+  satelliteOrbitEvidence?: SatelliteOrbitEvidence
   positionRepresents?: 'earth-moon-barycenter'
   parentId?: BodyId
   orbit?: OrbitDefinition
