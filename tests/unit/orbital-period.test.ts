@@ -10,12 +10,12 @@ function requireOrbit(bodyId: string) {
 }
 
 describe('modeled orbital periods', () => {
-  // The regression values come from the curated mean motions. Primary-source
-  // comparison for satellite mean elements: https://ssd.jpl.nasa.gov/sats/elem/
+  // The Moon regression comes from the JPL mean-elements table. Giant-moon
+  // regressions come from Horizons osculating elements at JD 2451545.0 TDB.
   it.each([
     ['moon', 27.322],
-    ['io', 1.7691287041132242],
-    ['titan', 15.943312666076174],
+    ['io', 1.771395757437516],
+    ['titan', 15.94734750754382],
   ])('uses declared parent-centered mean motion for %s', (bodyId, expectedDays) => {
     const { body, orbit } = requireOrbit(bodyId)
     const center = body.parentId ? 'parent' : 'sun'

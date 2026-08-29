@@ -7,14 +7,16 @@ export type OrbitSource = 'jpl-approx' | 'jpl-satellite-mean' | 'jpl-sbdb' | 'mp
 export type SatelliteOrbitEvidence = {
   sourceFrame: 'jpl-ecliptic' | 'undocumented-illustrative'
   appliedFrame: 'scene-j2000-ecliptic'
-  sourceCenter: 'earth-geocenter' | 'undocumented-parent-center'
+  sourceCenter: 'earth-geocenter' | 'planet-center' | 'undocumented-parent-center'
   appliedCenter: 'earth-geocenter' | 'parent-rendered-point'
   centerHandling: 'de440-gm-barycentric-partition' | 'direct-parent-addition'
   epochLabel: string
   epochTimeScale: 'TDB' | 'unspecified'
-  phaseProvenance: 'jpl-mean-elements' | 'illustrative-zero-at-epoch'
-  precision: 'fixed-mean-ellipse-not-ephemeris' | 'illustrative-fixed-ellipse'
+  phaseProvenance: 'jpl-mean-elements' | 'jpl-horizons-osculating-elements' | 'illustrative-zero-at-epoch'
+  precision: 'fixed-mean-ellipse-not-ephemeris' | 'fixed-osculating-ellipse-at-epoch-not-ephemeris' | 'illustrative-fixed-ellipse'
+  sourceEphemeris?: string
   sourceUrl?: string
+  sourceQueryUrl?: string
 }
 
 export type DatasetMode = 'lite' | 'full'

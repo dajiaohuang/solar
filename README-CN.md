@@ -113,7 +113,7 @@ catalog-summary.json
 | 功能 | 模型与范围 |
 | --- | --- |
 | 主要行星 | JPL 表 1 的拟合开普勒根数与长期变化率，基于 J2000 平均黄道/春分点，有效期 1800–2050；“地球”条目仍作为内部地月质心种子，渲染地球点则为推导地心。越界日期明确提示外推。来源使用 JDTDB；浏览器 UTC 日期目前直接生成数值 JD，未做 UTC→TDB 转换 |
-| 卫星与矮行星 | 月球使用 JPL 在 2000-01-01.5 TDB、地心黄道平面下的均值根数，仅在固定椭圆上推进平近点角。地心与月心使用校验和固定的 [NAIF/JPL DE440 引力参数内核](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc)中的地球/月球 GM 围绕 EMB 种子分解，因此质量加权中心复现种子、地月间距复现来源向量。这项代数校正不会把任一近似模型变成 DE440 位置星历。木卫一至木卫四和土卫六仍明确采用场景黄道示意椭圆与共享零相位；矮行星使用取整的 `curated-approx` 根数 |
+| 卫星与矮行星 | 月球使用 JPL 在 2000-01-01.5 TDB、地心黄道平面下的均值根数。木卫一、木卫二、木卫三、木卫四和土卫六使用 [NASA/JPL Horizons](https://ssd-api.jpl.nasa.gov/doc/horizons.html) 在 JD 2451545.0 TDB、各自母星中心、J2000 黄道面（x 轴与 ICRF 参考方向对齐）下的几何密切根数与相位。六颗卫星都只在固定椭圆上推进平近点角：这是可审计的历元近似，不是连续星历，并省略 UTC→TDB 转换、进动和 N-body 摄动。地心与月心使用校验和固定的 [NAIF/JPL DE440 引力参数](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc)围绕 EMB 种子分解。矮行星使用取整的 `curated-approx` 根数 |
 | MPCORB / SBDB | 只接受 `0 ≤ e < 1` 的椭圆密切根数，明确拒绝抛物线/双曲线数据 |
 | 月相 | 日—地—月相位角与有符号地心日月距角 |
 | 希尔球 | `a(1-e)(m/3M)^(1/3)` |
@@ -131,6 +131,7 @@ JPL SBDB 严格读取官方结构 `orbit.elements[]` 中的 `name/value/units/si
 - [JPL SBDB API](https://ssd-api.jpl.nasa.gov/doc/sbdb.html)
 - [JPL 近似行星位置](https://ssd.jpl.nasa.gov/planets/approx_pos.html)
 - [JPL 行星卫星均值根数](https://ssd.jpl.nasa.gov/sats/elem/)
+- [NASA/JPL Horizons API](https://ssd-api.jpl.nasa.gov/doc/horizons.html)
 
 ## 验证
 

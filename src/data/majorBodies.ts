@@ -1,21 +1,12 @@
 import type { CelestialBody, ElementSet } from '../types'
+import {
+  jplHorizonsGiantSatelliteEvidence,
+  jplHorizonsGiantSatelliteOrbit,
+} from './satelliteEpochElements'
 
 const J2000 = 2451545
 const DEFAULT_SMALL_BODY_EPOCH = 2461000.5
 const JPL_SATELLITE_MEAN_ELEMENTS_URL = 'https://ssd.jpl.nasa.gov/sats/elem/'
-
-const illustrativeSatelliteEvidence = {
-  sourceFrame: 'undocumented-illustrative' as const,
-  appliedFrame: 'scene-j2000-ecliptic' as const,
-  sourceCenter: 'undocumented-parent-center' as const,
-  appliedCenter: 'parent-rendered-point' as const,
-  centerHandling: 'direct-parent-addition' as const,
-  epochLabel: `JD ${DEFAULT_SMALL_BODY_EPOCH}`,
-  epochTimeScale: 'unspecified' as const,
-  phaseProvenance: 'illustrative-zero-at-epoch' as const,
-  precision: 'illustrative-fixed-ellipse' as const,
-}
-
 function elements(
   semiMajorAxisAU: number,
   eccentricity: number,
@@ -297,20 +288,10 @@ export const majorBodies: CelestialBody[] = [
     kind: 'moon',
     color: '#ffdd88',
     size: 2.2,
-    source: 'curated-approx',
+    source: 'horizons',
     parentId: 'jupiter',
-    satelliteOrbitEvidence: illustrativeSatelliteEvidence,
-    orbit: {
-      model: 'keplerian',
-      epochJd: DEFAULT_SMALL_BODY_EPOCH,
-      semiMajorAxisAU: 0.002819,
-      eccentricity: 0.0041,
-      inclinationDeg: 0.04,
-      ascendingNodeDeg: 0,
-      argPeriapsisDeg: 0,
-      meanAnomalyDeg: 0,
-      meanMotionDegPerDay: 203.49,
-    },
+    satelliteOrbitEvidence: jplHorizonsGiantSatelliteEvidence('io'),
+    orbit: jplHorizonsGiantSatelliteOrbit('io'),
   },
   {
     id: 'europa',
@@ -318,20 +299,10 @@ export const majorBodies: CelestialBody[] = [
     kind: 'moon',
     color: '#ddeeff',
     size: 2.1,
-    source: 'curated-approx',
+    source: 'horizons',
     parentId: 'jupiter',
-    satelliteOrbitEvidence: illustrativeSatelliteEvidence,
-    orbit: {
-      model: 'keplerian',
-      epochJd: DEFAULT_SMALL_BODY_EPOCH,
-      semiMajorAxisAU: 0.004485,
-      eccentricity: 0.0094,
-      inclinationDeg: 0.47,
-      ascendingNodeDeg: 0,
-      argPeriapsisDeg: 0,
-      meanAnomalyDeg: 0,
-      meanMotionDegPerDay: 101.37,
-    },
+    satelliteOrbitEvidence: jplHorizonsGiantSatelliteEvidence('europa'),
+    orbit: jplHorizonsGiantSatelliteOrbit('europa'),
   },
   {
     id: 'ganymede',
@@ -339,20 +310,10 @@ export const majorBodies: CelestialBody[] = [
     kind: 'moon',
     color: '#ccddcc',
     size: 2.5,
-    source: 'curated-approx',
+    source: 'horizons',
     parentId: 'jupiter',
-    satelliteOrbitEvidence: illustrativeSatelliteEvidence,
-    orbit: {
-      model: 'keplerian',
-      epochJd: DEFAULT_SMALL_BODY_EPOCH,
-      semiMajorAxisAU: 0.007155,
-      eccentricity: 0.0013,
-      inclinationDeg: 0.18,
-      ascendingNodeDeg: 0,
-      argPeriapsisDeg: 0,
-      meanAnomalyDeg: 0,
-      meanMotionDegPerDay: 50.32,
-    },
+    satelliteOrbitEvidence: jplHorizonsGiantSatelliteEvidence('ganymede'),
+    orbit: jplHorizonsGiantSatelliteOrbit('ganymede'),
   },
   {
     id: 'callisto',
@@ -360,20 +321,10 @@ export const majorBodies: CelestialBody[] = [
     kind: 'moon',
     color: '#bbaacc',
     size: 2.4,
-    source: 'curated-approx',
+    source: 'horizons',
     parentId: 'jupiter',
-    satelliteOrbitEvidence: illustrativeSatelliteEvidence,
-    orbit: {
-      model: 'keplerian',
-      epochJd: DEFAULT_SMALL_BODY_EPOCH,
-      semiMajorAxisAU: 0.012585,
-      eccentricity: 0.0074,
-      inclinationDeg: 0.19,
-      ascendingNodeDeg: 0,
-      argPeriapsisDeg: 0,
-      meanAnomalyDeg: 0,
-      meanMotionDegPerDay: 21.57,
-    },
+    satelliteOrbitEvidence: jplHorizonsGiantSatelliteEvidence('callisto'),
+    orbit: jplHorizonsGiantSatelliteOrbit('callisto'),
   },
   {
     id: 'titan',
@@ -381,20 +332,10 @@ export const majorBodies: CelestialBody[] = [
     kind: 'moon',
     color: '#ffcc88',
     size: 2.8,
-    source: 'curated-approx',
+    source: 'horizons',
     parentId: 'saturn',
-    satelliteOrbitEvidence: illustrativeSatelliteEvidence,
-    orbit: {
-      model: 'keplerian',
-      epochJd: DEFAULT_SMALL_BODY_EPOCH,
-      semiMajorAxisAU: 0.008168,
-      eccentricity: 0.0288,
-      inclinationDeg: 0.35,
-      ascendingNodeDeg: 0,
-      argPeriapsisDeg: 0,
-      meanAnomalyDeg: 0,
-      meanMotionDegPerDay: 22.58,
-    },
+    satelliteOrbitEvidence: jplHorizonsGiantSatelliteEvidence('titan'),
+    orbit: jplHorizonsGiantSatelliteOrbit('titan'),
   },
 ]
 
