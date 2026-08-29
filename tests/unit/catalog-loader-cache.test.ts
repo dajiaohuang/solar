@@ -3,6 +3,7 @@ import {
   MAX_CHUNK_CACHE_ENTRIES,
   loadAsteroidChunk,
   loadAsteroidManifest,
+  loadAsteroidSample,
   resetDatasetLoader,
   searchAsteroidCatalogPage,
 } from '../../src/lib/catalogLoader'
@@ -101,5 +102,38 @@ describe('catalog loader cache isolation', () => {
     const second = await searchAsteroidCatalogPage({ query: 'alpha', cursor: first.nextCursor!, maximumChunks: 1 })
     expect(second).toMatchObject({ total: 3, nextCursor: 2 })
     expect(second.records.map((record) => record.id)).toEqual(['asteroid:1'])
+  })
+
+  it('isolates sample profiles and rejects artifact counts that disagree with the manifest', async () => {
+    const sampleManifest: AsteroidManifest = {
+      ...manifest,
+      version: 'mpcorb-samples-full',
+      releasePath: '/samples',
+      precomputedSamples: {
+        desktop: { metadataPath: 'desktop.json', binaryPath: 'desktop.bin', count: 1 },
+        mobile: { metadataPath: 'mobile.json', binaryPath: 'mobile.bin', count: 1 },
+      },
+    }
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      const profile = url.includes('mobile') ? 'mobile' : 'desktop'
+      if (url.endsWith('.json')) return json([{
+        id: `asteroid:${profile}`, label: profile, shortLabel: profile, searchKey: profile, chunkId: 'chunk-0000',
+        orbitClassCode: 'MBA', orbitClassName: 'Main-belt Asteroid', isNeo: false, isPha: false,
+      }])
+      if (url.endsWith('.bin')) return new Response(new Float64Array([2451545, 2.5, 0.1, 5, 10, 20, 30, 0.25]))
+      return new Response(null, { status: 404 })
+    }))
+
+    expect((await loadAsteroidSample(sampleManifest, 'desktop'))[0].id).toBe('asteroid:desktop')
+    expect((await loadAsteroidSample(sampleManifest, 'mobile'))[0].id).toBe('asteroid:mobile')
+    await expect(loadAsteroidSample({
+      ...sampleManifest,
+      version: 'mpcorb-bad-sample-full',
+      precomputedSamples: {
+        ...sampleManifest.precomputedSamples!,
+        mobile: { ...sampleManifest.precomputedSamples!.mobile, count: 2 },
+      },
+    }, 'mobile')).rejects.toThrow('does not match its manifest count')
   })
 })

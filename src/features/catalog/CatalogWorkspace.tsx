@@ -23,6 +23,7 @@ import { selectionActions, selectionStore } from '../../state/selection-store'
 import { uiActions } from '../../state/ui-store'
 import type { AsteroidSectionCursor, MagnitudeStatus } from '../../types'
 import { bodyDisplayName } from '../../lib/bodyNames'
+import { catalogSampleErrorMessage } from '../../lib/catalogSampleProfile'
 import { DatasetCard } from './DatasetCard'
 
 const CLASS_OPTIONS = ['all', 'MBA', 'MCR', 'APO', 'ATE', 'AMO', 'ATI', 'HUN', 'HIL', 'JTA', 'TNO', 'OTHER']
@@ -277,6 +278,7 @@ export function CatalogWorkspace() {
             <span>{t('textMatches')} <strong>{textMatchTotal === null ? '—' : textMatchTotal.toLocaleString()}</strong></span>
             <span>{t('exactFilteredTotal')} <strong>{exactFilteredTotal === null ? '—' : exactFilteredTotal.toLocaleString()}</strong></span>
           </div>
+          {catalog.sampleError && <div className="error-banner">{catalogSampleErrorMessage(catalog.sampleError, t)}</div>}
           {catalog.error && <div className="error-banner">{catalog.error}{catalog.manifest && <div className="export-actions">
             <button onClick={() => { resetCatalogScanWorker(); void scanEntireCatalog() }}>{t('retryExactScan')}</button>
             <button onClick={() => { resetCatalogScanWorker(); catalogActions.patch({ error: null, isLoading: false }) }}>{t('resetCatalogWorker')}</button>

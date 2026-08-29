@@ -20,18 +20,18 @@ Solar Atlas connects spatial views, orbital-element space, time events, and data
 - **Mission Lab:** directionally correct Hohmann baselines in km/s, phase-angle guidance, a residual-checked universal-variable Lambert solver, departure/arrival `v∞`, C3, and a keyboard/click-selectable porkchop map that can apply an opportunity’s dates.
 - **Guided Stories:** eight six-stage, observation-first courses. The core course separates historical geocentrism from the modern geocentric frame; every course persists across workspaces, highlights relevant controls, states model boundaries, and finishes with a checkpoint.
 - **Object atlas:** tabbed Overview, Orbit, Physical, Context, and Sources profiles for major and catalog bodies, with provenance-aware deep links and explicit NEO risk wording.
-- **Reproducibility:** v3 scene URLs record dataset version, epoch, reference frames, focus set, filters, trajectory sampling, active guided-story step, mission endpoints/dates, language, and view settings. Complete scenes can also be saved locally and exported/imported as versioned JSON.
+- **Reproducibility:** v4 scene URLs record dataset version, epoch, reference frames, focus set, filters, trajectory sampling, active guided-story step, mission endpoints/dates, language, and view settings. Catalog workspaces additionally pin `catalogSample=mobile|desktop` together with the manifest-declared `catalogSampleCount`, so the same immutable sample is loaded across devices; incomplete, unsupported, or mismatched tuples fail closed. v2/v3 links remain readable and upgrade after their responsive sample loads. Complete scenes can also be saved locally and exported/imported as versioned JSON.
 - **Installable and discoverable web app:** first-install offline shell, update prompt, Web App Manifest, Open Graph image, JSON-LD, bilingual static knowledge/object pages, sitemap, and code-split workspaces.
 - **Release evidence:** every build exposes application version, commit SHA, build time, pinned dataset, parser identity, machine-readable scientific benchmark results, asset hashes, and a Pages capacity report. Deployment also preserves Lighthouse reports and enforces stable byte, accessibility, and responsiveness budgets.
 
 ## Explore a reproducible scene
 
-- [Start the core course: geocentrism vs. the geocentric frame](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=geocentric-model&lang=en)
-- [Explain Mars retrograde motion](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=retrograde-mars&step=2&lang=en)
-- [Read the Kirkwood gaps in element space](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=kirkwood-gaps&step=1&lang=en)
-- [Compare the four NEO orbit classes](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=neo-types&lang=en)
-- [Inspect Pluto and Neptune's 3:2 geometry](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=pluto-resonance&step=1&lang=en)
-- [Open an Earth-to-Mars mission setup](https://dajiaohuang.github.io/solar/?v=3&page=mission&from=earth&to=mars&depart=2026-11-15&arrive=2027-08-01&lang=en)
+- [Start the core course: geocentrism vs. the geocentric frame](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=geocentric-model&lang=en)
+- [Explain Mars retrograde motion](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=retrograde-mars&step=2&lang=en)
+- [Read the Kirkwood gaps in element space](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=kirkwood-gaps&step=1&lang=en)
+- [Compare the four NEO orbit classes](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=neo-types&lang=en)
+- [Inspect Pluto and Neptune's 3:2 geometry](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=pluto-resonance&step=1&lang=en)
+- [Open an Earth-to-Mars mission setup](https://dajiaohuang.github.io/solar/?v=4&page=mission&from=earth&to=mars&depart=2026-11-15&arrive=2027-08-01&lang=en)
 
 ## Quick start
 
@@ -183,7 +183,7 @@ npm run benchmark:catalog
 npm run check:capacity
 ```
 
-Unit coverage includes Julian dates, Kepler propagation, parent/reference frames, Hohmann units/direction, Moon phase geometry, Hill/SOI definitions, strict JPL SBDB fixtures, local event-extremum detection, Lambert circular-arc recovery, v2/v3 deep-link round trips, versioned scene-library persistence, MPCORB parsing, scoped persistence, manifest/cache isolation, and a one-million-row bounded catalog scan. The scientific subset publishes its exact JPL Horizons, Lambert, and ephemeris status into the build. Playwright covers browser history, persistent guided stories, global search, saved scenes, story/mission URLs, interactive porkchop selection, catalog filtering/recovery, worker and WebGL fallback, first-install offline behavior, cache isolation, and serious/critical axe violations. A scheduled matrix repeats the suite in Firefox and WebKit; the deploy gate additionally audits the home and a static exhibit with Lighthouse CI.
+Unit coverage includes Julian dates, Kepler propagation, parent/reference frames, Hohmann units/direction, Moon phase geometry, Hill/SOI definitions, strict JPL SBDB fixtures, local event-extremum detection, Lambert circular-arc recovery, v2/v3 compatibility and v4 catalog-sample round trips, versioned scene-library persistence, MPCORB parsing, scoped persistence, manifest/cache isolation, and a one-million-row bounded catalog scan. The scientific subset publishes its exact JPL Horizons, Lambert, and ephemeris status into the build. Playwright covers browser history, persistent guided stories, global search, saved scenes, story/mission URLs, cross-device pinned catalog samples, malformed-tuple recovery boundaries, interactive porkchop selection, catalog filtering/recovery, worker and WebGL fallback, first-install offline behavior, cache isolation, and serious/critical axe violations. A scheduled matrix repeats the suite in Firefox and WebKit; the deploy gate additionally audits the home and a static exhibit with Lighthouse CI.
 
 ## Deployment
 

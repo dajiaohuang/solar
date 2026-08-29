@@ -1,25 +1,53 @@
 import { useEffect } from 'react'
 import { loadAsteroidSample, loadCatalogSummary } from '../lib/catalogLoader'
+import { resolveCatalogSampleProfile } from '../lib/catalogSampleProfile'
 import { catalogActions, catalogStore } from '../state/catalog-store'
+import type { CatalogSampleProfile } from '../types'
 
-export function catalogSampleSize() {
+export function catalogSampleSize(): CatalogSampleProfile {
   return window.matchMedia('(max-width: 800px)').matches ? 'mobile' as const : 'desktop' as const
 }
 
 export function useCatalogSample() {
   const manifest = catalogStore.useStore((state) => state.manifest)
   const baseSampleKey = catalogStore.useStore((state) => state.baseSampleKey)
+  const requestedSampleProfile = catalogStore.useStore((state) => state.requestedSampleProfile)
+  const requestedSampleCount = catalogStore.useStore((state) => state.requestedSampleCount)
+  const requestedSampleCountRaw = catalogStore.useStore((state) => state.requestedSampleCountRaw)
+  const requestedSampleInvalid = catalogStore.useStore((state) => state.requestedSampleInvalid)
 
   useEffect(() => {
-    if (!manifest?.precomputedSamples) return
-    const size = catalogSampleSize()
-    const key = `${manifest.version}:${size}`
-    if (baseSampleKey === key) return
+    if (!manifest) return
+    const resolution = resolveCatalogSampleProfile(manifest, {
+      profile: requestedSampleProfile,
+      count: requestedSampleCount,
+      countRaw: requestedSampleCountRaw,
+      invalid: requestedSampleInvalid,
+    }, catalogSampleSize())
+    if (resolution.error) {
+      catalogActions.patch({
+        baseSampleKey: null,
+        baseSampleProfile: null,
+        baseSampleRecords: [],
+        isLoading: false,
+        sampleError: resolution.error,
+      })
+      return
+    }
+    if (!resolution.sample) {
+      catalogActions.patch({ sampleError: null })
+      return
+    }
+    const { profile, key } = resolution.sample
+    if (baseSampleKey === key) {
+      if (catalogStore.getState().sampleError) catalogActions.patch({ sampleError: null })
+      return
+    }
     let cancelled = false
-    catalogActions.patch({ isLoading: true, error: null })
-    void Promise.all([loadAsteroidSample(manifest, size), loadCatalogSummary(manifest)]).then(([records, summary]) => {
+    catalogActions.patch({ isLoading: true, error: null, sampleError: null })
+    void Promise.all([loadAsteroidSample(manifest, profile), loadCatalogSummary(manifest)]).then(([records, summary]) => {
       if (cancelled || catalogStore.getState().manifest?.version !== manifest.version) return
-      catalogActions.setBaseSample(key, records, summary)
+      catalogActions.setBaseSample(profile, key, records, summary)
       catalogActions.patch({ isLoading: false })
     }).catch((error: unknown) => {
       if (!cancelled) catalogActions.patch({
@@ -28,5 +56,5 @@ export function useCatalogSample() {
       })
     })
     return () => { cancelled = true }
-  }, [baseSampleKey, manifest])
+  }, [baseSampleKey, manifest, requestedSampleCount, requestedSampleCountRaw, requestedSampleInvalid, requestedSampleProfile])
 }

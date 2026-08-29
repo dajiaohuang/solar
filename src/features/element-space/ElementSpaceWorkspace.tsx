@@ -4,6 +4,7 @@ import { majorBodiesWithPhysicalData, useBodyRegistry } from '../../app/bodyRegi
 import { useSimulationClock } from '../../engine/clock/useSimulationClock'
 import { useI18n } from '../../i18n/context'
 import { asteroidRecordToBody } from '../../lib/catalogLoader'
+import { catalogSampleErrorMessage } from '../../lib/catalogSampleProfile'
 import { EXACT_CATALOG_LOCATOR_LIMIT, createCatalogScanKey, scanAsteroidCatalog } from '../../lib/catalogScan'
 import { elementPlotCoordinates } from '../../lib/elementPlot'
 import { buildCurrentPositions } from '../../lib/trajectory'
@@ -236,6 +237,7 @@ export function ElementSpaceWorkspace() {
       <div className="segmented-control">{(['a-e', 'a-i', 'a-H', 'q-Q', 'a-period'] as PlotMode[]).map((item) => <button key={item} className={mode === item ? 'active' : ''} onClick={() => uiActions.setElementPlot(item)}>{item}</button>)}</div>
       <div className="legend">{Object.entries(CLASS_COLORS).slice(0, 9).map(([key, color]) => <span key={key}><i style={{ background: color }} />{key}</span>)}</div>
     </div>
+    {catalog.sampleError && <div className="error-banner">{catalogSampleErrorMessage(catalog.sampleError, t)}</div>}
     <div className="elements-layout">
       <section className="chart-panel glass-panel">
         <div className="sample-caption">{t('showing')} {data.length.toLocaleString()} / {(catalog.activeResultScanKey === scanKey ? catalog.exactFilteredTotal ?? records.length : records.length).toLocaleString()} · {t('stratifiedSample')}{mode === 'a-H' ? ` · ${t('unknownMagnitudeExcluded')}` : ''}</div>

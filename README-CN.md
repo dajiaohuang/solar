@@ -20,18 +20,18 @@ Solar Atlas 把空间视图、轨道元素空间、时间事件与数据证据�
 - **任务实验室：** 单位与方向正确的霍曼基线、相位角、强制残差收敛的通用变量 Lambert 解、出发/到达 `v∞`、C3，以及可点击/键盘选择并回填日期的 Porkchop 图。
 - **引导故事：** 八门六阶段、观察优先的课程；核心课程专门区分历史地心说与现代地心参考系。所有课程均可跨工作区持续、突出相关控件、陈述模型边界并以检查题收尾。
 - **对象图谱：** 主要天体与目录对象均有“概览 / 轨道 / 物理 / 背景 / 来源”档案，并为 NEO 分类与风险判断设置明确边界。
-- **可复现链接：** v3 URL 记录数据集版本、历元、参考系、天体集合、筛选器、轨迹采样、活动课程步骤、任务端点/日期、语言与视图；完整场景还可保存在本地，并以带版本的 JSON 导入/导出。
+- **可复现链接：** v4 URL 记录数据集版本、历元、参考系、天体集合、筛选器、轨迹采样、活动课程步骤、任务端点/日期、语言与视图。目录工作区还会把 `catalogSample=mobile|desktop` 与 manifest 声明的 `catalogSampleCount` 成对固定，使不同设备加载同一份不可变样本；缺字段、不支持或数量不符的组合会失败关闭。v2/v3 链接仍可读取，并在响应式样本加载后升级；完整场景还可保存在本地，并以带版本的 JSON 导入/导出。
 - **可安装且可发现：** 首次安装即可离线使用应用壳、更新提示、Web App Manifest、Open Graph 图、JSON-LD、中英静态知识/天体页、sitemap 与路由代码分割。
 - **发布证据：** 每次构建显示应用版本、提交 SHA、构建时间、固定数据集、解析器身份、机器可读科学基准、资产哈希与 Pages 容量报告；部署还保存 Lighthouse 报告并执行字节、可访问性与响应速度预算。
 
 ## 打开可复现场景
 
-- [开始核心课程：地心说与地心参考系](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=geocentric-model&lang=zh)
-- [解释火星逆行](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=retrograde-mars&step=2&lang=zh)
-- [在元素空间观察柯克伍德空隙](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=kirkwood-gaps&step=1&lang=zh)
-- [比较四类 NEO 轨道](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=neo-types&lang=zh)
-- [检查冥王星—海王星 3:2 几何](https://dajiaohuang.github.io/solar/?v=3&page=stories&story=pluto-resonance&step=1&lang=zh)
-- [打开地球到火星任务设置](https://dajiaohuang.github.io/solar/?v=3&page=mission&from=earth&to=mars&depart=2026-11-15&arrive=2027-08-01&lang=zh)
+- [开始核心课程：地心说与地心参考系](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=geocentric-model&lang=zh)
+- [解释火星逆行](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=retrograde-mars&step=2&lang=zh)
+- [在元素空间观察柯克伍德空隙](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=kirkwood-gaps&step=1&lang=zh)
+- [比较四类 NEO 轨道](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=neo-types&lang=zh)
+- [检查冥王星—海王星 3:2 几何](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=pluto-resonance&step=1&lang=zh)
+- [打开地球到火星任务设置](https://dajiaohuang.github.io/solar/?v=4&page=mission&from=earth&to=mars&depart=2026-11-15&arrive=2027-08-01&lang=zh)
 
 ## 快速开始
 
@@ -145,7 +145,7 @@ npm run benchmark:catalog
 npm run check:capacity
 ```
 
-单元测试覆盖儒略日、开普勒传播、父天体/参考系、霍曼单位与方向、月相几何、Hill/SOI 定义、严格 JPL SBDB fixture、局部事件极值、Lambert 圆轨道弧、v2/v3 深链接、带版本的场景库、MPCORB 解析、manifest/缓存隔离、百万行有界扫描和微型数据发布。科学测试子集会把 JPL Horizons、Lambert 与星历状态写入构建。Playwright 覆盖浏览器历史、跨工作区课程、全局搜索、保存场景、交互 Porkchop、目录恢复、Worker/WebGL 降级、首次离线、缓存隔离及严重或致命 axe 问题；定时任务还会在 Firefox 与 WebKit 重跑，部署门禁另以 Lighthouse 审计首页和静态展页。
+单元测试覆盖儒略日、开普勒传播、父天体/参考系、霍曼单位与方向、月相几何、Hill/SOI 定义、严格 JPL SBDB fixture、局部事件极值、Lambert 圆轨道弧、v2/v3 兼容与 v4 目录样本往返、带版本的场景库、MPCORB 解析、manifest/缓存隔离、百万行有界扫描和微型数据发布。科学测试子集会把 JPL Horizons、Lambert 与星历状态写入构建。Playwright 覆盖浏览器历史、跨工作区课程、全局搜索、保存场景、故事/任务 URL、跨设备固定目录样本、畸形组合的恢复边界、交互 Porkchop、目录恢复、Worker/WebGL 降级、首次离线、缓存隔离及严重或致命 axe 问题；定时任务还会在 Firefox 与 WebKit 重跑，部署门禁另以 Lighthouse 审计首页和静态展页。
 
 ## 开源许可
 

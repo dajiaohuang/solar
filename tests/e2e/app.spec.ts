@@ -7,7 +7,20 @@ async function openCatalog(page: Page) {
   else await page.locator('.mobile-navigation').getByRole('button', { name: /Search|搜索/ }).click()
 }
 
-async function installMockCatalog(page: Page, options: { precomputed?: boolean; sampleCount?: number } = {}) {
+async function openElements(page: Page) {
+  const desktop = page.locator('.primary-navigation').getByRole('button', { name: /Element Space|轨道元素空间/ })
+  if (await desktop.isVisible()) await desktop.click()
+  else {
+    await page.locator('.mobile-navigation').getByRole('button', { name: /More|更多/ }).click()
+    await page.locator('.mobile-more-menu').getByRole('button', { name: /Element Space|轨道元素空间/ }).click()
+  }
+}
+
+async function installMockCatalog(page: Page, options: {
+  precomputed?: boolean
+  sampleCount?: number
+  profileSamples?: { desktop: number[]; mobile: number[] }
+} = {}) {
   const precomputed = options.precomputed ?? false
   const entries = [
     { id: 'asteroid:mpc:01001', packedDesignation: '01001', permanentNumber: 1001, label: '1001 Alpha', shortLabel: 'Alpha', searchKey: 'alpha 1001 01001', chunkId: 'chunk-0000', orbitClassCode: 'MBA', orbitClassName: 'Main-belt Asteroid', absoluteMagnitude: 12, isNeo: false, isPha: false },
@@ -16,6 +29,8 @@ async function installMockCatalog(page: Page, options: { precomputed?: boolean; 
   ]
   const numeric = new Float64Array(entries.length * 8)
   entries.forEach((_, index) => numeric.set([2451545, 2.1 + index * 0.2, 0.08 + index * 0.03, 4 + index, 20, 40, 60, 0.25], index * 8))
+  const defaultSampleIndexes = entries.slice(0, options.sampleCount ?? entries.length).map((_, index) => index)
+  const sampleIndexes = options.profileSamples ?? { desktop: defaultSampleIndexes, mobile: defaultSampleIndexes }
   const manifest = {
     schemaVersion: 2, version: 'mock-content-lite', datasetMode: 'lite', source: 'fixture', generatedAt: '2026-08-18T00:00:00Z',
     sourceSha256: 'a'.repeat(64), contentSha256: 'b'.repeat(64), parserVersion: 'test', totalCount: 3,
@@ -26,8 +41,8 @@ async function installMockCatalog(page: Page, options: { precomputed?: boolean; 
     schemaVersion: 3,
     capabilities: ['catalog-index-v1', 'catalog-locators-v1', 'precomputed-samples-v1', 'catalog-summary-v1', 'search-prefix-v2'],
     precomputedSamples: {
-      desktop: { metadataPath: 'catalog-sample-desktop.json', binaryPath: 'catalog-sample-desktop.bin', count: options.sampleCount ?? entries.length },
-      mobile: { metadataPath: 'catalog-sample-mobile.json', binaryPath: 'catalog-sample-mobile.bin', count: options.sampleCount ?? entries.length },
+      desktop: { metadataPath: 'catalog-sample-desktop.json', binaryPath: 'catalog-sample-desktop.bin', count: sampleIndexes.desktop.length },
+      mobile: { metadataPath: 'catalog-sample-mobile.json', binaryPath: 'catalog-sample-mobile.bin', count: sampleIndexes.mobile.length },
     },
     summaryPath: 'catalog-summary.json',
     compactIndex: { path: 'catalog-index.bin', format: 'catalog-index-v1', strideBytes: 24, count: entries.length, classCodes: ['MBA', 'APO', 'TNO'] },
@@ -49,12 +64,14 @@ async function installMockCatalog(page: Page, options: { precomputed?: boolean; 
     compact.writeUInt16LE(index, offset + 22)
   })
   await page.route(`**/data/asteroids/releases/${manifest.version}/catalog-index.bin`, (route) => route.fulfill({ body: compact, contentType: 'application/octet-stream' }))
-  const sampleCount = options.sampleCount ?? entries.length
-  const sampleEntries = entries.slice(0, sampleCount)
-  const sampleBinary = Buffer.from(numeric.buffer.slice(0, sampleCount * 8 * Float64Array.BYTES_PER_ELEMENT))
-  for (const size of ['desktop', 'mobile']) {
-    await page.route(`**/data/asteroids/releases/${manifest.version}/catalog-sample-${size}.json`, (route) => route.fulfill({ json: sampleEntries }))
-    await page.route(`**/data/asteroids/releases/${manifest.version}/catalog-sample-${size}.bin`, (route) => route.fulfill({ body: sampleBinary, contentType: 'application/octet-stream' }))
+  for (const size of ['desktop', 'mobile'] as const) {
+    const profileEntries = sampleIndexes[size].map((index) => entries[index])
+    const profileNumeric = new Float64Array(profileEntries.length * 8)
+    sampleIndexes[size].forEach((entryIndex, profileIndex) => {
+      profileNumeric.set(numeric.slice(entryIndex * 8, entryIndex * 8 + 8), profileIndex * 8)
+    })
+    await page.route(`**/data/asteroids/releases/${manifest.version}/catalog-sample-${size}.json`, (route) => route.fulfill({ json: profileEntries }))
+    await page.route(`**/data/asteroids/releases/${manifest.version}/catalog-sample-${size}.bin`, (route) => route.fulfill({ body: Buffer.from(profileNumeric.buffer), contentType: 'application/octet-stream' }))
   }
   await page.route(`**/data/asteroids/releases/${manifest.version}/catalog-summary.json`, (route) => route.fulfill({ json: {
     schemaVersion: 2, datasetMode: 'lite', totalCount: entries.length,
@@ -77,6 +94,60 @@ test('lazy-loads catalog samples only inside catalog workspaces and only once', 
   await openCatalog(page)
   await expect.poll(() => sampleRequests.length).toBe(2)
   expect(new Set(sampleRequests).size).toBe(2)
+})
+
+test('loads the same pinned catalog sample on desktop and mobile', async ({ page }) => {
+  const sampleRequests: string[] = []
+  page.on('request', (request) => {
+    if (/catalog-sample-(desktop|mobile)\.(json|bin)$/.test(request.url())) sampleRequests.push(request.url())
+  })
+  await installMockCatalog(page, { precomputed: true, profileSamples: { desktop: [0, 2], mobile: [1] } })
+  await page.goto('./?v=4&page=catalog&dataset=mock-content-lite&catalogSample=mobile&catalogSampleCount=1&lang=en')
+
+  await expect(page.locator('.catalog-table')).toContainText('Beta')
+  await expect.poll(() => sampleRequests.length).toBe(2)
+  await expect(page.locator('.catalog-table')).not.toContainText('Alpha')
+  await expect(page.locator('.catalog-table')).not.toContainText('Gamma')
+  expect(sampleRequests.every((url) => url.includes('catalog-sample-mobile.'))).toBe(true)
+  await expect(page).toHaveURL(/[?&]catalogSample=mobile(?:&|$)/)
+  await expect(page).toHaveURL(/[?&]catalogSampleCount=1(?:&|$)/)
+})
+
+test('upgrades a legacy catalog URL to the viewport-selected pinned sample', async ({ page }, testInfo) => {
+  const sampleRequests: string[] = []
+  page.on('request', (request) => {
+    if (/catalog-sample-(desktop|mobile)\.(json|bin)$/.test(request.url())) sampleRequests.push(request.url())
+  })
+  await installMockCatalog(page, { precomputed: true, profileSamples: { desktop: [0, 2], mobile: [1] } })
+  await page.goto('./?v=3&page=catalog&dataset=mock-content-lite&lang=en')
+
+  const expectedProfile = testInfo.project.name.startsWith('mobile') ? 'mobile' : 'desktop'
+  const expectedCount = expectedProfile === 'mobile' ? 1 : 2
+  await expect.poll(() => sampleRequests.length).toBe(2)
+  expect(sampleRequests.every((url) => url.includes(`catalog-sample-${expectedProfile}.`))).toBe(true)
+  await expect(page).toHaveURL(/[?&]v=4(?:&|$)/)
+  await expect(page).toHaveURL(new RegExp(`[?&]catalogSample=${expectedProfile}(?:&|$)`))
+  await expect(page).toHaveURL(new RegExp(`[?&]catalogSampleCount=${expectedCount}(?:&|$)`))
+})
+
+test('keeps a malformed catalog tuple while navigation continues without a responsive fallback', async ({ page }) => {
+  const sampleRequests: string[] = []
+  page.on('request', (request) => {
+    if (/catalog-sample-(desktop|mobile)\.(json|bin)$/.test(request.url())) sampleRequests.push(request.url())
+  })
+  await installMockCatalog(page, { precomputed: true })
+  await page.goto('./?v=4&page=catalog&dataset=mock-content-lite&catalogSample=mobile&catalogSampleCount=oops&lang=en')
+
+  await expect(page.getByText('catalogSampleCount must be a positive integer: oops')).toBeVisible()
+  expect(sampleRequests).toEqual([])
+  await page.getByRole('button', { name: '切换为中文' }).click()
+  await expect(page.getByText('catalogSampleCount 必须是正整数: oops')).toBeVisible()
+  await openElements(page)
+  await expect(page).toHaveURL(/[?&]page=elements(?:&|$)/)
+  await expect(page).toHaveURL(/[?&]catalogSample=mobile(?:&|$)/)
+  await expect(page).toHaveURL(/[?&]catalogSampleCount=oops(?:&|$)/)
+  await expect(page.getByText('catalogSampleCount 必须是正整数: oops')).toBeVisible()
+  expect(sampleRequests).toEqual([])
 })
 
 test('loads the deployable catalog through gzip JSON delivery', async ({ page }) => {
