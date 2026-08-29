@@ -26,7 +26,7 @@ type UiState = {
 }
 
 const initialUiState: UiState = {
-  route: 'home',
+  route: 'explorer',
   language: typeof window === 'undefined' ? 'en' : initialLanguage(),
   sidebarOpen: true,
   toast: null,

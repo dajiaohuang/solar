@@ -5,7 +5,7 @@ import { simulationClock } from '../engine/clock/SimulationClock'
 import { I18nProvider } from '../i18n/provider'
 import { loadAsteroidBodiesByIds, loadAsteroidManifest, loadDatasetProvenance } from '../lib/catalogLoader'
 import { encodeCurrentScene } from '../lib/shareScene'
-import { decodeUrlState, LEGACY_SCENE_URL_VERSION, type AppUrlState } from '../lib/urlState'
+import { decodeUrlState, type AppUrlState } from '../lib/urlState'
 import { catalogActions, catalogStore, DEFAULT_CATALOG_FILTERS } from '../state/catalog-store'
 import { DEFAULT_FOCUSED_ID, DEFAULT_SELECTED_IDS, selectionActions, selectionStore } from '../state/selection-store'
 import { DEFAULT_SIMULATION_STATE, simulationActions, simulationStore } from '../state/simulation-store'
@@ -16,8 +16,9 @@ const DEFAULT_STORY = 'geocentric-model'
 const MISSION_BODY_IDS = new Set(majorBodiesWithPhysicalData.filter((body) => body.orbit && !body.parentId).map((body) => body.id))
 
 function routeForState(state: AppUrlState) {
+  if (state.route === 'home') return 'explorer'
   if (state.route) return state.route
-  return state.version === LEGACY_SCENE_URL_VERSION ? 'explorer' : 'home'
+  return 'explorer'
 }
 
 function discreteSceneKey() {

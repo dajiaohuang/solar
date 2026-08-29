@@ -76,7 +76,7 @@ function setRange(params: URLSearchParams, key: string, range?: [number, number]
 export function encodeUrlState(state: AppUrlState) {
   const params = new URLSearchParams()
   params.set('v', String(SCENE_URL_VERSION))
-  if (state.route && state.route !== 'home') params.set('page', state.route)
+  if (state.route && state.route !== 'home' && state.route !== 'explorer') params.set('page', state.route)
   if (state.dataset) params.set('dataset', state.dataset)
   if (state.mode) params.set('mode', state.mode)
   if (state.ref && state.ref !== 'sun') params.set('ref', state.ref)

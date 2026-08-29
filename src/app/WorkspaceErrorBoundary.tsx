@@ -11,6 +11,6 @@ export class WorkspaceErrorBoundary extends Component<Props, State> {
   componentDidUpdate(previous: Props) { if (previous.route !== this.props.route && this.state.error) this.setState({ error: null }) }
   render() {
     if (!this.state.error) return this.props.children
-    return <section className="workspace-error glass-panel" role="alert"><span aria-hidden="true">◌</span><h2>{this.props.title}</h2><p>{this.props.description}</p><pre>{this.state.error.message}</pre><div><button onClick={() => this.setState({ error: null })}>{this.props.retry}</button><button onClick={() => { this.setState({ error: null }); uiActions.navigate('home') }}>{this.props.home}</button></div></section>
+    return <section className="workspace-error glass-panel" role="alert"><span aria-hidden="true">◌</span><h2>{this.props.title}</h2><p>{this.props.description}</p><pre>{this.state.error.message}</pre><div><button onClick={() => this.setState({ error: null })}>{this.props.retry}</button><button onClick={() => { this.setState({ error: null }); uiActions.navigate('explorer') }}>{this.props.home}</button></div></section>
   }
 }

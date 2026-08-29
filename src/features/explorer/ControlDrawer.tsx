@@ -1,9 +1,11 @@
 import { useMemo, useRef, useState } from 'react'
 import { fetchSbdbBody } from '../../data/loaders/sbdb'
 import { SCENE_PRESETS } from '../../data/presets'
+import { useSimulationClock } from '../../engine/clock/useSimulationClock'
 import { useI18n } from '../../i18n/context'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { buildScenePresetApplication } from '../../lib/scenePreset'
+import { requestOnboarding } from '../../lib/onboarding'
 import { exportAnnotatedScenePng } from '../../lib/sceneExport'
 import { loadSavedScenes, localizeSavedSceneUrl, mergeSceneLibrary, parseSceneLibrary, removeSavedScene, saveCurrentScene, sceneLibraryDocument } from '../../lib/sceneLibrary'
 import { encodeCurrentScene } from '../../lib/shareScene'
@@ -18,9 +20,18 @@ type Props = {
 }
 
 const HISTORY_OPTIONS = [90, 365, 1825, 4383, 7300, 12053, 43830, 90580]
+const BODY_KIND_TRANSLATION = {
+  star: 'bodyKindStar',
+  planet: 'bodyKindPlanet',
+  moon: 'bodyKindMoon',
+  dwarfPlanet: 'bodyKindDwarfPlanet',
+  asteroid: 'bodyKindAsteroid',
+  spacecraft: 'bodyKindSpacecraft',
+} as const
 
 export function ControlDrawer({ bodies, referenceOptions }: Props) {
   const simulation = simulationStore.useStore()
+  const clock = useSimulationClock()
   const selection = selectionStore.useStore()
   const { t, language } = useI18n()
   const [collectionName, setCollectionName] = useState('')
@@ -28,11 +39,9 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
   const [sbdbState, setSbdbState] = useState<'idle' | 'loading' | 'error'>('idle')
   const [sceneTitle, setSceneTitle] = useState('')
   const [savedScenes, setSavedScenes] = useState(loadSavedScenes)
-  const [selectedPresetId, setSelectedPresetId] = useState(SCENE_PRESETS[0].id)
   const [bodyQuery, setBodyQuery] = useState('')
   const sceneImportRef = useRef<HTMLInputElement | null>(null)
   const sortedBodies = useMemo(() => [...bodies].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name)), [bodies])
-  const selectedPreset = SCENE_PRESETS.find((preset) => preset.id === selectedPresetId) ?? SCENE_PRESETS[0]
   const filteredBodies = useMemo(() => {
     const query = bodyQuery.trim().toLocaleLowerCase()
     if (!query) return sortedBodies
@@ -40,33 +49,62 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
       .filter(Boolean)
       .some((value) => String(value).toLocaleLowerCase().includes(query)))
   }, [bodyQuery, language, sortedBodies])
+  const selectedPresetId = useMemo(() => {
+    const selectedIds = new Set(selection.selectedIds)
+    return SCENE_PRESETS.find((preset) => (
+      Math.abs(preset.julianDay - clock.julianDay) < 0.00001
+      && preset.referenceId === simulation.referenceId
+      && preset.viewMode === simulation.viewMode
+      && preset.historyDays === simulation.historyDays
+      && preset.zoomLevel === simulation.zoom
+      && !simulation.comparisonEnabled
+      && simulation.viewOffset.x === 0
+      && simulation.viewOffset.y === 0
+      && selectedIds.size === preset.selectedMajorBodyIds.length
+      && preset.selectedMajorBodyIds.every((bodyId) => selectedIds.has(bodyId))
+    ))?.id ?? null
+  }, [clock.julianDay, selection.selectedIds, simulation.comparisonEnabled, simulation.historyDays, simulation.referenceId, simulation.viewMode, simulation.viewOffset.x, simulation.viewOffset.y, simulation.zoom])
 
-  function applySelectedPreset() {
-    const application = buildScenePresetApplication(selectedPreset)
+  function applySelectedPreset(preset: typeof SCENE_PRESETS[number]) {
+    const application = buildScenePresetApplication(preset)
     simulationActions.pause()
     simulationActions.seek(application.julianDay)
     simulationActions.patch(application.simulation)
     selectionActions.setSelectedIds(application.selectedIds)
     selectionActions.focus(application.focusedId)
-    uiActions.toast(`${t('presetApplied')}: ${selectedPreset.name[language]}`)
+    uiActions.toast(`${t('presetApplied')}: ${preset.name[language]}`)
   }
 
   return (
     <aside className="control-drawer glass-panel">
-      <section className="drawer-section preset-console" data-story-target="preset">
+      <section id="scene-presets" className="drawer-section preset-console" data-story-target="preset">
         <div className="preset-console-heading">
           <div className="section-kicker">{t('scenePresets').toUpperCase()}</div>
-          <span className="preset-index">{String(SCENE_PRESETS.indexOf(selectedPreset) + 1).padStart(2, '0')} / {String(SCENE_PRESETS.length).padStart(2, '0')}</span>
+          <span className="preset-index">{String(SCENE_PRESETS.length).padStart(2, '0')}</span>
         </div>
-        <label className="field">
-          <span>{t('scenePreset')}</span>
-          <select aria-label={t('scenePreset')} value={selectedPreset.id} onChange={(event) => setSelectedPresetId(event.target.value)}>
-            {SCENE_PRESETS.map((preset) => <option value={preset.id} key={preset.id}>{preset.name[language]}</option>)}
-          </select>
-        </label>
-        <p className="preset-description">{selectedPreset.description[language]}</p>
-        <button type="button" className="preset-apply" onClick={applySelectedPreset}>{t('applyPreset')} ↗</button>
+        <p className="preset-description">{t('presetListDescription')}</p>
+        <div className="preset-list" aria-label={t('scenePresets')}>
+          {SCENE_PRESETS.map((preset) => {
+            const reference = referenceOptions.find((body) => body.id === preset.referenceId)
+            return <button
+              type="button"
+              className={preset.id === selectedPresetId ? 'active' : ''}
+              aria-pressed={preset.id === selectedPresetId}
+              aria-label={`${t('applyPreset')}: ${preset.name[language]}`}
+              key={preset.id}
+              onClick={() => applySelectedPreset(preset)}
+            >
+              <span><strong>{preset.name[language]}</strong><small>{preset.description[language]}</small></span>
+              <em>{reference ? bodyDisplayName(reference, language) : preset.referenceId} · {preset.selectedMajorBodyIds.length}</em>
+            </button>
+          })}
+        </div>
+        <button type="button" className="preset-tutorial" onClick={requestOnboarding}>{t('startTutorial')} →</button>
       </section>
+
+      <details className="advanced-controls">
+        <summary><span>{t('advancedControls')}</span><small>{t('advancedControlsDescription')}</small></summary>
+        <div className="advanced-controls-body">
 
       <section className="drawer-section" data-story-target="frame">
         <div className="section-kicker">{t('referenceFrame').toUpperCase()}</div>
@@ -147,7 +185,7 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
               <input type="checkbox" checked={selection.selectedIds.includes(body.id)} onChange={() => selectionActions.toggle(body.id)} />
               <i style={{ backgroundColor: body.color }} />
               <span onClick={() => selectionActions.focus(body.id)}>{bodyDisplayName(body, language)}</span>
-              <small>{body.orbitClassCode ?? body.kind}</small>
+              <small>{body.orbitClassCode ?? t(BODY_KIND_TRANSLATION[body.kind])}</small>
             </label>
           ))}
         </div>
@@ -231,6 +269,8 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
         }}>↗ {t('share')}</button>
         <button className="share-button" onClick={() => void exportAnnotatedScenePng(language).catch((error: unknown) => uiActions.toast(error instanceof Error ? error.message : String(error)))}>▣ {t('exportPng')}</button>
       </div>
+        </div>
+      </details>
     </aside>
   )
 }

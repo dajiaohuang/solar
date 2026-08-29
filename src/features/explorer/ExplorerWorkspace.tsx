@@ -56,7 +56,7 @@ function FrameView({
   onHover,
 }: FrameViewProps) {
   const simulation = simulationStore.useStore()
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   const referenceBody = bodiesById.get(referenceId) ?? bodiesById.get('sun')!
   const { frame: baseFrame, progress, isComputing, error } = useTrajectoryWorker({
     bodies: selectedBodies,
@@ -123,7 +123,7 @@ function FrameView({
       const factor = event.deltaY < 0 ? 1.12 : 0.89
       simulationActions.patch({ zoom: Math.max(0.15, Math.min(12, simulation.zoom * factor)) })
     }}>
-      <div className="frame-label"><span>{bodyDisplayName(referenceBody, document.documentElement.lang === 'zh' ? 'zh' : 'en')}</span><small>{simulation.viewMode.toUpperCase()}</small></div>
+      <div className="frame-label"><span>{bodyDisplayName(referenceBody, language)}</span><small>{simulation.viewMode.toUpperCase()}</small></div>
       {isComputing && <div className="compute-progress"><i style={{ width: `${progress * 100}%` }} /></div>}
       {error && <div className="canvas-error">{error}</div>}
       {simulation.viewMode === '3d' ? (
@@ -178,6 +178,7 @@ export function ExplorerWorkspace() {
   const [primaryFrame, setPrimaryFrame] = useState<TrajectoryFrameData>({ currentPositions: [], trajectories: [], maxDistance: 0 })
   const [secondaryFrame, setSecondaryFrame] = useState<TrajectoryFrameData>({ currentPositions: [], trajectories: [], maxDistance: 0 })
   const [hovered, setHovered] = useState<{ body: CelestialBody; distance: number; x: number; y: number } | null>(null)
+  const [inspectorOpen, setInspectorOpen] = useState(false)
   const [measureA, setMeasureA] = useState('earth')
   const [measureB, setMeasureB] = useState('mars')
   const focusedBody = selection.focusedId
@@ -195,10 +196,14 @@ export function ExplorerWorkspace() {
   }, [bodiesById, clock.julianDay, measuredBodyA, measuredBodyB])
 
   return (
-    <div className="explorer-workspace">
+    <div className={`explorer-workspace ${inspectorOpen ? 'inspector-open' : ''}`}>
       <ControlDrawer bodies={allBodies} referenceOptions={allBodies.filter((body) => body.kind !== 'spacecraft')} />
       <main className="explorer-stage">
         <SimulationControls />
+        <button className="inspector-toggle glass-panel" aria-expanded={inspectorOpen} onClick={() => setInspectorOpen((value) => !value)}>
+          <span>{inspectorOpen ? t('hideBodyDetails') : t('showBodyDetails')}</span>
+          <strong>{focusedBody ? bodyDisplayName(focusedBody, language) : t('noBody')}</strong>
+        </button>
         <div className={`frames-grid ${simulation.comparisonEnabled ? 'split' : ''}`} data-story-target="scene">
           <FrameView
             referenceId={simulation.referenceId}
@@ -225,9 +230,9 @@ export function ExplorerWorkspace() {
         </div>
         <div className="measure-ribbon glass-panel">
           <span>{t('distance')}</span>
-          <select value={measuredBodyA} onChange={(event) => setMeasureA(event.target.value)}>{selectedBodies.map((body) => <option key={body.id} value={body.id}>{bodyDisplayName(body, language)}</option>)}</select>
+          <select aria-label={t('distanceFrom')} value={measuredBodyA} onChange={(event) => setMeasureA(event.target.value)}>{selectedBodies.map((body) => <option key={body.id} value={body.id}>{bodyDisplayName(body, language)}</option>)}</select>
           <span>↔</span>
-          <select value={measuredBodyB} onChange={(event) => setMeasureB(event.target.value)}>{selectedBodies.map((body) => <option key={body.id} value={body.id}>{bodyDisplayName(body, language)}</option>)}</select>
+          <select aria-label={t('distanceTo')} value={measuredBodyB} onChange={(event) => setMeasureB(event.target.value)}>{selectedBodies.map((body) => <option key={body.id} value={body.id}>{bodyDisplayName(body, language)}</option>)}</select>
           <strong>{measuredDistance === null ? '—' : `${measuredDistance.toFixed(5)} AU · ${(measuredDistance * 149_597_870.7).toLocaleString(undefined, { maximumFractionDigits: 0 })} km`}</strong>
         </div>
         <details className="accessible-scene-controls glass-panel">
@@ -247,7 +252,7 @@ export function ExplorerWorkspace() {
           <strong>{bodyDisplayName(hovered.body, language)}</strong><span>{hovered.distance.toFixed(4)} AU</span>
         </div>}
       </main>
-      <BodyInspector key={focusedBody?.id ?? 'none'} body={focusedBody} currentPositions={simulation.comparisonEnabled ? secondaryFrame.currentPositions : primaryFrame.currentPositions} bodiesById={bodiesById} />
+      {inspectorOpen && <BodyInspector key={focusedBody?.id ?? 'none'} body={focusedBody} currentPositions={simulation.comparisonEnabled ? secondaryFrame.currentPositions : primaryFrame.currentPositions} bodiesById={bodiesById} />}
     </div>
   )
 }
