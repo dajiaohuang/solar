@@ -69,13 +69,14 @@ if (scientificValidation.modelEvidence?.earthMoonMassPartition?.renderedEarthPoi
 if (scientificValidation.modelEvidence?.earthMoonMassPartition?.earthGm !== '3.9860043550702266E+05') throw new Error('Scientific validation report is missing the canonical DE440 Earth GM')
 if (scientificValidation.modelEvidence?.earthMoonMassPartition?.moonGm !== '4.9028001184575496E+03') throw new Error('Scientific validation report is missing the canonical DE440 Moon GM')
 if (scientificValidation.modelEvidence?.earthMoonMassPartition?.systemGm !== '4.0350323562548019E+05') throw new Error('Scientific validation report is missing the canonical DE440 Earth–Moon system GM')
-if (scientificValidation.modelEvidence?.satelliteOrbits?.id !== 'satellite-two-body-contract-v1') throw new Error('Scientific validation report is missing the satellite model identity')
-if (scientificValidation.modelEvidence?.satelliteOrbits?.sourceWarning !== 'mean-elements-not-intended-for-ephemeris-computation') throw new Error('Scientific validation report is missing the satellite mean-element precision boundary')
+if (scientificValidation.modelEvidence?.satelliteOrbits?.id !== 'satellite-two-body-contract-v2') throw new Error('Scientific validation report is missing the satellite model identity')
+if (scientificValidation.modelEvidence?.satelliteOrbits?.sourceWarning !== 'fixed-mean-and-epoch-osculating-ellipses-not-continuous-ephemerides') throw new Error('Scientific validation report is missing the satellite element precision boundary')
 if (scientificValidation.modelEvidence?.satelliteOrbits?.moonSourceCenter !== 'earth-geocenter') throw new Error('Scientific validation report is missing the Moon source center')
 if (scientificValidation.modelEvidence?.satelliteOrbits?.moonAppliedCenter !== 'earth-geocenter') throw new Error('Scientific validation report is missing the corrected Moon applied center')
 if (scientificValidation.modelEvidence?.satelliteOrbits?.moonCenterHandling !== 'de440-gm-barycentric-partition') throw new Error('Scientific validation report does not disclose the Earth–Moon center partition')
-if (scientificValidation.modelEvidence?.satelliteOrbits?.sourcedBodies?.join(',') !== 'moon') throw new Error('Scientific validation report does not identify the sourced Moon model')
-if (scientificValidation.modelEvidence?.satelliteOrbits?.illustrativeBodies?.length !== 5) throw new Error('Scientific validation report does not identify every illustrative satellite model')
+if (scientificValidation.modelEvidence?.satelliteOrbits?.sourcedBodies?.join(',') !== 'moon,io,europa,ganymede,callisto,titan') throw new Error('Scientific validation report does not identify every sourced satellite model')
+if (scientificValidation.modelEvidence?.satelliteOrbits?.illustrativeBodies?.length !== 0) throw new Error('Scientific validation report still identifies illustrative satellite elements')
+if (scientificValidation.modelEvidence?.satelliteOrbits?.giantSatelliteFrameTransform !== 'identity-eclipj2000') throw new Error('Scientific validation report is missing the giant-satellite frame contract')
 const planetaryModelEvidence = scientificValidation.modelEvidence.planetaryApproximation
 const expectedPlanetaryModelWindow = `${planetaryModelEvidence.validFrom}/${planetaryModelEvidence.validTo}`
 if (scientificValidation.modelWindow?.planetaryApproximation !== expectedPlanetaryModelWindow) throw new Error('Scientific validation model window is inconsistent with the canonical model evidence')

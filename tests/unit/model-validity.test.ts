@@ -64,23 +64,28 @@ describe('JPL approximate element validity', () => {
 
   it('publishes the fixed-ellipse satellite propagation and precision boundary', () => {
     expect(SATELLITE_ORBIT_MODEL_EVIDENCE).toMatchObject({
-      id: 'satellite-two-body-contract-v1',
-      sourceUrl: 'https://ssd.jpl.nasa.gov/sats/elem/',
-      sourceWarning: 'mean-elements-not-intended-for-ephemeris-computation',
+      id: 'satellite-two-body-contract-v2',
+      sourceUrl: 'https://ssd-api.jpl.nasa.gov/doc/horizons.html',
+      sourceWarning: 'fixed-mean-and-epoch-osculating-ellipses-not-continuous-ephemerides',
       propagation: 'fixed-ellipse-mean-anomaly-only',
+      moonElementType: 'mean-elements',
+      giantSatelliteElementType: 'geometric-osculating-elements',
+      giantSatelliteSourceFrame: 'ecliptic-of-j2000',
+      giantSatelliteFrameTransform: 'identity-eclipj2000',
+      sourceEpoch: 'JD 2451545.0 TDB',
       moonSourceCenter: 'earth-geocenter',
       moonAppliedCenter: 'earth-geocenter',
       moonCenterHandling: 'de440-gm-barycentric-partition',
-      sourcedBodies: ['moon'],
-      illustrativeBodies: ['io', 'europa', 'ganymede', 'callisto', 'titan'],
+      sourcedBodies: ['moon', 'io', 'europa', 'ganymede', 'callisto', 'titan'],
+      illustrativeBodies: [],
     })
-    expect(en.satelliteMeanElementsWarning).toContain('not intended for ephemeris')
-    expect(en.satelliteMeanElementsWarning).toContain('illustrative')
-    expect(en.satelliteMeanElementsWarning).toContain('Earth-geocentric')
+    expect(en.satelliteMeanElementsWarning).toContain('not a continuous ephemeris')
+    expect(en.satelliteMeanElementsWarning).toContain('ECLIPJ2000')
+    expect(en.satelliteMeanElementsWarning).toContain('time-scale conversion')
     expect(en.satelliteMeanElementsWarning).toContain('DE440')
-    expect(zh.satelliteMeanElementsWarning).toContain('不用于星历')
-    expect(zh.satelliteMeanElementsWarning).toContain('示意')
-    expect(zh.satelliteMeanElementsWarning).toContain('地心')
+    expect(zh.satelliteMeanElementsWarning).toContain('不是连续星历')
+    expect(zh.satelliteMeanElementsWarning).toContain('ECLIPJ2000')
+    expect(zh.satelliteMeanElementsWarning).toContain('时标转换')
     expect(zh.satelliteMeanElementsWarning).toContain('DE440')
   })
 })

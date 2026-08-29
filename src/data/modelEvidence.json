@@ -29,11 +29,20 @@
     "precisionBoundary": "algebraically-conserved-within-the-approximate-input-model"
   },
   "satelliteOrbits": {
-    "id": "satellite-two-body-contract-v1",
-    "source": "JPL Solar System Dynamics — Planetary Satellite Mean Elements",
-    "sourceUrl": "https://ssd.jpl.nasa.gov/sats/elem/",
-    "sourceWarning": "mean-elements-not-intended-for-ephemeris-computation",
+    "id": "satellite-two-body-contract-v2",
+    "source": "JPL satellite mean elements and NASA/JPL Horizons geometric osculating elements",
+    "sourceUrl": "https://ssd-api.jpl.nasa.gov/doc/horizons.html",
+    "moonSourceUrl": "https://ssd.jpl.nasa.gov/sats/elem/",
+    "giantSatelliteSourceUrl": "https://ssd-api.jpl.nasa.gov/doc/horizons.html",
+    "sourceWarning": "fixed-mean-and-epoch-osculating-ellipses-not-continuous-ephemerides",
     "propagation": "fixed-ellipse-mean-anomaly-only",
+    "moonElementType": "mean-elements",
+    "giantSatelliteElementType": "geometric-osculating-elements",
+    "giantSatelliteSourceFrame": "ecliptic-of-j2000",
+    "giantSatelliteAppliedFrame": "mean-ecliptic-and-equinox-of-j2000",
+    "giantSatelliteFrameTransform": "identity-eclipj2000",
+    "sourceEpoch": "JD 2451545.0 TDB",
+    "applicationTimeHandling": "utc-derived-numeric-jd-without-tdb-conversion",
     "moonSourceCenter": "earth-geocenter",
     "moonAppliedCenter": "earth-geocenter",
     "moonCenterHandling": "de440-gm-barycentric-partition",
@@ -42,7 +51,7 @@
       "apsidal-precession",
       "n-body-perturbations"
     ],
-    "sourcedBodies": ["moon"],
-    "illustrativeBodies": ["io", "europa", "ganymede", "callisto", "titan"]
+    "sourcedBodies": ["moon", "io", "europa", "ganymede", "callisto", "titan"],
+    "illustrativeBodies": []
   }
 }

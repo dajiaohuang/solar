@@ -151,7 +151,7 @@ The simulation clock is not React state updated every animation frame. React rec
 | Capability | Model and scope |
 | --- | --- |
 | Major planets | JPL Table 1 fitted Keplerian elements and secular rates in the mean ecliptic/equinox of J2000, valid for 1800–2050; the Earth entry remains the internal Earth–Moon barycenter seed, while the rendered Earth point is a derived geocenter. Out-of-range dates show an extrapolation warning. The source uses JDTDB; browser UTC dates currently become numeric JD without a UTC→TDB conversion |
-| Moons/dwarfs | The Moon uses the JPL Earth-geocentric ecliptic mean elements for 2000-01-01.5 TDB and a fixed ellipse that advances mean anomaly only. Earth and Moon centers are partitioned around the EMB seed using the Earth and Moon GM values from the checksum-pinned [NAIF/JPL DE440 gravitational-parameter kernel](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc), so their mass-weighted center reproduces the seed and their separation reproduces the source vector. This algebraic correction does not turn either approximation into a DE440 position ephemeris. Io, Europa, Ganymede, Callisto, and Titan remain explicitly illustrative scene-ecliptic ellipses with shared zero phases; dwarf planets use rounded `curated-approx` elements |
+| Moons/dwarfs | The Moon uses JPL Earth-geocentric ecliptic mean elements for 2000-01-01.5 TDB. Io, Europa, Ganymede, Callisto, and Titan use [NASA/JPL Horizons](https://ssd-api.jpl.nasa.gov/doc/horizons.html) geometric osculating elements and phases at JD 2451545.0 TDB, queried from each parent planet's body center in the J2000 ecliptic plane with the x-axis aligned to the ICRF reference direction. All six moons advance mean anomaly on a fixed ellipse: this is an auditable epoch approximation, not a continuous ephemeris, and it omits UTC→TDB conversion, precession, and N-body perturbations. Earth and Moon centers are partitioned around the EMB seed using checksum-pinned [NAIF/JPL DE440 gravitational parameters](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc). Dwarf planets use rounded `curated-approx` elements |
 | MPCORB/SBDB bodies | Elliptic (`0 ≤ e < 1`) osculating elements only; parabolic/hyperbolic records are rejected explicitly |
 | Moon phase | Sun–Earth–Moon phase angle plus signed geocentric elongation |
 | Hill sphere | `a(1-e)(m/3M)^(1/3)` |
@@ -169,6 +169,7 @@ Primary sources:
 - [JPL SBDB API](https://ssd-api.jpl.nasa.gov/doc/sbdb.html)
 - [JPL approximate planetary positions](https://ssd.jpl.nasa.gov/planets/approx_pos.html)
 - [JPL planetary satellite mean elements](https://ssd.jpl.nasa.gov/sats/elem/)
+- [NASA/JPL Horizons API](https://ssd-api.jpl.nasa.gov/doc/horizons.html)
 
 ## Quality gates
 

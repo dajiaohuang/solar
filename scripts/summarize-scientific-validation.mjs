@@ -41,6 +41,12 @@ const report = {
       passed: suites.find((suite) => suite.file.endsWith('ephemeris.test.ts'))?.passed ?? false,
       contract: 'elliptic propagation, explicit non-elliptic rejection, parent resolution, and reference-frame translation',
     },
+    satelliteEpochElements: {
+      passed: suites.find((suite) => suite.file.endsWith('satellite-orbit-evidence.test.ts'))?.passed ?? false,
+      count: modelEvidence.satelliteOrbits.sourcedBodies.length,
+      source: modelEvidence.satelliteOrbits.source,
+      contract: 'source elements, epoch phases, parent-centered vectors, orbital planes, distances, and periods',
+    },
   },
   suites,
 }
