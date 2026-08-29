@@ -242,6 +242,39 @@ test('falls back safely when a shared mission URL has invalid parameters', async
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
 
+test('discloses the Earth–Moon barycenter and out-of-range mission extrapolation bilingually', async ({ page }) => {
+  await page.goto('./?v=3&page=mission&from=earth&to=mars&depart=2050-06-01&arrive=2050-12-01&lang=en')
+  await expect(page.getByText(/year 2051 is outside the 1800–2050 validity interval/)).toBeVisible()
+
+  await page.goto('./?v=3&page=mission&from=earth&to=mars&depart=2051-01-01&arrive=2051-09-01&lang=en')
+  await expect(page.getByText('Mission endpoint model boundary')).toBeVisible()
+  await expect(page.getByText(/Earth–Moon barycenter approximation/)).toBeVisible()
+  await expect(page.getByText(/year 2052 is outside the 1800–2050 validity interval/)).toBeVisible()
+
+  await page.goto('./?v=3&page=mission&from=ceres&to=pluto&depart=2051-01-01&arrive=2051-09-01&lang=en')
+  await expect(page.locator('.mission-model-boundary')).toHaveCount(0)
+
+  await page.goto('./?v=3&page=mission&from=earth&to=mars&depart=2051-01-01&arrive=2051-09-01&lang=zh')
+  await expect(page.getByText('任务端点模型边界')).toBeVisible()
+  await expect(page.getByText(/JPL 地月质心近似/)).toBeVisible()
+  await expect(page.getByText(/2052 超出 JPL 行星近似根数的 1800–2050 有效区间/)).toBeVisible()
+})
+
+test('publishes the exact planetary model provenance in Evidence and the Earth profile', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=3&page=about&lang=en')
+  await expect(page.getByText('jpl-approx-table-1')).toBeVisible()
+  await expect(page.getByText('Fitted Keplerian elements with secular rates', { exact: true })).toBeVisible()
+  await expect(page.getByText('Mean ecliptic and equinox of J2000', { exact: true })).toBeVisible()
+  await expect(page.getByText('Earth–Moon barycenter (not geocenter)', { exact: true })).toBeVisible()
+
+  await page.goto('./?v=3&page=explorer&focused=earth&lang=en')
+  await page.getByRole('button', { name: 'Show body details' }).click()
+  await page.getByRole('tab', { name: 'Context' }).click()
+  await expect(page.getByText('Rendered point')).toBeVisible()
+  await expect(page.getByText('Earth–Moon barycenter (not geocenter)')).toBeVisible()
+})
+
 test('shows Hill and Laplace influence definitions independently', async ({ page }) => {
   await page.goto('./?v=2&view=2d')
   await page.locator('.advanced-controls > summary').click()

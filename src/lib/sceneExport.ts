@@ -1,8 +1,10 @@
 import { simulationClock } from '../engine/clock/SimulationClock'
 import { catalogStore } from '../state/catalog-store'
+import { selectionStore } from '../state/selection-store'
 import { simulationStore } from '../state/simulation-store'
 import { BUILD_INFO } from './buildInfo'
 import { encodeCurrentScene } from './shareScene'
+import { createSceneExportModelEvidenceLines } from './sceneExportEvidence'
 
 function canvasBlob(canvas: HTMLCanvasElement) {
   return new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('PNG encoding failed')), 'image/png'))
@@ -13,7 +15,7 @@ export async function exportAnnotatedScenePng(language: 'en' | 'zh') {
   if (!source) throw new Error(language === 'zh' ? '当前工作区没有可导出的场景画布。' : 'The current workspace has no scene canvas to export.')
   const width = 1600
   const headerHeight = 112
-  const footerHeight = 122
+  const footerHeight = 168
   const contentHeight = 900
   const output = document.createElement('canvas')
   output.width = width
@@ -38,16 +40,27 @@ export async function exportAnnotatedScenePng(language: 'en' | 'zh') {
 
   const simulation = simulationStore.getState()
   const catalog = catalogStore.getState()
+  const selection = selectionStore.getState()
   const url = encodeCurrentScene()
+  const julianDay = simulationClock.getJulianDay()
+  const modelEvidenceLines = createSceneExportModelEvidenceLines(
+    language,
+    selection.selectedIds,
+    simulation.referenceId,
+    julianDay - simulation.historyDays,
+    julianDay,
+  )
   context.fillStyle = '#0c1218'
   context.fillRect(0, headerHeight + contentHeight, width, footerHeight)
   context.fillStyle = '#dbe5e8'
   context.font = '17px ui-monospace, monospace'
-  context.fillText(`JD ${simulationClock.getJulianDay().toFixed(5)} · ${simulation.referenceId} · ${simulation.viewMode.toUpperCase()} · ${catalog.datasetVersion}`, 54, headerHeight + contentHeight + 38)
+  context.fillText(`JD ${julianDay.toFixed(5)} · ${simulation.referenceId} · ${simulation.viewMode.toUpperCase()} · ${catalog.datasetVersion}`, 54, headerHeight + contentHeight + 32)
   context.fillStyle = '#7f929d'
-  context.font = '14px ui-monospace, monospace'
-  context.fillText(`Solar Atlas v${BUILD_INFO.version} · ${BUILD_INFO.commitSha.slice(0, 12)} · ${BUILD_INFO.buildTime}`, 54, headerHeight + contentHeight + 69)
-  context.fillText(url.length > 180 ? `${url.slice(0, 177)}…` : url, 54, headerHeight + contentHeight + 96)
+  context.font = '13px ui-monospace, monospace'
+  context.fillText(`Solar Atlas v${BUILD_INFO.version} · ${BUILD_INFO.commitSha.slice(0, 12)} · ${BUILD_INFO.buildTime}`, 54, headerHeight + contentHeight + 60)
+  modelEvidenceLines.forEach((line, index) => context.fillText(line, 54, headerHeight + contentHeight + 88 + index * 28))
+  const urlY = headerHeight + contentHeight + 88 + modelEvidenceLines.length * 28
+  context.fillText(url.length > 180 ? `${url.slice(0, 177)}…` : url, 54, urlY)
 
   const blob = await canvasBlob(output)
   const objectUrl = URL.createObjectURL(blob)

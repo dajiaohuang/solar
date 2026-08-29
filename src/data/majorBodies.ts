@@ -63,6 +63,7 @@ export const majorBodies: CelestialBody[] = [
     color: '#6db4ff',
     size: 4.8,
     source: 'jpl-approx',
+    positionRepresents: 'earth-moon-barycenter',
     orbit: {
       model: 'planetaryApprox',
       base: elements(1.00000261, 0.01671123, -0.00001531, 100.46457166, 102.93768193, 0),

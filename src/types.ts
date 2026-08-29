@@ -89,6 +89,7 @@ export type CelestialBody = {
   color: string
   size: number
   source: OrbitSource
+  positionRepresents?: 'earth-moon-barycenter'
   parentId?: BodyId
   orbit?: OrbitDefinition
   orbitClassCode?: OrbitClassCode

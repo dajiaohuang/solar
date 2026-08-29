@@ -150,7 +150,7 @@ The simulation clock is not React state updated every animation frame. React rec
 
 | Capability | Model and scope |
 | --- | --- |
-| Major planets | JPL approximate mean elements and secular rates for 1800–2050; out-of-range dates show an extrapolation warning |
+| Major planets | JPL Table 1 fitted Keplerian elements and secular rates in the mean ecliptic/equinox of J2000, valid for 1800–2050; the Earth entry propagates the Earth–Moon barycenter, and out-of-range dates show an extrapolation warning. The source uses JDTDB; browser UTC dates currently become numeric JD without a UTC→TDB conversion |
 | Moons/dwarfs | Rounded curated educational elements, explicitly labeled `curated-approx`, with parent-body recursion |
 | MPCORB/SBDB bodies | Elliptic (`0 ≤ e < 1`) osculating elements only; parabolic/hyperbolic records are rejected explicitly |
 | Moon phase | Sun–Earth–Moon phase angle plus signed geocentric elongation |

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { majorBodiesWithPhysicalData } from '../../app/bodyRegistry'
 import { computeHohmann, type HohmannResult } from '../../engine/mission/hohmann'
 import { solveBodyToBodyLambert, type LambertSolution, type PorkchopPoint } from '../../engine/mission/lambert'
+import { createPorkchopWindow } from '../../engine/mission/porkchopWindow'
 import { useI18n } from '../../i18n/context'
 import { createBodyPositionResolver, crossVector3, dotVector3 } from '../../lib/ephemeris'
 import { dateToJulianDay, julianDayToDate } from '../../lib/julianDate'
@@ -9,6 +10,7 @@ import type { BodyId, CelestialBody } from '../../types'
 import type { PorkchopWorkerRequest, PorkchopWorkerResponse } from '../../workers/porkchop.worker'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { missionActions, missionStore } from '../../state/mission-store'
+import { jplApproxWindowWarning } from '../../engine/ephemeris/modelValidity'
 
 function orbitRadius(body: CelestialBody) {
   if (!body.orbit) return null
@@ -82,6 +84,16 @@ export function MissionWorkspace() {
   const arrivalBody = bodiesById.get(arrivalId)!
   const departureJd = dateToJulianDay(new Date(`${departureDate}T12:00:00Z`))
   const arrivalJd = dateToJulianDay(new Date(`${arrivalDate}T12:00:00Z`))
+  const usesJplApproximation = departureBody.orbit?.model === 'planetaryApprox' || arrivalBody.orbit?.model === 'planetaryApprox'
+  const usesEarthMoonBarycenter = departureBody.positionRepresents === 'earth-moon-barycenter' || arrivalBody.positionRepresents === 'earth-moon-barycenter'
+  const porkchopWindow = createPorkchopWindow(departureJd, arrivalJd, hohmann?.transferTimeDays)
+  const modelValidityWarning = usesJplApproximation
+    ? jplApproxWindowWarning(
+        Math.min(departureJd, porkchopWindow.propagationStartJd),
+        Math.max(arrivalJd, porkchopWindow.propagationEndJd),
+        language,
+      )
+    : null
   const phase = useMemo(() => {
     const resolver = createBodyPositionResolver(bodiesById, departureJd)
     const depart = resolver(departureId), arrive = resolver(arrivalId)
@@ -134,16 +146,15 @@ export function MissionWorkspace() {
       if (workerRef.current === worker) workerRef.current = null
     }
     worker.onerror = (event) => { setTransferError(event.message || t('porkchopFailed')); setPorkchopStatus('error'); worker.terminate(); if (workerRef.current === worker) workerRef.current = null }
-    const hohmannTime = hohmann?.transferTimeDays ?? Math.max(60, arrivalJd - departureJd)
     const request: PorkchopWorkerRequest = {
       requestId,
       departureBodyId: departureId,
       arrivalBodyId: arrivalId,
       bodies: majorBodiesWithPhysicalData,
-      departureStartJd: departureJd - 180,
-      departureSpanDays: 365,
-      minFlightDays: Math.max(30, hohmannTime * 0.55),
-      maxFlightDays: hohmannTime * 1.65,
+      departureStartJd: porkchopWindow.departureStartJd,
+      departureSpanDays: porkchopWindow.departureSpanDays,
+      minFlightDays: porkchopWindow.minFlightDays,
+      maxFlightDays: porkchopWindow.maxFlightDays,
     }
     worker.postMessage(request)
   }
@@ -159,6 +170,11 @@ export function MissionWorkspace() {
         <label className="field"><span>{t('arrivalDate')}</span><input type="date" value={arrivalDate} onChange={(event) => missionActions.patch({ arrivalDate: event.target.value })} /></label>
         <button className="primary-button full-width" disabled={departureId === arrivalId || arrivalJd <= departureJd} onClick={computeTransfer}>{t('computeTransfer')}</button>
         {transferError && <div className="error-banner">{transferError}</div>}
+        {(usesEarthMoonBarycenter || modelValidityWarning) && <div className="mission-model-boundary" aria-label={t('missionModelBoundary')}>
+          <strong>{t('missionModelBoundary')}</strong>
+          {usesEarthMoonBarycenter && <p>{t('earthMoonBarycenterDisclosure')}</p>}
+          {modelValidityWarning && <p className="model-validity-warning" role="status">⚠ {modelValidityWarning}</p>}
+        </div>}
         <div className="phase-gauge"><span>{t('actualPhase').toUpperCase()}</span><strong>{phase.actual.toFixed(1)}°</strong>{phase.required !== null && <small>{t('hohmannTarget')} {phase.required.toFixed(1)}°</small>}<div><i style={{ transform: `rotate(${phase.actual}deg)` }} /></div></div>
       </aside>
 

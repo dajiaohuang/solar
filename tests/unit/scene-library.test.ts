@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { localizeSavedSceneUrl, mergeSceneLibrary, parseSceneLibrary, persistSavedScenes, type SavedScene } from '../../src/lib/sceneLibrary'
+import { localizeSavedSceneUrl, mergeSceneLibrary, parseSceneLibrary, persistSavedScenes, sceneLibraryDocument, type SavedScene } from '../../src/lib/sceneLibrary'
 
 function memoryStorage() {
   let value: string | null = null
@@ -32,5 +32,16 @@ describe('local scene library', () => {
       'https://dajiaohuang.github.io/solar/?v=3&page=events#result',
       'http://127.0.0.1:4173/solar/?v=3&page=home',
     )).toBe('http://127.0.0.1:4173/solar/?v=3&page=events#result')
+  })
+
+  it('exports the planetary model identity and Earth point representation with the scene URLs', () => {
+    const document = JSON.parse(sceneLibraryDocument([scene]))
+    expect(document.evidence.planetaryApproximation).toMatchObject({
+      id: 'jpl-approx-table-1',
+      validFrom: '1800-01-01',
+      validTo: '2050-12-31',
+      earthPoint: 'earth-moon-barycenter',
+    })
+    expect(parseSceneLibrary(JSON.stringify(document))).toEqual([scene])
   })
 })
