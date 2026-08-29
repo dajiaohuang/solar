@@ -28,6 +28,8 @@ Install Node.js 22+, npm 10+, and the platform toolchain:
 
 No signing key, certificate, provisioning profile, store credential, or release account belongs in the repository.
 
+The generated iOS package graph pins Capacitor to 8.5.0 and `ion-ios-filesystem` to the Xcode-verified 1.1.2 release. The post-sync normalizer reapplies those paths and pins after every Capacitor sync so a fresh checkout resolves the same native dependency versions.
+
 ## Build and sync
 
 Build the local native shell first:
