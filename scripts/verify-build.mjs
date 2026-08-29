@@ -27,6 +27,7 @@ for (const path of [
   'index.html', 'manifest.webmanifest', 'sw.js', 'build-info.json', 'health.json',
   'capacity-report.json', 'asset-manifest.json', 'sitemap.xml', 'robots.txt',
   'scientific-validation.json', 'validation/index.html', 'zh/validation/index.html',
+  'privacy/index.html', 'zh/privacy/index.html',
   'stories/geocentric-model/index.html', 'zh/stories/geocentric-model/index.html',
   'stories/retrograde-mars/index.html', 'zh/stories/retrograde-mars/index.html',
   'objects/ceres/index.html', 'zh/objects/ceres/index.html', 'og-image.png',
@@ -35,6 +36,23 @@ for (const path of [
   'og/objects/ceres-en.png', 'og/objects/ceres-zh.png',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'readme-screenshot.png',
 ]) await requireFile(path)
+
+const urlStateSource = await readFile(resolve('src/lib/urlState.ts'), 'utf8')
+const sceneVersionMatch = urlStateSource.match(/export const SCENE_URL_VERSION = (\d+)/)
+if (!sceneVersionMatch) throw new Error('Unable to read the canonical scene URL version')
+const currentSceneVersion = sceneVersionMatch[1]
+for (const path of [
+  'manifest.webmanifest',
+  'stories/geocentric-model/index.html',
+  'objects/ceres/index.html',
+  'about/index.html',
+  'privacy/index.html',
+  'zh/privacy/index.html',
+]) {
+  const content = await readFile(join(dist, ...path.split('/')), 'utf8')
+  if (!content.includes(`?v=${currentSceneVersion}`)) throw new Error(`${path} does not publish the current v${currentSceneVersion} scene URL`)
+  if (/\?v=(?:2|3)(?:&|&amp;)/.test(content)) throw new Error(`${path} still publishes a legacy scene URL`)
+}
 
 await Promise.all([
   requirePngDimensions('og-image.png', 1200, 630),
