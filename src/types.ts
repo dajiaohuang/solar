@@ -19,6 +19,8 @@ export type SatelliteOrbitEvidence = {
 
 export type DatasetMode = 'lite' | 'full'
 
+export type CatalogSampleProfile = 'desktop' | 'mobile'
+
 export type MagnitudeStatus = 'all' | 'known' | 'unknown'
 
 export type CatalogFilters = {

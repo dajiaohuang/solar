@@ -111,9 +111,14 @@ export function AppProviders({ children }: { children: ReactNode }) {
       summary: null,
       datasetVersion: 'unavailable',
       requestedDatasetVersion: initial.dataset ?? null,
+      requestedSampleProfile: initial.catalogSample ?? null,
+      requestedSampleCount: initial.catalogSampleCount ?? null,
+      requestedSampleCountRaw: initial.catalogSampleCountRaw ?? null,
+      requestedSampleInvalid: initial.catalogSampleInvalid ?? false,
       selectionScope: null,
       baseSampleRecords: [],
       baseSampleKey: null,
+      baseSampleProfile: null,
       browseRecords: [],
       activeResultRecords: [],
       activeResultScanKey: null,
@@ -123,6 +128,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
       loadProgress: 0,
       isLoading: true,
       error: null,
+      sampleError: null,
     })
 
     const loadGeneration = datasetLoadGeneration.current + 1

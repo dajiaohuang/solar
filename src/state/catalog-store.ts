@@ -1,5 +1,6 @@
 import { filterCatalogRecords } from '../lib/catalogFilters'
-import type { AsteroidManifest, AsteroidRecord, CatalogFilters, CatalogSummary, DatasetMode, DatasetProvenance } from '../types'
+import type { CatalogSampleError } from '../lib/catalogSampleProfile'
+import type { AsteroidManifest, AsteroidRecord, CatalogFilters, CatalogSampleProfile, CatalogSummary, DatasetMode, DatasetProvenance } from '../types'
 import { createStore } from './createStore'
 
 export type { CatalogFilters } from '../types'
@@ -7,11 +8,16 @@ type CatalogState = {
   mode: DatasetMode
   datasetVersion: string
   requestedDatasetVersion: string | null
+  requestedSampleProfile: string | null
+  requestedSampleCount: number | null
+  requestedSampleCountRaw: string | null
+  requestedSampleInvalid: boolean
   manifest: AsteroidManifest | null
   provenance: DatasetProvenance | null
   summary: CatalogSummary | null
   baseSampleRecords: AsteroidRecord[]
   baseSampleKey: string | null
+  baseSampleProfile: CatalogSampleProfile | null
   browseRecords: AsteroidRecord[]
   activeResultRecords: AsteroidRecord[]
   activeResultScanKey: string | null
@@ -27,6 +33,7 @@ type CatalogState = {
   filters: CatalogFilters
   isLoading: boolean
   error: string | null
+  sampleError: CatalogSampleError | null
 }
 
 export const DEFAULT_CATALOG_FILTERS: CatalogFilters = {
@@ -44,11 +51,16 @@ const initialCatalogState: CatalogState = {
   mode: 'lite',
   datasetVersion: 'unavailable',
   requestedDatasetVersion: null,
+  requestedSampleProfile: null,
+  requestedSampleCount: null,
+  requestedSampleCountRaw: null,
+  requestedSampleInvalid: false,
   manifest: null,
   provenance: null,
   summary: null,
   baseSampleRecords: [],
   baseSampleKey: null,
+  baseSampleProfile: null,
   browseRecords: [],
   activeResultRecords: [],
   activeResultScanKey: null,
@@ -60,6 +72,7 @@ const initialCatalogState: CatalogState = {
   filters: DEFAULT_CATALOG_FILTERS,
   isLoading: false,
   error: null,
+  sampleError: null,
 }
 
 export const catalogStore = createStore(initialCatalogState)
@@ -79,9 +92,10 @@ export const catalogActions = {
       loadProgress: 0,
     }))
   },
-  setBaseSample(key: string, records: AsteroidRecord[], summary: CatalogSummary | null) {
+  setBaseSample(profile: CatalogSampleProfile, key: string, records: AsteroidRecord[], summary: CatalogSummary | null) {
     catalogStore.setState({
       baseSampleKey: key,
+      baseSampleProfile: profile,
       baseSampleRecords: records,
       summary,
       recordsSampled: true,

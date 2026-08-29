@@ -1,15 +1,20 @@
 import type { AppRoute, ElementPlotMode } from '../state/ui-store'
 import type { BodyId, DatasetMode, MagnitudeStatus } from '../types'
 
-export const SCENE_URL_VERSION = 3 as const
-export const LEGACY_SCENE_URL_VERSION = 2 as const
+export const SCENE_URL_VERSION = 4 as const
+export const LEGACY_SCENE_URL_VERSIONS = [2, 3] as const
+type SceneUrlVersion = typeof SCENE_URL_VERSION | typeof LEGACY_SCENE_URL_VERSIONS[number]
 export type ScientificLayer = 'ecliptic' | 'orbits' | 'lagrange' | 'hill' | 'soi' | 'spacecraft'
 
 export type AppUrlState = {
-  version?: typeof SCENE_URL_VERSION | typeof LEGACY_SCENE_URL_VERSION
+  version?: SceneUrlVersion
   route?: AppRoute
   dataset?: string
   mode?: DatasetMode
+  catalogSample?: string
+  catalogSampleCount?: number
+  catalogSampleCountRaw?: string
+  catalogSampleInvalid?: boolean
   ref?: BodyId
   compareRef?: BodyId
   compare?: boolean
@@ -79,6 +84,12 @@ export function encodeUrlState(state: AppUrlState) {
   if (state.route && state.route !== 'home' && state.route !== 'explorer') params.set('page', state.route)
   if (state.dataset) params.set('dataset', state.dataset)
   if (state.mode) params.set('mode', state.mode)
+  if (state.catalogSample !== undefined) params.set('catalogSample', state.catalogSample)
+  if (state.catalogSampleCountRaw !== undefined) {
+    params.set('catalogSampleCount', state.catalogSampleCountRaw)
+  } else if (state.catalogSampleCount !== undefined && Number.isSafeInteger(state.catalogSampleCount) && state.catalogSampleCount > 0) {
+    params.set('catalogSampleCount', String(state.catalogSampleCount))
+  }
   if (state.ref && state.ref !== 'sun') params.set('ref', state.ref)
   if (state.compareRef) params.set('compareRef', state.compareRef)
   if (state.compare) params.set('compare', '1')
@@ -116,8 +127,10 @@ export function encodeUrlState(state: AppUrlState) {
 export function decodeUrlState(search = typeof window === 'undefined' ? '' : window.location.search): AppUrlState {
   const params = new URLSearchParams(search)
   const encodedVersion = params.get('v')
-  if (encodedVersion && encodedVersion !== String(SCENE_URL_VERSION) && encodedVersion !== String(LEGACY_SCENE_URL_VERSION)) return {}
-  const version = encodedVersion === String(LEGACY_SCENE_URL_VERSION) ? LEGACY_SCENE_URL_VERSION : SCENE_URL_VERSION
+  const supportedVersionStrings = [...LEGACY_SCENE_URL_VERSIONS, SCENE_URL_VERSION].map(String)
+  const versionPresent = params.has('v')
+  if (versionPresent && !supportedVersionStrings.includes(encodedVersion ?? '')) return {}
+  const version = versionPresent ? Number(encodedVersion) as SceneUrlVersion : SCENE_URL_VERSION
   const state: AppUrlState = { version }
   const routes: AppRoute[] = ['home', 'explorer', 'catalog', 'elements', 'events', 'mission', 'stories', 'about']
   const route = params.get('page') as AppRoute | null
@@ -126,6 +139,20 @@ export function decodeUrlState(search = typeof window === 'undefined' ? '' : win
   if (dataset) state.dataset = dataset
   const mode = params.get('mode')
   if (mode === 'lite' || mode === 'full') state.mode = mode
+  const catalogSamplePresent = params.has('catalogSample')
+  const catalogSampleCountPresent = params.has('catalogSampleCount')
+  if (version === SCENE_URL_VERSION && (catalogSamplePresent || catalogSampleCountPresent)) {
+    const catalogSample = params.get('catalogSample') ?? ''
+    const catalogSampleCountText = params.get('catalogSampleCount') ?? ''
+    const catalogSampleCount = Number(catalogSampleCountText)
+    const validCount = /^\d+$/.test(catalogSampleCountText)
+      && Number.isSafeInteger(catalogSampleCount)
+      && catalogSampleCount > 0
+    if (catalogSamplePresent) state.catalogSample = catalogSample
+    if (validCount) state.catalogSampleCount = catalogSampleCount
+    else if (catalogSampleCountPresent) state.catalogSampleCountRaw = catalogSampleCountText
+    state.catalogSampleInvalid = !catalogSample || !validCount || !catalogSamplePresent || !catalogSampleCountPresent
+  }
   const ref = params.get('ref')
   if (ref) state.ref = ref
   const compareRef = params.get('compareRef')

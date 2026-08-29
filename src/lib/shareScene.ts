@@ -16,12 +16,22 @@ export function encodeCurrentScene() {
     const language = ui.language === 'zh' ? '?lang=zh' : ''
     return `${window.location.origin}${window.location.pathname}${language}`
   }
+  const resolvedSampleProfile = catalog.baseSampleProfile ?? catalog.requestedSampleProfile ?? undefined
+  const resolvedSampleCount = catalog.baseSampleProfile
+    ? catalog.baseSampleRecords.length
+    : catalog.requestedSampleCount ?? undefined
+  const unresolvedSampleCountRaw = catalog.baseSampleProfile
+    ? undefined
+    : catalog.requestedSampleCountRaw ?? undefined
   const query = encodeUrlState({
     route: ui.route,
     dataset: catalog.datasetVersion !== 'unavailable'
       ? catalog.datasetVersion
       : catalog.requestedDatasetVersion ?? undefined,
     mode: catalog.mode,
+    catalogSample: resolvedSampleProfile,
+    catalogSampleCount: resolvedSampleCount,
+    catalogSampleCountRaw: unresolvedSampleCountRaw,
     ref: simulation.referenceId,
     compareRef: simulation.comparisonReferenceId,
     compare: simulation.comparisonEnabled,

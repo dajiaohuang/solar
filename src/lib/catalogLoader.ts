@@ -6,6 +6,7 @@ import type {
   AsteroidSectionCursor,
   BodyId,
   CatalogSummary,
+  CatalogSampleProfile,
   CelestialBody,
   DatasetProvenance,
   DatasetVersion,
@@ -323,7 +324,7 @@ export async function loadAsteroidBodiesByIds(ids: BodyId[]) {
   return chunks.flat().filter((record) => wanted.has(record.id)).map(asteroidRecordToBody)
 }
 
-export function loadAsteroidSample(manifest: AsteroidManifest, size: 'desktop' | 'mobile') {
+export function loadAsteroidSample(manifest: AsteroidManifest, size: CatalogSampleProfile) {
   const artifact = manifest.precomputedSamples?.[size]
   if (!artifact) return Promise.resolve<AsteroidRecord[]>([])
   const cacheKey = `${manifest.version}:${size}`
