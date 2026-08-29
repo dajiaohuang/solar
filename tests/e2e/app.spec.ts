@@ -313,13 +313,13 @@ test('falls back safely when a shared mission URL has invalid parameters', async
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
 
-test('discloses the Earth–Moon barycenter and out-of-range mission extrapolation bilingually', async ({ page }) => {
+test('discloses the derived Earth geocenter and out-of-range mission extrapolation bilingually', async ({ page }) => {
   await page.goto('./?v=3&page=mission&from=earth&to=mars&depart=2050-06-01&arrive=2050-12-01&lang=en')
   await expect(page.getByText(/year 2051 is outside the 1800–2050 validity interval/)).toBeVisible()
 
   await page.goto('./?v=3&page=mission&from=earth&to=mars&depart=2051-01-01&arrive=2051-09-01&lang=en')
   await expect(page.getByText('Mission endpoint model boundary')).toBeVisible()
-  await expect(page.getByText(/Earth–Moon barycenter approximation/)).toBeVisible()
+  await expect(page.getByText(/geocenter derived from the JPL Table 1 EMB seed/)).toBeVisible()
   await expect(page.getByText(/year 2052 is outside the 1800–2050 validity interval/)).toBeVisible()
 
   await page.goto('./?v=3&page=mission&from=ceres&to=pluto&depart=2051-01-01&arrive=2051-09-01&lang=en')
@@ -327,7 +327,7 @@ test('discloses the Earth–Moon barycenter and out-of-range mission extrapolati
 
   await page.goto('./?v=3&page=mission&from=earth&to=mars&depart=2051-01-01&arrive=2051-09-01&lang=zh')
   await expect(page.getByText('任务端点模型边界')).toBeVisible()
-  await expect(page.getByText(/JPL 地月质心近似/)).toBeVisible()
+  await expect(page.getByText(/由 JPL 表 1 地月质心种子.*推导的地心/)).toBeVisible()
   await expect(page.getByText(/2052 超出 JPL 行星近似根数的 1800–2050 有效区间/)).toBeVisible()
 })
 
@@ -337,13 +337,17 @@ test('publishes the exact planetary model provenance in Evidence and the Earth p
   await expect(page.getByText('jpl-approx-table-1')).toBeVisible()
   await expect(page.getByText('Fitted Keplerian elements with secular rates', { exact: true })).toBeVisible()
   await expect(page.getByText('Mean ecliptic and equinox of J2000', { exact: true })).toBeVisible()
-  await expect(page.getByText('Earth–Moon barycenter (not geocenter)', { exact: true })).toBeVisible()
+  await expect(page.getByText('Earth–Moon barycenter', { exact: true })).toBeVisible()
+  await expect(page.getByText('Earth geocenter derived from the EMB seed', { exact: true })).toBeVisible()
+  await expect(page.getByText('de440-earth-moon-gm-partition-v1')).toBeVisible()
 
   await page.goto('./?v=3&page=explorer&focused=earth&lang=en')
   await page.getByRole('button', { name: 'Show body details' }).click()
   await page.getByRole('tab', { name: 'Context' }).click()
   await expect(page.getByText('Rendered point')).toBeVisible()
-  await expect(page.getByText('Earth–Moon barycenter (not geocenter)')).toBeVisible()
+  await expect(page.getByText('Earth geocenter derived from the EMB seed')).toBeVisible()
+  await expect(page.getByText('Orbit seed represents')).toBeVisible()
+  await expect(page.getByText('Earth–Moon barycenter')).toBeVisible()
 })
 
 test('discloses sourced and illustrative satellite orbit models without false attribution', async ({ page }) => {
@@ -352,13 +356,13 @@ test('discloses sourced and illustrative satellite orbit models without false at
   await page.getByRole('button', { name: 'Show body details' }).click()
   await page.getByRole('tab', { name: 'Context' }).click()
   await expect(page.getByText('JPL planet-centered ecliptic', { exact: true })).toBeVisible()
-  await expect(page.getByText('Earth geocenter', { exact: true })).toBeVisible()
-  await expect(page.getByText('Earth–Moon barycenter seed', { exact: true })).toBeVisible()
-  await expect(page.getByText(/Untransformed center offset.*#21/)).toBeVisible()
+  await expect(page.getByText('Earth geocenter', { exact: true })).toHaveCount(2)
+  await expect(page.getByText('DE440 Earth/Moon GM mass partition', { exact: true })).toBeVisible()
   await expect(page.getByText('JPL mean-elements phase', { exact: true })).toBeVisible()
-  await expect(page.getByText(/Fixed mean ellipse;.*not an ephemeris.*#21/)).toBeVisible()
+  await expect(page.getByText('Fixed mean ellipse around the derived Earth geocenter; not an ephemeris', { exact: true })).toBeVisible()
   await page.getByRole('tab', { name: 'Sources' }).click()
   await expect(page.getByRole('link', { name: /JPL satellite mean elements/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /NAIF\/JPL DE440 GM/ })).toBeVisible()
   await expect(page.getByRole('link', { name: /JPL approximate positions/ })).toHaveCount(0)
 
   await page.goto('./?v=3&page=explorer&focused=io&bodies=jupiter%2Cio&lang=zh')
@@ -370,10 +374,11 @@ test('discloses sourced and illustrative satellite orbit models without false at
 
   await page.goto('./?v=3&page=about&lang=zh')
   await expect(page.getByText('satellite-two-body-contract-v1')).toBeVisible()
+  await expect(page.getByText('de440-earth-moon-gm-partition-v1')).toBeVisible()
   await expect(page.getByText(/不用于星历计算/)).toBeVisible()
   await expect(page.getByText(/巨行星卫星的平面与历元相位仍明确标为示意/)).toBeVisible()
-  await expect(page.getByText(/地心为中心.*地月质心种子.*#21/)).toBeVisible()
-  await expect(page.getByRole('link', { name: /中心校正跟踪 #21/ })).toBeVisible()
+  await expect(page.getByText(/DE440 地球\/月球引力参数.*地心来源向量/)).toBeVisible()
+  await expect(page.getByRole('link', { name: /NAIF\/JPL DE440 GM/ })).toBeVisible()
 })
 
 test('shows Hill and Laplace influence definitions independently', async ({ page }) => {

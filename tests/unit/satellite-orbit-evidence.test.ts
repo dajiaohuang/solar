@@ -25,8 +25,8 @@ describe('satellite orbit evidence', () => {
       sourceFrame: 'jpl-ecliptic',
       appliedFrame: 'scene-j2000-ecliptic',
       sourceCenter: 'earth-geocenter',
-      appliedCenter: 'earth-moon-barycenter-seed',
-      centerHandling: 'untransformed-center-offset',
+      appliedCenter: 'earth-geocenter',
+      centerHandling: 'de440-gm-barycentric-partition',
       epochLabel: '2000-01-01.5',
       epochTimeScale: 'TDB',
       phaseProvenance: 'jpl-mean-elements',
@@ -43,9 +43,9 @@ describe('satellite orbit evidence', () => {
     expect(orbit.meanMotionDegPerDay).toBeCloseTo(360 / 27.322, 12)
   })
 
-  it('keeps the applied Moon vector within the source ellipse while disclosing the center mismatch', () => {
+  it('keeps the applied Moon vector within the source ellipse after barycentric partitioning', () => {
     const { body: moon, orbit } = requireKeplerianBody('moon')
-    expect(moon.satelliteOrbitEvidence?.centerHandling).toBe('untransformed-center-offset')
+    expect(moon.satelliteOrbitEvidence?.centerHandling).toBe('de440-gm-barycentric-partition')
     const inclination = orbit.inclinationDeg * Math.PI / 180
     const node = orbit.ascendingNodeDeg * Math.PI / 180
     const planeNormal = {

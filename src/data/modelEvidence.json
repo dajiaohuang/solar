@@ -9,7 +9,24 @@
     "validTo": "2050-12-31",
     "source": "JPL Solar System Dynamics — Approximate Positions of the Planets, Table 1",
     "sourceUrl": "https://ssd.jpl.nasa.gov/planets/approx_pos.html",
-    "earthPoint": "earth-moon-barycenter"
+    "earthOrbitSeed": "earth-moon-barycenter",
+    "renderedEarthPoint": "earth-geocenter"
+  },
+  "earthMoonMassPartition": {
+    "id": "de440-earth-moon-gm-partition-v1",
+    "source": "NAIF/JPL DE440 gravitational-parameter kernel",
+    "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
+    "referenceUrl": "https://ssd.jpl.nasa.gov/astro_par.html",
+    "sourceSha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
+    "unit": "km^3 s^-2",
+    "earthGm": "3.9860043550702266E+05",
+    "moonGm": "4.9028001184575496E+03",
+    "systemGm": "4.0350323562548019E+05",
+    "orbitSeed": "earth-moon-barycenter",
+    "renderedEarthPoint": "earth-geocenter",
+    "moonSourceVector": "earth-geocentric",
+    "composition": "mass-weighted-two-body-partition",
+    "precisionBoundary": "algebraically-conserved-within-the-approximate-input-model"
   },
   "satelliteOrbits": {
     "id": "satellite-two-body-contract-v1",
@@ -18,10 +35,8 @@
     "sourceWarning": "mean-elements-not-intended-for-ephemeris-computation",
     "propagation": "fixed-ellipse-mean-anomaly-only",
     "moonSourceCenter": "earth-geocenter",
-    "moonAppliedCenter": "earth-moon-barycenter-seed",
-    "moonCenterHandling": "untransformed-pending-geocenter-correction",
-    "approximateMeanCenterOffsetKm": 4700,
-    "centerCorrectionIssue": "https://github.com/dajiaohuang/solar/issues/21",
+    "moonAppliedCenter": "earth-geocenter",
+    "moonCenterHandling": "de440-gm-barycentric-partition",
     "omittedEffects": [
       "nodal-precession",
       "apsidal-precession",

@@ -13,9 +13,21 @@ function canvasBlob(canvas: HTMLCanvasElement) {
 export async function exportAnnotatedScenePng(language: 'en' | 'zh') {
   const source = document.querySelector<HTMLCanvasElement>('.frames-grid .frame-view canvas')
   if (!source) throw new Error(language === 'zh' ? '当前工作区没有可导出的场景画布。' : 'The current workspace has no scene canvas to export.')
+  const simulation = simulationStore.getState()
+  const catalog = catalogStore.getState()
+  const selection = selectionStore.getState()
+  const url = encodeCurrentScene()
+  const julianDay = simulationClock.getJulianDay()
+  const modelEvidenceLines = createSceneExportModelEvidenceLines(
+    language,
+    selection.selectedIds,
+    simulation.referenceId,
+    julianDay - simulation.historyDays,
+    julianDay,
+  )
   const width = 1600
   const headerHeight = 112
-  const footerHeight = 168
+  const footerHeight = Math.max(168, 116 + modelEvidenceLines.length * 28)
   const contentHeight = 900
   const output = document.createElement('canvas')
   output.width = width
@@ -38,18 +50,6 @@ export async function exportAnnotatedScenePng(language: 'en' | 'zh') {
   const drawY = headerHeight + (contentHeight - drawHeight) / 2
   context.drawImage(source, drawX, drawY, drawWidth, drawHeight)
 
-  const simulation = simulationStore.getState()
-  const catalog = catalogStore.getState()
-  const selection = selectionStore.getState()
-  const url = encodeCurrentScene()
-  const julianDay = simulationClock.getJulianDay()
-  const modelEvidenceLines = createSceneExportModelEvidenceLines(
-    language,
-    selection.selectedIds,
-    simulation.referenceId,
-    julianDay - simulation.historyDays,
-    julianDay,
-  )
   context.fillStyle = '#0c1218'
   context.fillRect(0, headerHeight + contentHeight, width, footerHeight)
   context.fillStyle = '#dbe5e8'

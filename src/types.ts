@@ -8,8 +8,8 @@ export type SatelliteOrbitEvidence = {
   sourceFrame: 'jpl-ecliptic' | 'undocumented-illustrative'
   appliedFrame: 'scene-j2000-ecliptic'
   sourceCenter: 'earth-geocenter' | 'undocumented-parent-center'
-  appliedCenter: 'earth-moon-barycenter-seed' | 'parent-rendered-point'
-  centerHandling: 'untransformed-center-offset' | 'direct-parent-addition'
+  appliedCenter: 'earth-geocenter' | 'parent-rendered-point'
+  centerHandling: 'de440-gm-barycentric-partition' | 'direct-parent-addition'
   epochLabel: string
   epochTimeScale: 'TDB' | 'unspecified'
   phaseProvenance: 'jpl-mean-elements' | 'illustrative-zero-at-epoch'
@@ -105,7 +105,8 @@ export type CelestialBody = {
   size: number
   source: OrbitSource
   satelliteOrbitEvidence?: SatelliteOrbitEvidence
-  positionRepresents?: 'earth-moon-barycenter'
+  orbitRepresents?: 'earth-moon-barycenter'
+  positionRepresents?: 'earth-geocenter'
   parentId?: BodyId
   orbit?: OrbitDefinition
   orbitClassCode?: OrbitClassCode

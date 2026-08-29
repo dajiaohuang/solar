@@ -85,7 +85,7 @@ export function MissionWorkspace() {
   const departureJd = dateToJulianDay(new Date(`${departureDate}T12:00:00Z`))
   const arrivalJd = dateToJulianDay(new Date(`${arrivalDate}T12:00:00Z`))
   const usesJplApproximation = departureBody.orbit?.model === 'planetaryApprox' || arrivalBody.orbit?.model === 'planetaryApprox'
-  const usesEarthMoonBarycenter = departureBody.positionRepresents === 'earth-moon-barycenter' || arrivalBody.positionRepresents === 'earth-moon-barycenter'
+  const usesDerivedEarthGeocenter = departureBody.orbitRepresents === 'earth-moon-barycenter' || arrivalBody.orbitRepresents === 'earth-moon-barycenter'
   const porkchopWindow = createPorkchopWindow(departureJd, arrivalJd, hohmann?.transferTimeDays)
   const modelValidityWarning = usesJplApproximation
     ? jplApproxWindowWarning(
@@ -170,9 +170,9 @@ export function MissionWorkspace() {
         <label className="field"><span>{t('arrivalDate')}</span><input type="date" value={arrivalDate} onChange={(event) => missionActions.patch({ arrivalDate: event.target.value })} /></label>
         <button className="primary-button full-width" disabled={departureId === arrivalId || arrivalJd <= departureJd} onClick={computeTransfer}>{t('computeTransfer')}</button>
         {transferError && <div className="error-banner">{transferError}</div>}
-        {(usesEarthMoonBarycenter || modelValidityWarning) && <div className="mission-model-boundary" aria-label={t('missionModelBoundary')}>
+        {(usesDerivedEarthGeocenter || modelValidityWarning) && <div className="mission-model-boundary" aria-label={t('missionModelBoundary')}>
           <strong>{t('missionModelBoundary')}</strong>
-          {usesEarthMoonBarycenter && <p>{t('earthMoonBarycenterDisclosure')}</p>}
+          {usesDerivedEarthGeocenter && <p>{t('earthGeocenterDisclosure')}</p>}
           {modelValidityWarning && <p className="model-validity-warning" role="status">⚠ {modelValidityWarning}</p>}
         </div>}
         <div className="phase-gauge"><span>{t('actualPhase').toUpperCase()}</span><strong>{phase.actual.toFixed(1)}°</strong>{phase.required !== null && <small>{t('hohmannTarget')} {phase.required.toFixed(1)}°</small>}<div><i style={{ transform: `rotate(${phase.actual}deg)` }} /></div></div>

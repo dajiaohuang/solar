@@ -1,5 +1,5 @@
 import { catalogStore } from '../state/catalog-store'
-import { JPL_APPROX_MODEL_EVIDENCE } from '../engine/ephemeris/modelValidity'
+import { EARTH_MOON_MASS_PARTITION_EVIDENCE, JPL_APPROX_MODEL_EVIDENCE } from '../engine/ephemeris/modelValidity'
 import { encodeCurrentScene } from './shareScene'
 
 export const SCENE_LIBRARY_SCHEMA_VERSION = 1 as const
@@ -111,7 +111,10 @@ export function sceneLibraryDocument(scenes: SavedScene[]) {
     schemaVersion: SCENE_LIBRARY_SCHEMA_VERSION,
     exportedAt: new Date().toISOString(),
     application: 'Solar Atlas',
-    evidence: { planetaryApproximation: JPL_APPROX_MODEL_EVIDENCE },
+    evidence: {
+      planetaryApproximation: JPL_APPROX_MODEL_EVIDENCE,
+      earthMoonMassPartition: EARTH_MOON_MASS_PARTITION_EVIDENCE,
+    },
     scenes,
   }, null, 2)
 }
