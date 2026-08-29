@@ -5,7 +5,7 @@ Solar Atlas treats the million-object catalog as a columnar filtering problem, n
 - **Focus layer:** named, selectable bodies with trajectories, labels, inspection, and analysis. The limit is 160 bodies in 3D and 320 in 2D.
 - **Catalog cloud:** an optional single-buffer point cloud generated in a worker. It is off by default, so opening the Observation Deck requests no asteroid sample. Enabling it reuses the immutable mobile or desktop sample already identified in the scene URL.
 
-The application opens in 3D and falls back to 2D if WebGL is unavailable or lost. A paused 3D scene renders on demand; continuous animation runs only while the clock is playing with the catalog cloud visible. The renderer does not retain its drawing buffer.
+The application opens in 3D and falls back to 2D if WebGL is unavailable or lost. On an untouched first visit, a lightweight spatial preview sits behind the tutorial choice and the interactive Three.js renderer chunk is downloaded and initialized only after the visitor chooses a path; returning visits initialize 3D directly. A paused 3D scene renders on demand; continuous animation runs only while the clock is playing with the catalog cloud visible. The renderer does not retain its drawing buffer.
 
 ## Runtime point budgets
 

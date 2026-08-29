@@ -14,7 +14,7 @@ Solar Atlas connects a spatial workbench, orbital-element space, event analysis,
 
 The root URL opens directly into the **Observation Deck**. There is no marketing page between the visitor and the visualization.
 
-1. A first-time visitor chooses **Start tutorial** or **Explore independently** over the ready Observation Deck.
+1. A first-time visitor chooses **Start tutorial** or **Explore independently** over a lightweight preview of the ready Observation Deck. The interactive Three.js renderer chunk is downloaded and initialized immediately after that choice, avoiding expensive hidden work behind an untouched prompt.
 2. The four-tip tutorial introduces camera movement, reference frames, object selection, and preset scenes. It is shown once and can be reopened from the preset panel.
 3. The preset switchboard is open by default. Reference-frame, rendering, body, saved-scene, and export controls remain collapsed under **Advanced controls** until requested.
 

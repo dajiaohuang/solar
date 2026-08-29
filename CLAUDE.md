@@ -44,6 +44,7 @@ Useful pipeline environment variables are `MPCORB_SOURCE_FILE`, `MPCORB_SOURCE_U
 - The simulation clock lives outside React and publishes throttled snapshots. Do not drive orbital recomputation with a component-level `requestAnimationFrame` loop.
 - Keep focus trajectories separate from the catalog cloud: 3D focus is capped at 160, 2D focus at 320, while bulk catalog points use one worker-produced typed buffer and a view-specific budget. The default Explorer must not fetch a catalog sample until the cloud is explicitly enabled.
 - Browser memory and CPU values may only lower an initial adaptive budget. Frame timing is authoritative, and hardware-specific smoothness claims require measured evidence.
+- Preserve the first-visit renderer gate: the untouched onboarding choice uses the lightweight spatial preview, while tutorial/explore/dismiss actions and completed onboarding activate the real 3D renderer.
 - Heavy analyses are explicit, cancellable worker jobs. UI parameter changes must not silently rerun them.
 - Results and exports must state their model, epoch/window, units, and approximation limits.
 - Share URLs are a versioned scene contract. Extend `src/lib/urlState.ts` compatibly when new shareable state is added.
