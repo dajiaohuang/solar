@@ -1,6 +1,7 @@
 html { color-scheme: dark; background: #05080c; }
 html, body, #root { min-width: 320px; min-height: 100%; margin: 0; }
-body { min-height: 100vh; font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; background: #05080c; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+body { min-height: 100vh; min-height: 100dvh; font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; background: #05080c; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+.native-app, .native-app body { overscroll-behavior: none; }
 ::selection { background: rgba(98,208,181,.3); color: #fff; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }

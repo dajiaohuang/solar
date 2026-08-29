@@ -357,6 +357,39 @@ async function writeStaticKnowledgePages() {
       })
     }
   }
+  const privacyPages = {
+    en: {
+      title: 'Privacy policy',
+      description: 'Solar Atlas does not use accounts, advertising, analytics, tracking, or a developer-operated user database.',
+      sections: [
+        { title: 'Data stored on your device', body: 'Language, onboarding state, saved scenes, preferences, and optional scientific catalog caches stay in browser or application storage on your device. Uninstalling the app or clearing its storage removes them.' },
+        { title: 'Network requests', body: 'The bundled core experience works offline. At startup, the app requests the current catalog version manifest and provenance metadata from dajiaohuang.github.io; catalog samples, indexes, and detail shards are fetched only when a catalog feature or restored catalog scene needs them. Explicit JPL searches send the entered object query to NASA/JPL services, whose operators receive ordinary network metadata.' },
+        { title: 'Sharing and exports', body: 'Scene links and PNG, CSV, or JSON files are created only after you request them. Native apps use a private temporary cache and the operating-system share sheet; the app attempts to delete the temporary file after the share request.' },
+        { title: 'Permissions and contact', body: 'Solar Atlas does not request camera, microphone, location, contacts, notification, photo-library, or broad storage access. Privacy questions and deletion requests can be filed in the public GitHub repository.' },
+      ],
+    },
+    zh: {
+      title: '隐私政策',
+      description: '太阳系图谱不使用账号、广告、分析、跟踪，也不运营用户数据库。',
+      sections: [
+        { title: '保存在设备上的数据', body: '语言、教程状态、收藏场景、偏好与可选科学目录缓存仅保存在你的浏览器或应用本地存储中。卸载应用或清除应用数据即可删除。' },
+        { title: '网络请求', body: '内置核心体验可离线使用。应用启动时会从 dajiaohuang.github.io 请求当前目录版本清单和来源元数据；只有目录功能或恢复的目录场景需要时，才会继续获取目录样本、索引和详情分片。主动执行 JPL 查询时，输入的天体检索词会发送给 NASA/JPL 服务，其运营方会收到常规网络元数据。' },
+        { title: '分享与导出', body: '只有在你主动操作时才会生成场景链接或 PNG、CSV、JSON 文件。原生应用使用私有临时缓存和系统分享面板，并在分享请求结束后尝试删除临时文件。' },
+        { title: '权限与联系', body: '太阳系图谱不申请相机、麦克风、位置、联系人、通知、照片库或广泛存储权限。隐私问题与删除请求可在公开 GitHub 仓库提出。' },
+      ],
+    },
+  }
+  for (const lang of ['en', 'zh']) {
+    const page = privacyPages[lang]
+    await writePage(`${lang === 'zh' ? 'zh/' : ''}privacy`, {
+      lang,
+      ...page,
+      appUrl: `${SITE_BASE}?v=3&page=about&lang=${lang}`,
+      schemaType: 'WebPage',
+      boundary: lang === 'zh' ? '生效日期：2026-08-30。功能或数据处理方式发生变化时，本政策会随版本更新。' : 'Effective 2026-08-30. This policy is versioned with the application and will change if its features or data handling change.',
+      sources: [{ label: 'Solar Atlas source and issue tracker', url: 'https://github.com/dajiaohuang/solar' }],
+    })
+  }
   const urls = [SITE_BASE, ...pages.map((path) => `${SITE_BASE}${path}/`)]
   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((url) => `  <url><loc>${url}</loc><changefreq>monthly</changefreq></url>`).join('\n')}\n</urlset>\n`
   await writeFile(join(DIST, 'sitemap.xml'), sitemap)

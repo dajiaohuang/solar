@@ -113,6 +113,9 @@ export function TrajectoryCanvas3D({
   const resourcesRef = useRef<SceneResources | null>(null)
   const raycasterRef = useRef(new THREE.Raycaster())
   const positionsRef = useRef(currentPositions)
+  const lastTouchTapRef = useRef<{ bodyId: string; timestamp: number } | null>(null)
+  const touchGestureRef = useRef<{ pointerId: number; startX: number; startY: number; moved: boolean } | null>(null)
+  const activeTouchPointersRef = useRef(new Set<number>())
   const fitKeyRef = useRef('')
   const onUnavailableRef = useRef(onUnavailable)
   const fallbackLabelRef = useRef(fallbackLabel)
@@ -457,7 +460,7 @@ export function TrajectoryCanvas3D({
     resources.renderer.render(resources.scene, resources.camera)
   }, [catalogDrawCount, catalogFitKey, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z, catalogPositions3D, catalogRecords.length, currentPositions, lagrangePoints, referenceBody, showEcliptic, showGlow, showSaturnRings, trajectories])
 
-  const intersectBody = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+  const intersectBody = useCallback((event: { clientX: number; clientY: number }) => {
     const container = containerRef.current
     const resources = resourcesRef.current
     if (!container || !resources) return null
@@ -480,6 +483,56 @@ export function TrajectoryCanvas3D({
       aria-label={ariaLabel}
       onClick={(event) => { const id = intersectBody(event); if (id) onBodySelect?.(id) }}
       onDoubleClick={(event) => { const id = intersectBody(event); if (id) onReferenceChange?.(id) }}
+      onPointerDown={(event) => {
+        if (event.pointerType !== 'touch') return
+        activeTouchPointersRef.current.add(event.pointerId)
+        if (activeTouchPointersRef.current.size !== 1) {
+          touchGestureRef.current = null
+          lastTouchTapRef.current = null
+          return
+        }
+        touchGestureRef.current = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          moved: false,
+        }
+      }}
+      onPointerMove={(event) => {
+        if (event.pointerType !== 'touch') return
+        const gesture = touchGestureRef.current
+        if (!gesture || gesture.pointerId !== event.pointerId) return
+        if (Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) > 12) {
+          gesture.moved = true
+          lastTouchTapRef.current = null
+        }
+      }}
+      onPointerUp={(event) => {
+        if (event.pointerType !== 'touch') return
+        activeTouchPointersRef.current.delete(event.pointerId)
+        const gesture = touchGestureRef.current
+        touchGestureRef.current = null
+        if (!gesture || gesture.pointerId !== event.pointerId || gesture.moved) return
+        const id = intersectBody(event)
+        if (!id) {
+          lastTouchTapRef.current = null
+          return
+        }
+        const now = performance.now()
+        const previous = lastTouchTapRef.current
+        if (previous?.bodyId === id && now - previous.timestamp < 420) {
+          onReferenceChange?.(id)
+          lastTouchTapRef.current = null
+        } else {
+          lastTouchTapRef.current = { bodyId: id, timestamp: now }
+        }
+      }}
+      onPointerCancel={(event) => {
+        if (event.pointerType !== 'touch') return
+        activeTouchPointersRef.current.delete(event.pointerId)
+        touchGestureRef.current = null
+        lastTouchTapRef.current = null
+      }}
       onMouseMove={(event) => {
         const id = intersectBody(event)
         const position = positionsRef.current.find((item) => item.body.id === id)

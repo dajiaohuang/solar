@@ -5,6 +5,7 @@ import { simulationStore } from '../state/simulation-store'
 import { BUILD_INFO } from './buildInfo'
 import { encodeCurrentScene } from './shareScene'
 import { createSceneExportModelEvidenceLines } from './sceneExportEvidence'
+import { saveExport } from './platform'
 
 function canvasBlob(canvas: HTMLCanvasElement) {
   return new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('PNG encoding failed')), 'image/png'))
@@ -63,10 +64,5 @@ export async function exportAnnotatedScenePng(language: 'en' | 'zh') {
   context.fillText(url.length > 180 ? `${url.slice(0, 177)}…` : url, 54, urlY)
 
   const blob = await canvasBlob(output)
-  const objectUrl = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = objectUrl
-  anchor.download = `solar-atlas-${new Date().toISOString().slice(0, 10)}.png`
-  anchor.click()
-  URL.revokeObjectURL(objectUrl)
+  await saveExport(blob, `solar-atlas-${new Date().toISOString().slice(0, 10)}.png`)
 }

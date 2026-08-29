@@ -1,0 +1,108 @@
+name: Mobile applications
+
+on:
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'ios/**'
+      - 'resources/**'
+      - 'src/**'
+      - 'scripts/**'
+      - 'public/**'
+      - 'index.html'
+      - 'tsconfig*.json'
+      - 'capacitor.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - '.github/workflows/mobile.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - 'ios/**'
+      - 'resources/**'
+      - 'src/**'
+      - 'scripts/**'
+      - 'public/**'
+      - 'index.html'
+      - 'tsconfig*.json'
+      - 'capacitor.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.ts'
+      - '.github/workflows/mobile.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: npm ci
+      - name: Build and sync the native web shell
+        run: npm run mobile:sync:android
+      - name: Verify Android API contract
+        run: |
+          grep -q "compileSdkVersion = 36" android/variables.gradle
+          grep -q "targetSdkVersion = 36" android/variables.gradle
+          grep -q "minSdkVersion = 24" android/variables.gradle
+      - name: Build debug-key-signed Android application
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew lint testDebugUnitTest assembleDebug
+      - uses: actions/upload-artifact@v6
+        with:
+          name: solar-atlas-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Verify Xcode toolchain
+        run: xcodebuild -version
+      - name: Build and sync the native web shell
+        run: npm run mobile:sync:ios
+      - name: Build unsigned iOS simulator application
+        run: >-
+          xcodebuild
+          -project ios/App/App.xcodeproj
+          -scheme App
+          -sdk iphonesimulator
+          -configuration Debug
+          -derivedDataPath build/ios-derived-data
+          CODE_SIGNING_ALLOWED=NO
+          build
+      - uses: actions/upload-artifact@v6
+        with:
+          name: solar-atlas-ios-simulator
+          path: build/ios-derived-data/Build/Products/Debug-iphonesimulator/App.app
+          if-no-files-found: error
+          retention-days: 14

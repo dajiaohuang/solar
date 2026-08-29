@@ -2,7 +2,7 @@
 
 **A browser-native Solar System dynamics and small-body atlas with reproducible scenes, traceable data, and explicit model boundaries.**
 
-[Open Solar Atlas](https://dajiaohuang.github.io/solar/) · [中文文档](./README-CN.md) · [Scientific contract](#scientific-contract) · [Contributing](#contributing)
+[Open Solar Atlas](https://dajiaohuang.github.io/solar/) · [中文文档](./README-CN.md) · [Mobile builds](./MOBILE.md) · [Privacy](./PRIVACY.md) · [Scientific contract](#scientific-contract) · [Contributing](#contributing)
 
 Application version: **v0.11.0** · [Live build identity](https://dajiaohuang.github.io/solar/health.json) · [Changelog](./CHANGELOG.md) · [Roadmap](./ROADMAP.md) · [Performance budgets](./PERFORMANCE.md)
 
@@ -195,6 +195,12 @@ Useful pipeline variables:
 | `MPCORB_MODE` | `lite` or `full` |
 | `MPCORB_REFRESH=1` | Replace the cached raw snapshot |
 
+## Android and iOS
+
+The repository contains Capacitor 8 local-shell projects for Android and iOS under the application ID `io.github.dajiaohuang.solaratlas`. Android supports API 24 and targets API 36; iOS requires 16.4 or later. Both use the installed local shell for the curated core experience while loading catalog data on demand over HTTPS.
+
+These projects are source and non-release validation paths, not published store products. CI produces an Android debug APK signed with the standard disposable debug key and an unsigned iOS Simulator app; neither is a store release artifact. Windows can build Android when its toolchain is installed, but iOS builds require macOS and Xcode. No release signing, store submission, or real-device validation is claimed. See [MOBILE.md](./MOBILE.md) for prerequisites, commands, native behavior, and the acceptance checklist, and [PRIVACY.md](./PRIVACY.md) for the current source-level privacy notice.
+
 ## Architecture
 
 ```text
@@ -247,6 +253,8 @@ Solar Atlas provides a Web App Manifest, installable application shell, update-r
 
 After one successful online load, the service worker can reopen the cached application shell offline. This is not a promise that the complete MPCORB release, an uncached sample/detail shard, a newly visited route asset, or a live JPL SBDB request is available offline. Dataset/version errors remain visible instead of silently substituting different data.
 
+The Android and iOS projects use a separate Capacitor local-shell build without Service Worker registration. Their curated core is installed locally, while catalog shards and live JPL requests retain the same online boundary. Mobile build status and release limits are documented in [MOBILE.md](./MOBILE.md); privacy behavior is documented in [PRIVACY.md](./PRIVACY.md).
+
 ## Contributing
 
 Focused scientific corrections, accessibility improvements, performance work, and reproducible teaching stories are welcome. Open an issue before a large architecture or data-format change.
@@ -260,7 +268,7 @@ Before a pull request:
 - verify keyboard access, desktop/mobile behavior, reduced motion, and the 2D/WebGL fallback for UI changes; and
 - do not label two-body or schematic output as an operational ephemeris, N-body result, risk assessment, or navigation product.
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for the complete workflow and [SECURITY.md](./SECURITY.md) for private vulnerability reporting.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the complete workflow, [MOBILE.md](./MOBILE.md) for native contribution and release boundaries, and [SECURITY.md](./SECURITY.md) for private vulnerability reporting.
 
 ## Citation and license
 

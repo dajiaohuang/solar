@@ -14,16 +14,10 @@ import { eventSamplingPlan } from '../../engine/events/eventSampling'
 import { BUILD_INFO } from '../../lib/buildInfo'
 import { createBodyPositionResolver, dotVector3, subtractVector3, vector3Magnitude } from '../../lib/ephemeris'
 import type { CelestialBody, Vector3 } from '../../types'
+import { saveTextExport } from '../../lib/platform'
 
 const ALL_KINDS: EventKind[] = ['close-approach', 'conjunction', 'opposition', 'perihelion', 'aphelion']
 const EVENT_ALGORITHM_VERSION = 'event-search-v4'
-
-function download(name: string, content: string, type: string) {
-  const url = URL.createObjectURL(new Blob([content], { type }))
-  const anchor = document.createElement('a')
-  anchor.href = url; anchor.download = name; anchor.click()
-  URL.revokeObjectURL(url)
-}
 
 function angularSeparation(a: Vector3, b: Vector3) {
   const denominator = vector3Magnitude(a) * vector3Magnitude(b)
@@ -159,10 +153,10 @@ export function EventsWorkspace() {
         <dl><div><dt>{t('model')}</dt><dd>{t('coarseScanModel')}</dd></div><div><dt>{t('orbitEpoch')}</dt><dd>{t('perObjectEpoch')}</dd></div><div><dt>{t('window')}</dt><dd>JD {(contractCenter - contractWindow / 2).toFixed(2)} — {(contractCenter + contractWindow / 2).toFixed(2)}</dd></div><div><dt>{t('sampling')}</dt><dd>{contractSamples} / {samplingPlan.requiredSamples} {t('samples')} · {sampleIntervalDays.toFixed(4)} {t('dayInterval')} · {samplingPlan.capped ? t('capped') : t('adequateCadence')}</dd></div></dl>
         {validityWarning && <div className="error-banner">{validityWarning}</div>}
         <p className="fine-print">{t('analysisExplanation')}</p>
-        <div className="export-actions"><button disabled={!analysis.events.length} onClick={() => download('solar-atlas-events.json', JSON.stringify({ ...exportMetadata, events: analysis.events }, null, 2), 'application/json')}>{t('exportJson')}</button><button disabled={!analysis.events.length} onClick={() => {
+        <div className="export-actions"><button disabled={!analysis.events.length} onClick={() => void saveTextExport(JSON.stringify({ ...exportMetadata, events: analysis.events }, null, 2), 'solar-atlas-events.json', 'application/json').catch((error: unknown) => uiActions.toast(error instanceof Error ? error.message : String(error)))}>{t('exportJson')}</button><button disabled={!analysis.events.length} onClick={() => {
           const header = 'appVersion,commitSha,datasetVersion,algorithmVersion,kind,bodyA,bodyB,centralBodyId,julianDay,value,unit,model,sampleIntervalDays,numericalRefinementHalfWidthDays,physicalPredictionUncertainty\n'
           const rows = analysis.events.map((event) => [BUILD_INFO.version, BUILD_INFO.commitSha, exportMetadata.datasetVersion ?? '', EVENT_ALGORITHM_VERSION, event.kind, event.bodyAName, event.bodyBName ?? '', event.centralBodyId ?? '', event.julianDay, event.value, event.unit, event.model, event.sampleIntervalDays, event.numericalRefinementHalfWidthDays, event.physicalPredictionUncertainty].map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n')
-          download('solar-atlas-events.csv', header + rows, 'text/csv')
+          void saveTextExport(header + rows, 'solar-atlas-events.csv', 'text/csv').catch((error: unknown) => uiActions.toast(error instanceof Error ? error.message : String(error)))
         }}>{t('exportCsv')}</button></div>
       </aside>
     </div>
