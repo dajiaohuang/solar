@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { TrajectoryCanvas } from '../../components/TrajectoryCanvas'
-import { TrajectoryCanvas3D } from '../../components/TrajectoryCanvas3D'
 import { SPACECRAFT } from '../../data/spacecraft'
 import { BODY_PHYSICAL } from '../../data/physical'
 import { useSimulationClock } from '../../engine/clock/useSimulationClock'
@@ -24,7 +23,21 @@ import { BodyInspector } from '../body-inspector/BodyInspector'
 import { ControlDrawer } from './ControlDrawer'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { catalogSampleErrorMessage } from '../../lib/catalogSampleProfile'
+import { isOnboardingRendererReady, ONBOARDING_RENDER_READY_EVENT } from '../../lib/onboarding'
 import { SimulationControls } from './SimulationControls'
+
+const TrajectoryCanvas3D = lazy(async () => {
+  const module = await import('../../components/TrajectoryCanvas3D')
+  return { default: module.TrajectoryCanvas3D }
+})
+
+function SpatialPreview() {
+  return (
+    <div className="trajectory-3d-placeholder" aria-hidden="true">
+      <i /><i /><i /><i /><span />
+    </div>
+  )
+}
 
 function useTrajectoryAnchor(julianDay: number, isPlaying: boolean) {
   const [anchor, setAnchor] = useState(julianDay)
@@ -57,6 +70,7 @@ type FrameViewProps = {
   pixelRatioLimit: number
   onFrameDuration: (durationMs: number) => void
   isPlaying: boolean
+  render3DReady: boolean
 }
 
 function FrameView({
@@ -77,6 +91,7 @@ function FrameView({
   pixelRatioLimit,
   onFrameDuration,
   isPlaying,
+  render3DReady,
 }: FrameViewProps) {
   const simulation = simulationStore.useStore()
   const { t, language } = useI18n()
@@ -167,28 +182,32 @@ function FrameView({
       <div className="frame-label"><span>{bodyDisplayName(referenceBody, language)}</span><small>{simulation.viewMode.toUpperCase()}{simulation.showCatalogCloud ? ` · ${t('catalogCloudRendered')} ${catalogDrawCount.toLocaleString()} / ${catalogSampleTotal.toLocaleString()} · ${qualityLabel} · JD ${julianDay.toFixed(3)}` : ''}</small></div>
       {isComputing && <div className="compute-progress"><i style={{ width: `${progress * 100}%` }} /></div>}
       {error && <div className="canvas-error">{error}</div>}
-      {simulation.viewMode === '3d' ? (
-        <TrajectoryCanvas3D
-          referenceBody={referenceBody}
-          trajectories={frame.trajectories}
-          currentPositions={frame.currentPositions}
-          onReferenceChange={(id) => { if (bodiesById.has(id)) simulationActions.patch({ referenceId: id }) }}
-          onBodySelect={selectionActions.focus}
-          onHover={(body, distance, x, y) => onHover(body ? { body, distance, x, y } : null)}
-          lagrangePoints={lagrangePoints}
-          showEcliptic={simulation.showEcliptic}
-          ariaLabel={t('interactive3d')}
-          fallbackLabel={t('webgl3dUnavailable')}
-          onUnavailable={() => simulationActions.patch({ viewMode: '2d' })}
-          catalogRecords={catalogRecords}
-          catalogPositions3D={catalogPositions3D}
-          catalogDrawCount={catalogDrawCount}
-          catalogOrigin={catalogOrigin}
-          catalogFitKey={catalogFitKey}
-          continuous={isPlaying && simulation.showCatalogCloud}
-          pixelRatioLimit={pixelRatioLimit}
-          onFrameDuration={onFrameDuration}
-        />
+      {simulation.viewMode === '3d' && !render3DReady ? (
+        <SpatialPreview />
+      ) : simulation.viewMode === '3d' ? (
+        <Suspense fallback={<SpatialPreview />}>
+          <TrajectoryCanvas3D
+            referenceBody={referenceBody}
+            trajectories={frame.trajectories}
+            currentPositions={frame.currentPositions}
+            onReferenceChange={(id) => { if (bodiesById.has(id)) simulationActions.patch({ referenceId: id }) }}
+            onBodySelect={selectionActions.focus}
+            onHover={(body, distance, x, y) => onHover(body ? { body, distance, x, y } : null)}
+            lagrangePoints={lagrangePoints}
+            showEcliptic={simulation.showEcliptic}
+            ariaLabel={t('interactive3d')}
+            fallbackLabel={t('webgl3dUnavailable')}
+            onUnavailable={() => simulationActions.patch({ viewMode: '2d' })}
+            catalogRecords={catalogRecords}
+            catalogPositions3D={catalogPositions3D}
+            catalogDrawCount={catalogDrawCount}
+            catalogOrigin={catalogOrigin}
+            catalogFitKey={catalogFitKey}
+            continuous={isPlaying && simulation.showCatalogCloud}
+            pixelRatioLimit={pixelRatioLimit}
+            onFrameDuration={onFrameDuration}
+          />
+        </Suspense>
       ) : (
         <TrajectoryCanvas
           referenceBody={referenceBody}
@@ -224,6 +243,13 @@ export function ExplorerWorkspace() {
   const clock = useSimulationClock()
   const catalog = catalogStore.useStore()
   const { t, language } = useI18n()
+  const [render3DReady, setRender3DReady] = useState(isOnboardingRendererReady)
+  useEffect(() => {
+    const activate = () => setRender3DReady(true)
+    window.addEventListener(ONBOARDING_RENDER_READY_EVENT, activate)
+    if (isOnboardingRendererReady()) activate()
+    return () => window.removeEventListener(ONBOARDING_RENDER_READY_EVENT, activate)
+  }, [])
   useCatalogSample(simulation.showCatalogCloud)
   const focusBodyLimit = simulation.viewMode === '2d' ? 320 : 160
   const selectedBodies = useMemo(() => selectedFromStore.slice(0, focusBodyLimit), [focusBodyLimit, selectedFromStore])
@@ -312,6 +338,7 @@ export function ExplorerWorkspace() {
             pixelRatioLimit={renderBudget.pixelRatioLimit}
             onFrameDuration={renderBudget.onFrameDuration}
             isPlaying={clock.isPlaying}
+            render3DReady={render3DReady}
           />
           {simulation.comparisonEnabled && (
             <FrameView
@@ -332,6 +359,7 @@ export function ExplorerWorkspace() {
               pixelRatioLimit={renderBudget.pixelRatioLimit}
               onFrameDuration={renderBudget.onFrameDuration}
               isPlaying={clock.isPlaying}
+              render3DReady={render3DReady}
             />
           )}
         </div>

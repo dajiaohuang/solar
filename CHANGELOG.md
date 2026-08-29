@@ -15,6 +15,7 @@ All notable changes to Solar Atlas are documented here. The project follows sema
 - The application now opens directly in the 3D Observation Deck; advanced controls remain collapsed, first-time visitors choose between the tutorial and immediate exploration, and WebGL failure still falls back to 2D.
 - Focus trajectories are capped independently at 160 bodies in 3D and 320 in 2D, while catalog points use larger view- and device-specific budgets and share their total across split views.
 - Paused 3D scenes render on demand. Continuous animation is limited to a playing simulation with the catalog cloud enabled, and the renderer no longer preserves its drawing buffer.
+- The untouched first-visit choice uses a lightweight spatial preview and defers downloading and initializing the interactive Three.js renderer until the visitor starts the tutorial or chooses independent exploration; returning visitors still enter 3D directly.
 - The Moon remains derived from JPL mean elements and DE440 Earth–Moon mass partitioning; Io, Europa, Ganymede, Callisto, and Titan now use reproducible parent-centered JPL Horizons osculating-element queries at JD 2451545.0 TDB with explicit fixed-ellipse limitations.
 
 ### Documentation

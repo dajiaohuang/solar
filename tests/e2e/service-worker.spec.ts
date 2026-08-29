@@ -4,6 +4,7 @@ test.use({ serviceWorkers: 'allow' })
 
 test('first install can reload the application shell offline', async ({ page, context, browserName }) => {
   test.skip(browserName === 'webkit', 'Playwright WebKit cannot reliably reload while its context is forced offline')
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./')
   await page.evaluate(async () => { await navigator.serviceWorker.ready })
   await page.reload()

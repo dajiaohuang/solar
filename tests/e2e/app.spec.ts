@@ -273,6 +273,7 @@ test('navigates through the atlas workspaces without console errors', async ({ p
 })
 
 test('applies a reproducible story scene with the requested frame and view', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=3&page=stories&story=retrograde-mars')
   await expect(page.getByRole('heading', { name: /Stories|引导故事/ })).toBeVisible()
   await page.getByRole('button', { name: /Next|下一步/ }).click()
@@ -381,13 +382,22 @@ test('routes legacy home URLs to the deck and lets visitors reopen the tutorial'
 })
 
 test('offers a first-run choice and finishes the tutorial on the deck', async ({ page }) => {
+  const rendererRequests: string[] = []
+  page.on('request', (request) => {
+    if (request.url().includes('TrajectoryCanvas3D-')) rendererRequests.push(request.url())
+  })
   await page.goto('./?v=3&lang=en')
   const choice = page.getByRole('dialog', { name: 'How would you like to begin?' })
   await expect(choice).toBeVisible()
   await expect(choice).toBeFocused()
+  await expect(page.locator('.trajectory-3d-placeholder')).toBeVisible()
+  await expect(page.getByTestId('trajectory-canvas-3d')).toHaveCount(0)
+  expect(rendererRequests).toEqual([])
   await choice.getByRole('button', { name: 'Start tutorial' }).click()
   const onboarding = page.getByRole('dialog', { name: 'Four controls, then you’re free' })
   await expect(onboarding).toBeVisible()
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
+  expect(rendererRequests).toHaveLength(1)
   await onboarding.getByRole('button', { name: /Next tip/ }).click()
   await onboarding.getByRole('button', { name: /Next tip/ }).click()
   await onboarding.getByRole('button', { name: /Next tip/ }).click()
@@ -397,6 +407,33 @@ test('offers a first-run choice and finishes the tutorial on the deck', async ({
   await expect(page.locator('.trajectory-canvas, [data-testid="trajectory-canvas-3d"]')).toBeVisible()
   await page.reload()
   await expect(page.getByRole('dialog', { name: 'How would you like to begin?' })).toHaveCount(0)
+})
+
+test('starts the 3D renderer after choosing independent exploration', async ({ page }) => {
+  await page.goto('./?v=3&lang=en')
+  const choice = page.getByRole('dialog', { name: 'How would you like to begin?' })
+  await expect(page.locator('.trajectory-3d-placeholder')).toBeVisible()
+  await expect(page.getByTestId('trajectory-canvas-3d')).toHaveCount(0)
+  await choice.getByRole('button', { name: 'Explore independently' }).click()
+  await expect(choice).toHaveCount(0)
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
+})
+
+test('keeps renderer activation while the explorer workspace is still loading', async ({ page }) => {
+  let releaseExplorer!: () => void
+  const explorerGate = new Promise<void>((resolve) => { releaseExplorer = resolve })
+  await page.route('**/assets/ExplorerWorkspace-*.js', async (route) => {
+    await explorerGate
+    await route.continue()
+  })
+
+  await page.goto('./?v=3&lang=en', { waitUntil: 'domcontentloaded' })
+  const choice = page.getByRole('dialog', { name: 'How would you like to begin?' })
+  await expect(choice).toBeVisible()
+  await choice.getByRole('button', { name: 'Start tutorial' }).click()
+  await expect(page.getByRole('dialog', { name: 'Four controls, then you’re free' })).toBeVisible()
+  releaseExplorer()
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
 })
 
 test('computes the Earth-to-Mars transfer and worker porkchop map', async ({ page }) => {
@@ -587,6 +624,7 @@ test('keeps a guided story active across workspaces and advances its reproducibl
 })
 
 test('searches workspaces, objects, stories, and terms from the keyboard palette', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=3&page=home&lang=en')
   await expect(page.locator('.trajectory-canvas, [data-testid="trajectory-canvas-3d"]')).toBeVisible({ timeout: 15_000 })
   if ((page.viewportSize()?.width ?? 1280) > 980) await page.keyboard.press('Control+K')

@@ -1,20 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useI18n } from '../../i18n/context'
-import { ONBOARDING_REQUEST_EVENT } from '../../lib/onboarding'
-
-const STORAGE_KEY = 'solar-atlas-first-run-v1'
-
-function wasCompleted() {
-  try { return localStorage.getItem(STORAGE_KEY) === 'complete' } catch { return false }
-}
-
-function rememberCompletion() {
-  try { localStorage.setItem(STORAGE_KEY, 'complete') } catch { /* Optional storage. */ }
-}
+import {
+  ONBOARDING_REQUEST_EVENT,
+  activateOnboardingRenderer,
+  hasCompletedOnboarding,
+  markOnboardingComplete,
+} from '../../lib/onboarding'
 
 export function FirstRunGuide() {
   const { t } = useI18n()
-  const [visible, setVisible] = useState(() => !wasCompleted())
+  const [visible, setVisible] = useState(() => !hasCompletedOnboarding())
   const [mode, setMode] = useState<'choice' | 'tour'>('choice')
   const [step, setStep] = useState(0)
   const dialogRef = useRef<HTMLElement | null>(null)
@@ -36,7 +31,7 @@ export function FirstRunGuide() {
     window.requestAnimationFrame(() => dialogRef.current?.focus({ preventScroll: true }))
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
-      rememberCompletion()
+      markOnboardingComplete()
       setVisible(false)
     }
     window.addEventListener('keydown', onKeyDown)
@@ -47,7 +42,7 @@ export function FirstRunGuide() {
   }, [visible])
 
   function complete() {
-    rememberCompletion()
+    markOnboardingComplete()
     setVisible(false)
   }
 
@@ -58,7 +53,7 @@ export function FirstRunGuide() {
     <h2 id="first-run-choice-title">{t('onboardingChoiceTitle')}</h2>
     <p id="first-run-choice-description">{t('onboardingChoiceDescription')}</p>
     <div className="first-run-choice-actions">
-      <button className="primary-button" onClick={() => setMode('tour')}>{t('startTutorial')} →</button>
+      <button className="primary-button" onClick={() => { activateOnboardingRenderer(); setMode('tour') }}>{t('startTutorial')} →</button>
       <button className="quiet-button" onClick={() => complete()}>{t('exploreIndependently')}</button>
     </div>
   </aside>
