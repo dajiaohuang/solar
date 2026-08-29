@@ -17,9 +17,9 @@
     { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ],
   "shortcuts": [
-    { "name": "Solar Explorer", "short_name": "Explorer", "url": "./?v=3&page=explorer", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Guided Stories", "short_name": "Stories", "url": "./?v=3&page=stories", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Small-Body Catalog", "short_name": "Catalog", "url": "./?v=3&page=catalog", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
+    { "name": "Solar Explorer", "short_name": "Explorer", "url": "./?v=4&page=explorer", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Guided Stories", "short_name": "Stories", "url": "./?v=4&page=stories", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Small-Body Catalog", "short_name": "Catalog", "url": "./?v=4&page=catalog", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
   ],
   "screenshots": [
     { "src": "readme-screenshot.png", "sizes": "1440x900", "type": "image/png", "form_factor": "wide", "label": "Solar Atlas linked scientific workspaces" }

@@ -4,6 +4,8 @@ All notable changes to Solar Atlas are documented here. The project follows sema
 
 ## Unreleased
 
+- Publish the current v4 scene schema from generated knowledge/privacy pages and PWA shortcuts while retaining v2/v3 reader compatibility.
+
 ### Added
 
 - An optional worker-propagated asteroid catalog cloud in the Observation Deck, rendered as one GPU point buffer instead of one mesh or trajectory per catalog object.
