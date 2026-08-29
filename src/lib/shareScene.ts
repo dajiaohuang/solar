@@ -5,6 +5,12 @@ import { simulationStore } from '../state/simulation-store'
 import { uiStore } from '../state/ui-store'
 import { missionStore } from '../state/mission-store'
 import { encodeUrlState } from './urlState'
+import { CANONICAL_APP_URL, IS_NATIVE_APP } from './platform'
+
+function sceneBaseUrl() {
+  if (IS_NATIVE_APP || typeof window === 'undefined') return CANONICAL_APP_URL
+  return `${window.location.origin}${window.location.pathname}`
+}
 
 export function encodeCurrentScene() {
   const simulation = simulationStore.getState()
@@ -14,7 +20,7 @@ export function encodeCurrentScene() {
   const mission = missionStore.getState()
   if (ui.route === 'home') {
     const language = ui.language === 'zh' ? '?lang=zh' : ''
-    return `${window.location.origin}${window.location.pathname}${language}`
+    return `${sceneBaseUrl()}${language}`
   }
   const resolvedSampleProfile = catalog.baseSampleProfile ?? catalog.requestedSampleProfile ?? undefined
   const resolvedSampleCount = catalog.baseSampleProfile
@@ -72,5 +78,5 @@ export function encodeCurrentScene() {
     offset: [simulation.viewOffset.x, simulation.viewOffset.y],
     lang: ui.language,
   })
-  return `${window.location.origin}${window.location.pathname}${query ? `?${query}` : ''}`
+  return `${sceneBaseUrl()}${query ? `?${query}` : ''}`
 }

@@ -11,6 +11,8 @@ import { DEFAULT_FOCUSED_ID, DEFAULT_SELECTED_IDS, selectionActions, selectionSt
 import { DEFAULT_SIMULATION_STATE, simulationActions, simulationStore } from '../state/simulation-store'
 import { uiActions, uiStore } from '../state/ui-store'
 import { DEFAULT_MISSION_STATE, missionActions, missionStore } from '../state/mission-store'
+import { IS_NATIVE_APP } from '../lib/platform'
+import { onNativeSceneLocation } from '../lib/nativeUrl'
 
 const DEFAULT_STORY = 'geocentric-model'
 const MISSION_BODY_IDS = new Set(majorBodiesWithPhysicalData.filter((body) => body.orbit && !body.parentId).map((body) => body.id))
@@ -220,9 +222,17 @@ export function AppProviders({ children }: { children: ReactNode }) {
       simulationClock.subscribe(schedule),
     ]
     window.addEventListener('popstate', handlePopState)
+    const unsubscribeNativeScene = IS_NATIVE_APP
+      ? onNativeSceneLocation((location) => {
+        if (location === currentRelativeUrl()) return
+        window.history.pushState({ solarAtlas: true }, '', location)
+        handlePopState()
+      })
+      : () => undefined
     return () => {
       if (timeout !== null) window.clearTimeout(timeout)
       window.removeEventListener('popstate', handlePopState)
+      unsubscribeNativeScene()
       unsubscribers.forEach((unsubscribe) => unsubscribe())
     }
   }, [applyUrlState])

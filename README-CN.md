@@ -2,7 +2,7 @@
 
 **浏览器原生的太阳系动力学与小天体图谱：场景可复现、数据可追溯、模型边界明确。**
 
-[打开 Solar Atlas](https://dajiaohuang.github.io/solar/) · [English](./README.md) · [科学模型与边界](#科学模型与边界) · [参与贡献](#参与贡献)
+[打开 Solar Atlas](https://dajiaohuang.github.io/solar/) · [English](./README.md) · [移动端构建](./MOBILE-CN.md) · [隐私说明](./PRIVACY-CN.md) · [科学模型与边界](#科学模型与边界) · [参与贡献](#参与贡献)
 
 应用版本：**v0.11.0** · [线上构建身份](https://dajiaohuang.github.io/solar/health.json) · [更新日志](./CHANGELOG.md) · [路线图](./ROADMAP.md) · [性能预算](./PERFORMANCE.md)
 
@@ -195,6 +195,12 @@ npm run check:capacity
 | `MPCORB_MODE` | `lite` 或 `full` |
 | `MPCORB_REFRESH=1` | 替换缓存的原始快照 |
 
+## Android 与 iOS
+
+仓库已包含 Android 与 iOS 的 Capacitor 8 本地应用壳工程，应用 ID 为 `io.github.dajiaohuang.solaratlas`。Android 最低支持 API 24、目标 API 36；iOS 需要 16.4 或以上。两端都把内置核心体验安装在本地，并按需通过 HTTPS 加载目录数据。
+
+这些工程提供源码与非发布验证路径，不是已经发布的商店产品。CI 生成由标准一次性 debug key 签名的 Android debug APK，以及无签名 iOS 模拟器应用；两者都不是商店发布产物。工具链齐备时 Windows 可以构建 Android，但 iOS 必须使用 macOS 与 Xcode。当前不宣称已经完成发布签名、提交商店或真机验证。前置条件、命令、原生行为和验收清单见 [MOBILE-CN.md](./MOBILE-CN.md)，当前源码级隐私说明见 [PRIVACY-CN.md](./PRIVACY-CN.md)。
+
 ## 架构
 
 ```text
@@ -247,6 +253,8 @@ Solar Atlas 提供 Web App Manifest、可安装应用壳、更新提示、sitema
 
 至少成功联网打开一次后，Service Worker 可在离线状态重新打开已缓存的应用壳。这不表示完整 MPCORB 发布、未缓存样本/详情分片、尚未访问的路由资源或实时 JPL SBDB 请求一定离线可用。数据版本错误会保持可见，不会静默替换为另一份数据。
 
+Android 与 iOS 工程使用独立的 Capacitor 本地应用壳构建，不注册 Service Worker。内置核心随应用安装，目录分片与实时 JPL 请求仍保持同样的在线边界。移动构建状态与发布限制见 [MOBILE-CN.md](./MOBILE-CN.md)，隐私行为见 [PRIVACY-CN.md](./PRIVACY-CN.md)。
+
 ## 参与贡献
 
 欢迎聚焦的科学纠错、可访问性改进、性能工作和可复现教学故事。大型架构或数据格式变更请先创建 issue。
@@ -260,7 +268,7 @@ Solar Atlas 提供 Web App Manifest、可安装应用壳、更新提示、sitema
 - UI 改动应检查键盘、桌面/移动端、减少动态效果偏好及 2D/WebGL 回退；
 - 不要把二体或示意输出描述成业务星历、N 体结果、风险评估或导航产品。
 
-完整流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)，私下报告安全问题见 [SECURITY.md](./SECURITY.md)。
+完整流程见 [CONTRIBUTING.md](./CONTRIBUTING.md)，原生贡献与发布边界见 [MOBILE-CN.md](./MOBILE-CN.md)，私下报告安全问题见 [SECURITY.md](./SECURITY.md)。
 
 ## 引用与许可
 

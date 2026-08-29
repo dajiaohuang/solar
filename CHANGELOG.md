@@ -9,6 +9,9 @@ All notable changes to Solar Atlas are documented here. The project follows sema
 - An optional worker-propagated asteroid catalog cloud in the Observation Deck, rendered as one GPU point buffer instead of one mesh or trajectory per catalog object.
 - Auto, Balanced, and Maximum 3D performance profiles with separate mobile/desktop budgets, conservative capability hints, frame-time adaptation, and deterministic unit coverage.
 - Reproducible v4 scene fields for catalog-cloud intent and quality profile, plus browser coverage for the default no-download path and 2D/3D replay.
+- Capacitor 8 Android and iOS local-shell source projects using application ID `io.github.dajiaohuang.solaratlas`, with Android API 24–36 and iOS 16.4+ platform contracts.
+- Native lifecycle, Android Back, custom-scheme scene import, canonical scene sharing, external-browser handoff, and user-initiated file export integrations.
+- A deterministic native-shell verifier and mobile workflow configuration for an unsigned Android debug APK and unsigned iOS Simulator app. These are validation paths, not signed or published releases.
 
 ### Changed
 
@@ -17,11 +20,14 @@ All notable changes to Solar Atlas are documented here. The project follows sema
 - Paused 3D scenes render on demand. Continuous animation is limited to a playing simulation with the catalog cloud enabled, and the renderer no longer preserves its drawing buffer.
 - The untouched first-visit choice uses a lightweight spatial preview and defers downloading and initializing the interactive Three.js renderer until the visitor starts the tutorial or chooses independent exploration; returning visitors still enter 3D directly.
 - The Moon remains derived from JPL mean elements and DE440 Earth–Moon mass partitioning; Io, Europa, Ganymede, Callisto, and Titan now use reproducible parent-centered JPL Horizons osculating-element queries at JD 2451545.0 TDB with explicit fixed-ellipse limitations.
+- Native builds now use relative local assets without Service Worker registration. The curated core remains installed and offline-capable, while catalog data is loaded on demand over HTTPS and live JPL requests remain online-only.
 
 ### Documentation
 
 - Rebuilt the English and Chinese README as mirrored product, science, data, performance, validation, deployment, and contribution references, with a current runtime screenshot and explicit guarantee boundaries.
 - Expanded the performance guide to distinguish immutable sample size, catalog-point budget, and focus-trajectory budget without making hardware-specific smoothness guarantees.
+- Added mirrored Android/iOS delivery guides and source-level privacy notices, and linked their contribution, offline, permission, validation, and release boundaries from the main documentation.
+- Documented that iOS builds require macOS and Xcode, and that signing, store submission, publication, and completed real-device validation are not currently claimed.
 
 ## 0.11.0 — 2026-08-20
 

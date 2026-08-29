@@ -27,12 +27,24 @@ function loadBuildInfo(): BuildInfo {
   }
 }
 
-export default defineConfig(({ command }) => ({
-  plugins: [react()],
-  base: '/solar/',
-  publicDir: command === 'serve' ? 'public' : false,
-  define: { __SOLAR_BUILD_INFO__: JSON.stringify(loadBuildInfo()) },
-  // Three.js is isolated in a lazy renderer chunk; 600 kB keeps the build
-  // warning meaningful without flagging that deliberate route boundary.
-  build: { chunkSizeWarningLimit: 600 },
-}))
+export default defineConfig(({ command }) => {
+  const isNative = process.env.SOLAR_ATLAS_BUILD_TARGET === 'native'
+  const nativeDataRoot = (process.env.SOLAR_ATLAS_DATA_BASE_URL ?? 'https://dajiaohuang.github.io/solar/data/asteroids').replace(/\/+$/, '')
+  if (isNative && !nativeDataRoot.startsWith('https://')) {
+    throw new Error('Native catalog data must use an HTTPS origin')
+  }
+
+  return {
+    plugins: [react()],
+    base: isNative ? './' : '/solar/',
+    publicDir: command === 'serve' ? 'public' : false,
+    define: {
+      __SOLAR_BUILD_INFO__: JSON.stringify(loadBuildInfo()),
+      __SOLAR_NATIVE__: JSON.stringify(isNative),
+      __SOLAR_DATA_ROOT__: JSON.stringify(isNative ? nativeDataRoot : ''),
+    },
+    // Three.js is isolated in a lazy renderer chunk; 600 kB keeps the build
+    // warning meaningful without flagging that deliberate route boundary.
+    build: { chunkSizeWarningLimit: 600 },
+  }
+})

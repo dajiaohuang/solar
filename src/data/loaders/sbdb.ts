@@ -1,4 +1,5 @@
 import type { CelestialBody } from '../../types'
+import { IS_NATIVE_APP } from '../../lib/platform'
 
 type SbdbElement = {
   name?: string
@@ -130,6 +131,15 @@ export async function fetchSbdbBody(designation: string, signal?: AbortSignal) {
   url.searchParams.set('sstr', designation)
   url.searchParams.set('full-prec', '1')
   url.searchParams.set('phys-par', '1')
+  if (IS_NATIVE_APP) {
+    const { CapacitorHttp } = await import('@capacitor/core')
+    const response = await CapacitorHttp.get({ url: url.toString() })
+    const payload = response.data as SbdbResponse & { message?: string }
+    if (response.status < 200 || response.status >= 300 || payload.message) {
+      throw new Error(payload.message || `JPL SBDB request failed (${response.status})`)
+    }
+    return parseSbdbBody(payload, designation)
+  }
   const response = await fetch(url, { signal })
   const payload = await response.json() as SbdbResponse & { message?: string }
   if (!response.ok || payload.message) {

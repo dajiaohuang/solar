@@ -1,16 +1,7 @@
 import type { TrajectoryFrameData } from '../types'
+import { saveTextExport } from './platform'
 
-function downloadBlob(content: string, filename: string, mimeType: string) {
-  const blob = new Blob([content], { type: mimeType })
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = filename
-  anchor.click()
-  URL.revokeObjectURL(url)
-}
-
-export function exportAsJSON(frame: TrajectoryFrameData) {
+export async function exportAsJSON(frame: TrajectoryFrameData) {
   const exportData = {
     exportedAt: new Date().toISOString(),
     maxDistanceAU: frame.maxDistance,
@@ -30,10 +21,10 @@ export function exportAsJSON(frame: TrajectoryFrameData) {
     })),
   }
 
-  downloadBlob(JSON.stringify(exportData, null, 2), 'solar-trajectories.json', 'application/json')
+  await saveTextExport(JSON.stringify(exportData, null, 2), 'solar-trajectories.json', 'application/json')
 }
 
-export function exportAsCSV(frame: TrajectoryFrameData) {
+export async function exportAsCSV(frame: TrajectoryFrameData) {
   const rows: string[] = ['bodyId,bodyName,sampleIndex,x,au,y,au']
 
   for (const trajectory of frame.trajectories) {
@@ -42,5 +33,5 @@ export function exportAsCSV(frame: TrajectoryFrameData) {
     })
   }
 
-  downloadBlob(rows.join('\n'), 'solar-trajectories.csv', 'text/csv')
+  await saveTextExport(rows.join('\n'), 'solar-trajectories.csv', 'text/csv')
 }

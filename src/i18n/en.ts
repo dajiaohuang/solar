@@ -129,7 +129,9 @@ export const en = {
   bodyKindSpacecraft: 'Spacecraft',
   noBody: 'Select an object in the atlas.',
   share: 'Copy reproducible link',
+  shareNative: 'Share reproducible scene',
   linkCopied: 'Scene link copied',
+  sceneShared: 'Scene ready in the share sheet',
   dataset: 'Dataset',
   version: 'Version',
   mode: 'Mode',
@@ -299,7 +301,9 @@ export const en = {
   setReference: 'Use as reference frame',
   selectedObjectList: 'Selected celestial objects',
   copyStoryLink: 'Copy this step link',
+  shareStoryNative: 'Share this story step',
   storyLinkCopied: 'Story step link copied',
+  storyShared: 'Story step ready in the share sheet',
   revealExplanation: 'Reveal explanation',
   hideExplanation: 'Hide explanation',
   storySources: 'Sources',
@@ -508,6 +512,7 @@ export const en = {
   range: 'Range',
   median: 'Median',
   sample: 'Sample',
+  privacyPolicy: 'Privacy policy',
 } as const
 
 export type TranslationKey = keyof typeof en

@@ -3,6 +3,7 @@ import storiesData from '../../content/stories/stories.json'
 import type { Story, StoryScene } from '../../content/stories/types'
 import { useI18n } from '../../i18n/context'
 import { encodeCurrentScene } from '../../lib/shareScene'
+import { IS_NATIVE_APP, shareSceneUrl } from '../../lib/platform'
 import { applyStoryScene } from '../../lib/storyScene'
 import { uiActions, uiStore } from '../../state/ui-store'
 import { StoryCheckpoint } from './StoryCheckpoint'
@@ -24,8 +25,12 @@ export function StoriesWorkspace() {
   }
 
   async function copyStepLink() {
-    await navigator.clipboard.writeText(encodeCurrentScene())
-    uiActions.toast(t('storyLinkCopied'))
+    try {
+      const outcome = await shareSceneUrl(encodeCurrentScene(), story.title[language])
+      if (outcome !== 'cancelled') uiActions.toast(t(outcome === 'shared' ? 'storyShared' : 'storyLinkCopied'))
+    } catch (error) {
+      uiActions.toast(error instanceof Error ? error.message : String(error))
+    }
   }
 
   function selectStory(id: string) {
@@ -37,7 +42,7 @@ export function StoriesWorkspace() {
   }
 
   return <div className="workspace-page stories-workspace">
-    <header className="page-heading"><div><span className="eyebrow">{t('storiesKicker')}</span><h1>{t('stories')}</h1><p>{t('storiesDescription')}</p></div><button className="quiet-button" onClick={copyStepLink}>↗ {t('copyStoryLink')}</button></header>
+    <header className="page-heading"><div><span className="eyebrow">{t('storiesKicker')}</span><h1>{t('stories')}</h1><p>{t('storiesDescription')}</p></div><button className="quiet-button" onClick={() => void copyStepLink()}>↗ {t(IS_NATIVE_APP ? 'shareStoryNative' : 'copyStoryLink')}</button></header>
     <div className="stories-layout">
       <aside className="story-index glass-panel" aria-label={t('stories')}>{stories.map((item, index) => <button aria-current={item.id === story.id ? 'true' : undefined} className={`${item.id === story.id ? 'active' : ''}${item.core ? ' core' : ''}`} key={item.id} onClick={() => selectStory(item.id)}><em>{String(index + 1).padStart(2, '0')}</em><span><strong>{item.title[language]}{item.core && <i className="story-core-badge">{t('coreCourse')}</i>}</strong><small>{item.summary[language]}</small></span></button>)}</aside>
       <section className={`story-hero story-${story.id} glass-panel`}>

@@ -576,6 +576,9 @@ export function TrajectoryCanvas({
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const resourcesRef = useRef<GlResources | null>(null)
+  const lastTouchTapRef = useRef<{ bodyId: string; timestamp: number } | null>(null)
+  const touchGestureRef = useRef<{ pointerId: number; startX: number; startY: number; moved: boolean } | null>(null)
+  const activeTouchPointersRef = useRef(new Set<number>())
   const [containerRef, size] = useElementSize<HTMLDivElement>()
   const [webglUnavailable, setWebglUnavailable] = useState(false)
 
@@ -758,11 +761,85 @@ export function TrajectoryCanvas({
     [currentPositions, onHover, projection, viewRadiusAU],
   )
 
+  const handleTouchTap = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const worldPoint = unprojectPoint({ x: event.clientX - rect.left, y: event.clientY - rect.top }, projection)
+    const thresholdAU = viewRadiusAU * 0.1
+    let nearestItem: (typeof currentPositions)[number] | null = null
+    let nearestDistance = Number.POSITIVE_INFINITY
+    for (const item of currentPositions) {
+      const distance = Math.hypot(item.planarPosition.x - worldPoint.x, item.planarPosition.y - worldPoint.y)
+      if (distance < thresholdAU && distance < nearestDistance) {
+        nearestDistance = distance
+        nearestItem = item
+      }
+    }
+    if (!nearestItem) {
+      lastTouchTapRef.current = null
+      return
+    }
+    onHover?.(nearestItem.body, nearestItem.distance, event.clientX, event.clientY)
+    const now = performance.now()
+    const previous = lastTouchTapRef.current
+    if (previous?.bodyId === nearestItem.body.id && now - previous.timestamp < 420) {
+      onReferenceChange?.(nearestItem.body.id)
+      lastTouchTapRef.current = null
+    } else {
+      lastTouchTapRef.current = { bodyId: nearestItem.body.id, timestamp: now }
+    }
+  }, [currentPositions, onHover, onReferenceChange, projection, viewRadiusAU])
+
+  const handleTouchStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'touch') return
+    activeTouchPointersRef.current.add(event.pointerId)
+    if (activeTouchPointersRef.current.size !== 1) {
+      touchGestureRef.current = null
+      lastTouchTapRef.current = null
+      return
+    }
+    touchGestureRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+    }
+  }, [])
+
+  const handleTouchMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'touch') return
+    const gesture = touchGestureRef.current
+    if (!gesture || gesture.pointerId !== event.pointerId) return
+    if (Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) > 12) {
+      gesture.moved = true
+      lastTouchTapRef.current = null
+    }
+  }, [])
+
+  const handleTouchEnd = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'touch') return
+    activeTouchPointersRef.current.delete(event.pointerId)
+    const gesture = touchGestureRef.current
+    touchGestureRef.current = null
+    if (!gesture || gesture.pointerId !== event.pointerId || gesture.moved) return
+    handleTouchTap(event)
+  }, [handleTouchTap])
+
+  const handleTouchCancel = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'touch') return
+    activeTouchPointersRef.current.delete(event.pointerId)
+    touchGestureRef.current = null
+    lastTouchTapRef.current = null
+  }, [])
+
   return (
     <div
       className="viz-canvas canvas-mode"
       ref={containerRef}
       onDoubleClick={handleDoubleClick}
+      onPointerDown={handleTouchStart}
+      onPointerMove={handleTouchMove}
+      onPointerUp={handleTouchEnd}
+      onPointerCancel={handleTouchCancel}
       onMouseMove={handleMouseMove}
       onMouseLeave={() => onHover?.(null, 0, 0, 0)}
     >

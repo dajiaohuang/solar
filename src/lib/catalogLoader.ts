@@ -12,9 +12,9 @@ import type {
   DatasetVersion,
   OrbitClassCode,
 } from '../types'
+import { CATALOG_DATA_ROOT } from './platform'
 
-const BASE = import.meta.env.BASE_URL
-const dataRoot = `${BASE}data/asteroids`
+export const dataRoot = CATALOG_DATA_ROOT
 const searchBucketCache = new Map<string, Promise<AsteroidIndexEntry[]>>()
 const chunkCache = new Map<string, Promise<AsteroidRecord[]>>()
 const lookupCache = new Map<string, Promise<AsteroidIndexEntry[]>>()
