@@ -88,11 +88,13 @@ if (process.env.SMOKE_BROWSER === '1') {
       localStorage.setItem('solar-atlas-first-run-v1', 'complete')
     })
     await page.goto(site.toString(), { waitUntil: 'domcontentloaded', timeout: 60_000 })
-    await page.locator('.welcome-workspace').waitFor({ state: 'visible', timeout: 60_000 })
-    console.log('Confirmed visitor landing page')
-    await page.locator('.welcome-primary-actions .primary-button').click()
-    await page.getByTestId('trajectory-canvas-3d').waitFor({ state: 'visible', timeout: 60_000 })
-    console.log('Confirmed landing-to-explorer path')
+    await page.locator('.trajectory-canvas').waitFor({ state: 'visible', timeout: 60_000 })
+    const presetCount = await page.locator('.preset-list > button').count()
+    if (presetCount < 11) throw new Error(`Production deck exposes only ${presetCount} preset scenes`)
+    if (await page.locator('.advanced-controls').evaluate((element) => element.hasAttribute('open'))) {
+      throw new Error('Production deck opens advanced controls by default')
+    }
+    console.log(`Confirmed preset-first 2D Observation Deck with ${presetCount} scenes`)
     await page.locator('.primary-navigation button', { hasText: 'Catalog' }).click()
     await page.getByRole('heading', { name: 'Catalog' }).waitFor({ state: 'visible', timeout: 60_000 })
     await page.locator('.catalog-counts').waitFor({ state: 'visible', timeout: 60_000 })
