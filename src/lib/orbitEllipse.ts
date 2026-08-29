@@ -1,15 +1,11 @@
 import { createBodyPositionResolver } from './ephemeris'
+import { getOrbitalPeriodDays } from './orbitalPeriod'
 import { toPlanarPoint } from './referenceFrame'
-import type { BodyId, CelestialBody, OrbitDefinition, Vector2 } from '../types'
+import type { BodyId, CelestialBody, Vector2 } from '../types'
 
 const ELLIPSE_SAMPLES = 300
 
-export function getOrbitalPeriodDays(orbit: OrbitDefinition) {
-  const semiMajorAxisAU =
-    orbit.model === 'planetaryApprox' ? orbit.base.semiMajorAxisAU : orbit.semiMajorAxisAU
-
-  return 365.25 * Math.sqrt(semiMajorAxisAU * semiMajorAxisAU * semiMajorAxisAU)
-}
+export { getOrbitalPeriodDays }
 
 export function computeOrbitEllipses(
   bodies: CelestialBody[],
@@ -24,7 +20,7 @@ export function computeOrbitEllipses(
       continue
     }
 
-    const periodDays = getOrbitalPeriodDays(body.orbit)
+    const periodDays = getOrbitalPeriodDays(body.orbit, body.parentId ? 'parent' : 'sun')
     const startJulianDay = centerJulianDay - periodDays / 2
     const endJulianDay = centerJulianDay + periodDays / 2
     const points: Vector2[] = []

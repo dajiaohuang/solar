@@ -7,6 +7,7 @@ import { computeInfluenceRadii } from '../../engine/ephemeris/spheresOfInfluence
 import { useI18n } from '../../i18n/context'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { createBodyPositionResolver, getInstantaneousElements } from '../../lib/ephemeris'
+import { getOrbitalPeriodDays } from '../../lib/orbitalPeriod'
 import { encodeCurrentScene } from '../../lib/shareScene'
 import { catalogStore } from '../../state/catalog-store'
 import { uiActions } from '../../state/ui-store'
@@ -31,7 +32,11 @@ export function BodyInspector({ body, currentPositions, bodiesById }: Props) {
       ...elements,
       perihelionAU: elements.semiMajorAxisAU * (1 - elements.eccentricity),
       aphelionAU: elements.semiMajorAxisAU * (1 + elements.eccentricity),
-      periodDays: 365.2568983 * Math.sqrt(elements.semiMajorAxisAU ** 3),
+      periodDays: getOrbitalPeriodDays(
+        body.orbit,
+        body.parentId ? 'parent' : 'sun',
+        elements.semiMajorAxisAU,
+      ),
       influence: physical && parentPhysical ? computeInfluenceRadii(elements.semiMajorAxisAU, elements.eccentricity, physical.massKg, parentPhysical.massKg) : null,
     }
   }, [body, clock.julianDay])
