@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useI18n } from '../../i18n/context'
-import { uiActions } from '../../state/ui-store'
+import { ONBOARDING_REQUEST_EVENT } from '../../lib/onboarding'
 
 const STORAGE_KEY = 'solar-atlas-first-run-v1'
 
@@ -8,23 +8,61 @@ function wasCompleted() {
   try { return localStorage.getItem(STORAGE_KEY) === 'complete' } catch { return false }
 }
 
+function rememberCompletion() {
+  try { localStorage.setItem(STORAGE_KEY, 'complete') } catch { /* Optional storage. */ }
+}
+
 export function FirstRunGuide() {
   const { t } = useI18n()
   const [visible, setVisible] = useState(() => !wasCompleted())
+  const [mode, setMode] = useState<'choice' | 'tour'>('choice')
   const [step, setStep] = useState(0)
+  const dialogRef = useRef<HTMLElement | null>(null)
   const tips = [t('onboardingDrag'), t('onboardingFrame'), t('onboardingSelect'), t('onboardingStory')]
 
-  function complete(openCoreCourse = false) {
-    try { localStorage.setItem(STORAGE_KEY, 'complete') } catch { /* Optional storage. */ }
-    setVisible(false)
-    if (openCoreCourse) {
-      uiActions.selectStory('geocentric-model', 0)
-      uiActions.navigate('stories')
+  useEffect(() => {
+    const open = () => {
+      setMode('choice')
+      setStep(0)
+      setVisible(true)
     }
+    window.addEventListener(ONBOARDING_REQUEST_EVENT, open)
+    return () => window.removeEventListener(ONBOARDING_REQUEST_EVENT, open)
+  }, [])
+
+  useEffect(() => {
+    if (!visible) return
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    window.requestAnimationFrame(() => dialogRef.current?.focus({ preventScroll: true }))
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      rememberCompletion()
+      setVisible(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      previousFocus?.focus({ preventScroll: true })
+    }
+  }, [visible])
+
+  function complete() {
+    rememberCompletion()
+    setVisible(false)
   }
 
   if (!visible) return null
-  return <aside className="first-run-guide glass-panel" role="dialog" aria-labelledby="first-run-title" aria-modal="false">
+  if (mode === 'choice') return <aside ref={dialogRef} tabIndex={-1} className="first-run-guide first-run-choice glass-panel" role="dialog" aria-labelledby="first-run-choice-title" aria-describedby="first-run-choice-description" aria-modal="false">
+    <button className="first-run-close" onClick={() => complete()} aria-label={t('dismiss')}>×</button>
+    <span className="eyebrow">{t('firstVisit')}</span>
+    <h2 id="first-run-choice-title">{t('onboardingChoiceTitle')}</h2>
+    <p id="first-run-choice-description">{t('onboardingChoiceDescription')}</p>
+    <div className="first-run-choice-actions">
+      <button className="primary-button" onClick={() => setMode('tour')}>{t('startTutorial')} →</button>
+      <button className="quiet-button" onClick={() => complete()}>{t('exploreIndependently')}</button>
+    </div>
+  </aside>
+  return <aside ref={dialogRef} tabIndex={-1} className="first-run-guide glass-panel" role="dialog" aria-labelledby="first-run-title" aria-modal="false">
     <div className="first-run-progress" aria-hidden="true">{tips.map((_, index) => <i className={index === step ? 'active' : ''} key={index} />)}</div>
     <button className="first-run-close" onClick={() => complete()} aria-label={t('dismiss')}>×</button>
     <span className="eyebrow">{String(step + 1).padStart(2, '0')} / 04</span>
@@ -32,7 +70,7 @@ export function FirstRunGuide() {
     <p>{tips[step]}</p>
     <div className="first-run-actions">
       {step > 0 && <button className="quiet-button" onClick={() => setStep((value) => value - 1)}>← {t('previousTip')}</button>}
-      <button className="primary-button" onClick={() => step === tips.length - 1 ? complete(true) : setStep((value) => value + 1)}>
+      <button className="primary-button" onClick={() => step === tips.length - 1 ? complete() : setStep((value) => value + 1)}>
         {step === tips.length - 1 ? t('gotIt') : t('nextTip')} →
       </button>
     </div>

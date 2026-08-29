@@ -7,10 +7,10 @@ test('first install can reload the application shell offline', async ({ page, co
   await page.goto('./')
   await page.evaluate(async () => { await navigator.serviceWorker.ready })
   await page.reload()
-  await expect(page.getByRole('heading', { name: /See the Solar System|把太阳系看成/ })).toBeVisible()
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
   await context.setOffline(true)
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { name: /See the Solar System|把太阳系看成/ })).toBeVisible()
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
   await context.setOffline(false)
 })
 

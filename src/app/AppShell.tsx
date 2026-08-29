@@ -117,7 +117,7 @@ export function AppShell() {
 
   return <div className="atlas-app">
     <header className="app-header">
-      <button className="brand-lockup" onClick={() => navigate('home')} aria-label={`${t('brand')} · ${t('home')}`}>
+      <button className="brand-lockup" onClick={() => navigate('explorer')} aria-label={`${t('brand')} · ${t('explorer')}`}>
         <span className="brand-mark"><i /><b>☉</b></span>
         <span><strong>{t('brand')}</strong><small>{t('tagline')}</small></span>
       </button>
@@ -135,7 +135,6 @@ export function AppShell() {
       <button aria-expanded={mobileMoreOpen} className={mobileMoreOpen || MOBILE_MORE.some((item) => item.route === ui.route) || ui.route === 'home' ? 'active' : ''} onClick={() => setMobileMoreOpen((value) => !value)}><span>•••</span><small>{t('more')}</small></button>
     </nav>
     {mobileMoreOpen && <div className="mobile-more-menu glass-panel">
-      <button className={ui.route === 'home' ? 'active' : ''} onClick={() => navigate('home')}><span>☉</span>{t('home')}</button>
       {MOBILE_MORE.map((item) => <button key={item.route} className={ui.route === item.route ? 'active' : ''} onClick={() => navigate(item.route)}><span>{item.icon}</span>{t(item.label)}</button>)}
     </div>}
 

@@ -7,7 +7,6 @@ function lazyNamed<T extends Record<string, ComponentType>>(loader: () => Promis
   return lazy(async () => ({ default: (await loader())[name] }))
 }
 const ExplorerWorkspace = lazyNamed(() => import('../features/explorer/ExplorerWorkspace'), 'ExplorerWorkspace')
-const WelcomeWorkspace = lazyNamed(() => import('../features/home/WelcomeWorkspace'), 'WelcomeWorkspace')
 const CatalogWorkspace = lazyNamed(() => import('../features/catalog/CatalogWorkspace'), 'CatalogWorkspace')
 const ElementSpaceWorkspace = lazyNamed(() => import('../features/element-space/ElementSpaceWorkspace'), 'ElementSpaceWorkspace')
 const EventsWorkspace = lazyNamed(() => import('../features/events/EventsWorkspace'), 'EventsWorkspace')
@@ -19,7 +18,7 @@ export function AppRouteView({ route }: { route: AppRoute }) {
   const { t } = useI18n()
   let View: ComponentType
   switch (route) {
-    case 'home': View = WelcomeWorkspace; break
+    case 'home': View = ExplorerWorkspace; break
     case 'catalog': View = CatalogWorkspace; break
     case 'elements': View = ElementSpaceWorkspace; break
     case 'events': View = EventsWorkspace; break
