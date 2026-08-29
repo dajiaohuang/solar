@@ -1,4 +1,5 @@
 import { J2000_JULIAN_DAY } from './julianDate'
+import { partitionEarthMoonBarycenter } from '../engine/ephemeris/earthMoonSystem'
 import type {
   BodyId,
   CelestialBody,
@@ -188,6 +189,27 @@ export function crossVector3(a: Vector3, b: Vector3): Vector3 {
 export function createBodyPositionResolver(bodiesById: Map<BodyId, CelestialBody>, julianDay: number) {
   const cache = new Map<BodyId, Vector3>()
 
+  const resolveEarthMoonSystem = () => {
+    const cachedEarth = cache.get('earth')
+    const cachedMoon = cache.get('moon')
+    if (cachedEarth && cachedMoon) return
+
+    const earth = bodiesById.get('earth')
+    const moon = bodiesById.get('moon')
+    if (!earth?.orbit || earth.orbitRepresents !== 'earth-moon-barycenter') {
+      throw new Error('Earth-Moon barycentric resolution requires an Earth EMB orbit seed')
+    }
+    if (!moon?.orbit || moon.parentId !== 'earth') {
+      throw new Error('Earth-Moon barycentric resolution requires an Earth-centered Moon orbit')
+    }
+
+    const embHeliocentric = orbitToHeliocentricVector(earth.orbit, julianDay)
+    const earthToMoon = orbitToHeliocentricVector(moon.orbit, julianDay)
+    const partition = partitionEarthMoonBarycenter(embHeliocentric, earthToMoon)
+    cache.set('earth', partition.earthGeocenter)
+    cache.set('moon', partition.moonCenter)
+  }
+
   const resolve = (bodyId: BodyId): Vector3 => {
     const cached = cache.get(bodyId)
     if (cached) {
@@ -197,6 +219,15 @@ export function createBodyPositionResolver(bodiesById: Map<BodyId, CelestialBody
     const body = bodiesById.get(bodyId)
     if (!body) {
       throw new Error(`Unknown body: ${bodyId}`)
+    }
+
+    const earth = bodiesById.get('earth')
+    if (
+      (bodyId === 'earth' || bodyId === 'moon') &&
+      earth?.orbitRepresents === 'earth-moon-barycenter'
+    ) {
+      resolveEarthMoonSystem()
+      return cache.get(bodyId)!
     }
 
     if (!body.orbit) {

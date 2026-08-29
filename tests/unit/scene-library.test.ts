@@ -34,13 +34,19 @@ describe('local scene library', () => {
     )).toBe('http://127.0.0.1:4173/solar/?v=3&page=events#result')
   })
 
-  it('exports the planetary model identity and Earth point representation with the scene URLs', () => {
+  it('exports the planetary seed and Earth-Moon mass-partition identities with the scene URLs', () => {
     const document = JSON.parse(sceneLibraryDocument([scene]))
     expect(document.evidence.planetaryApproximation).toMatchObject({
       id: 'jpl-approx-table-1',
       validFrom: '1800-01-01',
       validTo: '2050-12-31',
-      earthPoint: 'earth-moon-barycenter',
+      earthOrbitSeed: 'earth-moon-barycenter',
+      renderedEarthPoint: 'earth-geocenter',
+    })
+    expect(document.evidence.earthMoonMassPartition).toMatchObject({
+      id: 'de440-earth-moon-gm-partition-v1',
+      sourceSha256: '924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140',
+      renderedEarthPoint: 'earth-geocenter',
     })
     expect(parseSceneLibrary(JSON.stringify(document))).toEqual([scene])
   })

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  EARTH_MOON_MASS_PARTITION_EVIDENCE,
   JPL_APPROX_MODEL_EVIDENCE,
   JPL_APPROX_VALIDITY_LABEL,
   SATELLITE_ORBIT_MODEL_EVIDENCE,
@@ -37,11 +38,28 @@ describe('JPL approximate element validity', () => {
       applicationTimeHandling: 'utc-derived-numeric-jd-without-tdb-conversion',
       validFrom: '1800-01-01',
       validTo: '2050-12-31',
-      earthPoint: 'earth-moon-barycenter',
+      earthOrbitSeed: 'earth-moon-barycenter',
+      renderedEarthPoint: 'earth-geocenter',
     })
-    expect(majorBodiesById.get('earth')?.positionRepresents).toBe('earth-moon-barycenter')
-    expect(en.earthMoonBarycenterDisclosure).toContain('Earth–Moon barycenter')
-    expect(zh.earthMoonBarycenterDisclosure).toContain('地月质心')
+    expect(majorBodiesById.get('earth')).toMatchObject({
+      orbitRepresents: 'earth-moon-barycenter',
+      positionRepresents: 'earth-geocenter',
+    })
+  })
+
+  it('publishes the exact DE440 Earth-Moon mass partition', () => {
+    expect(EARTH_MOON_MASS_PARTITION_EVIDENCE).toMatchObject({
+      id: 'de440-earth-moon-gm-partition-v1',
+      sourceUrl: 'https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc',
+      sourceSha256: '924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140',
+      unit: 'km^3 s^-2',
+      earthGm: '3.9860043550702266E+05',
+      moonGm: '4.9028001184575496E+03',
+      systemGm: '4.0350323562548019E+05',
+      orbitSeed: 'earth-moon-barycenter',
+      renderedEarthPoint: 'earth-geocenter',
+      composition: 'mass-weighted-two-body-partition',
+    })
   })
 
   it('publishes the fixed-ellipse satellite propagation and precision boundary', () => {
@@ -51,22 +69,18 @@ describe('JPL approximate element validity', () => {
       sourceWarning: 'mean-elements-not-intended-for-ephemeris-computation',
       propagation: 'fixed-ellipse-mean-anomaly-only',
       moonSourceCenter: 'earth-geocenter',
-      moonAppliedCenter: 'earth-moon-barycenter-seed',
-      moonCenterHandling: 'untransformed-pending-geocenter-correction',
-      approximateMeanCenterOffsetKm: 4700,
-      centerCorrectionIssue: 'https://github.com/dajiaohuang/solar/issues/21',
+      moonAppliedCenter: 'earth-geocenter',
+      moonCenterHandling: 'de440-gm-barycentric-partition',
       sourcedBodies: ['moon'],
       illustrativeBodies: ['io', 'europa', 'ganymede', 'callisto', 'titan'],
     })
     expect(en.satelliteMeanElementsWarning).toContain('not intended for ephemeris')
     expect(en.satelliteMeanElementsWarning).toContain('illustrative')
     expect(en.satelliteMeanElementsWarning).toContain('Earth-geocentric')
-    expect(en.satelliteMeanElementsWarning).toContain('Earth–Moon barycenter')
-    expect(en.satelliteMeanElementsWarning).toContain('#21')
+    expect(en.satelliteMeanElementsWarning).toContain('DE440')
     expect(zh.satelliteMeanElementsWarning).toContain('不用于星历')
     expect(zh.satelliteMeanElementsWarning).toContain('示意')
     expect(zh.satelliteMeanElementsWarning).toContain('地心')
-    expect(zh.satelliteMeanElementsWarning).toContain('地月质心')
-    expect(zh.satelliteMeanElementsWarning).toContain('#21')
+    expect(zh.satelliteMeanElementsWarning).toContain('DE440')
   })
 })
