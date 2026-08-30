@@ -263,7 +263,7 @@ npm run check:capacity
 
 `npm run ci` 合并 lint、单元、科学与构建检查。单元测试覆盖儒略日、开普勒传播、参考系、渲染预算滞回、霍曼/Lambert 数学、月相、Hill/SOI 定义、卫星证据、v2/v3 兼容、v4 场景往返、MPCORB 解析、缓存隔离与百万行有界扫描。Playwright 覆盖首次使用体验、默认 3D 与 2D 回退、显式目录点云加载、桌面/移动样本、URL 恢复、浏览器历史、故事、任务、离线应用壳、WebGL/Worker 失败和严重/致命自动化可访问性问题。
 
-`.github/workflows/pull-request-quality.yml` 是合并前门禁。所有 PR 都会运行只读的仓库解析器、本地链接和身份一致性检查；代码、配置、工作流与生产资产变更还会运行 lint、单元/科学验证、生产构建/容量、Chromium 交互/可访问性与 Lighthouse 检查。纯文档变更只跳过昂贵的浏览器任务，不会跳过仓库契约。分支保护应只要求稳定的汇总检查 `Pull request quality gate`；仅当仓库契约与所有适用的完整质量任务都成功时，它才会通过。
+`.github/workflows/pull-request-quality.yml` 是合并前门禁。所有 PR 都会运行只读的仓库解析器、本地链接和身份一致性检查；代码、配置、工作流与生产资产变更还会运行 lint、单元/科学验证、生产构建/容量、Chromium 交互/可访问性与 Lighthouse 检查。纯文档变更只跳过昂贵的浏览器任务，不会跳过仓库契约。分支保护要求每次合并（包括管理员合并）都必须取得 GitHub Actions 提供的稳定汇总检查 `Pull request quality gate`；仅当仓库契约与所有适用的完整质量任务都成功时，它才会通过。
 
 `.github/workflows/deploy.yml` 仍是合并后的唯一生产门禁：校验数据 pin、构建压缩交付产物、执行 Pages/浏览器预算、测试与 Lighthouse、归档证据、部署并运行生产冒烟。`.github/workflows/data-refresh.yml` 按月或手动发布不可变数据集。`.github/workflows/rollback.yml` 可从保留期内的成功运行恢复准确测试过的 Pages 产物。
 
