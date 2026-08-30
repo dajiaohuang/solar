@@ -83,7 +83,7 @@ export function EvidenceWorkspace() {
           <div><dt>{t('commitSha')}</dt><dd className="checksum">{BUILD_INFO.commitSha}</dd></div>
           <div><dt>{t('buildTime')}</dt><dd>{new Date(BUILD_INFO.buildTime).toLocaleString(language === 'zh' ? 'zh-CN' : 'en')}</dd></div>
           <div><dt>{t('deployment')}</dt><dd>{BUILD_INFO.environment}</dd></div>
-          <div><dt>{t('dataset')}</dt><dd>{catalog.manifest?.version ?? BUILD_INFO.datasetVersion ?? t('noDataset')}</dd></div>
+          <div><dt>{t('dataset')}</dt><dd>{catalog.manifest?.version ?? t('noDataset')}</dd></div>
           <div><dt>{t('parserVersion')}</dt><dd>{catalog.provenance?.parserVersion ?? catalog.manifest?.parserVersion ?? '—'}</dd></div>
           <div><dt>{t('dataGenerated')}</dt><dd>{catalog.manifest?.generatedAt ? new Date(catalog.manifest.generatedAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en') : '—'}</dd></div>
           <div><dt>{t('validationRules')}</dt><dd>{activeValidation ? validationRuleCount : '—'}</dd></div>
