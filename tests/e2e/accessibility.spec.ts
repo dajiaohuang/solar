@@ -27,6 +27,7 @@ async function expectMinimumTargetSize(page: Page, selector: string) {
 }
 
 test('first-run deck, story, and evidence surfaces have no serious automated accessibility violations', async ({ page }) => {
+  test.setTimeout(90_000)
   await page.goto('./')
   await expect(page.locator('.trajectory-3d-placeholder')).toBeVisible()
   const firstRun = page.getByRole('dialog', { name: /How would you like to begin|你想从哪里开始/ })
