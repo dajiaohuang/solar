@@ -17,6 +17,11 @@ describe('repository contract', () => {
     expect(markdownLinks(markdown)).toEqual(['./missing.md'])
   })
 
+  it('keeps odd-backslash escaped HTML comments visible and strips even ones', () => {
+    expect(markdownLinks('\\<!-- [visible](./missing.md) -->')).toEqual(['./missing.md'])
+    expect(markdownLinks('\\\\<!-- [ignored](./missing.md) -->')).toEqual([])
+  })
+
   it('uses GitHub-style heading anchors and disambiguates repeats', () => {
     expect([...markdownAnchors('# Quality gate\n## Quality gate\n## Run `npm run build` now\n## 科学模型与边界\n')]).toEqual([
       'quality-gate',

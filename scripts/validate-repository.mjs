@@ -40,7 +40,29 @@ function stripFencedCode(markdown) {
 }
 
 function stripNonRendered(markdown) {
-  return stripFencedCode(markdown).replace(/<!--[\s\S]*?(?:-->|$)/g, comment => comment.replace(/[^\r\n]/g, ''))
+  const source = stripFencedCode(markdown)
+  let output = ''
+  let inComment = false
+  for (let index = 0; index < source.length;) {
+    if (!inComment && source.startsWith('<!--', index)) {
+      let backslashes = 0
+      for (let previous = index - 1; previous >= 0 && source[previous] === '\\'; previous -= 1) backslashes += 1
+      if (backslashes % 2 === 0) {
+        inComment = true
+        index += 4
+        continue
+      }
+    }
+    if (inComment && source.startsWith('-->', index)) {
+      inComment = false
+      index += 3
+      continue
+    }
+    const character = source[index]
+    if (!inComment || character === '\r' || character === '\n') output += character
+    index += 1
+  }
+  return output
 }
 
 function codeSpanEnd(source, start) {
