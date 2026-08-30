@@ -71,13 +71,14 @@ Global object/story/term search is available with `Ctrl/⌘ K` or `/`. Browser B
 
 Scene URL schema **v4** carries the scientific and interaction state needed to replay a workspace: route, immutable dataset version, dataset mode, epoch, reference and comparison frames, focus set, filters, trajectory sampling, view mode, catalog-cloud choice, 3D quality profile, plot, guided-story step, mission endpoints/dates, language, and view settings.
 
-Catalog workspaces and dataset-backed presets pin `catalogSample=mobile|desktop` together with the manifest-declared `catalogSampleCount`. Incomplete, unavailable, unsupported, or count-mismatched tuples fail closed where the sample is loaded. v2 and v3 links remain readable and upgrade to v4 after their responsive sample resolves. Complete scenes can also be saved locally and exported or imported as versioned JSON libraries.
+Catalog workspaces and dataset-backed presets pin `catalogSample=mobile|desktop` together with the manifest-declared `catalogSampleCount`. Incomplete, unavailable, unsupported, or count-mismatched tuples fail closed where the sample is loaded. v2 and v3 links remain readable and upgrade to v4 after their responsive sample resolves. Scenes can also be saved locally and exported or imported as versioned JSON libraries.
 
 | Reproducibility guarantee | Explicit non-guarantee |
 | --- | --- |
 | Dataset release, sample profile/count, filters, selection order, epoch, frame, view, and analysis inputs are encoded or content-addressed | A shared scene does not promise identical FPS, GPU throughput, or network latency |
 | Catalog filters and exact totals are independent of the locally visible point budget | Auto/Maximum may draw a deterministic prefix of different length on different devices or at different times |
 | The selected 3D quality profile is shareable | The current adaptive point count is runtime state and is deliberately not serialized |
+| 3D scene fit and the configured zoom replay from a canonical starting camera | Free orbit, pan, wheel, and pinch gestures remain session-local; Reset view restores the reproducible fit |
 | Model identity, validity warnings, and build evidence remain visible | External JPL SBDB availability and uncached remote data are not controlled by the scene URL |
 
 Try a reproducible entry point:

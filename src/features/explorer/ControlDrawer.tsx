@@ -11,6 +11,7 @@ import { loadSavedScenes, localizeSavedSceneUrl, mergeSceneLibrary, parseSceneLi
 import { encodeCurrentScene } from '../../lib/shareScene'
 import { IS_NATIVE_APP, saveTextExport, shareSceneUrl } from '../../lib/platform'
 import { encodeUrlState } from '../../lib/urlState'
+import { VIEW_CAPABILITIES } from '../../lib/viewCapabilities'
 import { catalogActions, DEFAULT_CATALOG_FILTERS } from '../../state/catalog-store'
 import { selectionActions, selectionStore } from '../../state/selection-store'
 import { simulationActions, simulationStore } from '../../state/simulation-store'
@@ -20,6 +21,7 @@ import type { CelestialBody, RenderQuality } from '../../types'
 type Props = {
   bodies: CelestialBody[]
   referenceOptions: CelestialBody[]
+  onResetView: () => void
 }
 
 const HISTORY_OPTIONS = [90, 365, 1825, 4383, 7300, 12053, 43830, 90580]
@@ -32,7 +34,7 @@ const BODY_KIND_TRANSLATION = {
   spacecraft: 'bodyKindSpacecraft',
 } as const
 
-export function ControlDrawer({ bodies, referenceOptions }: Props) {
+export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) {
   const simulation = simulationStore.useStore()
   const clock = useSimulationClock()
   const selection = selectionStore.useStore()
@@ -44,6 +46,7 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
   const [savedScenes, setSavedScenes] = useState(loadSavedScenes)
   const [bodyQuery, setBodyQuery] = useState('')
   const sceneImportRef = useRef<HTMLInputElement | null>(null)
+  const capabilities = VIEW_CAPABILITIES[simulation.viewMode]
   const sortedBodies = useMemo(() => [...bodies].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name)), [bodies])
   const filteredBodies = useMemo(() => {
     const query = bodyQuery.trim().toLocaleLowerCase()
@@ -101,7 +104,10 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
     })
     simulationActions.pause()
     simulationActions.seek(application.julianDay)
-    simulationActions.patch(application.simulation)
+    simulationActions.patch(application.simulation.viewMode === '3d'
+      ? { ...application.simulation, showOrbits: false, showHillSphere: false, showLaplaceSoi: false }
+      : application.simulation)
+    onResetView()
     selectionActions.setSelectedIds(application.selectedIds)
     selectionActions.focus(application.focusedId)
     uiActions.navigate(application.route ?? 'explorer')
@@ -170,8 +176,8 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
       <section className="drawer-section view-parameters">
         <div className="section-kicker">{t('viewParameters').toUpperCase()}</div>
         <label className="field range-field">
-          <span>{t('zoom2d')} <strong>{simulation.zoom.toFixed(2)}×</strong></span>
-          <input aria-label={t('zoom2d')} type="range" min="0.15" max="12" step="0.05" value={simulation.zoom} onChange={(event) => simulationActions.patch({ zoom: Number(event.target.value) })} />
+          <span>{t(simulation.viewMode === '3d' ? 'zoom3d' : 'zoom2d')} <strong>{simulation.zoom.toFixed(2)}×</strong></span>
+          <input aria-label={t(simulation.viewMode === '3d' ? 'zoom3d' : 'zoom2d')} type="range" min="0.15" max="12" step="0.05" disabled={!capabilities.zoom} value={simulation.zoom} onChange={(event) => simulationActions.patch({ zoom: Number(event.target.value) })} />
         </label>
         <label className="field">
           <span>{t('trajectorySamples')}</span>
@@ -182,29 +188,31 @@ export function ControlDrawer({ bodies, referenceOptions }: Props) {
         <div className="view-offset-grid">
           <label className="field">
             <span>{t('offsetX')}</span>
-            <input type="number" step="0.1" value={simulation.viewOffset.x} onChange={(event) => simulationActions.patch({ viewOffset: { ...simulation.viewOffset, x: Number(event.target.value) || 0 } })} />
+            <input type="number" step="0.1" disabled={!capabilities.offset} value={simulation.viewOffset.x} onChange={(event) => simulationActions.patch({ viewOffset: { ...simulation.viewOffset, x: Number(event.target.value) || 0 } })} />
           </label>
           <label className="field">
             <span>{t('offsetY')}</span>
-            <input type="number" step="0.1" value={simulation.viewOffset.y} onChange={(event) => simulationActions.patch({ viewOffset: { ...simulation.viewOffset, y: Number(event.target.value) || 0 } })} />
+            <input type="number" step="0.1" disabled={!capabilities.offset} value={simulation.viewOffset.y} onChange={(event) => simulationActions.patch({ viewOffset: { ...simulation.viewOffset, y: Number(event.target.value) || 0 } })} />
           </label>
         </div>
-        <button type="button" className="view-reset" onClick={() => simulationActions.patch({ zoom: 1, viewOffset: { x: 0, y: 0 } })}>{t('resetView')}</button>
+        {!capabilities.offset && <p className="fine-print">{t('offset2dOnly')}</p>}
+        <button type="button" className="view-reset" onClick={() => { simulationActions.patch({ zoom: 1, viewOffset: { x: 0, y: 0 } }); onResetView() }}>{t('resetView')}</button>
+        {simulation.viewMode === '3d' && <p className="fine-print">{t('camera3dBoundary')}</p>}
       </section>
 
       <section className="drawer-section" data-story-target="layers">
         <div className="section-kicker">{t('layers').toUpperCase()}</div>
         {([
-          ['showEcliptic', 'ecliptic'], ['showOrbits', 'fullOrbits'], ['showLagrange', 'lagrange'],
-          ['showHillSphere', 'hill'], ['showLaplaceSoi', 'soi'], ['showSpacecraft', 'spacecraft'],
-        ] as const).map(([property, label]) => (
+          ['showEcliptic', 'ecliptic', capabilities.ecliptic], ['showOrbits', 'fullOrbits', capabilities.fullOrbits], ['showLagrange', 'lagrange', capabilities.lagrange],
+          ['showHillSphere', 'hill', capabilities.hillSphere], ['showLaplaceSoi', 'soi', capabilities.laplaceSoi], ['showSpacecraft', 'spacecraft', capabilities.spacecraft],
+        ] as const).map(([property, label, supported]) => (
           <label className="toggle-row" key={property}>
-            <input type="checkbox" checked={simulation[property]} onChange={(event) => simulationActions.patch({ [property]: event.target.checked })} />
-            <span>{t(label)}</span>
+            <input type="checkbox" disabled={!supported} checked={simulation[property]} onChange={(event) => simulationActions.patch({ [property]: event.target.checked })} />
+            <span>{t(label)}{!supported ? ` · ${t('twoDOnly')}` : ''}</span>
           </label>
         ))}
         <label className="toggle-row">
-          <input type="checkbox" checked={simulation.showCatalogCloud} onChange={(event) => simulationActions.patch({ showCatalogCloud: event.target.checked })} />
+          <input type="checkbox" disabled={!capabilities.catalogCloud} checked={simulation.showCatalogCloud} onChange={(event) => simulationActions.patch({ showCatalogCloud: event.target.checked })} />
           <span>{t('catalogCloud')}</span>
         </label>
         <label className="field">

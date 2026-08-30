@@ -20,7 +20,7 @@ export function SimulationControls() {
       </button>
       <div className="segmented-control" aria-label={t('view')}>
         <button className={simulation.viewMode === '2d' ? 'active' : ''} onClick={() => simulationActions.patch({ viewMode: '2d' })}>2D</button>
-        <button className={simulation.viewMode === '3d' ? 'active' : ''} onClick={() => simulationActions.patch({ viewMode: '3d' })}>3D</button>
+        <button className={simulation.viewMode === '3d' ? 'active' : ''} onClick={() => simulationActions.patch({ viewMode: '3d', viewOffset: { x: 0, y: 0 }, showOrbits: false, showHillSphere: false, showLaplaceSoi: false })}>3D</button>
       </div>
       <label className="compact-field">
         <span>{t('date')}</span>

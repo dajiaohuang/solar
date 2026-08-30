@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { PREPARE_CANVAS_CAPTURE_EVENT } from '../lib/canvasCapture'
+import { cameraDistanceForFit, cameraRangeForFit, clamp3dZoom } from '../lib/camera3d'
 import type { LagrangePoint } from '../lib/lagrange'
 import { createTrajectoryScene } from '../lib/trajectoryScene3d'
 import type { AsteroidRecord, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector3 } from '../types'
@@ -28,6 +29,8 @@ type Props = {
   continuous?: boolean
   pixelRatioLimit?: number
   onFrameDuration?: (durationMs: number) => void
+  zoomLevel?: number
+  resetViewKey?: number
 }
 
 type SceneResources = {
@@ -47,6 +50,7 @@ type SceneResources = {
   glowTexture: THREE.Texture
   catalogPoints: THREE.Points
   bodyScale: number
+  fitDistance: number
 }
 
 const EMPTY_CATALOG_RECORDS: AsteroidRecord[] = []
@@ -61,6 +65,18 @@ function radiusFor(body: CelestialBody) {
 
 function toThree(position: { x: number; y: number; z: number }) {
   return new THREE.Vector3(position.x, position.z, position.y)
+}
+
+function updateCameraData(container: HTMLDivElement, resources: SceneResources) {
+  container.dataset.cameraDistance = resources.camera.position.distanceTo(resources.controls.target).toFixed(6)
+  container.dataset.cameraPosition = resources.camera.position.toArray().map((value) => value.toFixed(6)).join(',')
+}
+
+function resetCameraToFit(resources: SceneResources, zoom: number) {
+  const distance = Math.max(resources.controls.minDistance, cameraDistanceForFit(resources.fitDistance, zoom))
+  resources.camera.position.set(0.16, 0.48, 1).setLength(distance)
+  resources.controls.target.set(0, 0, 0)
+  resources.controls.update()
 }
 
 function disposeObject(object: THREE.Object3D) {
@@ -110,6 +126,8 @@ export function TrajectoryCanvas3D({
   continuous = false,
   pixelRatioLimit = 1.75,
   onFrameDuration,
+  zoomLevel = 1,
+  resetViewKey = 0,
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const resourcesRef = useRef<SceneResources | null>(null)
@@ -119,6 +137,8 @@ export function TrajectoryCanvas3D({
   const touchGestureRef = useRef<{ pointerId: number; startX: number; startY: number; moved: boolean } | null>(null)
   const activeTouchPointersRef = useRef(new Set<number>())
   const fitKeyRef = useRef('')
+  const appliedZoomRef = useRef(clamp3dZoom(zoomLevel))
+  const appliedResetKeyRef = useRef(resetViewKey)
   const onUnavailableRef = useRef(onUnavailable)
   const fallbackLabelRef = useRef(fallbackLabel)
   const [unavailable, setUnavailable] = useState<string | null>(null)
@@ -213,9 +233,13 @@ export function TrajectoryCanvas3D({
       glowTexture,
       catalogPoints,
       bodyScale: 1,
+      fitDistance: 8.7,
     }
     resourcesRef.current = resources
-    const render = () => renderer.render(scene, camera)
+    const render = () => {
+      updateCameraData(container, resources)
+      renderer.render(scene, camera)
+    }
     controls.addEventListener('change', render)
     renderer.domElement.addEventListener(PREPARE_CANVAS_CAPTURE_EVENT, render)
     render()
@@ -423,12 +447,13 @@ export function TrajectoryCanvas3D({
         const item = bodyPositions.get(id)
         if (item) mesh.scale.setScalar(radiusFor(item.body) * resources.bodyScale)
       }
-      resources.camera.position.set(distance * 0.16, distance * 0.48, distance)
-      resources.camera.far = Math.max(500, distance * 5)
+      resources.fitDistance = distance
+      const cameraRange = cameraRangeForFit(distance, radius)
+      resources.camera.far = cameraRange.far
       resources.camera.updateProjectionMatrix()
-      resources.controls.maxDistance = Math.max(220, distance * 2.5)
-      resources.controls.target.set(0, 0, 0)
-      resources.controls.update()
+      resources.controls.maxDistance = cameraRange.maxDistance
+      resetCameraToFit(resources, zoomLevel)
+      appliedZoomRef.current = clamp3dZoom(zoomLevel)
     }
 
     const activeLagrangeIds = new Set<string>()
@@ -459,8 +484,38 @@ export function TrajectoryCanvas3D({
         resources.saturnRing.visible = true
       }
     }
+    const container = containerRef.current
+    if (container) updateCameraData(container, resources)
     resources.renderer.render(resources.scene, resources.camera)
-  }, [catalogDrawCount, catalogFitKey, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z, catalogPositions3D, catalogRecords.length, currentPositions, lagrangePoints, referenceBody, showEcliptic, showGlow, showSaturnRings, trajectories])
+  }, [catalogDrawCount, catalogFitKey, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z, catalogPositions3D, catalogRecords.length, currentPositions, lagrangePoints, referenceBody, showEcliptic, showGlow, showSaturnRings, trajectories, zoomLevel])
+
+  useEffect(() => {
+    const resources = resourcesRef.current
+    const container = containerRef.current
+    if (!resources || !container) return
+    const nextZoom = clamp3dZoom(zoomLevel)
+    const previousZoom = appliedZoomRef.current
+    if (Math.abs(nextZoom - previousZoom) < 1e-9) return
+    const cameraOffset = resources.camera.position.clone().sub(resources.controls.target)
+    const nextDistance = Math.max(resources.controls.minDistance, Math.min(resources.controls.maxDistance, cameraDistanceForFit(resources.fitDistance, nextZoom)))
+    cameraOffset.setLength(nextDistance)
+    resources.camera.position.copy(resources.controls.target).add(cameraOffset)
+    appliedZoomRef.current = nextZoom
+    resources.controls.update()
+    updateCameraData(container, resources)
+    resources.renderer.render(resources.scene, resources.camera)
+  }, [zoomLevel])
+
+  useEffect(() => {
+    const resources = resourcesRef.current
+    const container = containerRef.current
+    if (!resources || !container || appliedResetKeyRef.current === resetViewKey) return
+    appliedResetKeyRef.current = resetViewKey
+    appliedZoomRef.current = clamp3dZoom(zoomLevel)
+    resetCameraToFit(resources, zoomLevel)
+    updateCameraData(container, resources)
+    resources.renderer.render(resources.scene, resources.camera)
+  }, [resetViewKey, zoomLevel])
 
   const intersectBody = useCallback((event: { clientX: number; clientY: number }) => {
     const container = containerRef.current

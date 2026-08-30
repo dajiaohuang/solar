@@ -6,6 +6,7 @@ import { uiStore } from '../state/ui-store'
 import { missionStore } from '../state/mission-store'
 import { encodeUrlState } from './urlState'
 import { CANONICAL_APP_URL, IS_NATIVE_APP } from './platform'
+import { VIEW_CAPABILITIES } from './viewCapabilities'
 
 function sceneBaseUrl() {
   if (IS_NATIVE_APP || typeof window === 'undefined') return CANONICAL_APP_URL
@@ -18,6 +19,7 @@ export function encodeCurrentScene() {
   const catalog = catalogStore.getState()
   const ui = uiStore.getState()
   const mission = missionStore.getState()
+  const capabilities = VIEW_CAPABILITIES[simulation.viewMode]
   if (ui.route === 'home') {
     const language = ui.language === 'zh' ? '?lang=zh' : ''
     return `${sceneBaseUrl()}${language}`
@@ -69,13 +71,13 @@ export function encodeCurrentScene() {
     qRange: catalog.filters.perihelion,
     layers: [
       ...(simulation.showEcliptic ? ['ecliptic' as const] : []),
-      ...(simulation.showOrbits ? ['orbits' as const] : []),
+      ...(capabilities.fullOrbits && simulation.showOrbits ? ['orbits' as const] : []),
       ...(simulation.showLagrange ? ['lagrange' as const] : []),
-      ...(simulation.showHillSphere ? ['hill' as const] : []),
-      ...(simulation.showLaplaceSoi ? ['soi' as const] : []),
+      ...(capabilities.hillSphere && simulation.showHillSphere ? ['hill' as const] : []),
+      ...(capabilities.laplaceSoi && simulation.showLaplaceSoi ? ['soi' as const] : []),
       ...(simulation.showSpacecraft ? ['spacecraft' as const] : []),
     ],
-    offset: [simulation.viewOffset.x, simulation.viewOffset.y],
+    offset: capabilities.offset ? [simulation.viewOffset.x, simulation.viewOffset.y] : undefined,
     lang: ui.language,
   })
   return `${sceneBaseUrl()}${query ? `?${query}` : ''}`
