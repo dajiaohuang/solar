@@ -331,6 +331,26 @@ test('offers a complete reproducible observation deck on desktop and mobile', as
   await expect(page).toHaveURL(/[?&]bodies=[^&]*neptune/)
 })
 
+test('prioritizes 3D for internal entries and every built-in preset', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&page=stories&story=retrograde-mars&lang=en')
+  await openExplorer(page)
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
+  await expect(page).toHaveURL(/[?&]view=3d(?:&|$)/)
+
+  for (const name of ['Earth–Moon system', 'Jupiter and its modeled Galilean moons', 'Saturn–Titan system']) {
+    const preset = page.getByRole('button', { name: `Load preset: ${name}` })
+    await preset.click()
+    await expect(preset).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
+    await expect(page).toHaveURL(/[?&]view=3d(?:&|$)/)
+  }
+
+  await page.goto('./?v=4&page=explorer&view=2d&lang=en')
+  await expect(page.locator('.trajectory-canvas')).toBeVisible()
+  await expect(page.getByTestId('trajectory-canvas-3d')).toHaveCount(0)
+})
+
 test('loads and replays both pinned main-belt presets on desktop and mobile', async ({ page }) => {
   const sampleRequests: string[] = []
   page.on('request', (request) => {

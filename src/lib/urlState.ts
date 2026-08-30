@@ -135,7 +135,7 @@ export function decodeUrlState(search = typeof window === 'undefined' ? '' : win
   const versionPresent = params.has('v')
   if (versionPresent && !supportedVersionStrings.includes(encodedVersion ?? '')) return {}
   const version = versionPresent ? Number(encodedVersion) as SceneUrlVersion : SCENE_URL_VERSION
-  const state: AppUrlState = { version }
+  const state: AppUrlState = { version, view: '3d' }
   const routes: AppRoute[] = ['home', 'explorer', 'catalog', 'elements', 'events', 'mission', 'stories', 'about']
   const route = params.get('page') as AppRoute | null
   if (route && routes.includes(route)) state.route = route
@@ -172,10 +172,6 @@ export function decodeUrlState(search = typeof window === 'undefined' ? '' : win
   if (samples !== undefined && samples >= 32 && samples <= 480) state.samples = Math.floor(samples)
   const view = params.get('view')
   if (view === '2d' || view === '3d') state.view = view
-  else if (
-    route === 'explorer'
-    || ['ref', 'bodies', 'jd', 'zoom', 'history', 'samples', 'pan'].some((key) => params.has(key))
-  ) state.view = '3d'
   if (version === SCENE_URL_VERSION) {
     state.catalogCloud = params.get('catalogCloud') === '1'
     const quality = params.get('quality')

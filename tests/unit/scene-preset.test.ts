@@ -34,6 +34,7 @@ describe('observation-deck scene presets', () => {
   it('uses unique valid ids, existing bodies and complete bilingual copy', () => {
     expect(validateScenePresets(SCENE_PRESETS, majorBodiesById)).toEqual([])
     expect(new Set(SCENE_PRESETS.map((preset) => preset.id)).size).toBe(SCENE_PRESETS.length)
+    expect(SCENE_PRESETS.every((preset) => preset.viewMode === '3d')).toBe(true)
   })
 
   it('reports malformed preset ids, copy and body references', () => {
@@ -107,7 +108,7 @@ describe('observation-deck scene presets', () => {
     const jupiter = SCENE_PRESETS.find((preset) => preset.id === 'jupiter-galilean-moons')!
     expect(jupiter.referenceId).toBe('jupiter')
     expect(jupiter.selectedMajorBodyIds).toEqual(['jupiter', ...expectedMoons('jupiter')])
-    expect(jupiter.viewMode).toBe('2d')
+    expect(jupiter.viewMode).toBe('3d')
     expect(jupiter.description.en).toContain('modeled Galilean moons')
     expect(jupiter.description.zh).toContain('已建模伽利略卫星')
 

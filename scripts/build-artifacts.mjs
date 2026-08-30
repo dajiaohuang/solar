@@ -222,7 +222,7 @@ async function writeStaticKnowledgePages() {
         boundary: story.boundary[lang],
         sources: story.sources,
         imagePath: `og/stories/${story.id}-${lang}.png`,
-        appUrl: `${SITE_BASE}?v=4&page=stories&story=${encodeURIComponent(story.id)}&lang=${lang}`,
+        appUrl: `${SITE_BASE}?v=4&page=stories&story=${encodeURIComponent(story.id)}&view=3d&lang=${lang}`,
       })
     }
   }
@@ -318,7 +318,7 @@ async function writeStaticKnowledgePages() {
         boundary: object.boundary[lang],
         sources: object.sources,
         schemaType: 'Thing',
-        appUrl: `${SITE_BASE}?v=4&page=catalog&search=${encodeURIComponent(object.query)}&lang=${lang}`,
+        appUrl: `${SITE_BASE}?v=4&page=catalog&search=${encodeURIComponent(object.query)}&view=3d&lang=${lang}`,
         imagePath: `og/objects/${object.slug}-${lang}.png`,
       })
     }
@@ -350,7 +350,7 @@ async function writeStaticKnowledgePages() {
         title,
         description,
         sections: [{ title, body: description }],
-        appUrl: `${SITE_BASE}?v=4&page=about&lang=${lang}`,
+        appUrl: `${SITE_BASE}?v=4&page=about&view=3d&lang=${lang}`,
         schemaType: item.schemaType,
         sources: item.sources ?? [],
         boundary: item.boundary?.[lang],
@@ -384,7 +384,7 @@ async function writeStaticKnowledgePages() {
     await writePage(`${lang === 'zh' ? 'zh/' : ''}privacy`, {
       lang,
       ...page,
-      appUrl: `${SITE_BASE}?v=4&page=about&lang=${lang}`,
+      appUrl: `${SITE_BASE}?v=4&page=about&view=3d&lang=${lang}`,
       schemaType: 'WebPage',
       boundary: lang === 'zh' ? '生效日期：2026-08-30。功能或数据处理方式发生变化时，本政策会随版本更新。' : 'Effective 2026-08-30. This policy is versioned with the application and will change if its features or data handling change.',
       sources: [{ label: 'Solar Atlas source and issue tracker', url: 'https://github.com/dajiaohuang/solar' }],

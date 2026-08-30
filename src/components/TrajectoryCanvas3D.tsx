@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { LagrangePoint } from '../lib/lagrange'
+import { createTrajectoryScene } from '../lib/trajectoryScene3d'
 import type { AsteroidRecord, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector3 } from '../types'
 
 type Props = {
@@ -126,9 +127,7 @@ export function TrajectoryCanvas3D({
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
-    const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x05070b)
-    scene.fog = new THREE.FogExp2(0x05070b, 0.012)
+    const scene = createTrajectoryScene()
     const camera = new THREE.PerspectiveCamera(42, container.clientWidth / Math.max(container.clientHeight, 1), 0.005, 500)
     camera.position.set(0, 4.2, 7.5)
     let renderer: THREE.WebGLRenderer

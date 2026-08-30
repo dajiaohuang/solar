@@ -20,7 +20,7 @@ Solar Atlas connects a spatial workbench, orbital-element space, event analysis,
 | --- | --- |
 | Explore immediately | [Open the Observation Deck](https://dajiaohuang.github.io/solar/) and choose **Explore independently** |
 | Learn the controls | Open the same URL and choose **Start tutorial**; the four-tip guide can be reopened from the preset panel |
-| Try a reproducible lesson | [Explain Mars retrograde motion](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=retrograde-mars&step=2&lang=en) or choose another link under [Reproducible scenes](#reproducible-scenes) |
+| Try a reproducible lesson | [Explain Mars retrograde motion](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=retrograde-mars&step=2&view=3d&lang=en) or choose another link under [Reproducible scenes](#reproducible-scenes) |
 | Run the web app locally | Use `npm ci`, then `npm run dev`; no asteroid dataset is required for the curated core |
 | Inspect native validation | Open the [Android/iOS workflow](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml) or follow the platform commands in [MOBILE.md](./MOBILE.md) |
 
@@ -41,13 +41,13 @@ Solar Atlas currently ships twelve one-click presets. Every preset defines an ep
 | Preset | Reference and epoch | Default view | What it shows and what it does not claim |
 | --- | --- | --- | --- |
 | Solar System today | Sun · current date | 3D | Major planets, Moon, Ceres, and Pluto at the current approximate epoch |
-| Earth–Moon system | Earth · 2026-07-01 | 2D | Earth and the modeled Moon in an Earth-centered frame; not a DE440 position ephemeris |
+| Earth–Moon system | Earth · 2026-07-01 | 3D | Earth and the modeled Moon in an Earth-centered frame; not a DE440 position ephemeris |
 | Inner Solar System | Sun · 2026-07-01 | 3D | Mercury through Mars and the Moon across a 180-day trajectory window |
 | Outer Solar System | Sun · 2026-07-01 | 3D | Jupiter through Neptune across a twelve-year window |
 | Dwarf-planet orbits | Sun · 2026-07-01 | 3D | Ceres, Pluto, Eris, Haumea, and Makemake across a 33-year window |
 | Mars opposition 2027 | Sun · 2027-02-19 | 3D | Heliocentric Earth–Mars–Jupiter geometry near the February 2027 opposition |
-| Jupiter and its modeled Galilean moons | Jupiter · 2026-07-01 | 2D | Jupiter, Io, Europa, Ganymede, and Callisto using auditable fixed-ellipse approximations |
-| Saturn–Titan system | Saturn · 2026-07-01 | 2D | Saturn and Titan using the same bounded satellite-model contract |
+| Jupiter and its modeled Galilean moons | Jupiter · 2026-07-01 | 3D | Jupiter, Io, Europa, Ganymede, and Callisto using auditable fixed-ellipse approximations |
+| Saturn–Titan system | Saturn · 2026-07-01 | 3D | Saturn and Titan using the same bounded satellite-model contract |
 | Mars–main belt–Jupiter | Sun · 2026-07-01 | Element Space / `a–e` | The MBA subset of a pinned 8,000-object display sample, with Mars, Ceres, and Jupiter as heliocentric landmarks; not the complete main belt |
 | Main-belt element comparison | Sun · 2026-07-01 | Element Space / `a–i` | The MBA subset of the same pinned sample, comparing semi-major axis and inclination; not the complete main belt |
 | Near-Earth region | Sun · 2026-07-01 | 3D | An inner-system focus set ready for explicitly loaded NEOs |
@@ -82,12 +82,12 @@ Catalog workspaces and dataset-backed presets pin `catalogSample=mobile|desktop`
 
 Try a reproducible entry point:
 
-- [Core course: geocentrism vs. the geocentric frame](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=geocentric-model&lang=en)
-- [Explain Mars retrograde motion](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=retrograde-mars&step=2&lang=en)
-- [Read the Kirkwood gaps in element space](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=kirkwood-gaps&step=1&lang=en)
-- [Compare the four NEO orbit classes](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=neo-types&lang=en)
-- [Inspect Pluto and Neptune's 3:2 geometry](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=pluto-resonance&step=1&lang=en)
-- [Open an Earth-to-Mars mission setup](https://dajiaohuang.github.io/solar/?v=4&page=mission&from=earth&to=mars&depart=2026-11-15&arrive=2027-08-01&lang=en)
+- [Core course: geocentrism vs. the geocentric frame](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=geocentric-model&view=3d&lang=en)
+- [Explain Mars retrograde motion](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=retrograde-mars&step=2&view=3d&lang=en)
+- [Read the Kirkwood gaps in element space](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=kirkwood-gaps&step=1&view=3d&lang=en)
+- [Compare the four NEO orbit classes](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=neo-types&view=3d&lang=en)
+- [Inspect Pluto and Neptune's 3:2 geometry](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=pluto-resonance&step=1&view=3d&lang=en)
+- [Open an Earth-to-Mars mission setup](https://dajiaohuang.github.io/solar/?v=4&page=mission&from=earth&to=mars&depart=2026-11-15&arrive=2027-08-01&view=3d&lang=en)
 
 ## Rendering and device policy
 
