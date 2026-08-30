@@ -52,6 +52,7 @@ for (const path of [
   const content = await readFile(join(dist, ...path.split('/')), 'utf8')
   if (!content.includes(`?v=${currentSceneVersion}`)) throw new Error(`${path} does not publish the current v${currentSceneVersion} scene URL`)
   if (/\?v=(?:2|3)(?:&|&amp;)/.test(content)) throw new Error(`${path} still publishes a legacy scene URL`)
+  if (!/(?:&|&amp;)view=3d(?:&|&amp;|"|')/.test(content)) throw new Error(`${path} does not publish a 3D-first internal entry`)
 }
 
 await Promise.all([

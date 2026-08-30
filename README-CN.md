@@ -20,7 +20,7 @@ Solar Atlas 把空间工作台、轨道元素空间、事件分析、任务几�
 | --- | --- |
 | 立即探索 | [打开综合观测台](https://dajiaohuang.github.io/solar/)，选择“**直接探索**” |
 | 学习操作 | 打开同一网址，选择“**进入教程**”；四步教程之后可从预设面板再次打开 |
-| 体验可复现课程 | [解释火星逆行](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=retrograde-mars&step=2&lang=zh)，或在[可复现场景](#可复现场景)中选择其他入口 |
+| 体验可复现课程 | [解释火星逆行](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=retrograde-mars&step=2&view=3d&lang=zh)，或在[可复现场景](#可复现场景)中选择其他入口 |
 | 本地运行 Web 应用 | 依次运行 `npm ci` 与 `npm run dev`；内置核心不要求下载小行星数据集 |
 | 查看原生验证 | 打开 [Android/iOS 工作流](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml)，或按 [MOBILE-CN.md](./MOBILE-CN.md) 中的平台命令操作 |
 
@@ -41,13 +41,13 @@ Solar Atlas 当前提供十二个一键预设。每个预设都固定历元、�
 | 预设 | 参考系与历元 | 默认视图 | 展示内容与声明边界 |
 | --- | --- | --- | --- |
 | 今日太阳系 | 太阳 · 当前日期 | 3D | 当前近似历元下的主要行星、月球、谷神星和冥王星 |
-| 地月系统 | 地球 · 2026-07-01 | 2D | 地心参考系中的地球与已建模月球；不是 DE440 位置星历 |
+| 地月系统 | 地球 · 2026-07-01 | 3D | 地心参考系中的地球与已建模月球；不是 DE440 位置星历 |
 | 内太阳系 | 太阳 · 2026-07-01 | 3D | 水星至火星及月球，轨迹窗口 180 天 |
 | 外太阳系 | 太阳 · 2026-07-01 | 3D | 木星至海王星，轨迹窗口 12 年 |
 | 矮行星轨道 | 太阳 · 2026-07-01 | 3D | 谷神星、冥王星、阋神星、妊神星和鸟神星，轨迹窗口 33 年 |
 | 火星冲日 2027 | 太阳 · 2027-02-19 | 3D | 2027 年 2 月冲日前后的日心地球—火星—木星几何 |
-| 木星与已建模伽利略卫星 | 木星 · 2026-07-01 | 2D | 木星、木卫一、木卫二、木卫三和木卫四，使用可审计的固定椭圆近似 |
-| 土星—泰坦系统 | 土星 · 2026-07-01 | 2D | 土星和土卫六，使用同一套有界卫星模型契约 |
+| 木星与已建模伽利略卫星 | 木星 · 2026-07-01 | 3D | 木星、木卫一、木卫二、木卫三和木卫四，使用可审计的固定椭圆近似 |
+| 土星—泰坦系统 | 土星 · 2026-07-01 | 3D | 土星和土卫六，使用同一套有界卫星模型契约 |
 | 火星—主带—木星 | 太阳 · 2026-07-01 | 轨道元素空间 / `a–e` | 固定 8,000 条展示样本中的 MBA 子集，并以火星、谷神星和木星作为日心地标；不是完整主带 |
 | 主带轨道元素对比 | 太阳 · 2026-07-01 | 轨道元素空间 / `a–i` | 同一固定样本中的 MBA 子集，比较半长轴与倾角；不是完整主带 |
 | 近地天体区域 | 太阳 · 2026-07-01 | 3D | 已准备好显式加入 NEO 的内太阳系聚焦集合 |
@@ -82,12 +82,12 @@ Solar Atlas 当前提供十二个一键预设。每个预设都固定历元、�
 
 可直接打开的可复现入口：
 
-- [核心课程：地心说与地心参考系](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=geocentric-model&lang=zh)
-- [解释火星逆行](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=retrograde-mars&step=2&lang=zh)
-- [在元素空间观察柯克伍德空隙](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=kirkwood-gaps&step=1&lang=zh)
-- [比较四类 NEO 轨道](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=neo-types&lang=zh)
-- [检查冥王星—海王星 3:2 几何](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=pluto-resonance&step=1&lang=zh)
-- [打开地球到火星任务设置](https://dajiaohuang.github.io/solar/?v=4&page=mission&from=earth&to=mars&depart=2026-11-15&arrive=2027-08-01&lang=zh)
+- [核心课程：地心说与地心参考系](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=geocentric-model&view=3d&lang=zh)
+- [解释火星逆行](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=retrograde-mars&step=2&view=3d&lang=zh)
+- [在元素空间观察柯克伍德空隙](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=kirkwood-gaps&step=1&view=3d&lang=zh)
+- [比较四类 NEO 轨道](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=neo-types&view=3d&lang=zh)
+- [检查冥王星—海王星 3:2 几何](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=pluto-resonance&step=1&view=3d&lang=zh)
+- [打开地球到火星任务设置](https://dajiaohuang.github.io/solar/?v=4&page=mission&from=earth&to=mars&depart=2026-11-15&arrive=2027-08-01&view=3d&lang=zh)
 
 ## 渲染与设备策略
 

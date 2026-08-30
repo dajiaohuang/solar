@@ -79,11 +79,15 @@ describe('reproducible scene URLs', () => {
     expect(reencoded).toContain('catalogSampleCount=oops')
   })
 
-  it('writes the view explicitly while preserving old implicit-3D scene links', () => {
+  it('makes every implicit internal entry 3D-first while preserving explicit 2D links', () => {
     expect(encodeUrlState({ route: 'explorer', view: '2d' })).toContain('view=2d')
     expect(encodeUrlState({ route: 'explorer', view: '3d' })).toContain('view=3d')
+    expect(decodeUrlState('').view).toBe('3d')
     expect(decodeUrlState('?v=3&page=explorer&bodies=earth,mars').view).toBe('3d')
-    expect(decodeUrlState('?v=3&page=home&lang=en').view).toBeUndefined()
+    expect(decodeUrlState('?v=3&page=home&lang=en').view).toBe('3d')
+    expect(decodeUrlState('?v=4&page=stories&story=retrograde-mars&lang=en').view).toBe('3d')
+    expect(decodeUrlState('?v=4&page=catalog&search=ceres&lang=en').view).toBe('3d')
+    expect(decodeUrlState('?v=4&page=mission&from=earth&to=mars&view=2d').view).toBe('2d')
   })
 
   it('fails closed for a future scene schema instead of misreading its fields', () => {
