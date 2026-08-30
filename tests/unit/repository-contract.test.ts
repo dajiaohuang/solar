@@ -25,6 +25,8 @@ describe('repository contract', () => {
     const staleCanonical = 'Application version: **v0.10.0** · [Health](./health.json)\n\nExample text containing Application version: **v0.11.0** elsewhere.\n'
     expect(() => assertDocumentedVersion(staleCanonical, '0.11.0', 'en')).toThrow(/does not match/)
     expect(() => assertDocumentedVersion('Application version: **v0.11.0**\nApplication version: **v0.11.0**\n', '0.11.0', 'en')).toThrow(/exactly one/)
+    const misplacedCanonical = '# Solar Atlas\n\n## Version history\n\nApplication version: **v0.11.0**\n'
+    expect(() => assertDocumentedVersion(misplacedCanonical, '0.11.0', 'en')).toThrow(/opening metadata block/)
   })
 
   it('keeps documentation links and release identities synchronized', () => {

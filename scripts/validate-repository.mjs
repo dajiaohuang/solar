@@ -210,12 +210,21 @@ function matchOne(source, expression, label) {
 }
 
 export function assertDocumentedVersion(markdown, expected, language) {
-  const expression = language === 'zh'
-    ? /^应用版本：\s*\*\*v([^*\n]+)\*\*(?:\s*·.*)?$/gm
-    : /^Application version:\s*\*\*v([^*\n]+)\*\*(?:\s*·.*)?$/gm
+  const source = language === 'zh'
+    ? '^应用版本：\\s*\\*\\*v([^*\\n]+)\\*\\*(?:\\s*·.*)?$'
+    : '^Application version:\\s*\\*\\*v([^*\\n]+)\\*\\*(?:\\s*·.*)?$'
+  const expression = new RegExp(source, 'gm')
   const versions = [...markdown.matchAll(expression)].map(match => match[1].trim())
-  if (versions.length !== 1) fail(`${language === 'zh' ? 'README-CN.md' : 'README.md'} must contain exactly one canonical application-version line`)
-  if (versions[0] !== expected) fail(`${language === 'zh' ? 'README-CN.md' : 'README.md'} application version does not match package.json`)
+  const filename = language === 'zh' ? 'README-CN.md' : 'README.md'
+  if (versions.length !== 1) fail(`${filename} must contain exactly one canonical application-version line`)
+  if (versions[0] !== expected) fail(`${filename} application version does not match package.json`)
+
+  const lines = markdown.split(/\r?\n/)
+  const versionLine = lines.findIndex(line => new RegExp(source).test(line))
+  const firstSection = lines.findIndex(line => /^##\s+/.test(line))
+  if (versionLine < 0 || versionLine >= 15 || (firstSection >= 0 && versionLine >= firstSection)) {
+    fail(`${filename} canonical application version must remain in the opening metadata block`)
+  }
 }
 
 function validateIdentity() {
