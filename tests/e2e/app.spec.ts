@@ -331,6 +331,26 @@ test('offers a complete reproducible observation deck on desktop and mobile', as
   await expect(page).toHaveURL(/[?&]bodies=[^&]*neptune/)
 })
 
+test('keeps the Observation Deck inside the first mobile viewport in portrait and landscape', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+
+  for (const viewport of [{ width: 412, height: 839 }, { width: 915, height: 412 }]) {
+    await page.setViewportSize(viewport)
+    await page.goto('./?v=4&page=explorer&view=3d&lang=en')
+    await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
+
+    const stage = await page.locator('.explorer-stage').boundingBox()
+    const drawer = await page.locator('.control-drawer').boundingBox()
+    const navigation = await page.locator('.mobile-navigation').boundingBox()
+    expect(stage).not.toBeNull()
+    expect(drawer).not.toBeNull()
+    expect(navigation).not.toBeNull()
+    expect(stage!.y).toBeLessThan(drawer!.y)
+    expect(stage!.y).toBeLessThan(navigation!.y)
+    expect(stage!.y + stage!.height).toBeLessThanOrEqual(navigation!.y + 1)
+  }
+})
+
 test('prioritizes 3D for internal entries and every built-in preset', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=4&page=stories&story=retrograde-mars&lang=en')

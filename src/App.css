@@ -531,8 +531,8 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
   .guided-story-overlay { right: calc(10px + var(--safe-right)); bottom: calc(72px + var(--safe-bottom)); max-height: calc(100dvh - 150px - var(--safe-top) - var(--safe-bottom)); }
   .workspace-page { min-height: auto; padding: 24px 15px 30px; }
   .explorer-workspace { height: auto; min-height: calc(100vh - 118px); display: flex; flex-direction: column; overflow: visible; }
-  .control-drawer { order: 1; max-height: none; overflow: visible; border: 1px solid var(--line); margin: 10px; }
-  .explorer-stage { order: 2; height: 66vh; min-height: 480px; }
+  .control-drawer { order: 2; max-height: none; overflow: visible; border: 1px solid var(--line); margin: 10px; }
+  .explorer-stage { order: 1; height: calc(100dvh - 122px - var(--safe-top) - var(--safe-bottom)); min-height: 280px; }
   .inspector-panel { order: 3; position: static; width: auto; max-height: none; margin: 0 10px 10px; }
   .preset-list { grid-auto-flow: column; grid-auto-columns: minmax(230px, 72vw); grid-template-columns: none; max-height: none; overflow-x: auto; overflow-y: hidden; padding: 0 0 5px; scroll-snap-type: x proximity; }
   .preset-list > button { scroll-snap-align: start; }
