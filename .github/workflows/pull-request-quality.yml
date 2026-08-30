@@ -1,0 +1,99 @@
+name: Pull request quality
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pull-request-quality-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  repository_contract:
+    name: Repository contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      full_web_quality: ${{ steps.scope.outputs.full_web_quality }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Parse repository metadata, verify local links, and check application identity
+        run: npm run check:repository
+      - name: Classify the pull request
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/pr-quality-contract.mjs classify "$BASE_SHA" "$HEAD_SHA"
+
+  web_quality:
+    name: Web quality
+    needs: repository_contract
+    if: needs.repository_contract.outputs.full_web_quality == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test:unit
+      - run: npm run test:scientific
+      - name: Build the production application
+        run: npm run build
+      - run: npm run check:capacity
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run Chromium interaction and accessibility checks
+        env:
+          CI: 1
+          PLAYWRIGHT_REUSE_BUILD: 1
+        run: npm run test:e2e
+      - name: Enforce Lighthouse accessibility and performance budgets
+        uses: treosh/lighthouse-ci-action@3e7e23fb74242897f95c0ba9cabad3d0227b9b18 # v12.6.2
+        with:
+          urls: |
+            http://127.0.0.1:4188/solar/?v=4&page=home&view=3d&lang=en
+            http://127.0.0.1:4188/solar/stories/geocentric-model/
+          runs: 3
+          configPath: ./.lighthouserc.json
+          uploadArtifacts: true
+      - name: Upload browser diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: pull-request-browser-report
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
+  pull_request_quality_gate:
+    name: Pull request quality gate
+    needs: [repository_contract, web_quality]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Require every applicable quality job
+        env:
+          REPOSITORY_CONTRACT_RESULT: ${{ needs.repository_contract.result }}
+          WEB_QUALITY_RESULT: ${{ needs.web_quality.result }}
+        run: node scripts/pr-quality-contract.mjs gate

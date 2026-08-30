@@ -5,7 +5,9 @@ Describe the user-visible or scientific outcome.
 ## Evidence
 
 - [ ] `npm run lint`
+- [ ] `npm run check:repository`
 - [ ] `npm run test:unit`
+- [ ] `npm run test:scientific`
 - [ ] `npm run build`
 - [ ] `npm run test:e2e`
 - [ ] `npm run check:capacity`
