@@ -2,15 +2,27 @@
 
 **A browser-native Solar System dynamics and small-body atlas with reproducible scenes, traceable data, and explicit model boundaries.**
 
+[![Production deployment](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml) [![Android and iOS](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml/badge.svg?branch=main)](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml)
+
 [Open Solar Atlas](https://dajiaohuang.github.io/solar/) · [中文文档](./README-CN.md) · [Mobile builds](./MOBILE.md) · [Privacy](./PRIVACY.md) · [Scientific contract](#scientific-contract) · [Contributing](#contributing)
 
 Application version: **v0.11.0** · [Live build identity](https://dajiaohuang.github.io/solar/health.json) · [Changelog](./CHANGELOG.md) · [Roadmap](./ROADMAP.md) · [Performance budgets](./PERFORMANCE.md)
+
+> **Start here:** [open the Observation Deck](https://dajiaohuang.github.io/solar/). The root URL is the application—there is no marketing page or account gate in front of it.
 
 ![The Solar Atlas Observation Deck with its 3D scene and preset switchboard](./docs/screenshots/observation-deck.png)
 
 Solar Atlas connects a spatial workbench, orbital-element space, event analysis, mission geometry, guided stories, and data evidence in one client-side application. It is built for exploration and teaching. It is **not** an operational ephemeris, a collision-warning service, an N-body integrator, or a navigation product.
 
-## What opens first
+## Start in seconds
+
+| Goal | Fastest path |
+| --- | --- |
+| Explore immediately | [Open the Observation Deck](https://dajiaohuang.github.io/solar/) and choose **Explore independently** |
+| Learn the controls | Open the same URL and choose **Start tutorial**; the four-tip guide can be reopened from the preset panel |
+| Try a reproducible lesson | [Explain Mars retrograde motion](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=retrograde-mars&step=2&lang=en) or choose another link under [Reproducible scenes](#reproducible-scenes) |
+| Run the web app locally | Use `npm ci`, then `npm run dev`; no asteroid dataset is required for the curated core |
+| Inspect native validation | Open the [Android/iOS workflow](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml) or follow the platform commands in [MOBILE.md](./MOBILE.md) |
 
 The root URL opens directly into the **Observation Deck**. There is no marketing page between the visitor and the visualization.
 
@@ -199,7 +211,14 @@ Useful pipeline variables:
 
 The repository contains Capacitor 8 local-shell projects for Android and iOS under the application ID `io.github.dajiaohuang.solaratlas`. Android supports API 24 and targets API 36; iOS requires 16.4 or later. Both use the installed local shell for the curated core experience while loading catalog data on demand over HTTPS.
 
-These projects are source and non-release validation paths, not published store products. CI produces an Android debug APK signed with the standard disposable debug key and an unsigned iOS Simulator app; neither is a store release artifact. Windows can build Android when its toolchain is installed, but iOS builds require macOS and Xcode. No release signing, store submission, or real-device validation is claimed. See [MOBILE.md](./MOBILE.md) for prerequisites, commands, native behavior, and the acceptance checklist, and [PRIVACY.md](./PRIVACY.md) for the current source-level privacy notice.
+The v0.11.0 reference validation for [commit `e9e7897`](https://github.com/dajiaohuang/solar/commit/e9e789705711bf2946f6b423cd53e9b820a554ec) passed both native jobs on 2026-08-29 in [workflow run 33269424582](https://github.com/dajiaohuang/solar/actions/runs/33269424582):
+
+| Target | Verified CI output | Boundary |
+| --- | --- | --- |
+| Android | API contract, lint, unit tests, and `assembleDebug`; artifact `solar-atlas-android-debug` | Debug-key-signed APK for validation, not a release APK or AAB |
+| iOS | Xcode build of the synced shell for `iphonesimulator`; artifact `solar-atlas-ios-simulator` | Unsigned Simulator `.app`, not a device archive or IPA |
+
+Artifacts are retained for 14 days; the workflow result remains the durable evidence after downloads expire. These projects are source and non-release validation paths, not published store products. Windows can build Android when its toolchain is installed, but iOS builds require macOS and Xcode. No release signing, store submission, TestFlight/Play track, or real-device validation is claimed. See [MOBILE.md](./MOBILE.md) for prerequisites, commands, native behavior, and the acceptance checklist, and [PRIVACY.md](./PRIVACY.md) for the current source-level privacy notice.
 
 ## Architecture
 
@@ -245,7 +264,7 @@ npm run check:capacity
 
 `.github/workflows/deploy.yml` is the single production gate: it validates the pin, builds compressed delivery assets, enforces Pages/browser budgets, runs tests and Lighthouse, archives evidence, deploys, and executes a production smoke test. `.github/workflows/data-refresh.yml` publishes monthly/manual immutable datasets. `.github/workflows/rollback.yml` restores the exact tested Pages artifact from a successful retained run.
 
-The [health endpoint](https://dajiaohuang.github.io/solar/health.json) reports the currently deployed commit, build time, dataset, delivery manifest, and scientific-validation status.
+The [health endpoint](https://dajiaohuang.github.io/solar/health.json) reports the currently deployed commit, build time, dataset, delivery manifest, and scientific-validation status. The workflow badges at the top report the current `main` deployment and native-build state; the dated native run above is the v0.11.0 reference record rather than a claim that short-lived artifacts remain downloadable forever.
 
 ## Installable app and offline boundary
 
