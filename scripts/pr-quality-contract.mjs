@@ -16,11 +16,15 @@ export function pullRequestQualityPasses(repositoryContract, webQuality) {
   return repositoryContract === 'success' && (webQuality === 'success' || webQuality === 'skipped')
 }
 
-function classify(baseSha, headSha) {
-  if (!baseSha || !headSha || !process.env.GITHUB_OUTPUT) throw new Error('Classification requires base SHA, head SHA, and GITHUB_OUTPUT')
-  const paths = execFileSync('git', ['diff', '--name-only', '--diff-filter=ACDMRT', baseSha, headSha], { encoding: 'utf8' })
+export function changedPaths(baseSha, headSha, cwd = process.cwd()) {
+  return execFileSync('git', ['diff', '--no-renames', '--name-only', '--diff-filter=ACDMRT', baseSha, headSha], { cwd, encoding: 'utf8' })
     .split(/\r?\n/)
     .filter(Boolean)
+}
+
+function classify(baseSha, headSha) {
+  if (!baseSha || !headSha || !process.env.GITHUB_OUTPUT) throw new Error('Classification requires base SHA, head SHA, and GITHUB_OUTPUT')
+  const paths = changedPaths(baseSha, headSha)
   const full = requiresFullWebQuality(paths)
   appendFileSync(process.env.GITHUB_OUTPUT, `full_web_quality=${full}\n`)
   process.stdout.write(`${full ? 'Full Web quality required' : 'Repository contract only'} for ${paths.length} changed path(s).\n`)
