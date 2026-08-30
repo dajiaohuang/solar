@@ -2,15 +2,27 @@
 
 **浏览器原生的太阳系动力学与小天体图谱：场景可复现、数据可追溯、模型边界明确。**
 
+[![生产部署](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml) [![Android 与 iOS](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml/badge.svg?branch=main)](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml)
+
 [打开 Solar Atlas](https://dajiaohuang.github.io/solar/) · [English](./README.md) · [移动端构建](./MOBILE-CN.md) · [隐私说明](./PRIVACY-CN.md) · [科学模型与边界](#科学模型与边界) · [参与贡献](#参与贡献)
 
 应用版本：**v0.11.0** · [线上构建身份](https://dajiaohuang.github.io/solar/health.json) · [更新日志](./CHANGELOG.md) · [路线图](./ROADMAP.md) · [性能预算](./PERFORMANCE.md)
+
+> **从这里开始：** [直接打开综合观测台](https://dajiaohuang.github.io/solar/)。根网址就是应用本身，前面没有宣传页，也无需账号登录。
 
 ![带三维场景和预设列表的 Solar Atlas 综合观测台](./docs/screenshots/observation-deck.png)
 
 Solar Atlas 把空间工作台、轨道元素空间、事件分析、任务几何、引导课程和数据证据连接到同一个纯前端应用。它面向探索与教学，**不是**业务星历、碰撞预警服务、N 体积分器或航天导航产品。
 
-## 打开后会看到什么
+## 几秒钟开始体验
+
+| 目标 | 最短路径 |
+| --- | --- |
+| 立即探索 | [打开综合观测台](https://dajiaohuang.github.io/solar/)，选择“**直接探索**” |
+| 学习操作 | 打开同一网址，选择“**进入教程**”；四步教程之后可从预设面板再次打开 |
+| 体验可复现课程 | [解释火星逆行](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=retrograde-mars&step=2&lang=zh)，或在[可复现场景](#可复现场景)中选择其他入口 |
+| 本地运行 Web 应用 | 依次运行 `npm ci` 与 `npm run dev`；内置核心不要求下载小行星数据集 |
+| 查看原生验证 | 打开 [Android/iOS 工作流](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml)，或按 [MOBILE-CN.md](./MOBILE-CN.md) 中的平台命令操作 |
 
 根网址会直接进入**综合观测台**，访客无需先经过宣传首页。
 
@@ -199,7 +211,14 @@ npm run check:capacity
 
 仓库已包含 Android 与 iOS 的 Capacitor 8 本地应用壳工程，应用 ID 为 `io.github.dajiaohuang.solaratlas`。Android 最低支持 API 24、目标 API 36；iOS 需要 16.4 或以上。两端都把内置核心体验安装在本地，并按需通过 HTTPS 加载目录数据。
 
-这些工程提供源码与非发布验证路径，不是已经发布的商店产品。CI 生成由标准一次性 debug key 签名的 Android debug APK，以及无签名 iOS 模拟器应用；两者都不是商店发布产物。工具链齐备时 Windows 可以构建 Android，但 iOS 必须使用 macOS 与 Xcode。当前不宣称已经完成发布签名、提交商店或真机验证。前置条件、命令、原生行为和验收清单见 [MOBILE-CN.md](./MOBILE-CN.md)，当前源码级隐私说明见 [PRIVACY-CN.md](./PRIVACY-CN.md)。
+v0.11.0 的参考验证已在 2026-08-29 针对[提交 `e9e7897`](https://github.com/dajiaohuang/solar/commit/e9e789705711bf2946f6b423cd53e9b820a554ec) 通过 [工作流运行 33269424582](https://github.com/dajiaohuang/solar/actions/runs/33269424582) 的两个原生任务：
+
+| 目标 | 已验证 CI 输出 | 边界 |
+| --- | --- | --- |
+| Android | API 契约、lint、单元测试与 `assembleDebug`；产物名 `solar-atlas-android-debug` | 使用 debug key 签名的验证 APK，不是发布 APK 或 AAB |
+| iOS | 使用 Xcode 为 `iphonesimulator` 构建同步后的应用壳；产物名 `solar-atlas-ios-simulator` | 无签名模拟器 `.app`，不是设备归档或 IPA |
+
+产物保留 14 天；下载过期后，工作流结果仍是持久验证证据。这些工程提供源码与非发布验证路径，不是已经发布的商店产品。工具链齐备时 Windows 可以构建 Android，但 iOS 必须使用 macOS 与 Xcode。当前不宣称已经完成发布签名、提交商店、进入 TestFlight/Play 测试轨道或真机验证。前置条件、命令、原生行为和验收清单见 [MOBILE-CN.md](./MOBILE-CN.md)，当前源码级隐私说明见 [PRIVACY-CN.md](./PRIVACY-CN.md)。
 
 ## 架构
 
@@ -245,7 +264,7 @@ npm run check:capacity
 
 `.github/workflows/deploy.yml` 是唯一生产门禁：校验数据 pin、构建压缩交付产物、执行 Pages/浏览器预算、测试与 Lighthouse、归档证据、部署并运行生产冒烟。`.github/workflows/data-refresh.yml` 按月或手动发布不可变数据集。`.github/workflows/rollback.yml` 可从保留期内的成功运行恢复准确测试过的 Pages 产物。
 
-[健康端点](https://dajiaohuang.github.io/solar/health.json) 会报告当前线上提交、构建时间、数据集、交付 manifest 与科学验证状态。
+[健康端点](https://dajiaohuang.github.io/solar/health.json) 会报告当前线上提交、构建时间、数据集、交付 manifest 与科学验证状态。顶部工作流徽章表示当前 `main` 的部署与原生构建状态；上方带日期的原生运行是 v0.11.0 参考记录，不表示短期产物会永久可下载。
 
 ## 可安装应用与离线边界
 
