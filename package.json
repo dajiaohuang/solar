@@ -24,6 +24,7 @@
     "validate:data": "node --max-old-space-size=4096 ./scripts/validate-dataset.mjs",
     "benchmark:catalog": "node ./scripts/benchmark-catalog-index.mjs",
     "check:capacity": "node ./scripts/check-capacity.mjs",
+    "check:repository": "node ./scripts/validate-yaml.mjs && node ./scripts/validate-repository.mjs",
     "mobile:sync": "npm run build:native && cap sync && node ./scripts/fix-capacitor-ios-package.mjs",
     "mobile:sync:android": "npm run build:native && cap sync android",
     "mobile:sync:ios": "npm run build:native && cap sync ios && node ./scripts/fix-capacitor-ios-package.mjs",
