@@ -160,7 +160,7 @@ export function MissionWorkspace() {
   }
 
   return <div className="workspace-page mission-workspace" data-story-target="mission">
-    <header className="page-heading"><div><span className="eyebrow">{t('missionKicker')}</span><h1>{t('mission')}</h1><p>{t('educationalWarning')}</p></div></header>
+    <div className="page-heading"><div><span className="eyebrow">{t('missionKicker')}</span><h1>{t('mission')}</h1><p>{t('educationalWarning')}</p></div></div>
     <div className="mission-layout">
       <aside className="mission-config glass-panel">
         <div className="section-kicker">{t('transferEndpoints').toUpperCase()}</div>

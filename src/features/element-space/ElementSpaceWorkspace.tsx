@@ -232,7 +232,7 @@ export function ElementSpaceWorkspace() {
   const [xLabel, yLabel] = labelsFor(mode)
 
   return <div className="workspace-page elements-workspace" data-story-target="elements">
-    <header className="page-heading"><div><span className="eyebrow">{t('elementsKicker')}</span><h1>{t('elements')}</h1><p>{t('brushHint')}</p></div><strong className="selection-stat">{selection.selectedIds.length} {t('selectedCount')}</strong></header>
+    <div className="page-heading"><div><span className="eyebrow">{t('elementsKicker')}</span><h1>{t('elements')}</h1><p>{t('brushHint')}</p></div><strong className="selection-stat">{selection.selectedIds.length} {t('selectedCount')}</strong></div>
     <div className="elements-toolbar glass-panel">
       <div className="segmented-control">{(['a-e', 'a-i', 'a-H', 'q-Q', 'a-period'] as PlotMode[]).map((item) => <button key={item} className={mode === item ? 'active' : ''} onClick={() => uiActions.setElementPlot(item)}>{item}</button>)}</div>
       <div className="legend">{Object.entries(CLASS_COLORS).slice(0, 9).map(([key, color]) => <span key={key}><i style={{ background: color }} />{key}</span>)}</div>

@@ -150,7 +150,7 @@ export function AppShell() {
         <button className="language-button" onClick={toggleLanguage} aria-label={language === 'zh' ? 'Switch to English' : '切换为中文'}>{language === 'zh' ? 'EN' : '中文'}</button>
       </div>
     </header>
-    <div className="route-container" ref={routeContainerRef} tabIndex={-1}><AppRouteView route={ui.route} /></div>
+    <div className="route-container" ref={routeContainerRef} tabIndex={-1} role={ui.route === 'explorer' || ui.route === 'home' ? undefined : 'main'}><AppRouteView route={ui.route} /></div>
 
     <nav className="mobile-navigation" aria-label={t('mobileNavigation')}>
       {MOBILE_PRIMARY.map((item) => <button key={item.route} aria-current={ui.route === item.route ? 'page' : undefined} className={ui.route === item.route ? 'active' : ''} onClick={() => navigate(item.route)}><span>{item.icon}</span><small>{item.route === 'stories' ? t('learn') : item.route === 'catalog' ? t('search') : t(item.label)}</small></button>)}

@@ -162,6 +162,8 @@ export const en = {
   selectAllCatalog: 'Select complete filtered catalog',
   loadNextExactPage: 'Load next exact-result page',
   minimumNameSearch: 'Type at least 2 letters to search names. Numbers and provisional designations are not limited.',
+  minimum: 'Minimum',
+  maximum: 'Maximum',
   retryExactScan: 'Retry exact scan',
   resetCatalogWorker: 'Reset catalog worker',
   clearCatalogSelection: 'Clear catalog-wide selection',

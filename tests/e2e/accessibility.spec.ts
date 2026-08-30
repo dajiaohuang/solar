@@ -7,6 +7,25 @@ async function expectNoSeriousViolations(page: Page) {
   expect(violations, violations.map((violation) => `${violation.id}: ${violation.help}\n${violation.nodes.map((node) => node.target.join(' ')).join('\n')}`).join('\n\n')).toEqual([])
 }
 
+async function expectSingleApplicationLandmarks(page: Page) {
+  await expect(page.getByRole('main')).toHaveCount(1)
+  await expect(page.getByRole('banner')).toHaveCount(1)
+}
+
+async function expectMinimumTargetSize(page: Page, selector: string) {
+  const sizes = await page.locator(selector).evaluateAll((elements) => elements
+    .map((element) => {
+      const bounds = element.getBoundingClientRect()
+      return { width: bounds.width, height: bounds.height }
+    })
+    .filter((size) => size.width > 0 && size.height > 0))
+  expect(sizes.length).toBeGreaterThan(0)
+  for (const size of sizes) {
+    expect(size.width).toBeGreaterThanOrEqual(24)
+    expect(size.height).toBeGreaterThanOrEqual(24)
+  }
+}
+
 test('first-run deck, story, and evidence surfaces have no serious automated accessibility violations', async ({ page }) => {
   await page.goto('./')
   await expect(page.locator('.trajectory-3d-placeholder')).toBeVisible()
@@ -16,10 +35,41 @@ test('first-run deck, story, and evidence surfaces have no serious automated acc
   await firstRun.getByRole('button', { name: /Explore independently|直接探索/ }).click()
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
   await expect(page.locator('.advanced-controls')).not.toHaveAttribute('open', '')
+  await expectSingleApplicationLandmarks(page)
+  await expectNoSeriousViolations(page)
+
+  await page.goto('./?v=3&page=home')
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
+  await expectSingleApplicationLandmarks(page)
+  await expectNoSeriousViolations(page)
+
+  await page.goto('./?v=4&page=catalog')
+  await expect(page.getByRole('heading', { name: /Catalog|小天体目录/ })).toBeVisible()
+  await expectSingleApplicationLandmarks(page)
+  const rangeNames = await page.locator('input[type="number"]').evaluateAll((inputs) => inputs.map((input) => input.getAttribute('aria-label')))
+  expect(rangeNames).toHaveLength(10)
+  expect(new Set(rangeNames).size).toBe(10)
+  expect(rangeNames.every((name) => name && /Minimum|Maximum|最小值|最大值/.test(name))).toBe(true)
+  await expectNoSeriousViolations(page)
+
+  await page.goto('./?v=4&page=catalog&lang=zh')
+  await expect(page.getByRole('heading', { name: '小天体目录' })).toBeVisible()
+  const chineseRangeNames = await page.locator('input[type="number"]').evaluateAll((inputs) => inputs.map((input) => input.getAttribute('aria-label')))
+  expect(chineseRangeNames).toHaveLength(10)
+  expect(new Set(chineseRangeNames).size).toBe(10)
+  expect(chineseRangeNames.every((name) => name && /最小值|最大值/.test(name))).toBe(true)
+  await expectNoSeriousViolations(page)
+
+  await page.goto('./?v=3&page=elements')
+  await expect(page.getByRole('heading', { name: /Element Space|轨道元素空间/ })).toBeVisible()
+  await expectSingleApplicationLandmarks(page)
+  if ((page.viewportSize()?.width ?? 1280) <= 980) await expectMinimumTargetSize(page, '.section-heading button')
   await expectNoSeriousViolations(page)
 
   await page.goto('./?v=3&page=stories')
   await expect(page.getByRole('heading', { name: /Stories|引导故事/ })).toBeVisible()
+  await expectSingleApplicationLandmarks(page)
+  await expectMinimumTargetSize(page, '.story-pagination button')
   await expectNoSeriousViolations(page)
   await page.getByRole('button', { name: /Open this scene|打开此场景/ }).click()
   await expect(page.getByRole('dialog', { name: /From geocentrism to the geocentric frame|从地心说到地心参考系/ })).toBeVisible()
@@ -27,6 +77,7 @@ test('first-run deck, story, and evidence surfaces have no serious automated acc
 
   await page.goto('./?v=3&page=about')
   await expect(page.getByRole('heading', { name: /Evidence|证据与数据/ })).toBeVisible()
+  await expectSingleApplicationLandmarks(page)
   await expectNoSeriousViolations(page)
 
   if ((page.viewportSize()?.width ?? 1280) > 980) await page.keyboard.press('Control+K')

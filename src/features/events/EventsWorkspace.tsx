@@ -114,7 +114,7 @@ export function EventsWorkspace() {
   }
 
   return <div className="workspace-page events-workspace" data-story-target="events">
-    <header className="page-heading"><div><span className="eyebrow">{t('eventsKicker')}</span><h1>{t('events')}</h1><p>{t('analysisIdle')}</p></div><div className={`job-status status-${analysis.status}`}><i />{statusLabels[analysis.status]}</div></header>
+    <div className="page-heading"><div><span className="eyebrow">{t('eventsKicker')}</span><h1>{t('events')}</h1><p>{t('analysisIdle')}</p></div><div className={`job-status status-${analysis.status}`}><i />{statusLabels[analysis.status]}</div></div>
     <div className="events-layout">
       <aside className="event-config glass-panel">
         <div className="section-heading"><span>{t('selectedBodies')}</span><strong>{analysisBodies.length}/48</strong></div>
