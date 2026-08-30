@@ -24,15 +24,23 @@ function stripFencedCode(markdown) {
   for (const line of markdown.split(/(?<=\n)/)) {
     const content = line.replace(/\r?\n$/, '')
     if (!fence) {
-      const opening = content.match(/^ {0,3}(`{3,}|~{3,})/)
-      if (opening) fence = { marker: opening[1][0], length: opening[1].length }
+      const opening = content.match(/^ {0,3}(`{3,}|~{3,})(.*)$/)
+      if (opening && !(opening[1][0] === '`' && opening[2].includes('`'))) {
+        fence = { marker: opening[1][0], length: opening[1].length }
+        output.push(line.replace(/[^\r\n]/g, ''))
+      }
       else output.push(line)
       continue
     }
     const closing = content.match(/^ {0,3}(`+|~+)\s*$/)
     if (closing && closing[1][0] === fence.marker && closing[1].length >= fence.length) fence = null
+    output.push(line.replace(/[^\r\n]/g, ''))
   }
   return output.join('')
+}
+
+function stripNonRendered(markdown) {
+  return stripFencedCode(markdown).replace(/<!--[\s\S]*?(?:-->|$)/g, comment => comment.replace(/[^\r\n]/g, ''))
 }
 
 function codeSpanEnd(source, start) {
@@ -112,7 +120,7 @@ function inlineDestination(source, open) {
 }
 
 export function markdownLinks(markdown) {
-  const source = stripFencedCode(markdown)
+  const source = stripNonRendered(markdown)
   const links = []
   const definition = /^\s{0,3}\[[^\]\n]+\]:\s*(<[^>\n]+>|\S+)/gm
   for (let index = 0; index < source.length; index += 1) {
@@ -141,7 +149,7 @@ function headingText(markdown) {
 export function markdownAnchors(markdown) {
   const anchors = new Set()
   const counts = new Map()
-  for (const match of stripFencedCode(markdown).matchAll(/^ {0,3}#{1,6}\s+(.+?)\s*#*\s*$/gm)) {
+  for (const match of stripNonRendered(markdown).matchAll(/^ {0,3}#{1,6}\s+(.+?)\s*#*\s*$/gm)) {
     const base = headingText(match[1])
       .replace(/<[^>]*>/g, '')
       .normalize('NFKD')
@@ -213,13 +221,14 @@ export function assertDocumentedVersion(markdown, expected, language) {
   const source = language === 'zh'
     ? '^应用版本：\\s*\\*\\*v([^*\\n]+)\\*\\*(?:\\s*·.*)?$'
     : '^Application version:\\s*\\*\\*v([^*\\n]+)\\*\\*(?:\\s*·.*)?$'
+  const visible = stripNonRendered(markdown)
   const expression = new RegExp(source, 'gm')
-  const versions = [...markdown.matchAll(expression)].map(match => match[1].trim())
+  const versions = [...visible.matchAll(expression)].map(match => match[1].trim())
   const filename = language === 'zh' ? 'README-CN.md' : 'README.md'
   if (versions.length !== 1) fail(`${filename} must contain exactly one canonical application-version line`)
   if (versions[0] !== expected) fail(`${filename} application version does not match package.json`)
 
-  const lines = markdown.split(/\r?\n/)
+  const lines = visible.split(/\r?\n/)
   const versionLine = lines.findIndex(line => new RegExp(source).test(line))
   const firstSection = lines.findIndex(line => /^##\s+/.test(line))
   if (versionLine < 0 || versionLine >= 15 || (firstSection >= 0 && versionLine >= firstSection)) {

@@ -8,8 +8,13 @@ import { changedPaths, pullRequestQualityPasses, requiresFullWebQuality } from '
 
 describe('repository contract', () => {
   it('extracts local destinations without treating code examples as links', () => {
-    const markdown = '[Guide](./GUIDE.md#setup "title [ignored](./missing.md)")\n[diagram](./orbit_(3d).png)\n`[ignored](./missing.md)`\n````md\n[ignored](./missing.md)\n```\nstill fenced\n````\n'
+    const markdown = '[Guide](./GUIDE.md#setup "title [ignored](./missing.md)")\n[diagram](./orbit_(3d).png)\n`[ignored](./missing.md)`\n<!-- [ignored](./missing-comment.md) -->\n````md\n[ignored](./missing.md)\n```\nstill fenced\n````\n'
     expect(markdownLinks(markdown)).toEqual(['./GUIDE.md#setup', './orbit_(3d).png'])
+  })
+
+  it('does not accept a backtick fence whose info string contains a backtick', () => {
+    const markdown = '```bad`info\n[visible](./missing.md)\n```\n'
+    expect(markdownLinks(markdown)).toEqual(['./missing.md'])
   })
 
   it('uses GitHub-style heading anchors and disambiguates repeats', () => {
@@ -27,6 +32,10 @@ describe('repository contract', () => {
     expect(() => assertDocumentedVersion('Application version: **v0.11.0**\nApplication version: **v0.11.0**\n', '0.11.0', 'en')).toThrow(/exactly one/)
     const misplacedCanonical = '# Solar Atlas\n\n## Version history\n\nApplication version: **v0.11.0**\n'
     expect(() => assertDocumentedVersion(misplacedCanonical, '0.11.0', 'en')).toThrow(/opening metadata block/)
+    const fencedCanonical = '# Solar Atlas\n\n````text\nApplication version: **v0.11.0**\n````\n'
+    expect(() => assertDocumentedVersion(fencedCanonical, '0.11.0', 'en')).toThrow(/exactly one/)
+    const commentedCanonical = '# Solar Atlas\n\n<!-- Application version: **v0.11.0** -->\n'
+    expect(() => assertDocumentedVersion(commentedCanonical, '0.11.0', 'en')).toThrow(/exactly one/)
   })
 
   it('keeps documentation links and release identities synchronized', () => {
