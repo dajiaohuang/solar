@@ -72,7 +72,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .section-heading, .module-heading, .map-caption { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .section-heading > span, .module-heading > span { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
 .section-heading > strong { font: 11px var(--font-mono); color: var(--accent); }
-.section-heading button, .module-heading button { border: 0; background: transparent; color: var(--accent); font-size: 11px; cursor: pointer; }
+.section-heading button, .module-heading button { min-width: 24px; min-height: 24px; border: 0; background: transparent; color: var(--accent); font-size: 11px; cursor: pointer; }
 .module-heading { padding-bottom: 12px; border-bottom: 1px solid var(--line); }
 .module-heading em { font: normal 9px var(--font-mono); letter-spacing: .14em; color: var(--muted); }
 .module-heading em.pass { color: var(--accent); }
@@ -457,8 +457,8 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 .story-copy dt { font: 8px var(--font-mono); color: var(--muted); }
 .story-copy dd { margin: 0; font: 10px var(--font-mono); }
 .story-pagination { grid-column: 2; display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; }
-.story-pagination button { border: 0; background: transparent; font-size: 10px; color: var(--muted); cursor: pointer; }
-.story-pagination > div { display: flex; gap: 5px; }.story-pagination > div button { width: 24px; height: 12px; padding: 5px 0; }.story-pagination > div button::after { content: ""; display: block; width: 100%; height: 2px; background: var(--line-strong); }.story-pagination > div button.active::after { background: var(--accent); }
+.story-pagination button { min-width: 24px; min-height: 24px; border: 0; background: transparent; font-size: 10px; color: var(--muted); cursor: pointer; }
+.story-pagination > div { display: flex; gap: 5px; }.story-pagination > div button { width: 24px; height: 24px; padding: 11px 0; }.story-pagination > div button::after { content: ""; display: block; width: 100%; height: 2px; background: var(--line-strong); }.story-pagination > div button.active::after { background: var(--accent); }
 .story-evidence { grid-column: 3; grid-row: 1 / 3; padding: 18px; display: grid; align-content: start; gap: 28px; }.story-evidence p { color: var(--muted); font-size: 10px; line-height: 1.65; }.story-evidence a { display: grid; grid-template-columns: 1fr auto; gap: 8px; color: #c4d0d4; text-decoration: none; border-bottom: 1px solid var(--line); padding: 10px 0; font-size: 9px; line-height: 1.45; }.story-evidence a b { color: var(--accent); }
 .guided-story-overlay { position: fixed; z-index: 155; right: calc(18px + var(--safe-right)); bottom: calc(18px + var(--safe-bottom)); width: min(430px, calc(100% - 36px - var(--safe-left) - var(--safe-right))); max-height: calc(100dvh - 104px - var(--safe-top) - var(--safe-bottom)); overflow-y: auto; padding: 17px; border-color: rgba(98,208,181,.4); box-shadow: 0 22px 80px rgba(0,0,0,.72); }
 .guided-story-overlay > header { display: flex; align-items: start; justify-content: space-between; gap: 12px; }.guided-story-overlay > header > div:first-child { display: grid; gap: 5px; }.guided-story-overlay > header strong { font-size: 13px; }.guided-story-overlay > header > div:last-child { display: flex; }.guided-story-overlay > header button { width: 31px; height: 31px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }

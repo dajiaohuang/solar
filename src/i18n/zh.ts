@@ -164,6 +164,8 @@ export const zh: Record<TranslationKey, string> = {
   selectAllCatalog: '全选完整筛选目录',
   loadNextExactPage: '加载下一页精确结果',
   minimumNameSearch: '英文名称至少输入 2 个字母；编号和临时编号不受此限制。',
+  minimum: '最小值',
+  maximum: '最大值',
   retryExactScan: '重试精确扫描',
   resetCatalogWorker: '重置目录 Worker',
   clearCatalogSelection: '清除目录级全选',

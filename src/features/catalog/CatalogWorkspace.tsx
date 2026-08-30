@@ -228,13 +228,13 @@ export function CatalogWorkspace() {
 
   return (
     <div className="workspace-page catalog-workspace" data-story-target="catalog">
-      <header className="page-heading">
+      <div className="page-heading">
         <div><span className="eyebrow">{t('catalogKicker')}</span><h1>{t('catalog')}</h1><p>{t('tagline')}</p></div>
         <div className="mode-switch segmented-control">
           <button className={installedMode === 'lite' ? 'active' : ''} disabled={installedMode !== 'lite'}>{t('lite')}</button>
           <button className={installedMode === 'full' ? 'active' : ''} disabled={installedMode !== 'full'}>{t('full')}</button>
         </div>
-      </header>
+      </div>
 
       <div className="catalog-layout">
         <aside className="filter-panel glass-panel">
@@ -243,16 +243,16 @@ export function CatalogWorkspace() {
           {nameSearchTooShort && <p className="catalog-result-note">{t('minimumNameSearch')}</p>}
           <label className="field"><span>{t('orbitClass')}</span><select value={catalog.filters.orbitClass} onChange={(event) => catalogActions.patchFilters({ orbitClass: event.target.value })}>{CATALOG_ORBIT_CLASS_FILTERS.map((value) => <option value={value} key={value}>{value}</option>)}</select></label>
           <div className="section-kicker">{t('filters').toUpperCase()}</div>
-          <RangeFields label="a (AU)" value={catalog.filters.semiMajorAxis} onChange={(value) => catalogActions.patchFilters({ semiMajorAxis: value })} step="0.1" />
-          <RangeFields label="e" value={catalog.filters.eccentricity} onChange={(value) => catalogActions.patchFilters({ eccentricity: value })} step="0.01" />
-          <RangeFields label="i (°)" value={catalog.filters.inclination} onChange={(value) => catalogActions.patchFilters({ inclination: value })} step="1" />
-          <RangeFields label="H" value={catalog.filters.absoluteMagnitude} onChange={(value) => catalogActions.patchFilters({ absoluteMagnitude: value })} step="0.5" />
+          <RangeFields label="a (AU)" minimumLabel={t('minimum')} maximumLabel={t('maximum')} value={catalog.filters.semiMajorAxis} onChange={(value) => catalogActions.patchFilters({ semiMajorAxis: value })} step="0.1" />
+          <RangeFields label="e" minimumLabel={t('minimum')} maximumLabel={t('maximum')} value={catalog.filters.eccentricity} onChange={(value) => catalogActions.patchFilters({ eccentricity: value })} step="0.01" />
+          <RangeFields label="i (°)" minimumLabel={t('minimum')} maximumLabel={t('maximum')} value={catalog.filters.inclination} onChange={(value) => catalogActions.patchFilters({ inclination: value })} step="1" />
+          <RangeFields label="H" minimumLabel={t('minimum')} maximumLabel={t('maximum')} value={catalog.filters.absoluteMagnitude} onChange={(value) => catalogActions.patchFilters({ absoluteMagnitude: value })} step="0.5" />
           <label className="field"><span>{t('magnitudeStatus')}</span><select value={catalog.filters.magnitudeStatus} onChange={(event) => catalogActions.patchFilters({ magnitudeStatus: event.target.value as MagnitudeStatus })}>
             <option value="all">{t('magnitudeAll')}</option>
             <option value="known">{t('magnitudeKnown')}</option>
             <option value="unknown">{t('magnitudeUnknown')}</option>
           </select></label>
-          <RangeFields label="q (AU)" value={catalog.filters.perihelion} onChange={(value) => catalogActions.patchFilters({ perihelion: value })} step="0.1" />
+          <RangeFields label="q (AU)" minimumLabel={t('minimum')} maximumLabel={t('maximum')} value={catalog.filters.perihelion} onChange={(value) => catalogActions.patchFilters({ perihelion: value })} step="0.1" />
           <button className="primary-button full-width" disabled={!filtered.length} onClick={() => selectionActions.addCatalogBodies(filtered.slice(0, focusBodyLimit).map(asteroidRecordToBody), true)}>{t('addSelection')} · {Math.min(filtered.length, focusBodyLimit)}</button>
           <button className="secondary-button full-width" disabled={!catalog.manifest || catalog.isLoading || nameSearchTooShort} onClick={() => {
             if (catalog.activeResultScanKey === scanKey) selectAllFiltered()
@@ -315,6 +315,6 @@ export function CatalogWorkspace() {
   )
 }
 
-function RangeFields({ label, value, onChange, step }: { label: string; value: [number, number]; onChange: (value: [number, number]) => void; step: string }) {
-  return <div className="range-fields"><span>{label}</span><input type="number" value={value[0]} step={step} onChange={(event) => onChange([Number(event.target.value), value[1]])} /><b>—</b><input type="number" value={value[1]} step={step} onChange={(event) => onChange([value[0], Number(event.target.value)])} /></div>
+function RangeFields({ label, minimumLabel, maximumLabel, value, onChange, step }: { label: string; minimumLabel: string; maximumLabel: string; value: [number, number]; onChange: (value: [number, number]) => void; step: string }) {
+  return <div className="range-fields"><span>{label}</span><input aria-label={`${label}: ${minimumLabel}`} type="number" value={value[0]} step={step} onChange={(event) => onChange([Number(event.target.value), value[1]])} /><b>—</b><input aria-label={`${label}: ${maximumLabel}`} type="number" value={value[1]} step={step} onChange={(event) => onChange([value[0], Number(event.target.value)])} /></div>
 }

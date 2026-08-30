@@ -58,7 +58,7 @@ export function EvidenceWorkspace() {
   const validationRuleCount = useMemo(() => Object.values(activeValidation?.invariants ?? {}).filter((value) => value === true || (typeof value === 'number' && value > 0)).length, [activeValidation])
 
   return <div className="workspace-page evidence-workspace">
-    <header className="page-heading"><div><span className="eyebrow">{t('evidenceKicker')}</span><h1>{t('about')}</h1><p>{t('educationalWarning')}</p></div></header>
+    <div className="page-heading"><div><span className="eyebrow">{t('evidenceKicker')}</span><h1>{t('about')}</h1><p>{t('educationalWarning')}</p></div></div>
     <div className="evidence-grid">
       <section className="evidence-module glass-panel"><div className="module-heading"><span>{t('provenance')}</span><em>{t('dataLayer').toUpperCase()}</em></div><DatasetCard /></section>
 

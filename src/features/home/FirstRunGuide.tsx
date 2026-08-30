@@ -12,7 +12,7 @@ export function FirstRunGuide() {
   const [visible, setVisible] = useState(() => !hasCompletedOnboarding())
   const [mode, setMode] = useState<'choice' | 'tour'>('choice')
   const [step, setStep] = useState(0)
-  const dialogRef = useRef<HTMLElement | null>(null)
+  const dialogRef = useRef<HTMLDivElement | null>(null)
   const tips = [t('onboardingDrag'), t('onboardingFrame'), t('onboardingSelect'), t('onboardingStory')]
 
   useEffect(() => {
@@ -47,7 +47,7 @@ export function FirstRunGuide() {
   }
 
   if (!visible) return null
-  if (mode === 'choice') return <aside ref={dialogRef} tabIndex={-1} className="first-run-guide first-run-choice glass-panel" role="dialog" aria-labelledby="first-run-choice-title" aria-describedby="first-run-choice-description" aria-modal="false">
+  if (mode === 'choice') return <div ref={dialogRef} tabIndex={-1} className="first-run-guide first-run-choice glass-panel" role="dialog" aria-labelledby="first-run-choice-title" aria-describedby="first-run-choice-description" aria-modal="false">
     <button className="first-run-close" onClick={() => complete()} aria-label={t('dismiss')}>×</button>
     <span className="eyebrow">{t('firstVisit')}</span>
     <h2 id="first-run-choice-title">{t('onboardingChoiceTitle')}</h2>
@@ -56,8 +56,8 @@ export function FirstRunGuide() {
       <button className="primary-button" onClick={() => { activateOnboardingRenderer(); setMode('tour') }}>{t('startTutorial')} →</button>
       <button className="quiet-button" onClick={() => complete()}>{t('exploreIndependently')}</button>
     </div>
-  </aside>
-  return <aside ref={dialogRef} tabIndex={-1} className="first-run-guide glass-panel" role="dialog" aria-labelledby="first-run-title" aria-modal="false">
+  </div>
+  return <div ref={dialogRef} tabIndex={-1} className="first-run-guide glass-panel" role="dialog" aria-labelledby="first-run-title" aria-modal="false">
     <div className="first-run-progress" aria-hidden="true">{tips.map((_, index) => <i className={index === step ? 'active' : ''} key={index} />)}</div>
     <button className="first-run-close" onClick={() => complete()} aria-label={t('dismiss')}>×</button>
     <span className="eyebrow">{String(step + 1).padStart(2, '0')} / 04</span>
@@ -69,5 +69,5 @@ export function FirstRunGuide() {
         {step === tips.length - 1 ? t('gotIt') : t('nextTip')} →
       </button>
     </div>
-  </aside>
+  </div>
 }
