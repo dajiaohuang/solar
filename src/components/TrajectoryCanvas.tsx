@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PREPARE_CANVAS_CAPTURE_EVENT } from '../lib/canvasCapture'
 import { GRID_LEVELS, SVG_PADDING, createProjection, projectPoint, unprojectPoint, type Projection } from '../lib/viewProjection'
 import type { LagrangePoint } from '../lib/lagrange'
 import type { AsteroidRecord, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector2 } from '../types'
@@ -657,15 +658,20 @@ export function TrajectoryCanvas({
       resourcesRef.current = resources
     }
 
-    const { gl } = resources
-    gl.viewport(0, 0, canvas.width, canvas.height)
-    gl.clearColor(0, 0, 0, 0)
-    gl.clear(gl.COLOR_BUFFER_BIT)
-    gl.enable(gl.BLEND)
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+    const drawFrame = () => {
+      const { gl } = resources
+      gl.viewport(0, 0, canvas.width, canvas.height)
+      gl.clearColor(0, 0, 0, 0)
+      gl.clear(gl.COLOR_BUFFER_BIT)
+      gl.enable(gl.BLEND)
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 
-    drawLines(resources, geometry)
-    drawPoints(resources, geometry, pixelRatio)
+      drawLines(resources, geometry)
+      drawPoints(resources, geometry, pixelRatio)
+    }
+    canvas.addEventListener(PREPARE_CANVAS_CAPTURE_EVENT, drawFrame)
+    drawFrame()
+    return () => canvas.removeEventListener(PREPARE_CANVAS_CAPTURE_EVENT, drawFrame)
   }, [geometry, pixelRatioLimit, size.height, size.width, webglUnavailable])
 
   useEffect(() => {
