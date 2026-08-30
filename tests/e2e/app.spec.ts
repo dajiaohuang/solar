@@ -371,6 +371,53 @@ test('prioritizes 3D for internal entries and every built-in preset', async ({ p
   await expect(page.getByTestId('trajectory-canvas-3d')).toHaveCount(0)
 })
 
+test('replays 3D zoom and labels unsupported 2D-only controls truthfully', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  const captures: Buffer[] = []
+  const distances: number[] = []
+
+  for (const zoom of [0.15, 2]) {
+    await page.goto(`./?v=4&page=explorer&view=3d&zoom=${zoom}&layers=ecliptic,orbits,hill,soi&lang=en`)
+    const canvas = page.getByTestId('trajectory-canvas-3d')
+    await expect(canvas).toBeVisible({ timeout: 15_000 })
+    await expect.poll(async () => Number(await canvas.getAttribute('data-camera-distance'))).toBeGreaterThan(0)
+    distances.push(Number(await canvas.getAttribute('data-camera-distance')))
+    captures.push(await canvas.screenshot())
+  }
+
+  expect(distances[0]).toBeGreaterThan(distances[1])
+  expect(Buffer.compare(captures[0], captures[1])).not.toBe(0)
+
+  await page.locator('.advanced-controls > summary').click()
+  for (const checkbox of [
+    page.getByRole('checkbox', { name: /Osculating orbit ellipses · 2D only/ }),
+    page.getByRole('checkbox', { name: /Hill sphere · 2D only/ }),
+    page.getByRole('checkbox', { name: /Laplace SOI · 2D only/ }),
+  ]) {
+    await expect(checkbox).toBeDisabled()
+    await expect(checkbox).not.toBeChecked()
+  }
+  await expect(page.getByText(/Free orbit, pan, wheel, and pinch gestures stay in this session/)).toBeVisible()
+
+  const ecliptic = page.getByRole('checkbox', { name: 'Ecliptic plane' })
+  await ecliptic.uncheck()
+  const withoutEcliptic = await page.getByTestId('trajectory-canvas-3d').screenshot()
+  await ecliptic.check()
+  const withEcliptic = await page.getByTestId('trajectory-canvas-3d').screenshot()
+  expect(Buffer.compare(withoutEcliptic, withEcliptic)).not.toBe(0)
+
+  const camera = page.getByTestId('trajectory-canvas-3d')
+  const zoomedDistance = Number(await camera.getAttribute('data-camera-distance'))
+  const configuredUrl = page.url()
+  await camera.hover()
+  await page.mouse.wheel(0, -500)
+  await expect.poll(async () => Number(await camera.getAttribute('data-camera-distance'))).toBeLessThan(zoomedDistance)
+  expect(page.url()).toBe(configuredUrl)
+  await page.locator('.view-reset').click()
+  await expect(page.getByLabel('3D camera zoom')).toHaveValue('1')
+  await expect.poll(async () => Number(await camera.getAttribute('data-camera-distance'))).toBeGreaterThan(zoomedDistance)
+})
+
 test('exports rendered scene pixels from both WebGL views', async ({ page }) => {
   await page.addInitScript(() => {
     const originalToBlob = HTMLCanvasElement.prototype.toBlob

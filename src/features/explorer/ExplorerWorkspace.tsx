@@ -71,6 +71,7 @@ type FrameViewProps = {
   onFrameDuration: (durationMs: number) => void
   isPlaying: boolean
   render3DReady: boolean
+  cameraResetKey: number
 }
 
 function FrameView({
@@ -92,6 +93,7 @@ function FrameView({
   onFrameDuration,
   isPlaying,
   render3DReady,
+  cameraResetKey,
 }: FrameViewProps) {
   const simulation = simulationStore.useStore()
   const { t, language } = useI18n()
@@ -206,6 +208,8 @@ function FrameView({
             continuous={isPlaying && simulation.showCatalogCloud}
             pixelRatioLimit={pixelRatioLimit}
             onFrameDuration={onFrameDuration}
+            zoomLevel={simulation.zoom}
+            resetViewKey={cameraResetKey}
           />
         </Suspense>
       ) : (
@@ -215,6 +219,7 @@ function FrameView({
           currentPositions={frame.currentPositions}
           viewRadiusAU={suggested / simulation.zoom}
           viewOffsetAU={simulation.viewOffset}
+          showEcliptic={simulation.showEcliptic}
           showOrbits={simulation.showOrbits}
           orbitEllipses={orbitEllipses}
           onReferenceChange={(id) => { if (bodiesById.has(id)) simulationActions.patch({ referenceId: id }) }}
@@ -244,6 +249,8 @@ export function ExplorerWorkspace() {
   const catalog = catalogStore.useStore()
   const { t, language } = useI18n()
   const [render3DReady, setRender3DReady] = useState(isOnboardingRendererReady)
+  const [cameraResetKey, setCameraResetKey] = useState(0)
+  const resetView = () => setCameraResetKey((value) => value + 1)
   useEffect(() => {
     const activate = () => setRender3DReady(true)
     window.addEventListener(ONBOARDING_RENDER_READY_EVENT, activate)
@@ -303,7 +310,7 @@ export function ExplorerWorkspace() {
 
   return (
     <div className={`explorer-workspace ${inspectorOpen ? 'inspector-open' : ''}`}>
-      <ControlDrawer bodies={allBodies} referenceOptions={allBodies.filter((body) => body.kind !== 'spacecraft')} />
+      <ControlDrawer bodies={allBodies} referenceOptions={allBodies.filter((body) => body.kind !== 'spacecraft')} onResetView={resetView} />
       <main className="explorer-stage">
         <SimulationControls />
         {simulation.showCatalogCloud && catalog.sampleError && (
@@ -339,6 +346,7 @@ export function ExplorerWorkspace() {
             onFrameDuration={renderBudget.onFrameDuration}
             isPlaying={clock.isPlaying}
             render3DReady={render3DReady}
+            cameraResetKey={cameraResetKey}
           />
           {simulation.comparisonEnabled && (
             <FrameView
@@ -360,6 +368,7 @@ export function ExplorerWorkspace() {
               onFrameDuration={renderBudget.onFrameDuration}
               isPlaying={clock.isPlaying}
               render3DReady={render3DReady}
+              cameraResetKey={cameraResetKey}
             />
           )}
         </div>
@@ -375,7 +384,7 @@ export function ExplorerWorkspace() {
           <div className="accessible-view-actions" aria-label={t('view')}>
             <button onClick={() => simulationActions.patch({ zoom: Math.min(12, simulation.zoom * 1.25) })}>{t('zoomIn')} +</button>
             <button onClick={() => simulationActions.patch({ zoom: Math.max(.15, simulation.zoom / 1.25) })}>{t('zoomOut')} −</button>
-            <button onClick={() => simulationActions.patch({ zoom: 1, viewOffset: { x: 0, y: 0 } })}>{t('resetView')}</button>
+            <button onClick={() => { simulationActions.patch({ zoom: 1, viewOffset: { x: 0, y: 0 } }); resetView() }}>{t('resetView')}</button>
           </div>
           <ul aria-label={t('selectedObjectList')}>{selectedBodies.map((body) => <li key={body.id}>
             <span><i style={{ background: body.color }} />{bodyDisplayName(body, language)}</span>

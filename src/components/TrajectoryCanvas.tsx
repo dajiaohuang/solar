@@ -15,6 +15,7 @@ type Props = {
   currentPositions: RenderedBodyPosition[]
   viewRadiusAU: number
   viewOffsetAU: { x: number; y: number }
+  showEcliptic?: boolean
   showOrbits?: boolean
   orbitEllipses?: OrbitEllipse[]
   onReferenceChange?: (bodyId: string) => void
@@ -314,6 +315,7 @@ function buildGeometry(
   referenceBody: CelestialBody,
   trajectories: TrajectorySample[],
   currentPositions: RenderedBodyPosition[],
+  showEcliptic: boolean,
   showOrbits: boolean,
   orbitEllipses: OrbitEllipse[],
   planetOpacity: number,
@@ -333,48 +335,49 @@ function buildGeometry(
   const haloColor = [1, 1, 1, 0.18]
   const projectedReferencePoint = projectPoint({ x: 0, y: 0 }, projection)
 
-  for (const ratio of GRID_LEVELS) {
-    for (let index = 0; index < RING_SEGMENTS; index += 1) {
-      const startAngle = (index / RING_SEGMENTS) * Math.PI * 2
-      const endAngle = ((index + 1) / RING_SEGMENTS) * Math.PI * 2
-      const radius = projection.drawableRadius * ratio
+  if (showEcliptic) {
+    for (const ratio of GRID_LEVELS) {
+      for (let index = 0; index < RING_SEGMENTS; index += 1) {
+        const startAngle = (index / RING_SEGMENTS) * Math.PI * 2
+        const endAngle = ((index + 1) / RING_SEGMENTS) * Math.PI * 2
+        const radius = projection.drawableRadius * ratio
 
-      pushLineSegment(
-        linePositions,
-        lineColors,
-        toClipSpace(
-          {
-            x: projection.centerX + Math.cos(startAngle) * radius,
-            y: projection.centerY + Math.sin(startAngle) * radius,
-          },
-          projection,
-        ),
-        toClipSpace(
-          {
-            x: projection.centerX + Math.cos(endAngle) * radius,
-            y: projection.centerY + Math.sin(endAngle) * radius,
-          },
-          projection,
-        ),
-        gridColor,
-      )
+        pushLineSegment(
+          linePositions,
+          lineColors,
+          toClipSpace(
+            {
+              x: projection.centerX + Math.cos(startAngle) * radius,
+              y: projection.centerY + Math.sin(startAngle) * radius,
+            },
+            projection,
+          ),
+          toClipSpace(
+            {
+              x: projection.centerX + Math.cos(endAngle) * radius,
+              y: projection.centerY + Math.sin(endAngle) * radius,
+            },
+            projection,
+          ),
+          gridColor,
+        )
+      }
     }
+    pushLineSegment(
+      linePositions,
+      lineColors,
+      toClipSpace({ x: projection.padding, y: projection.centerY }, projection),
+      toClipSpace({ x: projection.width - projection.padding, y: projection.centerY }, projection),
+      gridColor,
+    )
+    pushLineSegment(
+      linePositions,
+      lineColors,
+      toClipSpace({ x: projection.centerX, y: projection.padding }, projection),
+      toClipSpace({ x: projection.centerX, y: projection.height - projection.padding }, projection),
+      gridColor,
+    )
   }
-
-  pushLineSegment(
-    linePositions,
-    lineColors,
-    toClipSpace({ x: projection.padding, y: projection.centerY }, projection),
-    toClipSpace({ x: projection.width - projection.padding, y: projection.centerY }, projection),
-    gridColor,
-  )
-  pushLineSegment(
-    linePositions,
-    lineColors,
-    toClipSpace({ x: projection.centerX, y: projection.padding }, projection),
-    toClipSpace({ x: projection.centerX, y: projection.height - projection.padding }, projection),
-    gridColor,
-  )
 
   const haloSegments = 48
   for (let index = 0; index < haloSegments; index += 1) {
@@ -556,6 +559,7 @@ export function TrajectoryCanvas({
   currentPositions,
   viewRadiusAU,
   viewOffsetAU,
+  showEcliptic = true,
   showOrbits,
   orbitEllipses,
   onReferenceChange,
@@ -618,6 +622,7 @@ export function TrajectoryCanvas({
         referenceBody,
         trajectories,
         currentPositions,
+        showEcliptic,
         showOrbits ?? false,
         orbitEllipses ?? [],
         planetOpacity,
@@ -628,7 +633,7 @@ export function TrajectoryCanvas({
         catalogDrawCount,
         catalogOrigin,
       ),
-    [asteroidOpacity, catalogDrawCount, catalogOrigin, catalogPositions, catalogRecords, currentPositions, moonOpacity, orbitEllipses, planetOpacity, projection, referenceBody, showOrbits, trajectories],
+    [asteroidOpacity, catalogDrawCount, catalogOrigin, catalogPositions, catalogRecords, currentPositions, moonOpacity, orbitEllipses, planetOpacity, projection, referenceBody, showEcliptic, showOrbits, trajectories],
   )
 
   useEffect(() => {
@@ -862,7 +867,7 @@ export function TrajectoryCanvas({
           {referenceBody.name}
         </span>
 
-        {[0.33, 0.66, 1.0].map((ratio) => {
+        {showEcliptic && [0.33, 0.66, 1.0].map((ratio) => {
           const ringAU = viewRadiusAU * ratio
           const ringPixelRadius = projection.drawableRadius * ratio
           const projected = {

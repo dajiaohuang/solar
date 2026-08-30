@@ -13,6 +13,7 @@ import { uiActions, uiStore } from '../state/ui-store'
 import { DEFAULT_MISSION_STATE, missionActions, missionStore } from '../state/mission-store'
 import { IS_NATIVE_APP } from '../lib/platform'
 import { onNativeSceneLocation } from '../lib/nativeUrl'
+import { VIEW_CAPABILITIES } from '../lib/viewCapabilities'
 
 const DEFAULT_STORY = 'geocentric-model'
 const MISSION_BODY_IDS = new Set(majorBodiesWithPhysicalData.filter((body) => body.orbit && !body.parentId).map((body) => body.id))
@@ -56,6 +57,8 @@ export function AppProviders({ children }: { children: ReactNode }) {
     const selectedIds = initial.bodies ?? DEFAULT_SELECTED_IDS
     const focusedId = initial.focused ?? (selectedIds.includes(DEFAULT_FOCUSED_ID) ? DEFAULT_FOCUSED_ID : selectedIds[0] ?? null)
     const language = initial.lang ?? uiStore.getState().language
+    const viewMode = initial.view ?? DEFAULT_SIMULATION_STATE.viewMode
+    const capabilities = VIEW_CAPABILITIES[viewMode]
 
     uiActions.navigate(route)
     uiActions.setLanguage(language)
@@ -73,7 +76,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
     selectionActions.focus(focusedId)
     simulationActions.patch({
       ...DEFAULT_SIMULATION_STATE,
-      viewOffset: initial.offset
+      viewOffset: capabilities.offset && initial.offset
         ? { x: initial.offset[0], y: initial.offset[1] }
         : { ...DEFAULT_SIMULATION_STATE.viewOffset },
       referenceId: initial.ref ?? DEFAULT_SIMULATION_STATE.referenceId,
@@ -82,14 +85,14 @@ export function AppProviders({ children }: { children: ReactNode }) {
       zoom: initial.zoom ?? DEFAULT_SIMULATION_STATE.zoom,
       historyDays: initial.history ?? DEFAULT_SIMULATION_STATE.historyDays,
       sampleCount: initial.samples ?? DEFAULT_SIMULATION_STATE.sampleCount,
-      viewMode: initial.view ?? DEFAULT_SIMULATION_STATE.viewMode,
+      viewMode,
       renderQuality: initial.quality ?? DEFAULT_SIMULATION_STATE.renderQuality,
       showCatalogCloud: initial.catalogCloud ?? DEFAULT_SIMULATION_STATE.showCatalogCloud,
       showEcliptic: initial.layers?.includes('ecliptic') ?? DEFAULT_SIMULATION_STATE.showEcliptic,
-      showOrbits: initial.layers?.includes('orbits') ?? DEFAULT_SIMULATION_STATE.showOrbits,
+      showOrbits: capabilities.fullOrbits && (initial.layers?.includes('orbits') ?? DEFAULT_SIMULATION_STATE.showOrbits),
       showLagrange: initial.layers?.includes('lagrange') ?? DEFAULT_SIMULATION_STATE.showLagrange,
-      showHillSphere: initial.layers?.includes('hill') ?? DEFAULT_SIMULATION_STATE.showHillSphere,
-      showLaplaceSoi: initial.layers?.includes('soi') ?? DEFAULT_SIMULATION_STATE.showLaplaceSoi,
+      showHillSphere: capabilities.hillSphere && (initial.layers?.includes('hill') ?? DEFAULT_SIMULATION_STATE.showHillSphere),
+      showLaplaceSoi: capabilities.laplaceSoi && (initial.layers?.includes('soi') ?? DEFAULT_SIMULATION_STATE.showLaplaceSoi),
       showSpacecraft: initial.layers?.includes('spacecraft') ?? DEFAULT_SIMULATION_STATE.showSpacecraft,
     })
     simulationClock.pause()
