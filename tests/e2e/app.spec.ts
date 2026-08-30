@@ -520,6 +520,24 @@ test('publishes the exact planetary model provenance in Evidence and the Earth p
   await expect(page.getByText('Earth–Moon barycenter')).toBeVisible()
 })
 
+test('reports only the catalog dataset loaded by the running application', async ({ page }) => {
+  await installMockCatalog(page, { precomputed: true })
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&page=about&lang=en')
+
+  await expect(page.locator('.build-identity')).toContainText('mock-content-lite')
+})
+
+test('does not present the build-time dataset pin as loaded when the catalog is offline', async ({ page }) => {
+  await page.route('**/data/asteroids/**', (route) => route.abort('internetdisconnected'))
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&page=about&lang=en')
+
+  const identity = page.locator('.build-identity')
+  await expect(identity.getByText('No dataset', { exact: true })).toBeVisible()
+  await expect(identity).not.toContainText('mpcorb-919b585f403b185a-full')
+})
+
 test('discloses sourced satellite frames, phases, and fixed-ellipse limits', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=3&page=explorer&focused=moon&bodies=earth%2Cmoon&lang=en')
