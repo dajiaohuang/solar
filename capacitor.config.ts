@@ -7,6 +7,14 @@ const config: CapacitorConfig = {
   server: {
     androidScheme: 'https',
   },
+  plugins: {
+    SystemBars: {
+      insetsHandling: 'css',
+      style: 'DARK',
+      hidden: false,
+      animation: 'NONE',
+    },
+  },
   android: {
     backgroundColor: '#05080c',
     minWebViewVersion: 80,

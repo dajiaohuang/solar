@@ -17,6 +17,14 @@ if (!joined.includes('https://dajiaohuang.github.io/solar/data/asteroids')) {
   throw new Error('Native JavaScript does not contain the audited catalog data origin')
 }
 
+const stylesheets = assetFiles.filter((name) => name.endsWith('.css'))
+const styles = (await Promise.all(stylesheets.map((name) => readFile(join(dist, 'assets', name), 'utf8')))).join('\n')
+for (const side of ['top', 'right', 'bottom', 'left']) {
+  if (!styles.includes(`var(--safe-area-inset-${side},env(safe-area-inset-${side},0px))`)) {
+    throw new Error(`Native CSS does not preserve the Capacitor ${side} safe-area fallback`)
+  }
+}
+
 async function directoryBytes(path) {
   let total = 0
   for (const entry of await readdir(path, { withFileTypes: true })) {
