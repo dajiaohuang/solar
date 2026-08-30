@@ -3,6 +3,7 @@ import { catalogStore } from '../state/catalog-store'
 import { selectionStore } from '../state/selection-store'
 import { simulationStore } from '../state/simulation-store'
 import { BUILD_INFO } from './buildInfo'
+import { prepareCanvasCapture } from './canvasCapture'
 import { encodeCurrentScene } from './shareScene'
 import { createSceneExportModelEvidenceLines } from './sceneExportEvidence'
 import { saveExport } from './platform'
@@ -49,6 +50,7 @@ export async function exportAnnotatedScenePng(language: 'en' | 'zh') {
   const drawHeight = source.height * scale
   const drawX = (width - drawWidth) / 2
   const drawY = headerHeight + (contentHeight - drawHeight) / 2
+  prepareCanvasCapture(source)
   context.drawImage(source, drawX, drawY, drawWidth, drawHeight)
 
   context.fillStyle = '#0c1218'

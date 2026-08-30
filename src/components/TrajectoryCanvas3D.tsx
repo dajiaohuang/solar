@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
+import { PREPARE_CANVAS_CAPTURE_EVENT } from '../lib/canvasCapture'
 import type { LagrangePoint } from '../lib/lagrange'
 import { createTrajectoryScene } from '../lib/trajectoryScene3d'
 import type { AsteroidRecord, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector3 } from '../types'
@@ -216,6 +217,7 @@ export function TrajectoryCanvas3D({
     resourcesRef.current = resources
     const render = () => renderer.render(scene, camera)
     controls.addEventListener('change', render)
+    renderer.domElement.addEventListener(PREPARE_CANVAS_CAPTURE_EVENT, render)
     render()
     const observer = new ResizeObserver(() => {
       const width = Math.max(container.clientWidth, 1)
@@ -230,6 +232,7 @@ export function TrajectoryCanvas3D({
     return () => {
       observer.disconnect()
       renderer.domElement.removeEventListener('webglcontextlost', handleContextLost)
+      renderer.domElement.removeEventListener(PREPARE_CANVAS_CAPTURE_EVENT, render)
       controls.removeEventListener('change', render)
       controls.dispose()
       for (const line of resources.trajectoryLines.values()) disposeObject(line)

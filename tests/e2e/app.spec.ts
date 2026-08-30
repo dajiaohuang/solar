@@ -351,6 +351,42 @@ test('prioritizes 3D for internal entries and every built-in preset', async ({ p
   await expect(page.getByTestId('trajectory-canvas-3d')).toHaveCount(0)
 })
 
+test('exports rendered scene pixels from both WebGL views', async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalToBlob = HTMLCanvasElement.prototype.toBlob
+    HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
+      if (this.width === 1600 && this.height > 1012) {
+        const context = this.getContext('2d')
+        const pixels = context?.getImageData(0, 112, 1600, 900).data
+        let renderedPixels = 0
+        if (pixels) {
+          for (let y = 0; y < 900; y += 10) {
+            for (let x = 0; x < 1600; x += 10) {
+              const offset = (y * 1600 + x) * 4
+              if (pixels[offset] !== 5 || pixels[offset + 1] !== 8 || pixels[offset + 2] !== 12) {
+                renderedPixels += 1
+              }
+            }
+          }
+        }
+        ;(window as Window & { __solarExportRenderedPixels?: number }).__solarExportRenderedPixels = renderedPixels
+      }
+      return originalToBlob.call(this, callback, type, quality)
+    }
+  })
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+
+  for (const view of ['3d', '2d']) {
+    await page.goto(`./?v=4&page=explorer&view=${view}&lang=en`)
+    await expect(page.locator(view === '3d' ? '[data-testid="trajectory-canvas-3d"]' : '.trajectory-canvas')).toBeVisible({ timeout: 15_000 })
+    await page.locator('.advanced-controls > summary').click()
+    await page.getByRole('button', { name: 'Export annotated PNG' }).click()
+    await expect.poll(() => page.evaluate(() =>
+      (window as Window & { __solarExportRenderedPixels?: number }).__solarExportRenderedPixels ?? 0,
+    )).toBeGreaterThan(0)
+  }
+})
+
 test('loads and replays both pinned main-belt presets on desktop and mobile', async ({ page }) => {
   const sampleRequests: string[] = []
   page.on('request', (request) => {
