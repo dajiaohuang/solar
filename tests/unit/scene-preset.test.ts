@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import datasetPin from '../../.github/asteroid-dataset.json'
 import { SCENE_PRESETS } from '../../src/data/presets'
 import { majorBodies, majorBodiesById } from '../../src/data/majorBodies'
 import { buildScenePresetApplication, buildScenePresetUrlState, validateScenePresets } from '../../src/lib/scenePreset'
@@ -124,7 +125,7 @@ describe('observation-deck scene presets', () => {
     expect(belt.referenceId).toBe('sun')
     expect(belt.selectedMajorBodyIds).toEqual(['mars', 'ceres', 'jupiter'])
     expect(belt.catalogSelection).toMatchObject({
-      datasetVersion: 'mpcorb-919b585f403b185a-full',
+      datasetVersion: datasetPin.version,
       datasetMode: 'full',
       sampleProfile: 'mobile',
       sampleCount: 8_000,
@@ -153,7 +154,7 @@ describe('observation-deck scene presets', () => {
       expect(decodeUrlState(`?${encoded}`)).toMatchObject({
         version: 4,
         route: 'elements',
-        dataset: 'mpcorb-919b585f403b185a-full',
+        dataset: datasetPin.version,
         mode: 'full',
         catalogSample: 'mobile',
         catalogSampleCount: 8_000,
