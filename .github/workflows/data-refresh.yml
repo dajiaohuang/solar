@@ -13,19 +13,29 @@ on:
         options: [full, lite]
 
 permissions:
-  contents: write
-  actions: write
+  contents: read
 
 concurrency:
   group: asteroid-data-release
   cancel-in-progress: false
 
 jobs:
-  publish:
+  build_candidate:
+    name: Build and validate dataset candidate
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    permissions:
+      contents: read
+    outputs:
+      source_sha: ${{ github.sha }}
+      version: ${{ steps.package.outputs.version }}
+      asset_sha256: ${{ steps.package.outputs.asset_sha256 }}
+      artifact_digest: ${{ steps.candidate.outputs.artifact-digest }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -54,12 +64,66 @@ jobs:
           node scripts/package-dataset.mjs public/data/asteroids asteroid-dataset.tar.gz
           ASSET_SHA256=$(sha256sum asteroid-dataset.tar.gz | awk '{print $1}')
           echo "asset_sha256=$ASSET_SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Transfer the validated candidate to the publishing job
+        id: candidate
+        uses: actions/upload-artifact@v6
+        with:
+          name: asteroid-dataset-candidate
+          path: asteroid-dataset.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish protected dataset pin
+    needs: build_candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - name: Read the immutable source control without persistent credentials
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.build_candidate.outputs.source_sha }}
+          persist-credentials: false
+      - name: Download the validated dataset candidate
+        uses: actions/download-artifact@v7
+        with:
+          name: asteroid-dataset-candidate
+          path: publish-input
+      - name: Verify and classify the candidate before any write
+        id: publication
+        env:
+          VERSION: ${{ needs.build_candidate.outputs.version }}
+          SOURCE_SHA: ${{ needs.build_candidate.outputs.source_sha }}
+          EXPECTED_ASSET_SHA256: ${{ needs.build_candidate.outputs.asset_sha256 }}
+          EXPECTED_ARTIFACT_DIGEST: ${{ needs.build_candidate.outputs.artifact_digest }}
+          PUBLIC_REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}.git
+        run: |
+          node scripts/dataset-pin-automation.mjs validate-candidate-identity \
+            "$VERSION" "$EXPECTED_ASSET_SHA256" "$SOURCE_SHA" "$EXPECTED_ARTIFACT_DIGEST"
+          echo "$EXPECTED_ASSET_SHA256  publish-input/asteroid-dataset.tar.gz" | sha256sum --check --strict
+          node scripts/dataset-pin-automation.mjs classify-publication \
+            "$VERSION" "$EXPECTED_ASSET_SHA256" "$SOURCE_SHA" "$PUBLIC_REPOSITORY_URL"
+
+      - name: Enable authenticated publishing after candidate verification
+        if: steps.publication.outputs.mode == 'fresh'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.build_candidate.outputs.source_sha }}
+          persist-credentials: true
+          clean: false
+
       - name: Publish GitHub release
+        if: steps.publication.outputs.mode == 'fresh'
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.package.outputs.version }}
-          LOCAL_ASSET_SHA256: ${{ steps.package.outputs.asset_sha256 }}
+          VERSION: ${{ needs.build_candidate.outputs.version }}
+          LOCAL_ASSET_SHA256: ${{ needs.build_candidate.outputs.asset_sha256 }}
         run: |
           if gh release view "dataset-$VERSION" >/dev/null 2>&1; then
             mkdir -p existing-release
@@ -73,29 +137,51 @@ jobs:
             echo "Immutable dataset release dataset-$VERSION already exists with the expected asset; reusing it."
             echo "asset_sha256=$EXISTING_ASSET_SHA256" >> "$GITHUB_OUTPUT"
           else
-            gh release create "dataset-$VERSION" asteroid-dataset.tar.gz \
+            gh release create "dataset-$VERSION" publish-input/asteroid-dataset.tar.gz \
               --title "Asteroid dataset $VERSION" \
               --notes "Immutable MPCORB-derived dataset. The archive contains provenance, SHA-256 checksums, a validation report, search indexes, and Float64 binary shards."
             echo "asset_sha256=$LOCAL_ASSET_SHA256" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Pin dataset on main and deploy
+      - name: Prepare the protected dataset pin branch
+        if: steps.publication.outputs.mode == 'fresh'
+        id: pin
+        env:
+          VERSION: ${{ needs.build_candidate.outputs.version }}
+          ASSET_SHA256: ${{ steps.release.outputs.asset_sha256 }}
+          SOURCE_SHA: ${{ needs.build_candidate.outputs.source_sha }}
+        run: node scripts/dataset-pin-automation.mjs prepare-pin "$VERSION" "$ASSET_SHA256" "$SOURCE_SHA"
+
+      - name: Validate, merge, and deploy the exact protected pin
+        if: steps.publication.outputs.mode == 'fresh' && steps.pin.outputs.changed == 'true'
+        id: publish_pin
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.package.outputs.version }}
-          ASSET_SHA256: ${{ steps.release.outputs.asset_sha256 }}
-        run: |
-          node -e "require('fs').writeFileSync('.github/asteroid-dataset.json', JSON.stringify({schemaVersion:1,tag:'dataset-'+process.env.VERSION,version:process.env.VERSION,asset:'asteroid-dataset.tar.gz',assetSha256:process.env.ASSET_SHA256}, null, 2)+'\n')"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/asteroid-dataset.json
-          if git diff --cached --quiet; then
-            echo "Dataset pin already points to dataset-$VERSION."
-            exit 0
-          fi
-          git commit -m "data: pin asteroid dataset $VERSION"
-          git fetch origin main
-          git rebase origin/main
-          git push origin HEAD:main
-          # Commits pushed with GITHUB_TOKEN do not start another push workflow.
-          gh workflow run deploy.yml --ref main
+        run: >-
+          node scripts/dataset-pin-automation.mjs orchestrate
+          "${{ needs.build_candidate.outputs.version }}"
+          "${{ steps.pin.outputs.branch }}"
+          "${{ steps.pin.outputs.base_sha }}"
+          "${{ steps.pin.outputs.head_sha }}"
+
+      - name: Recover an exact deployment for an unchanged fresh pin
+        if: steps.publication.outputs.mode == 'fresh' && steps.pin.outputs.changed == 'false'
+        id: recover_deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          node scripts/dataset-pin-automation.mjs recover-deployment
+          "${{ needs.build_candidate.outputs.version }}"
+          "${{ steps.release.outputs.asset_sha256 }}"
+          "${{ steps.pin.outputs.base_sha }}"
+
+      - name: Recover the exact post-merge deployment on a safe rerun
+        if: steps.publication.outputs.mode == 'recover'
+        id: recover_post_merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          node scripts/dataset-pin-automation.mjs recover-deployment
+          "${{ needs.build_candidate.outputs.version }}"
+          "${{ needs.build_candidate.outputs.asset_sha256 }}"
+          "${{ steps.publication.outputs.target_sha }}"
