@@ -1,5 +1,5 @@
 name: Pull request quality
-run-name: ${{ inputs.request_id || format('Pull request #{0}', github.event.pull_request.number) }}
+run-name: "${{ inputs.request_id || format('Pull request #{0}', github.event.pull_request.number) }}"
 
 on:
   pull_request:
