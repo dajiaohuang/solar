@@ -230,7 +230,7 @@ test('loads the deployable catalog through gzip JSON delivery', async ({ page })
   })
   await page.goto('./?v=3&page=catalog&lang=en')
   await expect(page.getByRole('heading', { name: 'Catalog' })).toBeVisible()
-  await expect(page.locator('.catalog-table > button').first()).toBeVisible({ timeout: 30_000 })
+  await expect(page.locator('.catalog-table > li > button').first()).toBeVisible({ timeout: 30_000 })
   await expect.poll(() => gzipResponses.some((url) => /catalog-sample-(desktop|mobile)\.json\.gz$/.test(url))).toBe(true)
   await page.getByRole('searchbox', { name: /Search name/ }).fill('Ceres')
   await expect.poll(() => gzipResponses.some((url) => /\/search\/prefix-ce\.json\.gz$/.test(url))).toBe(true)
@@ -694,6 +694,40 @@ test('loads and selects the complete filtered catalog separately from focus mode
   await page.getByRole('button', { name: /Select complete filtered catalog|全选完整筛选目录/ }).click()
   await expect(page.getByRole('button', { name: /Clear catalog-wide selection|清除目录级全选/ })).toContainText('3')
   await expect(page.locator('.catalog-results .section-heading small')).toContainText('3')
+})
+
+test('reflows Evidence and exposes independent body and catalog actions', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 900 })
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&page=about&view=3d&lang=en')
+  await expect(page.getByRole('heading', { name: 'Evidence' })).toBeVisible()
+  const widths = await page.evaluate(() => ({
+    documentClient: document.documentElement.clientWidth,
+    documentScroll: document.documentElement.scrollWidth,
+    bodyClient: document.body.clientWidth,
+    bodyScroll: document.body.scrollWidth,
+  }))
+  expect(widths.documentScroll).toBe(widths.documentClient)
+  expect(widths.bodyScroll).toBe(widths.bodyClient)
+
+  await page.goto('./?v=4&page=explorer&view=2d&lang=en&bodies=earth%2Cmars&focused=earth')
+  await page.locator('.advanced-controls > summary').click()
+  const marsRow = page.locator('.body-check-row').filter({ hasText: 'Mars' })
+  const marsCheckbox = marsRow.getByRole('checkbox', { name: 'Mars Planet' })
+  const marsFocus = marsRow.getByRole('button', { name: 'Mars' })
+  await expect(marsCheckbox).toBeChecked()
+  await marsFocus.focus()
+  await expect(marsFocus).toBeFocused()
+  await marsFocus.press('Enter')
+  await expect(page).toHaveURL(/[?&]focused=mars(?:&|$)/)
+  await expect(marsCheckbox).toBeChecked()
+
+  await installMockCatalog(page, { precomputed: true })
+  await page.goto('./?v=4&page=catalog&lang=en')
+  const catalogList = page.locator('.catalog-table')
+  await expect(catalogList).toHaveRole('list')
+  await expect(catalogList.locator(':scope > li')).toHaveCount(3)
+  await expect(catalogList.getByRole('button', { name: /Alpha/ })).toHaveRole('button')
 })
 
 test('separates known and unknown absolute-magnitude records', async ({ page }) => {
