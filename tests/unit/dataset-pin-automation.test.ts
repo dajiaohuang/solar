@@ -2,17 +2,21 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import {
+  advancePullRequestWorkflowRun,
   automationBranch,
   classifyPublication,
   git,
+  pullRequestWorkflowRunAction,
   requireArtifactBase,
   requiredActionsCheck,
+  selectPullRequestWorkflowRun,
   selectWorkflowRun,
   successfulDeployment,
   validateCandidateIdentity,
   validateDeployDispatch,
   validateMergedDeployment,
   validatePublicRepositoryUrl,
+  validatePullRequestWorkflowRun,
   validateQualityDispatch,
   validateReleaseAsset,
 } from '../../scripts/dataset-pin-automation.mjs'
@@ -145,7 +149,67 @@ describe('protected dataset pin automation', () => {
     expect(selectWorkflowRun([{ ...run, event: 'pull_request' }], expected)).toBeUndefined()
   })
 
-  it('requires the exact successful GitHub Actions summary from the dispatched run', () => {
+  it('selects one exact pull_request run by workflow and pull request association', () => {
+    const expected = {
+      prNumber: 64,
+      branch: 'automation/dataset-pin-mpcorb-0123456789abcdef-lite',
+      baseSha,
+      headSha,
+    }
+    const run = {
+      id: 123,
+      event: 'pull_request',
+      path: '.github/workflows/pull-request-quality.yml',
+      head_branch: expected.branch,
+      head_sha: headSha,
+      pull_requests: [{
+        number: 64,
+        head: { ref: expected.branch, sha: headSha },
+        base: { ref: 'main', sha: baseSha },
+      }],
+    }
+    expect(selectPullRequestWorkflowRun([run], expected)).toBe(run)
+    expect(selectPullRequestWorkflowRun([{ ...run, event: 'workflow_dispatch' }], expected)).toBeUndefined()
+    expect(selectPullRequestWorkflowRun([{ ...run, head_branch: 'automation/other' }], expected)).toBeUndefined()
+    expect(selectPullRequestWorkflowRun([{ ...run, head_sha: mergeSha }], expected)).toBeUndefined()
+    expect(selectPullRequestWorkflowRun([{
+      ...run,
+      pull_requests: [{ ...run.pull_requests[0], number: 65 }],
+    }], expected)).toBeUndefined()
+    expect(selectPullRequestWorkflowRun([{
+      ...run,
+      pull_requests: [{ ...run.pull_requests[0], base: { ref: 'main', sha: mergeSha } }],
+    }], expected)).toBeUndefined()
+    expect(() => selectPullRequestWorkflowRun([run, { ...run }], expected)).toThrow(/Multiple pull_request/)
+    expect(() => validatePullRequestWorkflowRun({ ...run, path: '.github/workflows/deploy.yml' }, expected)).toThrow(/stale or mismatched/)
+  })
+
+  it('approves only action-required runs and fails closed on terminal or invalid states', () => {
+    expect(pullRequestWorkflowRunAction({ status: 'completed', conclusion: 'action_required' })).toBe('approve')
+    expect(pullRequestWorkflowRunAction({ status: 'queued', conclusion: null })).toBe('wait')
+    expect(pullRequestWorkflowRunAction({ status: 'in_progress', conclusion: null })).toBe('wait')
+    expect(pullRequestWorkflowRunAction({ status: 'completed', conclusion: 'success' })).toBe('success')
+    expect(() => pullRequestWorkflowRunAction({ status: 'completed', conclusion: 'failure' })).toThrow(/concluded failure/)
+    expect(() => pullRequestWorkflowRunAction({ status: 'completed', conclusion: 'cancelled' })).toThrow(/concluded cancelled/)
+    expect(() => pullRequestWorkflowRunAction({ status: 'queued', conclusion: 'failure' })).toThrow(/before completion/)
+    expect(() => pullRequestWorkflowRunAction({ status: 'mystery', conclusion: null })).toThrow(/unsupported status/)
+  })
+
+  it('approves exactly once when a queued run later becomes action-required', () => {
+    let step = advancePullRequestWorkflowRun({ status: 'queued', conclusion: null })
+    expect(step).toEqual({ action: 'wait', approved: false })
+
+    step = advancePullRequestWorkflowRun({ status: 'completed', conclusion: 'action_required' }, step.approved)
+    expect(step).toEqual({ action: 'approve', approved: true })
+
+    step = advancePullRequestWorkflowRun({ status: 'completed', conclusion: 'action_required' }, step.approved)
+    expect(step).toEqual({ action: 'wait', approved: true })
+
+    step = advancePullRequestWorkflowRun({ status: 'completed', conclusion: 'success' }, step.approved)
+    expect(step).toEqual({ action: 'success', approved: true })
+  })
+
+  it('requires the exact successful GitHub Actions summary from the selected run', () => {
     const exact = {
       name: 'Pull request quality gate',
       app: { id: 15368, slug: 'github-actions' },
@@ -298,5 +362,9 @@ describe('protected dataset pin automation', () => {
     expect(refreshSource).not.toContain('HEAD:main')
     expect(automationSource).not.toContain("git(['rebase'")
     expect(automationSource).not.toContain('rebaseAutomationBranch')
+    expect(automationSource).not.toContain('dataset-pin-quality-')
+    expect(automationSource).not.toContain('dispatchWorkflow(owner, repo, QUALITY_WORKFLOW')
+    expect(automationSource).toContain('/actions/runs/${initialRun.id}/approve')
+    expect(automationSource).toContain("event: 'pull_request'")
   })
 })
