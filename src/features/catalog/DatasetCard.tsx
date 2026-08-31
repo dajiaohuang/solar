@@ -1,4 +1,5 @@
 import { useI18n } from '../../i18n/context'
+import { datasetDisplayTimestamps } from '../../lib/datasetProvenance'
 import { catalogStore } from '../../state/catalog-store'
 
 export function DatasetCard({ compact = false }: { compact?: boolean }) {
@@ -25,6 +26,7 @@ export function DatasetCard({ compact = false }: { compact?: boolean }) {
   }
   const provenance = catalog.provenance
   const summary = catalog.summary
+  const { sourceLastModifiedAt, generatedAt } = datasetDisplayTimestamps(catalog.manifest)
   const leadingClasses = summary
     ? Object.entries(summary.categoryCounts).sort(([, left], [, right]) => right - left).slice(0, 3)
     : []
@@ -36,7 +38,8 @@ export function DatasetCard({ compact = false }: { compact?: boolean }) {
         <div><dt>{t('objects')}</dt><dd>{catalog.manifest.totalCount.toLocaleString()}</dd></div>
         {!compact && <>
           <div><dt>{t('source')}</dt><dd>MPCORB · Minor Planet Center</dd></div>
-          <div><dt>{t('generated')}</dt><dd>{new Date(catalog.manifest.generatedAt).toLocaleString()}</dd></div>
+          <div><dt>{t('mpcSnapshot')}</dt><dd>{new Date(sourceLastModifiedAt).toLocaleString()}</dd></div>
+          {generatedAt && <div><dt>{t('generated')}</dt><dd>{new Date(generatedAt).toLocaleString()}</dd></div>}
           <div><dt>{t('checksum')} · source</dt><dd className="checksum">{provenance?.sourceSha256 ?? catalog.manifest.sourceSha256 ?? 'legacy / unavailable'}</dd></div>
           <div><dt>{t('checksum')} · content</dt><dd className="checksum">{provenance?.contentSha256 ?? catalog.manifest.contentSha256 ?? 'legacy / unavailable'}</dd></div>
           <div><dt>{t('selectionPolicy')}</dt><dd>{provenance?.selectionPolicy?.type ?? catalog.manifest.selectionPolicy?.type ?? 'legacy / unspecified'}</dd></div>

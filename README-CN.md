@@ -126,7 +126,7 @@ Solar Atlas 把三个回答不同问题的上限分开处理：
 | 事件分析 | 自适应寻找非端点候选，再做有界局部细化和重新二体传播。导出的数值细化半宽不是物理不确定性；后者未估计 |
 | 航天器轨迹 | 按里程碑日期绘制的示意轨迹，与 Horizons 和传播星历分开标注 |
 
-JPL SBDB 数据严格读取官方 `orbit.elements[]` 记录中的 `name`、`value`、`units` 和不确定性字段，不会虚构扁平属性。绝对星等筛选明确区分“全部 / 已知 / 未知”；未知 H 不会被伪造为数值，也不会进入数值 `a–H` 图。
+JPL SBDB 数据严格读取官方 `orbit.elements[]` 记录中的 `name`、`value` 与 `units`，不会虚构扁平属性。对象级 `orbit.condition_code` 会按“轨道条件码”展示；目前不建模逐根数 sigma 与协方差。绝对星等筛选明确区分“全部 / 已知 / 未知”；未知 H 不会被伪造为数值，也不会进入数值 `a–H` 图。
 
 主要来源：
 
@@ -139,7 +139,7 @@ JPL SBDB 数据严格读取官方 `orbit.elements[]` 记录中的 `name`、`valu
 
 ## 数据与发布
 
-没有本地 MPCORB 发布时，内置主要天体图谱仍可运行。生产数据集是独立版本化的不可变产物，由 [`.github/asteroid-dataset.json`](./.github/asteroid-dataset.json) 固定。应用版本、Git 提交、数据版本、解析器身份、验证报告和交付哈希在“证据”与构建产物中保持分离。
+没有本地 MPCORB 发布时，内置主要天体图谱仍可运行。生产数据集是独立版本化的不可变产物，由 [`.github/asteroid-dataset.json`](./.github/asteroid-dataset.json) 固定。应用版本、Git 提交、数据版本、解析器身份、验证报告和交付哈希在“证据”与构建产物中保持分离。MPC 快照时间记录源文件修改时间（或 HTTP `Last-Modified` 值），独立的生成时间则记录发布器构建该版本的时刻。自动发布身份覆盖内容与完整来源描述；设置 `MPCORB_GENERATED_AT` 后，独立重建可实现逐字节复现。
 
 每个 schema-v3 发布包含：
 

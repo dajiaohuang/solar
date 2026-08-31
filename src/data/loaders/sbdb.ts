@@ -109,7 +109,7 @@ export function parseSbdbBody(response: SbdbResponse, fallbackDesignation: strin
     orbitClassCode: response.object?.orbit_class?.code,
     orbitClassName: response.object?.orbit_class?.name,
     absoluteMagnitude: Number.isFinite(absoluteMagnitude) ? absoluteMagnitude : undefined,
-    orbitUncertainty: orbit.condition_code === undefined ? undefined : String(orbit.condition_code),
+    orbitConditionCode: orbit.condition_code === undefined ? undefined : String(orbit.condition_code),
     dataEpochLabel: `JD ${epochJd} TDB (JPL SBDB)`,
     isCatalogBody: true,
     orbit: {

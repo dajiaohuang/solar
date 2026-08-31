@@ -116,7 +116,7 @@ export type CelestialBody = {
   orbitClassName?: string
   absoluteMagnitude?: number
   radiusKm?: number
-  orbitUncertainty?: string
+  orbitConditionCode?: string
   dataEpochLabel?: string
   isCatalogBody?: boolean
 }
@@ -236,6 +236,7 @@ export type AsteroidManifest = {
   datasetMode?: DatasetMode
   source: string
   generatedAt: string
+  sourceLastModifiedAt?: string
   sourceDownloadedAt?: string
   sourceSha256?: string
   contentSha256?: string
@@ -324,6 +325,7 @@ export type DatasetVersion = {
   mode: DatasetMode
   manifestPath: string
   generatedAt: string
+  sourceLastModifiedAt?: string
   sourceSha256: string
   contentSha256?: string
   selectionPolicy?: DatasetSelectionPolicy
@@ -338,8 +340,9 @@ export type DatasetSelectionPolicy = {
 export type DatasetProvenance = {
   datasetVersion: string
   source: string
-  downloadedAt: string
+  downloadedAt?: string
   generatedAt: string
+  sourceLastModifiedAt?: string
   sourceSha256: string
   contentSha256?: string
   parserVersion: string

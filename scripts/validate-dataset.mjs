@@ -79,6 +79,25 @@ if (manifest.version !== pointer.activeVersion || report.datasetVersion !== poin
 if (pointer.mode !== manifest.datasetMode || provenance.mode !== manifest.datasetMode) {
   throw new Error('Dataset pointer, manifest, and provenance modes do not agree')
 }
+function isCanonicalIsoTimestamp(value) {
+  if (typeof value !== 'string') return false
+  const timestamp = new Date(value)
+  return Number.isFinite(timestamp.getTime()) && timestamp.toISOString() === value
+}
+if (![pointer.generatedAt, manifest.generatedAt, provenance.generatedAt].every(isCanonicalIsoTimestamp)) {
+  throw new Error('Dataset pointer, manifest, and provenance must contain canonical ISO generation timestamps')
+}
+if (pointer.generatedAt !== manifest.generatedAt || provenance.generatedAt !== manifest.generatedAt) {
+  throw new Error('Dataset pointer, manifest, and provenance generation timestamps do not agree')
+}
+if (manifest.sourceLastModifiedAt !== undefined) {
+  if (![pointer.sourceLastModifiedAt, manifest.sourceLastModifiedAt, provenance.sourceLastModifiedAt].every(isCanonicalIsoTimestamp)) {
+    throw new Error('Dataset pointer, manifest, and provenance must contain canonical ISO source Last-Modified timestamps')
+  }
+  if (pointer.sourceLastModifiedAt !== manifest.sourceLastModifiedAt || provenance.sourceLastModifiedAt !== manifest.sourceLastModifiedAt) {
+    throw new Error('Dataset pointer, manifest, and provenance source Last-Modified timestamps do not agree')
+  }
+}
 if (!manifest.selectionPolicy?.type) throw new Error('Dataset manifest does not declare a selection policy')
 if (!/^[a-f0-9]{64}$/.test(manifest.contentSha256 ?? '')) throw new Error('Dataset manifest does not contain a valid content SHA-256')
 if (pointer.contentSha256 !== manifest.contentSha256 || report.contentSha256 !== manifest.contentSha256 || provenance.contentSha256 !== manifest.contentSha256) {
