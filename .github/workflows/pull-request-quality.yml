@@ -17,6 +17,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       full_web_quality: ${{ steps.scope.outputs.full_web_quality }}
+      native_quality: ${{ steps.scope.outputs.native_quality }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -81,9 +82,17 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  mobile_quality:
+    name: Mobile quality
+    needs: repository_contract
+    if: needs.repository_contract.outputs.native_quality == 'true'
+    uses: ./.github/workflows/mobile.yml
+    permissions:
+      contents: read
+
   pull_request_quality_gate:
     name: Pull request quality gate
-    needs: [repository_contract, web_quality]
+    needs: [repository_contract, web_quality, mobile_quality]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -96,4 +105,5 @@ jobs:
         env:
           REPOSITORY_CONTRACT_RESULT: ${{ needs.repository_contract.result }}
           WEB_QUALITY_RESULT: ${{ needs.web_quality.result }}
+          MOBILE_QUALITY_RESULT: ${{ needs.mobile_quality.result }}
         run: node scripts/pr-quality-contract.mjs gate
