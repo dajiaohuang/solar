@@ -1,9 +1,19 @@
 name: Deploy application
+run-name: ${{ inputs.request_id || format('Deploy {0}', github.sha) }}
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Optional exact main commit required by an automated dispatch
+        required: false
+        type: string
+      request_id:
+        description: Optional unique identity used to locate an automated run
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -20,6 +30,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Validate the explicitly dispatched main commit
+        if: github.event_name == 'workflow_dispatch' && inputs.expected_sha != ''
+        env:
+          EXPECTED_DEPLOY_SHA: ${{ inputs.expected_sha }}
+        run: node scripts/dataset-pin-automation.mjs validate-deploy-dispatch
       - uses: actions/setup-node@v7
         with:
           node-version: 22

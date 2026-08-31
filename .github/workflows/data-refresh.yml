@@ -13,8 +13,7 @@ on:
         options: [full, lite]
 
 permissions:
-  contents: write
-  actions: write
+  contents: read
 
 concurrency:
   group: asteroid-data-release
@@ -24,6 +23,10 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -79,23 +82,21 @@ jobs:
             echo "asset_sha256=$LOCAL_ASSET_SHA256" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Pin dataset on main and deploy
+      - name: Prepare the protected dataset pin branch
+        id: pin
         env:
-          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.package.outputs.version }}
           ASSET_SHA256: ${{ steps.release.outputs.asset_sha256 }}
-        run: |
-          node -e "require('fs').writeFileSync('.github/asteroid-dataset.json', JSON.stringify({schemaVersion:1,tag:'dataset-'+process.env.VERSION,version:process.env.VERSION,asset:'asteroid-dataset.tar.gz',assetSha256:process.env.ASSET_SHA256}, null, 2)+'\n')"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/asteroid-dataset.json
-          if git diff --cached --quiet; then
-            echo "Dataset pin already points to dataset-$VERSION."
-            exit 0
-          fi
-          git commit -m "data: pin asteroid dataset $VERSION"
-          git fetch origin main
-          git rebase origin/main
-          git push origin HEAD:main
-          # Commits pushed with GITHUB_TOKEN do not start another push workflow.
-          gh workflow run deploy.yml --ref main
+        run: node scripts/dataset-pin-automation.mjs prepare-pin "$VERSION" "$ASSET_SHA256"
+
+      - name: Validate, merge, and deploy the exact protected pin
+        if: steps.pin.outputs.changed == 'true'
+        id: publish_pin
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          node scripts/dataset-pin-automation.mjs orchestrate
+          "${{ steps.package.outputs.version }}"
+          "${{ steps.pin.outputs.branch }}"
+          "${{ steps.pin.outputs.base_sha }}"
+          "${{ steps.pin.outputs.head_sha }}"
