@@ -1,21 +1,7 @@
 name: Mobile applications
 
 on:
-  pull_request:
-    paths:
-      - 'android/**'
-      - 'ios/**'
-      - 'resources/**'
-      - 'src/**'
-      - 'scripts/**'
-      - 'public/**'
-      - 'index.html'
-      - 'tsconfig*.json'
-      - 'capacitor.config.ts'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'vite.config.ts'
-      - '.github/workflows/mobile.yml'
+  workflow_call:
   push:
     branches: [main]
     paths:

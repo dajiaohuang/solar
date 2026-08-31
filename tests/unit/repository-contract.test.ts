@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { parse } from 'yaml'
 import { assertDocumentedVersion, markdownAnchors, markdownLinks, validateRepository } from '../../scripts/validate-repository.mjs'
-import { changedPaths, pullRequestQualityPasses, requiresFullWebQuality } from '../../scripts/pr-quality-contract.mjs'
+import { changedPaths, pullRequestQualityPasses, requiresFullWebQuality, requiresNativeQuality } from '../../scripts/pr-quality-contract.mjs'
 
 describe('repository contract', () => {
   it('extracts local destinations without treating code examples as links', () => {
@@ -57,6 +58,34 @@ describe('repository contract', () => {
     expect(requiresFullWebQuality(['.github/workflows/pull-request-quality.yml'])).toBe(true)
   })
 
+  it('runs native validation only for the existing mobile impact paths', () => {
+    expect(requiresNativeQuality(['README.md', 'docs/screenshots/deck.png'])).toBe(false)
+    expect(requiresNativeQuality(['src/App.tsx'])).toBe(true)
+    expect(requiresNativeQuality(['android/app/build.gradle'])).toBe(true)
+    expect(requiresNativeQuality(['ios/App/App.xcodeproj/project.pbxproj'])).toBe(true)
+    expect(requiresNativeQuality(['tsconfig.app.json'])).toBe(true)
+    expect(requiresNativeQuality(['.github/workflows/mobile.yml'])).toBe(true)
+    expect(requiresNativeQuality(['.github/workflows/pull-request-quality.yml'])).toBe(true)
+  })
+
+  it('reuses the native workflow from the stable pull request gate', () => {
+    const root = new URL('../../', import.meta.url)
+    const mobile = parse(readFileSync(new URL('.github/workflows/mobile.yml', root), 'utf8'))
+    const quality = parse(readFileSync(new URL('.github/workflows/pull-request-quality.yml', root), 'utf8'))
+
+    expect(mobile.on).toHaveProperty('workflow_call')
+    expect(mobile.on).not.toHaveProperty('pull_request')
+    expect(quality.jobs.mobile_quality).toMatchObject({
+      uses: './.github/workflows/mobile.yml',
+      needs: 'repository_contract',
+    })
+    expect(quality.jobs.pull_request_quality_gate.needs).toEqual([
+      'repository_contract',
+      'web_quality',
+      'mobile_quality',
+    ])
+  })
+
   it('classifies both sides of a code-to-document rename', () => {
     const repository = mkdtempSync(join(tmpdir(), 'solar-pr-quality-'))
     const git = (...args: string[]) => execFileSync('git', args, { cwd: repository, stdio: 'ignore' })
@@ -82,10 +111,12 @@ describe('repository contract', () => {
   })
 
   it('passes the stable summary only for successful required work', () => {
-    expect(pullRequestQualityPasses('success', 'success')).toBe(true)
-    expect(pullRequestQualityPasses('success', 'skipped')).toBe(true)
-    expect(pullRequestQualityPasses('failure', 'skipped')).toBe(false)
-    expect(pullRequestQualityPasses('success', 'failure')).toBe(false)
-    expect(pullRequestQualityPasses('success', 'cancelled')).toBe(false)
+    expect(pullRequestQualityPasses('success', 'success', 'success')).toBe(true)
+    expect(pullRequestQualityPasses('success', 'skipped', 'skipped')).toBe(true)
+    expect(pullRequestQualityPasses('failure', 'skipped', 'skipped')).toBe(false)
+    expect(pullRequestQualityPasses('success', 'failure', 'success')).toBe(false)
+    expect(pullRequestQualityPasses('success', 'cancelled', 'success')).toBe(false)
+    expect(pullRequestQualityPasses('success', 'success', 'failure')).toBe(false)
+    expect(pullRequestQualityPasses('success', 'success', 'cancelled')).toBe(false)
   })
 })
