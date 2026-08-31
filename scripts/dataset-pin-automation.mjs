@@ -153,6 +153,16 @@ export function pullRequestWorkflowRunAction(run) {
   throw new Error(`Pull request quality workflow has unsupported status ${run.status || 'missing'}`)
 }
 
+export function advancePullRequestWorkflowRun(run, approved = false) {
+  const action = pullRequestWorkflowRunAction(run)
+  if (action === 'approve') {
+    return approved
+      ? { action: 'wait', approved: true }
+      : { action: 'approve', approved: true }
+  }
+  return { action, approved }
+}
+
 export function requiredActionsCheck(checkRuns, expectedRunId) {
   const matches = checkRuns.filter(check => (
     check.name === QUALITY_CHECK &&
@@ -418,16 +428,21 @@ async function waitForPullRequestWorkflowRun(owner, repo, expected, timeoutMinut
 }
 
 async function approveAndWaitForPullRequestWorkflowRun(owner, repo, expected, initialRun, timeoutMinutes) {
-  let action = pullRequestWorkflowRunAction(validatePullRequestWorkflowRun(initialRun, expected))
-  if (action === 'approve') {
-    await github(`/repos/${owner}/${repo}/actions/runs/${initialRun.id}/approve`, { method: 'POST' })
-  }
+  validatePullRequestWorkflowRun(initialRun, expected)
+  let approved = false
+  let currentRun = initialRun
   return waitFor(`exact pull_request quality run ${initialRun.id}`, async () => {
-    const { data: run } = await github(`/repos/${owner}/${repo}/actions/runs/${initialRun.id}`)
+    const run = currentRun ?? (await github(`/repos/${owner}/${repo}/actions/runs/${initialRun.id}`)).data
+    currentRun = undefined
     validatePullRequestWorkflowRun(run, expected)
-    action = pullRequestWorkflowRunAction(run)
-    if (action === 'success') return run
-    if (action === 'approve' || action === 'wait') return undefined
+    const step = advancePullRequestWorkflowRun(run, approved)
+    approved = step.approved
+    if (step.action === 'approve') {
+      await github(`/repos/${owner}/${repo}/actions/runs/${initialRun.id}/approve`, { method: 'POST' })
+      return undefined
+    }
+    if (step.action === 'success') return run
+    if (step.action === 'wait') return undefined
     return undefined
   }, timeoutMinutes)
 }

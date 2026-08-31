@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import {
+  advancePullRequestWorkflowRun,
   automationBranch,
   classifyPublication,
   git,
@@ -192,6 +193,20 @@ describe('protected dataset pin automation', () => {
     expect(() => pullRequestWorkflowRunAction({ status: 'completed', conclusion: 'cancelled' })).toThrow(/concluded cancelled/)
     expect(() => pullRequestWorkflowRunAction({ status: 'queued', conclusion: 'failure' })).toThrow(/before completion/)
     expect(() => pullRequestWorkflowRunAction({ status: 'mystery', conclusion: null })).toThrow(/unsupported status/)
+  })
+
+  it('approves exactly once when a queued run later becomes action-required', () => {
+    let step = advancePullRequestWorkflowRun({ status: 'queued', conclusion: null })
+    expect(step).toEqual({ action: 'wait', approved: false })
+
+    step = advancePullRequestWorkflowRun({ status: 'completed', conclusion: 'action_required' }, step.approved)
+    expect(step).toEqual({ action: 'approve', approved: true })
+
+    step = advancePullRequestWorkflowRun({ status: 'completed', conclusion: 'action_required' }, step.approved)
+    expect(step).toEqual({ action: 'wait', approved: true })
+
+    step = advancePullRequestWorkflowRun({ status: 'completed', conclusion: 'success' }, step.approved)
+    expect(step).toEqual({ action: 'success', approved: true })
   })
 
   it('requires the exact successful GitHub Actions summary from the selected run', () => {
