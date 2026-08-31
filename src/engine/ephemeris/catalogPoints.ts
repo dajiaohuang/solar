@@ -1,21 +1,7 @@
+import { solveEllipticKeplerRadians } from './kepler'
+
 const RAD = Math.PI / 180
 export const CATALOG_ELEMENT_STRIDE = 8
-
-function normalizeRadians(value: number) {
-  const wrapped = value % (Math.PI * 2)
-  return wrapped < 0 ? wrapped + Math.PI * 2 : wrapped
-}
-
-function solveEccentricAnomaly(meanAnomaly: number, eccentricity: number) {
-  let eccentricAnomaly = eccentricity < 0.8 ? meanAnomaly : Math.PI
-  for (let iteration = 0; iteration < 18; iteration += 1) {
-    const delta = (eccentricAnomaly - eccentricity * Math.sin(eccentricAnomaly) - meanAnomaly) /
-      (1 - eccentricity * Math.cos(eccentricAnomaly))
-    eccentricAnomaly -= delta
-    if (Math.abs(delta) < 1e-12) break
-  }
-  return eccentricAnomaly
-}
 
 export function propagateCatalogElementPositions(
   elements: Float64Array,
@@ -31,14 +17,19 @@ export function propagateCatalogElementPositions(
     const epochJd = elements[offset]
     const semiMajorAxisAU = elements[offset + 1]
     const eccentricity = elements[offset + 2]
-    if (!(semiMajorAxisAU > 0) || eccentricity < 0 || eccentricity >= 1) {
+    if (!(semiMajorAxisAU > 0) || !Number.isFinite(eccentricity) || eccentricity < 0 || eccentricity >= 1) {
       throw new Error(`Catalog record ${index} is not a supported elliptic orbit`)
     }
     const inclination = elements[offset + 3] * RAD
     const ascendingNode = elements[offset + 4] * RAD
     const argPeriapsis = elements[offset + 5] * RAD
-    const meanAnomaly = normalizeRadians((elements[offset + 6] + elements[offset + 7] * (julianDay - epochJd)) * RAD)
-    const eccentricAnomaly = solveEccentricAnomaly(meanAnomaly, eccentricity)
+    const meanAnomaly = (elements[offset + 6] + elements[offset + 7] * (julianDay - epochJd)) * RAD
+    let eccentricAnomaly: number
+    try {
+      eccentricAnomaly = solveEllipticKeplerRadians(meanAnomaly, eccentricity)
+    } catch (error) {
+      throw new RangeError(`Catalog record ${index} failed elliptic Kepler propagation`, { cause: error })
+    }
     const orbitalX = semiMajorAxisAU * (Math.cos(eccentricAnomaly) - eccentricity)
     const orbitalY = semiMajorAxisAU * Math.sqrt(1 - eccentricity ** 2) * Math.sin(eccentricAnomaly)
     const cosW = Math.cos(argPeriapsis), sinW = Math.sin(argPeriapsis)
