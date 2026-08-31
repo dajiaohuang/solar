@@ -4,6 +4,7 @@ import { parse } from 'yaml'
 import {
   automationBranch,
   classifyPublication,
+  git,
   requireArtifactBase,
   requiredActionsCheck,
   selectWorkflowRun,
@@ -35,6 +36,11 @@ function pullRequest(overrides = {}) {
 }
 
 describe('protected dataset pin automation', () => {
+  it('normalizes captured Git output and accepts inherited-stdio commands', () => {
+    expect(git(['rev-parse', '--is-inside-work-tree'], { capture: true })).toBe('true')
+    expect(git(['rev-parse', '--is-inside-work-tree'])).toBeUndefined()
+  })
+
   it('accepts only deterministic dataset automation branch names', () => {
     expect(automationBranch('mpcorb-0123456789abcdef-lite')).toBe(
       'automation/dataset-pin-mpcorb-0123456789abcdef-lite',

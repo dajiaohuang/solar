@@ -170,8 +170,9 @@ export function validateMergedDeployment(pullRequest, mainSha, deploymentRun, ex
   return deploymentRun
 }
 
-function git(args, options = {}) {
-  return execFileSync('git', args, { encoding: 'utf8', stdio: options.capture ? 'pipe' : 'inherit' }).trim()
+export function git(args, options = {}) {
+  const result = execFileSync('git', args, { encoding: 'utf8', stdio: options.capture ? 'pipe' : 'inherit' })
+  return options.capture ? result.trim() : undefined
 }
 
 function output(name, value) {
