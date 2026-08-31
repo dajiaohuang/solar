@@ -26,4 +26,42 @@ describe('catalog point propagation', () => {
     expect(both.positions3D[1]).toBeCloseTo(expected.y, 5)
     expect(both.positions3D[2]).toBeCloseTo(expected.z, 5)
   })
+
+  it('converges at perihelion for an MPCORB-width high-eccentricity record', () => {
+    const orbit = {
+      model: 'keplerian' as const, epochJd: 2451545, semiMajorAxisAU: 1, eccentricity: 0.9999999,
+      inclinationDeg: 0, ascendingNodeDeg: 0, argPeriapsisDeg: 0,
+      meanAnomalyDeg: 0, meanMotionDegPerDay: 1,
+    }
+    const both = propagateCatalogElementPositions(new Float64Array([
+      orbit.epochJd, orbit.semiMajorAxisAU, orbit.eccentricity, orbit.inclinationDeg,
+      orbit.ascendingNodeDeg, orbit.argPeriapsisDeg, orbit.meanAnomalyDeg, orbit.meanMotionDegPerDay,
+    ]), orbit.epochJd)
+    const expected = orbitToHeliocentricVector(orbit, orbit.epochJd)
+
+    expect(both.positions[0]).toBeCloseTo(1e-7, 12)
+    expect(both.positions[1]).toBe(0)
+    expect(both.positions3D[0]).toBeCloseTo(expected.x, 12)
+    expect(both.positions3D[1]).toBeCloseTo(expected.y, 12)
+    expect(both.positions3D[2]).toBeCloseTo(expected.z, 12)
+  })
+
+  it('keeps million-row propagation bounded', () => {
+    const count = 1_000_000
+    const elements = new Float64Array(count * 8)
+    for (let index = 0; index < count; index += 1) {
+      const offset = index * 8
+      elements[offset] = 2451545
+      elements[offset + 1] = 2.4
+      elements[offset + 2] = index === 0 ? 0.9999999 : 0.31
+      elements[offset + 6] = index % 360
+      elements[offset + 7] = 0.264
+    }
+
+    const result = propagateCatalogElementPositions(elements, 2451545)
+    expect(result.positions).toHaveLength(count * 2)
+    expect(result.positions3D).toHaveLength(count * 3)
+    expect(result.positions[0]).toBeCloseTo(2.4e-7, 12)
+    expect(Number.isFinite(result.positions3D.at(-1))).toBe(true)
+  }, 10_000)
 })

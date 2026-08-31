@@ -1,5 +1,6 @@
 import { J2000_JULIAN_DAY } from './julianDate'
 import { partitionEarthMoonBarycenter } from '../engine/ephemeris/earthMoonSystem'
+import { solveEllipticKeplerRadians } from '../engine/ephemeris/kepler'
 import type {
   BodyId,
   CelestialBody,
@@ -36,26 +37,7 @@ export function solveKeplerEquation(meanAnomalyDeg: number, eccentricity: number
     )
   }
 
-  const normalizedMeanAnomaly = normalizeDegrees(meanAnomalyDeg)
-  let eccentricAnomalyDeg = eccentricity < 0.8
-    ? normalizedMeanAnomaly
-    : 180
-
-  for (let iteration = 0; iteration < 30; iteration += 1) {
-    const deltaMeanAnomalyDeg =
-      normalizedMeanAnomaly -
-      (eccentricAnomalyDeg - eccentricity * RAD_TO_DEG * Math.sin(toRadians(eccentricAnomalyDeg)))
-    const deltaEccentricAnomalyDeg =
-      deltaMeanAnomalyDeg / (1 - eccentricity * Math.cos(toRadians(eccentricAnomalyDeg)))
-
-    eccentricAnomalyDeg += deltaEccentricAnomalyDeg
-
-    if (Math.abs(deltaEccentricAnomalyDeg) <= 1e-6) {
-      break
-    }
-  }
-
-  return eccentricAnomalyDeg
+  return solveEllipticKeplerRadians(toRadians(meanAnomalyDeg), eccentricity) * RAD_TO_DEG
 }
 
 function getPlanetaryElementsAtJulianDay(orbit: PlanetaryApproxOrbit, julianDay: number) {
