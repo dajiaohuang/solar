@@ -10,6 +10,10 @@ import {
 import type { BodyId, CelestialBody, Vector3 } from '../../types'
 import { SOLAR_GM_AU3_PER_DAY2, auPerDayToKmPerSecond } from '../units'
 
+const FIRST_POSITIVE_STUMPFF_SINGULARITY_Z = 4 * Math.PI ** 2
+// Keep the zero-revolution search strictly on the continuous side of C(z) = 0.
+const ZERO_REVOLUTION_UPPER_Z = FIRST_POSITIVE_STUMPFF_SINGULARITY_Z * (1 - 1e-12)
+
 export type LambertSolution = {
   model: 'lambert-universal-variable'
   centralBody: 'Sun'
@@ -45,7 +49,7 @@ export function classifyLambertFailure(error: unknown): LambertFailureCode {
 function stumpffC(z: number) {
   if (z > 1e-8) {
     const root = Math.sqrt(z)
-    return (1 - Math.cos(root)) / z
+    return 2 * Math.sin(root / 2) ** 2 / z
   }
   if (z < -1e-8) {
     const root = Math.sqrt(-z)
@@ -125,10 +129,10 @@ export function solveLambertUniversal(params: {
     }
   }
 
-  let lower = -4 * Math.PI ** 2
-  let upper = 4 * Math.PI ** 2
+  let lower = -FIRST_POSITIVE_STUMPFF_SINGULARITY_Z
+  let upper = ZERO_REVOLUTION_UPPER_Z
   let lowerEval = evaluate(lower)
-  let upperEval = evaluate(upper)
+  const upperEval = evaluate(upper)
   for (let expansion = 0; expansion < 24; expansion += 1) {
     if (Number.isFinite(lowerEval.residual) && Number.isFinite(upperEval.residual) &&
         lowerEval.residual * upperEval.residual <= 0) {
@@ -138,20 +142,18 @@ export function solveLambertUniversal(params: {
       lower /= 2
       lowerEval = evaluate(lower)
     }
-    if (!Number.isFinite(upperEval.residual) || upperEval.residual < 0) {
-      upper *= 1.5
-      upperEval = evaluate(upper)
-    }
   }
 
   if (!Number.isFinite(lowerEval.residual) || !Number.isFinite(upperEval.residual) ||
       lowerEval.residual * upperEval.residual > 0) {
     // Scan a broad interval for the first zero-revolution bracket.
-    let previousZ = -4 * Math.PI ** 2
+    let previousZ = -FIRST_POSITIVE_STUMPFF_SINGULARITY_Z
     let previous = evaluate(previousZ)
     let found = false
     for (let index = 1; index <= 800; index += 1) {
-      const z = -4 * Math.PI ** 2 + index * (8 * Math.PI ** 2 / 800)
+      const z = -FIRST_POSITIVE_STUMPFF_SINGULARITY_Z + index * (
+        (ZERO_REVOLUTION_UPPER_Z + FIRST_POSITIVE_STUMPFF_SINGULARITY_Z) / 800
+      )
       const current = evaluate(z)
       if (Number.isFinite(previous.residual) && Number.isFinite(current.residual) &&
           previous.residual * current.residual <= 0) {
