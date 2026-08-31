@@ -289,10 +289,10 @@ export function CatalogWorkspace() {
             {t('showing')} {visibleTableCount.toLocaleString()} / {resultTotal.toLocaleString()}
             {catalog.activeResultScanKey === scanKey ? ` · ${t('stratifiedSample')}` : catalog.recordsSampled ? ` · ${t('refineSearch')}` : ''}
           </p>}
-          <div className="catalog-table" role="list">
+          <ul className="catalog-table">
             {filtered.slice(0, 240).map((record) => {
               const selected = Boolean(catalog.selectionScope) || selection.selectedIds.includes(record.id)
-              return <button role="listitem" className={selected ? 'selected' : ''} key={record.id} onClick={() => {
+              return <li key={record.id}><button className={selected ? 'selected' : ''} onClick={() => {
                 selectionActions.addCatalogBodies([asteroidRecordToBody(record)])
                 selectionActions.toggle(record.id)
                 selectionActions.focus(record.id)
@@ -303,9 +303,9 @@ export function CatalogWorkspace() {
                 <span className="numeric"><b>{record.eccentricity.toFixed(3)}</b><small>e</small></span>
                 <span className="numeric"><b>{record.inclinationDeg.toFixed(1)}°</b><small>i</small></span>
                 <em>{record.orbitClassCode}{record.isPha ? ' · PHA' : record.isNeo ? ' · NEO' : ''}</em>
-              </button>
+              </button></li>
             })}
-          </div>
+          </ul>
           {catalog.manifest && !catalog.manifest.precomputedSamples && !catalog.filters.query && hasMore && <button className="load-more" disabled={catalog.isLoading} onClick={() => void loadMore()}>{catalog.isLoading ? t('loading') : t('loadMore')}</button>}
           {catalog.manifest && catalog.filters.query && !nameSearchTooShort && searchPage.nextCursor !== null && <button className="load-more" disabled={catalog.isLoading} onClick={() => void loadMoreSearchResults()}>{catalog.isLoading ? t('loading') : t('loadMore')}</button>}
           {catalog.activeResultScanKey === scanKey && catalog.exactHydrationHasMore && <button className="load-more" disabled={catalog.isLoading} onClick={() => void loadNextExactPage()}>{catalog.isLoading ? t('loading') : t('loadNextExactPage')}</button>}

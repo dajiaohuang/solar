@@ -235,12 +235,15 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
         <div className="body-match-count">{filteredBodies.length} {t('matchingBodies')}</div>
         <div className="body-check-list">
           {filteredBodies.map((body) => (
-            <label className="body-check-row" key={body.id}>
-              <input type="checkbox" checked={selection.selectedIds.includes(body.id)} onChange={() => selectionActions.toggle(body.id)} />
-              <i style={{ backgroundColor: body.color }} />
-              <span onClick={() => selectionActions.focus(body.id)}>{bodyDisplayName(body, language)}</span>
+            <div className="body-check-row" key={body.id}>
+              <label className="body-check-toggle">
+                <input type="checkbox" checked={selection.selectedIds.includes(body.id)} onChange={() => selectionActions.toggle(body.id)} />
+                <span className="sr-only">{bodyDisplayName(body, language)} {body.orbitClassCode ?? t(BODY_KIND_TRANSLATION[body.kind])}</span>
+              </label>
+              <i aria-hidden="true" style={{ backgroundColor: body.color }} />
+              <button type="button" className="body-focus-button" onClick={() => selectionActions.focus(body.id)}>{bodyDisplayName(body, language)}</button>
               <small>{body.orbitClassCode ?? t(BODY_KIND_TRANSLATION[body.kind])}</small>
-            </label>
+            </div>
           ))}
         </div>
         <div className="inline-actions body-selection-actions">
