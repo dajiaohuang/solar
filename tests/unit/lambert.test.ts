@@ -51,6 +51,21 @@ describe('universal-variable Lambert solver', () => {
     expect(Math.abs(solution.residual)).toBeLessThan(1e-10)
   })
 
+  it('keeps long-flight solutions on the zero-revolution branch', () => {
+    const solution = solveLambertUniversal({
+      departurePositionAU: { x: 1, y: 0, z: 0 },
+      arrivalPositionAU: { x: 0, y: 1, z: 0 },
+      timeOfFlightDays: 800,
+    })
+
+    expect(solution.departureVelocityAUPerDay.x).toBeCloseTo(0.0178149336448, 10)
+    expect(solution.departureVelocityAUPerDay.y).toBeCloseTo(0.0104640373391, 10)
+    expect(solution.departureVelocityAUPerDay.z).toBe(0)
+    expect(solution.converged).toBe(true)
+    expect(Math.abs(solution.residual)).toBeLessThan(1e-10)
+    expect(solution.bracketWidth).toBeLessThan(4 * Math.PI ** 2)
+  })
+
   it('never returns an unconverged result for extreme time-of-flight cases', () => {
     for (const timeOfFlightDays of [0.01, 20_000]) {
       try {
