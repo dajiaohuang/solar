@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
+import datasetPin from '../../.github/asteroid-dataset.json' with { type: 'json' }
 
 async function openCatalog(page: Page) {
   const desktop = page.locator('.primary-navigation').getByRole('button', { name: /Catalog|小天体目录/ })
@@ -60,7 +61,7 @@ async function installMockCatalog(page: Page, options: {
   const sampleIndexes = options.profileSamples ?? { desktop: defaultSampleIndexes, mobile: defaultSampleIndexes }
   const manifest = {
     schemaVersion: 2,
-    version: options.presetDataset ? 'mpcorb-919b585f403b185a-full' : 'mock-content-lite',
+    version: options.presetDataset ? datasetPin.version : 'mock-content-lite',
     datasetMode: options.presetDataset ? 'full' : 'lite',
     source: 'fixture', generatedAt: '2026-08-18T00:00:00Z',
     sourceSha256: 'a'.repeat(64), contentSha256: 'b'.repeat(64), parserVersion: 'test', totalCount: entries.length,
@@ -466,7 +467,7 @@ test('loads and replays both pinned main-belt presets on desktop and mobile', as
   await page.getByRole('button', { name: 'Load preset: Mars–main belt–Jupiter' }).click()
   await expect(page.locator('.element-scatter')).toBeVisible({ timeout: 15_000 })
   await expect(page).toHaveURL(/[?&]page=elements(?:&|$)/)
-  await expect(page).toHaveURL(/[?&]dataset=mpcorb-919b585f403b185a-full(?:&|$)/)
+  await expect.poll(() => new URL(page.url()).searchParams.get('dataset')).toBe(datasetPin.version)
   await expect(page).toHaveURL(/[?&]mode=full(?:&|$)/)
   await expect(page).toHaveURL(/[?&]catalogSample=mobile(?:&|$)/)
   await expect(page).toHaveURL(/[?&]catalogSampleCount=8000(?:&|$)/)
@@ -638,7 +639,7 @@ test('does not present the build-time dataset pin as loaded when the catalog is 
 
   const identity = page.locator('.build-identity')
   await expect(identity.getByText('No dataset', { exact: true })).toBeVisible()
-  await expect(identity).not.toContainText('mpcorb-919b585f403b185a-full')
+  await expect(identity).not.toContainText(datasetPin.version)
 })
 
 test('discloses sourced satellite frames, phases, and fixed-ellipse limits', async ({ page }) => {
