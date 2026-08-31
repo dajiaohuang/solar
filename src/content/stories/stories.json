@@ -9,7 +9,7 @@
       { "label": "Library of Congress: Ancient Greek astronomy and the Ptolemaic model", "url": "https://www.loc.gov/collections/finding-our-place-in-the-cosmos-with-carl-sagan/articles-and-essays/modeling-the-cosmos/ancient-greek-astronomy-and-cosmology" },
       { "label": "NASA: Planetary motion and the scientific revolution", "url": "https://science.nasa.gov/earth/earth-observatory/planetary-motion/" },
       { "label": "NASA: Galileo’s phases of Venus", "url": "https://science.nasa.gov/resource/galileos-phases-of-venus-and-other-planets/" },
-      { "label": "IAU Resolution B1: Geocentric reference systems and frames", "url": "https://www.iau.org/static/resolutions/IAU2018_ResolB1_English.pdf" },
+      { "label": "IAU Resolution B1: Geocentric reference systems and frames", "url": "https://iauarchive.eso.org/static/resolutions/IAU2018_ResolB1_English.pdf" },
       { "label": "JPL approximate planetary positions", "url": "https://ssd.jpl.nasa.gov/planets/approx_pos.html" }
     ],
     "glossary": [

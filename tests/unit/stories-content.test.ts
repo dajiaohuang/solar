@@ -27,4 +27,14 @@ describe('guided story content', () => {
     expect(story.boundary.en).toContain('not evidence')
     expect(story.checkpoint?.choices.filter((choice) => choice.correct)).toHaveLength(1)
   })
+
+  it('pins the IAU Resolution B1 evidence to the official IAU archive', () => {
+    const story = stories.find((entry) => entry.id === 'geocentric-model')
+    const resolution = story?.sources.find((source) => source.label.startsWith('IAU Resolution B1'))
+
+    expect(resolution?.url).toBe('https://iauarchive.eso.org/static/resolutions/IAU2018_ResolB1_English.pdf')
+    expect(stories.flatMap((entry) => entry.sources).map((source) => source.url)).not.toContain(
+      'https://www.iau.org/static/resolutions/IAU2018_ResolB1_English.pdf',
+    )
+  })
 })
