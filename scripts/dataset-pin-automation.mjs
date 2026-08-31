@@ -114,6 +114,45 @@ export function selectWorkflowRun(runs, expected) {
   return identified[0]
 }
 
+export function selectPullRequestWorkflowRun(runs, expected) {
+  const identified = runs.filter(run => {
+    const associations = run.pull_requests ?? []
+    return run.event === 'pull_request' &&
+      run.path === `.github/workflows/${QUALITY_WORKFLOW}` &&
+      run.head_branch === expected.branch &&
+      run.head_sha === expected.headSha &&
+      associations.length === 1 &&
+      associations[0]?.number === expected.prNumber &&
+      associations[0]?.head?.ref === expected.branch &&
+      associations[0]?.head?.sha === expected.headSha &&
+      associations[0]?.base?.ref === 'main' &&
+      associations[0]?.base?.sha === expected.baseSha
+  })
+  if (identified.length > 1) {
+    throw new Error('Multiple pull_request workflow runs match the exact pull request identity')
+  }
+  return identified[0]
+}
+
+export function validatePullRequestWorkflowRun(run, expected) {
+  const exact = selectPullRequestWorkflowRun([run], expected)
+  if (!exact) throw new Error('Pull request workflow run identity is stale or mismatched')
+  return exact
+}
+
+export function pullRequestWorkflowRunAction(run) {
+  if (run.status === 'completed') {
+    if (run.conclusion === 'success') return 'success'
+    if (run.conclusion === 'action_required') return 'approve'
+    throw new Error(`Pull request quality workflow concluded ${run.conclusion || 'without a conclusion'}`)
+  }
+  if (run.conclusion !== null && run.conclusion !== undefined) {
+    throw new Error('Pull request quality workflow has a conclusion before completion')
+  }
+  if (['queued', 'in_progress', 'requested', 'waiting', 'pending'].includes(run.status)) return 'wait'
+  throw new Error(`Pull request quality workflow has unsupported status ${run.status || 'missing'}`)
+}
+
 export function requiredActionsCheck(checkRuns, expectedRunId) {
   const matches = checkRuns.filter(check => (
     check.name === QUALITY_CHECK &&
@@ -121,7 +160,7 @@ export function requiredActionsCheck(checkRuns, expectedRunId) {
     check.app?.slug === 'github-actions' &&
     check.details_url?.includes(`/actions/runs/${expectedRunId}/`)
   ))
-  if (matches.length !== 1) throw new Error(`Expected one ${QUALITY_CHECK} check from the dispatched Actions run`)
+  if (matches.length !== 1) throw new Error(`Expected one ${QUALITY_CHECK} check from the exact Actions run`)
   const [check] = matches
   if (check.status !== 'completed' || check.conclusion !== 'success') {
     throw new Error(`${QUALITY_CHECK} did not complete successfully`)
@@ -370,6 +409,29 @@ async function waitForWorkflowRun(owner, repo, workflow, expected, timeoutMinute
   }, timeoutMinutes)
 }
 
+async function waitForPullRequestWorkflowRun(owner, repo, expected, timeoutMinutes) {
+  return waitFor(`pull_request quality run for pull request #${expected.prNumber}`, async () => {
+    const query = new URLSearchParams({ event: 'pull_request', branch: expected.branch, per_page: '50' })
+    const { data } = await github(`/repos/${owner}/${repo}/actions/workflows/${QUALITY_WORKFLOW}/runs?${query}`)
+    return selectPullRequestWorkflowRun(data.workflow_runs, expected)
+  }, timeoutMinutes)
+}
+
+async function approveAndWaitForPullRequestWorkflowRun(owner, repo, expected, initialRun, timeoutMinutes) {
+  let action = pullRequestWorkflowRunAction(validatePullRequestWorkflowRun(initialRun, expected))
+  if (action === 'approve') {
+    await github(`/repos/${owner}/${repo}/actions/runs/${initialRun.id}/approve`, { method: 'POST' })
+  }
+  return waitFor(`exact pull_request quality run ${initialRun.id}`, async () => {
+    const { data: run } = await github(`/repos/${owner}/${repo}/actions/runs/${initialRun.id}`)
+    validatePullRequestWorkflowRun(run, expected)
+    action = pullRequestWorkflowRunAction(run)
+    if (action === 'success') return run
+    if (action === 'approve' || action === 'wait') return undefined
+    return undefined
+  }, timeoutMinutes)
+}
+
 async function workflowRuns(owner, repo, workflow, branch) {
   const query = new URLSearchParams({ branch, per_page: '100' })
   const { data } = await github(`/repos/${owner}/${repo}/actions/workflows/${workflow}/runs?${query}`)
@@ -444,16 +506,14 @@ async function recoverDeployment(version, assetSha256, preparedMainSha) {
   process.stdout.write(`Recovered deployment ${deployRun.html_url} for current main ${currentMainSha}.\n`)
 }
 
-async function validateDispatchedQuality(owner, repo, pull, expected, run) {
+async function validatePullRequestQuality(owner, repo, pull, expected, run) {
   const currentMain = await mainSha(owner, repo)
-  validateQualityDispatch({
-    eventName: 'workflow_dispatch',
-    prNumber: String(pull.number),
-    baseSha: expected.baseSha,
-    headSha: expected.headSha,
-    runtimeSha: run.head_sha,
-    runtimeRef: run.head_branch,
-  }, pull, currentMain)
+  if (pull.state !== 'open' || pull.merged || pull.base?.ref !== 'main' ||
+      pull.base?.sha !== expected.baseSha || currentMain !== expected.baseSha ||
+      pull.head?.ref !== expected.branch || pull.head?.sha !== expected.headSha) {
+    throw new Error('Automation pull request identity became stale before quality validation')
+  }
+  validatePullRequestWorkflowRun(run, { ...expected, prNumber: pull.number })
   await waitFor('the exact required GitHub Actions check', async () => {
     const { data } = await github(`/repos/${owner}/${repo}/commits/${expected.headSha}/check-runs?per_page=100`)
     try {
@@ -482,20 +542,22 @@ async function orchestrate(version, branch, initialBaseSha, initialHeadSha) {
   requireArtifactBase(baseSha, await mainSha(owner, repo))
   if (pull.head.sha !== headSha) throw new Error('Automation pull request head changed outside this run')
 
-  const qualityRequestId = `dataset-pin-quality-${sourceRun}-${headSha.slice(0, 12)}`
-  await dispatchWorkflow(owner, repo, QUALITY_WORKFLOW, branch, {
-    pr_number: String(pull.number),
-    base_sha: baseSha,
-    head_sha: headSha,
-    request_id: qualityRequestId,
-  })
-  const qualityRun = await waitForWorkflowRun(owner, repo, QUALITY_WORKFLOW, {
-    requestId: qualityRequestId,
+  const qualityIdentity = {
+    prNumber: pull.number,
     branch,
+    baseSha,
     headSha,
-  }, 45)
+  }
+  const pendingQualityRun = await waitForPullRequestWorkflowRun(owner, repo, qualityIdentity, 5)
+  const qualityRun = await approveAndWaitForPullRequestWorkflowRun(
+    owner,
+    repo,
+    qualityIdentity,
+    pendingQualityRun,
+    45,
+  )
   pull = await pullRequest(owner, repo, pull.number)
-  await validateDispatchedQuality(owner, repo, pull, { baseSha, headSha }, qualityRun)
+  await validatePullRequestQuality(owner, repo, pull, { branch, baseSha, headSha }, qualityRun)
 
   const mainBeforeMerge = await mainSha(owner, repo)
   requireArtifactBase(baseSha, mainBeforeMerge)
