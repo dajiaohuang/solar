@@ -12,6 +12,7 @@ describe('JPL SBDB parser', () => {
     expect(body.orbit.eccentricity).toBeCloseTo(0.203745114, 8)
     expect(body.orbit.ascendingNodeDeg).toBeCloseTo(2.060867, 6)
     expect(body.absoluteMagnitude).toBe(20.56)
+    expect(body.orbitConditionCode).toBe('0')
   })
 
   it('rejects non-elliptic elements before they can produce NaN positions', () => {

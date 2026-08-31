@@ -126,7 +126,7 @@ These are bounded policies, not RAM-based performance promises. A device with 12
 | Event search | Adaptive non-endpoint candidates followed by bounded local refinement and fresh two-body propagation. The exported numerical refinement half-width is not physical uncertainty, which is not estimated |
 | Spacecraft overlays | Milestone-dated schematic tracks labeled separately from Horizons and propagated ephemerides |
 
-JPL SBDB values are read from the documented `orbit.elements[]` records (`name`, `value`, `units`, and uncertainty fields), not invented flat properties. Absolute-magnitude filters have explicit all/known/unknown states; an unknown H is never fabricated as a number and is excluded from numeric `a–H` plots.
+JPL SBDB values are read from the documented `orbit.elements[]` records (`name`, `value`, and `units`), not invented flat properties. The object-level `orbit.condition_code` is exposed as an orbit condition code; per-element sigma and covariance are not currently modeled. Absolute-magnitude filters have explicit all/known/unknown states; an unknown H is never fabricated as a number and is excluded from numeric `a–H` plots.
 
 Primary sources:
 
@@ -139,7 +139,7 @@ Primary sources:
 
 ## Data and publication
 
-The curated major-body atlas works without a local MPCORB release. The production dataset is a separately versioned, immutable artifact pinned by [`.github/asteroid-dataset.json`](./.github/asteroid-dataset.json). Application version, Git commit, dataset version, parser identity, validation report, and delivery hashes remain separate in Evidence and build artifacts.
+The curated major-body atlas works without a local MPCORB release. The production dataset is a separately versioned, immutable artifact pinned by [`.github/asteroid-dataset.json`](./.github/asteroid-dataset.json). Application version, Git commit, dataset version, parser identity, validation report, and delivery hashes remain separate in Evidence and build artifacts. The MPC snapshot timestamp records the source file modification time (or HTTP `Last-Modified` value), while the distinct generation timestamp records when the publisher built the release. The automatic release identity covers the content and full provenance descriptor; setting `MPCORB_GENERATED_AT` makes an independent rebuild byte-for-byte reproducible.
 
 Each schema-v3 release contains:
 

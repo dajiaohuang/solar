@@ -4,6 +4,7 @@ import { EARTH_MOON_MASS_PARTITION_EVIDENCE, JPL_APPROX_MODEL_EVIDENCE, SATELLIT
 import { useI18n } from '../../i18n/context'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { BUILD_INFO } from '../../lib/buildInfo'
+import { datasetDisplayTimestamps } from '../../lib/datasetProvenance'
 import { catalogStore } from '../../state/catalog-store'
 import { DatasetCard } from '../catalog/DatasetCard'
 
@@ -56,6 +57,7 @@ export function EvidenceWorkspace() {
   }, [])
   const activeValidation = validationRoot ? validation : null
   const validationRuleCount = useMemo(() => Object.values(activeValidation?.invariants ?? {}).filter((value) => value === true || (typeof value === 'number' && value > 0)).length, [activeValidation])
+  const timestamps = catalog.manifest ? datasetDisplayTimestamps(catalog.manifest) : null
 
   return <div className="workspace-page evidence-workspace">
     <div className="page-heading"><div><span className="eyebrow">{t('evidenceKicker')}</span><h1>{t('about')}</h1><p>{t('educationalWarning')}</p></div></div>
@@ -85,7 +87,8 @@ export function EvidenceWorkspace() {
           <div><dt>{t('deployment')}</dt><dd>{BUILD_INFO.environment}</dd></div>
           <div><dt>{t('dataset')}</dt><dd>{catalog.manifest?.version ?? t('noDataset')}</dd></div>
           <div><dt>{t('parserVersion')}</dt><dd>{catalog.provenance?.parserVersion ?? catalog.manifest?.parserVersion ?? '—'}</dd></div>
-          <div><dt>{t('dataGenerated')}</dt><dd>{catalog.manifest?.generatedAt ? new Date(catalog.manifest.generatedAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en') : '—'}</dd></div>
+          <div><dt>{t('mpcSnapshot')}</dt><dd>{timestamps ? new Date(timestamps.sourceLastModifiedAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en') : '—'}</dd></div>
+          {timestamps?.generatedAt && <div><dt>{t('dataGenerated')}</dt><dd>{new Date(timestamps.generatedAt).toLocaleString(language === 'zh' ? 'zh-CN' : 'en')}</dd></div>}
           <div><dt>{t('validationRules')}</dt><dd>{activeValidation ? validationRuleCount : '—'}</dd></div>
         </dl>
         <div className="identity-links"><a href="https://github.com/dajiaohuang/solar" target="_blank" rel="noreferrer">{t('githubSource')} ↗</a><a href="https://github.com/dajiaohuang/solar/blob/main/CHANGELOG.md" target="_blank" rel="noreferrer">{t('changelog')} ↗</a><a href="https://dajiaohuang.github.io/solar/privacy/" target="_blank" rel="noreferrer">{t('privacyPolicy')} ↗</a><a href="https://github.com/dajiaohuang/solar/issues/new/choose" target="_blank" rel="noreferrer">{t('reportIssue')} ↗</a></div>

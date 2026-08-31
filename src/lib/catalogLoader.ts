@@ -155,7 +155,8 @@ export async function loadDatasetProvenance(): Promise<DatasetProvenance | null>
     return {
       datasetVersion: activeManifest.version,
       source: activeManifest.source,
-      downloadedAt: activeManifest.sourceDownloadedAt ?? activeManifest.generatedAt,
+      sourceLastModifiedAt: activeManifest.sourceLastModifiedAt ?? activeManifest.sourceDownloadedAt ?? activeManifest.generatedAt,
+      downloadedAt: activeManifest.sourceDownloadedAt,
       generatedAt: activeManifest.generatedAt,
       sourceSha256: activeManifest.sourceSha256 ?? 'not recorded (legacy dataset)',
       contentSha256: activeManifest.contentSha256,
