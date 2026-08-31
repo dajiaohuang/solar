@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { appendFileSync, writeFileSync } from 'node:fs'
 
 const SHA_PATTERN = /^[a-f0-9]{40}$/
@@ -17,6 +18,68 @@ export function assertSha(value, label) {
 export function automationBranch(version) {
   if (!DATASET_VERSION_PATTERN.test(version ?? '')) throw new Error('Invalid dataset version')
   return `automation/dataset-pin-${version}`
+}
+
+export function validateCandidateIdentity(version, assetSha256, sourceSha, artifactDigest) {
+  automationBranch(version)
+  if (!ASSET_SHA_PATTERN.test(assetSha256 ?? '')) throw new Error('Invalid dataset asset SHA-256')
+  assertSha(sourceSha, 'Artifact source SHA')
+  if (!ASSET_SHA_PATTERN.test(artifactDigest ?? '')) throw new Error('Invalid Actions artifact SHA-256')
+  return { version, assetSha256, sourceSha, artifactDigest }
+}
+
+export function validatePublicRepositoryUrl(value) {
+  let url
+  try {
+    url = new URL(value)
+  } catch {
+    throw new Error('Public repository URL must be a valid HTTPS URL')
+  }
+  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash ||
+      !/^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\.git$/.test(url.pathname)) {
+    throw new Error('Public repository URL must be an uncredentialed HTTPS Git repository URL')
+  }
+  return url.href
+}
+
+export function classifyPublication(candidate, currentMainSha, currentCommit, pin) {
+  automationBranch(candidate.version)
+  if (!ASSET_SHA_PATTERN.test(candidate.assetSha256 ?? '')) throw new Error('Invalid dataset asset SHA-256')
+  const sourceSha = assertSha(candidate.sourceSha, 'Artifact source SHA')
+  assertSha(currentMainSha, 'Current main SHA')
+  if (currentMainSha === sourceSha) return { mode: 'fresh', targetSha: sourceSha }
+
+  const expectedKeys = ['asset', 'assetSha256', 'schemaVersion', 'tag', 'version']
+  const pinKeys = pin && typeof pin === 'object' ? Object.keys(pin).sort() : []
+  const exactPin = pin?.schemaVersion === 1 &&
+    pin?.version === candidate.version &&
+    pin?.tag === `dataset-${candidate.version}` &&
+    pin?.asset === 'asteroid-dataset.tar.gz' &&
+    pin?.assetSha256 === candidate.assetSha256 &&
+    JSON.stringify(pinKeys) === JSON.stringify(expectedKeys)
+  const exactCommit = currentCommit?.sha === currentMainSha &&
+    currentCommit.parents?.length === 1 &&
+    currentCommit.parents[0]?.sha === sourceSha &&
+    currentCommit.files?.length === 1 &&
+    currentCommit.files[0]?.filename === '.github/asteroid-dataset.json' &&
+    currentCommit.files[0]?.status === 'modified'
+  if (!exactCommit || !exactPin) {
+    throw new Error('main advanced beyond the exact dataset pin merge; rerun the full data refresh from current main')
+  }
+  return { mode: 'recover', targetSha: currentMainSha }
+}
+
+export function validateReleaseAsset(release, version, assetSha256) {
+  automationBranch(version)
+  if (!ASSET_SHA_PATTERN.test(assetSha256 ?? '')) throw new Error('Invalid dataset asset SHA-256')
+  if (release?.tag_name !== `dataset-${version}` || release.draft) {
+    throw new Error('Dataset release identity does not match the validated candidate')
+  }
+  const assets = release.assets?.filter(asset => asset.name === 'asteroid-dataset.tar.gz') ?? []
+  if (assets.length !== 1 || !Number.isSafeInteger(assets[0].id)) {
+    throw new Error('Dataset release must contain exactly one immutable dataset asset')
+  }
+  return assets[0]
 }
 
 export function validateQualityDispatch(input, pullRequest, mainSha) {
@@ -73,6 +136,25 @@ export function validateDeployDispatch(expectedSha, runtimeSha) {
   return expectedSha
 }
 
+export function requireArtifactBase(expectedSha, currentMainSha) {
+  assertSha(expectedSha, 'Artifact source SHA')
+  assertSha(currentMainSha, 'Current main SHA')
+  if (expectedSha !== currentMainSha) {
+    throw new Error('main advanced after dataset validation; rerun the full data refresh from the new main')
+  }
+  return expectedSha
+}
+
+export function successfulDeployment(runs, expectedSha) {
+  assertSha(expectedSha, 'Expected deployed SHA')
+  return runs.find(run => (
+    run.head_branch === 'main' &&
+    run.head_sha === expectedSha &&
+    run.status === 'completed' &&
+    run.conclusion === 'success'
+  ))
+}
+
 export function validateMergedDeployment(pullRequest, mainSha, deploymentRun, expected) {
   if (!pullRequest.merged || pullRequest.merge_commit_sha !== expected.mergeSha) {
     throw new Error('Pull request merge identity does not match the expected commit')
@@ -102,11 +184,20 @@ function remoteBranchSha(branch) {
   return line ? line.split(/\s+/)[0] : ''
 }
 
-function preparePin(version, assetSha256) {
+function remoteMainSha(remote = 'origin') {
+  const validatedRemote = remote === 'origin' ? remote : validatePublicRepositoryUrl(remote)
+  const line = git(['ls-remote', '--heads', validatedRemote, 'refs/heads/main'], { capture: true })
+  const sha = line ? line.split(/\s+/)[0] : ''
+  return assertSha(sha, 'Remote main SHA')
+}
+
+function preparePin(version, assetSha256, artifactBaseSha) {
   const branch = automationBranch(version)
   if (!ASSET_SHA_PATTERN.test(assetSha256 ?? '')) throw new Error('Invalid dataset asset SHA-256')
+  assertSha(artifactBaseSha, 'Artifact source SHA')
   git(['fetch', 'origin', 'refs/heads/main:refs/remotes/origin/main'])
   const baseSha = assertSha(git(['rev-parse', 'origin/main'], { capture: true }), 'Fetched main SHA')
+  requireArtifactBase(artifactBaseSha, baseSha)
   const previousRemoteSha = remoteBranchSha(branch)
   git(['switch', '-C', branch, 'origin/main'])
   writeFileSync('.github/asteroid-dataset.json', `${JSON.stringify({
@@ -123,6 +214,7 @@ function preparePin(version, assetSha256) {
     execFileSync('git', ['diff', '--cached', '--quiet'])
     output('changed', 'false')
     output('base_sha', baseSha)
+    output('head_sha', baseSha)
     output('branch', branch)
     process.stdout.write(`Dataset pin already points to dataset-${version}.\n`)
     return
@@ -168,6 +260,35 @@ async function github(path, options = {}) {
   return { response, data }
 }
 
+async function publicGithub(path) {
+  const response = await fetch(apiUrl(path), {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+  })
+  const text = await response.text()
+  const data = text ? JSON.parse(text) : undefined
+  if (!response.ok) throw new Error(`Public GitHub API ${response.status} ${path}: ${data?.message || text}`)
+  return data
+}
+
+async function githubAssetSha256(path) {
+  const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN
+  if (!token) throw new Error('GH_TOKEN or GITHUB_TOKEN is required')
+  const response = await fetch(apiUrl(path), {
+    headers: {
+      Accept: 'application/octet-stream',
+      Authorization: `Bearer ${token}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+  })
+  if (!response.ok || !response.body) throw new Error(`Unable to download immutable dataset asset: ${response.status}`)
+  const hash = createHash('sha256')
+  for await (const chunk of response.body) hash.update(chunk)
+  return hash.digest('hex')
+}
+
 function repositoryParts() {
   const [owner, repo, extra] = (process.env.GITHUB_REPOSITORY || '').split('/')
   if (!owner || !repo || extra) throw new Error('GITHUB_REPOSITORY must be owner/repository')
@@ -177,6 +298,20 @@ function repositoryParts() {
 async function mainSha(owner, repo) {
   const { data } = await github(`/repos/${owner}/${repo}/branches/main`)
   return assertSha(data.commit.sha, 'Remote main SHA')
+}
+
+async function datasetPin(owner, repo, sha) {
+  const { data } = await github(`/repos/${owner}/${repo}/contents/.github/asteroid-dataset.json?ref=${sha}`)
+  if (data.type !== 'file' || data.encoding !== 'base64') throw new Error('main dataset pin is not a regular base64 GitHub content response')
+  return JSON.parse(Buffer.from(data.content, 'base64').toString('utf8'))
+}
+
+async function publicDatasetPin(owner, repo, sha) {
+  const data = await publicGithub(`/repos/${owner}/${repo}/contents/.github/asteroid-dataset.json?ref=${sha}`)
+  if (data.type !== 'file' || data.encoding !== 'base64') {
+    throw new Error('main dataset pin is not a regular base64 GitHub content response')
+  }
+  return JSON.parse(Buffer.from(data.content, 'base64').toString('utf8'))
 }
 
 async function pullRequest(owner, repo, number) {
@@ -234,26 +369,78 @@ async function waitForWorkflowRun(owner, repo, workflow, expected, timeoutMinute
   }, timeoutMinutes)
 }
 
-async function rebaseAutomationBranch(branch, expectedHeadSha) {
-  git([
-    'fetch',
-    'origin',
-    'refs/heads/main:refs/remotes/origin/main',
-    `refs/heads/${branch}:refs/remotes/origin/${branch}`,
-  ])
-  const remoteHeadSha = remoteBranchSha(branch)
-  if (remoteHeadSha !== expectedHeadSha) throw new Error('Automation branch changed unexpectedly before rebase')
-  git(['switch', '-C', branch, `origin/${branch}`])
-  git(['rebase', 'origin/main'])
-  const baseSha = assertSha(git(['rev-parse', 'origin/main'], { capture: true }), 'Rebased main SHA')
-  const headSha = assertSha(git(['rev-parse', 'HEAD'], { capture: true }), 'Rebased head SHA')
-  git([
-    'push',
-    `--force-with-lease=refs/heads/${branch}:${remoteHeadSha}`,
-    'origin',
-    `HEAD:refs/heads/${branch}`,
-  ])
-  return { baseSha, headSha }
+async function workflowRuns(owner, repo, workflow, branch) {
+  const query = new URLSearchParams({ branch, per_page: '100' })
+  const { data } = await github(`/repos/${owner}/${repo}/actions/workflows/${workflow}/runs?${query}`)
+  return data.workflow_runs
+}
+
+async function classifyPublicationFromRemote(version, assetSha256, sourceSha, publicRepositoryUrl) {
+  automationBranch(version)
+  if (!ASSET_SHA_PATTERN.test(assetSha256 ?? '')) throw new Error('Invalid dataset asset SHA-256')
+  assertSha(sourceSha, 'Artifact source SHA')
+  const currentMainSha = remoteMainSha(publicRepositoryUrl)
+  let currentCommit
+  let pin
+  if (currentMainSha !== sourceSha) {
+    const { owner, repo } = repositoryParts()
+    currentCommit = await publicGithub(`/repos/${owner}/${repo}/commits/${currentMainSha}`)
+    pin = await publicDatasetPin(owner, repo, currentMainSha)
+  }
+  const publication = classifyPublication({ version, assetSha256, sourceSha }, currentMainSha, currentCommit, pin)
+  output('mode', publication.mode)
+  output('target_sha', publication.targetSha)
+  process.stdout.write(`Validated ${publication.mode} publication path at ${publication.targetSha}.\n`)
+}
+
+async function verifyRelease(owner, repo, version, assetSha256) {
+  const { data: release } = await github(`/repos/${owner}/${repo}/releases/tags/dataset-${version}`)
+  const asset = validateReleaseAsset(release, version, assetSha256)
+  const publishedSha256 = await githubAssetSha256(`/repos/${owner}/${repo}/releases/assets/${asset.id}`)
+  if (publishedSha256 !== assetSha256) {
+    throw new Error('Immutable dataset release asset differs from the validated candidate SHA-256')
+  }
+  return asset
+}
+
+async function recoverDeployment(version, assetSha256, preparedMainSha) {
+  automationBranch(version)
+  if (!ASSET_SHA_PATTERN.test(assetSha256 ?? '')) throw new Error('Invalid dataset asset SHA-256')
+  assertSha(preparedMainSha, 'Prepared main SHA')
+  const { owner, repo } = repositoryParts()
+  const currentMainSha = await mainSha(owner, repo)
+  requireArtifactBase(preparedMainSha, currentMainSha)
+  const pin = await datasetPin(owner, repo, currentMainSha)
+  if (pin.version !== version || pin.tag !== `dataset-${version}` ||
+      pin.asset !== 'asteroid-dataset.tar.gz' || pin.assetSha256 !== assetSha256) {
+    throw new Error('Current main no longer contains the validated release version and asset SHA; refusing deployment recovery')
+  }
+  await verifyRelease(owner, repo, version, assetSha256)
+  const existing = successfulDeployment(await workflowRuns(owner, repo, DEPLOY_WORKFLOW, 'main'), currentMainSha)
+  if (existing) {
+    requireArtifactBase(currentMainSha, await mainSha(owner, repo))
+    output('deploy_run_url', existing.html_url)
+    output('deployed_sha', currentMainSha)
+    process.stdout.write(`Deployment ${existing.html_url} already succeeded for current main ${currentMainSha}.\n`)
+    return
+  }
+  const sourceRun = `${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}`
+  if (!/^\d+-\d+$/.test(sourceRun)) throw new Error('GitHub run identity is required')
+  const requestId = `dataset-pin-recover-${sourceRun}-${currentMainSha.slice(0, 12)}`
+  await dispatchWorkflow(owner, repo, DEPLOY_WORKFLOW, 'main', {
+    expected_sha: currentMainSha,
+    request_id: requestId,
+  })
+  const deployRun = await waitForWorkflowRun(owner, repo, DEPLOY_WORKFLOW, {
+    requestId,
+    branch: 'main',
+    headSha: currentMainSha,
+  }, 45)
+  validateDeployDispatch(currentMainSha, deployRun.head_sha)
+  requireArtifactBase(currentMainSha, await mainSha(owner, repo))
+  output('deploy_run_url', deployRun.html_url)
+  output('deployed_sha', currentMainSha)
+  process.stdout.write(`Recovered deployment ${deployRun.html_url} for current main ${currentMainSha}.\n`)
 }
 
 async function validateDispatchedQuality(owner, repo, pull, expected, run) {
@@ -280,94 +467,80 @@ async function validateDispatchedQuality(owner, repo, pull, expected, run) {
 async function orchestrate(version, branch, initialBaseSha, initialHeadSha) {
   automationBranch(version)
   if (branch !== automationBranch(version)) throw new Error('Automation branch does not match the dataset version')
-  let baseSha = assertSha(initialBaseSha, 'Initial base SHA')
-  let headSha = assertSha(initialHeadSha, 'Initial head SHA')
+  const baseSha = assertSha(initialBaseSha, 'Initial base SHA')
+  const headSha = assertSha(initialHeadSha, 'Initial head SHA')
   const { owner, repo } = repositoryParts()
   const sourceRun = `${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}`
   if (!/^\d+-\d+$/.test(sourceRun)) throw new Error('GitHub run identity is required')
   let pull = await openOrReusePullRequest(owner, repo, branch, version)
 
-  for (let attempt = 1; attempt <= 4; attempt += 1) {
-    pull = await pullRequest(owner, repo, pull.number)
-    const currentMain = await mainSha(owner, repo)
-    if (pull.head.sha !== headSha) throw new Error('Automation pull request head changed outside this run')
-    if (currentMain !== baseSha || pull.base.sha !== baseSha) {
-      ({ baseSha, headSha } = await rebaseAutomationBranch(branch, headSha))
-      pull = await waitFor('GitHub to observe the rebased pull request head', async () => {
-        const candidate = await pullRequest(owner, repo, pull.number)
-        return candidate.head.sha === headSha && candidate.base.sha === baseSha ? candidate : undefined
-      }, 5)
-    }
+  pull = await waitFor('GitHub to observe the exact pull request identities', async () => {
+    const candidate = await pullRequest(owner, repo, pull.number)
+    return candidate.head.sha === headSha && candidate.base.sha === baseSha ? candidate : undefined
+  }, 5)
+  requireArtifactBase(baseSha, await mainSha(owner, repo))
+  if (pull.head.sha !== headSha) throw new Error('Automation pull request head changed outside this run')
 
-    const qualityRequestId = `dataset-pin-quality-${sourceRun}-${attempt}-${headSha.slice(0, 12)}`
-    await dispatchWorkflow(owner, repo, QUALITY_WORKFLOW, branch, {
-      pr_number: String(pull.number),
-      base_sha: baseSha,
-      head_sha: headSha,
-      request_id: qualityRequestId,
-    })
-    const qualityRun = await waitForWorkflowRun(owner, repo, QUALITY_WORKFLOW, {
-      requestId: qualityRequestId,
-      branch,
-      headSha,
-    }, 45)
-    pull = await pullRequest(owner, repo, pull.number)
-    await validateDispatchedQuality(owner, repo, pull, { baseSha, headSha }, qualityRun)
+  const qualityRequestId = `dataset-pin-quality-${sourceRun}-${headSha.slice(0, 12)}`
+  await dispatchWorkflow(owner, repo, QUALITY_WORKFLOW, branch, {
+    pr_number: String(pull.number),
+    base_sha: baseSha,
+    head_sha: headSha,
+    request_id: qualityRequestId,
+  })
+  const qualityRun = await waitForWorkflowRun(owner, repo, QUALITY_WORKFLOW, {
+    requestId: qualityRequestId,
+    branch,
+    headSha,
+  }, 45)
+  pull = await pullRequest(owner, repo, pull.number)
+  await validateDispatchedQuality(owner, repo, pull, { baseSha, headSha }, qualityRun)
 
-    const mainBeforeMerge = await mainSha(owner, repo)
-    if (mainBeforeMerge !== baseSha || pull.base.sha !== baseSha || pull.head.sha !== headSha) {
-      if (attempt === 4) throw new Error('main kept advancing; refusing to reuse stale quality evidence')
-      ({ baseSha, headSha } = await rebaseAutomationBranch(branch, headSha))
-      continue
-    }
-
-    const { response, data: merge } = await github(`/repos/${owner}/${repo}/pulls/${pull.number}/merge`, {
-      method: 'PUT',
-      body: {
-        sha: headSha,
-        merge_method: 'squash',
-        commit_title: `data: pin asteroid dataset ${version}`,
-      },
-      allow: [405, 409],
-    })
-    if (!response.ok || !merge.merged) {
-      if (attempt === 4) throw new Error(`Protected merge failed: ${merge?.message || response.status}`)
-      const latestMain = await mainSha(owner, repo)
-      if (latestMain === baseSha) throw new Error(`Protected merge failed without a main update: ${merge?.message}`)
-      ({ baseSha, headSha } = await rebaseAutomationBranch(branch, headSha))
-      continue
-    }
-
-    const mergeSha = assertSha(merge.sha, 'Merge SHA')
-    pull = await waitFor('merged pull request identity', async () => {
-      const candidate = await pullRequest(owner, repo, pull.number)
-      return candidate.merged && candidate.merge_commit_sha === mergeSha ? candidate : undefined
-    }, 5)
-    const mergedMainSha = await mainSha(owner, repo)
-    if (mergedMainSha !== mergeSha) throw new Error('main advanced before deployment dispatch; refusing an ambiguous deployment')
-
-    const deployRequestId = `dataset-pin-deploy-${sourceRun}-${mergeSha.slice(0, 12)}`
-    await dispatchWorkflow(owner, repo, DEPLOY_WORKFLOW, 'main', {
-      expected_sha: mergeSha,
-      request_id: deployRequestId,
-    })
-    const deployRun = await waitForWorkflowRun(owner, repo, DEPLOY_WORKFLOW, {
-      requestId: deployRequestId,
-      branch: 'main',
-      headSha: mergeSha,
-    }, 45)
-    validateMergedDeployment(pull, mergedMainSha, deployRun, {
-      mergeSha,
-      requestId: deployRequestId,
-    })
-    output('pr_url', pull.html_url)
-    output('merge_sha', mergeSha)
-    output('quality_run_url', qualityRun.html_url)
-    output('deploy_run_url', deployRun.html_url)
-    process.stdout.write(`Published ${pull.html_url} at ${mergeSha}; deployment ${deployRun.html_url} passed.\n`)
-    return
+  const mainBeforeMerge = await mainSha(owner, repo)
+  requireArtifactBase(baseSha, mainBeforeMerge)
+  if (pull.base.sha !== baseSha || pull.head.sha !== headSha) {
+    throw new Error('Pull request identity changed after quality validation')
   }
-  throw new Error('Dataset pin automation exhausted its validation attempts')
+
+  const { data: merge } = await github(`/repos/${owner}/${repo}/pulls/${pull.number}/merge`, {
+    method: 'PUT',
+    body: {
+      sha: headSha,
+      merge_method: 'squash',
+      commit_title: `data: pin asteroid dataset ${version}`,
+    },
+  })
+  if (!merge.merged) throw new Error(`Protected merge failed: ${merge?.message || 'unknown error'}`)
+
+  const mergeSha = assertSha(merge.sha, 'Merge SHA')
+  pull = await waitFor('merged pull request identity', async () => {
+    const candidate = await pullRequest(owner, repo, pull.number)
+    return candidate.merged && candidate.merge_commit_sha === mergeSha ? candidate : undefined
+  }, 5)
+  const mergedMainSha = await mainSha(owner, repo)
+  if (mergedMainSha !== mergeSha) {
+    throw new Error('main advanced before deployment dispatch; refusing an ambiguous deployment')
+  }
+
+  const deployRequestId = `dataset-pin-deploy-${sourceRun}-${mergeSha.slice(0, 12)}`
+  await dispatchWorkflow(owner, repo, DEPLOY_WORKFLOW, 'main', {
+    expected_sha: mergeSha,
+    request_id: deployRequestId,
+  })
+  const deployRun = await waitForWorkflowRun(owner, repo, DEPLOY_WORKFLOW, {
+    requestId: deployRequestId,
+    branch: 'main',
+    headSha: mergeSha,
+  }, 45)
+  validateMergedDeployment(pull, await mainSha(owner, repo), deployRun, {
+    mergeSha,
+    requestId: deployRequestId,
+  })
+  output('pr_url', pull.html_url)
+  output('merge_sha', mergeSha)
+  output('quality_run_url', qualityRun.html_url)
+  output('deploy_run_url', deployRun.html_url)
+  process.stdout.write(`Published ${pull.html_url} at ${mergeSha}; deployment ${deployRun.html_url} passed.\n`)
 }
 
 async function validateQualityDispatchFromEnvironment() {
@@ -388,14 +561,21 @@ async function validateQualityDispatchFromEnvironment() {
 
 async function main() {
   const command = process.argv[2]
-  if (command === 'prepare-pin') preparePin(process.argv[3], process.argv[4])
+  if (command === 'validate-candidate-identity') {
+    validateCandidateIdentity(process.argv[3], process.argv[4], process.argv[5], process.argv[6])
+  } else if (command === 'classify-publication') {
+    await classifyPublicationFromRemote(process.argv[3], process.argv[4], process.argv[5], process.argv[6])
+  } else if (command === 'validate-publication-base') {
+    requireArtifactBase(process.argv[3], remoteMainSha(process.argv[4]))
+  } else if (command === 'prepare-pin') preparePin(process.argv[3], process.argv[4], process.argv[5])
   else if (command === 'orchestrate') await orchestrate(process.argv[3], process.argv[4], process.argv[5], process.argv[6])
+  else if (command === 'recover-deployment') await recoverDeployment(process.argv[3], process.argv[4], process.argv[5])
   else if (command === 'validate-quality-dispatch') await validateQualityDispatchFromEnvironment()
   else if (command === 'validate-deploy-dispatch') {
     validateDeployDispatch(process.env.EXPECTED_DEPLOY_SHA, process.env.GITHUB_SHA)
     process.stdout.write(`Validated deployment commit ${process.env.GITHUB_SHA}.\n`)
   } else if (process.argv[1]?.endsWith('dataset-pin-automation.mjs')) {
-    throw new Error('Expected prepare-pin, orchestrate, validate-quality-dispatch, or validate-deploy-dispatch')
+    throw new Error('Expected validate-candidate-identity, classify-publication, validate-publication-base, prepare-pin, orchestrate, recover-deployment, validate-quality-dispatch, or validate-deploy-dispatch')
   }
 }
 
