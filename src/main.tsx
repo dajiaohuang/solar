@@ -18,6 +18,7 @@ if (IS_NATIVE_APP) {
 if (!IS_NATIVE_APP && 'serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { updateViaCache: 'none' }).then((registration) => {
+      if (!registration) return
       const announceWaiting = () => {
         if (registration.waiting && navigator.serviceWorker.controller) {
           window.dispatchEvent(new CustomEvent('solar-atlas-update', { detail: registration }))
@@ -31,6 +32,6 @@ if (!IS_NATIVE_APP && 'serviceWorker' in navigator && import.meta.env.PROD) {
         })
       })
       void registration.update()
-    })
+    }).catch(() => undefined)
   })
 }
