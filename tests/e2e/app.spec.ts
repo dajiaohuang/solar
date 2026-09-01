@@ -273,6 +273,15 @@ test('navigates through the atlas workspaces without console errors', async ({ p
   expect(errors).toEqual([])
 })
 
+test('degrades cleanly when service worker registration is unavailable', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./')
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
+  expect(errors).toEqual([])
+})
+
 test('applies a reproducible story scene with the requested frame and view', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=3&page=stories&story=retrograde-mars')
