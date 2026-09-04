@@ -70,6 +70,13 @@ export function createCatalogPointWorkerScheduler(
         flush()
         return
       }
+      if (response.type === 'error' && response.requestId === elementRequestId) {
+        initialized = false
+        elementRequestId = null
+        queuedJulianDay = null
+        callbacks.onError(response.error ?? 'Catalog point worker initialization failed')
+        return
+      }
       if (response.requestId !== activeComputeId || activeComputeGeneration !== generation) return
       if (response.type === 'progress') {
         callbacks.onProgress(response.progress ?? 0)

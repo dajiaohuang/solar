@@ -4,7 +4,7 @@ import type { CatalogPointWorkerRequest, CatalogPointWorkerResponse } from './ca
 import { propagateCatalogElementPositions } from '../engine/ephemeris/catalogPoints'
 
 const workerScope = self as DedicatedWorkerGlobalScope
-let elements = new Float64Array()
+let elements: Float64Array<ArrayBufferLike> = new Float64Array()
 function compute(request: Extract<CatalogPointWorkerRequest, { type: 'compute' }>) {
   const { julianDay, requestId } = request
   const { positions, positions3D } = propagateCatalogElementPositions(elements, julianDay, (progress) =>
