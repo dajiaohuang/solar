@@ -22,6 +22,8 @@ The native build uses relative local assets and does not register the web Servic
 
 SPK focus ephemerides and the geometric/light-time/stellar-aberration observation readouts follow the bundled manifest when those kernel assets are present. They do not turn the app into an all-body precision or navigation product; no gravity deflection, atmosphere, surface observer, or covariance model is included. The GPU catalog cloud remains Keplerian.
 
+The [all-body source inventory](./docs/all-body-inventory.md) is an explicit developer audit, not an installed mobile catalog. Native sync neither downloads nor copies those generated shards; the current offline/online boundary is unchanged. Inventory coverage and usable mobile ephemeris coverage must be reported separately.
+
 ## Prerequisites
 
 The shared web shell includes satellite-scale 3D framing, portrait-resize handling and km/hour orbital readouts. After changing these shared features, run `npm run mobile:sync` to refresh both native asset bundles and validate Android/iOS CI. Browser viewport tests are not a substitute for real-device touch, rotation or performance testing.

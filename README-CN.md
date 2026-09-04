@@ -220,6 +220,10 @@ npm run check:capacity
 | `MPCORB_MODE` | `lite` 或 `full` |
 | `MPCORB_REFRESH=1` | 替换缓存的原始快照 |
 
+### 全天体覆盖清单
+
+全部已知天体的目标不限于内置天体和椭圆 MPCORB 目录。显式运行的[来源清单管线](./docs/all-body-inventory.md)逐条记录 JPL 小行星、彗星、行星卫星及小天体卫星，保留候选对象、缺失数据和暂不支持的轨道，输出可复现的哈希分片及覆盖缺口清单。清单数量**不表示**每条记录已经可选、可渲染或拥有物理星历。普通网页、Android 和 iOS 构建不下载、不打包这份开发审计清单；SPK type 21、开放轨道与完整运行时交付仍需继续建设。
+
 ## Android 与 iOS
 
 仓库已包含 Android 与 iOS 的 Capacitor 8 本地应用壳工程，应用 ID 为 `io.github.dajiaohuang.solaratlas`。Android 最低支持 API 24、目标 API 36；iOS 需要 16.4 或以上。两端都把内置核心体验安装在本地，并按需通过 HTTPS 加载目录数据。

@@ -220,6 +220,10 @@ Useful pipeline variables:
 | `MPCORB_MODE` | `lite` or `full` |
 | `MPCORB_REFRESH=1` | Replace the cached raw snapshot |
 
+### All-body coverage inventory
+
+The all-known-body goal is broader than the built-in registry and the elliptic MPCORB catalog. An opt-in [source inventory pipeline](./docs/all-body-inventory.md) accounts for individual JPL asteroid/comet records, planetary moons and small-body satellites, including candidates and missing/unsupported orbital data. It produces reproducible, hashed shards and a coverage-gap ledger. Inventory counts are **not** a claim that every record is already selectable, rendered or covered by physical ephemerides. Ordinary Web/Android/iOS builds do not download or bundle this developer inventory; SPK type 21, open trajectories and full runtime delivery remain follow-up work.
+
 ## Android and iOS
 
 The repository contains Capacitor 8 local-shell projects for Android and iOS under the application ID `io.github.dajiaohuang.solaratlas`. Android supports API 24 and targets API 36; iOS requires 16.4 or later. Both use the installed local shell for the curated core experience while loading catalog data on demand over HTTPS.
