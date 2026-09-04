@@ -1,7 +1,8 @@
 import { AU_IN_KM, SECONDS_PER_DAY } from '../engine/units'
-import { bodyNaifId } from '../data/ephemerisTargets'
 import { MissingBodyStateError } from './ephemeris'
 import type { BodyId, CelestialBody, RenderedBodyPosition, Vector3 } from '../types'
+
+export { backendBodyId } from './currentStateIdentity'
 
 export const CURRENT_STATES_API_VERSION = 'solar.api/v1'
 export const CURRENT_STATES_FRAME = 'ECLIPJ2000'
@@ -9,7 +10,6 @@ export const CURRENT_STATES_TIME_SCALE = 'TDB'
 export const CURRENT_STATES_STATE_LAYOUT = 'row-major-[x,y,z,vx,vy,vz]'
 export const MAX_CURRENT_STATE_BATCH = 510
 const SHA256 = /^[a-f0-9]{64}$/
-const BACKEND_BUILTIN_ALIASES = new Set(['sun', 'mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'])
 const EXACT_CURRENT_STATE_MODELS = new Set(['spk-original', 'source-kernel-state-at-audit-epoch', 'exact-only', 'unavailable-no-kernel'])
 
 const AVAILABILITIES = new Set(['operational', 'fallback', 'snapshot', 'missing'])
@@ -84,15 +84,6 @@ export type CurrentStateAudit = {
   validityEndEt?: number
   stateEvidence: string
   missingReason: string
-}
-
-export function backendBodyId(body: Pick<CelestialBody, 'id' | 'naifId'>): string {
-  const target = bodyNaifId(body)
-  // Only the Go catalog's stable builtin aliases stay named. Every other
-  // mapped NAIF body uses its explicit backend identity; this covers moons,
-  // dwarf planets, and satellite centers without guessing a display alias.
-  if (target !== undefined && (!BACKEND_BUILTIN_ALIASES.has(body.id) || body.id.startsWith('naif:'))) return `naif:${target}`
-  return body.id
 }
 
 export function splitCurrentStateBatches(ids: readonly string[], max = MAX_CURRENT_STATE_BATCH): string[][] {

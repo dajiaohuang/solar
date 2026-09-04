@@ -1,10 +1,20 @@
 import { test as base, expect } from '@playwright/test'
 import type { Page } from '@playwright/test'
+import ephemerisBodies from '../../src/data/ephemerisBodies.json' with { type: 'json' }
+import satelliteCatalog from '../../src/data/satelliteCatalog.json' with { type: 'json' }
+import { BODY_NAIF_IDS } from '../../src/data/ephemerisTargets'
+import { backendBodyId } from '../../src/lib/currentStateIdentity'
 
 const catalogHash = 'a'.repeat(64)
 const source = 'fixture-current-states'
 const datasetVersion = 'fixture-v1'
 const missingId = 'sat:planet:saturn:provisional:S/2009 S1'
+const knownBackendIds = new Set([
+  ...Object.entries(BODY_NAIF_IDS).map(([id, naifId]) => backendBodyId({ id, naifId })),
+  ...ephemerisBodies.bodies.map(body => backendBodyId(body)),
+  ...satelliteCatalog.primaries.map(body => backendBodyId(body)),
+  ...satelliteCatalog.bodies.map(body => backendBodyId(body)),
+])
 
 function fixtureState(id: string) {
   let hash = 17
@@ -31,11 +41,11 @@ async function installCurrentStatesBackend(page: Page) {
     if (request.method() !== 'POST') return route.fulfill({ status: 405 })
     const body = JSON.parse(request.postData() ?? '{}') as { ids?: string[]; epochJd?: number; frame?: string; precision?: string }
     const ids = body.ids ?? []
-    if (ids.length < 1 || ids.length > 510 || body.frame !== 'ECLIPJ2000' || body.precision !== 'exact') return route.fulfill({ status: 400, json: { error: 'strict current-states fixture contract' } })
+    if (ids.length < 1 || ids.length > 510 || new Set(ids).size !== ids.length || body.frame !== 'ECLIPJ2000' || body.precision !== 'exact') return route.fulfill({ status: 400, json: { error: 'strict current-states fixture contract' } })
     const unavailableByEpoch = typeof body.epochJd === 'number' && Math.abs(body.epochJd - 2466154.5) < 0.01
       ? new Set(['naif:506'])
-      : typeof body.epochJd === 'number' && Math.abs(body.epochJd - 2460000.5) < 0.01 ? new Set(['quaoar', 'naif:120050000']) : new Set<string>()
-    const present = ids.map(id => id !== missingId && !unavailableByEpoch.has(id))
+      : typeof body.epochJd === 'number' && Math.abs(body.epochJd - 2460000.5) < 0.01 ? new Set(['naif:920050000', 'naif:120050000']) : new Set<string>()
+    const present = ids.map(id => knownBackendIds.has(id) && id !== missingId && !unavailableByEpoch.has(id))
     await route.fulfill({
       json: {
         apiVersion: 'solar.api/v1', catalogVersion: datasetVersion, catalogManifestSha256: catalogHash,
@@ -46,7 +56,7 @@ async function installCurrentStatesBackend(page: Page) {
         model: present.map(value => value ? 'spk-original' : 'exact-only'), centerIds: ids.map(() => 'naif:0'),
         validityStartEt: ids.map(() => -1e12), validityEndEt: ids.map(() => 1e12), validityPresent: ids.map(() => true),
         stateEvidence: present.map(value => value ? 'fixture-kernel' : ''), evidenceWindowStartEt: ids.map(() => -1e12), evidenceWindowEndEt: ids.map(() => 1e12), evidenceWindowPresent: present,
-        missingReason: present.map(value => value ? '' : 'unknown-identity'), identityStatus: ids.map(() => ''), sourceRecord: ids.map(() => false), statePresent: present,
+        missingReason: present.map(value => value ? '' : 'unknown-identity'), identityStatus: ids.map(id => knownBackendIds.has(id) ? '' : 'unknown'), sourceRecord: ids.map(() => false), statePresent: present,
         stateValues: ids.flatMap((id, index) => present[index] ? fixtureState(id) : [0, 0, 0, 0, 0, 0]),
       },
     })
