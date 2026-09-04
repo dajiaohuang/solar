@@ -1,4 +1,5 @@
 import { bodyPositionOrNull, createBodyPositionResolver, subtractVector3, vector3Magnitude } from '../../lib/ephemeris'
+import { kernelsForWindow } from './kernelStore'
 import type { SpacecraftDef } from '../../data/spacecraft'
 import type { BodyId, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector3 } from '../../types'
 
@@ -36,8 +37,11 @@ export function buildSpacecraftFrame(
   })
   const trajectoryUnavailableBodyIds: BodyId[] = []
   const trajectories: TrajectorySample[] = spacecraft.flatMap((body) => {
+    const historicalKernels = body.trajectoryPoints.length
+      ? kernelsForWindow(body.trajectoryPoints[0].jd, body.trajectoryPoints[body.trajectoryPoints.length - 1].jd)
+      : []
     const points3D = body.trajectoryPoints.map((point) => {
-      const historicalReference = bodyPositionOrNull(createBodyPositionResolver(bodiesById, point.jd), referenceId)
+      const historicalReference = bodyPositionOrNull(createBodyPositionResolver(bodiesById, point.jd, historicalKernels), referenceId)
       return historicalReference ? subtractVector3(point, historicalReference) : null
     })
     if (points3D.some((point): point is null => point === null)) {
