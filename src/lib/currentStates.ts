@@ -210,6 +210,8 @@ export function validateCurrentStates(raw: unknown, capabilities: BackendCapabil
     if (response.statePresent![index] !== true && response.statePresent![index] !== false) throw new Error('Invalid current-state presence')
     if (response.statePresent![index] && availability !== 'operational' && availability !== 'snapshot') throw new Error('Present state has invalid availability')
     if (!response.statePresent![index] && availability !== 'missing') throw new Error('Unavailable state must be marked missing')
+    if (response.statePresent![index] && ((availability === 'operational' && model !== 'spk-original') || (availability === 'snapshot' && model !== 'source-kernel-state-at-audit-epoch'))) throw new Error('Present state has invalid model')
+    if (response.statePresent![index] && (model === 'exact-only' || model === 'unavailable-no-kernel')) throw new Error('Unavailable model cannot have a state')
     if (response.statePresent![index] && (!source || !datasetVersion || !model || !response.stateEvidence![index])) throw new Error('Exact state is missing audit identity')
     if (response.validityPresent![index] && (!Number.isFinite(response.validityStartEt![index]) || !Number.isFinite(response.validityEndEt![index]) || response.validityEndEt![index] < response.validityStartEt![index])) throw new Error('Invalid current-state validity window')
     if (response.evidenceWindowPresent![index] && (!Number.isFinite(response.evidenceWindowStartEt![index]) || !Number.isFinite(response.evidenceWindowEndEt![index]) || response.evidenceWindowEndEt![index] < response.evidenceWindowStartEt![index])) throw new Error('Invalid current-state evidence window')
