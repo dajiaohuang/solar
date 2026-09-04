@@ -20,6 +20,8 @@ import (
 )
 
 const maxBodyBytes = 1 << 20
+const maxCurrentStateIDs = 512
+const maxCurrentStateResponseBytes = 8 << 20
 
 type Server struct {
 	catalog   *catalog.Catalog
@@ -87,6 +89,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.body(w, r, strings.TrimPrefix(path, "bodies/"))
 	case r.Method == "POST" && path == "trajectory":
 		s.trajectory(w, r)
+	case r.Method == "POST" && path == "current-states":
+		s.currentStates(w, r)
 	case r.Method == "GET" && path == "preview/manifest":
 		s.preview(w, r)
 	default:
@@ -99,7 +103,7 @@ func (s *Server) capabilities(w http.ResponseWriter, _ *http.Request) {
 	if s.inventory != nil {
 		coverage["sourceInventory"] = map[string]any{"totalRecords": s.inventory.TotalRecords(), "compressedBytes": s.inventory.TotalBytes(), "shards": s.inventory.ShardCount(), "index": s.inventory.IndexStats(), "uniqueBodySemantics": "not-deduplicated"}
 	}
-	s.json(w, http.StatusOK, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "manifestSha256": s.catalog.ManifestHash(), "coverage": coverage, "contract": map[string]any{"timeScale": "TDB", "epoch": "Julian date", "frame": "ECLIPJ2000", "distanceUnit": "km", "velocityUnit": "km/s", "precisionModes": []string{"exact", "approximate-opt-in"}, "modelBoundary": "Exact requests use verified SPK coefficients or source state evidence; approximate source-element propagation is explicit opt-in", "nBody": false}, "limits": map[string]int{"catalogPageMax": 500, "trajectoryBodiesMax": 64, "trajectorySamplesMax": 10000, "inventoryPageMax": 500, "inventoryMaxIndexedRecords": inventory.MaxIndexedRecords, "inventoryMaxIndexPostings": inventory.MaxIndexPostings, "inventoryMaxShards": inventory.MaxShards, "inventoryMaxShardBytes": inventory.MaxShardBytes}, "profiles": map[string]any{"full": map[string]any{"catalog": true, "identities": s.inventory != nil, "trajectory": true}, "preview": map[string]any{"catalog": "curated", "fullOnlyVisible": true, "restrictedActions": "blocked"}}})
+	s.json(w, http.StatusOK, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "manifestSha256": s.catalog.ManifestHash(), "coverage": coverage, "contract": map[string]any{"timeScale": "TDB", "epoch": "Julian date", "frame": "ECLIPJ2000", "distanceUnit": "km", "velocityUnit": "km/s", "precisionModes": []string{"exact", "approximate-opt-in"}, "modelBoundary": "Exact requests use verified SPK coefficients or source state evidence; approximate source-element propagation is explicit opt-in", "nBody": false}, "limits": map[string]int{"catalogPageMax": 500, "trajectoryBodiesMax": 64, "trajectorySamplesMax": 10000, "currentStateIDsMax": maxCurrentStateIDs, "currentStateBodyBytes": maxBodyBytes, "currentStateResponseBytes": maxCurrentStateResponseBytes, "inventoryPageMax": 500, "inventoryMaxIndexedRecords": inventory.MaxIndexedRecords, "inventoryMaxIndexPostings": inventory.MaxIndexPostings, "inventoryMaxShards": inventory.MaxShards, "inventoryMaxShardBytes": inventory.MaxShardBytes}, "profiles": map[string]any{"full": map[string]any{"catalog": true, "identities": s.inventory != nil, "trajectory": true, "currentStates": true}, "preview": map[string]any{"catalog": "curated", "fullOnlyVisible": true, "restrictedActions": "blocked"}}})
 }
 
 func (s *Server) catalogPage(w http.ResponseWriter, r *http.Request) {
@@ -286,13 +290,25 @@ func precisionMode(value string) (bool, error) {
 }
 
 func (s *Server) resolveInventoryState(ctx context.Context, record inventory.Record, jd float64, allowApproximate bool) (sourceStateResult, error) {
+	return s.resolveInventoryStateWithOperational(ctx, record, jd, allowApproximate, nil, nil)
+}
+
+func (s *Server) resolveInventoryStateWithOperational(ctx context.Context, record inventory.Record, jd float64, allowApproximate bool, operational map[string]catalog.State, operationalFound map[string]bool) (sourceStateResult, error) {
 	if !finite(jd) {
 		return sourceStateResult{Availability: catalog.Missing, MissingReason: "invalid-epoch"}, nil
 	}
 	if record.NAIFID != 0 {
 		catalogID := "naif:" + strconv.Itoa(record.NAIFID)
 		if body, ok := s.catalog.Get(catalogID); ok && body.Availability == catalog.AvailableOperational {
-			state, found, err := s.catalog.OperationalState(catalogID, jd)
+			var state catalog.State
+			var found bool
+			var err error
+			if operational != nil || operationalFound != nil {
+				state, found = operational[catalogID]
+				found = operationalFound[catalogID]
+			} else {
+				state, found, err = s.catalog.OperationalState(catalogID, jd)
+			}
 			if err != nil {
 				return sourceStateResult{}, err
 			}
@@ -492,6 +508,305 @@ type sourceStateResult struct {
 	EvidenceWindow map[string]float64
 }
 
+type currentStatesRequest struct {
+	IDs       []string `json:"ids"`
+	EpochJD   float64  `json:"epochJd"`
+	Frame     string   `json:"frame"`
+	Precision string   `json:"precision"`
+}
+
+// currentStatesResponse is deliberately columnar: IDs and every metadata
+// field have the same row order, while stateValues is a flat six-component
+// array that maps directly to a Float64Array. statePresent disambiguates the
+// zero-filled slots for missing states without emitting JSON NaN/null values.
+type currentStatesResponse struct {
+	APIVersion              string                 `json:"apiVersion"`
+	CatalogVersion          string                 `json:"catalogVersion"`
+	CatalogManifestSHA256   string                 `json:"catalogManifestSha256"`
+	InventoryManifestSHA256 string                 `json:"inventoryManifestSha256,omitempty"`
+	EpochJD                 float64                `json:"epochJd"`
+	TimeScale               string                 `json:"timeScale"`
+	Frame                   string                 `json:"frame"`
+	DistanceUnit            string                 `json:"distanceUnit"`
+	VelocityUnit            string                 `json:"velocityUnit"`
+	StateLayout             string                 `json:"stateLayout"`
+	StateStride             int                    `json:"stateStride"`
+	IDs                     []string               `json:"ids"`
+	Availability            []catalog.Availability `json:"availability"`
+	Precision               []string               `json:"precision"`
+	Source                  []string               `json:"source"`
+	DatasetVersion          []string               `json:"datasetVersion"`
+	Model                   []string               `json:"model"`
+	CenterIDs               []string               `json:"centerIds"`
+	ValidityStartET         []float64              `json:"validityStartEt"`
+	ValidityEndET           []float64              `json:"validityEndEt"`
+	ValidityPresent         []bool                 `json:"validityPresent"`
+	StateEvidence           []string               `json:"stateEvidence"`
+	EvidenceWindowStartET   []float64              `json:"evidenceWindowStartEt"`
+	EvidenceWindowEndET     []float64              `json:"evidenceWindowEndEt"`
+	EvidenceWindowPresent   []bool                 `json:"evidenceWindowPresent"`
+	MissingReason           []string               `json:"missingReason"`
+	IdentityStatus          []string               `json:"identityStatus"`
+	SourceRecord            []bool                 `json:"sourceRecord"`
+	StatePresent            []bool                 `json:"statePresent"`
+	StateValues             []float64              `json:"stateValues"`
+}
+
+type currentStateRow struct {
+	ID                    string
+	Availability          catalog.Availability
+	Precision             string
+	Source                string
+	DatasetVersion        string
+	Model                 string
+	CenterID              string
+	ValidityStartET       float64
+	ValidityEndET         float64
+	ValidityPresent       bool
+	StateEvidence         string
+	EvidenceWindowStartET float64
+	EvidenceWindowEndET   float64
+	EvidenceWindowPresent bool
+	MissingReason         string
+	IdentityStatus        string
+	SourceRecord          bool
+	State                 *catalog.State
+}
+
+func (s *Server) currentStates(w http.ResponseWriter, r *http.Request) {
+	var req currentStatesRequest
+	dec := json.NewDecoder(io.LimitReader(r.Body, maxBodyBytes))
+	if err := dec.Decode(&req); err != nil {
+		s.error(w, http.StatusBadRequest, "invalid_json", "request body is not valid JSON")
+		return
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		s.error(w, http.StatusBadRequest, "invalid_json", "request body must contain one JSON object")
+		return
+	}
+	if len(req.IDs) < 1 || len(req.IDs) > maxCurrentStateIDs {
+		s.error(w, http.StatusBadRequest, "invalid_id_count", fmt.Sprintf("ids must contain 1..%d entries", maxCurrentStateIDs))
+		return
+	}
+	ids := make([]string, len(req.IDs))
+	seen := make(map[string]struct{}, len(req.IDs))
+	for n, rawID := range req.IDs {
+		id := strings.TrimSpace(rawID)
+		if id == "" {
+			s.error(w, http.StatusBadRequest, "invalid_identity_id", "ids must not contain empty entries")
+			return
+		}
+		if _, ok := seen[id]; ok {
+			s.error(w, http.StatusBadRequest, "duplicate_identity_id", "ids must be unique")
+			return
+		}
+		seen[id] = struct{}{}
+		ids[n] = id
+	}
+	if !finite(req.EpochJD) {
+		s.error(w, http.StatusBadRequest, "invalid_epoch", "epochJd must be a finite Julian TDB date")
+		return
+	}
+	if req.Frame == "" {
+		req.Frame = "ECLIPJ2000"
+	}
+	if req.Frame != "ECLIPJ2000" {
+		s.error(w, http.StatusBadRequest, "unsupported_frame", "only ECLIPJ2000 is supported")
+		return
+	}
+	allowApproximate, err := precisionMode(req.Precision)
+	if err != nil {
+		s.error(w, http.StatusBadRequest, "invalid_precision", err.Error())
+		return
+	}
+	requestedPrecision := "exact"
+	if allowApproximate {
+		requestedPrecision = "approximate"
+	}
+
+	catalogBodies := make(map[string]catalog.Body, len(ids))
+	unknownIDs := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if body, ok := s.catalog.Get(id); ok {
+			catalogBodies[id] = body
+		} else {
+			unknownIDs = append(unknownIDs, id)
+		}
+	}
+	inventoryRows := make(map[string]json.RawMessage)
+	if len(unknownIDs) > 0 && s.inventory != nil {
+		inventoryRows, err = s.inventory.GetMany(r.Context(), unknownIDs)
+		if err != nil {
+			if r.Context().Err() != nil {
+				s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
+			} else {
+				s.error(w, http.StatusUnprocessableEntity, "inventory_unavailable", err.Error())
+			}
+			return
+		}
+	}
+	records := make(map[string]inventory.Record, len(inventoryRows))
+	operationalIDs := make([]string, 0, len(ids))
+	operationalSeen := make(map[string]struct{}, len(ids))
+	addOperational := func(id string) {
+		if _, ok := operationalSeen[id]; !ok {
+			operationalSeen[id] = struct{}{}
+			operationalIDs = append(operationalIDs, id)
+		}
+	}
+	for _, id := range ids {
+		if body, ok := catalogBodies[id]; ok {
+			if body.Availability == catalog.AvailableOperational {
+				addOperational(id)
+			}
+			continue
+		}
+		raw, ok := inventoryRows[id]
+		if !ok {
+			continue
+		}
+		record, decodeErr := inventory.Decode(raw)
+		if decodeErr != nil {
+			s.error(w, http.StatusUnprocessableEntity, "invalid_source_record", decodeErr.Error())
+			return
+		}
+		records[id] = record
+		if record.NAIFID != 0 {
+			catalogID := "naif:" + strconv.Itoa(record.NAIFID)
+			if body, ok := s.catalog.Get(catalogID); ok && body.Availability == catalog.AvailableOperational {
+				addOperational(catalogID)
+			}
+		}
+	}
+	operationalStates, operationalFound, err := s.catalog.OperationalStates(operationalIDs, req.EpochJD)
+	if err != nil {
+		s.error(w, http.StatusUnprocessableEntity, "state_unavailable", err.Error())
+		return
+	}
+	response := currentStatesResponse{
+		APIVersion:            catalog.APIVersion,
+		CatalogVersion:        s.catalog.Version(),
+		CatalogManifestSHA256: s.catalog.ManifestHash(),
+		EpochJD:               req.EpochJD,
+		TimeScale:             "TDB",
+		Frame:                 req.Frame,
+		DistanceUnit:          "km",
+		VelocityUnit:          "km/s",
+		StateLayout:           "row-major-[x,y,z,vx,vy,vz]",
+		StateStride:           6,
+		IDs:                   make([]string, 0, len(ids)),
+		Availability:          make([]catalog.Availability, 0, len(ids)),
+		Precision:             make([]string, 0, len(ids)),
+		Source:                make([]string, 0, len(ids)),
+		DatasetVersion:        make([]string, 0, len(ids)),
+		Model:                 make([]string, 0, len(ids)),
+		CenterIDs:             make([]string, 0, len(ids)),
+		ValidityStartET:       make([]float64, 0, len(ids)),
+		ValidityEndET:         make([]float64, 0, len(ids)),
+		ValidityPresent:       make([]bool, 0, len(ids)),
+		StateEvidence:         make([]string, 0, len(ids)),
+		EvidenceWindowStartET: make([]float64, 0, len(ids)),
+		EvidenceWindowEndET:   make([]float64, 0, len(ids)),
+		EvidenceWindowPresent: make([]bool, 0, len(ids)),
+		MissingReason:         make([]string, 0, len(ids)),
+		IdentityStatus:        make([]string, 0, len(ids)),
+		SourceRecord:          make([]bool, 0, len(ids)),
+		StatePresent:          make([]bool, 0, len(ids)),
+		StateValues:           make([]float64, 0, len(ids)*6),
+	}
+	if s.inventory != nil {
+		response.InventoryManifestSHA256 = s.inventory.ManifestHash()
+	}
+	for _, id := range ids {
+		if err := r.Context().Err(); err != nil {
+			s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
+			return
+		}
+		row := currentStateRow{ID: id, Availability: catalog.Missing, Precision: requestedPrecision, MissingReason: "unknown-identity"}
+		if body, ok := catalogBodies[id]; ok {
+			row.Source, row.DatasetVersion, row.Model, row.CenterID = body.Source, body.DatasetVersion, body.Model, body.ParentID
+			if finite(body.ValidityStartET) && finite(body.ValidityEndET) && body.ValidityEndET >= body.ValidityStartET {
+				row.ValidityStartET, row.ValidityEndET, row.ValidityPresent = body.ValidityStartET, body.ValidityEndET, true
+			}
+			switch body.Availability {
+			case catalog.AvailableOperational:
+				if state, found := operationalStates[id]; operationalFound[id] && found {
+					row.Availability, row.Precision, row.State, row.StateEvidence = catalog.AvailableOperational, "exact", &state, "catalog-kernel"
+					row.EvidenceWindowStartET, row.EvidenceWindowEndET, row.EvidenceWindowPresent = body.ValidityStartET, body.ValidityEndET, row.ValidityPresent
+				} else {
+					row.MissingReason = "kernel-coverage-gap"
+				}
+			case catalog.AvailableFallback:
+				if body.Elements == nil {
+					row.MissingReason = "no-supported-state-model"
+				} else if allowApproximate {
+					state, propagateErr := science.PropagateBoundElliptic(r.Context(), science.Elements{SemiMajorAxisAU: body.Elements.SemiMajorAxisAU, Eccentricity: body.Elements.Eccentricity, InclinationDeg: body.Elements.InclinationDeg, AscendingNodeDeg: body.Elements.AscendingNodeDeg, ArgPeriapsisDeg: body.Elements.ArgPeriapsisDeg, MeanAnomalyDeg: body.Elements.MeanAnomalyDeg, MeanMotionDegPerDay: body.Elements.MeanMotionDegPerDay}, body.EpochJD, req.EpochJD)
+					if propagateErr != nil {
+						s.error(w, http.StatusUnprocessableEntity, "state_unavailable", propagateErr.Error())
+						return
+					}
+					row.Availability, row.Precision, row.State, row.StateEvidence = catalog.AvailableFallback, "approximate", &catalog.State{Position: catalog.Vec3{X: state.Position.X, Y: state.Position.Y, Z: state.Position.Z}, Velocity: catalog.Vec3{X: state.Velocity.X, Y: state.Velocity.Y, Z: state.Velocity.Z}}, "source-elements-approximation"
+				} else {
+					row.MissingReason = "approximate-model-requires-explicit-opt-in"
+				}
+			case catalog.Missing:
+				if body.MissingReason != "" {
+					row.MissingReason = body.MissingReason
+				} else {
+					row.MissingReason = "no-supported-state-model"
+				}
+			}
+		} else if record, ok := records[id]; ok {
+			row.SourceRecord, row.Source, row.IdentityStatus, row.CenterID = true, record.Source, record.IdentityStatus, record.ParentID
+			if record.Orbit != nil {
+				row.CenterID = record.Orbit.Center
+			}
+			result, resolveErr := s.resolveInventoryStateWithOperational(r.Context(), record, req.EpochJD, allowApproximate, operationalStates, operationalFound)
+			if resolveErr != nil {
+				s.error(w, http.StatusUnprocessableEntity, "state_unavailable", resolveErr.Error())
+				return
+			}
+			row.Availability, row.Model, row.MissingReason, row.State, row.StateEvidence = result.Availability, result.Model, result.MissingReason, result.State, result.Evidence
+			if result.State != nil {
+				row.Precision = map[bool]string{true: "approximate", false: "exact"}[allowApproximate]
+				if result.Availability != catalog.AvailableFallback {
+					row.Precision = "exact"
+				}
+			}
+			if result.EvidenceWindow != nil {
+				row.EvidenceWindowStartET, row.EvidenceWindowEndET, row.EvidenceWindowPresent = result.EvidenceWindow["startEt"], result.EvidenceWindow["endEt"], true
+				row.ValidityStartET, row.ValidityEndET, row.ValidityPresent = row.EvidenceWindowStartET, row.EvidenceWindowEndET, true
+			}
+		}
+		response.IDs = append(response.IDs, row.ID)
+		response.Availability = append(response.Availability, row.Availability)
+		response.Precision = append(response.Precision, row.Precision)
+		response.Source = append(response.Source, row.Source)
+		response.DatasetVersion = append(response.DatasetVersion, row.DatasetVersion)
+		response.Model = append(response.Model, row.Model)
+		response.CenterIDs = append(response.CenterIDs, row.CenterID)
+		response.ValidityStartET = append(response.ValidityStartET, row.ValidityStartET)
+		response.ValidityEndET = append(response.ValidityEndET, row.ValidityEndET)
+		response.ValidityPresent = append(response.ValidityPresent, row.ValidityPresent)
+		response.StateEvidence = append(response.StateEvidence, row.StateEvidence)
+		response.EvidenceWindowStartET = append(response.EvidenceWindowStartET, row.EvidenceWindowStartET)
+		response.EvidenceWindowEndET = append(response.EvidenceWindowEndET, row.EvidenceWindowEndET)
+		response.EvidenceWindowPresent = append(response.EvidenceWindowPresent, row.EvidenceWindowPresent)
+		response.MissingReason = append(response.MissingReason, row.MissingReason)
+		response.IdentityStatus = append(response.IdentityStatus, row.IdentityStatus)
+		response.SourceRecord = append(response.SourceRecord, row.SourceRecord)
+		if row.State != nil && finiteState(*row.State) {
+			response.StatePresent = append(response.StatePresent, true)
+			response.StateValues = appendFlatState(response.StateValues, *row.State)
+		} else {
+			response.StatePresent = append(response.StatePresent, false)
+			response.StateValues = append(response.StateValues, 0, 0, 0, 0, 0, 0)
+		}
+	}
+	s.jsonLimited(w, http.StatusOK, response, maxCurrentStateResponseBytes)
+}
+
 func (s *Server) trajectory(w http.ResponseWriter, r *http.Request) {
 	var req trajectoryRequest
 	dec := json.NewDecoder(io.LimitReader(r.Body, maxBodyBytes))
@@ -684,4 +999,20 @@ func (s *Server) json(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func (s *Server) jsonLimited(w http.ResponseWriter, status int, v any, limit int) {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		s.error(w, http.StatusInternalServerError, "encode_response", "response could not be encoded")
+		return
+	}
+	if len(raw) > limit {
+		s.error(w, http.StatusRequestEntityTooLarge, "response_too_large", "response exceeds the configured byte limit")
+		return
+	}
+	raw = append(raw, '\n')
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write(raw)
 }

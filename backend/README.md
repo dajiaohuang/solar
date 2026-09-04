@@ -20,3 +20,9 @@ accumulate an unbounded work queue. Reproduce the measured cold/warm, batch,
 long-trajectory, compact-state transport, mixed-load, RSS and profile evidence
 with the commands in
 [`BENCHMARKS.md`](../BENCHMARKS.md).
+
+For one shared TDB epoch, `POST /v1/current-states` accepts up to 512 unique
+catalog or source IDs and returns a compact columnar JSON envelope suitable for
+typed-array clients. Source rows are grouped by shard, while operational SPK
+center-chain work is memoized per epoch and solution-kernel pool. The request
+is cancellable and both body and response sizes are bounded.

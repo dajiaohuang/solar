@@ -62,6 +62,21 @@ is an explicit opt-in for a bounded two-body source-element model; it is never
 reported as exact. A known identity without an exact state returns HTTP 200 with
 `availability: "missing"` and a machine-readable reason.
 
+`POST /v1/current-states` resolves one shared TDB Julian epoch for 1–512 unique
+catalog or source IDs. The request is bounded by the JSON body limit and the
+response is capped at 8 MiB; a saturated scientific worker pool fails fast with
+`429 overloaded`. The response is compact columnar JSON: `ids` and each
+parallel metadata array use the same order, while `stateValues` is a flat
+row-major `[x,y,z,vx,vy,vz]` numeric array with `statePresent` marking rows that
+contain a state (missing rows are zero-filled). Per-ID arrays retain
+`availability`, `precision`, `source`, `datasetVersion`, `model`, `centerIds`,
+validity/evidence windows, `missingReason`, and source identity status. The
+envelope includes catalog and inventory manifest SHA-256 values, TDB,
+ECLIPJ2000, km and km/s. Exact rows use the same SPK/snapshot resolver as the
+single-state endpoint; source-element fallback remains explicit opt-in and is
+never labelled exact. Unknown IDs remain in order as `missing` with
+`missingReason: "unknown-identity"` so mixed selections are not shifted.
+
 `GET /v1/bodies/{id}` returns one catalog record. Unknown IDs are a 404; a
 known source target without local data is a 200 catalog record with
 `availability: "missing"`.

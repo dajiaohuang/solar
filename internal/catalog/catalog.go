@@ -279,51 +279,108 @@ func (c *Catalog) Page(query string, offset, limit int) []Body {
 }
 
 // OperationalState resolves one source-kernel state and its center chain at a
-// TDB Julian epoch. Dependency-only kernels are usable only through an
-// explicit solutionKernelIds pool; unrelated source pools are never mixed.
+// TDB Julian epoch. It delegates to the batch resolver so single and batch
+// requests share exactly the same root selection and center-chain semantics.
 func (c *Catalog) OperationalState(id string, jd float64) (State, bool, error) {
-	b, ok := c.byID[id]
-	if !ok || b.NAIFID == 0 || len(c.byTarget) == 0 || !validFloat(jd) {
-		return State{}, false, nil
+	states, found, err := c.OperationalStates([]string{id}, jd)
+	return states[id], found[id], err
+}
+
+// OperationalStates resolves several targets at one TDB epoch. Kernel
+// evaluation is memoized by target and solution-kernel pool, so sibling bodies
+// sharing a center or a manifest solution set do not repeat the same work.
+// Results retain input IDs only when an exact operational state is available.
+func (c *Catalog) OperationalStates(ids []string, jd float64) (map[string]State, map[string]bool, error) {
+	states := make(map[string]State, len(ids))
+	found := make(map[string]bool, len(ids))
+	if !validFloat(jd) || len(c.byTarget) == 0 {
+		return states, found, nil
 	}
 	et := (jd - 2451545.0) * 86400
-	var root *kernelBinding
-	for n := len(c.byTarget[b.NAIFID]) - 1; n >= 0; n-- {
-		candidate := c.byTarget[b.NAIFID][n]
+	cache := make(map[operationalCacheKey]operationalCacheEntry, len(ids)*2)
+	for _, id := range ids {
+		b, ok := c.byID[id]
+		if !ok || b.NAIFID == 0 {
+			continue
+		}
+		root, err := c.operationalRoot(b.NAIFID, et)
+		if err != nil {
+			return nil, nil, err
+		}
+		if root == nil {
+			continue
+		}
+		allowed, pool := operationalPool(root)
+		st, ok, err := c.resolveOperationalCached(b.NAIFID, et, allowed, pool, cache, map[int]bool{})
+		if err != nil {
+			return nil, nil, err
+		}
+		if ok {
+			states[id] = State{Position: toEcliptic(st.Position, st.Frame), Velocity: toEcliptic(st.Velocity, st.Frame)}
+			found[id] = true
+		}
+	}
+	return states, found, nil
+}
+
+type operationalCacheKey struct {
+	target int
+	pool   string
+}
+
+type operationalCacheEntry struct {
+	state spk.State
+	found bool
+	err   error
+}
+
+func (c *Catalog) operationalRoot(target int, et float64) (*kernelBinding, error) {
+	for n := len(c.byTarget[target]) - 1; n >= 0; n-- {
+		candidate := c.byTarget[target][n]
 		if candidate.dependencyOnly {
 			continue
 		}
-		if _, found, err := candidate.kernel.Evaluate(b.NAIFID, et); err != nil {
-			return State{}, false, err
+		if _, found, err := candidate.kernel.Evaluate(target, et); err != nil {
+			return nil, err
 		} else if found {
-			root = candidate
-			break
+			return candidate, nil
 		}
 	}
-	if root == nil {
-		return State{}, false, nil
-	}
-	var allowed map[string]bool
-	if len(root.solutionIDs) > 0 {
-		allowed = make(map[string]bool, len(root.solutionIDs)+1)
-		for _, x := range root.solutionIDs {
-			allowed[x] = true
-		}
-		allowed[root.id] = true
-	}
-	st, found, err := c.resolveOperational(b.NAIFID, et, allowed, map[int]bool{})
-	if !found || err != nil {
-		return State{}, found, err
-	}
-	return State{Position: toEcliptic(st.Position, st.Frame), Velocity: toEcliptic(st.Velocity, st.Frame)}, true, nil
+	return nil, nil
 }
 
-func (c *Catalog) resolveOperational(target int, et float64, allowed map[string]bool, visiting map[int]bool) (spk.State, bool, error) {
+func operationalPool(root *kernelBinding) (map[string]bool, string) {
+	if len(root.solutionIDs) == 0 {
+		return nil, ""
+	}
+	allowed := make(map[string]bool, len(root.solutionIDs)+1)
+	for _, id := range root.solutionIDs {
+		allowed[id] = true
+	}
+	allowed[root.id] = true
+	return allowed, root.id + "\x00" + strings.Join(root.solutionIDs, "\x00")
+}
+
+func (c *Catalog) resolveOperationalCached(target int, et float64, allowed map[string]bool, pool string, cache map[operationalCacheKey]operationalCacheEntry, visiting map[int]bool) (spk.State, bool, error) {
+	key := operationalCacheKey{target: target, pool: pool}
+	if cache != nil {
+		if entry, ok := cache[key]; ok {
+			return entry.state, entry.found, entry.err
+		}
+	}
 	if target == 0 {
-		return spk.State{Center: 0, Frame: 17}, true, nil
+		st := spk.State{Center: 0, Frame: 17}
+		if cache != nil {
+			cache[key] = operationalCacheEntry{state: st, found: true}
+		}
+		return st, true, nil
 	}
 	if visiting[target] {
-		return spk.State{}, false, fmt.Errorf("cyclic SPK center chain")
+		err := fmt.Errorf("cyclic SPK center chain")
+		if cache != nil {
+			cache[key] = operationalCacheEntry{err: err}
+		}
+		return spk.State{}, false, err
 	}
 	visiting[target] = true
 	defer delete(visiting, target)
@@ -338,25 +395,47 @@ func (c *Catalog) resolveOperational(target int, et float64, allowed map[string]
 		}
 		st, found, err := binding.kernel.Evaluate(target, et)
 		if err != nil {
+			if cache != nil {
+				cache[key] = operationalCacheEntry{err: err}
+			}
 			return spk.State{}, false, err
 		}
 		if !found {
 			continue
 		}
-		center, centerFound, err := c.resolveOperational(st.Center, et, allowed, visiting)
+		center, centerFound, err := c.resolveOperationalCached(st.Center, et, allowed, pool, cache, visiting)
 		if err != nil {
+			if cache != nil {
+				cache[key] = operationalCacheEntry{err: err}
+			}
 			return spk.State{}, false, err
 		}
 		if !centerFound {
+			if cache != nil {
+				cache[key] = operationalCacheEntry{}
+			}
 			return spk.State{}, false, nil
 		}
 		st.Position = addSPK(center.Position, convertFrame(st.Position, st.Frame))
 		st.Velocity = addSPK(center.Velocity, convertFrame(st.Velocity, st.Frame))
 		st.Frame = 17
-		st.Center = 0
+		if cache != nil {
+			cache[key] = operationalCacheEntry{state: st, found: true}
+		}
 		return st, true, nil
 	}
+	if cache != nil {
+		cache[key] = operationalCacheEntry{}
+	}
 	return spk.State{}, false, nil
+}
+
+func (c *Catalog) resolveOperational(target int, et float64, allowed map[string]bool, visiting map[int]bool) (spk.State, bool, error) {
+	st, found, err := c.resolveOperationalCached(target, et, allowed, "", nil, visiting)
+	if found {
+		st.Center = 0
+	}
+	return st, found, err
 }
 func convertFrame(v spk.Vec3, frame int) spk.Vec3 {
 	if frame == 17 {
