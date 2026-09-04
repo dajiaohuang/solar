@@ -305,6 +305,33 @@ test('applies a reproducible story scene with the requested frame and view', asy
   await expect(page.locator('.measure-ribbon select').nth(1)).toHaveValue('saturn')
 })
 
+test('loads resolved TNO primary centers lazily and keeps Makemake coverage explicit', async ({ page }, testInfo) => {
+  test.setTimeout(60_000)
+  const requests: string[] = [], errors: string[] = []
+  page.on('request', request => requests.push(request.url()))
+  page.on('pageerror', error => errors.push(error.message))
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&page=explorer&bodies=earth&ref=sun&lang=en')
+  await page.waitForLoadState('networkidle')
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
+  expect(requests.filter(url => url.includes('/tnosat-'))).toEqual([])
+  await page.goto('./?v=4&page=explorer&bodies=eris,haumea,makemake&ref=sun&jd=2461222.5&zoom=0.15&lang=en')
+  await page.waitForLoadState('networkidle')
+  const status = page.getByTestId('ephemeris-status')
+  await expect(status.locator('summary')).toContainText('2/3', { timeout: 30_000 })
+  await status.locator('summary').click()
+  await expect(status).toContainText('makemake')
+  await expect(status.getByRole('alert')).toHaveCount(0)
+  // The main resolver and trajectory worker each load the same pinned assets.
+  const tnoRequests = requests.filter(url => url.includes('/tnosat-'))
+  expect(new Set(tnoRequests).size).toBe(2)
+  expect(tnoRequests.length).toBeLessThanOrEqual(4)
+  expect(requests.filter(url => /catalog-sample-/.test(url))).toEqual([])
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath('tno-primary-centers.png'), fullPage: true })
+  expect(errors).toEqual([])
+})
+
 test('offers a complete reproducible observation deck on desktop and mobile', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=3&page=explorer&lang=en')
@@ -517,8 +544,10 @@ test('routes legacy home URLs to the deck and lets visitors reopen the tutorial'
 
 test('offers a first-run choice and finishes the tutorial on the deck', async ({ page }) => {
   const rendererRequests: string[] = []
+  const kernelRequests: string[] = []
   page.on('request', (request) => {
     if (request.url().includes('TrajectoryCanvas3D-')) rendererRequests.push(request.url())
+    if (request.url().endsWith('.bsp')) kernelRequests.push(request.url())
   })
   await page.goto('./?v=3&lang=en')
   const choice = page.getByRole('dialog', { name: 'How would you like to begin?' })
@@ -527,6 +556,7 @@ test('offers a first-run choice and finishes the tutorial on the deck', async ({
   await expect(page.locator('.trajectory-3d-placeholder')).toBeVisible()
   await expect(page.getByTestId('trajectory-canvas-3d')).toHaveCount(0)
   expect(rendererRequests).toEqual([])
+  expect(kernelRequests).toEqual([])
   await choice.getByRole('button', { name: 'Start tutorial' }).click()
   const onboarding = page.getByRole('dialog', { name: 'Four controls, then you’re free' })
   await expect(onboarding).toBeVisible()

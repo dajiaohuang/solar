@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { cropSpk, inspectSpk } from '../../scripts/crop-spk.mjs'
 import { SpkKernel } from '../../src/engine/ephemeris/spk'
+import { readFileSync } from 'node:fs'
+import reference from '../fixtures/spk21-synthetic.json'
 
 function syntheticSource(options: { interval?: number; recordSize?: number } = {}) {
   const buffer = Buffer.alloc(4 * 1024), v = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength)
@@ -33,6 +35,8 @@ function syntheticType21Source(count = 205, corruptDirectory = false) {
   for (let record = 0; record < count; record++) {
     const offset = at(startAddress + record * dlsize)
     for (let i = 0; i < dlsize; i++) v.setFloat64(offset + i * 8, record * 1000 + i, true)
+    v.setFloat64(offset + (4 * maxdim + 7) * 8, 3, true)
+    for (let axis = 0; axis < 3; axis++) v.setFloat64(offset + (4 * maxdim + 8 + axis) * 8, 2, true)
   }
   const epochStart = startAddress + count * dlsize
   for (let index = 0; index < count; index++) v.setFloat64(at(epochStart + index), 1000 + index, true)
@@ -42,6 +46,36 @@ function syntheticType21Source(count = 205, corruptDirectory = false) {
 }
 
 describe('crop-spk', () => {
+  it('retains original type 21 record bytes and CSPICE states across directory boundaries', async () => {
+    const bytes = readFileSync('tests/fixtures/spk21-synthetic.bsp')
+    const source = { size: bytes.length, identity: {}, read: async (start: number, length: number) => bytes.subarray(start, start + length) }
+    const original = new SpkKernel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
+    for (const count of [99, 100, 101, 200]) {
+      const target = -210006, startEt = 1000, endEt = count * 1000
+      const result = await cropSpk(source, { startEt, endEt, targets: [target] })
+      const cropped = new SpkKernel(result.buffer.buffer.slice(result.buffer.byteOffset, result.buffer.byteOffset + result.buffer.byteLength))
+      const before = original.segments.find(s => s.target === target)!, after = cropped.segments[0]
+      expect(after.recordCount).toBe(count)
+      expect(result.buffer.subarray((after.startAddress - 1) * 8, (after.startAddress - 1 + count * after.recordSize!) * 8)).toEqual(bytes.subarray((before.startAddress - 1) * 8, (before.startAddress - 1 + count * before.recordSize!) * 8))
+      for (const sample of reference.samples.filter(s => s.target === target && s.et >= startEt && s.et <= endEt)) {
+        const state = cropped.evaluate(target, sample.et)!
+        const values = [state.position.x, state.position.y, state.position.z, state.velocity.x, state.velocity.y, state.velocity.z]
+        values.forEach((value, axis) => expect(Math.abs(value - sample.state[axis])).toBeLessThanOrEqual(axis < 3 ? 1e-7 : 1e-14))
+      }
+      expect(cropped.evaluate(target, startEt - 1e-6)).toBeNull()
+      expect(cropped.evaluate(target, endEt + 1e-6)).toBeNull()
+    }
+  })
+  it('rejects malformed copied type 21 lines before publishing a crop', async () => {
+    const original = syntheticType21Source()
+    const source = { ...original, read: async (start: number, length: number) => {
+      const bytes = Buffer.from(await original.read(start, length))
+      const badStep = 385 * 8
+      if (start <= badStep && start + length > badStep) bytes.writeDoubleLE(0, badStep - start)
+      return bytes
+    } }
+    await expect(cropSpk(source, { startEt: 1000, endEt: 1001 })).rejects.toThrow(/step size/)
+  })
   it('retains complete original records and emits a readable DAF/SPK', async () => {
     const result = await cropSpk(syntheticSource(), { startEt: 5, endEt: 15 })
     const arrayBuffer = result.buffer.buffer.slice(result.buffer.byteOffset, result.buffer.byteOffset + result.buffer.byteLength)

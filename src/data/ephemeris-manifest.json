@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "jpl-spk-2020-01-01-2031-01-01-v1",
-  "contract": "Original SPK type 2/3 records; no refitting; geometric states; body-center IDs; TDB seconds; source model effects are not applied twice.",
+  "contract": "Original SPK type 2/3/21 records; no refitting; geometric states; body-center IDs; TDB seconds; source model effects are not applied twice.",
   "files": [
     {
       "id": "de440s-2000-01-01-2051-01-01",
@@ -1134,6 +1134,46 @@
         "bytes": 645727232,
         "etag": "\"6064e842-267d0400\"",
         "lastModified": "Wed, 31 Mar 2021 21:23:14 GMT"
+      },
+      "core": false
+    },
+    {
+      "id": "tnosat-eris-v001-2020-01-01-2030-01-02",
+      "path": "tnosat-eris-v001-2020-01-01-2030-01-02.bsp",
+      "sha256": "88ddef7e5440b7c0232e0775e6d05003c50792e6335d260f9fe0931c19724308",
+      "bytes": 29412352,
+      "targets": [
+        920136199,
+        20136199
+      ],
+      "startEt": 631108800,
+      "endEt": 946814400,
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20136199_jpl080_20220908.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20136199_jpl080_20220908.bsp",
+        "bytes": 175898624,
+        "etag": "\"631a6afd-a7c0000\"",
+        "lastModified": "Thu, 08 Sep 2022 22:21:49 GMT"
+      },
+      "core": false
+    },
+    {
+      "id": "tnosat-haumea-v001b-2020-01-01-2030-01-02",
+      "path": "tnosat-haumea-v001b-2020-01-01-2030-01-02.bsp",
+      "sha256": "9232ef33ccbed5c96645a2e83be73ddb20fd1d563f9657befefbaca8a8631ed4",
+      "bytes": 29413376,
+      "targets": [
+        920136108,
+        20136108
+      ],
+      "startEt": 631108800,
+      "endEt": 946814400,
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001b_20136108_jpl110_20221014.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001b_20136108_jpl110_20221014.bsp",
+        "bytes": 263605248,
+        "etag": "\"6349fbc3-fb64c00\"",
+        "lastModified": "Sat, 15 Oct 2022 00:16:03 GMT"
       },
       "core": false
     }

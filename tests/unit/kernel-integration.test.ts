@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { majorBodies, majorBodiesById } from '../../src/data/majorBodies'
 import seeds from '../../src/data/ephemerisBodies.json'
 import { bodyNaifId } from '../../src/data/ephemerisTargets'
-import { EPHEMERIS_MANIFEST, installKernel, kernelCoverage, kernelStateForBody, kernelsForWindow, loadedKernels } from '../../src/engine/ephemeris/kernelStore'
+import { EPHEMERIS_MANIFEST, installKernel, kernelCoverage, kernelStateForBody, kernelsForWindow, loadedKernels, kernelFilesForBodies } from '../../src/engine/ephemeris/kernelStore'
 import { createKernelResolver } from '../../src/engine/ephemeris/kernelPool'
 import { currentObservation, currentOsculatingElements } from '../../src/engine/ephemeris/diagnostics'
 import { utcJulianDayToEt } from '../../src/engine/ephemeris/timeScales'
@@ -20,9 +20,24 @@ beforeAll(() => {
 })
 
 describe('shared physical ephemeris integration', () => {
-  it('covers 63 actual selectable body centers, not mislabeled planetary barycenters', () => {
-    expect(majorBodies.filter((entry) => kernelCoverage(entry, jd).model === 'jpl-spk')).toHaveLength(63)
-    expect(kernelCoverage(body('eris'), jd).model).toBe('approximate-fallback')
+  it('loads complete TNO center chains only when those bodies are requested', () => {
+    const tno = EPHEMERIS_MANIFEST.files.filter(file => file.id.startsWith('tnosat-'))
+    expect(tno).toHaveLength(2)
+    const initial = kernelFilesForBodies([body('earth')])
+    for (const file of tno) {
+      expect(file.core).toBe(false)
+      expect(initial).not.toContain(file.id)
+      expect(kernelFilesForBodies([body(file.id.includes('eris') ? 'eris' : 'haumea')])).toContain(file.id)
+      expect(file.targets).toHaveLength(2)
+    }
+    const late = 2463000.5
+    expect(kernelCoverage(body('haumea'), late).model).toBe('approximate-fallback')
+  })
+  it('covers 65 actual selectable body centers, not mislabeled system barycenters', () => {
+    expect(majorBodies.filter((entry) => kernelCoverage(entry, jd).model === 'jpl-spk')).toHaveLength(65)
+    expect(kernelCoverage(body('makemake'), jd).model).toBe('approximate-fallback')
+    expect(bodyNaifId(body('eris'))).toBe(920136199)
+    expect(bodyNaifId(body('haumea'))).toBe(920136108)
     const pool = createKernelResolver(loadedKernels(), utcJulianDayToEt(jd))
     const mars = kernelStateForBody(body('mars'), jd)!
     expect(mars).toEqual(pool.relative(499, 10))
@@ -40,7 +55,7 @@ describe('shared physical ephemeris integration', () => {
   })
 
   it('returns shared resolver positions and analytic SPK velocities in app units', () => {
-    for (const id of ['earth', 'moon', 'mars', 'naif:401', 'jupiter', 'io', 'ceres', 'asteroid:2']) {
+    for (const id of ['earth', 'moon', 'mars', 'naif:401', 'jupiter', 'io', 'ceres', 'asteroid:2', 'eris', 'haumea']) {
       const state = kernelStateForBody(body(id), jd)!
       const position = createBodyPositionResolver(majorBodiesById, jd)(id)
       const velocity = createBodyVelocityResolver(majorBodiesById, jd)(id)
@@ -69,7 +84,8 @@ describe('shared physical ephemeris integration', () => {
     expect(geometric.lightTimeSeconds).toBe(0)
     expect(apparent.lightTimeSeconds).toBeGreaterThan(.01)
     expect(apparent.position).not.toEqual(geometric.position)
-    expect(currentObservation(body('eris'), body('earth'), jd, 'light-time')).toBeNull()
+    expect(currentObservation(body('makemake'), body('earth'), jd, 'light-time')).toBeNull()
+    expect(currentObservation(body('eris'), body('earth'), jd, 'light-time')!.converged).toBe(true)
     expect(currentObservation(body('moon'), body('earth'), jd, 'light-time')!.converged).toBe(true)
   })
 })

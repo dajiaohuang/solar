@@ -1,4 +1,4 @@
-// Repackage complete original Chebyshev records, never resample or fit states.
+// Repackage complete original type 2/3/21 records, never resample or fit states.
 // DAF/SPK layout: https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/spk.html
 import { createHash } from 'node:crypto'
 import { mkdir, open, writeFile } from 'node:fs/promises'
@@ -123,7 +123,7 @@ export async function cropSpk(source, { startEt, endEt, targets }) {
       const dlsize = 4 * maxdim + 11
       const directoryCount = Math.floor(count / 100)
       const expectedWords = count * dlsize + count + directoryCount + 2
-      if (!Number.isInteger(maxdim) || maxdim < 15 || maxdim > 25 || !Number.isInteger(count) || count < 1 || !Number.isSafeInteger(expectedWords) || expectedWords !== segment.endAddress - segment.startAddress + 1 || !Number.isSafeInteger(dlsize)) throw new Error('Invalid type 21 directory')
+      if (!Number.isInteger(maxdim) || maxdim < 15 || maxdim > 25 || !Number.isInteger(count) || count < 1 || count > 1e7 || !Number.isSafeInteger(expectedWords) || expectedWords !== segment.endAddress - segment.startAddress + 1 || !Number.isSafeInteger(dlsize)) throw new Error('Invalid type 21 directory')
       const epochStart = segment.startAddress - 1 + count * dlsize
       const epochBytes = count * 8
       if (!Number.isSafeInteger(epochStart) || !Number.isSafeInteger(epochBytes) || epochBytes <= 0) throw new Error('Invalid type 21 directory')
@@ -157,6 +157,18 @@ export async function cropSpk(source, { startEt, endEt, targets }) {
       const rawBytes = recordBytes + selectedEpochBytes + (selectedDirectoryCount + 2) * 8
       if (!Number.isSafeInteger(rawBytes) || recordBytes > MAX_RANGE_BYTES || dataBytes + rawBytes + 32 > MAX_OUTPUT_BYTES - 3 * 1024) throw new Error('Cropped SPK exceeds safety limit')
       const raw = await source.read((segment.startAddress - 1 + first * dlsize) * 8, recordBytes)
+      // Fail closed before publishing a crop, not only when the app loads it.
+      for (let record = 0; record < last - first + 1; record++) {
+        const word = index => readDouble(raw, (record * dlsize + index) * 8)
+        for (let index = 0; index < dlsize; index++) if (!Number.isFinite(word(index))) throw new Error('Invalid type 21 difference line')
+        const kqmax1 = word(4 * maxdim + 7)
+        if (!Number.isInteger(kqmax1) || kqmax1 < 3 || kqmax1 > maxdim + 1) throw new Error('Invalid type 21 integration order')
+        for (let axis = 0; axis < 3; axis++) {
+          const order = word(4 * maxdim + 8 + axis)
+          if (!Number.isInteger(order) || order < 0 || order > Math.min(maxdim, kqmax1 - 1)) throw new Error('Invalid type 21 component order')
+        }
+        for (let index = 1; index <= kqmax1 - 2; index++) if (word(index) === 0) throw new Error('Invalid type 21 step size')
+      }
       const data = Buffer.alloc(rawBytes)
       for (let offset = 0; offset < raw.length; offset += 8) data.writeDoubleLE(readDouble(raw, offset), offset)
       let outOffset = raw.length
