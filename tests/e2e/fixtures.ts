@@ -8,13 +8,11 @@ import { backendBodyId } from '../../src/lib/currentStateIdentity'
 const catalogHash = 'a'.repeat(64)
 const source = 'fixture-current-states'
 const datasetVersion = 'fixture-v1'
-const missingId = 'sat:planet:saturn:provisional:S/2009 S1'
-const noKernelIds = new Set([missingId])
 const knownBackendIds = new Set([
   ...Object.entries(BODY_NAIF_IDS).map(([id, naifId]) => backendBodyId({ id, naifId })),
   ...ephemerisBodies.bodies.map(body => backendBodyId(body)),
   ...satelliteCatalog.primaries.map(body => backendBodyId(body)),
-  ...satelliteCatalog.bodies.map(body => backendBodyId(body)),
+  ...satelliteCatalog.bodies.filter(body => body.naifId !== undefined).map(body => backendBodyId(body)),
 ])
 
 function fixtureState(id: string) {
@@ -32,7 +30,7 @@ async function installCurrentStatesBackend(page: Page) {
         timeScale: 'TDB', frame: 'ECLIPJ2000', distanceUnit: 'km', velocityUnit: 'km/s',
         precisionModes: ['exact', 'approximate-opt-in'],
         currentStates: { precision: 'exact-only', stateOriginId: 'naif:0' }, nBody: false,
-        auditIdentities: [{ source, datasetVersion, model: 'spk-original' }, { source, datasetVersion, model: 'unavailable-no-kernel' }],
+        auditIdentities: [{ source, datasetVersion, model: 'spk-original' }],
       },
       limits: { currentStateIDsMax: 512 },
     },
@@ -46,22 +44,20 @@ async function installCurrentStatesBackend(page: Page) {
     const unavailableByEpoch = typeof body.epochJd === 'number' && Math.abs(body.epochJd - 2466154.5) < 0.01
       ? new Set(['naif:506'])
       : typeof body.epochJd === 'number' && Math.abs(body.epochJd - 2460000.5) < 0.01 ? new Set(['naif:920050000', 'naif:120050000']) : new Set<string>()
-    const isKnown = (id: string) => knownBackendIds.has(id) || noKernelIds.has(id)
-    const present = ids.map(id => knownBackendIds.has(id) && !noKernelIds.has(id) && !unavailableByEpoch.has(id))
+    const present = ids.map(id => knownBackendIds.has(id) && !unavailableByEpoch.has(id))
     const coverageGap = ids.map(id => knownBackendIds.has(id) && unavailableByEpoch.has(id))
-    const noKernel = ids.map(id => noKernelIds.has(id))
     await route.fulfill({
       json: {
         apiVersion: 'solar.api/v1', catalogVersion: datasetVersion, catalogManifestSha256: catalogHash,
         epochJd: body.epochJd, timeScale: 'TDB', frame: 'ECLIPJ2000', distanceUnit: 'km', velocityUnit: 'km/s',
         stateLayout: 'row-major-[x,y,z,vx,vy,vz]', stateStride: 6, stateOriginId: 'naif:0', ids,
         availability: present.map(value => value ? 'operational' : 'missing'), precision: ids.map(() => 'exact'),
-        source: ids.map(id => isKnown(id) ? source : ''), datasetVersion: ids.map(id => isKnown(id) ? datasetVersion : ''),
-        model: ids.map((id, index) => present[index] || coverageGap[index] ? 'spk-original' : noKernel[index] ? 'unavailable-no-kernel' : ''),
-        centerIds: ids.map((id, index) => (knownBackendIds.has(id) && !noKernel[index]) ? 'naif:0' : ''),
+        source: ids.map(id => knownBackendIds.has(id) ? source : ''), datasetVersion: ids.map(id => knownBackendIds.has(id) ? datasetVersion : ''),
+        model: ids.map((id, index) => present[index] || coverageGap[index] ? 'spk-original' : ''),
+        centerIds: ids.map((id, index) => (knownBackendIds.has(id) && (present[index] || coverageGap[index])) ? 'naif:0' : ''),
         validityStartEt: ids.map(() => -1e12), validityEndEt: ids.map(() => 1e12), validityPresent: ids.map((id, index) => knownBackendIds.has(id) && (present[index] || coverageGap[index])),
         stateEvidence: present.map(value => value ? 'fixture-kernel' : ''), evidenceWindowStartEt: ids.map(() => -1e12), evidenceWindowEndEt: ids.map(() => 1e12), evidenceWindowPresent: present,
-        missingReason: ids.map((id, index) => present[index] ? '' : noKernel[index] ? 'kernel-not-packaged' : coverageGap[index] ? 'kernel-coverage-gap' : 'unknown-identity'), identityStatus: ids.map(() => ''), sourceRecord: ids.map(() => false), statePresent: present,
+        missingReason: ids.map((id, index) => present[index] ? '' : coverageGap[index] ? 'kernel-coverage-gap' : 'unknown-identity'), identityStatus: ids.map(() => ''), sourceRecord: ids.map(() => false), statePresent: present,
         stateValues: ids.flatMap((id, index) => present[index] ? fixtureState(id) : [0, 0, 0, 0, 0, 0]),
       },
     })

@@ -13,7 +13,7 @@ test('full-Web fixture rejects duplicate IDs and marks unknown identities missin
     const staleAlias = await request(['quaoar'])
     const knownPrimary = await request(['naif:920050000'])
     const coverageGap = await request(['naif:920050000', 'naif:120050000'], 2460000.5)
-    const noKernel = await request(['sat:planet:saturn:provisional:S/2009 S1'])
+    const noInventoryIdentity = await request(['sat:planet:saturn:provisional:S/2009 S1'])
     return {
       duplicateStatus: duplicate.status,
       unknownStatus: unknown.status,
@@ -21,7 +21,7 @@ test('full-Web fixture rejects duplicate IDs and marks unknown identities missin
       staleAliasBody: await staleAlias.json(),
       knownPrimaryBody: await knownPrimary.json(),
       coverageGapBody: await coverageGap.json(),
-      noKernelBody: await noKernel.json(),
+      noInventoryIdentityBody: await noInventoryIdentity.json(),
     }
   })
 
@@ -49,11 +49,11 @@ test('full-Web fixture rejects duplicate IDs and marks unknown identities missin
   expect(result.coverageGapBody.validityPresent).toEqual([true, true])
   expect(result.coverageGapBody.evidenceWindowPresent).toEqual([false, false])
   expect(result.coverageGapBody.statePresent).toEqual([false, false])
-  expect(result.noKernelBody.availability).toEqual(['missing'])
-  expect(result.noKernelBody.source).toEqual(['fixture-current-states'])
-  expect(result.noKernelBody.datasetVersion).toEqual(['fixture-v1'])
-  expect(result.noKernelBody.model).toEqual(['unavailable-no-kernel'])
-  expect(result.noKernelBody.missingReason).toEqual(['kernel-not-packaged'])
-  expect(result.noKernelBody.validityPresent).toEqual([false])
-  expect(result.noKernelBody.evidenceWindowPresent).toEqual([false])
+  expect(result.noInventoryIdentityBody.availability).toEqual(['missing'])
+  expect(result.noInventoryIdentityBody.source).toEqual([''])
+  expect(result.noInventoryIdentityBody.datasetVersion).toEqual([''])
+  expect(result.noInventoryIdentityBody.model).toEqual([''])
+  expect(result.noInventoryIdentityBody.missingReason).toEqual(['unknown-identity'])
+  expect(result.noInventoryIdentityBody.validityPresent).toEqual([false])
+  expect(result.noInventoryIdentityBody.evidenceWindowPresent).toEqual([false])
 })
