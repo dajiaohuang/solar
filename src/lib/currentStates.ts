@@ -10,6 +10,7 @@ export const CURRENT_STATES_STATE_LAYOUT = 'row-major-[x,y,z,vx,vy,vz]'
 export const MAX_CURRENT_STATE_BATCH = 510
 const SHA256 = /^[a-f0-9]{64}$/
 const BACKEND_BUILTIN_ALIASES = new Set(['sun', 'mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'])
+const EXACT_CURRENT_STATE_MODELS = new Set(['spk-original', 'source-kernel-state-at-audit-epoch', 'exact-only', 'unavailable-no-kernel'])
 
 const AVAILABILITIES = new Set(['operational', 'fallback', 'snapshot', 'missing'])
 
@@ -19,7 +20,7 @@ export type BackendCapabilities = {
   manifestSha256: string
   inventoryManifestSha256?: string
   limits: { currentStateIDsMax: number }
-  contract: { timeScale: string; frame: string; distanceUnit: string; velocityUnit: string; precisionModes: string[]; nBody: boolean; auditIdentities: AuditIdentityTuple[] }
+  contract: { timeScale: string; frame: string; distanceUnit: string; velocityUnit: string; precisionModes: string[]; nBody: boolean; currentStates: { precision: 'exact-only'; stateOriginId: 'naif:0' }; auditIdentities: AuditIdentityTuple[] }
 }
 
 export type AuditIdentityTuple = { source: string; datasetVersion: string; model: string }
@@ -120,10 +121,13 @@ export function validateCapabilities(raw: unknown): BackendCapabilities {
     || !Array.isArray(contract.precisionModes) || !contract.precisionModes.includes('exact')
     || !contract.precisionModes.includes('approximate-opt-in')
     || contract.precisionModes.some(mode => mode !== 'exact' && mode !== 'approximate-opt-in')) throw new Error('Unsupported current-state contract')
+  const currentStates = contract.currentStates as Record<string, unknown> | undefined
+  if (!currentStates || currentStates.precision !== 'exact-only' || currentStates.stateOriginId !== 'naif:0') throw new Error('Unsupported current-states endpoint contract')
   const identities = contract.auditIdentities as unknown
   const auditRows = Array.isArray(identities) ? identities as Array<Record<string, unknown>> : []
   if (auditRows.length === 0 || auditRows.some(item => !item || typeof item !== 'object' || typeof item.source !== 'string' || !item.source.trim() || typeof item.datasetVersion !== 'string' || !item.datasetVersion.trim() || typeof item.model !== 'string' || !item.model.trim())) throw new Error('Missing current-state audit identities')
   const auditIdentities = auditRows.map(item => ({ source: item.source as string, datasetVersion: item.datasetVersion as string, model: item.model as string }))
+  if (auditIdentities.some(identity => !EXACT_CURRENT_STATE_MODELS.has(identity.model))) throw new Error('Capabilities advertise a non-exact current-state model')
   const tupleKeys = auditIdentities.map(item => `${item.source}\u0000${item.datasetVersion}\u0000${item.model}`)
   if (new Set(tupleKeys).size !== tupleKeys.length) throw new Error('Duplicate current-state audit identities')
   const limits = value.limits as Record<string, unknown> | undefined
@@ -146,7 +150,8 @@ export function validateCapabilities(raw: unknown): BackendCapabilities {
     contract: {
       timeScale: contract.timeScale as string, frame: contract.frame as string,
       distanceUnit: contract.distanceUnit as string, velocityUnit: contract.velocityUnit as string,
-      precisionModes: contract.precisionModes as string[], nBody: contract.nBody as boolean, auditIdentities,
+      precisionModes: contract.precisionModes as string[], nBody: contract.nBody as boolean,
+      currentStates: { precision: 'exact-only', stateOriginId: 'naif:0' }, auditIdentities,
     } }
 }
 
@@ -196,6 +201,7 @@ export function validateCurrentStates(raw: unknown, capabilities: BackendCapabil
     const datasetVersion = response.datasetVersion![index]
     const model = response.model![index]
     if (typeof datasetVersion !== 'string' || typeof model !== 'string') throw new Error('Invalid current-state model metadata')
+    if (model && !EXACT_CURRENT_STATE_MODELS.has(model)) throw new Error('Current-state response uses a non-exact model')
     if (source || datasetVersion || model) {
       const knownIdentity = capabilities.contract.auditIdentities.some(identity => identity.source === source && identity.datasetVersion === datasetVersion && identity.model === model)
       if (!knownIdentity) throw new Error('Unknown current-state audit identity')

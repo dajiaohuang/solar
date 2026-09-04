@@ -5,6 +5,7 @@ export type ClockSnapshot = {
   isPlaying: boolean
   rateDaysPerSecond: number
   revision: number
+  seekRevision: number
 }
 
 type Listener = () => void
@@ -21,6 +22,7 @@ export class SimulationClock {
   private animationFrame: number | null = null
   private lastPublishedAt = 0
   private revision = 0
+  private seekRevision = 0
   private listeners = new Set<Listener>()
   private readonly publishIntervalMs: number
   private snapshot: ClockSnapshot = {
@@ -28,6 +30,7 @@ export class SimulationClock {
     isPlaying: this.isPlaying,
     rateDaysPerSecond: this.rateDaysPerSecond,
     revision: this.revision,
+    seekRevision: this.seekRevision,
   }
 
   constructor(publishIntervalMs = 125) {
@@ -46,6 +49,7 @@ export class SimulationClock {
   seek(julianDay: number) {
     if (!Number.isFinite(julianDay)) return
     this.julianDay = julianDay
+    this.seekRevision += 1
     this.publish()
   }
 
@@ -111,6 +115,7 @@ export class SimulationClock {
       isPlaying: this.isPlaying,
       rateDaysPerSecond: this.rateDaysPerSecond,
       revision: this.revision,
+      seekRevision: this.seekRevision,
     }
     for (const listener of this.listeners) listener()
   }

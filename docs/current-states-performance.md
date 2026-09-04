@@ -15,8 +15,9 @@ go test ./internal/httpapi -bench BenchmarkCurrentStateWireShapes -benchmem
 ```
 
 The Go benchmark reports columnar JSON wire bytes and allocations for 160,
-294, and 510 rows. Client CPU is measured by the test runner around the
-coalesced request; the client must retain one atomic store commit per complete
-frame set and zero commits for an incomplete set. These are audit metrics, not
-production claims: deployers should repeat them against their backend and
-network profile.
+294, and 510 rows. The focused Web test prints request count, request bytes,
+response bytes, and elapsed client validation/build time for each case. It
+also records one completed publication for each complete response and zero
+publications when any batch fails. The elapsed value is a repeatable test-run
+measurement, not a machine-independent CPU baseline; deployers should repeat
+it against their backend and network profile.

@@ -21,7 +21,7 @@ const epochTdb = utcJulianDayToTdb(epochUtc)
 const capabilities = validateCapabilities({
   apiVersion: 'solar.api/v1', catalogVersion: 'full-1', manifestSha256: hash,
   coverage: { sourceInventory: { manifestSha256: inventoryHash } },
-  contract: { timeScale: 'TDB', frame: 'ECLIPJ2000', distanceUnit: 'km', velocityUnit: 'km/s', precisionModes: ['exact', 'approximate-opt-in'], nBody: false, auditIdentities: [{ source: 'jpl-spk-operational', datasetVersion: 'full-1', model: 'spk-original' }, { source: 'jpl-spk-a', datasetVersion: 'full-1', model: 'spk-original' }, { source: 'jpl-spk-b', datasetVersion: 'full-1', model: 'spk-original' }] },
+  contract: { timeScale: 'TDB', frame: 'ECLIPJ2000', distanceUnit: 'km', velocityUnit: 'km/s', precisionModes: ['exact', 'approximate-opt-in'], currentStates: { precision: 'exact-only', stateOriginId: 'naif:0' }, nBody: false, auditIdentities: [{ source: 'jpl-spk-operational', datasetVersion: 'full-1', model: 'spk-original' }, { source: 'jpl-spk-a', datasetVersion: 'full-1', model: 'spk-original' }, { source: 'jpl-spk-b', datasetVersion: 'full-1', model: 'spk-original' }] },
   limits: { currentStateIDsMax: 512 },
 })
 
@@ -57,15 +57,17 @@ describe('current-state adapter', () => {
 
   it('converts only at the km/AU boundary', () => {
     expect(kmToAu(AU_IN_KM)).toBe(1)
-    expect(sampleCurrentStateEpoch(epochUtc + 0.000001, true)).toBeLessThanOrEqual(epochUtc + 0.000001)
+    expect(sampleCurrentStateEpoch(epochUtc + 0.000001, true)).toBe(epochUtc + 0.000001)
     expect(sampleCurrentStateEpoch(epochUtc, false)).toBe(epochUtc)
   })
 
   it('fails closed on unknown API, audit, units, source and column mismatches', () => {
     expect(() => validateCapabilities({ ...capabilities, apiVersion: 'solar.api/v2' })).toThrow()
+    expect(() => validateCapabilities({ ...capabilities, contract: { ...capabilities.contract, currentStates: { precision: 'approximate-opt-in', stateOriginId: 'naif:0' } } })).toThrow()
     expect(() => validateCapabilities({ ...capabilities, contract: { ...capabilities.contract, precisionModes: ['exact', 'future-mode'] } })).toThrow()
     expect(() => validateCapabilities({ ...capabilities, manifestSha256: 'c'.repeat(64) })).not.toThrow()
     expect(() => validateCurrentStates(response(['earth'], { source: ['unknown'] }), capabilities, epochTdb)).toThrow()
+    expect(() => validateCurrentStates(response(['earth'], { model: ['source-elements-two-body'] }), capabilities, epochTdb)).toThrow()
     expect(() => validateCurrentStates(response(['earth'], { apiVersion: 'solar.api/v2' }), capabilities, epochTdb)).toThrow()
     expect(() => validateCurrentStates(response(['earth'], { stateValues: [1] }), capabilities, epochTdb)).toThrow()
     expect(() => validateCurrentStates(response(['earth'], { distanceUnit: 'AU' }), capabilities, epochTdb)).toThrow()
@@ -104,12 +106,13 @@ describe('current-state adapter', () => {
   it('coalesces same-epoch requests and exercises 160/294/510 payload batches', async () => {
     for (const count of [160, 294, 510]) {
       resetCurrentStatesCaches()
+      const startedAt = performance.now()
       const ids = Array.from({ length: count }, (_, index) => `body:${index}`)
       let calls = 0
       const posts: Array<{ ids: string[]; requestBytes: number; responseBytes: number }> = []
       const fetcher = (async (url: string) => {
         calls += 1
-        if (url.endsWith('/capabilities')) return new Response(JSON.stringify({ apiVersion: 'solar.api/v1', catalogVersion: 'full-1', manifestSha256: hash, contract: { timeScale: 'TDB', frame: 'ECLIPJ2000', distanceUnit: 'km', velocityUnit: 'km/s', precisionModes: ['exact', 'approximate-opt-in'], nBody: false, auditIdentities: [{ source: 'jpl-spk-operational', datasetVersion: 'full-1', model: 'spk-original' }] }, limits: { currentStateIDsMax: 512 } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+        if (url.endsWith('/capabilities')) return new Response(JSON.stringify({ apiVersion: 'solar.api/v1', catalogVersion: 'full-1', manifestSha256: hash, contract: { timeScale: 'TDB', frame: 'ECLIPJ2000', distanceUnit: 'km', velocityUnit: 'km/s', precisionModes: ['exact', 'approximate-opt-in'], currentStates: { precision: 'exact-only', stateOriginId: 'naif:0' }, nBody: false, auditIdentities: [{ source: 'jpl-spk-operational', datasetVersion: 'full-1', model: 'spk-original' }] }, limits: { currentStateIDsMax: 512 } }), { status: 200, headers: { 'Content-Type': 'application/json' } })
         const body = ids
         const encoded = JSON.stringify({ ids: body, epochJd: epochTdb, frame: 'ECLIPJ2000', precision: 'exact' })
         const payload = JSON.stringify(response(ids))
@@ -128,6 +131,10 @@ describe('current-state adapter', () => {
       expect(posts[0].ids).toEqual(ids)
       expect(posts[0].requestBytes).toBeGreaterThan(0)
       expect(posts[0].responseBytes).toBeGreaterThan(0)
+      const clientElapsedMs = performance.now() - startedAt
+      const completedPublications = first.responses.length === 1 && second.responses.length === 1 ? 1 : 0
+      console.info(JSON.stringify({ count, requestCount: posts.length, requestBytes: posts[0].requestBytes, responseBytes: posts[0].responseBytes, clientElapsedMs, completedPublications, failedBatchPublications: 0 }))
+      expect(completedPublications).toBe(1)
     }
   })
 
@@ -135,7 +142,7 @@ describe('current-state adapter', () => {
     resetCurrentStatesCaches()
     let postSignal: AbortSignal | undefined
     const fetcher = (async (url: string, init?: RequestInit) => {
-      if (url.endsWith('/capabilities')) return new Response(JSON.stringify({ apiVersion: 'solar.api/v1', catalogVersion: 'full-1', manifestSha256: hash, contract: { timeScale: 'TDB', frame: 'ECLIPJ2000', distanceUnit: 'km', velocityUnit: 'km/s', precisionModes: ['exact', 'approximate-opt-in'], nBody: false, auditIdentities: [{ source: 'jpl-spk-operational', datasetVersion: 'full-1', model: 'spk-original' }] }, limits: { currentStateIDsMax: 512 } }), { status: 200 })
+      if (url.endsWith('/capabilities')) return new Response(JSON.stringify({ apiVersion: 'solar.api/v1', catalogVersion: 'full-1', manifestSha256: hash, contract: { timeScale: 'TDB', frame: 'ECLIPJ2000', distanceUnit: 'km', velocityUnit: 'km/s', precisionModes: ['exact', 'approximate-opt-in'], currentStates: { precision: 'exact-only', stateOriginId: 'naif:0' }, nBody: false, auditIdentities: [{ source: 'jpl-spk-operational', datasetVersion: 'full-1', model: 'spk-original' }] }, limits: { currentStateIDsMax: 512 } }), { status: 200 })
       postSignal = init?.signal as AbortSignal
       return new Promise<Response>((_, reject) => postSignal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true }))
     }) as typeof fetch
@@ -160,14 +167,16 @@ describe('current-state adapter', () => {
     resetCurrentStatesCaches()
     const ids = Array.from({ length: 1020 }, (_, index) => `body:${index}`)
     let post = 0
+    let completedPublications = 0
     const fetcher = (async (url: string, init?: RequestInit) => {
-      if (url.endsWith('/capabilities')) return new Response(JSON.stringify({ apiVersion: 'solar.api/v1', catalogVersion: 'full-1', manifestSha256: hash, contract: { timeScale: 'TDB', frame: 'ECLIPJ2000', distanceUnit: 'km', velocityUnit: 'km/s', precisionModes: ['exact', 'approximate-opt-in'], nBody: false, auditIdentities: [{ source: 'jpl-spk-operational', datasetVersion: 'full-1', model: 'spk-original' }] }, limits: { currentStateIDsMax: 512 } }), { status: 200 })
+      if (url.endsWith('/capabilities')) return new Response(JSON.stringify({ apiVersion: 'solar.api/v1', catalogVersion: 'full-1', manifestSha256: hash, contract: { timeScale: 'TDB', frame: 'ECLIPJ2000', distanceUnit: 'km', velocityUnit: 'km/s', precisionModes: ['exact', 'approximate-opt-in'], currentStates: { precision: 'exact-only', stateOriginId: 'naif:0' }, nBody: false, auditIdentities: [{ source: 'jpl-spk-operational', datasetVersion: 'full-1', model: 'spk-original' }] }, limits: { currentStateIDsMax: 512 } }), { status: 200 })
       post += 1
       if (post === 1) return new Response(JSON.stringify(response(JSON.parse(String(init?.body)).ids)), { status: 200 })
       return new Response(JSON.stringify({ error: 'second batch failed' }), { status: 500 })
     }) as typeof fetch
-    await expect(loadCurrentStateFrames({ base: 'https://backend.test', ids, epochTdbJd: epochTdb, bodies: [earth], requestedIds: new Map([['earth', 'earth']]), referenceIds: ['earth'], signal: new AbortController().signal, fetcher })).rejects.toThrow('HTTP 500')
+    await expect(loadCurrentStateFrames({ base: 'https://backend.test', ids, epochTdbJd: epochTdb, bodies: [earth], requestedIds: new Map([['earth', 'earth']]), referenceIds: ['earth'], signal: new AbortController().signal, fetcher }).then(() => { completedPublications += 1 })).rejects.toThrow('HTTP 500')
     expect(post).toBe(2)
+    expect(completedPublications).toBe(0)
   })
 
   it('refreshes capabilities and keys response reuse by catalog identity', async () => {
@@ -181,7 +190,7 @@ describe('current-state adapter', () => {
         capabilityCalls += 1
         const version = capabilityCalls === 1 ? 'full-1' : backendVersion
         const manifest = capabilityCalls === 1 ? hash : nextHash
-        return new Response(JSON.stringify({ apiVersion: 'solar.api/v1', catalogVersion: version, manifestSha256: manifest, contract: { timeScale: 'TDB', frame: 'ECLIPJ2000', distanceUnit: 'km', velocityUnit: 'km/s', precisionModes: ['exact', 'approximate-opt-in'], nBody: false, auditIdentities: [{ source: 'jpl-spk-operational', datasetVersion: version, model: 'spk-original' }] }, limits: { currentStateIDsMax: 512 } }), { status: 200 })
+        return new Response(JSON.stringify({ apiVersion: 'solar.api/v1', catalogVersion: version, manifestSha256: manifest, contract: { timeScale: 'TDB', frame: 'ECLIPJ2000', distanceUnit: 'km', velocityUnit: 'km/s', precisionModes: ['exact', 'approximate-opt-in'], currentStates: { precision: 'exact-only', stateOriginId: 'naif:0' }, nBody: false, auditIdentities: [{ source: 'jpl-spk-operational', datasetVersion: version, model: 'spk-original' }] }, limits: { currentStateIDsMax: 512 } }), { status: 200 })
       }
       postCalls += 1
       const second = backendVersion === 'full-2'
@@ -201,7 +210,7 @@ describe('current-state adapter', () => {
     resetCurrentStatesCaches()
     let posts = 0
     const fetcher = (async (url: string) => {
-      if (url.endsWith('/capabilities')) return new Response(JSON.stringify({ apiVersion: 'solar.api/v1', catalogVersion: 'full-1', manifestSha256: hash, contract: { timeScale: 'TDB', frame: 'ECLIPJ2000', distanceUnit: 'km', velocityUnit: 'km/s', precisionModes: ['exact', 'approximate-opt-in'], nBody: false, auditIdentities: [{ source: 'jpl-spk-operational', datasetVersion: 'full-1', model: 'spk-original' }] }, limits: { currentStateIDsMax: 512 } }), { status: 200 })
+      if (url.endsWith('/capabilities')) return new Response(JSON.stringify({ apiVersion: 'solar.api/v1', catalogVersion: 'full-1', manifestSha256: hash, contract: { timeScale: 'TDB', frame: 'ECLIPJ2000', distanceUnit: 'km', velocityUnit: 'km/s', precisionModes: ['exact', 'approximate-opt-in'], currentStates: { precision: 'exact-only', stateOriginId: 'naif:0' }, nBody: false, auditIdentities: [{ source: 'jpl-spk-operational', datasetVersion: 'full-1', model: 'spk-original' }] }, limits: { currentStateIDsMax: 512 } }), { status: 200 })
       posts += 1
       return new Response(JSON.stringify({ error: { code: 'overloaded', message: 'busy' } }), { status: 429, headers: { 'Retry-After': '1' } })
     }) as typeof fetch

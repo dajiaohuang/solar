@@ -24,11 +24,15 @@ const MAX_RESPONSE_CACHE = 16
 // identity mismatch also invalidates this entry immediately (see below).
 const CAPABILITY_TTL_MS = 60_000
 export const CURRENT_STATE_PLAYING_SAMPLE_MS = 500
-const MS_PER_DAY = 86_400_000
 
+// This helper deliberately never quantizes the scientific epoch. Sampling is
+// a wall-clock scheduling concern; every request still carries the latest
+// exact UTC epoch observed by SimulationClock.
 export function sampleCurrentStateEpoch(epochUtcJd: number, isPlaying: boolean) {
+  // Both modes carry the exact epoch; `isPlaying` is consumed to make this
+  // boundary explicit while wall-clock cadence is handled by the hook.
   if (!isPlaying) return epochUtcJd
-  return Math.floor((epochUtcJd * MS_PER_DAY) / CURRENT_STATE_PLAYING_SAMPLE_MS) * CURRENT_STATE_PLAYING_SAMPLE_MS / MS_PER_DAY
+  return epochUtcJd
 }
 
 function apiBase() {
@@ -166,24 +170,31 @@ export async function loadCurrentStateFrames(params: {
   base: string
   ids: string[]
   epochTdbJd: number
+  epochUtcJd?: number
   bodies: CelestialBody[]
   requestedIds: Map<BodyId, string>
   referenceIds: BodyId[]
   signal: AbortSignal
   fetcher?: FetchLike
-}): Promise<{ capabilities: BackendCapabilities; responses: CurrentStatesResponse[]; frames: ReadonlyMap<BodyId, BackendFrame> }> {
+}): Promise<{ capabilities: BackendCapabilities; responses: CurrentStatesResponse[]; frames: ReadonlyMap<BodyId, BackendFrame>; epochUtcJd: number }> {
   const { capabilities, responses } = await fetchCurrentStates(params)
   // Promise.all in fetchCurrentStates completes every batch before this map
   // is created, so callers publish one complete snapshot or none at all.
   const frames = new Map<BodyId, BackendFrame>()
   for (const referenceId of params.referenceIds) frames.set(referenceId, buildBackendFrame({ bodies: params.bodies, referenceId, requestedIds: params.requestedIds, responses }))
-  return { capabilities, responses, frames }
+  return { capabilities, responses, frames, epochUtcJd: params.epochUtcJd ?? NaN }
 }
 
-export function useCurrentStates(params: { bodies: CelestialBody[]; resolutionBodies: CelestialBody[]; referenceIds: BodyId[]; epochUtcJd: number; isPlaying?: boolean }) {
+export function useCurrentStates(params: { bodies: CelestialBody[]; resolutionBodies: CelestialBody[]; referenceIds: BodyId[]; epochUtcJd: number; isPlaying?: boolean; seekRevision?: number }) {
   const [frames, setFrames] = useState<ReadonlyMap<BodyId, BackendFrame>>(new Map())
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [publishedEpochUtcJd, setPublishedEpochUtcJd] = useState<number | null>(null)
+  const [playingSample, setPlayingSample] = useState(0)
+  const latestEpochRef = useRef(params.epochUtcJd)
+  useEffect(() => {
+    latestEpochRef.current = params.epochUtcJd
+  }, [params.epochUtcJd])
   const gate = useRef<ReturnType<typeof createLatestOnlyGate> | null>(null)
   if (gate.current == null) gate.current = createLatestOnlyGate()
   const base = apiBase()
@@ -198,11 +209,19 @@ export function useCurrentStates(params: { bodies: CelestialBody[]; resolutionBo
     params.referenceIds.forEach(add)
     return required
   }, [params.bodies, params.referenceIds, params.resolutionBodies])
-  // Clock ticks publish more often than a network round trip. While playing,
-  // sample a bounded 500 ms epoch so requests can complete and still get a
-  // final exact sample immediately when playback stops.
-  const requestEpochUtcJd = sampleCurrentStateEpoch(params.epochUtcJd, params.isPlaying === true)
-  const requestKey = `${base ?? 'none'}|${requestEpochUtcJd}|${[...requested].map(([id, backend]) => `${id}:${backend}`).join(',')}`
+  const isPlaying = params.isPlaying === true
+  // Use wall-clock cadence, never a JD bucket: at high simulation rates a JD
+  // bucket would create requests faster than this bound. A pause or explicit
+  // seek changes the request token immediately.
+  useEffect(() => {
+    if (!isPlaying) return undefined
+    const timer = window.setInterval(() => setPlayingSample(value => value + 1), CURRENT_STATE_PLAYING_SAMPLE_MS)
+    return () => window.clearInterval(timer)
+  }, [isPlaying])
+  const requestToken = isPlaying
+    ? `playing:${playingSample}:seek:${params.seekRevision ?? 0}`
+    : `paused:${params.epochUtcJd}:seek:${params.seekRevision ?? 0}`
+  const requestKey = `${base ?? 'none'}|${requestToken}|${[...requested].map(([id, backend]) => `${id}:${backend}`).join(',')}`
 
   useEffect(() => {
     const request = gate.current!.begin()
@@ -211,6 +230,7 @@ export function useCurrentStates(params: { bodies: CelestialBody[]; resolutionBo
       queueMicrotask(() => {
         if (!gate.current!.isCurrent(request)) return
         setFrames(new Map())
+        setPublishedEpochUtcJd(null)
         setError(null)
         setLoading(false)
       })
@@ -223,20 +243,23 @@ export function useCurrentStates(params: { bodies: CelestialBody[]; resolutionBo
     })
     // This is the one UTC -> TDB boundary for the Web adapter. Every batch
     // carries this exact shared epoch and no body-level conversion occurs.
+    const requestEpochUtcJd = sampleCurrentStateEpoch(latestEpochRef.current, isPlaying)
     const epochTdbJd = utcJulianDayToTdb(requestEpochUtcJd)
     const ids = [...requested.values()]
-    void loadCurrentStateFrames({ base, ids, epochTdbJd, bodies: params.bodies, requestedIds: requested, referenceIds: params.referenceIds, signal: controller.signal }).then(({ frames }) => {
+    void loadCurrentStateFrames({ base, ids, epochTdbJd, epochUtcJd: requestEpochUtcJd, bodies: params.bodies, requestedIds: requested, referenceIds: params.referenceIds, signal: controller.signal }).then(({ frames, epochUtcJd }) => {
       if (!gate.current!.isCurrent(request)) return
       setFrames(frames)
+      setPublishedEpochUtcJd(epochUtcJd)
       setLoading(false)
     }).catch((reason: unknown) => {
       if (!gate.current!.isCurrent(request)) return
       setFrames(new Map())
+      setPublishedEpochUtcJd(null)
       setError(reason instanceof Error ? reason.message : String(reason))
       setLoading(false)
     })
     return () => gate.current!.cancel(request)
-  }, [base, requestKey, params.bodies, params.referenceIds, requestEpochUtcJd, requested])
+  }, [base, requestKey, params.bodies, params.referenceIds, requested, isPlaying, params.seekRevision])
 
-  return { configured: PRODUCT_PROFILE === 'full' && base !== null, frames, error, loading }
+  return { configured: PRODUCT_PROFILE === 'full' && base !== null, frames, error, loading, publishedEpochUtcJd }
 }

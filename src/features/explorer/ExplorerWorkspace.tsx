@@ -83,7 +83,7 @@ type FrameViewProps = {
   render3DReady: boolean
   cameraResetKey: number
   backendFrame?: Pick<BackendFrame, 'currentPositions' | 'missingBodyIds' | 'maxDistance'> | null
-  backendStatus: { configured: boolean; loading: boolean; error: string | null }
+  backendStatus: { configured: boolean; loading: boolean; error: string | null; publishedEpochUtcJd?: number | null; requestedEpochUtcJd?: number }
 }
 
 function FrameView({
@@ -302,15 +302,7 @@ export function ExplorerWorkspace() {
     const required = new Map(allBodies.map((body) => [body.id, body]))
     return [...required.values()]
   }, [allBodies])
-  const trajectoryAnchor = useTrajectoryAnchor(clock.julianDay, clock.isPlaying)
-  // Keep catalog points and named bodies on the exact same published clock
-  // snapshot. Trajectories may use a slower anchor because they are historical
-  // context, but mixing that anchor into the point cloud is scientifically false
-  // at high simulation rates.
-  const catalogPointCloud = useCatalogPointWorker(catalogRecords, clock.julianDay)
-  const displayJulianDay = simulation.showCatalogCloud && catalogPointCloud.positions.length > 0
-    ? catalogPointCloud.computedJulianDay
-    : clock.julianDay
+  const requestedJulianDay = clock.julianDay
   // One lazy, bounded-by-registry absolute-state cache for both frames at this
   // exact displayed epoch. The registry changes on every kernel revision.
   const currentStateReferenceIds = useMemo(() => [simulation.referenceId, ...(simulation.comparisonEnabled ? [simulation.comparisonReferenceId] : [])], [simulation.comparisonEnabled, simulation.comparisonReferenceId, simulation.referenceId])
@@ -324,9 +316,21 @@ export function ExplorerWorkspace() {
     }, [selectedBodies, selection.focusedId, simulation.comparisonEnabled, simulation.comparisonReferenceId, simulation.referenceId]),
     resolutionBodies,
     referenceIds: currentStateReferenceIds,
-    epochUtcJd: displayJulianDay,
+    epochUtcJd: requestedJulianDay,
     isPlaying: clock.isPlaying,
+    seekRevision: clock.seekRevision,
   })
+  // A backend frame is an audited snapshot, so its UTC epoch is the only
+  // epoch allowed beside that frame while a newer request is loading.
+  const renderedJulianDay = currentStates.configured && currentStates.publishedEpochUtcJd !== null
+    ? currentStates.publishedEpochUtcJd
+    : requestedJulianDay
+  // All visual layers in a scene use the same authoritative epoch. During a
+  // backend refresh this intentionally keeps the previous frame/cloud epoch;
+  // EphemerisStatus still exposes loading so a stale snapshot is explicit.
+  const trajectoryAnchor = useTrajectoryAnchor(renderedJulianDay, clock.isPlaying)
+  const catalogPointCloud = useCatalogPointWorker(catalogRecords, renderedJulianDay)
+  const catalogEpochAligned = !simulation.showCatalogCloud || Math.abs(catalogPointCloud.computedJulianDay - renderedJulianDay) <= 1e-9
   // Full Web uses the audited backend when configured. Pages remains its
   // declared curated static preview; an unconfigured full build has no exact
   // current-position resolver and never silently falls back to local physics.
@@ -336,11 +340,11 @@ export function ExplorerWorkspace() {
     if (currentStates.configured) {
       const absolute = new Map<BodyId, { x: number; y: number; z: number }>()
       for (const frame of currentStates.frames.values()) for (const [id, position] of frame.absolutePositions) absolute.set(id, position)
-      return createBackendPositionResolver(absolute, displayJulianDay)
+      return createBackendPositionResolver(absolute, renderedJulianDay)
     }
-    if (PRODUCT_PROFILE === 'preview') return createBodyPositionResolver(bodiesById, displayJulianDay)
-    return (bodyId: BodyId) => { throw new MissingBodyStateError(bodyId, displayJulianDay) }
-  }, [bodiesById, currentStates.configured, currentStates.frames, displayJulianDay])
+    if (PRODUCT_PROFILE === 'preview') return createBodyPositionResolver(bodiesById, renderedJulianDay)
+    return (bodyId: BodyId) => { throw new MissingBodyStateError(bodyId, renderedJulianDay) }
+  }, [bodiesById, currentStates.configured, currentStates.frames, renderedJulianDay])
   const renderBudget = useAdaptiveRenderBudget({
     viewMode: simulation.viewMode,
     quality: simulation.renderQuality,
@@ -348,8 +352,8 @@ export function ExplorerWorkspace() {
     availableCount: catalogRecords.length,
     samplingActive: clock.isPlaying && simulation.showCatalogCloud && simulation.viewMode === '3d',
   })
-  const primaryCatalogDrawCount = Math.min(renderBudget.primary, catalogPointCloud.readyCount)
-  const secondaryCatalogDrawCount = Math.min(renderBudget.secondary, catalogPointCloud.readyCount)
+  const primaryCatalogDrawCount = catalogEpochAligned ? Math.min(renderBudget.primary, catalogPointCloud.readyCount) : 0
+  const secondaryCatalogDrawCount = catalogEpochAligned ? Math.min(renderBudget.secondary, catalogPointCloud.readyCount) : 0
   const catalogFitKey = simulation.showCatalogCloud
     ? `${catalog.baseSampleKey ?? 'unloaded'}|${JSON.stringify(catalog.filters)}`
     : ''
@@ -400,7 +404,7 @@ export function ExplorerWorkspace() {
             resolveCurrentPosition={resolveCurrentPosition}
             resolutionBodies={resolutionBodies}
             bodiesById={bodiesById}
-            julianDay={displayJulianDay}
+            julianDay={renderedJulianDay}
             trajectoryAnchor={trajectoryAnchor}
             onFrame={setPrimaryFrame}
             onHover={setHovered}
@@ -416,7 +420,7 @@ export function ExplorerWorkspace() {
             render3DReady={render3DReady}
             cameraResetKey={cameraResetKey}
             backendFrame={currentStates.configured ? (currentStates.frames.get(simulation.referenceId) ?? null) : (PRODUCT_PROFILE === 'full' ? null : undefined)}
-            backendStatus={currentStates}
+            backendStatus={{ ...currentStates, requestedEpochUtcJd: requestedJulianDay }}
           />
           {simulation.comparisonEnabled && (
             <FrameView
@@ -426,7 +430,7 @@ export function ExplorerWorkspace() {
               resolveCurrentPosition={resolveCurrentPosition}
               resolutionBodies={resolutionBodies}
               bodiesById={bodiesById}
-              julianDay={displayJulianDay}
+              julianDay={renderedJulianDay}
               trajectoryAnchor={trajectoryAnchor}
               onFrame={setSecondaryFrame}
               onHover={setHovered}
@@ -442,7 +446,7 @@ export function ExplorerWorkspace() {
               render3DReady={render3DReady}
               cameraResetKey={cameraResetKey}
               backendFrame={currentStates.configured ? (currentStates.frames.get(simulation.comparisonReferenceId) ?? null) : (PRODUCT_PROFILE === 'full' ? null : undefined)}
-              backendStatus={currentStates}
+              backendStatus={{ ...currentStates, requestedEpochUtcJd: requestedJulianDay }}
             />
           )}
         </div>

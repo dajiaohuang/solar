@@ -264,8 +264,15 @@ func (c *Catalog) AuditIdentityTuples() []map[string]string {
 	seen := make(map[identity]struct{})
 	for _, body := range c.bodies {
 		model := body.Model
-		if model == "" && body.Availability == Missing && body.Source != "" && body.DatasetVersion != "" {
-			model = "unavailable-no-kernel"
+		switch body.Availability {
+		case AvailableFallback:
+			// The current-states endpoint is exact-only; fallback catalog
+			// elements are not an identity it can emit.
+			model = "exact-only"
+		case Missing:
+			if body.Source != "" && body.DatasetVersion != "" {
+				model = "unavailable-no-kernel"
+			}
 		}
 		if body.Source == "" || body.DatasetVersion == "" || model == "" {
 			continue
