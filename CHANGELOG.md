@@ -4,6 +4,10 @@ All notable changes to Solar Atlas are documented here. The project follows sema
 
 ## Unreleased
 
+- Fix near-satellite 3D camera/marker/clipping scales and portrait refitting without changing physical coordinates or restoring distance fog.
+- Shorten expanded moon-preset histories to resolve fast revolutions at default sampling; keep partial arcs and manual sampling limits explicit.
+- Use km/hour readouts for close distances and fast periods, parent-relative apsis terminology, and active-SPK versus fallback Earth-center labels in the shared web/native UI.
+
 - Publish the current v4 scene schema from generated knowledge/privacy pages and PWA shortcuts while retaining v2/v3 reader compatibility.
 
 ### Added

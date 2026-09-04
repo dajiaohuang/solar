@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { PREPARE_CANVAS_CAPTURE_EVENT } from '../lib/canvasCapture'
-import { cameraDistanceForFit, cameraRangeForFit, clamp3dZoom } from '../lib/camera3d'
+import { cameraDistanceForFit, cameraRangeForFit, clamp3dZoom, sceneFramingForRadius } from '../lib/camera3d'
 import type { LagrangePoint } from '../lib/lagrange'
 import { createTrajectoryScene } from '../lib/trajectoryScene3d'
 import type { AsteroidRecord, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector3 } from '../types'
@@ -51,6 +51,9 @@ type SceneResources = {
   catalogPoints: THREE.Points
   bodyScale: number
   fitDistance: number
+  contentRadius: number
+  nearestRadius: number
+  grid: THREE.PolarGridHelper
 }
 
 const EMPTY_CATALOG_RECORDS: AsteroidRecord[] = []
@@ -68,8 +71,28 @@ function toThree(position: { x: number; y: number; z: number }) {
 }
 
 function updateCameraData(container: HTMLDivElement, resources: SceneResources) {
-  container.dataset.cameraDistance = resources.camera.position.distanceTo(resources.controls.target).toFixed(6)
-  container.dataset.cameraPosition = resources.camera.position.toArray().map((value) => value.toFixed(6)).join(',')
+  container.dataset.cameraDistance = resources.camera.position.distanceTo(resources.controls.target).toPrecision(12)
+  container.dataset.cameraPosition = resources.camera.position.toArray().map((value) => value.toPrecision(12)).join(',')
+  container.dataset.sceneRadius = String(resources.contentRadius)
+  container.dataset.markerScale = String(resources.bodyScale)
+}
+
+function applySceneFraming(resources: SceneResources) {
+  const framing = sceneFramingForRadius(resources.contentRadius, resources.camera.aspect, resources.nearestRadius)
+  resources.fitDistance = framing.fitDistance
+  resources.bodyScale = framing.bodyScale
+  for (const mesh of resources.bodyMeshes.values()) mesh.scale.setScalar(mesh.userData.markerRadius * framing.bodyScale)
+  for (const mesh of resources.lagrangeMeshes.values()) mesh.scale.setScalar(framing.bodyScale)
+  resources.saturnRing.scale.setScalar(framing.bodyScale)
+  resources.glow.scale.setScalar(0.9 * framing.bodyScale)
+  resources.grid.scale.setScalar(framing.auxiliaryScale)
+  resources.eclipticGroup.scale.setScalar(framing.auxiliaryScale)
+  const range = cameraRangeForFit(framing.fitDistance, resources.contentRadius)
+  resources.camera.near = range.near
+  resources.camera.far = range.far
+  resources.controls.minDistance = range.minDistance
+  resources.controls.maxDistance = range.maxDistance
+  resources.camera.updateProjectionMatrix()
 }
 
 function resetCameraToFit(resources: SceneResources, zoom: number) {
@@ -234,6 +257,9 @@ export function TrajectoryCanvas3D({
       catalogPoints,
       bodyScale: 1,
       fitDistance: 8.7,
+      contentRadius: 0,
+      nearestRadius: 0,
+      grid,
     }
     resourcesRef.current = resources
     const render = () => {
@@ -247,6 +273,13 @@ export function TrajectoryCanvas3D({
       const width = Math.max(container.clientWidth, 1)
       const height = Math.max(container.clientHeight, 1)
       camera.aspect = width / height
+      if (resources.contentRadius > 0 && resources.contentRadius < 0.1) {
+        const previousFit = resources.fitDistance
+        applySceneFraming(resources)
+        const offset = camera.position.clone().sub(controls.target).multiplyScalar(resources.fitDistance / previousFit)
+        camera.position.copy(controls.target).add(offset)
+        controls.update()
+      }
       camera.updateProjectionMatrix()
       renderer.setSize(width, height)
       render()
@@ -405,7 +438,8 @@ export function TrajectoryCanvas3D({
         resources.bodyMeshes.set(id, mesh)
         resources.scene.add(mesh)
       }
-      mesh.scale.setScalar(radiusFor(item.body) * resources.bodyScale)
+      mesh.userData.markerRadius = radiusFor(item.body)
+      mesh.scale.setScalar(mesh.userData.markerRadius * resources.bodyScale)
       if (item.position3D) mesh.position.copy(toThree(item.position3D))
     }
     for (const [id, mesh] of resources.bodyMeshes) {
@@ -420,12 +454,17 @@ export function TrajectoryCanvas3D({
     // user camera moves during clock playback while keeping story/catalog
     // scenes (including outbound spacecraft paths) discoverable.
     const catalogReady = catalogDrawCount > 0 && catalogPositions3D.length >= 3
-    const fitKey = `${referenceBody.id}|${[...bodyPositions.keys()].sort().join(',')}|${trajectories.map((item) => `${item.body.id}:${item.points3D?.length ?? 0}`).sort().join(',')}|${catalogReady ? catalogFitKey : ''}`
+    const fitKey = `${referenceBody.id}|${[...bodyPositions.keys()].sort().join(',')}|${trajectories.map((item) => `${item.body.id}:${item.points3D?.length ?? 0}`).sort().join(',')}|${catalogReady ? catalogFitKey : ''}|${resetViewKey}`
     if (fitKeyRef.current !== fitKey) {
       fitKeyRef.current = fitKey
       let radius = 0
+      let nearest = Infinity
       for (const item of bodyPositions.values()) {
-        if (item.position3D) radius = Math.max(radius, Math.hypot(item.position3D.x, item.position3D.y, item.position3D.z))
+        if (item.position3D) {
+          const distance = Math.hypot(item.position3D.x, item.position3D.y, item.position3D.z)
+          radius = Math.max(radius, distance)
+          if (distance > 0) nearest = Math.min(nearest, distance)
+        }
       }
       for (const trajectory of trajectories) {
         if (trajectory.body.kind === 'spacecraft') continue
@@ -441,17 +480,9 @@ export function TrajectoryCanvas3D({
           catalogPositions3D[index * 3 + 2] - catalogOrigin.z,
         ))
       }
-      const distance = Math.max(2.8, Math.min(260, radius * 1.45 + 1.4))
-      resources.bodyScale = Math.max(1, Math.min(4.5, Math.sqrt(Math.max(radius, 1) / 7)))
-      for (const [id, mesh] of resources.bodyMeshes) {
-        const item = bodyPositions.get(id)
-        if (item) mesh.scale.setScalar(radiusFor(item.body) * resources.bodyScale)
-      }
-      resources.fitDistance = distance
-      const cameraRange = cameraRangeForFit(distance, radius)
-      resources.camera.far = cameraRange.far
-      resources.camera.updateProjectionMatrix()
-      resources.controls.maxDistance = cameraRange.maxDistance
+      resources.contentRadius = radius
+      resources.nearestRadius = nearest
+      applySceneFraming(resources)
       resetCameraToFit(resources, zoomLevel)
       appliedZoomRef.current = clamp3dZoom(zoomLevel)
     }
@@ -468,6 +499,7 @@ export function TrajectoryCanvas3D({
           resources.auxiliaryGroup.add(marker)
         }
         marker.position.set(point.position.x, 0, point.position.y)
+        marker.scale.setScalar(resources.bodyScale)
       }
     }
     for (const [id, marker] of resources.lagrangeMeshes) {
@@ -487,7 +519,7 @@ export function TrajectoryCanvas3D({
     const container = containerRef.current
     if (container) updateCameraData(container, resources)
     resources.renderer.render(resources.scene, resources.camera)
-  }, [catalogDrawCount, catalogFitKey, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z, catalogPositions3D, catalogRecords.length, currentPositions, lagrangePoints, referenceBody, showEcliptic, showGlow, showSaturnRings, trajectories, zoomLevel])
+  }, [catalogDrawCount, catalogFitKey, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z, catalogPositions3D, catalogRecords.length, currentPositions, lagrangePoints, referenceBody, resetViewKey, showEcliptic, showGlow, showSaturnRings, trajectories, zoomLevel])
 
   useEffect(() => {
     const resources = resourcesRef.current

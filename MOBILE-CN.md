@@ -24,6 +24,8 @@ Solar Atlas 已包含 Android 与 iOS 的 **Capacitor 8 本地应用壳工程**�
 
 ## 前置条件
 
+共享 Web 应用壳包含卫星尺度的 3D 取景、竖屏尺寸变化处理及千米/小时轨道读数。修改这些共享功能后，运行 `npm run mobile:sync` 刷新两个平台的资源，并验证 Android/iOS CI。浏览器视口测试不能替代真机触控、旋转与性能测试。
+
 安装 Node.js 22+、npm 10+ 与对应平台工具链：
 
 - Android：Android Studio、Android SDK API 36 与 JDK 21。工具链齐备时可在 Windows、macOS 或 Linux 构建 Android。

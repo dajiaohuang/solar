@@ -24,6 +24,8 @@ SPK focus ephemerides and the geometric/light-time/stellar-aberration observatio
 
 ## Prerequisites
 
+The shared web shell includes satellite-scale 3D framing, portrait-resize handling and km/hour orbital readouts. After changing these shared features, run `npm run mobile:sync` to refresh both native asset bundles and validate Android/iOS CI. Browser viewport tests are not a substitute for real-device touch, rotation or performance testing.
+
 Install Node.js 22+, npm 10+, and the platform toolchain:
 
 - Android: Android Studio, Android SDK API 36, and JDK 21. Android builds can run on Windows, macOS, or Linux when that toolchain is installed.

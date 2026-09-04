@@ -197,7 +197,7 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
         </div>
         {!capabilities.offset && <p className="fine-print">{t('offset2dOnly')}</p>}
         <button type="button" className="view-reset" onClick={() => { simulationActions.patch({ zoom: 1, viewOffset: { x: 0, y: 0 } }); onResetView() }}>{t('resetView')}</button>
-        {simulation.viewMode === '3d' && <p className="fine-print">{t('camera3dBoundary')}</p>}
+        {simulation.viewMode === '3d' && <><p className="fine-print">{t('camera3dBoundary')}</p><p className="fine-print">{t('schematicMarkerScale')}</p></>}
       </section>
 
       <section className="drawer-section" data-story-target="layers">
