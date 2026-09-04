@@ -31,7 +31,7 @@ describe('product availability is not scientific coverage', () => {
       expect(preset, id).toBeDefined()
       expect(sceneAvailability(buildScenePresetUrlState(preset, 'en'), 'preview'), id).toEqual({ available: true })
     }
-    for (const id of ['jupiter-spk-moons', 'saturn-spk-moons', 'saturn-spk-moons-2']) {
+    for (const id of ['jupiter-spk-moons', 'saturn-spk-moons']) {
       expect(sceneAvailability(buildScenePresetUrlState(SCENE_PRESETS.find(item => item.id === id)!, 'zh'), 'preview').available).toBe(false)
     }
   })

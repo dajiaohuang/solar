@@ -15,6 +15,7 @@ import { uiActions, uiStore, type ElementPlotMode } from '../../state/ui-store'
 import type { AsteroidRecord, BodyId, CelestialBody } from '../../types'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { useCatalogSample } from '../../hooks/useCatalogSample'
+import { PagedBodyList } from '../../components/PagedBodyList'
 
 type PlotMode = ElementPlotMode
 type PlotDatum = { record: AsteroidRecord; x: number; y: number }
@@ -228,7 +229,7 @@ export function ElementSpaceWorkspace() {
     .map((record) => toPlotDatum(record, mode))
     .filter((datum): datum is PlotDatum => datum !== null), [mode, records])
   const selectedSet = useMemo(() => new Set(selection.selectedIds), [selection.selectedIds])
-  const miniBodies = useMemo(() => selection.selectedIds.map((id) => bodiesById.get(id)).filter((body): body is CelestialBody => Boolean(body)).slice(0, 160), [bodiesById, selection.selectedIds])
+  const miniBodies = useMemo(() => selection.selectedIds.map((id) => bodiesById.get(id)).filter((body): body is CelestialBody => Boolean(body)), [bodiesById, selection.selectedIds])
   const miniFrame = useMemo(() => buildCurrentPositions({ bodies: miniBodies, bodiesById, referenceId: 'sun', julianDay: clock.julianDay }), [bodiesById, clock.julianDay, miniBodies])
   const [xLabel, yLabel] = labelsFor(mode)
 
@@ -243,10 +244,9 @@ export function ElementSpaceWorkspace() {
       <section className="chart-panel glass-panel">
         <div className="sample-caption">{t('showing')} {data.length.toLocaleString()} / {(catalog.activeResultScanKey === scanKey ? catalog.exactFilteredTotal ?? records.length : records.length).toLocaleString()} · {t('stratifiedSample')}{mode === 'a-H' ? ` · ${t('unknownMagnitudeExcluded')}` : ''}</div>
         <div className="axis-title y">{yLabel}</div><ElementScatter data={data} mode={mode} selectedIds={selectedSet} onSelect={(selected) => {
-          const limited = selected.slice(0, 160)
-          if (selectionActions.addCatalogBodies(limited.map(asteroidRecordToBody)) === false) return
-          if (!selectionActions.setSelectedIds(limited.map((record) => record.id))) return
-          uiActions.toast(`${limited.length} ${t('selectedCount')}`)
+          if (selectionActions.addCatalogBodies(selected.map(asteroidRecordToBody)) === false) return
+          if (!selectionActions.setSelectedIds(selected.map((record) => record.id))) return
+          uiActions.toast(`${selected.length} ${t('selectedCount')}`)
         }} onFocus={(record) => {
           if (selectionActions.addCatalogBodies([asteroidRecordToBody(record)]) === false) return
           selectionActions.focus(record.id)
@@ -259,7 +259,7 @@ export function ElementSpaceWorkspace() {
       </section>
       <aside className="selection-panel glass-panel">
         <div className="section-heading"><span>{t('selectedBodies')}</span><button onClick={() => selectionActions.setSelectedIds([])}>{t('clear')}</button></div>
-        <div className="selected-object-list">{miniBodies.map((body) => <button key={body.id} onClick={() => selectionActions.focus(body.id)}><i style={{ background: body.color }} /><span>{bodyDisplayName(body, language)}</span><small>{body.orbitClassCode ?? body.kind}</small></button>)}</div>
+        <PagedBodyList bodies={miniBodies} className="selected-object-list">{body => <button key={body.id} onClick={() => selectionActions.focus(body.id)}><i style={{ background: body.color }} /><span>{bodyDisplayName(body, language)}</span><small>{body.orbitClassCode ?? body.kind}</small></button>}</PagedBodyList>
         <div className="resonance-note"><strong>{t('resonances')}</strong>{RESONANCE_BANDS.map((item) => <span key={item.label}>{item.label}<b>{item.a.toFixed(2)} AU</b></span>)}</div>
         <ElementDistributionSummary data={data} />
       </aside>

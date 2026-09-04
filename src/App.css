@@ -222,6 +222,7 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 .ephemeris-status summary { cursor: pointer; }
 .ephemeris-status p { overflow-wrap: anywhere; line-height: 1.5; }
 .ephemeris-status button { margin-right: 10px; }
+.frame-layer-budget { padding: 6px 10px; font-size: 11px; overflow-wrap: anywhere; }
 .explorer-stage::before { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2; background: radial-gradient(circle at center, transparent 44%, rgba(0,0,0,.28)); }
 .catalog-cloud-error { position: absolute; z-index: 14; top: 72px; left: 50%; width: min(520px, calc(100% - 32px)); transform: translateX(-50%); }
 .simulation-bar { position: absolute; z-index: 12; top: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: end; gap: 9px; padding: 8px; width: max-content; max-width: calc(100% - 28px); }

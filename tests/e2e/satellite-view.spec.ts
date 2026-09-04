@@ -62,9 +62,9 @@ test('uses useful moon orbital units and distinguishes the active Earth center',
 // Each system has the same bounded assertions and deadline. A growing scene
 // library must not share one aggregate timeout or hide later cases after a
 // failure in an earlier system.
-// Check this matrix against the rendered inventory so future overflow groups
-// cannot silently go untested. Saturn's second group was previously omitted.
-const satellitePresetIds = ['mars-spk-moons', 'jupiter-spk-moons', 'saturn-spk-moons', 'saturn-spk-moons-2', 'uranus-spk-moons', 'neptune-spk-moons', 'pluto-spk-moons', 'eris-spk-moons', 'haumea-spk-moons', 'quaoar-spk-moons', 'orcus-spk-moons', 'salacia-spk-moons', '1998ww31-spk-moons', '2001qw322-spk-moons', 'kagara-spk-moons', '1999oj4-spk-moons', '2003un284-spk-moons', 'earth-moon']
+// Check this matrix against the rendered inventory so new systems cannot go
+// untested. Each preset includes its full system, independently of trail budgets.
+const satellitePresetIds = ['mars-spk-moons', 'jupiter-spk-moons', 'saturn-spk-moons', 'uranus-spk-moons', 'neptune-spk-moons', 'pluto-spk-moons', 'eris-spk-moons', 'haumea-spk-moons', 'quaoar-spk-moons', 'orcus-spk-moons', 'salacia-spk-moons', '1998ww31-spk-moons', '2001qw322-spk-moons', 'kagara-spk-moons', '1999oj4-spk-moons', '2003un284-spk-moons', 'earth-moon']
 for (const id of satellitePresetIds) {
   test(`keeps ${id} in a bounded local 3D frame`, async ({ page }) => {
     test.setTimeout(120_000)
@@ -82,11 +82,14 @@ for (const id of satellitePresetIds) {
       await page.getByTestId('preset-jupiter-spk-moons').click()
       await expect(page.getByTestId('ephemeris-status').locator('summary')).not.toContainText('Loading', { timeout: 60_000 })
     }
-    await page.getByTestId(`preset-${id}`).click()
-    await page.waitForLoadState('networkidle')
+    const preset = page.getByTestId(`preset-${id}`)
+    const selectedCount = Number((await preset.locator('em').innerText()).split(' · ').at(-1))
+    expect(selectedCount).toBeGreaterThan(0)
+    await preset.click()
     // A first selection now loads an entire system's split original records.
-    // Network-idle can occur between batches; wait for the application loader,
-    // then separately bound trajectory computation after all inputs arrive.
+    // Background worker requests are not scene readiness. Require the new
+    // selection, its loader and then trajectory completion within the deadlines.
+    await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText(new RegExp(`/${selectedCount}(?:\\D|$)`))
     await expect(page.getByTestId('ephemeris-status').locator('summary')).not.toContainText('Loading', { timeout: 60_000 })
     await expect(page.locator('.compute-progress')).toHaveCount(0)
     const canvas = page.getByTestId('trajectory-canvas-3d')

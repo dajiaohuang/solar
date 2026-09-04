@@ -42,7 +42,7 @@ The default deck loads only the curated major-body model and does **not** downlo
 
 Solar Atlas currently ships thirty one-click presets, including seventeen groups covering the satellite identity catalog around sixteen parent bodies, and a 16-large-asteroid scene. Every preset defines an epoch, reference frame, focus set, view, zoom, and trajectory window; dataset-backed presets additionally pin a complete dataset/sample/filter tuple.
 
-The frozen satellite catalog contains 472 identities (460 discovery-list entries, one additional planetary-satellite source identity and eleven TNO companions), in addition to Earth's Moon. Of these, 471 have corroborated SPK target numbers; S/2009 S1 remains unmatched. Catalog inclusion does **not** promise a position, a physical radius, or formal discovery confirmation. New entries have no invented fallback ellipse. Missing positions and incomplete historical trails are reported separately; an unavailable reference suppresses the frame. Saturn's 293 catalog identities are split into two preset groups to respect the 160-object 3D focus limit. See the [replayable satellite evidence workflow](./scripts/reference/SATELLITE-SURVEY.md).
+The frozen satellite catalog contains 472 identities (460 discovery-list entries, one additional planetary-satellite source identity and eleven TNO companions), in addition to Earth's Moon. Of these, 471 have corroborated SPK target numbers; S/2009 S1 remains unmatched. Catalog inclusion does **not** promise a position, a physical radius, or formal discovery confirmation. New entries have no invented fallback ellipse. Missing positions and incomplete historical trails are reported separately; an unavailable reference suppresses the frame. Saturn's 293 catalog identities now share one system preset. Current positions are independent of the historical-trail budget; selecting a body prioritizes its trail. See the [replayable satellite evidence workflow](./scripts/reference/SATELLITE-SURVEY.md).
 
 | Preset | Reference and epoch | Default view | What it shows and what it does not claim |
 | --- | --- | --- | --- |
@@ -106,7 +106,7 @@ Solar Atlas separates three limits that answer different questions:
 
 1. **Catalog sample size** — immutable data available to a catalog scene: currently 8,000 mobile or 30,000 desktop records.
 2. **Visible catalog-point budget** — the prefix drawn in the Observation Deck when Catalog point cloud is explicitly enabled.
-3. **Focus-body limit** — bodies with individual trajectories, interaction, and detail: 160 in 3D or 320 in the batched 2D view.
+3. **Trail/detail budget** — at most 160 requested historical trails in 3D or 320 in 2D. This does not truncate current positions: all selected resolvable bodies remain drawn and interactive. Extra 3D positions share fixed-pixel GPU points instead of individual meshes; object lists paginate without dropping selection. These points retain their actual SPK/fallback/missing-state classification and are not the approximate catalog cloud.
 
 The initial device class comes from viewport width, while coarse-pointer landscape devices up to 1,180 px remain on the mobile policy. Optional browser memory and concurrency hints can only make an adaptive first frame more conservative; they never promote a device beyond its class. Runtime frame measurements are authoritative after startup, and both renderers cap device pixel ratio. Split-frame comparison gives both frames the same deterministic prefix within one shared total budget.
 

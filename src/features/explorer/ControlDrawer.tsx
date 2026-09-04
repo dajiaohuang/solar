@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { PagedBodyList } from '../../components/PagedBodyList'
 import { fetchSbdbBody } from '../../data/loaders/sbdb'
 import { SCENE_PRESETS } from '../../data/presets'
 import { availabilityAttributes, bodyAvailability, catalogAvailability, PRODUCT_PROFILE, sceneAvailability } from '../../lib/productAvailability'
@@ -28,6 +29,11 @@ type Props = {
 }
 
 const HISTORY_OPTIONS = [90, 365, 1825, 4383, 7300, 12053, 43830, 90580]
+// Keep familiar primary bodies discoverable on the first page, independently
+// of selection so checking a body never moves the focused checkbox.
+const BODY_KIND_ORDER: Record<CelestialBody['kind'], number> = {
+  star: 0, planet: 1, dwarfPlanet: 2, moon: 3, asteroid: 4, spacecraft: 5,
+}
 const BODY_KIND_TRANSLATION = {
   star: 'bodyKindStar',
   planet: 'bodyKindPlanet',
@@ -53,7 +59,7 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
   const displayedPresets = useMemo(() => PRODUCT_PROFILE === 'preview'
     ? [...SCENE_PRESETS].sort((a, b) => Number(sceneAvailability(buildScenePresetUrlState(b, language)).available) - Number(sceneAvailability(buildScenePresetUrlState(a, language)).available))
     : SCENE_PRESETS, [language])
-  const sortedBodies = useMemo(() => [...bodies].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name)), [bodies])
+  const sortedBodies = useMemo(() => [...bodies].sort((a, b) => BODY_KIND_ORDER[a.kind] - BODY_KIND_ORDER[b.kind] || a.name.localeCompare(b.name)), [bodies])
   const filteredBodies = useMemo(() => {
     const query = bodyQuery.trim().toLocaleLowerCase()
     if (!query) return sortedBodies
@@ -240,14 +246,14 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
       </section>
 
       <section className="drawer-section focus-list-section">
-        <div className="section-heading"><span>{t('selectedBodies')}</span><strong>{selection.selectedIds.length}/{simulation.viewMode === '2d' ? 320 : 160}</strong></div>
+        <div className="section-heading"><span>{t('selectedBodies')}</span><strong>{selection.selectedIds.length}</strong></div>
         <label className="field body-filter">
           <span>{t('filterBodies')}</span>
           <input type="search" value={bodyQuery} onChange={(event) => setBodyQuery(event.target.value)} placeholder={t('filterBodies')} />
         </label>
         <div className="body-match-count">{filteredBodies.length} {t('matchingBodies')}</div>
-        <div className="body-check-list">
-          {filteredBodies.map((body) => (
+        <PagedBodyList key={bodyQuery} bodies={filteredBodies} className="body-check-list">
+          {(body) => (
             <div className="body-check-row" key={body.id}>
               <label className="body-check-toggle">
                 <input type="checkbox" {...availabilityAttributes(bodyAvailability(body.id))} checked={selection.selectedIds.includes(body.id)} onChange={() => selectionActions.toggle(body.id)} />
@@ -257,11 +263,11 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
               <button type="button" {...availabilityAttributes(bodyAvailability(body.id))} className="body-focus-button" onClick={() => selectionActions.focus(body.id)}>{bodyDisplayName(body, language)}</button>
               <small>{!bodyAvailability(body.id).available ? t('fullVersion') : body.orbitClassCode ?? t(BODY_KIND_TRANSLATION[body.kind])}</small>
             </div>
-          ))}
-        </div>
+          )}
+        </PagedBodyList>
         <div className="inline-actions body-selection-actions">
-          <button onClick={() => selectionActions.setSelectedIds(referenceOptions.filter((body) => body.id !== 'sun' && body.kind !== 'spacecraft').map((body) => body.id).slice(0, simulation.viewMode === '2d' ? 320 : 160))}>{t('selectMajorBodies')}</button>
-          <button onClick={() => selectionActions.setSelectedIds(sortedBodies.slice(0, simulation.viewMode === '2d' ? 320 : 160).map((body) => body.id))}>{t('selectAllAvailable')}</button>
+          <button onClick={() => selectionActions.setSelectedIds(referenceOptions.filter((body) => body.id !== 'sun' && body.kind !== 'spacecraft').map((body) => body.id))}>{t('selectMajorBodies')}</button>
+          <button onClick={() => selectionActions.setSelectedIds(sortedBodies.map((body) => body.id))}>{t('selectAllAvailable')}</button>
           <button onClick={() => selectionActions.setSelectedIds([])}>{t('clear')}</button>
         </div>
       </section>

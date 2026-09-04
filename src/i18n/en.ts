@@ -95,6 +95,8 @@ export const en = {
   offsetX: 'Horizontal offset',
   offsetY: 'Vertical offset',
   selectedBodies: 'Focus objects',
+  currentPositionCount: 'Current positions',
+  trailBudgetCount: 'Trail budget (select an object to prioritize)',
   selectAll: 'Select major bodies',
   filterBodies: 'Search renderable bodies',
   matchingBodies: 'matching bodies',

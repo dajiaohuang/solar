@@ -5,12 +5,14 @@ import { PREPARE_CANVAS_CAPTURE_EVENT } from '../lib/canvasCapture'
 import { cameraDistanceForFit, cameraRangeForFit, clamp3dZoom, sceneFramingForRadius } from '../lib/camera3d'
 import type { LagrangePoint } from '../lib/lagrange'
 import { createTrajectoryScene } from '../lib/trajectoryScene3d'
+import { updatePointGeometry } from '../lib/pointGeometry3d'
 import type { AsteroidRecord, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector3 } from '../types'
 
 type Props = {
   referenceBody: CelestialBody
   trajectories: TrajectorySample[]
   currentPositions: RenderedBodyPosition[]
+  detailBodyIds?: string[]
   onReferenceChange?: (bodyId: string) => void
   onBodySelect?: (bodyId: string) => void
   onHover?: (body: CelestialBody | null, distance: number, x: number, y: number) => void
@@ -49,6 +51,8 @@ type SceneResources = {
   glow: THREE.Sprite
   glowTexture: THREE.Texture
   catalogPoints: THREE.Points
+  currentPoints: THREE.Points
+  pointBodyIds: string[]
   bodyScale: number
   fitDistance: number
   contentRadius: number
@@ -131,6 +135,7 @@ export function TrajectoryCanvas3D({
   referenceBody,
   trajectories,
   currentPositions,
+  detailBodyIds,
   onReferenceChange,
   onBodySelect,
   onHover,
@@ -238,6 +243,12 @@ export function TrajectoryCanvas3D({
     )
     catalogPoints.frustumCulled = false
     scene.add(catalogPoints)
+    // Unbudgeted valid state points use one draw call, not one mesh per body.
+    // Fixed pixel size keeps distant points visible; no distance fade.
+    const currentPoints = new THREE.Points(new THREE.BufferGeometry(),
+      new THREE.PointsMaterial({ size: 4, sizeAttenuation: false, vertexColors: true }))
+    currentPoints.frustumCulled = false
+    scene.add(currentPoints)
 
     const resources: SceneResources = {
       scene,
@@ -255,6 +266,8 @@ export function TrajectoryCanvas3D({
       glow,
       glowTexture,
       catalogPoints,
+      currentPoints,
+      pointBodyIds: [],
       bodyScale: 1,
       fitDistance: 8.7,
       contentRadius: 0,
@@ -303,6 +316,7 @@ export function TrajectoryCanvas3D({
       ;(resources.glow.material as THREE.Material).dispose()
       resources.glowTexture.dispose()
       disposeObject(resources.catalogPoints)
+      disposeObject(resources.currentPoints)
       renderer.dispose()
       container.removeChild(renderer.domElement)
       resourcesRef.current = null
@@ -340,23 +354,19 @@ export function TrajectoryCanvas3D({
     const resources = resourcesRef.current
     if (!resources) return
     const count = Math.min(catalogRecords.length, Math.floor(catalogPositions3D.length / 3))
-    const cloudPositions = new Float32Array(count * 3)
-    const cloudColors = new Float32Array(count * 3)
-    for (let index = 0; index < count; index += 1) {
+    resources.catalogPoints.geometry = updatePointGeometry(resources.catalogPoints.geometry, count, catalogRecords, (cloudPositions, index) => {
       cloudPositions[index * 3] = catalogPositions3D[index * 3]
       cloudPositions[index * 3 + 1] = catalogPositions3D[index * 3 + 2]
       cloudPositions[index * 3 + 2] = catalogPositions3D[index * 3 + 1]
+    }, (cloudColors, index) => {
       const record = catalogRecords[index]
       const color = record.isPha ? [1, 0.35, 0.3] : record.isNeo ? [1, 0.62, 0.5] : [0.62, 0.7, 0.76]
       cloudColors.set(color, index * 3)
-    }
-    resources.catalogPoints.geometry.dispose()
-    resources.catalogPoints.geometry = new THREE.BufferGeometry()
-    resources.catalogPoints.geometry.setAttribute('position', new THREE.BufferAttribute(cloudPositions, 3))
-    resources.catalogPoints.geometry.setAttribute('color', new THREE.BufferAttribute(cloudColors, 3))
+    })
+    resources.catalogPoints.geometry.setDrawRange(0, Math.min(catalogDrawCount, count))
     resources.catalogPoints.visible = count > 0
     resources.renderer.render(resources.scene, resources.camera)
-  }, [catalogPositions3D, catalogRecords])
+  }, [catalogPositions3D, catalogRecords, catalogDrawCount])
 
   useEffect(() => {
     const resources = resourcesRef.current
@@ -430,7 +440,10 @@ export function TrajectoryCanvas3D({
       position3D: { x: 0, y: 0, z: 0 },
       distance: 0,
     })
+    const detailedIds = new Set(detailBodyIds ?? currentPositions.slice(0, 160).map(item => item.body.id))
+    detailedIds.add(referenceBody.id)
     for (const [id, item] of bodyPositions) {
+      if (!detailedIds.has(id)) continue
       let mesh = resources.bodyMeshes.get(id)
       if (!mesh) {
         mesh = new THREE.Mesh(resources.bodyGeometry, new THREE.MeshBasicMaterial({ color: item.body.color }))
@@ -443,11 +456,30 @@ export function TrajectoryCanvas3D({
       if (item.position3D) mesh.position.copy(toThree(item.position3D))
     }
     for (const [id, mesh] of resources.bodyMeshes) {
-      if (!bodyPositions.has(id)) {
+      if (!bodyPositions.has(id) || !detailedIds.has(id)) {
         resources.scene.remove(mesh)
         ;(mesh.material as THREE.Material).dispose()
         resources.bodyMeshes.delete(id)
       }
+    }
+    const pointBodies = currentPositions.filter(item => !detailedIds.has(item.body.id) && item.position3D)
+    resources.pointBodyIds = pointBodies.map(item => item.body.id)
+    const colorKey = pointBodies.map(item => `${item.body.id}:${item.body.color}`).join('|')
+    const pointColor = new THREE.Color()
+    resources.currentPoints.geometry = updatePointGeometry(resources.currentPoints.geometry, pointBodies.length, colorKey,
+      (values, index) => {
+        const point = pointBodies[index].position3D!
+        values[index * 3] = point.x; values[index * 3 + 1] = point.z; values[index * 3 + 2] = point.y
+      }, (values, index) => {
+        pointColor.set(pointBodies[index].body.color)
+        pointColor.toArray(values, index * 3)
+      })
+    resources.currentPoints.visible = pointBodies.length > 0
+    if (containerRef.current) {
+      containerRef.current.dataset.positionCount = String(currentPositions.length)
+      containerRef.current.dataset.detailCount = String(resources.bodyMeshes.size)
+      containerRef.current.dataset.statePointCount = String(pointBodies.length)
+      containerRef.current.dataset.trailCount = String(resources.trajectoryLines.size)
     }
 
     // Reframe only when the scene composition changes, preserving deliberate
@@ -519,7 +551,7 @@ export function TrajectoryCanvas3D({
     const container = containerRef.current
     if (container) updateCameraData(container, resources)
     resources.renderer.render(resources.scene, resources.camera)
-  }, [catalogDrawCount, catalogFitKey, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z, catalogPositions3D, catalogRecords.length, currentPositions, lagrangePoints, referenceBody, resetViewKey, showEcliptic, showGlow, showSaturnRings, trajectories, zoomLevel])
+  }, [catalogDrawCount, catalogFitKey, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z, catalogPositions3D, catalogRecords.length, currentPositions, detailBodyIds, lagrangePoints, referenceBody, resetViewKey, showEcliptic, showGlow, showSaturnRings, trajectories, zoomLevel])
 
   useEffect(() => {
     const resources = resourcesRef.current
@@ -560,7 +592,18 @@ export function TrajectoryCanvas3D({
     )
     raycasterRef.current.setFromCamera(pointer, resources.camera)
     const hits = raycasterRef.current.intersectObjects([...resources.bodyMeshes.values()], false)
-    return hits[0]?.object.userData.bodyId as string | undefined
+    if (hits[0]) return hits[0].object.userData.bodyId as string
+    // Pixel-distance picking matches the fixed-pixel points at every zoom.
+    const positions = resources.currentPoints.geometry.getAttribute('position')
+    const projected = new THREE.Vector3()
+    let nearestId: string | undefined, nearestDistance = 9
+    for (let index = 0; index < resources.pointBodyIds.length; index++) {
+      projected.fromBufferAttribute(positions, index).project(resources.camera)
+      if (projected.z < -1 || projected.z > 1) continue
+      const distance = Math.hypot((projected.x - pointer.x) * rect.width / 2, (projected.y - pointer.y) * rect.height / 2)
+      if (distance < nearestDistance) { nearestDistance = distance; nearestId = resources.pointBodyIds[index] }
+    }
+    return nearestId
   }, [])
 
   return (
