@@ -156,13 +156,22 @@ against original SATEPHGEN name/number rows and every selected component,
 primary and system descriptor in the replayed `tnosat_*` sources. It records
 each source metadata hash; it does not infer target semantics from number
 prefixes, claim discovery-table membership, or promote source GM to a mass.
-The selected eight TNO companions are additional to the 461 planetary-satellite
+The selected eleven TNO companions are additional to the 461 planetary-satellite
 identities in the frozen survey reconciliation.
 
-Five additional primary identities are emitted separately in `primaries`,
+Eight additional primary identities are emitted separately in `primaries`,
 requiring the original Horizons target-name/designation line as well as the
 primary/system descriptors. `Sat1` labels stay qualified by their parent;
 they do not imply formal names. Existing Eris/Haumea scene IDs are preserved.
+
+`sourceSelections` accounts for every frozen `tnosat_*` publication, including
+those not selected for runtime delivery. Ten sources are selected; the earlier
+Haumea v001 is retained alongside the chosen v001b; Patroclus JPL082 is explicitly
+source-only because it omits system target 20000617. The raw `Manoetius` name is
+retained, not silently rewritten from another publication. A separate older
+Lucy solution 54/DE431 system trajectory does not establish a same-source fit
+with JPL082/DE440. Unknown source additions require an explicit reviewed ledger
+decision; regeneration fails instead of silently omitting them.
 
 The survey itself does not select sources. The separate offline integrator accepts
 a reviewed local JSON plan: `survey` and `surveySha256`, `cores` with `id` and
@@ -182,7 +191,7 @@ The optional `systems` plan array names reviewed `id`, `core`, original crop
 `path`, `sourceEvidence` and `reason`. It retains all primary/companion/system
 records from a single publication, verifies source validators and identity
 evidence, and rejects missing/extra targets or incomplete center chains. Full
-uses 2020-01-01/2030-01-01 TDB; Pages uses 2026-07-01/2027-01-01 for these five
+uses 2020-01-01/2030-01-01 TDB; Pages uses 2026-07-01/2027-01-01 for these eight
 new systems to fit the budget without shortening existing published coverage.
 
 ```sh
@@ -220,11 +229,11 @@ an existing output path are refused. The legacy `data:ephemerides` generator now
 refuses to overwrite an integrated source-pool manifest. Prepare any changed
 baseline separately and review its integration rather than losing added targets.
 
-Pages and full each list 507 files and the same target identities. Pages narrows
+Pages and full each list 510 files and the same target identities. Pages narrows
 large satellite files to 2026/2027 TDB; full retains 2020/2031 for planetary
-satellites and 2020/2030-01-02 for the Eris/Haumea companions. The five other
+satellites and 2020/2030-01-02 for the Eris/Haumea companions. The eight other
 binary systems have the explicit ten-year/full and half-year/Pages windows above. At the modern
-test epoch, 502 selectable centers resolve, with the remaining gaps enumerated
+test epoch, 508 selectable centers resolve, with the remaining gaps enumerated
 in the [physical contract](../../docs/physical-ephemerides.md). The full package
 is a delivery profile, not a claim of complete physical coverage of all bodies.
 
@@ -241,7 +250,7 @@ manifest change, prepend `--replace-generated`. The recorder requires its own
 CSPICE provenance structure and checks that the old file did not change while
 the oracle was running. Ordinary invocation still refuses existing files.
 
-The reference pins 441 ordered root pools and 1,353 heliocentric/barycentric
+The reference pins 444 ordered root pools and 1,380 heliocentric/barycentric
 six-vector pairs, including each root's endpoints and midpoint. Tests verify
 every source hash, dependency order and numerical agreement. They do not measure
 observational uncertainty, certify all dates, or turn different source families
@@ -255,8 +264,8 @@ identity and exported manifest links; full/native does not inherit Pages' cap.
 模型中的零 GM 当成实测零质量。缺少位置时不绘制天体，参考系无数据时不虚构原点，
 轨迹有缺口时不跨越缺口连线。完整数据接入与 Pages 容量选择必须另行明确验证。
 
-补充调查会保留原始文件、独立 NAIF 编号表及冲突证据。当前生成目录有 469 个卫星
-身份（不含地球月球），其中 468 个具有核对过的 SPK 编号；S/2009 S1 未匹配。
+补充调查会保留原始文件、独立 NAIF 编号表及冲突证据。当前生成目录有 472 个卫星
+身份（不含地球月球），其中 471 个具有核对过的 SPK 编号；S/2009 S1 未匹配。
 新增身份没有伪造的轨道或物理量，预设分组不会静默丢弃超出聚焦上限的对象。
 Type 17 已加入原始记录读取与裁剪，并通过独立 CSPICE 样本校验；这仍不等于这些
 身份全部具有已交付的轨迹，也不等于完整物理或实际观测误差已经评估。

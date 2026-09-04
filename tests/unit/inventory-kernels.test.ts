@@ -32,7 +32,7 @@ describe('inventory does not confuse source membership with SPK coverage', () =>
     const record = { id: 'naif:120136199', category: 'moon', parentId: 'sb:asteroid:136199', name: 'Dysnomia' }
     expect(kernels.attach(record)).toMatchObject({ naifId: 120136199, ephemerisStatus: 'state-available-at-audit-epoch' })
     expect(kernels.attach({ ...record, parentId: 'sb:asteroid:136108' }).ephemerisStatus).toBe('not-mapped-to-bundled-kernel')
-    for (const [designation, primary, companion, name] of [['50000', 920050000, 120050000, 'Weywot'], ['90482', 920090482, 120090482, 'Vanth'], ['120347', 920120347, 120120347, 'Actaea'], ['1998 WW31', 953031823, 153031823, '1998 WW31 · Sat1'], ['2001 QW322', 953092511, 153092511, '2001 QW322 · Sat1']] as const) {
+    for (const [designation, primary, companion, name] of [['50000', 920050000, 120050000, 'Weywot'], ['90482', 920090482, 120090482, 'Vanth'], ['120347', 920120347, 120120347, 'Actaea'], ['1998 WW31', 953031823, 153031823, '1998 WW31 · Sat1'], ['2001 QW322', 953092511, 153092511, '2001 QW322 · Sat1'], ['469705', 920469705, 120469705, 'Haunu'], ['612095', 920612095, 120612095, '1999 OJ4 · Sat1'], ['612687', 920612687, 120612687, '2003 UN284 · Sat1']] as const) {
       const id = `sb:asteroid:${designation}`
       expect(kernels.attach({ id, designation, category: 'asteroid' })).toMatchObject({ naifId: primary, ephemerisStatus: 'state-available-at-audit-epoch' })
       expect(kernels.attach({ id: `naif:${companion}`, category: 'moon', parentId: id, name })).toMatchObject({ naifId: companion, ephemerisStatus: 'state-available-at-audit-epoch' })

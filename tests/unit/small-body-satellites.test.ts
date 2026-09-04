@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { SMALL_BODY_SATELLITE_SOURCES, smallBodySatelliteIdentities, smallBodyPrimaryIdentity } from '../../scripts/lib/small-body-satellites.mjs'
+import { SMALL_BODY_SATELLITE_SOURCES, smallBodySatelliteIdentities, smallBodyPrimaryIdentity, smallBodySourceLedger } from '../../scripts/lib/small-body-satellites.mjs'
+import satelliteCatalog from '../../src/data/satelliteCatalog.json'
 import { majorBodiesById } from '../../src/data/majorBodies'
 import { SMALL_BODY_PRIMARIES, satelliteIdentity, satelliteSearchTerms } from '../../src/data/satelliteIdentities'
 
@@ -40,8 +41,8 @@ describe('source-backed small-body satellite identities', () => {
     expect(satelliteSearchTerms(majorBodiesById.get('naif:120136108')!)).toContain('Hiiaka')
   })
 
-  it('retains five explicit primary identities without promoting barycenters or source constants', () => {
-    expect(SMALL_BODY_PRIMARIES).toHaveLength(5)
+  it('retains eight explicit primary identities without promoting barycenters or source constants', () => {
+    expect(SMALL_BODY_PRIMARIES).toHaveLength(8)
     for (const primary of SMALL_BODY_PRIMARIES) {
       const body = majorBodiesById.get(primary.id)!
       expect(body).toMatchObject({ naifId: primary.naifId, kind: 'asteroid' })
@@ -50,8 +51,8 @@ describe('source-backed small-body satellite identities', () => {
       expect(satelliteSearchTerms(body)).toContain(primary.designation)
     }
     const sat1 = [...majorBodiesById.values()].filter(body => body.shortName?.endsWith(' · Sat1'))
-    expect(sat1.map(body => body.parentId).sort()).toEqual(['1998ww31', '2001qw322'])
-    expect(new Set(sat1.map(body => body.name)).size).toBe(2)
+    expect(sat1.map(body => body.parentId).sort()).toEqual(['1998ww31', '1999oj4', '2001qw322', '2003un284'])
+    expect(new Set(sat1.map(body => body.name)).size).toBe(4)
   })
 
   it('accepts explicitly matched alphanumeric labels but rejects changed designation evidence', () => {
@@ -63,5 +64,35 @@ describe('source-backed small-body satellite identities', () => {
     expect(() => smallBodyPrimaryIdentity(binary, { ...original, comments: original.comments.replace('(1998 WW31)', '(2001 QW322)') }, sha)).toThrow('designation')
     expect(() => smallBodySatelliteIdentities(binary, { ...original, comments: original.comments.replace('Sat1', 'Sat2') }, sha)).toThrow('name/number')
     expect(() => smallBodySatelliteIdentities({ ...binary, parentName: '.*' }, original, sha)).toThrow('Invalid explicit')
+  })
+
+  it('accounts for all twelve frozen small-body sources without counting source-only offsets as delivered states', () => {
+    const ledger = satelliteCatalog.sourceSelections
+    expect(ledger).toHaveLength(12)
+    expect(ledger.filter(entry => entry.status === 'selected-original-records')).toHaveLength(10)
+    expect(ledger.filter(entry => entry.status === 'not-selected-same-system')).toHaveLength(1)
+    const gap = ledger.find(entry => entry.status === 'source-only-missing-compatible-system')!
+    expect(gap.missingCenter).toBe(20000617)
+    expect(gap.components).toEqual([{ name: 'Patroclus', naifId: 920000617 }, { name: 'Manoetius', naifId: 120000617 }])
+    expect(gap.targets).not.toContain(gap.missingCenter)
+    expect([...majorBodiesById.values()].some(body => body.naifId === 120000617)).toBe(false)
+  })
+
+  it('fails source reconciliation closed on unknown sources or altered source-only semantics', () => {
+    const sources = SMALL_BODY_SATELLITE_SOURCES.map(selection => ({ id: selection.id, sha256: sha,
+      record: { source: { source: `https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/${selection.id}.bsp` },
+        comments: [[selection.parentName, selection.primary], ...selection.moons.map(moon => [moon.sourceName, moon.target])].map(([name, target]) => `${name} ${target} 0 1 15 SATORBINT`).join('\n'),
+        segments: [{ target: selection.primary, center: selection.system, frame: 1, type: 2 }, { target: selection.system, center: 10, frame: 1, type: 21 },
+          ...selection.moons.map(moon => ({ target: moon.target, center: selection.system, frame: 1, type: 2 }))] } }))
+    const id = 'tnosat_v001_20000617_jpl082_20230601'
+    const gap = { id, sha256: sha, record: { source: { source: `https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/${id}.bsp` },
+      comments: 'Patroclus 920000617 0.07 1 15 SATORBINT\nManoetius 120000617 0.02 1 15 SATORBINT',
+      segments: [920000617, 120000617].map(target => ({ target, center: 20000617, frame: 1, type: 2 })) } }
+    expect(smallBodySourceLedger([...sources, gap])).toHaveLength(11)
+    expect(() => smallBodySourceLedger(sources.slice(1))).toThrow('absent')
+    expect(() => smallBodySourceLedger([...sources, sources[0]])).toThrow('Duplicate')
+    expect(() => smallBodySourceLedger([...sources, { ...gap, id: 'unreviewed', record: { ...gap.record, source: { source: 'https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/unreviewed.bsp' } } }])).toThrow('Unreviewed')
+    expect(() => smallBodySourceLedger([...sources, { ...gap, record: { ...gap.record, comments: gap.record.comments.replace('Manoetius', 'Menoetius') } }])).toThrow('evidence mismatch')
+    expect(() => smallBodySourceLedger([...sources, { ...gap, record: { ...gap.record, segments: gap.record.segments.map(segment => ({ ...segment, center: 10 })) } }])).toThrow('evidence mismatch')
   })
 })

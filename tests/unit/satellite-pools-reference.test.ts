@@ -113,8 +113,8 @@ describe('integrated satellite source pools and delivery profiles', () => {
     expect(digest(readFileSync('scripts/reference/spk-pool-oracle.c'))).toBe(fixture.oracleSourceSha256)
     expect(digest(manifestBytes)).toBe(fixture.manifestSha256)
     expect(fixture.contexts.map(context => context.rootId)).toEqual(full.files.filter(file => file.solutionKernelIds && !file.dependencyOnly).map(file => file.id))
-    expect(fixture.contexts).toHaveLength(441)
-    expect(fixture.samples).toHaveLength(1353)
+    expect(fixture.contexts).toHaveLength(444)
+    expect(fixture.samples).toHaveLength(1380)
     for (const context of fixture.contexts) {
       const root = byId.get(context.rootId)!
       expect(context.files.map(file => file.id)).toEqual([...root.solutionKernelIds!, root.id])
@@ -178,8 +178,8 @@ describe('integrated satellite source pools and delivery profiles', () => {
         expect(kernel.evaluate(target, file.endEt + 1)).toBeNull()
       }
     }
-    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(972007424)
-    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(262033408)
+    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(1147897856)
+    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(270908416)
   })
 
   it('defaults native to full without imposing the Pages policy on explicit full Web builds', () => {

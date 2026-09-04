@@ -5,7 +5,7 @@ import { getOrbitalPeriodDays } from '../../src/lib/orbitalPeriod'
 
 it('bounds moon-system preset windows to resolve the fastest seed orbit at default sampling', () => {
   const presets = SCENE_PRESETS.filter((preset) => preset.id.endsWith('-spk-moons'))
-  expect(presets).toHaveLength(13)
+  expect(presets).toHaveLength(16)
   for (const preset of presets) {
     const moons = majorBodies.filter((body) => preset.selectedMajorBodyIds.includes(body.id) && body.kind === 'moon')
     const shortest = Math.min(...moons.filter(moon => moon.orbit).map((moon) => getOrbitalPeriodDays(moon.orbit!, 'parent')))
@@ -16,7 +16,7 @@ it('bounds moon-system preset windows to resolve the fastest seed orbit at defau
 })
 
 it('covers every satellite identity across bounded 3D preset groups without silent truncation', () => {
-  for (const parent of ['mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto', 'eris', 'haumea', 'quaoar', 'orcus', 'salacia', '1998ww31', '2001qw322']) {
+  for (const parent of ['mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto', 'eris', 'haumea', 'quaoar', 'orcus', 'salacia', '1998ww31', '2001qw322', 'kagara', '1999oj4', '2003un284']) {
     const groups = SCENE_PRESETS.filter(preset => preset.id.startsWith(`${parent}-spk-moons`))
     const selected = groups.flatMap(group => group.selectedMajorBodyIds.filter(id => id !== parent))
     expect(selected.sort()).toEqual(majorBodies.filter(body => body.kind === 'moon' && body.parentId === parent).map(body => body.id).sort())

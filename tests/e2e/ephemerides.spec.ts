@@ -123,12 +123,12 @@ test('does not substitute a system center when a TNO primary dependency is missi
   await expect(status.getByRole('alert')).toContainText('HTTP 503')
 })
 
-test('loads five original binary systems and omits their positions outside the Pages interval', async ({ page }) => {
+test('loads eight original binary systems and omits their positions outside the Pages interval', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=4&lang=en&view=3d&speed=0')
-  for (const parent of ['quaoar', 'orcus', 'salacia', '1998ww31', '2001qw322']) {
+  for (const parent of ['quaoar', 'orcus', 'salacia', '1998ww31', '2001qw322', 'kagara', '1999oj4', '2003un284']) {
     await page.getByTestId(`preset-${parent}-spk-moons`).click()
     await page.waitForLoadState('networkidle')
     await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('2/2', { timeout: 30_000 })

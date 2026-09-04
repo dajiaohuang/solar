@@ -20,6 +20,15 @@ export const SMALL_BODY_SATELLITE_SOURCES = [
   { id: 'tnosat_v001_53092511_jpl005_20220908', parentId: '2001qw322', parentName: '2001qw322', primary: 953092511, system: 53092511,
     designation: '2001 QW322', horizonsName: '(2001 QW322)', inventoryId: 'sb:asteroid:2001 QW322', displayName: '2001 QW322',
     moons: [{ target: 153092511, sourceName: 'Sat1', name: '2001 QW322 · Sat1', aliases: [] }] },
+  { id: 'tnosat_v001_20469705_jpl009_20220908', parentId: 'kagara', parentName: 'Kagara', primary: 920469705, system: 20469705,
+    designation: '469705', horizonsName: '469705 |=Kagara (2005 EF298)', inventoryId: 'sb:asteroid:469705',
+    moons: [{ target: 120469705, sourceName: 'Haunu', name: 'Haunu', aliases: [] }] },
+  { id: 'tnosat_v001_20612095_jpl006_20220908', parentId: '1999oj4', parentName: '1999oj4', primary: 920612095, system: 20612095,
+    designation: '612095', horizonsName: '612095 (1999 OJ4)', inventoryId: 'sb:asteroid:612095', displayName: '1999 OJ4',
+    moons: [{ target: 120612095, sourceName: 'Sat1', name: '1999 OJ4 · Sat1', aliases: [] }] },
+  { id: 'tnosat_v001_20612687_jpl008_20220908', parentId: '2003un284', parentName: '2003un284', primary: 920612687, system: 20612687,
+    designation: '612687', horizonsName: '612687 (2003 UN284)', inventoryId: 'sb:asteroid:612687', displayName: '2003 UN284',
+    moons: [{ target: 120612687, sourceName: 'Sat1', name: '2003 UN284 · Sat1', aliases: [] }] },
 ]
 
 export function smallBodySatelliteIdentities(selection, record, sourceSha256) {
@@ -63,4 +72,40 @@ export function smallBodyPrimaryIdentity(selection, record, sourceSha256) {
     name: selection.displayName ?? selection.parentName, designation: selection.designation, inventoryId: selection.inventoryId,
     sourceUrl: record.source.source, sourceSha256, sourceEphemeris: selection.id,
     meaning: 'Named primary from original component offsets, not its system barycenter; no invented orbit or physical properties.' }
+}
+
+/** Account for every frozen small-body publication, not only selected states.
+ * This is source inventory, not a second body registry or a coverage claim. */
+export function smallBodySourceLedger(records) {
+  const selected = new Map(SMALL_BODY_SATELLITE_SOURCES.map(entry => [entry.id, entry]))
+  if (new Set(records.map(entry => entry.id)).size !== records.length) throw new Error('Duplicate small-body source ledger entry')
+  const result = records.map(({ id, record, sha256 }) => {
+    const url = `https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/${id}.bsp`
+    if (record.source?.source !== url || !/^[a-f0-9]{64}$/.test(sha256)) throw new Error('Small-body ledger source mismatch')
+    const targets = [...new Set(record.segments.map(segment => segment.target))].sort((a, b) => a - b)
+    const base = { id, url, sha256, targets }
+    const selection = selected.get(id)
+    if (selection) {
+      smallBodySatelliteIdentities(selection, record, sha256)
+      return { ...base, status: 'selected-original-records', parentId: selection.parentId,
+        reason: 'Selected primary/component/system identities; delivered state and interval remain manifest-dependent.' }
+    }
+    if (id === 'tnosat_v001_20136108_jpl110_20220908') {
+      const replacement = 'tnosat_v001b_20136108_jpl110_20221014'
+      if (!records.some(entry => entry.id === replacement)) throw new Error('Missing reviewed Haumea replacement source')
+      return { ...base, status: 'not-selected-same-system', parentId: 'haumea', replacement,
+        reason: 'Retained original source evidence; the explicitly selected v001b publication supplies this system.' }
+    }
+    if (id === 'tnosat_v001_20000617_jpl082_20230601') {
+      const components = [{ name: 'Patroclus', naifId: 920000617 }, { name: 'Manoetius', naifId: 120000617 }]
+      if (targets.length !== 2 || components.some(({ name, naifId }) => !targets.includes(naifId)
+        || !new RegExp(`^\\s*${name}\\s+${naifId}\\s+[-+0-9.Ee]+\\s+\\d+\\s+\\d+\\s+SATORBINT\\s*$`, 'm').test(record.comments))
+        || record.segments.some(segment => segment.center !== 20000617 || segment.frame !== 1 || segment.type !== 2)) throw new Error('Patroclus source-only evidence mismatch')
+      return { ...base, status: 'source-only-missing-compatible-system', components, missingCenter: 20000617,
+        reason: 'Original JPL082/DE440 publication contains offsets only. Lucy solution 54/DE431 is a separate older system solution; no mixed fit is silently substituted. Names are raw source labels, not a formal-name adjudication.' }
+    }
+    throw new Error(`Unreviewed small-body source ${id}`)
+  })
+  if ([...selected.keys()].some(id => !result.some(entry => entry.id === id))) throw new Error('Selected small-body source absent from ledger')
+  return result.sort((a, b) => a.id.localeCompare(b.id, 'en'))
 }

@@ -14467,6 +14467,111 @@
       "integrationBatch": "satellite-expansion-20260904"
     },
     {
+      "id": "system-kagara-2026-07-01-2027-01-01",
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20469705_jpl009_20220908.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20469705_jpl009_20220908.bsp",
+        "bytes": 175927296,
+        "etag": "\"631a6afe-a7c7000\"",
+        "lastModified": "Thu, 08 Sep 2022 22:21:50 GMT"
+      },
+      "core": false,
+      "solutionKernelIds": [
+        "de440s-2000-01-01-2051-01-01"
+      ],
+      "solution": "KAGARA published system + DE440 Sun conversion",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20469705_jpl009_20220908.bsp",
+          "sha256": "6f2a7981ca7c79162195374ab46f44ba8f35d7cc5ebcab0e27a662f6c8745ad0"
+        },
+        "sourceSelection": "Original Kagara920469705/Haunu120469705 offsets and system20469705 trajectory from one publication. Original comment explicitly identifies 469705 Kagara and remaps2469705 to20469705. Preserve DE440 fit/DE441 SB441-N16 trajectory provenance; no invented physical properties.",
+        "windowPolicy": "New small-body systems: 2026-07-01/2027-01-01 TDB; preserve existing Pages coverage"
+      },
+      "path": "system-kagara-2026-07-01-2027-01-01.bsp",
+      "sha256": "12a06c4d14fee802bdf8647284135350d6793d23ffcf799881977819600b50d0",
+      "bytes": 2958336,
+      "targets": [
+        120469705,
+        920469705,
+        20469705
+      ],
+      "startEt": 836136000,
+      "endEt": 852033600,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "system-1999oj4-2026-07-01-2027-01-01",
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20612095_jpl006_20220908.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20612095_jpl006_20220908.bsp",
+        "bytes": 175923200,
+        "etag": "\"631a6aff-a7c6000\"",
+        "lastModified": "Thu, 08 Sep 2022 22:21:51 GMT"
+      },
+      "core": false,
+      "solutionKernelIds": [
+        "de440s-2000-01-01-2051-01-01"
+      ],
+      "solution": "1999OJ4 published system + DE440 Sun conversion",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20612095_jpl006_20220908.bsp",
+          "sha256": "41c6d96d61141c18d1ce8ea0cdefcde89324adf268c5f99ea70ba20a4b5d974c"
+        },
+        "sourceSelection": "Original primary920612095, Sat1 target120612095 and system20612095; original target line identifies612095 (1999 OJ4). Preserve raw component label, mixed DE440/DE441 publication provenance and no inferred zero mass.",
+        "windowPolicy": "New small-body systems: 2026-07-01/2027-01-01 TDB; preserve existing Pages coverage"
+      },
+      "path": "system-1999oj4-2026-07-01-2027-01-01.bsp",
+      "sha256": "9da6a4a3972036a749abdd1cfdcb09344d89d758aa7bdf9a18b854db178d6dfa",
+      "bytes": 2958336,
+      "targets": [
+        120612095,
+        920612095,
+        20612095
+      ],
+      "startEt": 836136000,
+      "endEt": 852033600,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "system-2003un284-2026-07-01-2027-01-01",
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20612687_jpl008_20220908.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20612687_jpl008_20220908.bsp",
+        "bytes": 175928320,
+        "etag": "\"631a6aff-a7c7400\"",
+        "lastModified": "Thu, 08 Sep 2022 22:21:51 GMT"
+      },
+      "core": false,
+      "solutionKernelIds": [
+        "de440s-2000-01-01-2051-01-01"
+      ],
+      "solution": "2003UN284 published system + DE440 Sun conversion",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20612687_jpl008_20220908.bsp",
+          "sha256": "0dd1bb95f20e976f2588e008c11b325c119b86542b45e93bad768c29ab1cec7a"
+        },
+        "sourceSelection": "Original primary920612687, Sat1 target120612687 and system20612687; original target line identifies612687 (2003 UN284). Preserve raw component label, mixed DE440/DE441 publication provenance and no inferred zero mass.",
+        "windowPolicy": "New small-body systems: 2026-07-01/2027-01-01 TDB; preserve existing Pages coverage"
+      },
+      "path": "system-2003un284-2026-07-01-2027-01-01.bsp",
+      "sha256": "b55fa4a79207083e7bd32b368b313e2aab78139dbdc47b0e90c2d93979d347a2",
+      "bytes": 2958336,
+      "targets": [
+        120612687,
+        920612687,
+        20612687
+      ],
+      "startEt": 836136000,
+      "endEt": 852033600,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
       "id": "system-quaoar-2026-07-01-2027-01-01",
       "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20050000_jpl043_20220908.bsp",
       "sourceIdentity": {

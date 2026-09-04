@@ -65,7 +65,7 @@ test('keeps every moon-system preset in a bounded local 3D frame', async ({ page
   page.on('pageerror', error => errors.push(error.message))
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=4&lang=en&speed=0')
-  for (const id of ['jupiter-spk-moons', 'saturn-spk-moons', 'uranus-spk-moons', 'neptune-spk-moons', 'pluto-spk-moons', 'eris-spk-moons', 'haumea-spk-moons', 'quaoar-spk-moons', 'orcus-spk-moons', 'salacia-spk-moons', '1998ww31-spk-moons', '2001qw322-spk-moons', 'earth-moon']) {
+  for (const id of ['jupiter-spk-moons', 'saturn-spk-moons', 'uranus-spk-moons', 'neptune-spk-moons', 'pluto-spk-moons', 'eris-spk-moons', 'haumea-spk-moons', 'quaoar-spk-moons', 'orcus-spk-moons', 'salacia-spk-moons', '1998ww31-spk-moons', '2001qw322-spk-moons', 'kagara-spk-moons', '1999oj4-spk-moons', '2003un284-spk-moons', 'earth-moon']) {
     await page.getByTestId(`preset-${id}`).click()
     await page.waitForLoadState('networkidle')
     // A first selection now loads an entire system's split original records.

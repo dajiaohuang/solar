@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-04T12:04:36.366Z",
+  "generatedAt": "2026-09-04T12:28:26.234Z",
   "primaries": [
     {
       "id": "quaoar",
@@ -61,6 +61,212 @@
       "sourceSha256": "6864d723ebe662e772aea8f9238a8c9eb31ea958d58358bcb516c32b916d0392",
       "sourceEphemeris": "tnosat_v001_53092511_jpl005_20220908",
       "meaning": "Named primary from original component offsets, not its system barycenter; no invented orbit or physical properties."
+    },
+    {
+      "id": "kagara",
+      "naifId": 920469705,
+      "systemNaifId": 20469705,
+      "name": "Kagara",
+      "designation": "469705",
+      "inventoryId": "sb:asteroid:469705",
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20469705_jpl009_20220908.bsp",
+      "sourceSha256": "6f2a7981ca7c79162195374ab46f44ba8f35d7cc5ebcab0e27a662f6c8745ad0",
+      "sourceEphemeris": "tnosat_v001_20469705_jpl009_20220908",
+      "meaning": "Named primary from original component offsets, not its system barycenter; no invented orbit or physical properties."
+    },
+    {
+      "id": "1999oj4",
+      "naifId": 920612095,
+      "systemNaifId": 20612095,
+      "name": "1999 OJ4",
+      "designation": "612095",
+      "inventoryId": "sb:asteroid:612095",
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20612095_jpl006_20220908.bsp",
+      "sourceSha256": "41c6d96d61141c18d1ce8ea0cdefcde89324adf268c5f99ea70ba20a4b5d974c",
+      "sourceEphemeris": "tnosat_v001_20612095_jpl006_20220908",
+      "meaning": "Named primary from original component offsets, not its system barycenter; no invented orbit or physical properties."
+    },
+    {
+      "id": "2003un284",
+      "naifId": 920612687,
+      "systemNaifId": 20612687,
+      "name": "2003 UN284",
+      "designation": "612687",
+      "inventoryId": "sb:asteroid:612687",
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20612687_jpl008_20220908.bsp",
+      "sourceSha256": "0dd1bb95f20e976f2588e008c11b325c119b86542b45e93bad768c29ab1cec7a",
+      "sourceEphemeris": "tnosat_v001_20612687_jpl008_20220908",
+      "meaning": "Named primary from original component offsets, not its system barycenter; no invented orbit or physical properties."
+    }
+  ],
+  "sourceSelections": [
+    {
+      "id": "tnosat_v001_20000617_jpl082_20230601",
+      "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20000617_jpl082_20230601.bsp",
+      "sha256": "f9f8ff5dc582253937e78ee205179041a517bbe2205aaed764bb5669ff306ea1",
+      "targets": [
+        120000617,
+        920000617
+      ],
+      "status": "source-only-missing-compatible-system",
+      "components": [
+        {
+          "name": "Patroclus",
+          "naifId": 920000617
+        },
+        {
+          "name": "Manoetius",
+          "naifId": 120000617
+        }
+      ],
+      "missingCenter": 20000617,
+      "reason": "Original JPL082/DE440 publication contains offsets only. Lucy solution 54/DE431 is a separate older system solution; no mixed fit is silently substituted. Names are raw source labels, not a formal-name adjudication."
+    },
+    {
+      "id": "tnosat_v001_20050000_jpl043_20220908",
+      "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20050000_jpl043_20220908.bsp",
+      "sha256": "38631343d3cdd89a51e152d85b6d2b21d9c0e65eeb91b93190d6de6624857a82",
+      "targets": [
+        20050000,
+        120050000,
+        920050000
+      ],
+      "status": "selected-original-records",
+      "parentId": "quaoar",
+      "reason": "Selected primary/component/system identities; delivered state and interval remain manifest-dependent."
+    },
+    {
+      "id": "tnosat_v001_20090482_jpl043_20220908",
+      "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20090482_jpl043_20220908.bsp",
+      "sha256": "013513ee679cc6867e4ab78fa039f1f5178ba3a2d5f13a9ad084255a99960373",
+      "targets": [
+        20090482,
+        120090482,
+        920090482
+      ],
+      "status": "selected-original-records",
+      "parentId": "orcus",
+      "reason": "Selected primary/component/system identities; delivered state and interval remain manifest-dependent."
+    },
+    {
+      "id": "tnosat_v001_20120347_jpl025_20220908",
+      "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20120347_jpl025_20220908.bsp",
+      "sha256": "39a712760ed44f2e4805ece53764248e01b1a7910bfe8ac8d4d15f99bebccb1d",
+      "targets": [
+        20120347,
+        120120347,
+        920120347
+      ],
+      "status": "selected-original-records",
+      "parentId": "salacia",
+      "reason": "Selected primary/component/system identities; delivered state and interval remain manifest-dependent."
+    },
+    {
+      "id": "tnosat_v001_20136108_jpl110_20220908",
+      "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20136108_jpl110_20220908.bsp",
+      "sha256": "74dab97488ff70c4b25dc66c2ccd929ea37837732e401beff0fdd06d9d3c76ae",
+      "targets": [
+        20136108,
+        120136108,
+        220136108,
+        920136108
+      ],
+      "status": "not-selected-same-system",
+      "parentId": "haumea",
+      "replacement": "tnosat_v001b_20136108_jpl110_20221014",
+      "reason": "Retained original source evidence; the explicitly selected v001b publication supplies this system."
+    },
+    {
+      "id": "tnosat_v001_20136199_jpl080_20220908",
+      "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20136199_jpl080_20220908.bsp",
+      "sha256": "d72495c7facb609d511ea9222a5ddde5bf6c06cfb3cc85a6c8a3ade1241987f7",
+      "targets": [
+        20136199,
+        120136199,
+        920136199
+      ],
+      "status": "selected-original-records",
+      "parentId": "eris",
+      "reason": "Selected primary/component/system identities; delivered state and interval remain manifest-dependent."
+    },
+    {
+      "id": "tnosat_v001_20469705_jpl009_20220908",
+      "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20469705_jpl009_20220908.bsp",
+      "sha256": "6f2a7981ca7c79162195374ab46f44ba8f35d7cc5ebcab0e27a662f6c8745ad0",
+      "targets": [
+        20469705,
+        120469705,
+        920469705
+      ],
+      "status": "selected-original-records",
+      "parentId": "kagara",
+      "reason": "Selected primary/component/system identities; delivered state and interval remain manifest-dependent."
+    },
+    {
+      "id": "tnosat_v001_20612095_jpl006_20220908",
+      "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20612095_jpl006_20220908.bsp",
+      "sha256": "41c6d96d61141c18d1ce8ea0cdefcde89324adf268c5f99ea70ba20a4b5d974c",
+      "targets": [
+        20612095,
+        120612095,
+        920612095
+      ],
+      "status": "selected-original-records",
+      "parentId": "1999oj4",
+      "reason": "Selected primary/component/system identities; delivered state and interval remain manifest-dependent."
+    },
+    {
+      "id": "tnosat_v001_20612687_jpl008_20220908",
+      "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20612687_jpl008_20220908.bsp",
+      "sha256": "0dd1bb95f20e976f2588e008c11b325c119b86542b45e93bad768c29ab1cec7a",
+      "targets": [
+        20612687,
+        120612687,
+        920612687
+      ],
+      "status": "selected-original-records",
+      "parentId": "2003un284",
+      "reason": "Selected primary/component/system identities; delivered state and interval remain manifest-dependent."
+    },
+    {
+      "id": "tnosat_v001_53031823_jpl010_20220908",
+      "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_53031823_jpl010_20220908.bsp",
+      "sha256": "8057e72ca98ab869a65347e6d3e3e0ad2f41990804f8c016f69f0cc20d4c24a8",
+      "targets": [
+        53031823,
+        153031823,
+        953031823
+      ],
+      "status": "selected-original-records",
+      "parentId": "1998ww31",
+      "reason": "Selected primary/component/system identities; delivered state and interval remain manifest-dependent."
+    },
+    {
+      "id": "tnosat_v001_53092511_jpl005_20220908",
+      "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_53092511_jpl005_20220908.bsp",
+      "sha256": "6864d723ebe662e772aea8f9238a8c9eb31ea958d58358bcb516c32b916d0392",
+      "targets": [
+        53092511,
+        153092511,
+        953092511
+      ],
+      "status": "selected-original-records",
+      "parentId": "2001qw322",
+      "reason": "Selected primary/component/system identities; delivered state and interval remain manifest-dependent."
+    },
+    {
+      "id": "tnosat_v001b_20136108_jpl110_20221014",
+      "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001b_20136108_jpl110_20221014.bsp",
+      "sha256": "6a82bfc1074d196a5a218756b8ff5ec8af0ca9147833eee8e9279765e1c1e25d",
+      "targets": [
+        20136108,
+        120136108,
+        220136108,
+        920136108
+      ],
+      "status": "selected-original-records",
+      "parentId": "haumea",
+      "reason": "Selected primary/component/system identities; delivered state and interval remain manifest-dependent."
     }
   ],
   "contract": "Auditable satellite identities; no generated orbit, GM, phase, physical radius or claim of available ephemeris states.",
@@ -11811,6 +12017,84 @@
           "parentNaifId": 953092511,
           "systemNaifId": 53092511,
           "ephemeris": "tnosat_v001_53092511_jpl005_20220908",
+          "evidence": "original-comment-name-number-and-system-primary-descriptors"
+        }
+      ]
+    },
+    {
+      "id": "naif:120469705",
+      "naifId": 120469705,
+      "name": "Haunu",
+      "parentId": "kagara",
+      "aliases": [],
+      "identityStatus": "source-identified-not-in-discovery-snapshot",
+      "identityResolution": "original-comment-name-number-and-system-primary-descriptors",
+      "sourceEphemerides": [
+        "tnosat_v001_20469705_jpl009_20220908"
+      ],
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20469705_jpl009_20220908.bsp",
+      "sourceSha256": "6f2a7981ca7c79162195374ab46f44ba8f35d7cc5ebcab0e27a662f6c8745ad0",
+      "primaryNaifId": 920469705,
+      "systemNaifId": 20469705,
+      "provenance": "Published component relative to its system barycenter; named parent uses the distinct original primary offset. Source GM is not asserted measured mass.",
+      "sourceClaims": [
+        {
+          "name": "Haunu",
+          "parentNaifId": 920469705,
+          "systemNaifId": 20469705,
+          "ephemeris": "tnosat_v001_20469705_jpl009_20220908",
+          "evidence": "original-comment-name-number-and-system-primary-descriptors"
+        }
+      ]
+    },
+    {
+      "id": "naif:120612095",
+      "naifId": 120612095,
+      "name": "1999 OJ4 · Sat1",
+      "parentId": "1999oj4",
+      "aliases": [],
+      "identityStatus": "source-identified-not-in-discovery-snapshot",
+      "identityResolution": "original-comment-name-number-and-system-primary-descriptors",
+      "sourceEphemerides": [
+        "tnosat_v001_20612095_jpl006_20220908"
+      ],
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20612095_jpl006_20220908.bsp",
+      "sourceSha256": "41c6d96d61141c18d1ce8ea0cdefcde89324adf268c5f99ea70ba20a4b5d974c",
+      "primaryNaifId": 920612095,
+      "systemNaifId": 20612095,
+      "provenance": "Published component relative to its system barycenter; named parent uses the distinct original primary offset. Source GM is not asserted measured mass.",
+      "sourceClaims": [
+        {
+          "name": "Sat1",
+          "parentNaifId": 920612095,
+          "systemNaifId": 20612095,
+          "ephemeris": "tnosat_v001_20612095_jpl006_20220908",
+          "evidence": "original-comment-name-number-and-system-primary-descriptors"
+        }
+      ]
+    },
+    {
+      "id": "naif:120612687",
+      "naifId": 120612687,
+      "name": "2003 UN284 · Sat1",
+      "parentId": "2003un284",
+      "aliases": [],
+      "identityStatus": "source-identified-not-in-discovery-snapshot",
+      "identityResolution": "original-comment-name-number-and-system-primary-descriptors",
+      "sourceEphemerides": [
+        "tnosat_v001_20612687_jpl008_20220908"
+      ],
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20612687_jpl008_20220908.bsp",
+      "sourceSha256": "0dd1bb95f20e976f2588e008c11b325c119b86542b45e93bad768c29ab1cec7a",
+      "primaryNaifId": 920612687,
+      "systemNaifId": 20612687,
+      "provenance": "Published component relative to its system barycenter; named parent uses the distinct original primary offset. Source GM is not asserted measured mass.",
+      "sourceClaims": [
+        {
+          "name": "Sat1",
+          "parentNaifId": 920612687,
+          "systemNaifId": 20612687,
+          "ephemeris": "tnosat_v001_20612687_jpl008_20220908",
           "evidence": "original-comment-name-number-and-system-primary-descriptors"
         }
       ]
