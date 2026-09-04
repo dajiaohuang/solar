@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url'
 
 const sha256 = (buffer) => createHash('sha256').update(buffer).digest('hex')
 const MAX_OUTPUT_BYTES = 512 * 1024 * 1024
+const MAX_RANGE_BYTES = 128 * 1024 * 1024
 
 async function sha256File(path) {
   const hash = createHash('sha256')
@@ -24,7 +25,7 @@ export async function openSource(source) {
     return {
       size, identity: { source, bytes: size, sha256: await sha256File(source) },
       async read(start, length) {
-        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(length) || start < 0 || length <= 0 || start + length > size) throw new Error('SPK range outside source')
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(length) || start < 0 || length <= 0 || length > MAX_RANGE_BYTES || start + length > size) throw new Error('SPK range outside source or safety limit')
         const buffer = Buffer.alloc(length)
         const { bytesRead } = await handle.read(buffer, 0, length, start)
         if (bytesRead !== length) throw new Error('Truncated local SPK')
@@ -51,7 +52,9 @@ export async function openSource(source) {
         await response.body?.cancel()
         throw new Error(`Server did not honor exact SPK range (${response.status})`)
       }
-      if ((etag && response.headers.get('etag') !== etag) || (modified && response.headers.get('last-modified') !== modified)) throw new Error('Source SPK changed during extraction')
+      if ((etag && response.headers.get('etag') !== etag) || (modified && response.headers.get('last-modified') !== modified)) {
+        await response.body?.cancel(); throw new Error('Source SPK changed during extraction')
+      }
       const buffer = Buffer.from(await response.arrayBuffer())
       if (buffer.length !== length) throw new Error('Truncated SPK range')
       return buffer
@@ -86,7 +89,7 @@ export async function inspectSpk(source) {
         frame: int(summary, offset + 24), type: int(summary, offset + 28),
         startAddress: int(summary, offset + 32), endAddress: int(summary, offset + 36),
       }
-      if (segment.startAddress < 1 || segment.endAddress < segment.startAddress || segment.endAddress * 8 > source.size) throw new Error('SPK segment address out of bounds')
+      if (!Number.isFinite(segment.startEt) || !Number.isFinite(segment.endEt) || segment.startEt > segment.endEt || !Number.isSafeInteger(segment.startAddress) || !Number.isSafeInteger(segment.endAddress) || segment.startAddress < 1 || segment.endAddress < segment.startAddress || segment.endAddress * 8 > source.size) throw new Error('SPK segment descriptor/address out of bounds')
       segments.push(segment)
     }
     record = double(summary, 0)
@@ -99,16 +102,20 @@ export async function cropSpk(source, { startEt, endEt, targets }) {
   const input = await inspectSpk(source)
   const selected = input.segments.filter((s) => (!targets || targets.includes(s.target)) && s.startEt <= endEt && s.endEt >= startEt)
   const output = []
+  let dataBytes = 0
   for (const segment of selected) {
     if (![2, 3].includes(segment.type) || ![1, 17].includes(segment.frame)) throw new Error(`Unsupported selected SPK ${segment.target}: type ${segment.type}, frame ${segment.frame}`)
     const directory = await source.read((segment.endAddress - 4) * 8, 32)
     const init = input.double(directory, 0), interval = input.double(directory, 8)
     const recordSize = input.double(directory, 16), count = input.double(directory, 24)
-    if (!Number.isFinite(init) || !(interval > 0) || !Number.isInteger(recordSize) || recordSize < 5 || !Number.isInteger(count) || count < 1 || count * recordSize + 4 !== segment.endAddress - segment.startAddress + 1) throw new Error('Invalid Chebyshev directory')
+    const validStride = segment.type === 2 ? (recordSize - 2) % 3 === 0 : (recordSize - 2) % 6 === 0
+    if (!Number.isFinite(init) || !Number.isFinite(interval) || !(interval > 0) || !Number.isInteger(recordSize) || recordSize < 5 || !validStride || !Number.isInteger(count) || count < 1 || !Number.isSafeInteger(count * recordSize) || count * recordSize + 4 !== segment.endAddress - segment.startAddress + 1 || segment.startEt > init || segment.endEt < init + count * interval) throw new Error('Invalid Chebyshev directory')
     const from = Math.max(startEt, segment.startEt), to = Math.min(endEt, segment.endEt)
     const first = Math.max(0, Math.min(count - 1, Math.floor((from - init) / interval)))
     const last = Math.max(first, Math.min(count - 1, Math.floor((to - init) / interval)))
-    const raw = await source.read((segment.startAddress - 1 + first * recordSize) * 8, (last - first + 1) * recordSize * 8)
+    const rawBytes = (last - first + 1) * recordSize * 8
+    if (!Number.isSafeInteger(rawBytes) || rawBytes > MAX_RANGE_BYTES || dataBytes + rawBytes + 32 > MAX_OUTPUT_BYTES - 3 * 1024) throw new Error('Cropped SPK exceeds safety limit')
+    const raw = await source.read((segment.startAddress - 1 + first * recordSize) * 8, rawBytes)
     const data = Buffer.alloc(raw.length + 32)
     for (let offset = 0; offset < raw.length; offset += 8) data.writeDoubleLE(input.double(raw, offset), offset)
     data.writeDoubleLE(init + first * interval, raw.length)
@@ -116,6 +123,7 @@ export async function cropSpk(source, { startEt, endEt, targets }) {
     data.writeDoubleLE(recordSize, raw.length + 16)
     data.writeDoubleLE(last - first + 1, raw.length + 24)
     output.push({ ...segment, startEt: from, endEt: to, data })
+    dataBytes += data.length
   }
   if (!output.length) throw new Error('No selected SPK coverage')
   // Header followed by pairs of summary/name records; addresses are 1-based doubles.
