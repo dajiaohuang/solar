@@ -1,4 +1,5 @@
 import { evaluateType21, inspectType21, type Type21Metadata } from './spkType21.ts';
+import { evaluateType17, inspectType17, type Type17Metadata } from './spkType17.ts';
 
 /**
  * Minimal, dependency-free reader for binary DAF/SPK kernels.
@@ -19,6 +20,7 @@ export interface SpkSegment {
   recordSize: number;
   /** Present only for validated extended modified-difference records. */
   type21?: Type21Metadata;
+  type17?: Type17Metadata;
 }
 
 export interface SpkRecordData {
@@ -90,7 +92,11 @@ export class SpkKernel {
     for (let n = this.segments.length - 1; n >= 0; n--) {
       const s = this.segments[n];
       if (s.target !== target || et < s.startEt || et > s.endEt) continue;
-      if (s.frame !== 1 && s.frame !== 17 || s.type !== 2 && s.type !== 3 && s.type !== 21) { unsupported = s; break; }
+      if (s.frame !== 1 && s.frame !== 17 || s.type !== 2 && s.type !== 3 && s.type !== 17 && s.type !== 21) { unsupported = s; break; }
+      if (s.type17) {
+        const v = evaluateType17((address) => this.f64(this.addressOffset(address)), s.startAddress, et);
+        return { position: v.position, velocity: v.velocity, center: s.center, frame: s.frame };
+      }
       if (s.type21) {
         const v = evaluateType21((address) => this.f64(this.addressOffset(address)), s.startAddress, s.type21, et);
         return { position: { x: v[0], y: v[1], z: v[2] }, velocity: { x: v[3], y: v[4], z: v[5] }, center: s.center, frame: s.frame };
@@ -141,6 +147,10 @@ export class SpkKernel {
   private parseSegment(d: number[], i: number[]): SpkSegment {
     const [startEt, endEt] = d, [target, center, frame, type, startAddress, endAddress] = i;
     if (![startEt, endEt].every(Number.isFinite) || startEt > endEt || startAddress < 1 || endAddress < startAddress || endAddress > this.bytes / 8) fail('invalid segment descriptor');
+    if (type === 17) {
+      const type17 = inspectType17((address) => this.f64(this.addressOffset(address)), startAddress, endAddress);
+      return { target, center, frame, type, startEt, endEt, startAddress, endAddress, coefficientCount: 0, recordCount: 1, recordSize: 12, type17 };
+    }
     if (type === 21) {
       if (endAddress - startAddress + 1 < 2) fail('truncated type 21 directory');
       const type21 = inspectType21((address) => this.f64(this.addressOffset(address)), startAddress, endAddress, endEt);
