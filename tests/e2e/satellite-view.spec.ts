@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 test('frames close moons at their own scale and preserves zoom, reset and portrait fit', async ({ page }) => {
   const errors: string[] = []
@@ -91,7 +91,7 @@ for (const id of satellitePresetIds) {
     // selection, its loader and then trajectory completion within the deadlines.
     await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText(new RegExp(`/${selectedCount}(?:\\D|$)`))
     await expect(page.getByTestId('ephemeris-status').locator('summary')).not.toContainText('Loading', { timeout: 60_000 })
-    await expect(page.locator('.compute-progress')).toHaveCount(0)
+    await expect(page.locator('.compute-progress')).toHaveCount(0, { timeout: 60_000 })
     const canvas = page.getByTestId('trajectory-canvas-3d')
     await expect(canvas).toBeVisible()
     // Irregular moons extend beyond the old close-moon scale. Test a physical

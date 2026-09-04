@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 test('defers SPK downloads until the first-visit choice', async ({ page }) => {
   const kernels: string[] = []
@@ -138,7 +138,7 @@ test('loads eight original binary systems and omits their positions outside the 
   await page.goto('./?v=4&lang=en&view=3d&ref=quaoar&bodies=quaoar,naif:120050000&focused=naif:120050000&jd=2460000.5&speed=0')
   await expect(page.getByTestId('ephemeris-status').locator('summary')).not.toContainText('Loading', { timeout: 30_000 })
   await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('0/2')
-  await expect(page.locator('.frame-overlays .canvas-error[role="status"]')).toContainText('reference')
-  await expect(page.locator('.frame-view canvas')).toHaveCount(0)
+  await expect(page.getByTestId('missing-position-notice')).toContainText('Position unavailable')
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
   expect(errors).toEqual([])
 })

@@ -84,6 +84,8 @@ jobs:
       - run: npm run test:unit
       - run: npm run test:scientific
       - name: Build the production application
+        env:
+          VITE_SOLAR_API_BASE_URL: /solar-test-api
         run: npm run build
       - run: npm run check:capacity
       - name: Install Chromium

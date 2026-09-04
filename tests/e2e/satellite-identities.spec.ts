@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 test('keeps ephemeris-only identities selectable and their missing-state notices separate', async ({ page }) => {
   const errors: string[] = []
