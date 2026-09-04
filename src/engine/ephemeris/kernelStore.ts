@@ -3,6 +3,7 @@ import { bodyNaifId } from '../../data/ephemerisTargets'
 import { SpkKernel } from './spk'
 import { createKernelResolver, kernelsCoveringInterval, type LoadedKernel } from './kernelPool'
 import { utcJulianDayToEt } from './timeScales'
+import type { CelestialBody } from '../../types'
 
 export type KernelFile = {
   id: string; path: string; sha256: string; bytes: number; targets: number[];
@@ -93,8 +94,8 @@ export function kernelStateForBody(body: { id: string; naifId?: number }, utcJd:
   return createKernelResolver(loadedKernels(), et).relative(target, 10)
 }
 
-export function kernelCoverage(body: { id: string; naifId?: number }, utcJd: number) {
+export function kernelCoverage(body: Pick<CelestialBody, 'id' | 'naifId' | 'orbit'>, utcJd: number) {
   const target = bodyNaifId(body)
   const state = kernelStateForBody(body, utcJd)
-  return { target, model: state ? 'jpl-spk' : 'approximate-fallback', kernelIds: loadedKernelIds(), manifestId: EPHEMERIS_MANIFEST.id }
+  return { target, model: state ? 'jpl-spk' : body.id === 'sun' ? 'heliocentric-origin' : body.orbit ? 'approximate-fallback' : 'unavailable', kernelIds: loadedKernelIds(), manifestId: EPHEMERIS_MANIFEST.id }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-const { parseSatelliteEphemerisIndex, reconcileSatelliteIdentities } = await import('../../scripts/lib/satellite-ephemeris-index.mjs')
+const { parseSatelliteEphemerisIndex, parseSatelliteKernelIdentities, reconcileSatelliteIdentities } = await import('../../scripts/lib/satellite-ephemeris-index.mjs')
 
 const fixture = `
 <table id="sat_ephem"><thead><tr><th>Planet</th><th>Satellite</th><th>Code</th><th>Ephemeris</th><th>Ref</th></tr></thead>
@@ -20,12 +20,62 @@ describe('parseSatelliteEphemerisIndex', () => {
   })
 
   it('rejects fabricated or ambiguous identity inputs', () => {
-    expect(() => parseSatelliteEphemerisIndex(fixture.replace('401', '401').replace('505', '401'))).toThrow(/Duplicate/)
+    expect(() => parseSatelliteEphemerisIndex(fixture.replace('505', '401'))).toThrow(/parent mismatch/)
     expect(() => parseSatelliteEphemerisIndex(fixture.replace('#MAR099', '#MISSING'))).toThrow(/Unlinked/)
+  })
+  it('rejects impossible dates, malformed rows and repeated source IDs', () => {
+    expect(() => parseSatelliteEphemerisIndex(fixture.replace('1900-01-01', '1900-02-30'))).toThrow(/bounds/)
+    expect(() => parseSatelliteEphemerisIndex(fixture.replace('<td>401</td>', ''))).toThrow(/row/)
+    expect(() => parseSatelliteEphemerisIndex(fixture + '<div id="MAR099"></div>')).toThrow(/Duplicate/)
+    expect(() => parseSatelliteEphemerisIndex(fixture.replace('Jupiter', 'Uranus'))).toThrow(/parent mismatch/)
+  })
+  it('retains alternate solution assignments without treating first row as precedence', () => {
+    const duplicate = '<tr><td>Mars</td><td>Phobos</td><td>401</td><td><a href="#JUP505">alternate</a></td><td>Other source</td></tr>'
+    const result = parseSatelliteEphemerisIndex(fixture.replace('</tbody>', `${duplicate}</tbody>`))
+    expect(result.bodies).toHaveLength(2)
+    expect(result.bodies[0].sourceAssignments).toEqual([{ ephemeris: 'MAR099', reference: 'JPL & ESA' }, { ephemeris: 'JUP505', reference: 'Other source' }])
   })
 })
 
 describe('reconcileSatelliteIdentities', () => {
+  it('normalizes source separators and zero padding but never merges distinct designations or parents', () => {
+    const discovery = [
+      { name: 'S/2003 J2', parentId: 'jupiter' },
+      { name: 'S/2023 S1', parentId: 'saturn' },
+    ]
+    const candidates = [
+      { naifId: 55501, name: 'S2003_j_2', parentId: 'jupiter' },
+      { naifId: 65236, name: 'S2023_s01', parentId: 'saturn' },
+      { naifId: 65237, name: 'S2023_s02', parentId: 'saturn' },
+      { naifId: 55502, name: 'S2003_j_2', parentId: 'saturn' },
+    ]
+    expect(reconcileSatelliteIdentities(discovery, candidates).matched.map(row => row.body.naifId)).toEqual([55501, 65236])
+  })
+  it('retains conflicting published IDs instead of letting source order resolve them', () => {
+    const discovery = [{ name: 'Francisco', parentId: 'uranus' }]
+    const candidates = [
+      { name: 'Francisco', parentId: 'uranus', naifId: 723, ephemeris: 'table' },
+      { name: 'Francisco', parentId: 'uranus', naifId: 722, ephemeris: 'comments' },
+    ]
+    const result = reconcileSatelliteIdentities(discovery, candidates)
+    expect(result.matched).toHaveLength(0)
+    expect(result.ambiguous[0].sourceMatches).toEqual(candidates)
+    expect(reconcileSatelliteIdentities(discovery, [...candidates].reverse()).ambiguous).toHaveLength(1)
+  })
+  it('reads explicit names and model parameters only when SPK descriptors confirm the number', () => {
+    const comments = 'Planet Name: Jupiter\nBodies on the File:\n Name Number GM NDIV NDEG Model\n Himalia 506 1.515E-01 1 15 SATORBINT\n Elara 507 0.0E+00 1 15 SATORBINT\n Unknown 508 0.0E+00 1 15 SATORBINT\nAdditional Constants on the File:\n'
+    const bodies = parseSatelliteKernelIdentities(comments, [{ target: 506 }, { target: 507 }], 'JUP347')
+    expect(bodies.map(body => body.naifId)).toEqual([506, 507])
+    expect(bodies[1]).toMatchObject({ name: 'Elara', parentNaifId: 599, sourceModelGmKm3S2: '0.0E+00' })
+    expect(bodies[1].sourceModelGmBoundary).toContain('not asserted measured')
+  })
+  it('matches Saturn/Uranus/Neptune/Pluto provisional spellings and Pluto discovery parent', () => {
+    for (const [parentId, parentNaifId, letter] of [['saturn', 699, 'S'], ['uranus', 799, 'U'], ['neptune', 899, 'N'], ['pluto', 999, 'P']] as const) {
+      const sourceParent = parentId === 'pluto' ? 'sb:asteroid:134340' : `naif:${parentNaifId}`
+      const result = reconcileSatelliteIdentities([{ parentId: sourceParent, name: `S/2020 ${letter}1` }], [{ parentId, parentNaifId, name: `S2020_${letter}1` }])
+      expect(result.matched).toHaveLength(1)
+    }
+  })
   it('matches exact normalized provisional aliases and preserves failures', () => {
     const result = reconcileSatelliteIdentities([
       { id: 'a', name: 'S/2010 J3', parentId: 'naif:599' },

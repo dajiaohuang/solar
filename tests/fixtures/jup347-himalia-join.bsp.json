@@ -1,0 +1,34 @@
+{
+  "segments": [
+    {
+      "startEt": 755438400,
+      "endEt": 755524800,
+      "target": 506,
+      "center": 5,
+      "frame": 1,
+      "type": 2,
+      "startAddress": 5460545,
+      "endAddress": 6142248,
+      "bytes": 432
+    },
+    {
+      "startEt": 755524800,
+      "endEt": 755611200,
+      "target": 506,
+      "center": 5,
+      "frame": 1,
+      "type": 2,
+      "startAddress": 10429881,
+      "endAddress": 10965834,
+      "bytes": 432
+    }
+  ],
+  "source": {
+    "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
+    "bytes": 876787712,
+    "etag": "\"6820cce8-3442b800\"",
+    "lastModified": "Sun, 11 May 2025 16:14:32 GMT"
+  },
+  "sha256": "3ec47a85a27f6112d6e49cb2544c22c8fd2e7a7ef32e5623ae5499db9a629aec",
+  "bytes": 4096
+}

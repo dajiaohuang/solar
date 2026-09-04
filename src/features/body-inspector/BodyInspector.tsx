@@ -35,10 +35,11 @@ export function BodyInspector({ body, currentPositions, bodiesById }: Props) {
   const [tab, setTab] = useState<Tab>('overview')
   const details = useMemo(() => {
     void ephemerides.revision // The external kernel pool can change while paused.
-    if (!body?.orbit) return null
+    if (!body) return null
     const parent = bodiesById.get(body.parentId ?? 'sun')
     const osculating = parent ? currentOsculatingElements(body, parent, clock.julianDay) : null
-    const elements = osculating ?? getInstantaneousElements(body.orbit, clock.julianDay)
+    const elements = osculating ?? (body.orbit ? getInstantaneousElements(body.orbit, clock.julianDay) : null)
+    if (!elements) return null
     const physical = BODY_PHYSICAL[body.id]
     const parentPhysical = BODY_PHYSICAL[body.parentId ?? 'sun']
     return {
@@ -47,7 +48,7 @@ export function BodyInspector({ body, currentPositions, bodiesById }: Props) {
       perihelionAU: elements.semiMajorAxisAU * (1 - elements.eccentricity),
       aphelionAU: elements.semiMajorAxisAU * (1 + elements.eccentricity),
       periodDays: osculating ? 360 / osculating.meanMotionDegPerDay : getOrbitalPeriodDays(
-        body.orbit,
+        body.orbit!,
         body.parentId ? 'parent' : 'sun',
         elements.semiMajorAxisAU,
       ),

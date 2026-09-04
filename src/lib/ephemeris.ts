@@ -26,6 +26,25 @@ export class UnsupportedOrbitError extends RangeError {
   }
 }
 
+export class MissingBodyStateError extends Error {
+  readonly bodyId: BodyId
+  readonly julianDay: number
+  constructor(bodyId: BodyId, julianDay: number) {
+    super(`No position model is available for ${bodyId} at Julian day ${julianDay}`)
+    this.name = 'MissingBodyStateError'
+    this.bodyId = bodyId
+    this.julianDay = julianDay
+  }
+}
+
+/** Absence is not the origin. Do not swallow malformed models or other bugs. */
+export function bodyPositionOrNull(resolve: (bodyId: BodyId) => Vector3, bodyId: BodyId): Vector3 | null {
+  try { return resolve(bodyId) } catch (error) {
+    if (error instanceof MissingBodyStateError) return null
+    throw error
+  }
+}
+
 export function normalizeDegrees(angle: number) {
   const wrapped = angle % 360
   return wrapped < 0 ? wrapped + 360 : wrapped
@@ -231,6 +250,7 @@ export function createBodyPositionResolver(bodiesById: Map<BodyId, CelestialBody
     }
 
     if (!body.orbit) {
+      if (bodyId !== 'sun') throw new MissingBodyStateError(bodyId, julianDay)
       const origin = { x: 0, y: 0, z: 0 }
       cache.set(bodyId, origin)
       return origin

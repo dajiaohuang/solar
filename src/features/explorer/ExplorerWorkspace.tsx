@@ -10,7 +10,7 @@ import { useCatalogPointWorker } from '../../hooks/useCatalogPointWorker'
 import { useCatalogSample } from '../../hooks/useCatalogSample'
 import { useAdaptiveRenderBudget } from '../../hooks/useAdaptiveRenderBudget'
 import { useI18n } from '../../i18n/context'
-import { createBodyPositionResolver, vector3Magnitude, subtractVector3 } from '../../lib/ephemeris'
+import { bodyPositionOrNull, createBodyPositionResolver, vector3Magnitude, subtractVector3 } from '../../lib/ephemeris'
 import { computeLagrangePoints } from '../../lib/lagrange'
 import { computeOrbitEllipses } from '../../lib/orbitEllipse'
 import { getSuggestedViewRadius } from '../../lib/referenceFrame'
@@ -105,7 +105,7 @@ function FrameView({
     : simulation.renderQuality === 'balanced'
       ? t('renderQualityBalanced')
       : t('renderQualityAuto')
-  const catalogOrigin = useMemo(() => createBodyPositionResolver(bodiesById, julianDay)(referenceBody.id), [bodiesById, referenceBody.id, julianDay])
+  const catalogOrigin = useMemo(() => bodyPositionOrNull(createBodyPositionResolver(bodiesById, julianDay), referenceBody.id), [bodiesById, referenceBody.id, julianDay])
   const { frame: baseFrame, progress, isComputing, error } = useTrajectoryWorker({
     bodies: selectedBodies,
     resolutionBodies,
@@ -115,10 +115,10 @@ function FrameView({
     historyDays: simulation.historyDays,
     sampleCount: Math.min(simulation.sampleCount, selectedBodies.length > 80 ? 64 : 240),
   })
-  const spacecraftFrame = useMemo(() => simulation.showSpacecraft
+  const spacecraftFrame = useMemo(() => simulation.showSpacecraft && catalogOrigin
     ? buildSpacecraftFrame(SPACECRAFT, referenceBody.id, bodiesById, julianDay)
     : { currentPositions: [], trajectories: [] },
-  [bodiesById, julianDay, referenceBody.id, simulation.showSpacecraft])
+  [bodiesById, catalogOrigin, julianDay, referenceBody.id, simulation.showSpacecraft])
   const frame = useMemo<TrajectoryFrameData>(() => ({
     currentPositions: [...baseFrame.currentPositions, ...spacecraftFrame.currentPositions],
     trajectories: [...baseFrame.trajectories, ...spacecraftFrame.trajectories],
@@ -129,6 +129,7 @@ function FrameView({
     selectedBodies.map((body) => body.id), referenceBody.id, bodiesById,
   ), [bodiesById, referenceBody.id, selectedBodies])
   const catalogSuggested = useMemo(() => {
+    if (!catalogOrigin) return 0
     const count = Math.min(catalogDrawCount, Math.floor(catalogPositions.length / 2))
     let radius = 0
     for (let index = 0; index < count; index += 1) {
@@ -138,7 +139,7 @@ function FrameView({
       ))
     }
     return radius > 0 ? radius * 1.08 : 0
-  }, [catalogDrawCount, catalogOrigin.x, catalogOrigin.y, catalogPositions])
+  }, [catalogDrawCount, catalogOrigin, catalogPositions])
   const suggested = Math.max(focusSuggested, catalogSuggested)
   const orbitEllipses = useMemo(() => simulation.showOrbits
     ? computeOrbitEllipses(selectedBodies.slice(0, 40), bodiesById, referenceBody.id, trajectoryAnchor)
@@ -186,7 +187,8 @@ function FrameView({
       <div className="frame-label"><span>{bodyDisplayName(referenceBody, language)}</span><small>{simulation.viewMode.toUpperCase()}{simulation.showCatalogCloud ? ` · ${t('catalogCloudRendered')} ${catalogDrawCount.toLocaleString()} / ${catalogSampleTotal.toLocaleString()} · ${qualityLabel} · JD ${julianDay.toFixed(3)}` : ''}</small></div>
       {isComputing && <div className="compute-progress"><i style={{ width: `${progress * 100}%` }} /></div>}
       {error && <div className="canvas-error">{error}</div>}
-      {simulation.viewMode === '3d' && !render3DReady ? (
+      {catalogOrigin && baseFrame.missingBodyIds.length > 0 && <div className="canvas-error" role="status">{t('bodyStateUnavailable')}: {baseFrame.missingBodyIds.map(id => bodyDisplayName(bodiesById.get(id)!, language)).join(', ')}</div>}
+      {!catalogOrigin ? <div className="canvas-error" role="status">{t('referenceStateUnavailable')}</div> : simulation.viewMode === '3d' && !render3DReady ? (
         <SpatialPreview />
       ) : simulation.viewMode === '3d' ? (
         <Suspense fallback={<SpatialPreview />}>
@@ -307,7 +309,8 @@ export function ExplorerWorkspace() {
   const measuredDistance = useMemo(() => {
     const resolver = createBodyPositionResolver(bodiesById, displayJulianDay)
     if (!bodiesById.has(measuredBodyA) || !bodiesById.has(measuredBodyB)) return null
-    return vector3Magnitude(subtractVector3(resolver(measuredBodyA), resolver(measuredBodyB)))
+    const a = bodyPositionOrNull(resolver, measuredBodyA), b = bodyPositionOrNull(resolver, measuredBodyB)
+    return a && b ? vector3Magnitude(subtractVector3(a, b)) : null
   }, [bodiesById, displayJulianDay, measuredBodyA, measuredBodyB])
 
   return (

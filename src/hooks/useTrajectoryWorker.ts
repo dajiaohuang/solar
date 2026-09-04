@@ -94,6 +94,7 @@ export function useTrajectoryWorker(params: Params) {
         setProgress(1)
         setIsComputing(false)
       } else if (response.type === 'error') {
+        setTrajectories([])
         setError(response.error ?? 'Trajectory worker failed')
         setIsComputing(false)
         worker.terminate()
@@ -102,6 +103,7 @@ export function useTrajectoryWorker(params: Params) {
     }
     worker.onerror = (event) => {
       if (requestId !== latestRequestId.current) return
+      setTrajectories([])
       setError(event.message || 'Trajectory worker failed')
       setIsComputing(false)
       worker.terminate()
@@ -133,7 +135,7 @@ export function useTrajectoryWorker(params: Params) {
     workerRef.current = null
   }, [])
 
-  const frame = useMemo(() => ({ ...current, trajectories }), [current, trajectories])
+  const frame = useMemo(() => ({ ...current, trajectories: trajectories.filter(sample => !current.missingBodyIds.includes(sample.body.id)) }), [current, trajectories])
 
   return {
     frame,

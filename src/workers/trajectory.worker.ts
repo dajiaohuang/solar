@@ -2,7 +2,8 @@
 
 import { createBodyPositionResolver } from '../lib/ephemeris'
 import { ensureKernelFiles, kernelsForWindow } from '../engine/ephemeris/kernelStore'
-import { getRelativePositions, toPlanarPoint } from '../lib/referenceFrame'
+import { getRelativePositions } from '../lib/referenceFrame'
+import { createTrajectoryAccumulator } from '../lib/trajectorySamples'
 import type {
   BodyId,
   CelestialBody,
@@ -50,8 +51,7 @@ async function compute(request: TrajectoryWorkerRequest) {
   await ensureKernelFiles(request.ephemerisFiles ?? [])
   const kernels = kernelsForWindow(request.centerJulianDay - request.historyDays, request.centerJulianDay, request.ephemerisFiles ?? [])
   const bodiesById = new Map<BodyId, CelestialBody>(request.resolutionBodies.map((body) => [body.id, body]))
-  const points = request.bodies.map(() => [] as Vector2[])
-  const points3D = request.bodies.map(() => [] as Vector3[])
+  const accumulator = createTrajectoryAccumulator(request.bodies)
   const sampleCount = Math.max(2, request.sampleCount)
 
   for (let index = 0; index < sampleCount; index += 1) {
@@ -63,10 +63,7 @@ async function compute(request: TrajectoryWorkerRequest) {
     const julianDay = request.centerJulianDay - request.historyDays + progress * request.historyDays
     const resolve = createBodyPositionResolver(bodiesById, julianDay, kernels)
     const positions = getRelativePositions(request.bodies, request.referenceId, resolve)
-    for (let bodyIndex = 0; bodyIndex < positions.length; bodyIndex += 1) {
-      points[bodyIndex].push(toPlanarPoint(positions[bodyIndex].position))
-      points3D[bodyIndex].push(positions[bodyIndex].position)
-    }
+    accumulator.append(positions)
     if (index % 12 === 0) {
       workerScope.postMessage({
         type: 'progress',
@@ -77,7 +74,8 @@ async function compute(request: TrajectoryWorkerRequest) {
     }
   }
 
-  const packed = packTrajectories(request.bodies.map((body) => body.id), points, points3D)
+  const complete = accumulator.complete(sampleCount)
+  const packed = packTrajectories(complete.map(sample => sample.body.id), complete.map(sample => sample.points), complete.map(sample => sample.points3D))
   const response: TrajectoryWorkerResponse = { type: 'result', requestId: request.requestId, packed }
   workerScope.postMessage(response, [packed.offsets.buffer, packed.points2D.buffer, packed.points3D.buffer])
 }

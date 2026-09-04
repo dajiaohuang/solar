@@ -245,6 +245,8 @@ export const zh: Record<TranslationKey, string> = {
   ellipticOnly: '只接受 0 ≤ e < 1、a > 0 的椭圆密切轨道。',
   moonPhase: '月面照明',
   illuminated: '被照亮',
+  bodyStateUnavailable: '所选日期缺少位置数据，未绘制以下天体',
+  referenceStateUnavailable: '参考天体在所选日期没有位置数据。请更换参考系或日期；不会用虚构原点代替。',
   distance: '距离',
   distanceFrom: '测距起点',
   distanceTo: '测距终点',

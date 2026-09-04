@@ -1,0 +1,23 @@
+{
+  "oracle": "NAIF CSPICE N0067 spkgeo",
+  "oracleSource": "scripts/reference/spk-state-oracle.c",
+  "oracleSourceSha256": "df34be204fc14d6e3378de08e6579f183606f6e3510f8702da9d183e51be864c",
+  "fixture": "jup347-himalia-join.bsp",
+  "fixtureSha256": "3ec47a85a27f6112d6e49cb2544c22c8fd2e7a7ef32e5623ae5499db9a629aec",
+  "reference": "jup347-himalia-join-cspice.json",
+  "referenceSha256": "7558e9fb60d0b4bfcf7c088355cd05463e52b8f55a3561ff767f09d1150f9c03",
+  "core": "de440s-2000-01-01-2051-01-01.bsp",
+  "coreSha256": "8724d2d1bac115a75ad1f984c5b474ca778c96ee8be2df83e624cef61c001069",
+  "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
+  "retrievedAt": "2026-09-04",
+  "target": 506,
+  "center": 5,
+  "frame": 1,
+  "joinEtTdbSeconds": 755524800,
+  "boundary": "Independent numerical evaluation of an exact original-record crop using the explicitly pinned DE440 core. This tests the evaluator and segment selection, not observational accuracy, a DE442-consistent whole-system solution, or states from the uncropped full source file. The source solution itself is not recomputed or integrated in the application.",
+  "nearJoinBarycentricEcliptic": [
+    { "et": 755524799.9999, "state": [542518139.747664, 521727974.330198, -11945426.169043064, -12.466578412569218, 11.259168713836942, 1.8895015643755735] },
+    { "et": 755524800, "state": [542518139.746417, 521727974.3313241, -11945426.168854088, -12.466578412646037, 11.2591687137019, 1.8895015643444357] },
+    { "et": 755524800.0001, "state": [542518139.7451702, 521727974.33245015, -11945426.168665111, -12.466578412723258, 11.259168713566783, 1.8895015643130373] }
+  ]
+}

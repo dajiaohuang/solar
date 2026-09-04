@@ -4,11 +4,28 @@ import type { Vector3 } from '../../types'
 export type GeometricState = { position: Vector3; velocity: Vector3 }
 export type LoadedKernel = { id: string; kernel: SpkKernel }
 /** A scan must not acquire/drop a kernel halfway through a curve or event
- * bracket: that discontinuity can manufacture an extremum. Conservative
- * whole-segment coverage is deliberate; partial files fall back for the scan. */
+ * bracket: that discontinuity can manufacture an extremum. Each target must
+ * have gap-free coverage for the whole interval, including adjacent original
+ * backward/forward integration segments. The file set stays fixed throughout. */
 export function kernelsCoveringInterval(kernels: readonly LoadedKernel[], startEt: number, endEt: number) {
   if (!Number.isFinite(startEt) || !Number.isFinite(endEt) || endEt < startEt) return []
-  return kernels.filter(({ kernel }) => kernel.segments.length > 0 && kernel.segments.every((segment) => segment.startEt <= startEt && segment.endEt >= endEt))
+  return kernels.filter(({ kernel }) => {
+    const targets = [...new Set(kernel.segments.map(segment => segment.target))]
+    return targets.length > 0 && targets.every(target => {
+      const segments = kernel.segments.filter(segment => segment.target === target)
+        .sort((a, b) => a.startEt - b.startEt)
+      let coveredUntil = startEt
+      let started = false
+      for (const segment of segments) {
+        if (segment.endEt < startEt) continue
+        if (segment.startEt > coveredUntil) break
+        started = true
+        coveredUntil = Math.max(coveredUntil, segment.endEt)
+        if (coveredUntil >= endEt) return true
+      }
+      return started && coveredUntil >= endEt
+    })
+  })
 }
 const ZERO = { x: 0, y: 0, z: 0 }
 const OBLIQUITY = 84381.448 / 3600 * Math.PI / 180

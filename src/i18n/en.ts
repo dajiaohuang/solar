@@ -243,6 +243,8 @@ export const en = {
   ellipticOnly: 'Elliptic osculating elements only (0 ≤ e < 1, a > 0).',
   moonPhase: 'Moon illumination',
   illuminated: 'illuminated',
+  bodyStateUnavailable: 'Position unavailable at this date; these bodies are not drawn',
+  referenceStateUnavailable: 'The reference body has no position at this date. Choose another reference or date; no substitute origin is shown.',
   distance: 'Distance',
   distanceFrom: 'Measure distance from',
   distanceTo: 'Measure distance to',

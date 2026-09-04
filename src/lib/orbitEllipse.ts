@@ -1,4 +1,5 @@
-import { createBodyPositionResolver } from './ephemeris'
+import { bodyPositionOrNull, createBodyPositionResolver } from './ephemeris'
+import { kernelsForWindow } from '../engine/ephemeris/kernelStore'
 import { getOrbitalPeriodDays } from './orbitalPeriod'
 import { toPlanarPoint } from './referenceFrame'
 import type { BodyId, CelestialBody, Vector2 } from '../types'
@@ -24,13 +25,15 @@ export function computeOrbitEllipses(
     const startJulianDay = centerJulianDay - periodDays / 2
     const endJulianDay = centerJulianDay + periodDays / 2
     const points: Vector2[] = []
+    const kernels = kernelsForWindow(startJulianDay, endJulianDay)
 
     for (let index = 0; index <= ELLIPSE_SAMPLES; index += 1) {
       const fraction = index / ELLIPSE_SAMPLES
       const julianDay = startJulianDay + fraction * (endJulianDay - startJulianDay)
-      const resolve = createBodyPositionResolver(bodiesById, julianDay)
-      const referencePosition = resolve(referenceId)
-      const bodyPosition = resolve(body.id)
+      const resolve = createBodyPositionResolver(bodiesById, julianDay, kernels)
+      const referencePosition = bodyPositionOrNull(resolve, referenceId)
+      const bodyPosition = bodyPositionOrNull(resolve, body.id)
+      if (!referencePosition || !bodyPosition) break
       const relativePosition = {
         x: bodyPosition.x - referencePosition.x,
         y: bodyPosition.y - referencePosition.y,
@@ -40,7 +43,7 @@ export function computeOrbitEllipses(
       points.push(toPlanarPoint(relativePosition))
     }
 
-    ellipses.push({ body, points })
+    if (points.length === ELLIPSE_SAMPLES + 1) ellipses.push({ body, points })
   }
 
   return ellipses

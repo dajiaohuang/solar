@@ -1,4 +1,4 @@
-import { subtractVector3, vector3Magnitude } from './ephemeris'
+import { bodyPositionOrNull, subtractVector3, vector3Magnitude } from './ephemeris'
 import type { BodyId, BodyPosition, CelestialBody, Vector2, Vector3 } from '../types'
 
 export function toPlanarPoint(vector: Vector3): Vector2 {
@@ -10,12 +10,13 @@ export function getRelativePositions(
   referenceId: BodyId,
   resolveBodyPosition: (bodyId: BodyId) => Vector3,
 ): BodyPosition[] {
-  const referencePosition = resolveBodyPosition(referenceId)
+  const referencePosition = bodyPositionOrNull(resolveBodyPosition, referenceId)
+  if (!referencePosition) return []
 
-  return bodies.map((body) => ({
-    body,
-    position: subtractVector3(resolveBodyPosition(body.id), referencePosition),
-  }))
+  return bodies.flatMap((body) => {
+    const position = bodyPositionOrNull(resolveBodyPosition, body.id)
+    return position ? [{ body, position: subtractVector3(position, referencePosition) }] : []
+  })
 }
 
 export function getSuggestedViewRadius(
