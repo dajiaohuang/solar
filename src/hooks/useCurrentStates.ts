@@ -23,6 +23,13 @@ const MAX_RESPONSE_CACHE = 16
 // Capabilities are cheap metadata and are refreshed periodically. A response
 // identity mismatch also invalidates this entry immediately (see below).
 const CAPABILITY_TTL_MS = 60_000
+export const CURRENT_STATE_PLAYING_SAMPLE_MS = 500
+const MS_PER_DAY = 86_400_000
+
+export function sampleCurrentStateEpoch(epochUtcJd: number, isPlaying: boolean) {
+  if (!isPlaying) return epochUtcJd
+  return Math.floor((epochUtcJd * MS_PER_DAY) / CURRENT_STATE_PLAYING_SAMPLE_MS) * CURRENT_STATE_PLAYING_SAMPLE_MS / MS_PER_DAY
+}
 
 function apiBase() {
   const configured = import.meta.env.VITE_SOLAR_API_BASE_URL
@@ -57,17 +64,20 @@ function raceAbort<T>(shared: Shared<T>, signal: AbortSignal): Promise<T> {
 
 function sharedFetch<T>(cache: Map<string, Shared<T>>, key: string, start: (signal: AbortSignal) => Promise<T>, maxEntries: number, ttlMs = Infinity, retainSettled = true) {
   const existing = cache.get(key)
-  if (existing && (existing.consumers > 0 || (ttlMs > 0 && Date.now() - existing.touchedAt <= ttlMs))) { existing.touchedAt = Date.now(); cache.delete(key); cache.set(key, existing); return existing }
+  if (existing && !existing.controller.signal.aborted && (existing.consumers > 0 || (ttlMs > 0 && Date.now() - existing.touchedAt <= ttlMs))) { existing.touchedAt = Date.now(); cache.delete(key); cache.set(key, existing); return existing }
   if (existing) { existing.controller.abort(); cache.delete(key) }
   const controller = new AbortController()
   const shared: Shared<T> = { controller, consumers: 0, settled: false, touchedAt: Date.now(), promise: start(controller.signal) }
   cache.set(key, shared)
   while (cache.size > maxEntries) {
-    const oldestKey = cache.keys().next().value as string | undefined
-    if (!oldestKey) break
-    const oldest = cache.get(oldestKey)
-    if (oldest && oldest.consumers > 0) break
-    oldest?.controller.abort()
+    let oldestKey: string | undefined
+    let oldest: Shared<T> | undefined
+    for (const [candidateKey, candidate] of cache) {
+      if (candidate.consumers > 0) continue
+      if (!oldest || candidate.touchedAt < oldest.touchedAt) { oldestKey = candidateKey; oldest = candidate }
+    }
+    if (!oldestKey || !oldest) break
+    oldest.controller.abort()
     cache.delete(oldestKey)
   }
   void shared.promise.then(() => { shared.settled = true; if (!retainSettled && cache.get(key) === shared) cache.delete(key) }, () => { shared.settled = true; if (cache.get(key) === shared) cache.delete(key) })
@@ -170,7 +180,7 @@ export async function loadCurrentStateFrames(params: {
   return { capabilities, responses, frames }
 }
 
-export function useCurrentStates(params: { bodies: CelestialBody[]; resolutionBodies: CelestialBody[]; referenceIds: BodyId[]; epochUtcJd: number }) {
+export function useCurrentStates(params: { bodies: CelestialBody[]; resolutionBodies: CelestialBody[]; referenceIds: BodyId[]; epochUtcJd: number; isPlaying?: boolean }) {
   const [frames, setFrames] = useState<ReadonlyMap<BodyId, BackendFrame>>(new Map())
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -188,7 +198,11 @@ export function useCurrentStates(params: { bodies: CelestialBody[]; resolutionBo
     params.referenceIds.forEach(add)
     return required
   }, [params.bodies, params.referenceIds, params.resolutionBodies])
-  const requestKey = `${base ?? 'none'}|${params.epochUtcJd}|${[...requested].map(([id, backend]) => `${id}:${backend}`).join(',')}`
+  // Clock ticks publish more often than a network round trip. While playing,
+  // sample a bounded 500 ms epoch so requests can complete and still get a
+  // final exact sample immediately when playback stops.
+  const requestEpochUtcJd = sampleCurrentStateEpoch(params.epochUtcJd, params.isPlaying === true)
+  const requestKey = `${base ?? 'none'}|${requestEpochUtcJd}|${[...requested].map(([id, backend]) => `${id}:${backend}`).join(',')}`
 
   useEffect(() => {
     const request = gate.current!.begin()
@@ -209,7 +223,7 @@ export function useCurrentStates(params: { bodies: CelestialBody[]; resolutionBo
     })
     // This is the one UTC -> TDB boundary for the Web adapter. Every batch
     // carries this exact shared epoch and no body-level conversion occurs.
-    const epochTdbJd = utcJulianDayToTdb(params.epochUtcJd)
+    const epochTdbJd = utcJulianDayToTdb(requestEpochUtcJd)
     const ids = [...requested.values()]
     void loadCurrentStateFrames({ base, ids, epochTdbJd, bodies: params.bodies, requestedIds: requested, referenceIds: params.referenceIds, signal: controller.signal }).then(({ frames }) => {
       if (!gate.current!.isCurrent(request)) return
@@ -222,7 +236,7 @@ export function useCurrentStates(params: { bodies: CelestialBody[]; resolutionBo
       setLoading(false)
     })
     return () => gate.current!.cancel(request)
-  }, [base, requestKey, params.bodies, params.epochUtcJd, params.referenceIds, requested])
+  }, [base, requestKey, params.bodies, params.referenceIds, requestEpochUtcJd, requested])
 
   return { configured: PRODUCT_PROFILE === 'full' && base !== null, frames, error, loading }
 }

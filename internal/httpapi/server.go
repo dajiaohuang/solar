@@ -737,6 +737,9 @@ func (s *Server) currentStates(w http.ResponseWriter, r *http.Request) {
 		row := currentStateRow{ID: id, Availability: catalog.Missing, Precision: requestedPrecision, MissingReason: "unknown-identity"}
 		if body, ok := catalogBodies[id]; ok {
 			row.Source, row.DatasetVersion, row.Model, row.CenterID = body.Source, body.DatasetVersion, body.Model, body.ParentID
+			if body.Availability == catalog.Missing && row.Source != "" && row.DatasetVersion != "" && row.Model == "" {
+				row.Model = "unavailable-no-kernel"
+			}
 			if finite(body.ValidityStartET) && finite(body.ValidityEndET) && body.ValidityEndET >= body.ValidityStartET {
 				row.ValidityStartET, row.ValidityEndET, row.ValidityPresent = body.ValidityStartET, body.ValidityEndET, true
 			}

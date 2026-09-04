@@ -4,12 +4,14 @@ import { utcJulianDayToTdb } from '../../src/engine/ephemeris/timeScales'
 import {
   backendBodyId,
   buildBackendFrame,
+  createBackendPositionResolver,
   kmToAu,
   splitCurrentStateBatches,
   validateCapabilities,
   validateCurrentStates,
 } from '../../src/lib/currentStates'
-import { createLatestOnlyGate, fetchCurrentStates, loadCurrentStateFrames, resetCurrentStatesCaches } from '../../src/hooks/useCurrentStates'
+import { createLatestOnlyGate, fetchCurrentStates, loadCurrentStateFrames, resetCurrentStatesCaches, sampleCurrentStateEpoch } from '../../src/hooks/useCurrentStates'
+import { bodyPositionOrNull } from '../../src/lib/ephemeris'
 import type { CelestialBody } from '../../src/types'
 
 const hash = 'a'.repeat(64)
@@ -44,12 +46,19 @@ const mars: CelestialBody = { id: 'mars', name: 'Mars', kind: 'planet', color: '
 describe('current-state adapter', () => {
   it('maps catalog targets and caps batches at 510', () => {
     expect(backendBodyId({ id: 'asteroid:2' })).toBe('naif:2000002')
+    expect(backendBodyId({ id: 'moon', naifId: 301 })).toBe('naif:301')
+    expect(backendBodyId({ id: 'ceres', naifId: 2000001 })).toBe('naif:2000001')
+    expect(backendBodyId({ id: 'io', naifId: 501 })).toBe('naif:501')
+    expect(backendBodyId({ id: 'eris', naifId: 920136199 })).toBe('naif:920136199')
+    expect(backendBodyId({ id: 'earth', naifId: 399 })).toBe('earth')
     expect(splitCurrentStateBatches(Array.from({ length: 1021 }, (_, i) => `naif:${i}`)).map(batch => batch.length)).toEqual([510, 510, 1])
     expect(splitCurrentStateBatches(['earth', 'earth', 'mars'], 510)).toEqual([['earth', 'mars']])
   })
 
   it('converts only at the km/AU boundary', () => {
     expect(kmToAu(AU_IN_KM)).toBe(1)
+    expect(sampleCurrentStateEpoch(epochUtc + 0.000001, true)).toBeLessThanOrEqual(epochUtc + 0.000001)
+    expect(sampleCurrentStateEpoch(epochUtc, false)).toBe(epochUtc)
   })
 
   it('fails closed on unknown API, audit, units, source and column mismatches', () => {
@@ -61,6 +70,12 @@ describe('current-state adapter', () => {
     expect(() => validateCurrentStates(response(['earth'], { stateValues: [1] }), capabilities, epochTdb)).toThrow()
     expect(() => validateCurrentStates(response(['earth'], { distanceUnit: 'AU' }), capabilities, epochTdb)).toThrow()
     expect(() => validateCurrentStates(response(['earth'], { inventoryManifestSha256: 'not-a-hash' }), capabilities, epochTdb)).toThrow()
+    expect(() => validateCurrentStates(response(['earth'], { centerIds: [1] }), capabilities, epochTdb)).toThrow()
+    expect(() => validateCurrentStates(response(['earth'], { validityPresent: ['yes'] }), capabilities, epochTdb)).toThrow()
+    expect(() => validateCurrentStates(response(['earth'], { sourceRecord: ['yes'] }), capabilities, epochTdb)).toThrow()
+    expect(() => validateCurrentStates(response(['earth'], { evidenceWindowStartEt: ['bad'] }), capabilities, epochTdb)).toThrow()
+    expect(validateCurrentStates(response(['earth'], { availability: ['missing'], source: ['jpl-spk-operational'], datasetVersion: ['full-1'], model: ['spk-original'], statePresent: [false], stateValues: [0, 0, 0, 0, 0, 0] }), capabilities, epochTdb).statePresent[0]).toBe(false)
+    expect(() => validateCurrentStates(response(['earth'], { availability: ['missing'], source: ['untrusted'], datasetVersion: ['untrusted-v1'], model: ['unavailable-no-kernel'], statePresent: [false], stateValues: [0, 0, 0, 0, 0, 0] }), capabilities, epochTdb)).toThrow()
   })
 
   it('converts km to AU and subtracts a same-frame reference atomically', () => {
@@ -78,6 +93,12 @@ describe('current-state adapter', () => {
     expect(missing.currentPositions).toHaveLength(2)
     const mismatched = buildBackendFrame({ bodies: [earth, mars], referenceId: 'earth', requestedIds: requested, responses: [validateCurrentStates(response(['earth', 'mars'], { source: ['jpl-spk-a', 'jpl-spk-b'] }), capabilities, epochTdb)] })
     expect(mismatched.currentPositions).toHaveLength(2)
+  })
+
+  it('treats an empty full-Web backend resolver as an ordinary missing state', () => {
+    const empty = buildBackendFrame({ bodies: [earth], referenceId: 'earth', requestedIds: new Map([['earth', 'earth']]), responses: [] })
+    expect(empty.currentPositions).toHaveLength(0)
+    expect(bodyPositionOrNull(createBackendPositionResolver(new Map()), 'earth')).toBeNull()
   })
 
   it('coalesces same-epoch requests and exercises 160/294/510 payload batches', async () => {

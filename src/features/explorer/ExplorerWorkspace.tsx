@@ -10,7 +10,7 @@ import { useCatalogPointWorker } from '../../hooks/useCatalogPointWorker'
 import { useCatalogSample } from '../../hooks/useCatalogSample'
 import { useAdaptiveRenderBudget } from '../../hooks/useAdaptiveRenderBudget'
 import { useI18n } from '../../i18n/context'
-import { bodyPositionOrNull, createBodyPositionResolver, vector3Magnitude, subtractVector3 } from '../../lib/ephemeris'
+import { bodyPositionOrNull, createBodyPositionResolver, MissingBodyStateError, vector3Magnitude, subtractVector3 } from '../../lib/ephemeris'
 import { computeLagrangePoints } from '../../lib/lagrange'
 import { computeOrbitEllipses } from '../../lib/orbitEllipse'
 import { getSuggestedViewRadius } from '../../lib/referenceFrame'
@@ -313,6 +313,7 @@ export function ExplorerWorkspace() {
     : clock.julianDay
   // One lazy, bounded-by-registry absolute-state cache for both frames at this
   // exact displayed epoch. The registry changes on every kernel revision.
+  const currentStateReferenceIds = useMemo(() => [simulation.referenceId, ...(simulation.comparisonEnabled ? [simulation.comparisonReferenceId] : [])], [simulation.comparisonEnabled, simulation.comparisonReferenceId, simulation.referenceId])
   const currentStates = useCurrentStates({
     // A catalog selection can represent 1.5M identities. Current-state work
     // is intentionally bounded to the interactive detail budget; the cloud
@@ -322,23 +323,23 @@ export function ExplorerWorkspace() {
       return [...selectedBodies.filter(body => priority.has(body.id)), ...selectedBodies.filter(body => !priority.has(body.id))].slice(0, MAX_CURRENT_STATE_BATCH)
     }, [selectedBodies, selection.focusedId, simulation.comparisonEnabled, simulation.comparisonReferenceId, simulation.referenceId]),
     resolutionBodies,
-    referenceIds: [simulation.referenceId, ...(simulation.comparisonEnabled ? [simulation.comparisonReferenceId] : [])],
+    referenceIds: currentStateReferenceIds,
     epochUtcJd: displayJulianDay,
+    isPlaying: clock.isPlaying,
   })
   // Full Web uses the audited backend when configured. Pages remains its
   // declared curated static preview; an unconfigured full build has no exact
   // current-position resolver and never silently falls back to local physics.
   // The resolver identity is intentionally tied to the atomically published
-  // backend frame; React Compiler cannot preserve this conditional memo.
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization
+  // backend frame.
   const resolveCurrentPosition = useMemo(() => {
     if (currentStates.configured) {
       const absolute = new Map<BodyId, { x: number; y: number; z: number }>()
       for (const frame of currentStates.frames.values()) for (const [id, position] of frame.absolutePositions) absolute.set(id, position)
-      return createBackendPositionResolver(absolute)
+      return createBackendPositionResolver(absolute, displayJulianDay)
     }
     if (PRODUCT_PROFILE === 'preview') return createBodyPositionResolver(bodiesById, displayJulianDay)
-    return () => { throw new Error('Full-Web backend is not configured; exact current states are unavailable') }
+    return (bodyId: BodyId) => { throw new MissingBodyStateError(bodyId, displayJulianDay) }
   }, [bodiesById, currentStates.configured, currentStates.frames, displayJulianDay])
   const renderBudget = useAdaptiveRenderBudget({
     viewMode: simulation.viewMode,

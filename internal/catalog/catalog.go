@@ -263,10 +263,14 @@ func (c *Catalog) AuditIdentityTuples() []map[string]string {
 	type identity struct{ source, datasetVersion, model string }
 	seen := make(map[identity]struct{})
 	for _, body := range c.bodies {
-		if body.Source == "" || body.DatasetVersion == "" || body.Model == "" {
+		model := body.Model
+		if model == "" && body.Availability == Missing && body.Source != "" && body.DatasetVersion != "" {
+			model = "unavailable-no-kernel"
+		}
+		if body.Source == "" || body.DatasetVersion == "" || model == "" {
 			continue
 		}
-		seen[identity{body.Source, body.DatasetVersion, body.Model}] = struct{}{}
+		seen[identity{body.Source, body.DatasetVersion, model}] = struct{}{}
 	}
 	items := make([]identity, 0, len(seen))
 	for value := range seen {

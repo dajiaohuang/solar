@@ -1,5 +1,6 @@
 import { AU_IN_KM, SECONDS_PER_DAY } from '../engine/units'
 import { bodyNaifId } from '../data/ephemerisTargets'
+import { MissingBodyStateError } from './ephemeris'
 import type { BodyId, CelestialBody, RenderedBodyPosition, Vector3 } from '../types'
 
 export const CURRENT_STATES_API_VERSION = 'solar.api/v1'
@@ -8,6 +9,7 @@ export const CURRENT_STATES_TIME_SCALE = 'TDB'
 export const CURRENT_STATES_STATE_LAYOUT = 'row-major-[x,y,z,vx,vy,vz]'
 export const MAX_CURRENT_STATE_BATCH = 510
 const SHA256 = /^[a-f0-9]{64}$/
+const BACKEND_BUILTIN_ALIASES = new Set(['sun', 'mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'])
 
 const AVAILABILITIES = new Set(['operational', 'fallback', 'snapshot', 'missing'])
 
@@ -85,7 +87,10 @@ export type CurrentStateAudit = {
 
 export function backendBodyId(body: Pick<CelestialBody, 'id' | 'naifId'>): string {
   const target = bodyNaifId(body)
-  if (target !== undefined && (body.id.startsWith('asteroid:') || body.id.startsWith('naif:'))) return `naif:${target}`
+  // Only the Go catalog's stable builtin aliases stay named. Every other
+  // mapped NAIF body uses its explicit backend identity; this covers moons,
+  // dwarf planets, and satellite centers without guessing a display alias.
+  if (target !== undefined && (!BACKEND_BUILTIN_ALIASES.has(body.id) || body.id.startsWith('naif:'))) return `naif:${target}`
   return body.id
 }
 
@@ -175,6 +180,12 @@ export function validateCurrentStates(raw: unknown, capabilities: BackendCapabil
     ['identityStatus', 'identity status'], ['sourceRecord', 'source record'], ['statePresent', 'state presence'],
   ]
   for (const [key, name] of columns) assertArray(response[key], name, ids.length)
+  const stringColumns: (keyof CurrentStatesResponse)[] = ['source', 'datasetVersion', 'model', 'centerIds', 'stateEvidence', 'missingReason', 'identityStatus']
+  for (const key of stringColumns) if ((response[key] as unknown[]).some(value => typeof value !== 'string')) throw new Error(`Invalid current-state ${String(key)} element`)
+  const booleanColumns: (keyof CurrentStatesResponse)[] = ['validityPresent', 'evidenceWindowPresent', 'sourceRecord', 'statePresent']
+  for (const key of booleanColumns) if ((response[key] as unknown[]).some(value => typeof value !== 'boolean')) throw new Error(`Invalid current-state ${String(key)} element`)
+  const numericColumns: (keyof CurrentStatesResponse)[] = ['validityStartEt', 'validityEndEt', 'evidenceWindowStartEt', 'evidenceWindowEndEt']
+  for (const key of numericColumns) if ((response[key] as unknown[]).some(value => typeof value !== 'number' || !Number.isFinite(value))) throw new Error(`Invalid current-state ${String(key)} element`)
   if (!Array.isArray(response.stateValues) || response.stateValues.length !== ids.length * 6 || response.stateValues.some(value => typeof value !== 'number' || !Number.isFinite(value))) throw new Error('Invalid current-state values')
   for (let index = 0; index < ids.length; index += 1) {
     const availability = response.availability![index]
@@ -186,7 +197,8 @@ export function validateCurrentStates(raw: unknown, capabilities: BackendCapabil
     const model = response.model![index]
     if (typeof datasetVersion !== 'string' || typeof model !== 'string') throw new Error('Invalid current-state model metadata')
     if (source || datasetVersion || model) {
-      if (!capabilities.contract.auditIdentities.some(identity => identity.source === source && identity.datasetVersion === datasetVersion && identity.model === model)) throw new Error('Unknown current-state audit identity')
+      const knownIdentity = capabilities.contract.auditIdentities.some(identity => identity.source === source && identity.datasetVersion === datasetVersion && identity.model === model)
+      if (!knownIdentity) throw new Error('Unknown current-state audit identity')
     }
     if (response.statePresent![index] !== true && response.statePresent![index] !== false) throw new Error('Invalid current-state presence')
     if (availability === 'missing' && response.statePresent![index]) throw new Error('Missing state cannot be present')
@@ -244,10 +256,10 @@ export function buildBackendFrame(params: {
     epochJd: params.responses[0]?.epochJd ?? NaN, epochTdbJd: params.responses[0]?.epochJd ?? NaN, audit: [...audit.values()], absolutePositions: bodyAbsolute }
 }
 
-export function createBackendPositionResolver(absolutePositions: ReadonlyMap<BodyId, Vector3>) {
+export function createBackendPositionResolver(absolutePositions: ReadonlyMap<BodyId, Vector3>, epochJd = NaN) {
   return (bodyId: BodyId): Vector3 => {
     const position = absolutePositions.get(bodyId)
-    if (!position) throw new Error(`No backend current state is available for ${bodyId}`)
+    if (!position) throw new MissingBodyStateError(bodyId, epochJd)
     return position
   }
 }
