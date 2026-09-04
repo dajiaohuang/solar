@@ -140,12 +140,15 @@ func Load(dataDir string) (*Catalog, error) {
 	}
 	h := sha256.Sum256(mb)
 	c := &Catalog{byID: make(map[string]Body), version: m.ID, manifestHash: hex.EncodeToString(h[:]), manifestProfile: m.Profile, manifestContract: m.Contract, manifestFiles: len(m.Files)}
+	manifestTargetIDs := make(map[int]struct{})
 	// Keep stable, well-known body identities available even without the large kernels.
 	for _, b := range builtins() {
 		c.add(b)
 	}
 	for _, f := range m.Files {
-		c.manifestTargets += len(f.Targets)
+		for _, target := range f.Targets {
+			manifestTargetIDs[target] = struct{}{}
+		}
 		present := fileExists(filepath.Join(dataDir, f.Path))
 		if present {
 			c.packagedFiles++
@@ -173,6 +176,7 @@ func Load(dataDir string) (*Catalog, error) {
 			c.add(b)
 		}
 	}
+	c.manifestTargets = len(manifestTargetIDs)
 	if eb, e := os.ReadFile(filepath.Join(dataDir, "ephemerisBodies.json")); e == nil {
 		var f ephemerisBodyFile
 		if json.Unmarshal(eb, &f) == nil {
