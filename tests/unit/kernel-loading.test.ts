@@ -38,6 +38,7 @@ it('bounds concurrent loads across overlapping requests and reuses verified file
   let release = false
   let active = 0
   let maximum = 0
+  const revisions: number[] = []
   const gates: Array<() => void> = []
   const fetchMock = vi.fn(async (url: string) => {
     active++
@@ -48,6 +49,7 @@ it('bounds concurrent loads across overlapping requests and reuses verified file
     return new Response(new Uint8Array(content))
   })
   vi.stubGlobal('fetch', fetchMock)
+  const unsubscribe = store.subscribeEphemerides(() => revisions.push(store.getEphemerisSnapshot().revision))
   try {
     const first = store.ensureKernelFiles(files.slice(0, 8).map(file => file.id))
     const second = store.ensureKernelFiles(files.slice(4).map(file => file.id))
@@ -58,11 +60,16 @@ it('bounds concurrent loads across overlapping requests and reuses verified file
     expect(maximum).toBeLessThanOrEqual(4)
     expect(fetchMock).toHaveBeenCalledTimes(12)
     expect(store.getEphemerisSnapshot().loading).toBe(0)
+    expect(store.getEphemerisSnapshot().revision).toBeGreaterThan(0)
+    expect(revisions.length).toBeLessThanOrEqual(6)
+    const revisionAtCompletion = store.getEphemerisSnapshot().revision
+    await new Promise(resolve => setTimeout(resolve, 30))
+    expect(store.getEphemerisSnapshot().revision).toBe(revisionAtCompletion)
     await store.ensureKernelFiles(files.map(file => file.id))
     expect(fetchMock).toHaveBeenCalledTimes(12)
     await expect(store.ensureKernelFiles(['unknown-kernel'])).rejects.toThrow('Unknown')
     expect(fetchMock).toHaveBeenCalledTimes(12)
-  } finally { vi.unstubAllGlobals() }
+  } finally { unsubscribe(); vi.unstubAllGlobals() }
 })
 
 it('retains failed dependency errors across peer successes and clears only successful retries', async () => {
@@ -80,6 +87,7 @@ it('retains failed dependency errors across peer successes and clears only succe
   }))
   try {
     await expect(store.ensureKernelFiles(files.map(file => file.id))).rejects.toThrow('HTTP 503')
+    await vi.waitFor(() => expect(store.getEphemerisSnapshot().loading).toBeGreaterThan(0))
     releasePeer()
     await vi.waitFor(() => expect(store.getEphemerisSnapshot().loading).toBe(0))
     expect(store.loadedKernelIds()).toContain(files[2].id)

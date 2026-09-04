@@ -12,15 +12,16 @@ export const majorBodiesWithPhysicalData = majorBodies.map((body) => ({
 
 export function useBodyRegistry() {
   const ephemerides = useSyncExternalStore(subscribeEphemerides, getEphemerisSnapshot)
+  const ephemerisRevision = ephemerides.revision
   const { catalogBodies, selectedIds } = selectionStore.useStore()
   return useMemo(() => {
     const allBodies = [...majorBodiesWithPhysicalData, ...Object.values(catalogBodies)]
     const bodiesById = new Map<BodyId, CelestialBody>(allBodies.map((body) => [body.id, body]))
     return {
-      ephemerisRevision: ephemerides.revision,
+      ephemerisRevision,
       allBodies,
       bodiesById,
       selectedBodies: selectedIds.map((id) => bodiesById.get(id)).filter((body): body is CelestialBody => Boolean(body)),
     }
-  }, [catalogBodies, selectedIds, ephemerides])
+  }, [catalogBodies, selectedIds, ephemerisRevision])
 }

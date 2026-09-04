@@ -30,6 +30,7 @@ const pending = new Map<string, Promise<void>>()
 const failures = new Map<string, string>()
 const failureMessage = () => [...failures.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, message]) => message).join('\n') || null
 let activeLoads = 0
+let loadingCount = 0
 const loadWaiters: Array<() => void> = []
 async function withLoadSlot(load: () => Promise<void>) {
   if (activeLoads < 4) activeLoads++
@@ -43,9 +44,31 @@ async function withLoadSlot(load: () => Promise<void>) {
 }
 const listeners = new Set<() => void>()
 let snapshot = { revision: 0, loading: 0, error: null as string | null }
-const publish = (patch: Partial<typeof snapshot>) => {
-  snapshot = { ...snapshot, ...patch, revision: snapshot.revision + 1 }
+let pendingPublish: Partial<typeof snapshot> | null = null
+let pendingInvalidation = false
+let publishTimer: ReturnType<typeof setTimeout> | null = null
+const emit = (patch: Partial<typeof snapshot>, invalidates = false) => {
+  snapshot = { ...snapshot, ...patch, revision: snapshot.revision + (invalidates ? 1 : 0) }
   listeners.forEach((listener) => listener())
+}
+const flushPendingPublish = () => {
+  if (publishTimer !== null) { clearTimeout(publishTimer); publishTimer = null }
+  if (!pendingPublish) return
+  const patch = pendingPublish
+  pendingPublish = null
+  const invalidates = pendingInvalidation
+  pendingInvalidation = false
+  emit({ ...patch, loading: loadingCount }, invalidates)
+}
+const publish = (patch: Partial<typeof snapshot> = {}, invalidates = false) => {
+  flushPendingPublish()
+  emit({ ...patch, loading: patch.loading ?? loadingCount }, invalidates)
+}
+const publishSoon = (patch: Partial<typeof snapshot> = {}, invalidates = false) => {
+  pendingPublish = { ...pendingPublish, ...patch, loading: loadingCount }
+  pendingInvalidation ||= invalidates
+  if (publishTimer !== null) return
+  publishTimer = setTimeout(flushPendingPublish, 16)
 }
 export const subscribeEphemerides = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
 export const getEphemerisSnapshot = () => snapshot
@@ -57,7 +80,7 @@ export function kernelsForWindow(startUtcJd: number, endUtcJd: number, ids = loa
   } catch { return [] }
 }
 
-export function installKernel(id: string, buffer: ArrayBuffer) {
+export function installKernel(id: string, buffer: ArrayBuffer, publishNow = true) {
   const kernel = new SpkKernel(buffer)
   const file = EPHEMERIS_MANIFEST.files.find(file => file.id === id)
   installed.set(id, { id, kernel, solutionKernelIds: file?.solutionKernelIds, dependencyOnly: file?.dependencyOnly })
@@ -65,7 +88,7 @@ export function installKernel(id: string, buffer: ArrayBuffer) {
   currentResolver = null
   // A different successful file must not hide a still-missing dependency.
   failures.delete(id)
-  publish({ error: failureMessage() })
+  if (publishNow) publish({ error: failureMessage() }, true)
 }
 
 async function loadFile(file: KernelFile) {
@@ -90,7 +113,8 @@ async function loadFile(file: KernelFile) {
   if (buffer.byteLength !== file.bytes || buffer.byteLength > 128 * 1024 * 1024) throw new Error(`Ephemeris ${file.id}: unexpected size`)
   const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', buffer))].map((byte) => byte.toString(16).padStart(2, '0')).join('')
   if (digest !== file.sha256) throw new Error(`Ephemeris ${file.id}: checksum mismatch`)
-  installKernel(file.id, buffer)
+  installKernel(file.id, buffer, false)
+  publishSoon({ error: failureMessage() }, true)
 }
 
 /** Exact file set is sent to workers: no hidden high/low precision divergence. */
@@ -111,18 +135,29 @@ export async function ensureKernelFiles(ids: string[]) {
       if (installed.has(id)) continue
       let promise = pending.get(id)
       if (!promise) {
-        publish({ loading: snapshot.loading + 1 })
+        loadingCount += 1
+        publishSoon()
         promise = withLoadSlot(() => loadFile(file)).catch((error: unknown) => {
           failures.set(id, error instanceof Error ? error.message : String(error))
-          publish({ error: failureMessage() })
+          publishSoon({ error: failureMessage() })
           throw error
-        }).finally(() => { pending.delete(id); publish({ loading: snapshot.loading - 1 }) })
+        }).finally(() => {
+          pending.delete(id)
+          loadingCount = Math.max(0, loadingCount - 1)
+          publishSoon({ error: failureMessage() })
+        })
         pending.set(id, promise)
       }
       try { await promise } catch (error) { failed = true; throw error }
     }
   }
-  await Promise.all(Array.from({ length: Math.min(4, files.length) }, consume))
+  try {
+    await Promise.all(Array.from({ length: Math.min(4, files.length) }, consume))
+  } finally {
+    // Do not leave the last successful batch waiting on a timer. On an early
+    // rejection, peers may still be loading, so their non-zero state remains.
+    if (loadingCount === 0) flushPendingPublish()
+  }
 }
 
 export function kernelFilesForBodies(bodies: { id: string; naifId?: number }[]) {
