@@ -68,7 +68,7 @@ const publishSoon = (patch: Partial<typeof snapshot> = {}, invalidates = false) 
   pendingPublish = { ...pendingPublish, ...patch, loading: loadingCount }
   pendingInvalidation ||= invalidates
   if (publishTimer !== null) return
-  publishTimer = setTimeout(flushPendingPublish, 16)
+  publishTimer = setTimeout(flushPendingPublish, 100)
 }
 export const subscribeEphemerides = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
 export const getEphemerisSnapshot = () => snapshot
@@ -136,7 +136,8 @@ export async function ensureKernelFiles(ids: string[]) {
       let promise = pending.get(id)
       if (!promise) {
         loadingCount += 1
-        publishSoon()
+        if (loadingCount === 1) publish({ loading: loadingCount })
+        else publishSoon()
         promise = withLoadSlot(() => loadFile(file)).catch((error: unknown) => {
           failures.set(id, error instanceof Error ? error.message : String(error))
           publishSoon({ error: failureMessage() })
