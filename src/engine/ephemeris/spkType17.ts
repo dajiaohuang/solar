@@ -21,20 +21,30 @@ export function evaluateType17(read: ReadDouble, startAddress: number, et: numbe
   for (let i = 0; i < 12; i++) r[i] = read(startAddress + i);
   const [epoch, a, h, k, longitude, p, q, periRate, meanLongitudeRate, nodeRate, rapol, decpol] = r;
   const e = Math.hypot(h, k);
+  if (![epoch, et, ...r].every(Number.isFinite)) throw new Error('Invalid SPK: nonfinite type 17 input');
   if (!(a > 0)) throw new Error('Invalid SPK: type 17 semi-major axis must be positive');
   if (e > 0.9) throw new Error('Invalid SPK: type 17 eccentricity exceeds 0.9');
+  if (meanLongitudeRate === 0) throw new Error('Invalid SPK: type 17 mean longitude rate must be nonzero');
   const dt = et - epoch;
   const dlp = periRate * dt, can = Math.cos(dlp), san = Math.sin(dlp);
   const hh = h * can + k * san, kk = k * can - h * san;
   const nodeDt = nodeRate * dt, cnn = Math.cos(nodeDt), snn = Math.sin(nodeDt);
   const pp = p * cnn + q * snn, qq = q * cnn - p * snn;
-  const ml = longitude + meanLongitudeRate * dt;
-  let eccentric = wrapAngle(ml);
-  for (let i = 0; i < 15; i++) {
+  const ml = wrapAngle(longitude + meanLongitudeRate * dt);
+  let eccentric = ml;
+  let converged = false;
+  for (let i = 0; i < 20; i++) {
     const delta = (eccentric + hh * Math.cos(eccentric) - kk * Math.sin(eccentric) - ml) /
       (1 - hh * Math.sin(eccentric) - kk * Math.cos(eccentric));
     eccentric -= delta;
-    if (Math.abs(delta) < 2e-15) break;
+    if (Math.abs(delta) < 2e-15) { converged = true; break; }
+  }
+  if (!converged) {
+    let lo = -Math.PI, hi = Math.PI;
+    const residual = (x: number) => x + hh * Math.cos(x) - kk * Math.sin(x) - ml;
+    for (let i = 0; i < 80; i++) { const mid = (lo + hi) / 2; if (residual(mid) > 0) hi = mid; else lo = mid; }
+    eccentric = (lo + hi) / 2;
+    if (Math.abs(residual(eccentric)) > 1e-13) throw new Error('Invalid SPK: type 17 Kepler solve did not converge');
   }
   const ce = Math.cos(eccentric), se = Math.sin(eccentric), b = 1 / (Math.sqrt(1 - hh * hh - kk * kk) + 1);
   const x1 = a * ((1 - b * hh * hh) * ce + (hh * kk * b * se - kk));
