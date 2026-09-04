@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import storiesData from '../content/stories/stories.json'
 import type { Story } from '../content/stories/types'
 import { majorBodies } from '../data/majorBodies'
+import { satelliteSearchTerms } from '../data/satelliteIdentities'
 import { useI18n } from '../i18n/context'
 import { bodyDisplayName } from '../lib/bodyNames'
 import { catalogActions, catalogStore } from '../state/catalog-store'
@@ -61,7 +62,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     }))
     const bodies = majorBodies.map((body) => ({
       id: `body:${body.id}`, icon: '●', label: bodyDisplayName(body, language), detail: `${t('objectResult')} · ${body.kind}`,
-      keywords: `${body.id} ${body.name} ${bodyDisplayName(body, 'en')} ${body.kind}`.toLowerCase(),
+      keywords: `${body.id} ${body.name} ${bodyDisplayName(body, 'en')} ${body.kind} ${satelliteSearchTerms(body)}`.toLowerCase(),
       action: () => {
         selectionActions.setSelectedIds([...new Set([...majorBodies.filter((item) => item.id !== 'sun' && ['earth', 'mars'].includes(item.id)).map((item) => item.id), body.id])].filter((id) => id !== 'sun'))
         selectionActions.focus(body.id)

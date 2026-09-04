@@ -8,6 +8,7 @@ import { kernelCoverage, EPHEMERIS_MANIFEST } from '../../engine/ephemeris/kerne
 import { useEphemerides } from '../../hooks/useEphemerides'
 import { currentOsculatingElements } from '../../engine/ephemeris/diagnostics'
 import { ObservationReadout } from './ObservationReadout'
+import { SatelliteIdentityReadout } from './SatelliteIdentityReadout'
 import { simulationStore } from '../../state/simulation-store'
 import { useI18n } from '../../i18n/context'
 import { bodyDisplayName } from '../../lib/bodyNames'
@@ -117,6 +118,8 @@ export function BodyInspector({ body, currentPositions, bodiesById }: Props) {
     {!body || !profile || !kindLabels ? <p className="muted-copy">{t('noBody')}</p> : <>
       <header className="inspector-header"><i style={{ background: body.color }} /><div><h2>{bodyDisplayName(body, language)}</h2><p>{body.orbitClassName ?? kindLabels[body.kind]}</p></div></header>
       <p className="fine-print" data-testid="body-model">{modelDescription}</p>
+      <SatelliteIdentityReadout body={body} />
+      {tab === 'sources' && <SatelliteIdentityReadout body={body} sources />}
       {viewMode === '3d' && <p className="fine-print">{t('schematicMarkerScale')}</p>}
       {hasEphemeris && <p className="fine-print">{t('ephemerisBoundary')}</p>}
       {tab === 'orbit' && <p className="fine-print">{t(details?.isOsculating ? 'osculatingElements' : 'seedElementsOnly')}</p>}

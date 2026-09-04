@@ -5,6 +5,7 @@ import { openSource } from './crop-spk.mjs'
 import { digest } from './lib/inventory-snapshot.mjs'
 import { parsePlanetarySatellites } from './lib/satellite-inventory.mjs'
 import { parseSatelliteEphemerisIndex, parseSatelliteKernelIdentities, reconcileSatelliteIdentities } from './lib/satellite-ephemeris-index.mjs'
+import { parseNaifSatelliteRegistry, resolveSatelliteRegistryClaims } from './lib/satellite-registry.mjs'
 import { classifySatelliteAssignments, classifySatelliteSource, locateSatelliteSource, replaySpkSurvey, satelliteDirectoryUrls, surveySpkSource } from './lib/spk-source-survey.mjs'
 
 const args = process.argv.slice(2)
@@ -17,15 +18,17 @@ function toEt(date) {
 }
 const verify = option('--verify')
 const rebuild = option('--rebuild')
-function deriveReport(report, index, surveys, discoveryRecords) {
+function deriveReport(report, index, surveys, discoveryRecords, registry) {
   const startEt = toEt(report.from), endEt = toEt(report.to)
   if (startEt >= endEt) throw new Error('Reversed survey time window')
   const bodies = index.bodies.map(body => classifySatelliteAssignments(body, surveys, startEt, endEt))
   const commentBodies = [...surveys].flatMap(([id, survey]) => parseSatelliteKernelIdentities(survey.comments, survey.segments, id))
   const commentClassifications = commentBodies.map(body => classifySatelliteSource(body, surveys.get(body.ephemeris), startEt, endEt))
   const reconciliation = reconcileSatelliteIdentities(discoveryRecords, [...index.bodies, ...commentBodies])
+  const resolvedIdentities = registry ? resolveSatelliteRegistryClaims(discoveryRecords, reconciliation, commentBodies, registry) : null
   const statuses = Object.fromEntries([...new Set(bodies.map(body => body.status))].map(status => [status, bodies.filter(body => body.status === status).length]))
   return { schemaVersion: 2, bodies, commentBodies, commentClassifications, reconciliation,
+    ...(registry ? { registry, resolvedIdentities } : {}),
     summary: { listedBodies: bodies.length, sourceCount: report.sources.length, inspectedSources: surveys.size, errors: report.errors.length, statuses,
       commentIdentityRecords: commentBodies.length,
       uniqueIdentifiedTargets: new Set([...index.bodies, ...commentBodies].map(body => body.naifId)).size,
@@ -61,7 +64,9 @@ if (verify || rebuild) {
       retained.add(`${evidence.id}-range-${range.start}.bin`)
     }
   }
-  const derived = deriveReport(report, index, surveys, parsePlanetarySatellites(discovery.toString('utf8')).records)
+  const registry = retained.has('naif-ids.html') ? parseNaifSatelliteRegistry(await readFile(join(archive, 'naif-ids.html'), 'utf8')) : undefined
+  if (!registry && (report.registry || report.resolvedIdentities)) throw new Error('Registry claims lack archived source evidence')
+  const derived = deriveReport(report, index, surveys, parsePlanetarySatellites(discovery.toString('utf8')).records, registry)
   if (rebuild) {
     const output = option('--output')
     if (!output) throw new Error('--rebuild requires a new --output directory')

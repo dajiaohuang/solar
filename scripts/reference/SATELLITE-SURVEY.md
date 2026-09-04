@@ -62,9 +62,72 @@ The provenance JSON pins both the crop and the DE440 core used by the numerical
 oracle. This is an evaluator/selection regression, not proof of observational
 accuracy or a DE442-consistent complete-system solution.
 
+## Supplemental sources and selectable identities
+
+Retain an additional original source only when its exact filename occurs in the
+archived JPL directory. The supplemental archive also freezes the NAIF name/ID
+registry; the final rebuild replays every archived source before publication:
+
+```sh
+node scripts/supplement-satellite-survey.mjs VERIFIED_ARCHIVE SUPPLEMENT_DIRECTORY sat459.bsp,sat480.bsp
+node scripts/survey-satellite-ephemerides.mjs --rebuild SUPPLEMENT_DIRECTORY --output FINAL_DIRECTORY
+node scripts/survey-satellite-ephemerides.mjs --verify FINAL_DIRECTORY
+node scripts/generate-satellite-catalog.mjs FINAL_DIRECTORY NEW_CATALOG.json
+```
+
+For an intentional refresh of the generated app catalog, use its existing path
+and `--replace-generated`. This flag refuses unrelated files. It does not modify
+any original survey archive. The generated catalog pins discovery and survey
+hashes. Existing app IDs remain stable; new entries have no orbit, GM or radius.
+All identities remain selectable, while defaults still select only the original
+19 bodies. Large systems are partitioned into complete, bounded preset groups.
+
+NAIF registry resolutions require both an exact name/parent match and independent
+SPK descriptor/comment corroboration. Raw conflicting claims remain in the
+survey. ROCKSPK's `***` number field is never interpreted as a number: a name is
+associated only when a single included-comment SPKMERGE source explicitly lists
+one target, one named ROCKSPK object, and matching parent-centered Type 17
+descriptors. This resolves SAT480's S/2009 S2 to 65304 without guessing from the
+provisional designation. S/2009 S1 remains unmatched in this snapshot.
+
+## Type 17 independent verification
+
+The runtime and cropper now support the original 12-word equinoctial record.
+Only descriptor coverage is narrowed; the elements are retained exactly (with
+byte-order normalization). Propagation follows
+[NAIF EQNCPV](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/eqncpv_c.html),
+including node/periapse rates, reference-pole rotation, and analytic velocity.
+No additional generic J2 or relativistic correction is applied to these records.
+The implementation rejects non-finite inputs, nonpositive semi-major axes,
+eccentricity above 0.9, and zero mean-longitude rate (unsupported by this path).
+
+`spk17-cspice-expanded.json` contains 40 independent CSPICE N0067 states from
+five synthetic element sets: nontrivial reference poles, retrograde geometry,
+near-0.9 eccentricity, circular limits and epochs up to +/-1e9 seconds away.
+Position agreement is checked within 2e-6 km and velocity within 1e-9 km/s.
+These are numerical test tolerances, not physical ephemeris uncertainties.
+`spk17-oracle.c` contains no application evaluator and can be compiled against
+an independently obtained CSPICE toolkit. Reproduce the JSON with:
+
+```sh
+cc -I /path/to/cspice/include scripts/reference/spk17-oracle.c /path/to/cspice/lib/cspice.a -lm -o /tmp/spk17-oracle
+node scripts/reference/record-spk17-reference.mjs NEW_REFERENCE.json /tmp/spk17-oracle
+```
+
+The tests also cover little/big-endian original records, crop endpoint behavior,
+invalid records, and current-position-valid/historical-reference-unavailable
+spacecraft trails. Identity, format support, independently verified state
+evaluation, and delivered source coverage remain distinct acceptance gates.
+
 ## 中文边界
 
 这只是可重放的身份与数据覆盖调查，不代表新增星体已经上线，也不等于完整物理。
 原始目录、网页、星历注释和编号冲突全部保留；不能按网页行序选择解，不能把动力学
 模型中的零 GM 当成实测零质量。缺少位置时不绘制天体，参考系无数据时不虚构原点，
 轨迹有缺口时不跨越缺口连线。完整数据接入与 Pages 容量选择必须另行明确验证。
+
+补充调查会保留原始文件、独立 NAIF 编号表及冲突证据。当前生成目录有 461 个卫星
+身份（不含地球月球），其中 460 个具有核对过的 SPK 编号；S/2009 S1 未匹配。
+新增身份没有伪造的轨道或物理量，预设分组不会静默丢弃超出聚焦上限的对象。
+Type 17 已加入原始记录读取与裁剪，并通过独立 CSPICE 样本校验；这仍不等于这些
+身份全部具有已交付的轨迹，也不等于完整物理或实际观测误差已经评估。

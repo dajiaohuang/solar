@@ -78,7 +78,7 @@ export function classifySatelliteSource(body, survey, startEt, endEt) {
   // Adjacent descriptors can cover the interval. This only proves their time
   // union, not continuity, center-chain consistency or numerical accuracy.
   const overlaps = segments.filter(segment => segment.startEt <= endEt && segment.endEt >= startEt)
-  const supported = overlaps.filter(segment => [2, 3, 21].includes(segment.type) && [1, 17].includes(segment.frame))
+  const supported = overlaps.filter(segment => [2, 3, 17, 21].includes(segment.type) && [1, 17].includes(segment.frame))
   let status = 'outside-requested-window'
   if (overlaps.length) status = supported.length === overlaps.length ? 'partial-window-descriptors' : 'unsupported-format-in-window'
   let coveredUntil = startEt

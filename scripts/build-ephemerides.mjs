@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { cropSpk, openSource } from './crop-spk.mjs'
 import { SpkKernel } from '../src/engine/ephemeris/spk.ts'
+import { kernelsCoveringInterval } from '../src/engine/ephemeris/kernelPool.ts'
 
 // Explicit opt-in data-generation command; normal builds never contact NAIF.
 // Override bounds for local/native distributions without changing app code.
@@ -51,7 +52,7 @@ for (const config of sources) {
         const bytes = await readFile(join(output, file.path))
         if (bytes.length !== file.bytes || createHash('sha256').update(bytes).digest('hex') !== file.sha256) throw new Error('Existing kernel checksum mismatch')
         const parsed = new SpkKernel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
-        if (!parsed.segments.length || parsed.segments.some(s => s.startEt > bounds.startEt || s.endEt < bounds.endEt)) throw new Error('Existing kernel does not cover request')
+        if (!kernelsCoveringInterval([{ id: file.id, kernel: parsed }], bounds.startEt, bounds.endEt).length) throw new Error('Existing kernel does not cover request')
         const expectedTargets = groups[ids.indexOf(file.id)]
         if (expectedTargets && (expectedTargets.some(target => !parsed.segments.some(s => s.target === target)) || parsed.segments.some(s => !expectedTargets.includes(s.target)))) throw new Error('Existing kernel target mismatch')
         if (new URL(file.source).origin !== new URL(config.url).origin || new URL(file.source).pathname !== new URL(config.url).pathname) throw new Error('Existing kernel source mismatch')

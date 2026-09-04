@@ -14,7 +14,7 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "data:ephemerides": "node --experimental-strip-types ./scripts/build-ephemerides.mjs",
-    "test:scientific": "vitest run tests/unit/event-benchmarks.test.ts tests/unit/lambert.test.ts tests/unit/ephemeris.test.ts tests/unit/satellite-orbit-evidence.test.ts tests/unit/spk.test.ts tests/unit/spk-reference.test.ts tests/unit/kernel-integration.test.ts tests/unit/kernel-window.test.ts tests/unit/missing-body-state.test.ts tests/unit/time-scales-apparent.test.ts tests/unit/osculating.test.ts tests/unit/observation.test.ts tests/unit/crop-spk.test.ts tests/unit/generate-ephemeris-bodies.test.ts --reporter=json --outputFile=.cache/scientific-tests.json && node ./scripts/summarize-scientific-validation.mjs",
+    "test:scientific": "vitest run tests/unit/event-benchmarks.test.ts tests/unit/lambert.test.ts tests/unit/ephemeris.test.ts tests/unit/satellite-orbit-evidence.test.ts tests/unit/spk.test.ts tests/unit/spk17.test.ts tests/unit/spk-reference.test.ts tests/unit/kernel-integration.test.ts tests/unit/kernel-window.test.ts tests/unit/missing-body-state.test.ts tests/unit/spacecraft-coverage.test.ts tests/unit/time-scales-apparent.test.ts tests/unit/osculating.test.ts tests/unit/observation.test.ts tests/unit/crop-spk.test.ts tests/unit/generate-ephemeris-bodies.test.ts --reporter=json --outputFile=.cache/scientific-tests.json && node ./scripts/summarize-scientific-validation.mjs",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "ci": "npm run lint && npm run test:unit && npm run test:scientific && npm run build",

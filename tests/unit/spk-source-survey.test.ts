@@ -73,6 +73,7 @@ describe('satellite SPK source survey', () => {
     const segment = { target: 601, center: 6, startEt: 10, endEt: 30, type: 2, frame: 1 }
     expect(classifySatelliteSource(body, { segments: [] }, 12, 20).status).toBe('target-absent')
     expect(classifySatelliteSource(body, { segments: [segment] }, 12, 20).status).toBe('supported-window-descriptors')
+    expect(classifySatelliteSource(body, { segments: [{ ...segment, type: 17 }] }, 12, 20).status).toBe('supported-window-descriptors')
     expect(classifySatelliteSource(body, { segments: [segment] }, 0, 20).status).toBe('partial-window-descriptors')
     expect(classifySatelliteSource(body, { segments: [segment] }, 31, 40).status).toBe('outside-requested-window')
     expect(classifySatelliteSource(body, { segments: [{ ...segment, type: 13 }] }, 12, 20).status).toBe('unsupported-format-in-window')

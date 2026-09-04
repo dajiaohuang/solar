@@ -113,7 +113,9 @@ function FrameView({
     currentJulianDay: julianDay,
     trajectoryJulianDay: trajectoryAnchor,
     historyDays: simulation.historyDays,
-    sampleCount: Math.min(simulation.sampleCount, selectedBodies.length > 80 ? 64 : 240),
+    // Inventory expansion must not silently undersample short-period moons.
+    // The focus-body limit bounds work independently of catalog cloud points.
+    sampleCount: Math.min(simulation.sampleCount, 240),
   })
   const spacecraftFrame = useMemo(() => simulation.showSpacecraft && catalogOrigin
     ? buildSpacecraftFrame(SPACECRAFT, referenceBody.id, bodiesById, julianDay)
@@ -127,8 +129,8 @@ function FrameView({
   }), [baseFrame, spacecraftFrame])
   useEffect(() => onFrame(frame), [frame, onFrame])
   const focusSuggested = useMemo(() => getSuggestedViewRadius(
-    selectedBodies.map((body) => body.id), referenceBody.id, bodiesById,
-  ), [bodiesById, referenceBody.id, selectedBodies])
+    selectedBodies.map((body) => body.id), referenceBody.id, bodiesById, baseFrame.maxDistance,
+  ), [bodiesById, referenceBody.id, selectedBodies, baseFrame.maxDistance])
   const catalogSuggested = useMemo(() => {
     if (!catalogOrigin) return 0
     const count = Math.min(catalogDrawCount, Math.floor(catalogPositions.length / 2))
@@ -185,12 +187,16 @@ function FrameView({
       const factor = event.deltaY < 0 ? 1.12 : 0.89
       simulationActions.patch({ zoom: Math.max(0.15, Math.min(12, simulation.zoom * factor)) })
     }}>
+      <div className="frame-overlays" onWheel={event => event.stopPropagation()}>
       <div className="frame-label"><span>{bodyDisplayName(referenceBody, language)}</span><small>{simulation.viewMode.toUpperCase()}{simulation.showCatalogCloud ? ` · ${t('catalogCloudRendered')} ${catalogDrawCount.toLocaleString()} / ${catalogSampleTotal.toLocaleString()} · ${qualityLabel} · JD ${julianDay.toFixed(3)}` : ''}</small></div>
-      {isComputing && <div className="compute-progress"><i style={{ width: `${progress * 100}%` }} /></div>}
+      <EphemerisStatus bodies={selectedBodies} references={[referenceBody]} julianDay={julianDay} historyDays={simulation.historyDays} />
       {error && <div className="canvas-error">{error}</div>}
-      {catalogOrigin && baseFrame.missingBodyIds.length > 0 && <div className="canvas-error" role="status">{t('bodyStateUnavailable')}: {baseFrame.missingBodyIds.map(id => bodyDisplayName(bodiesById.get(id)!, language)).join(', ')}</div>}
-      {catalogOrigin && frame.trajectoryUnavailableBodyIds.length > 0 && <div className="canvas-error" role="status">{t('trajectoryCoverageUnavailable')}: {frame.trajectoryUnavailableBodyIds.map(id => bodyDisplayName(bodiesById.get(id) ?? SPACECRAFT.find(body => body.id === id)!, language)).join(', ')}</div>}
-      {!catalogOrigin ? <div className="canvas-error" role="status">{t('referenceStateUnavailable')}</div> : simulation.viewMode === '3d' && !render3DReady ? (
+      {catalogOrigin && baseFrame.missingBodyIds.length > 0 && <details className="canvas-error" data-testid="missing-position-notice"><summary>{t('bodyStateUnavailable')} ({baseFrame.missingBodyIds.length})</summary><p>{baseFrame.missingBodyIds.map(id => bodyDisplayName(bodiesById.get(id)!, language)).join(', ')}</p></details>}
+      {catalogOrigin && frame.trajectoryUnavailableBodyIds.length > 0 && <details className="canvas-error" data-testid="missing-trajectory-notice"><summary>{t('trajectoryCoverageUnavailable')} ({frame.trajectoryUnavailableBodyIds.length})</summary><p>{frame.trajectoryUnavailableBodyIds.map(id => bodyDisplayName(bodiesById.get(id) ?? SPACECRAFT.find(body => body.id === id)!, language)).join(', ')}</p></details>}
+      {!catalogOrigin && <div className="canvas-error" role="status">{t('referenceStateUnavailable')}</div>}
+      </div>
+      {isComputing && <div className="compute-progress"><i style={{ width: `${progress * 100}%` }} /></div>}
+      {!catalogOrigin ? null : simulation.viewMode === '3d' && !render3DReady ? (
         <SpatialPreview />
       ) : simulation.viewMode === '3d' ? (
         <Suspense fallback={<SpatialPreview />}>
@@ -320,7 +326,6 @@ export function ExplorerWorkspace() {
       <ControlDrawer bodies={allBodies} referenceOptions={allBodies.filter((body) => body.kind !== 'spacecraft')} onResetView={resetView} />
       <main className="explorer-stage">
         <SimulationControls />
-        <EphemerisStatus bodies={selectedBodies} references={[simulation.referenceId, ...(simulation.comparisonEnabled ? [simulation.comparisonReferenceId] : [])].map((id) => bodiesById.get(id)).filter((body): body is CelestialBody => Boolean(body))} julianDay={displayJulianDay} historyDays={simulation.historyDays} />
         {simulation.showCatalogCloud && catalog.sampleError && (
           <div className="error-banner catalog-cloud-error" role="alert">{catalogSampleErrorMessage(catalog.sampleError, t)}</div>
         )}

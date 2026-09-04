@@ -13,6 +13,7 @@ export function inspectType17(read: ReadDouble, startAddress: number, endAddress
   const a = read(startAddress + 1), e = Math.hypot(read(startAddress + 2), read(startAddress + 3));
   if (a <= 0) throw new Error('Invalid SPK: type 17 semi-major axis must be positive');
   if (e > 0.9) throw new Error('Invalid SPK: type 17 eccentricity exceeds 0.9');
+  if (read(startAddress + 8) === 0) throw new Error('Unsupported SPK: type 17 mean longitude rate must be nonzero');
   return { recordSize: 12, recordCount: 1 };
 }
 
@@ -40,7 +41,8 @@ export function evaluateType17(read: ReadDouble, startAddress: number, et: numbe
     if (Math.abs(delta) < 2e-15) { converged = true; break; }
   }
   if (!converged) {
-    let lo = -Math.PI, hi = Math.PI;
+    // The root is within ml +/- e, not necessarily within [-pi, pi].
+    let lo = ml - e, hi = ml + e;
     const residual = (x: number) => x + hh * Math.cos(x) - kk * Math.sin(x) - ml;
     for (let i = 0; i < 80; i++) { const mid = (lo + hi) / 2; if (residual(mid) > 0) hi = mid; else lo = mid; }
     eccentric = (lo + hi) / 2;

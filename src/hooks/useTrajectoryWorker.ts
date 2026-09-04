@@ -59,7 +59,9 @@ export function useTrajectoryWorker(params: Params) {
   const [progress, setProgress] = useState(0)
   const [isComputing, setIsComputing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const requestKey = JSON.stringify([referenceId, trajectoryJulianDay, historyDays, sampleCount, bodies.map((body) => body.id), resolutionBodies.map((body) => body.id)])
+  const kernelKey = loadedKernelIds().join('|')
+  const requestKey = useMemo(() => JSON.stringify([referenceId, trajectoryJulianDay, historyDays, sampleCount, kernelKey, bodies, resolutionBodies]),
+    [referenceId, trajectoryJulianDay, historyDays, sampleCount, kernelKey, bodies, resolutionBodies])
   const [completedRequestKey, setCompletedRequestKey] = useState<string | null>(null)
   const bodiesById = useMemo(
     () => new Map<BodyId, CelestialBody>(resolutionBodies.map((body) => [body.id, body])),

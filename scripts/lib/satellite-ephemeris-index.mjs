@@ -150,5 +150,34 @@ export function parseSatelliteKernelIdentities(comments, segments, ephemeris) {
       identityEvidence: 'source-comment-name-number-matched-to-descriptor',
       sourceModelGmKm3S2: row[3], sourceModelGmBoundary: 'Upstream dynamical-model parameter, not asserted measured physical mass.' })
   }
-  return bodies
+  return [...bodies, ...parseSingleRockIdentity(comments, segments, ephemeris)]
+}
+
+/** ROCKSPK can print *** instead of the target number. Only associate a name
+ * when the included-comment source has exactly ONE explicitly logged target,
+ * exactly ONE named rock, and a matching parent-centered Type 17 descriptor.
+ * No number is inferred from the object's designation or physical elements. */
+function parseSingleRockIdentity(comments, segments, ephemeris) {
+  const merge = /BEGIN SPKMERGE COMMANDS([\s\S]*?)END SPKMERGE COMMANDS/.exec(comments)?.[1]
+  if (!merge) return []
+  const included = [...merge.matchAll(/SOURCE_SPK_KERNEL\s*=\s*(\S+)([\s\S]*?)(?=SOURCE_SPK_KERNEL|$)/g)]
+    .filter(match => /INCLUDE_COMMENTS\s*=\s*YES\s*(?:\n|$)/.test(match[2]))
+  if (included.length !== 1 || included[0][1].split('/').at(-1).toUpperCase() !== `${ephemeris}.bsp`.toUpperCase()) return []
+  const targetLine = [...included[0][2].matchAll(/^\s*BODIES\s*=\s*(.*?)\s*$/gm)]
+  if (targetLine.length !== 1 || !/^\d+$/.test(targetLine[0][1])) return []
+  const naifId = Number(targetLine[0][1])
+  const rocks = [...comments.matchAll(/Rock Elements:\s*(\S+)/g)]
+  const elements = [...comments.matchAll(/Elements for\s+(\S+)\s+at Julian Date:\s*[\d.]+\s+Center:\s*(\w+)/g)]
+  const tables = [...comments.matchAll(/Bodies on the File:\s*\n\s*Name\s+Number\s+GM\s+AX\s+BX\s+CX\s*\n([\s\S]*?)(?=\s*Elements for)/g)]
+  if (rocks.length !== 1 || rocks[0][1].toUpperCase() !== ephemeris.toUpperCase() || elements.length !== 1 || tables.length !== 1) return []
+  const rows = tables[0][1].trim().split(/\n/).filter(line => line.trim())
+  if (rows.length !== 1) return []
+  const row = /^\s*(\S+)\s+\*{3}\s+[+\-\d.EeDd]+(?:\s+[+\-\d.EeDd]+){3}\s*$/.exec(rows[0])
+  const parent = PARENTS.get(elements[0][2].toLowerCase())
+  if (!row || row[1] !== elements[0][1] || !parent) return []
+  const records = segments.filter(segment => segment.target === naifId)
+  if (!records.length || records.some(segment => segment.type !== 17 || segment.center !== parent.naif)) return []
+  return [{ naifId, name: row[1], parentId: parent.id, parentNaifId: parent.naif, ephemeris,
+    reference: 'JPL SPKMERGE single included-comment target and ROCKSPK single named object',
+    identityEvidence: 'single-source-explicit-merge-target-and-rock-name-with-parent-descriptor' }]
 }

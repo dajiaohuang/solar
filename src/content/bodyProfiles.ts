@@ -50,7 +50,7 @@ export function fallbackBodyProfile(kind: BodyKind, orbitClass?: string): Pick<B
   const labels: Record<BodyKind, Localized> = {
     star: { en: 'A stellar reference object in the atlas.', zh: '图谱中的恒星参考对象。' },
     planet: { en: 'A major planet propagated with the declared planetary approximation.', zh: '使用已声明行星近似模型传播的主要行星。' },
-    moon: { en: 'A natural satellite represented by a bounded educational orbit model.', zh: '使用有边界教学轨道模型表示的天然卫星。' },
+    moon: { en: 'A cataloged natural satellite. Its identity does not imply that a position or orbit model is available for the selected date.', zh: '已收录的天然卫星身份；收录不代表在所选日期已有位置或轨道模型。' },
     dwarfPlanet: { en: 'A curated dwarf-planet orbit for comparative exploration.', zh: '用于比较探索的策展矮行星轨道。' },
     asteroid: { en: `A traceable ${orbitClass ?? 'small-body'} osculating orbit from the active catalog or JPL SBDB.`, zh: `来自当前目录或 JPL SBDB 的可追溯${orbitClass ?? '小天体'}密切轨道。` },
     spacecraft: { en: 'A milestone-dated schematic spacecraft teaching path.', zh: '按任务里程碑日期构建的航天器教学示意路径。' },

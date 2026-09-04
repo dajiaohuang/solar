@@ -1,5 +1,6 @@
 import type { CelestialBody, ElementSet } from '../types'
 import ephemerisBodies from './ephemerisBodies.json'
+import { additionalSatelliteBodies } from './satelliteIdentities'
 import {
   jplHorizonsGiantSatelliteEvidence,
   jplHorizonsGiantSatelliteOrbit,
@@ -355,10 +356,12 @@ majorBodies.push(...ephemerisBodies.bodies.map((entry): CelestialBody => ({
   dataEpochLabel: `JD ${ephemerisBodies.epochJd} TDB · fixed osculating fallback`,
 })))
 
+majorBodies.push(...additionalSatelliteBodies(majorBodies))
+
 export const majorBodiesById = new Map(majorBodies.map((body) => [body.id, body]))
 
 export const defaultSelectedBodyIds = majorBodies
-  .filter((body) => body.id !== 'sun' && body.source !== 'jpl-spk-osculating-fallback')
+  .filter((body) => body.id !== 'sun' && body.source !== 'jpl-spk-osculating-fallback' && body.source !== 'jpl-satellite-inventory')
   .map((body) => body.id)
 
 export const defaultHistoryOptions = [

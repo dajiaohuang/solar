@@ -38,6 +38,28 @@ describe('parseSatelliteEphemerisIndex', () => {
 })
 
 describe('reconcileSatelliteIdentities', () => {
+  it('requires a unique explicit merge target, named rock and matching parent descriptor for ROCKSPK identities', () => {
+    const comments = `; BEGIN SPKMERGE COMMANDS
+ SOURCE_SPK_KERNEL = sat480.bsp
+ INCLUDE_COMMENTS = YES
+ BODIES = 65304
+ SOURCE_SPK_KERNEL = sat441l.bsp
+ INCLUDE_COMMENTS = NO
+ BODIES = 699
+; END SPKMERGE COMMANDS
+ Rock Elements: SAT480
+ Bodies on the File:
+ Name Number GM AX BX CX
+ S/2009_s_2 *** 0.0E+00 0.000 0.000 0.000
+ Elements for S/2009_s_2 at Julian Date: 2454888.5260157059 Center: SATURN`
+    const segments = [{ target: 65304, center: 699, type: 17 }, { target: 699, center: 6, type: 2 }]
+    expect(parseSatelliteKernelIdentities(comments, segments, 'SAT480')).toMatchObject([{ naifId: 65304, name: 'S/2009_s_2', parentId: 'saturn' }])
+    expect(parseSatelliteKernelIdentities(comments, segments, 'sat480')).toMatchObject([{ naifId: 65304 }])
+    for (const changed of [comments.replace('BODIES = 65304', 'BODIES = 65304, 65305'), comments.replace('INCLUDE_COMMENTS = NO', 'INCLUDE_COMMENTS = YES'), comments.replace('Center: SATURN', 'Center: JUPITER'), comments.replace('sat480.bsp', 'another.bsp'), comments + '\n Elements for other at Julian Date: 2454888 Center: SATURN']) {
+      expect(parseSatelliteKernelIdentities(changed, segments, 'SAT480')).toEqual([])
+    }
+    expect(parseSatelliteKernelIdentities(comments, [{ ...segments[0], target: 65305 }], 'SAT480')).toEqual([])
+  })
   it('normalizes source separators and zero padding but never merges distinct designations or parents', () => {
     const discovery = [
       { name: 'S/2003 J2', parentId: 'jupiter' },

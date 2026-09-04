@@ -5,7 +5,7 @@ test('frames close moons at their own scale and preserves zoom, reset and portra
   page.on('pageerror', (error) => errors.push(error.message))
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=4&lang=en&speed=0')
-  await page.getByRole('button', { name: 'Load preset: Mars · 2 included moons', exact: true }).click()
+  await page.getByTestId('preset-mars-spk-moons').click()
   await page.waitForLoadState('networkidle')
   const canvas = page.getByTestId('trajectory-canvas-3d')
   await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('3/3')
@@ -62,8 +62,8 @@ test('uses useful moon orbital units and distinguishes the active Earth center',
 test('keeps every moon-system preset in a bounded local 3D frame', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=4&lang=en&speed=0')
-  for (const name of ['Jupiter · 8 included moons', 'Saturn · 14 included moons', 'Uranus · 5 included moons', 'Neptune · 2 included moons', 'Pluto · 5 included moons', 'Earth–Moon system']) {
-    await page.getByRole('button', { name: `Load preset: ${name}`, exact: true }).click()
+  for (const id of ['jupiter-spk-moons', 'saturn-spk-moons', 'uranus-spk-moons', 'neptune-spk-moons', 'pluto-spk-moons', 'earth-moon']) {
+    await page.getByTestId(`preset-${id}`).click()
     await page.waitForLoadState('networkidle')
     await expect(page.locator('.compute-progress')).toHaveCount(0)
     const canvas = page.getByTestId('trajectory-canvas-3d')

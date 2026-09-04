@@ -23,6 +23,7 @@ export function getSuggestedViewRadius(
   bodyIds: BodyId[],
   referenceId: BodyId,
   bodiesById: Map<BodyId, CelestialBody>,
+  observedReach = 0,
 ) {
   const referencePath = getReachToAncestors(referenceId, bodiesById)
 
@@ -44,7 +45,10 @@ export function getSuggestedViewRadius(
     return Math.max(largest, relativeReach ?? bodyPath.totalReach + (referencePath?.totalReach ?? 0))
   }, 0)
 
-  return (maxReach || 0.02) * 1.18
+  // SPK-only identities have no seed ellipse. Use the actual relative extent
+  // for framing, without manufacturing orbital elements from a display bound.
+  const reach = Math.max(maxReach, Number.isFinite(observedReach) ? observedReach : 0)
+  return (reach || 0.02) * 1.18
 }
 
 function getLocalOrbitReach(body: CelestialBody) {

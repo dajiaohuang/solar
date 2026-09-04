@@ -36,7 +36,9 @@ The default deck loads only the curated major-body model and does **not** downlo
 
 ## Built-in scene presets
 
-Solar Atlas currently ships nineteen one-click presets, including six expanded planet-centered moon systems and a 16-large-asteroid scene. Every preset defines an epoch, reference frame, focus set, view, zoom, and trajectory window; dataset-backed presets additionally pin a complete dataset/sample/filter tuple.
+Solar Atlas currently ships twenty one-click presets, including seven groups covering the satellite identity catalog around six parent bodies, and a 16-large-asteroid scene. Every preset defines an epoch, reference frame, focus set, view, zoom, and trajectory window; dataset-backed presets additionally pin a complete dataset/sample/filter tuple.
+
+The frozen satellite catalog contains 461 identities (460 discovery-list entries plus one explicitly named source-only target), in addition to Earth's Moon. Of these, 460 have corroborated SPK target numbers; S/2009 S1 remains unmatched. Catalog inclusion does **not** promise a position, a physical radius, or formal discovery confirmation. New entries have no invented fallback ellipse. Missing positions and incomplete historical trails are reported separately; an unavailable reference suppresses the frame. Saturn's 293 catalog identities are split into two preset groups to respect the 160-object 3D focus limit. See the [replayable satellite evidence workflow](./scripts/reference/SATELLITE-SURVEY.md).
 
 | Preset | Reference and epoch | Default view | What it shows and what it does not claim |
 | --- | --- | --- | --- |
@@ -55,7 +57,7 @@ Solar Atlas currently ships nineteen one-click presets, including six expanded p
 
 The list is intentionally extensible. New presets should remain one-click, bilingual, URL-replayable, honest about sample versus complete data, and explicit about the model used for every included body.
 
-Close moon systems use a scene-sized 3D camera fit, clipping range and schematic marker scale, including portrait resizing. Positions remain in AU; enlarged body markers and rings are **not physical sizes**. The six expanded moon presets use shorter windows based on the fastest included seed period (at least about 24 points per revolution with the default 180 samples). Slower moons may show partial arcs. Manually choosing a long window or fewer samples can still undersample fast orbits; a trail is a sampled history, not a fitted closed ellipse.
+Close moon systems use a scene-sized 3D camera fit, clipping range and schematic marker scale, including portrait resizing. Positions remain in AU; enlarged body markers and rings are **not physical sizes**. Expanded moon presets use shorter windows based on the fastest existing seed period (at least about 24 points per revolution for those seed orbits with the default 180 samples). This sampling bound does not establish periods for newly cataloged bodies without seed elements. Slower moons may show partial arcs. Manually choosing a long window or fewer samples can still undersample fast orbits; a trail is a sampled history, not a fitted closed ellipse.
 
 The inspector and hover readouts use kilometers below 0.01 AU and hours for periods shorter than one day. Moon orbit extrema are labelled **periapsis/apoapsis**, relative to their parent; inclinations use the J2000 ecliptic, not the planet's equator. Display digits are formatting, not an uncertainty estimate. Direct SPK Earth-center positions are distinguished from the retained EMB-derived fallback.
 

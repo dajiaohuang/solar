@@ -118,10 +118,13 @@ export async function cropSpk(source, { startEt, endEt, targets }) {
     if (![2, 3, 17, 21].includes(segment.type) || ![1, 17].includes(segment.frame)) throw new Error(`Unsupported selected SPK ${segment.target}: type ${segment.type}, frame ${segment.frame}`)
     if (segment.type === 17) {
       if (segment.endAddress - segment.startAddress + 1 !== 12) throw new Error('Invalid type 17 record size')
-      const data = await source.read((segment.startAddress - 1) * 8, 12 * 8)
+      const raw = await source.read((segment.startAddress - 1) * 8, 12 * 8)
+      const data = Buffer.from(raw)
       for (let offset = 0; offset < data.length; offset += 8) if (!Number.isFinite(input.double(data, offset))) throw new Error('Invalid type 17 element')
       const a = input.double(data, 8), e = Math.hypot(input.double(data, 16), input.double(data, 24))
       if (!(a > 0) || e > 0.9) throw new Error('Invalid type 17 orbital elements')
+      if (input.double(data, 64) === 0) throw new Error('Unsupported type 17 zero mean longitude rate')
+      for (let offset = 0; offset < raw.length; offset += 8) data.writeDoubleLE(input.double(raw, offset), offset)
       if (dataBytes + data.length > MAX_OUTPUT_BYTES - 3 * 1024) throw new Error('Cropped SPK exceeds safety limit')
       output.push({ ...segment, startEt: Math.max(startEt, segment.startEt), endEt: Math.min(endEt, segment.endEt), data })
       dataBytes += data.length

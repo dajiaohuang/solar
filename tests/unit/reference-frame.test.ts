@@ -3,6 +3,11 @@ import { majorBodiesById } from '../../src/data/majorBodies'
 import { getSuggestedViewRadius } from '../../src/lib/referenceFrame'
 
 describe('reference-frame view radius', () => {
+  it('includes actual SPK-only satellite positions without inventing a seed orbit', () => {
+    expect(majorBodiesById.get('naif:506')!.orbit).toBeUndefined()
+    expect(getSuggestedViewRadius(['jupiter', 'naif:506'], 'jupiter', majorBodiesById, .08)).toBeCloseTo(.08 * 1.18, 12)
+    expect(getSuggestedViewRadius(['jupiter', 'naif:506'], 'jupiter', majorBodiesById, NaN)).toBeGreaterThan(0)
+  })
   it('fits Jupiter-centered moons to their local parent-body scale', () => {
     const radius = getSuggestedViewRadius(
       ['jupiter', 'io', 'europa', 'ganymede', 'callisto'],
