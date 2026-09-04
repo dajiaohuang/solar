@@ -2,6 +2,8 @@
 
 > **开发定位：** Web、Android、iOS 三个独立前端项目，共用统一后端。GitHub Pages 使用相同 Web 前端，开放精选核心功能；完整版内容保留可见入口，但不可选中，并提示使用完整版。当前版本仍是纯前端 Web 与 Capacitor 应用壳，迁移尚未完成。详见[产品定位与验收标准](./docs/product-direction.md)。
 
+独立的 [Go 后端实现](./backend/README.md)已有可本地运行的源码；客户端接入与后端公开部署仍是尚未完成的独立步骤。
+
 **浏览器原生的太阳系动力学与小天体图谱：场景可复现、数据可追溯、模型边界明确。**
 
 [![生产部署](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml) [![Android 与 iOS](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml/badge.svg?branch=main)](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml)

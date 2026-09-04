@@ -52,9 +52,9 @@ Existing scene URLs must remain readable. Opening a full-only scene directly mus
 
 ## Migration and acceptance / 迁移与验收
 
-**Current implementation:** React/Vite client-side Web plus Capacitor Android/iOS shells; no unified application backend or independent native frontend has been delivered. Existing commands, full/native SPK profiles, Pages assets and offline guarantees continue to describe this implementation until an explicitly tested migration replaces them. This documentation change does not reduce the current deployment or change its data origin.
+**Current implementation:** React/Vite client-side Web plus Capacitor Android/iOS shells. A separately implemented [Go backend and versioned API](./backend-api-v1.md) is now available in source for local execution; the three clients have not yet migrated to it, and no independent native frontend or public backend deployment is claimed. Existing commands, full/native SPK profiles, Pages assets and offline guarantees continue to describe the current clients until an explicitly tested migration replaces them. The [curated preview build](./preview-delivery.md) is opt-in; the live deploy command still retains the full catalog origin for installed clients.
 
-**当前实现：** React/Vite 纯前端 Web 与 Capacitor Android/iOS 应用壳；统一应用后端和独立原生前端尚未交付。现有命令、完整/原生 SPK 配置、Pages 资源和离线边界仍描述当前实现，直至经过测试的迁移替代它们。本次文档调整不会裁剪线上版本或变更数据来源。
+**当前实现：** React/Vite 纯前端 Web 与 Capacitor Android/iOS 应用壳。独立开发的 [Go 后端与版本化 API](./backend-api-v1.md) 已有可本地运行的源码，但三端尚未迁移接入，不宣称已经交付独立原生前端或公开部署后端。现有命令、完整/原生 SPK 配置、Pages 资源和离线边界仍描述当前客户端，直至经过测试的迁移替代它们。[精选预览构建](./preview-delivery.md)需显式选择；线上部署命令仍为已安装客户端保留完整目录来源。
 
 1. Complete and retain the current source-backed satellite batch and its validation. Reuse its identities, scientific engine, fixtures and provenance in the migration; do not discard verified data work / 完成并保留当前权威卫星批次与验证；迁移复用身份、科学引擎、基准和来源证据，不丢弃已验证的数据工作。
 2. Define the shared versioned API/scene contract and backend boundary. Separate the Web project and add backend catalog/state access with contract, error, resource-limit and independent scientific tests / 定义统一版本化 API/场景协议及后端边界，拆出 Web 项目并接入后端目录/状态服务，覆盖协议、错误、资源限制和独立科学测试。

@@ -2,6 +2,8 @@
 
 > **Development direction:** three independent Web, Android and iOS frontend projects sharing one backend. GitHub Pages will use the same Web frontend with curated core features enabled; full-only entries remain visible with an explanation and an invitation to use the full version. The current release is still client-side Web plus Capacitor shells; this migration is not complete. See [product direction and acceptance criteria](./docs/product-direction.md).
 
+The independent [Go backend implementation](./backend/README.md) is available for local execution. Client integration and public backend deployment remain separate, uncompleted steps.
+
 **A browser-native Solar System dynamics and small-body atlas with reproducible scenes, traceable data, and explicit model boundaries.**
 
 [![Production deployment](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml) [![Android and iOS](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml/badge.svg?branch=main)](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml)
