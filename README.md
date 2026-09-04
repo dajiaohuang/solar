@@ -55,6 +55,10 @@ Solar Atlas currently ships nineteen one-click presets, including six expanded p
 
 The list is intentionally extensible. New presets should remain one-click, bilingual, URL-replayable, honest about sample versus complete data, and explicit about the model used for every included body.
 
+Close moon systems use a scene-sized 3D camera fit, clipping range and schematic marker scale, including portrait resizing. Positions remain in AU; enlarged body markers and rings are **not physical sizes**. The six expanded moon presets use shorter windows based on the fastest included seed period (at least about 24 points per revolution with the default 180 samples). Slower moons may show partial arcs. Manually choosing a long window or fewer samples can still undersample fast orbits; a trail is a sampled history, not a fitted closed ellipse.
+
+The inspector and hover readouts use kilometers below 0.01 AU and hours for periods shorter than one day. Moon orbit extrema are labelled **periapsis/apoapsis**, relative to their parent; inclinations use the J2000 ecliptic, not the planet's equator. Display digits are formatting, not an uncertainty estimate. Direct SPK Earth-center positions are distinguished from the retained EMB-derived fallback.
+
 ## Workspaces
 
 - **Observation Deck** — 2D/3D spatial views, bounded simulation clock, arbitrary loaded-body reference frames, split-frame comparison, searchable focus selection, trajectories, camera controls, distance measurement, Lagrange points, Hill spheres, Laplace SOIs, and optional catalog point clouds.

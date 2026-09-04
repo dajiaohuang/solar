@@ -22,6 +22,7 @@ import { useBodyRegistry } from '../../app/bodyRegistry'
 import { BodyInspector } from '../body-inspector/BodyInspector'
 import { ControlDrawer } from './ControlDrawer'
 import { bodyDisplayName } from '../../lib/bodyNames'
+import { formatDistanceAU } from '../../lib/formatDistance'
 import { catalogSampleErrorMessage } from '../../lib/catalogSampleProfile'
 import { isOnboardingRendererReady, ONBOARDING_RENDER_READY_EVENT } from '../../lib/onboarding'
 import { SimulationControls } from './SimulationControls'
@@ -395,7 +396,7 @@ export function ExplorerWorkspace() {
           </li>)}</ul>
         </details>
         {hovered && <div className="atlas-tooltip" style={{ left: hovered.x + 14, top: hovered.y + 12 }}>
-          <strong>{bodyDisplayName(hovered.body, language)}</strong><span>{hovered.distance.toFixed(4)} AU</span>
+          <strong>{bodyDisplayName(hovered.body, language)}</strong><span>{formatDistanceAU(hovered.distance, language)}</span>
         </div>}
       </main>
       {inspectorOpen && <BodyInspector key={focusedBody?.id ?? 'none'} body={focusedBody} currentPositions={simulation.comparisonEnabled ? secondaryFrame.currentPositions : primaryFrame.currentPositions} bodiesById={bodiesById} />}

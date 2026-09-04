@@ -1,5 +1,6 @@
 import { dateToJulianDay } from '../lib/julianDate'
 import { majorBodies } from './majorBodies'
+import { getOrbitalPeriodDays } from '../lib/orbitalPeriod'
 import datasetPin from '../../.github/asteroid-dataset.json'
 import type { AppRoute, ElementPlotMode } from '../state/ui-store'
 import type { BodyId, CatalogFilters, CatalogSampleProfile, DatasetMode } from '../types'
@@ -66,11 +67,17 @@ export const SCENE_PRESETS: ScenePreset[] = [
   ...(['mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'] as const).map((parent): ScenePreset => {
     const names = { mars: ['Mars', '火星'], jupiter: ['Jupiter', '木星'], saturn: ['Saturn', '土星'], uranus: ['Uranus', '天王星'], neptune: ['Neptune', '海王星'], pluto: ['Pluto', '冥王星'] }
     const moons = majorBodies.filter((body) => body.kind === 'moon' && body.parentId === parent)
+    // At the default 180 samples, keep at least ~30 samples per fastest
+    // revolution. Long-period moons may show only part of their trajectory.
+    // Seed periods size the display window, not the physical propagation.
+    const historyDays = Math.max(1, Math.floor(Math.min(30, ...moons.map((moon) =>
+      moon.orbit ? getOrbitalPeriodDays(moon.orbit, 'parent') * 6 : 30,
+    ))))
     return {
       id: `${parent}-spk-moons`, name: { en: `${names[parent][0]} · ${moons.length} included moons`, zh: `${names[parent][1]} · ${moons.length} 颗已收录卫星` },
-      description: { en: 'Body-centered geometric SPK states when loaded and covered; fixed-ellipse fallback otherwise. Not every known moon.', zh: '以母星本体中心为参考系；已加载且覆盖时使用 SPK 几何星历，否则回退固定椭圆。不是该行星全部已知卫星。' },
+      description: { en: 'Body-centered SPK when loaded and covered; fixed-ellipse fallback otherwise. Short trails may show partial orbits. Not every known moon.', zh: '母星中心参考系；已加载且覆盖时使用 SPK，否则回退固定椭圆。短时轨迹可能不满一圈，并非全部已知卫星。' },
       referenceId: parent, selectedMajorBodyIds: [parent, ...moons.map((moon) => moon.id)],
-      julianDay: dateToJD('2026-09-04'), viewMode: '3d', zoomLevel: 1, historyDays: 30,
+      julianDay: dateToJD('2026-09-04'), viewMode: '3d', zoomLevel: 1, historyDays,
     }
   }),
   {
