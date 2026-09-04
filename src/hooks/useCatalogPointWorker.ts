@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AsteroidRecord, CatalogPointWorkerRequest, CatalogPointWorkerResponse } from '../types'
+import { createCatalogPointWorkerScheduler } from '../lib/catalogPointWorkerScheduler'
+import type { AsteroidRecord } from '../types'
 
 const EMPTY_POSITIONS = new Float32Array()
 
 export function useCatalogPointWorker(records: AsteroidRecord[], julianDay: number) {
-  const requestId = useRef(0)
+  const schedulerRef = useRef<ReturnType<typeof createCatalogPointWorkerScheduler> | null>(null)
+  const recordsRef = useRef(records)
+  const julianDayRef = useRef(julianDay)
   const [positions, setPositions] = useState<Float32Array>(EMPTY_POSITIONS)
   const [positions3D, setPositions3D] = useState<Float32Array>(EMPTY_POSITIONS)
   const [computedRecords, setComputedRecords] = useState(records)
@@ -12,23 +15,55 @@ export function useCatalogPointWorker(records: AsteroidRecord[], julianDay: numb
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => { julianDayRef.current = julianDay }, [julianDay])
+
   useEffect(() => {
-    const currentRequestId = requestId.current + 1
-    requestId.current = currentRequestId
+    const worker = new Worker(new URL('../workers/catalog-points.worker.ts', import.meta.url), { type: 'module' })
+    const scheduler = createCatalogPointWorkerScheduler((request, transfer) => worker.postMessage(request, transfer ?? []), {
+      onProgress: (value) => setProgress(value),
+      onResult: (result) => {
+        const activeRecords = recordsRef.current
+        setPositions(result.positions)
+        setPositions3D(result.positions3D)
+        setComputedRecords(activeRecords)
+        setComputedJulianDay(result.julianDay)
+        setProgress(1)
+      },
+      onError: (message) => setError(message),
+    })
+    schedulerRef.current = scheduler
+    worker.onmessage = (event: MessageEvent) => scheduler.handle(event.data)
+    worker.onerror = (event) => {
+      scheduler.reset(false)
+      setError(event.message || 'Catalog point propagation failed')
+    }
+    return () => {
+      scheduler.reset()
+      schedulerRef.current = null
+      worker.terminate()
+    }
+  }, [])
+
+  useEffect(() => {
+    recordsRef.current = records
     if (!records.length) {
+      schedulerRef.current?.reset()
       queueMicrotask(() => {
-        if (requestId.current !== currentRequestId) return
+        if (recordsRef.current !== records) return
         setPositions(EMPTY_POSITIONS)
         setPositions3D(EMPTY_POSITIONS)
         setComputedRecords(records)
-        setComputedJulianDay(julianDay)
+        setComputedJulianDay(julianDayRef.current)
         setProgress(0)
+        setError(null)
       })
       return
     }
-    const worker = new Worker(new URL('../workers/catalog-points.worker.ts', import.meta.url), { type: 'module' })
     queueMicrotask(() => {
-      if (requestId.current !== currentRequestId) return
+      if (recordsRef.current !== records) return
+      setPositions(EMPTY_POSITIONS)
+      setPositions3D(EMPTY_POSITIONS)
+      setComputedRecords([])
       setProgress(0)
       setError(null)
     })
@@ -37,33 +72,11 @@ export function useCatalogPointWorker(records: AsteroidRecord[], julianDay: numb
       record.epochJd, record.semiMajorAxisAU, record.eccentricity, record.inclinationDeg,
       record.ascendingNodeDeg, record.argPeriapsisDeg, record.meanAnomalyDeg, record.meanMotionDegPerDay,
     ], index * 8))
-    worker.onmessage = (event: MessageEvent<CatalogPointWorkerResponse>) => {
-      if (event.data.requestId !== requestId.current) return
-      if (event.data.type === 'progress') setProgress(event.data.progress ?? 0)
-      if (event.data.type === 'result') {
-        setPositions(event.data.positions ?? EMPTY_POSITIONS)
-        setPositions3D(event.data.positions3D ?? EMPTY_POSITIONS)
-        setComputedRecords(records)
-        setComputedJulianDay(julianDay)
-        setProgress(1)
-        worker.terminate()
-      }
-      if (event.data.type === 'error') {
-        setError(event.data.error ?? 'Catalog point propagation failed')
-        worker.terminate()
-      }
-    }
-    worker.onerror = (event) => {
-      if (currentRequestId !== requestId.current) return
-      setError(event.message || 'Catalog point propagation failed')
-      worker.terminate()
-    }
-    const request: CatalogPointWorkerRequest = {
-      type: 'compute', requestId: currentRequestId, julianDay, elements,
-    }
-    worker.postMessage(request, [elements.buffer])
-    return () => worker.terminate()
-  }, [julianDay, records])
+    schedulerRef.current?.setElements(elements)
+    schedulerRef.current?.requestJulianDay(julianDayRef.current)
+  }, [records])
+
+  useEffect(() => { schedulerRef.current?.requestJulianDay(julianDay) }, [julianDay])
 
   const ready = computedRecords === records
   return {
