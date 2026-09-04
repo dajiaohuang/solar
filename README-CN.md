@@ -115,8 +115,9 @@ Solar Atlas 把三个回答不同问题的上限分开处理：
 
 | 功能 | 模型与范围 |
 | --- | --- |
-| 主要行星 | JPL 表 1 拟合开普勒根数与长期变化率，基于 J2000 平均黄道/春分点，有效期 1800–2050。“地球”条目作为内部地月质心种子，渲染地球点为推导地心。越界日期会提示外推。来源使用 JDTDB；浏览器 UTC 日期目前直接生成数值 JD，未做 UTC→TDB 转换 |
-| 卫星与矮行星 | 月球使用 JPL 在 2000-01-01.5 TDB、地心黄道平面下的均值根数。木卫一、木卫二、木卫三、木卫四和土卫六使用 [NASA/JPL Horizons](https://ssd-api.jpl.nasa.gov/doc/horizons.html) 在 JD 2451545.0 TDB、各自母星中心、J2000 黄道面下的几何密切根数与相位。六颗卫星都只在固定椭圆上推进平近点角：这是可审计的历元近似，不是连续星历，并省略 UTC→TDB 转换、进动和 N 体摄动。地心与月心使用校验和固定的 [NAIF/JPL DE440 引力参数](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc) 围绕 EMB 种子分解。矮行星使用取整的 `curated-approx` 根数 |
+| 主要行星 | JPL 表 1 拟合开普勒根数与长期变化率，基于 J2000 平均黄道/春分点，有效期 1800–2050。“地球”条目作为内部地月质心种子，渲染地球点为推导地心。SPK 状态使用 UTC→TT→TDB（1972 年起采用 NAIF 闰秒表；未来日期明确标为不确定）；近似回退仍保持数值 JD 契约 |
+| SPK 星历 | 可选的原始 NAIF/JPL SPK type 2/3 系数，在声明参考系中计算几何天体中心状态，并沿中心链解析到质心。`de440s` 覆盖 2000–2051，卫星和选定小天体内核覆盖 2020–2031。系数不重拟合、不重采样，来源模型修正不会重复施加 |
+| 卫星与矮行星 | SPK 不可用时，月球与固定椭圆卫星条目仍作为可审计的回退近似；它们不是连续星历。地心与月心使用校验和固定的 [NAIF/JPL DE440 引力参数](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc) 围绕 EMB 种子分解。矮行星使用取整的 `curated-approx` 根数 |
 | MPCORB 与 SBDB 天体 | 只接受 `0 ≤ e < 1`、`a > 0` 的椭圆密切根数，明确拒绝抛物线和双曲线数据 |
 | 月相 | 日—地—月相位角与有符号地心日月距角 |
 | 希尔球 | `a(1-e)(m/3M)^(1/3)` |
@@ -136,6 +137,13 @@ JPL SBDB 数据严格读取官方 `orbit.elements[]` 记录中的 `name`、`valu
 - [JPL 行星卫星均值根数](https://ssd.jpl.nasa.gov/sats/elem/)
 - [NASA/JPL Horizons API](https://ssd-api.jpl.nasa.gov/doc/horizons.html)
 - [NAIF/JPL DE440 引力参数](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc)
+- [NAIF SPK Required Reading](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/spk.html) · [NAIF 时间系统](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/time.html)
+
+### 物理星历覆盖与观测边界
+
+可选物理星历包包含 59 个经 SHA-256 固定的文件（约 65.6 MiB），按需加载：`de440s` 覆盖 2000–2051，卫星及 16 个选定小天体内核覆盖 2020–2031。manifest 目前包含 46 个新增目标条目，其种子/中心映射正在纠错；这些条目不代表所有天体都有覆盖。普通 `npm run build` 不下载内核，也不联网。原生构建携带相同 manifest，已打包的内核可离线使用；目录数据和实时 SBDB 查询仍需联网。
+
+SPK 输出是声明参考系中的几何天体中心状态，并沿中心链解析；它不是客户端 N 体积分器，应用不会再次叠加通用广义相对论或 J2 修正。焦点轨迹可使用 SPK，而 GPU 目录点云仍使用开普勒模型。几何、接收光时与恒星光行差读数彼此分开；不提供引力偏折、大气、地表观测者模型或协方差。
 
 ## 数据与发布
 
