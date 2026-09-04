@@ -24,6 +24,20 @@ func BenchmarkCatalogPage(b *testing.B) {
 	}
 }
 
+func BenchmarkCatalogIDMapLookup(b *testing.B) {
+	c, err := loadBenchmarkCatalog()
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, ok := c.Get("earth"); !ok {
+			b.Fatal("earth missing from catalog")
+		}
+	}
+}
+
 func BenchmarkTrajectory64Samples(b *testing.B) {
 	c, err := loadBenchmarkCatalog()
 	if err != nil {

@@ -13,7 +13,7 @@ Run from this worktree:
 
 ```text
 go run ./cmd/bench -requests 500 -concurrency 32 -inventory-dir D:/repo/repostew/.repostew/cache/solar-all-body-coverage/inventory-pr94-20260904
-go test -bench 'Benchmark(CatalogPage|Trajectory64Samples|Trajectory64BodyBatch|Trajectory10000Samples)$' -benchmem -benchtime=200ms ./internal/httpapi
+go test -bench 'Benchmark(CatalogIDMapLookup|CatalogPage|Trajectory64Samples|Trajectory64BodyBatch|Trajectory10000Samples)$' -benchmem -benchtime=200ms ./internal/httpapi
 go test -race ./...
 go test -fuzz FuzzSPKParserNeverPanics -fuzztime=10s ./internal/spk
 go test -fuzz FuzzDecodeCursorNeverPanics -fuzztime=10s ./internal/inventory
@@ -40,10 +40,11 @@ full source inventory 1,567,193 rows / 314 gzip shards, 552 catalog entries;
 The direct HTTP benchmarks on the same machine reported:
 
 ```text
-BenchmarkCatalogPage-32                3308    71348 ns/op      75332 B/op 282 allocs/op
-BenchmarkTrajectory64Samples-32        5845    42626 ns/op      24484 B/op  70 allocs/op
-BenchmarkTrajectory64BodyBatch-32        99  2487905 ns/op     819623 B/op 176 allocs/op
-BenchmarkTrajectory10000Samples-32        42  5415076 ns/op    2916433 B/op  78 allocs/op
+BenchmarkCatalogPage-32                3135    92240 ns/op      75544 B/op 282 allocs/op
+BenchmarkCatalogIDMapLookup-32      44948870       5.501 ns/op          0 B/op   0 allocs/op
+BenchmarkTrajectory64Samples-32        5600    51339 ns/op      24525 B/op  70 allocs/op
+BenchmarkTrajectory64BodyBatch-32       100  2131010 ns/op     764721 B/op 175 allocs/op
+BenchmarkTrajectory10000Samples-32        46  5381111 ns/op    3585515 B/op  84 allocs/op
 ```
 
 The batch benchmark submits all 64 catalog IDs; rows without a supported
