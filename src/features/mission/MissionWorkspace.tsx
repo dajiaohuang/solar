@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { majorBodiesWithPhysicalData } from '../../app/bodyRegistry'
+import { majorBodiesWithPhysicalData, useBodyRegistry } from '../../app/bodyRegistry'
 import { computeHohmann, type HohmannResult } from '../../engine/mission/hohmann'
 import { solveBodyToBodyLambert, type LambertSolution, type PorkchopPoint } from '../../engine/mission/lambert'
 import { createPorkchopWindow } from '../../engine/mission/porkchopWindow'
 import { useI18n } from '../../i18n/context'
 import { createBodyPositionResolver, crossVector3, dotVector3 } from '../../lib/ephemeris'
-import { loadedKernelIds } from '../../engine/ephemeris/kernelStore'
+import { loadedKernelIds, kernelsForWindow } from '../../engine/ephemeris/kernelStore'
 import { dateToJulianDay, julianDayToDate } from '../../lib/julianDate'
-import type { BodyId, CelestialBody } from '../../types'
+import type { CelestialBody } from '../../types'
 import type { PorkchopWorkerRequest, PorkchopWorkerResponse } from '../../workers/porkchop.worker'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { missionActions, missionStore } from '../../state/mission-store'
@@ -68,12 +68,12 @@ function PorkchopCanvas({ points, columns, rows, ariaLabel, selectedIndex, onSel
 
 export function MissionWorkspace() {
   const candidates = useMemo(() => majorBodiesWithPhysicalData.filter((body) => body.orbit && !body.parentId), [])
-  const bodiesById = useMemo(() => new Map<BodyId, CelestialBody>(majorBodiesWithPhysicalData.map((body) => [body.id, body])), [])
+  const { bodiesById } = useBodyRegistry()
   const { departureId, arrivalId, departureDate, arrivalDate } = missionStore.useStore()
   const [hohmann, setHohmann] = useState<HohmannResult | null>(null)
   const [lambert, setLambert] = useState<LambertSolution | null>(null)
   const [transferError, setTransferError] = useState<string | null>(null)
-  const [porkchop, setPorkchop] = useState<{ columns: number; rows: number; points: PorkchopPoint[] } | null>(null)
+  const [porkchop, setPorkchop] = useState<{ columns: number; rows: number; points: PorkchopPoint[]; ephemerisFiles: string[] } | null>(null)
   const [porkchopStatus, setPorkchopStatus] = useState<'idle' | 'running' | 'error'>('idle')
   const [selectedPorkchopIndex, setSelectedPorkchopIndex] = useState(-1)
   const workerRef = useRef<Worker | null>(null)
@@ -198,7 +198,7 @@ export function MissionWorkspace() {
             try {
               const departureRadius = orbitRadius(departureBody), arrivalRadius = orbitRadius(arrivalBody)
               if (departureRadius && arrivalRadius) setHohmann(computeHohmann(departureRadius, arrivalRadius))
-              setLambert(solveBodyToBodyLambert({ departureBodyId: departureId, arrivalBodyId: arrivalId, bodiesById, departureJulianDay: selectedPorkchopPoint.departureJulianDay, arrivalJulianDay: selectedPorkchopPoint.arrivalJulianDay }))
+              setLambert(solveBodyToBodyLambert({ kernels: kernelsForWindow(selectedPorkchopPoint.departureJulianDay - 0.01, selectedPorkchopPoint.arrivalJulianDay + 0.01, porkchop.ephemerisFiles), departureBodyId: departureId, arrivalBodyId: arrivalId, bodiesById, departureJulianDay: selectedPorkchopPoint.departureJulianDay, arrivalJulianDay: selectedPorkchopPoint.arrivalJulianDay }))
               setTransferError(null)
             } catch (error) { setTransferError(error instanceof Error ? error.message : String(error)) }
           }}>{t('applyOpportunity')}</button></div>}{porkchopFailures.length > 0 && <p className="fine-print">{t('solverFailures')}: {porkchopFailures.map(([code, count]) => `${code} ${count}`).join(' · ')}</p>}</> : <div className="porkchop-placeholder"><div className="contours" /><p>{t('porkchopDescription')}</p></div>}</article>
