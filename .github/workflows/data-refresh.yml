@@ -48,6 +48,9 @@ jobs:
           if [ "$REQUESTED_MODE" = "lite" ]; then npm run data:lite; else npm run data:full; fi
       - run: npm run validate:data
       - name: Validate application against generated dataset
+        env:
+          # The candidate Full build is reused by Playwright in this step.
+          VITE_SOLAR_API_BASE_URL: /solar-test-api
         run: |
           npm run lint
           npm run test:unit
