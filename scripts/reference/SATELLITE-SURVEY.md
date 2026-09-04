@@ -119,6 +119,36 @@ invalid records, and current-position-valid/historical-reference-unavailable
 spacecraft trails. Identity, format support, independently verified state
 evaluation, and delivered source coverage remain distinct acceptance gates.
 
+For real source coverage, `spk17-sat480-cspice.json` retains the original SAT480
+record for S/2009 S2 and 65 independent EQNCPV states across 2020–2031, relative
+to its declared Saturn center. Regenerate from an integrity-checked source crop
+and its adjacent provenance JSON with:
+
+```sh
+node scripts/reference/record-spk17-source-reference.mjs SAT480_CROP.bsp NEW_REFERENCE.json /tmp/spk17-oracle
+```
+
+## Offline per-target preparation
+
+```sh
+node scripts/split-spk-crop.mjs VERIFIED_CROP.bsp NEW_DIRECTORY
+```
+
+This explicit, offline command verifies the crop checksum and original HTTPS
+provenance, requires a gap-free shared interval, then retains original records
+in separate content-addressed target files. Each file is checked at endpoints,
+midpoint and descriptor boundaries against the input position and velocity.
+The 128 MiB runtime file limit is enforced per target, not by truncating the
+identity catalog. Existing output directories are refused. A failed run does
+not publish a successful manifest. Generated outputs remain outside Git.
+
+The resulting manifest is preparation evidence, not an app release: source
+selection, center-chain solution compatibility and complete source-target
+accounting must still pass before integration. Source crops may themselves be
+subsets; compare their targets against the frozen source survey. Pages may use
+a shorter declared window or subset, while the full distribution keeps its own
+coverage target.
+
 ## 中文边界
 
 这只是可重放的身份与数据覆盖调查，不代表新增星体已经上线，也不等于完整物理。

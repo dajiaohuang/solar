@@ -4,6 +4,7 @@ import { SpkKernel } from '../../src/engine/ephemeris/spk'
 import { cropSpk } from '../../scripts/crop-spk.mjs'
 import oracle from '../fixtures/spk17-cspice.json'
 import expanded from '../fixtures/spk17-cspice-expanded.json'
+import sourceReference from '../fixtures/spk17-sat480-cspice.json'
 
 function sourceFor(elements: number[], little = true) {
   const bytes = Buffer.alloc(4096)
@@ -36,6 +37,16 @@ describe('SPK Type 17 CSPICE oracle', () => {
       const state = evaluateType17(address => elements[address - 1], 1, sample.et)
       const actual = [...Object.values(state.position), ...Object.values(state.velocity)]
       actual.forEach((value, axis) => expect(Math.abs(value - sample.state[axis]), `${sample.record}/${sample.et}/${axis}`).toBeLessThan(axis < 3 ? 2e-6 : 1e-9))
+    }
+  })
+
+  it('matches independent CSPICE for original SAT480 records throughout 2020–2031', () => {
+    expect(sourceReference.records[0]).toMatchObject({ target: 65304, center: 699, frame: 1 })
+    for (const sample of sourceReference.samples) {
+      const record = sourceReference.records[sample.record]
+      const state = evaluateType17(address => record.elements[address - 1], 1, sample.et)
+      const actual = [...Object.values(state.position), ...Object.values(state.velocity)]
+      actual.forEach((value, axis) => expect(Math.abs(value - sample.state[axis]), `${sample.et}/${axis}`).toBeLessThan(axis < 3 ? 2e-6 : 1e-9))
     }
   })
 
