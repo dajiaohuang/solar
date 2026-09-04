@@ -1247,6 +1247,339 @@
       "integrationBatch": "satellite-expansion-20260904"
     },
     {
+      "id": "de437-sat415-satellite-2020-2031",
+      "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+      "sourceIdentity": {
+        "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+        "bytes": 624325632,
+        "etag": null,
+        "lastModified": "Mon, 07 Mar 2022 23:50:18 GMT"
+      },
+      "supplementalSource": {
+        "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+        "sha256": "22c3653286219a95473a8eed9eea0d37125a9cf13f70650d8361d7db38ea8e09"
+      },
+      "dependencyOnly": true,
+      "solution": "DE437-SAT415",
+      "path": "de437-sat415-satellite-2020-2031.bsp",
+      "sha256": "c0565e9104e96beeaddb4e1f39dcc213f838aae9930815ac2853e63821b07ea4",
+      "bytes": 1812480,
+      "targets": [
+        699,
+        10,
+        6
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "satellite-naif-sat415-610-2026-2027",
+      "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+      "sourceIdentity": {
+        "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+        "bytes": 624325632,
+        "etag": null,
+        "lastModified": "Mon, 07 Mar 2022 23:50:18 GMT"
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "de437-sat415-satellite-2020-2031"
+      ],
+      "solution": "NAIF-SAT415 + DE437-SAT415",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+          "sha256": "22c3653286219a95473a8eed9eea0d37125a9cf13f70650d8361d7db38ea8e09"
+        },
+        "sourceSelection": "Distinct modern NAIF SAT415 publication, using its own embedded DE437 Sun/system barycenter and Saturn-center records; not the historical SSD container or a DE440 replacement",
+        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+      },
+      "path": "satellite-naif-sat415-610-2026-2027.bsp",
+      "sha256": "ad251c7111e7deb64e6cbc732095b522641151efd9d9033308fd047a911f05ab",
+      "bytes": 766976,
+      "targets": [
+        610
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "satellite-naif-sat415-611-2026-2027",
+      "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+      "sourceIdentity": {
+        "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+        "bytes": 624325632,
+        "etag": null,
+        "lastModified": "Mon, 07 Mar 2022 23:50:18 GMT"
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "de437-sat415-satellite-2020-2031"
+      ],
+      "solution": "NAIF-SAT415 + DE437-SAT415",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+          "sha256": "22c3653286219a95473a8eed9eea0d37125a9cf13f70650d8361d7db38ea8e09"
+        },
+        "sourceSelection": "Distinct modern NAIF SAT415 publication, using its own embedded DE437 Sun/system barycenter and Saturn-center records; not the historical SSD container or a DE440 replacement",
+        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+      },
+      "path": "satellite-naif-sat415-611-2026-2027.bsp",
+      "sha256": "e47bb0361afab1eca7d008f031a775fa4fbd30bc5679f852e0bb3b4b8f0c68f9",
+      "bytes": 766976,
+      "targets": [
+        611
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "satellite-naif-sat415-615-2026-2027",
+      "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+      "sourceIdentity": {
+        "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+        "bytes": 624325632,
+        "etag": null,
+        "lastModified": "Mon, 07 Mar 2022 23:50:18 GMT"
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "de437-sat415-satellite-2020-2031"
+      ],
+      "solution": "NAIF-SAT415 + DE437-SAT415",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+          "sha256": "22c3653286219a95473a8eed9eea0d37125a9cf13f70650d8361d7db38ea8e09"
+        },
+        "sourceSelection": "Distinct modern NAIF SAT415 publication, using its own embedded DE437 Sun/system barycenter and Saturn-center records; not the historical SSD container or a DE440 replacement",
+        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+      },
+      "path": "satellite-naif-sat415-615-2026-2027.bsp",
+      "sha256": "09606bdfcc61f63af413cd89686f464e42dd23749e6777c43a71757c560d4b86",
+      "bytes": 766976,
+      "targets": [
+        615
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "satellite-naif-sat415-616-2026-2027",
+      "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+      "sourceIdentity": {
+        "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+        "bytes": 624325632,
+        "etag": null,
+        "lastModified": "Mon, 07 Mar 2022 23:50:18 GMT"
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "de437-sat415-satellite-2020-2031"
+      ],
+      "solution": "NAIF-SAT415 + DE437-SAT415",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+          "sha256": "22c3653286219a95473a8eed9eea0d37125a9cf13f70650d8361d7db38ea8e09"
+        },
+        "sourceSelection": "Distinct modern NAIF SAT415 publication, using its own embedded DE437 Sun/system barycenter and Saturn-center records; not the historical SSD container or a DE440 replacement",
+        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+      },
+      "path": "satellite-naif-sat415-616-2026-2027.bsp",
+      "sha256": "e818c4b8cfdab348b0b6aab1bb82756304c5f8b252bd8c1048bb9076e2a8609d",
+      "bytes": 766976,
+      "targets": [
+        616
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "satellite-naif-sat415-617-2026-2027",
+      "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+      "sourceIdentity": {
+        "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+        "bytes": 624325632,
+        "etag": null,
+        "lastModified": "Mon, 07 Mar 2022 23:50:18 GMT"
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "de437-sat415-satellite-2020-2031"
+      ],
+      "solution": "NAIF-SAT415 + DE437-SAT415",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+          "sha256": "22c3653286219a95473a8eed9eea0d37125a9cf13f70650d8361d7db38ea8e09"
+        },
+        "sourceSelection": "Distinct modern NAIF SAT415 publication, using its own embedded DE437 Sun/system barycenter and Saturn-center records; not the historical SSD container or a DE440 replacement",
+        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+      },
+      "path": "satellite-naif-sat415-617-2026-2027.bsp",
+      "sha256": "3163350085ef26ca91cb5216750d4a54acaa47b74b5d62ac58eb45d2a6ec95c9",
+      "bytes": 766976,
+      "targets": [
+        617
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "satellite-naif-sat415-618-2026-2027",
+      "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+      "sourceIdentity": {
+        "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+        "bytes": 624325632,
+        "etag": null,
+        "lastModified": "Mon, 07 Mar 2022 23:50:18 GMT"
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "de437-sat415-satellite-2020-2031"
+      ],
+      "solution": "NAIF-SAT415 + DE437-SAT415",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+          "sha256": "22c3653286219a95473a8eed9eea0d37125a9cf13f70650d8361d7db38ea8e09"
+        },
+        "sourceSelection": "Distinct modern NAIF SAT415 publication, using its own embedded DE437 Sun/system barycenter and Saturn-center records; not the historical SSD container or a DE440 replacement",
+        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+      },
+      "path": "satellite-naif-sat415-618-2026-2027.bsp",
+      "sha256": "ac2e9028ee2583f51f4cbc7d9958ec9dedbbfa07594c89d61da8f3951425f2b8",
+      "bytes": 766976,
+      "targets": [
+        618
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "satellite-naif-sat415-633-2020-2031",
+      "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+      "sourceIdentity": {
+        "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+        "bytes": 624325632,
+        "etag": null,
+        "lastModified": "Mon, 07 Mar 2022 23:50:18 GMT"
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "de437-sat415-satellite-2020-2031"
+      ],
+      "solution": "NAIF-SAT415 + DE437-SAT415",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+          "sha256": "22c3653286219a95473a8eed9eea0d37125a9cf13f70650d8361d7db38ea8e09"
+        },
+        "sourceSelection": "Distinct modern NAIF SAT415 publication, using its own embedded DE437 Sun/system barycenter and Saturn-center records; not the historical SSD container or a DE440 replacement",
+        "windowPolicy": "Original prepared 2020/2031 window"
+      },
+      "path": "satellite-naif-sat415-633-2020-2031.bsp",
+      "sha256": "6feeb54216540bb18f10b0ec3afa09818497fcf1186c9c5d2e0082994ba9d1da",
+      "bytes": 4204544,
+      "targets": [
+        633
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "satellite-naif-sat415-649-2020-2031",
+      "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+      "sourceIdentity": {
+        "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+        "bytes": 624325632,
+        "etag": null,
+        "lastModified": "Mon, 07 Mar 2022 23:50:18 GMT"
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "de437-sat415-satellite-2020-2031"
+      ],
+      "solution": "NAIF-SAT415 + DE437-SAT415",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+          "sha256": "22c3653286219a95473a8eed9eea0d37125a9cf13f70650d8361d7db38ea8e09"
+        },
+        "sourceSelection": "Distinct modern NAIF SAT415 publication, using its own embedded DE437 Sun/system barycenter and Saturn-center records; not the historical SSD container or a DE440 replacement",
+        "windowPolicy": "Original prepared 2020/2031 window"
+      },
+      "path": "satellite-naif-sat415-649-2020-2031.bsp",
+      "sha256": "dc25743a460c105495d09524b346575a4531633718fe051de5106d7d55187a5c",
+      "bytes": 4204544,
+      "targets": [
+        649
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "satellite-naif-sat415-653-2020-2031",
+      "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+      "sourceIdentity": {
+        "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+        "bytes": 624325632,
+        "etag": null,
+        "lastModified": "Mon, 07 Mar 2022 23:50:18 GMT"
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "de437-sat415-satellite-2020-2031"
+      ],
+      "solution": "NAIF-SAT415 + DE437-SAT415",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
+          "sha256": "22c3653286219a95473a8eed9eea0d37125a9cf13f70650d8361d7db38ea8e09"
+        },
+        "sourceSelection": "Distinct modern NAIF SAT415 publication, using its own embedded DE437 Sun/system barycenter and Saturn-center records; not the historical SSD container or a DE440 replacement",
+        "windowPolicy": "Original prepared 2020/2031 window"
+      },
+      "path": "satellite-naif-sat415-653-2020-2031.bsp",
+      "sha256": "6e916f97b15980801115e94f5f7a0bf2c41f17e1cfcf190336f337e864173d6e",
+      "bytes": 4204544,
+      "targets": [
+        653
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
       "id": "satellite-jup347-506-2020-2031",
       "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
       "sourceIdentity": {

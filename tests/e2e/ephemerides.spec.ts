@@ -53,3 +53,26 @@ test('exposes failed SPK downloads as approximate fallback without breaking 3D',
   await expect(status.getByRole('alert')).toContainText('HTTP 503')
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
 })
+
+test('loads the declared SAT415 center pool for Janus in 3D', async ({ page }) => {
+  const kernels: string[] = []
+  page.on('request', request => { if (request.url().endsWith('.bsp')) kernels.push(request.url()) })
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&lang=en&view=3d&ref=saturn&bodies=saturn,naif:610&focused=naif:610&jd=2461287.5&speed=0&history=1')
+  await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('2/2', { timeout: 30_000 })
+  expect(kernels.some(url => url.includes('de437-sat415-satellite-2020-2031.bsp'))).toBe(true)
+  expect(kernels.some(url => url.includes('satellite-naif-sat415-610-'))).toBe(true)
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
+})
+
+test('does not borrow a different core when the SAT415 dependency fails', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.route('**/de437-sat415-satellite-2020-2031.bsp', route => route.fulfill({ status: 503, body: 'unavailable' }))
+  await page.goto('./?v=4&lang=en&view=3d&ref=saturn&bodies=saturn,naif:610&focused=naif:610&jd=2461287.5&speed=0&history=1')
+  const status = page.getByTestId('ephemeris-status')
+  await expect(status.locator('summary')).not.toContainText('Loading', { timeout: 30_000 })
+  await expect(status.locator('summary')).toContainText('1/2')
+  await status.locator('summary').click()
+  await expect(status.getByRole('alert')).toContainText('HTTP 503')
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
+})

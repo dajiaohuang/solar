@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { SpkKernel } from '../src/engine/ephemeris/spk.ts'
 import { createKernelResolver, kernelsCoveringInterval } from '../src/engine/ephemeris/kernelPool.ts'
 import { cropSpk } from './crop-spk.mjs'
+import { replaySpkSurvey } from './lib/spk-source-survey.mjs'
 
 const planPath = process.argv[2]
 if (!planPath) throw new Error('Usage: node scripts/integrate-satellite-pack.mjs VERIFIED_PLAN.json')
@@ -28,6 +29,22 @@ const identities = JSON.parse(await readFile('src/data/satelliteCatalog.json', '
 const knownTargets = new Set(identities.bodies.map(body => body.naifId).filter(Number.isSafeInteger))
 const cores = { de440: baseCore.id }
 const common = [], additions = []
+const supplemental = new Map()
+async function sourceEvidence(config, sourceUrl, targets) {
+  if (!config.sourceEvidence) return undefined
+  const evidence = config.sourceEvidence
+  let record = supplemental.get(evidence.sha256)
+  if (!record) {
+    if (!/^[\w.-]+$/.test(evidence.id)) throw new Error('Invalid supplemental source identity')
+    const bytes = await readFile(join(evidence.directory, `${evidence.id}.json`))
+    if (digest(bytes) !== evidence.sha256) throw new Error('Supplemental source hash mismatch')
+    record = JSON.parse(bytes)
+    await replaySpkSurvey(evidence.directory, evidence.id, record)
+    supplemental.set(evidence.sha256, record)
+  }
+  if (record.source.source !== sourceUrl || targets.some(target => !record.targets.includes(target))) throw new Error('Supplemental source/target mismatch')
+  return { url: sourceUrl, sha256: evidence.sha256 }
+}
 await mkdir(out, { recursive: true })
 
 async function publish(bytes, metadata) {
@@ -50,21 +67,26 @@ async function verifiedCrop(path) {
   return { bytes, evidence }
 }
 for (const config of plan.cores) {
-  if (!['de441', 'de442'].includes(config.id) || cores[config.id]) throw new Error('Invalid planetary core selection')
+  if (!['de441', 'de442', 'de437-sat415'].includes(config.id) || cores[config.id]) throw new Error('Invalid planetary core selection')
   const { bytes, evidence } = await verifiedCrop(config.path)
+  const supplementalSource = await sourceEvidence(config, evidence.source.source, parsed(bytes).segments.map(segment => segment.target))
+  if (config.id === 'de437-sat415' && !supplementalSource) throw new Error('Embedded DE437 source evidence required')
   const id = `${config.id}-satellite-2020-2031`
-  common.push(await publish(bytes, { id, source: evidence.source.source, sourceIdentity: evidence.source, dependencyOnly: true, solution: config.id.toUpperCase() }))
+  common.push(await publish(bytes, { id, source: evidence.source.source, sourceIdentity: evidence.source, supplementalSource, dependencyOnly: true, solution: config.id.toUpperCase() }))
   cores[config.id] = id
 }
 for (const config of plan.sources) {
   if (!cores[config.core]) throw new Error('Unknown declared source core')
   const split = JSON.parse(await readFile(join(config.directory, 'manifest.json'), 'utf8'))
+  if (config.targets?.some(target => !split.files.some(file => file.targets.length === 1 && file.targets[0] === target))) throw new Error('Selected source target is missing from prepared files')
   for (const file of split.files) {
     const target = file.targets[0]
-    if (file.targets.length !== 1 || (config.targets && !config.targets.includes(target))) continue
+    if (file.targets.length !== 1) throw new Error('Prepared source is not split per target')
+    if (config.targets && !config.targets.includes(target)) continue
     if (!knownTargets.has(target) && ![699, 799, 899].includes(target)) throw new Error(`Unaccounted source target ${target}`)
     const bytes = await readFile(join(config.directory, file.path))
     if (bytes.length !== file.bytes || digest(bytes) !== file.sha256) throw new Error('Prepared split checksum mismatch')
+    await sourceEvidence(config, file.source, [target])
     additions.push({ config, file, bytes, target })
   }
 }
@@ -76,6 +98,7 @@ for (const config of plan.centers) {
   additions.push({ config, bytes, target: config.target, file: { source: evidence.source.source, sourceIdentity: evidence.source } })
 }
 const rootIds = new Map()
+if (new Set(additions.map(addition => addition.target)).size !== additions.length) throw new Error('Conflicting selected source solutions for one target')
 for (const addition of additions) {
   const key = `${addition.config.id}/${addition.target}`
   if (rootIds.has(key)) throw new Error('Duplicate selected source target')
@@ -98,7 +121,7 @@ for (const profile of ['pages', 'full']) {
     files.push(await publish(outputBytes, { id, source: file.source, sourceIdentity: file.sourceIdentity,
       core: false, dependencyOnly: target === 699, solutionKernelIds,
       solution: `${config.id.toUpperCase()} + ${config.core.toUpperCase()}`,
-      selectionEvidence: { surveySha256: plan.surveySha256, sourceSelection: config.reason, windowPolicy: shortened ? 'Pages large inner-moon records: 2026/2027' : 'Original prepared 2020/2031 window' } }))
+      selectionEvidence: { surveySha256: plan.surveySha256, supplementalSource: await sourceEvidence(config, file.source, [target]), sourceSelection: config.reason, windowPolicy: shortened ? 'Pages large inner-moon records: 2026/2027' : 'Original prepared 2020/2031 window' } }))
   }
   if (new Set(files.map(file => file.id)).size !== files.length) throw new Error('Duplicate manifest kernel ID')
   const kernels = []

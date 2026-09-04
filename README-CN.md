@@ -232,7 +232,7 @@ npm run check:capacity
 
 仓库已包含 Android 与 iOS 的 Capacitor 8 本地应用壳工程，应用 ID 为 `io.github.dajiaohuang.solaratlas`。Android 最低支持 API 24、目标 API 36；iOS 需要 16.4 或以上。两端都把内置核心体验安装在本地，并按需通过 HTTPS 加载目录数据。
 
-v0.11.0 的参考验证已在 2026-08-29 针对[提交 `e9e7897`](https://github.com/dajiaohuang/solar/commit/e9e789705711bf2946f6b423cd53e9b820a554ec) 通过 [工作流运行 33269424582](https://github.com/dajiaohuang/solar/actions/runs/33269424582) 的两个原生任务：
+v0.11.0 的参考验证已在 2026-08-29 针对[提交 `e9e7897`](https://github.com/dajiaohuang/solar/commit/e9e789705711bf2946f6b432cd53e9b820a554ec) 通过 [工作流运行 33269424582](https://github.com/dajiaohuang/solar/actions/runs/33269424582) 的两个原生任务：
 
 | 目标 | 已验证 CI 输出 | 边界 |
 | --- | --- | --- |

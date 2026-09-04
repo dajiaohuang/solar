@@ -14,13 +14,34 @@ const pages = JSON.parse(readFileSync('src/data/ephemeris-manifest.json', 'utf8'
 const byId = new Map(full.files.map(file => [file.id, file]))
 
 describe('integrated satellite source pools and delivery profiles', () => {
+  it('requires the modern SAT415 embedded DE437 pool instead of borrowing DE440', () => {
+    const file = byId.get('satellite-naif-sat415-610-2020-2031')!
+    expect(file.solutionKernelIds).toEqual(['de437-sat415-satellite-2020-2031'])
+    const dependency = byId.get(file.solutionKernelIds![0])!
+    expect(dependency.source).toBe(file.source)
+    expect([...dependency.targets].sort((a, b) => a - b)).toEqual([6, 10, 699])
+    expect(dependency.dependencyOnly).toBe(true)
+    const load = (entry: KernelFile): LoadedKernel => {
+      const bytes = readFileSync(`public/data/ephemerides/${entry.path}`)
+      return { ...entry, kernel: new SpkKernel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)) }
+    }
+    const root = load(file)
+    const legacy = load(full.files.find(entry => entry.id.startsWith('de440s-'))!)
+    const et = (file.startEt + file.endEt) / 2
+    expect(root.kernel.evaluate(610, et)?.center).toBe(6)
+    expect(createKernelResolver([legacy, root], et).relative(610, 10)).toBeNull()
+    const core = load(dependency)
+    const resolved = createKernelResolver([legacy, core, root], et)
+    expect(resolved.relative(610, 10)).toEqual(createKernelResolver([core, root], et).relative(610, 10))
+    expect(resolved.relative(610, 699)).not.toEqual(resolved.relative(610, 6))
+  })
   it('pins the independent oracle, manifest, dependency order and all roots', () => {
     expect(fixture.oracle).toBe('CSPICE N0067 spkgeo_c')
     expect(digest(readFileSync('scripts/reference/spk-pool-oracle.c'))).toBe(fixture.oracleSourceSha256)
     expect(digest(manifestBytes)).toBe(fixture.manifestSha256)
     expect(fixture.contexts.map(context => context.rootId)).toEqual(full.files.filter(file => file.solutionKernelIds && !file.dependencyOnly).map(file => file.id))
-    expect(fixture.contexts).toHaveLength(423)
-    expect(fixture.samples).toHaveLength(1269)
+    expect(fixture.contexts).toHaveLength(432)
+    expect(fixture.samples).toHaveLength(1296)
     for (const context of fixture.contexts) {
       const root = byId.get(context.rootId)!
       expect(context.files.map(file => file.id)).toEqual([...root.solutionKernelIds!, root.id])
@@ -82,8 +103,8 @@ describe('integrated satellite source pools and delivery profiles', () => {
         expect(kernel.evaluate(target, file.endEt + 1)).toBeNull()
       }
     }
-    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(524467200)
-    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(217626624)
+    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(589323264)
+    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(236654592)
   })
 
   it('defaults native to full without imposing the Pages policy on explicit full Web builds', () => {

@@ -33,10 +33,10 @@ describe('shared physical ephemeris integration', () => {
     const late = 2463000.5
     expect(kernelCoverage(body('haumea'), late).model).toBe('approximate-fallback')
   })
-  it('covers 479 actual selectable body centers and accounts for every remaining identity gap', () => {
-    expect(majorBodies.filter((entry) => kernelCoverage(entry, jd).model === 'jpl-spk')).toHaveLength(479)
+  it('covers 488 actual selectable body centers and accounts for every remaining identity gap', () => {
+    expect(majorBodies.filter((entry) => kernelCoverage(entry, jd).model === 'jpl-spk')).toHaveLength(488)
     expect(majorBodies.filter(entry => kernelCoverage(entry, jd).model !== 'jpl-spk').map(entry => entry.id).sort()).toEqual([
-      'makemake', 'naif:610', 'naif:611', 'naif:615', 'naif:616', 'naif:617', 'naif:618', 'naif:633', 'naif:635', 'naif:649', 'naif:653', 'sat:planet:saturn:provisional:S/2009 S1',
+      'makemake', 'naif:635', 'sat:planet:saturn:provisional:S/2009 S1',
     ].sort())
     expect(kernelCoverage(body('makemake'), jd).model).toBe('approximate-fallback')
     expect(bodyNaifId(body('eris'))).toBe(920136199)

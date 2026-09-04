@@ -162,6 +162,22 @@ the invocation directory; machine-specific input paths are not published.
 node scripts/integrate-satellite-pack.mjs VERIFIED_PLAN.json
 ```
 
+For an explicitly reviewed official source absent from the frozen survey, archive
+its original header, summary and comment ranges separately:
+
+```sh
+node scripts/archive-spk-source.mjs OFFICIAL_HTTPS_SPK_URL NEW_DIRECTORY
+```
+
+The command accepts only NAIF/JPL SSD HTTPS BSP URLs, refuses an existing output
+directory, and replays the archived ranges before publishing `source.json`.
+This metadata archive does not download all coefficients or choose a solution.
+Add `sourceEvidence: { directory, id, sha256 }` to the plan's matching source and
+core entries, using the printed identity and SHA-256. Integration replays those
+bytes and checks the exact source URL and target membership. This supplements,
+but does not rewrite, the original survey. Modern NAIF `sat415.bsp` uses this
+path; its embedded DE437 center pool is retained with the nine selected moons.
+
 The integrator replays the frozen survey and verifies crops/checksums, preserving
 original records and explicit ordered dependency pools. It produces Pages and
 full manifests; existing identical files may be reused, but different bytes at
@@ -169,9 +185,9 @@ an existing output path are refused. The legacy `data:ephemerides` generator now
 refuses to overwrite an integrated source-pool manifest. Prepare any changed
 baseline separately and review its integration rather than losing added targets.
 
-Pages and full each list 487 files and the same target identities. Pages narrows
+Pages and full each list 497 files and the same target identities. Pages narrows
 large inner-moon files to 2026/2027 TDB; full retains 2020/2031. At the modern
-test epoch, 479 selectable centers resolve, with the remaining gaps enumerated
+test epoch, 488 selectable centers resolve, with the remaining gaps enumerated
 in the [physical contract](../../docs/physical-ephemerides.md). The full package
 is a delivery profile, not a claim of complete physical coverage of all bodies.
 
@@ -183,7 +199,12 @@ cc -I /path/to/cspice/include scripts/reference/spk-pool-oracle.c /path/to/cspic
 node scripts/reference/record-satellite-pools.mjs NEW_REFERENCE.json /tmp/spk-pool-oracle /absolute/path/to/public/data/ephemerides
 ```
 
-The reference pins 423 ordered root pools and 1,269 heliocentric/barycentric
+To intentionally refresh the existing generated reference after a reviewed
+manifest change, prepend `--replace-generated`. The recorder requires its own
+CSPICE provenance structure and checks that the old file did not change while
+the oracle was running. Ordinary invocation still refuses existing files.
+
+The reference pins 432 ordered root pools and 1,296 heliocentric/barycentric
 six-vector pairs, including each root's endpoints and midpoint. Tests verify
 every source hash, dependency order and numerical agreement. They do not measure
 observational uncertainty, certify all dates, or turn different source families

@@ -4,9 +4,19 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 
-const [output, command, ...args] = process.argv.slice(2)
+const argv = process.argv.slice(2)
+const replaceGenerated = argv[0] === '--replace-generated'
+if (replaceGenerated) argv.shift()
+const [output, command, ...args] = argv
 if (!output || !command) throw new Error('New reference output and oracle command required')
 const digest = bytes => createHash('sha256').update(bytes).digest('hex')
+let previousDigest
+if (replaceGenerated) {
+  const previous = await readFile(output)
+  const record = JSON.parse(previous)
+  if (record.oracle !== 'CSPICE N0067 spkgeo_c' || !Array.isArray(record.contexts) || !Array.isArray(record.samples) || !record.manifestSha256 || !record.oracleSourceSha256) throw new Error('Refusing to replace an unrelated reference file')
+  previousDigest = digest(previous)
+}
 const manifestBytes = await readFile('src/data/ephemeris-manifest-full.json')
 const manifest = JSON.parse(manifestBytes)
 const byId = new Map(manifest.files.map(file => [file.id, file]))
@@ -32,5 +42,6 @@ const result = { oracle: 'CSPICE N0067 spkgeo_c', oracleSourceSha256: digest(awa
   manifestSha256: digest(manifestBytes), frame: 'ECLIPJ2000', timeScale: 'TDB seconds past J2000', positionUnit: 'km', velocityUnit: 'km/s',
   contract: 'Independent original-kernel numerical parity at three epochs per integrated root. Not continuous physical uncertainty, all dates, or one global fit.',
   contexts, samples: requests.map(({ line: _line, ...request }, index) => ({ ...request, ...states[index] })) }
-await writeFile(output, `${JSON.stringify(result, null, 2)}\n`, { flag: 'wx' })
+if (replaceGenerated && digest(await readFile(output)) !== previousDigest) throw new Error('Reference changed during regeneration')
+await writeFile(output, `${JSON.stringify(result, null, 2)}\n`, { flag: replaceGenerated ? 'w' : 'wx' })
 console.log(`${contexts.length} source pools, ${states.length} independent six-vector sample pairs`)
