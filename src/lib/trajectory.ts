@@ -101,6 +101,7 @@ export function buildCurrentPositions(params: {
   }))
   return {
     currentPositions,
+    trajectoryUnavailableBodyIds: [],
     missingBodyIds: params.bodies.filter(body => !currentPositions.some(item => item.body.id === body.id)).map(body => body.id),
     maxDistance: currentPositions.reduce((largest, item) => Math.max(largest, item.distance), 0),
   }
@@ -129,9 +130,11 @@ export function buildTrajectoryFrame(params: {
     historyDays,
     sampleCount,
   })
+  const completeIds = new Set(trajectories.map((sample) => sample.body.id))
   return {
     currentPositions,
     trajectories,
+    trajectoryUnavailableBodyIds: bodies.filter((body) => !completeIds.has(body.id)).map((body) => body.id),
     maxDistance,
   }
 }

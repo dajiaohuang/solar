@@ -245,6 +245,7 @@ export const en = {
   illuminated: 'illuminated',
   bodyStateUnavailable: 'Position unavailable at this date; these bodies are not drawn',
   referenceStateUnavailable: 'The reference body has no position at this date. Choose another reference or date; no substitute origin is shown.',
+  trajectoryCoverageUnavailable: 'Historical trajectory unavailable for',
   distance: 'Distance',
   distanceFrom: 'Measure distance from',
   distanceTo: 'Measure distance to',

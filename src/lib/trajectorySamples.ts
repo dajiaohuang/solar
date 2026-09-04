@@ -19,5 +19,8 @@ export function createTrajectoryAccumulator(bodies: CelestialBody[]) {
     complete(sampleCount: number) {
       return [...samples.values()].filter(sample => !incomplete.has(sample.body.id) && sampleCount > 0 && sample.points.length === sampleCount)
     },
+    incompleteBodyIds() {
+      return [...incomplete]
+    },
   }
 }

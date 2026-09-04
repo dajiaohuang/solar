@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { bodyPositionOrNull, createBodyPositionResolver, createBodyVelocityResolver, MissingBodyStateError } from '../../src/lib/ephemeris'
 import { getRelativePositions } from '../../src/lib/referenceFrame'
-import { buildCurrentPositions, buildTrajectories } from '../../src/lib/trajectory'
+import { buildCurrentPositions, buildTrajectories, buildTrajectoryFrame } from '../../src/lib/trajectory'
 import { createTrajectoryAccumulator } from '../../src/lib/trajectorySamples'
 import { kernelCoverage } from '../../src/engine/ephemeris/kernelStore'
 import { computeOrbitEllipses } from '../../src/lib/orbitEllipse'
+import { buildSpacecraftFrame } from '../../src/engine/ephemeris/spacecraft'
 import type { CelestialBody } from '../../src/types'
 
 const sun: CelestialBody = { id: 'sun', name: 'Sun', kind: 'star', color: '#fff', size: 1, source: 'custom' }
@@ -34,6 +35,7 @@ describe('unavailable body states', () => {
     expect(current.currentPositions[1].position3D).toEqual({ x: 1, y: 0, z: 0 })
     expect(current.missingBodyIds).toEqual(['no-state', 'dependent'])
     expect(buildTrajectories(params).map(sample => [sample.body.id, sample.points.length])).toEqual([['sun', 3], ['moving', 3]])
+    expect(buildTrajectoryFrame(params).trajectoryUnavailableBodyIds).toEqual(['no-state', 'dependent'])
   })
   it('hides the entire frame and trails when the reference is unavailable', () => {
     expect(getRelativePositions(bodies, missing.id, createBodyPositionResolver(bodiesById, 2451545, []))).toEqual([])
@@ -48,5 +50,15 @@ describe('unavailable body states', () => {
     samples.append([{ body: moving, position }, { body: missing, position }])
     expect(samples.complete(3).map(sample => sample.body.id)).toEqual(['moving'])
     expect(samples.complete(3)[0].points3D).toEqual([position, position, position])
+  })
+  it('reports spacecraft trails whose historical reference state is unavailable', () => {
+    const spacecraft = [{
+      ...moving, id: 'probe', kind: 'spacecraft' as const,
+      trajectoryPoints: [{ jd: 2451544, x: 1, y: 0, z: 0 }, { jd: 2451545, x: 2, y: 0, z: 0 }],
+    }]
+    const frame = buildSpacecraftFrame(spacecraft, missing.id, bodiesById, 2451545)
+    expect(frame.currentPositions).toEqual([])
+    expect(frame.trajectories).toEqual([])
+    expect(frame.trajectoryUnavailableBodyIds).toEqual(['probe'])
   })
 })
