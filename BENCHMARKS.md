@@ -12,10 +12,8 @@ fastest.
 Run from this worktree:
 
 ```text
-go run ./cmd/bench -requests 500 -concurrency 32 \
-  -inventory-dir D:/repo/repostew/.repostew/cache/solar-all-body-coverage/inventory-pr94-20260904
-go test -bench 'Benchmark(CatalogPage|Trajectory64Samples|Trajectory64BodyBatch|Trajectory10000Samples)$' \
-  -benchmem -benchtime=200ms ./internal/httpapi
+go run ./cmd/bench -requests 500 -concurrency 32 -inventory-dir D:/repo/repostew/.repostew/cache/solar-all-body-coverage/inventory-pr94-20260904
+go test -bench 'Benchmark(CatalogPage|Trajectory64Samples|Trajectory64BodyBatch|Trajectory10000Samples)$' -benchmem -benchtime=200ms ./internal/httpapi
 go test -race ./...
 go test -fuzz FuzzSPKParserNeverPanics -fuzztime=10s ./internal/spk
 go test -fuzz FuzzDecodeCursorNeverPanics -fuzztime=10s ./internal/inventory
@@ -70,9 +68,7 @@ cache observation, not a promise of a fixed warm-up improvement.
 CPU and allocation profiles were captured with:
 
 ```text
-go test -cpuprofile=D:/repo/repostew/.repostew/solar-backend-cpu.pprof \
-  -memprofile=D:/repo/repostew/.repostew/solar-backend-mem.pprof \
-  -bench '^BenchmarkTrajectory10000Samples$' -benchtime=3s ./internal/httpapi
+go test -cpuprofile=D:/repo/repostew/.repostew/solar-backend-cpu.pprof -memprofile=D:/repo/repostew/.repostew/solar-backend-mem.pprof -bench '^BenchmarkTrajectory10000Samples$' -benchtime=3s ./internal/httpapi
 go tool pprof -top D:/repo/repostew/.repostew/solar-backend-cpu.pprof
 go tool pprof -top -alloc_space D:/repo/repostew/.repostew/solar-backend-mem.pprof
 ```
