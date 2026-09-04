@@ -115,8 +115,9 @@ These are bounded policies, not RAM-based performance promises. A device with 12
 
 | Capability | Model and scope |
 | --- | --- |
-| Major planets | JPL Table 1 fitted Keplerian elements and secular rates in the mean ecliptic/equinox of J2000, valid for 1800–2050. The Earth entry seeds the internal Earth–Moon barycenter; the rendered Earth point is a derived geocenter. Out-of-range dates show an extrapolation warning. The source uses JDTDB; browser UTC dates currently become numeric JD without UTC→TDB conversion |
-| Moons and dwarfs | The Moon uses JPL Earth-geocentric ecliptic mean elements for 2000-01-01.5 TDB. Io, Europa, Ganymede, Callisto, and Titan use [NASA/JPL Horizons](https://ssd-api.jpl.nasa.gov/doc/horizons.html) geometric osculating elements and phases at JD 2451545.0 TDB, queried from each parent body center in the J2000 ecliptic plane. All six moons advance mean anomaly on a fixed ellipse: an auditable epoch approximation, not a continuous ephemeris; UTC→TDB conversion, precession, and N-body perturbations are omitted. Earth and Moon centers are partitioned around the EMB seed using checksum-pinned [NAIF/JPL DE440 gravitational parameters](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc). Dwarf planets use rounded `curated-approx` elements |
+| Major planets | JPL Table 1 fitted Keplerian elements and secular rates in the mean ecliptic/equinox of J2000, valid for 1800–2050. The Earth entry seeds the internal Earth–Moon barycenter; the rendered Earth point is a derived geocenter. Out-of-range dates show an extrapolation warning. SPK-backed states use UTC→TT→TDB (NAIF leap table from 1972; future dates are explicitly uncertain); the approximate fallback retains its numeric-JD contract |
+| SPK ephemerides | Optional original NAIF/JPL SPK type 2/3 coefficients, evaluated as geometric body-center states and resolved through center chains in ECLIPJ2000. `de440s` covers 2000–2051; satellite and selected small-body kernels cover 2020–2031. Coefficients are not refit or resampled, and source corrections are not applied twice |
+| Moons and dwarfs | The Moon and fixed-ellipse satellite entries remain auditable fallback approximations when SPK coverage is unavailable; they are not continuous ephemerides. Earth and Moon centers are partitioned around the EMB seed using checksum-pinned [NAIF/JPL DE440 gravitational parameters](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc). Dwarf planets use rounded `curated-approx` elements |
 | MPCORB and SBDB bodies | Elliptic (`0 ≤ e < 1`, `a > 0`) osculating elements only; parabolic and hyperbolic records are rejected explicitly |
 | Moon phase | Sun–Earth–Moon phase angle plus signed geocentric elongation |
 | Hill sphere | `a(1-e)(m/3M)^(1/3)` |
@@ -136,6 +137,13 @@ Primary sources:
 - [JPL planetary satellite mean elements](https://ssd.jpl.nasa.gov/sats/elem/)
 - [NASA/JPL Horizons API](https://ssd-api.jpl.nasa.gov/doc/horizons.html)
 - [NAIF/JPL DE440 gravitational parameters](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc)
+- [NAIF SPK Required Reading](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/spk.html) · [NAIF time system](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/time.html)
+
+### Physical ephemeris coverage and observation boundary
+
+The optional physical-ephemeris bundle is 59 SHA-256-pinned files (about 65.6 MiB) loaded on demand: `de440s` spans 2000–2051, while satellite and 16 selected small-body kernels span 2020–2031. The manifest currently includes 46 additional target entries whose seed/center mapping is being corrected; those entries are not a claim of universal coverage. Ordinary `npm run build` does not fetch kernels or contact the network. Native builds carry the same manifest and can use already bundled kernel assets offline; catalog and live SBDB requests remain online.
+
+SPK output is geometric, center-resolved state in its declared frame. It is not an N-body client, and the app does not add a second general-relativistic or J2 correction. Focus trajectories may use SPK states while the GPU catalog cloud remains Keplerian. Geometric, reception light-time, and stellar-aberration readouts are separate; no gravitational light deflection, atmosphere, surface-observer model, or covariance is provided.
 
 ## Data and publication
 
