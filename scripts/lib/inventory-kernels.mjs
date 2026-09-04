@@ -58,15 +58,23 @@ export async function inventoryKernels(root, et, requestedProfile = 'pages') {
     const number = /^asteroid:(\d+)$/.exec(body.id)?.[1]
     if (number) asteroidIds.set(number, body.naifId)
   }
-  const kernels = []
-  for (const file of manifest.files) {
-    if (!/^[\w.-]+\.bsp$/.test(file.path)) throw new Error('Invalid bundled kernel path')
-    const bytes = await readFile(join(root, 'public/data/ephemerides', file.path))
-    if (bytes.length !== file.bytes || digest(bytes) !== file.sha256) throw new Error(`Bundled kernel integrity mismatch: ${file.id}`)
-    const buffer = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength ? bytes.buffer : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
-    const kernel = snapshotKernelAtEpoch(new SpkKernel(buffer), et)
-    kernels.push({ id: file.id, solutionKernelIds: file.solutionKernelIds, dependencyOnly: file.dependencyOnly, kernel })
-  }
+  const kernels = new Array(manifest.files.length)
+  let nextFile = 0
+  // Bound I/O to four files, rather than serializing hundreds of disk reads or
+  // loading the whole profile. Store by manifest index: pool precedence must
+  // never depend on which read finishes first. Snapshots release coefficients.
+  await Promise.all(Array.from({ length: Math.min(4, manifest.files.length) }, async () => {
+    while (nextFile < manifest.files.length) {
+      const index = nextFile++
+      const file = manifest.files[index]
+      if (!/^[\w.-]+\.bsp$/.test(file.path)) throw new Error('Invalid bundled kernel path')
+      const bytes = await readFile(join(root, 'public/data/ephemerides', file.path))
+      if (bytes.length !== file.bytes || digest(bytes) !== file.sha256) throw new Error(`Bundled kernel integrity mismatch: ${file.id}`)
+      const buffer = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength ? bytes.buffer : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+      const kernel = snapshotKernelAtEpoch(new SpkKernel(buffer), et)
+      kernels[index] = { id: file.id, solutionKernelIds: file.solutionKernelIds, dependencyOnly: file.dependencyOnly, kernel }
+    }
+  }))
   const resolver = createKernelResolver(kernels, et)
   const byTarget = new Map()
   for (const { id, kernel } of kernels) for (const segment of kernel.segments) {
