@@ -65,15 +65,22 @@ type State struct {
 }
 
 type Catalog struct {
-	bodies       []Body
-	byID         map[string]Body
-	version      string
-	manifestHash string
+	bodies           []Body
+	byID             map[string]Body
+	version          string
+	manifestHash     string
+	manifestProfile  string
+	manifestContract string
+	manifestFiles    int
+	manifestTargets  int
+	packagedFiles    int
 }
 
 type manifest struct {
-	ID    string         `json:"id"`
-	Files []manifestFile `json:"files"`
+	ID       string         `json:"id"`
+	Profile  string         `json:"profile"`
+	Contract string         `json:"contract"`
+	Files    []manifestFile `json:"files"`
 }
 type manifestFile struct {
 	ID      string  `json:"id"`
@@ -119,6 +126,11 @@ func Load(dataDir string) (*Catalog, error) {
 	dataDir, _ = filepath.Abs(dataDir)
 	m := manifest{}
 	manifestPath := filepath.Join(dataDir, "ephemeris-manifest.json")
+	// Prefer the complete client profile when it is shipped next to the Pages
+	// manifest. A curated profile remains selectable via a separate data dir.
+	if fileExists(filepath.Join(dataDir, "ephemeris-manifest-full.json")) {
+		manifestPath = filepath.Join(dataDir, "ephemeris-manifest-full.json")
+	}
 	mb, err := os.ReadFile(manifestPath)
 	if err != nil {
 		return loadBuiltins(fmt.Errorf("read manifest: %w", err))
@@ -127,13 +139,17 @@ func Load(dataDir string) (*Catalog, error) {
 		return loadBuiltins(fmt.Errorf("parse manifest: %w", err))
 	}
 	h := sha256.Sum256(mb)
-	c := &Catalog{byID: make(map[string]Body), version: m.ID, manifestHash: hex.EncodeToString(h[:])}
+	c := &Catalog{byID: make(map[string]Body), version: m.ID, manifestHash: hex.EncodeToString(h[:]), manifestProfile: m.Profile, manifestContract: m.Contract, manifestFiles: len(m.Files)}
 	// Keep stable, well-known body identities available even without the large kernels.
 	for _, b := range builtins() {
 		c.add(b)
 	}
 	for _, f := range m.Files {
+		c.manifestTargets += len(f.Targets)
 		present := fileExists(filepath.Join(dataDir, f.Path))
+		if present {
+			c.packagedFiles++
+		}
 		for _, naif := range f.Targets {
 			id := "naif:" + strconv.Itoa(naif)
 			b, ok := c.byID[id]
@@ -169,7 +185,7 @@ func Load(dataDir string) (*Catalog, error) {
 }
 
 func loadBuiltins(err error) (*Catalog, error) {
-	c := &Catalog{byID: make(map[string]Body), version: "unavailable", manifestHash: ""}
+	c := &Catalog{byID: make(map[string]Body), version: "unavailable", manifestHash: "", manifestProfile: "unavailable"}
 	for _, b := range builtins() {
 		c.add(b)
 	}
@@ -187,9 +203,18 @@ func (c *Catalog) add(b Body) {
 	}
 	sort.Slice(c.bodies, func(i, j int) bool { return c.bodies[i].ID < c.bodies[j].ID })
 }
-func (c *Catalog) Len() int                   { return len(c.bodies) }
-func (c *Catalog) Version() string            { return c.version }
-func (c *Catalog) ManifestHash() string       { return c.manifestHash }
+func (c *Catalog) Len() int                 { return len(c.bodies) }
+func (c *Catalog) Version() string          { return c.version }
+func (c *Catalog) ManifestHash() string     { return c.manifestHash }
+func (c *Catalog) ManifestProfile() string  { return c.manifestProfile }
+func (c *Catalog) ManifestContract() string { return c.manifestContract }
+func (c *Catalog) Stats() map[string]int {
+	out := map[string]int{"catalogEntries": len(c.bodies), "manifestFiles": c.manifestFiles, "manifestTargets": c.manifestTargets, "packagedFiles": c.packagedFiles}
+	for _, b := range c.bodies {
+		out[string(b.Availability)]++
+	}
+	return out
+}
 func (c *Catalog) Get(id string) (Body, bool) { b, ok := c.byID[id]; return b, ok }
 func (c *Catalog) Page(query string, offset, limit int) []Body {
 	q := strings.ToLower(strings.TrimSpace(query))
