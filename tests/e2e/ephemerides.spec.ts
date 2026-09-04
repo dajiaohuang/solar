@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 test('defers SPK downloads until the first-visit choice', async ({ page }) => {
   const kernels: string[] = []

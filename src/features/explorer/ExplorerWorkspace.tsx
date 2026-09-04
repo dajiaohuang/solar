@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { TrajectoryCanvas } from '../../components/TrajectoryCanvas'
 import { SPACECRAFT } from '../../data/spacecraft'
 import { BODY_PHYSICAL } from '../../data/physical'
@@ -10,7 +10,7 @@ import { useCatalogPointWorker } from '../../hooks/useCatalogPointWorker'
 import { useCatalogSample } from '../../hooks/useCatalogSample'
 import { useAdaptiveRenderBudget } from '../../hooks/useAdaptiveRenderBudget'
 import { useI18n } from '../../i18n/context'
-import { bodyPositionOrNull, createBodyPositionResolver, vector3Magnitude, subtractVector3 } from '../../lib/ephemeris'
+import { bodyPositionOrNull, createBodyPositionResolver, MissingBodyStateError, vector3Magnitude, subtractVector3 } from '../../lib/ephemeris'
 import { computeLagrangePoints } from '../../lib/lagrange'
 import { computeOrbitEllipses } from '../../lib/orbitEllipse'
 import { getSuggestedViewRadius } from '../../lib/referenceFrame'
@@ -30,6 +30,9 @@ import { EphemerisStatus } from './EphemerisStatus'
 import { VIEW_CAPABILITIES } from '../../lib/viewCapabilities'
 import { selectDetailBodies } from '../../lib/focusLayers'
 import { PagedBodyList } from '../../components/PagedBodyList'
+import { PRODUCT_PROFILE } from '../../lib/productAvailability'
+import { createBackendPositionResolver, MAX_CURRENT_STATE_BATCH, type BackendFrame } from '../../lib/currentStates'
+import { useCurrentStates } from '../../hooks/useCurrentStates'
 
 const TrajectoryCanvas3D = lazy(async () => {
   const module = await import('../../components/TrajectoryCanvas3D')
@@ -44,19 +47,6 @@ function SpatialPreview() {
   )
 }
 
-function useTrajectoryAnchor(julianDay: number, isPlaying: boolean) {
-  const [anchor, setAnchor] = useState(julianDay)
-  const lastUpdateRef = useRef(0)
-  useEffect(() => {
-    const now = performance.now()
-    if (!isPlaying || now - lastUpdateRef.current > 2200) {
-      lastUpdateRef.current = now
-      setAnchor(julianDay)
-    }
-  }, [isPlaying, julianDay])
-  return anchor
-}
-
 type FrameViewProps = {
   referenceId: BodyId
   selectedBodies: CelestialBody[]
@@ -65,7 +55,7 @@ type FrameViewProps = {
   resolutionBodies: CelestialBody[]
   bodiesById: Map<BodyId, CelestialBody>
   julianDay: number
-  trajectoryAnchor: number
+  trajectoryJulianDay: number
   onFrame: (frame: TrajectoryFrameData) => void
   onHover: (item: { body: CelestialBody; distance: number; x: number; y: number } | null) => void
   catalogRecords: AsteroidRecord[]
@@ -79,6 +69,8 @@ type FrameViewProps = {
   isPlaying: boolean
   render3DReady: boolean
   cameraResetKey: number
+  backendFrame?: Pick<BackendFrame, 'currentPositions' | 'missingBodyIds' | 'maxDistance'> | null
+  backendStatus: { configured: boolean; loading: boolean; error: string | null; publishedEpochUtcJd?: number | null; requestedEpochUtcJd?: number }
 }
 
 function FrameView({
@@ -89,7 +81,7 @@ function FrameView({
   resolutionBodies,
   bodiesById,
   julianDay,
-  trajectoryAnchor,
+  trajectoryJulianDay,
   onFrame,
   onHover,
   catalogRecords,
@@ -103,6 +95,8 @@ function FrameView({
   isPlaying,
   render3DReady,
   cameraResetKey,
+  backendFrame,
+  backendStatus,
 }: FrameViewProps) {
   const simulation = simulationStore.useStore()
   const { t, language } = useI18n()
@@ -121,11 +115,12 @@ function FrameView({
     resolutionBodies,
     referenceId: referenceBody.id,
     currentJulianDay: julianDay,
-    trajectoryJulianDay: trajectoryAnchor,
+    trajectoryJulianDay,
     historyDays: simulation.historyDays,
     // Inventory expansion must not silently undersample short-period moons.
     // Only historical trails are budgeted; current positions keep all selections.
     sampleCount: Math.min(simulation.sampleCount, 240),
+    currentFrame: backendFrame,
   })
   const spacecraftFrame = useMemo(() => simulation.showSpacecraft && catalogOrigin
     ? buildSpacecraftFrame(SPACECRAFT, referenceBody.id, bodiesById, julianDay)
@@ -155,8 +150,8 @@ function FrameView({
   }, [catalogDrawCount, catalogOrigin, catalogPositions])
   const suggested = Math.max(focusSuggested, catalogSuggested)
   const orbitEllipses = useMemo(() => VIEW_CAPABILITIES[simulation.viewMode].fullOrbits && simulation.showOrbits
-    ? computeOrbitEllipses(selectedBodies.slice(0, 40), bodiesById, referenceBody.id, trajectoryAnchor)
-    : [], [bodiesById, referenceBody.id, selectedBodies, simulation.showOrbits, simulation.viewMode, trajectoryAnchor])
+    ? computeOrbitEllipses(selectedBodies.slice(0, 40), bodiesById, referenceBody.id, trajectoryJulianDay)
+    : [], [bodiesById, referenceBody.id, selectedBodies, simulation.showOrbits, simulation.viewMode, trajectoryJulianDay])
   const lagrangePoints = useMemo(() => {
     if (!simulation.showLagrange || referenceBody.id !== 'sun') return []
     return frame.currentPositions.filter((item) => item.body.kind === 'planet').map((item) => ({
@@ -199,7 +194,7 @@ function FrameView({
     }}>
       <div className="frame-overlays" onWheel={event => event.stopPropagation()}>
       <div className="frame-label"><span>{bodyDisplayName(referenceBody, language)}</span><small>{simulation.viewMode.toUpperCase()}{simulation.showCatalogCloud ? ` · ${t('catalogCloudRendered')} ${catalogDrawCount.toLocaleString()} / ${catalogSampleTotal.toLocaleString()} · ${qualityLabel} · JD ${julianDay.toFixed(3)}` : ''}</small></div>
-      <EphemerisStatus bodies={selectedBodies} references={[referenceBody]} julianDay={julianDay} historyDays={simulation.historyDays} />
+      <EphemerisStatus bodies={selectedBodies} references={[referenceBody]} julianDay={julianDay} historyDays={simulation.historyDays} backendStatus={backendStatus} />
       {selectedBodies.length > trajectoryBodies.length && <div className="frame-layer-budget glass-panel" data-testid="focus-layer-budget">{t('currentPositionCount')}: {baseFrame.currentPositions.length}/{selectedBodies.length} · {t('trailBudgetCount')}: {trajectoryBodies.length}/{selectedBodies.length}</div>}
       {error && <div className="canvas-error">{error}</div>}
       {catalogOrigin && baseFrame.missingBodyIds.length > 0 && <details className="canvas-error" data-testid="missing-position-notice"><summary>{t('bodyStateUnavailable')} ({baseFrame.missingBodyIds.length})</summary><p>{baseFrame.missingBodyIds.map(id => bodyDisplayName(bodiesById.get(id)!, language)).join(', ')}</p></details>}
@@ -294,18 +289,49 @@ export function ExplorerWorkspace() {
     const required = new Map(allBodies.map((body) => [body.id, body]))
     return [...required.values()]
   }, [allBodies])
-  const trajectoryAnchor = useTrajectoryAnchor(clock.julianDay, clock.isPlaying)
-  // Keep catalog points and named bodies on the exact same published clock
-  // snapshot. Trajectories may use a slower anchor because they are historical
-  // context, but mixing that anchor into the point cloud is scientifically false
-  // at high simulation rates.
-  const catalogPointCloud = useCatalogPointWorker(catalogRecords, clock.julianDay)
-  const displayJulianDay = simulation.showCatalogCloud && catalogPointCloud.positions.length > 0
-    ? catalogPointCloud.computedJulianDay
-    : clock.julianDay
+  const requestedJulianDay = clock.julianDay
   // One lazy, bounded-by-registry absolute-state cache for both frames at this
   // exact displayed epoch. The registry changes on every kernel revision.
-  const resolveCurrentPosition = useMemo(() => createBodyPositionResolver(bodiesById, displayJulianDay), [bodiesById, displayJulianDay])
+  const currentStateReferenceIds = useMemo(() => [simulation.referenceId, ...(simulation.comparisonEnabled ? [simulation.comparisonReferenceId] : [])], [simulation.comparisonEnabled, simulation.comparisonReferenceId, simulation.referenceId])
+  const currentStates = useCurrentStates({
+    // A catalog selection can represent 1.5M identities. Current-state work
+    // is intentionally bounded to the interactive detail budget; the cloud
+    // remains sampled and no selection action turns into a full fetch.
+    bodies: useMemo(() => {
+      const priority = new Set([simulation.referenceId, ...(simulation.comparisonEnabled ? [simulation.comparisonReferenceId] : []), selection.focusedId].filter((id): id is string => Boolean(id)))
+      return [...selectedBodies.filter(body => priority.has(body.id)), ...selectedBodies.filter(body => !priority.has(body.id))].slice(0, MAX_CURRENT_STATE_BATCH)
+    }, [selectedBodies, selection.focusedId, simulation.comparisonEnabled, simulation.comparisonReferenceId, simulation.referenceId]),
+    resolutionBodies,
+    referenceIds: currentStateReferenceIds,
+    epochUtcJd: requestedJulianDay,
+    isPlaying: clock.isPlaying,
+    seekRevision: clock.seekRevision,
+  })
+  // A backend frame is an audited snapshot, so its UTC epoch is the only
+  // epoch allowed beside that frame while a newer request is loading.
+  const renderedJulianDay = currentStates.configured && currentStates.publishedEpochUtcJd !== null
+    ? currentStates.publishedEpochUtcJd
+    : requestedJulianDay
+  // All visual layers in a scene use the same authoritative epoch. During a
+  // backend refresh this intentionally keeps the previous frame/cloud epoch;
+  // EphemerisStatus still exposes loading so a stale snapshot is explicit.
+  const trajectoryJulianDay = renderedJulianDay
+  const catalogPointCloud = useCatalogPointWorker(catalogRecords, renderedJulianDay)
+  const catalogEpochAligned = !simulation.showCatalogCloud || Math.abs(catalogPointCloud.computedJulianDay - renderedJulianDay) <= 1e-9
+  // Full Web uses the audited backend when configured. Pages remains its
+  // declared curated static preview; an unconfigured full build has no exact
+  // current-position resolver and never silently falls back to local physics.
+  // The resolver identity is intentionally tied to the atomically published
+  // backend frame.
+  const resolveCurrentPosition = useMemo(() => {
+    if (currentStates.configured) {
+      const absolute = new Map<BodyId, { x: number; y: number; z: number }>()
+      for (const frame of currentStates.frames.values()) for (const [id, position] of frame.absolutePositions) absolute.set(id, position)
+      return createBackendPositionResolver(absolute, renderedJulianDay)
+    }
+    if (PRODUCT_PROFILE === 'preview') return createBodyPositionResolver(bodiesById, renderedJulianDay)
+    return (bodyId: BodyId) => { throw new MissingBodyStateError(bodyId, renderedJulianDay) }
+  }, [bodiesById, currentStates.configured, currentStates.frames, renderedJulianDay])
   const renderBudget = useAdaptiveRenderBudget({
     viewMode: simulation.viewMode,
     quality: simulation.renderQuality,
@@ -313,8 +339,8 @@ export function ExplorerWorkspace() {
     availableCount: catalogRecords.length,
     samplingActive: clock.isPlaying && simulation.showCatalogCloud && simulation.viewMode === '3d',
   })
-  const primaryCatalogDrawCount = Math.min(renderBudget.primary, catalogPointCloud.readyCount)
-  const secondaryCatalogDrawCount = Math.min(renderBudget.secondary, catalogPointCloud.readyCount)
+  const primaryCatalogDrawCount = catalogEpochAligned ? Math.min(renderBudget.primary, catalogPointCloud.readyCount) : 0
+  const secondaryCatalogDrawCount = catalogEpochAligned ? Math.min(renderBudget.secondary, catalogPointCloud.readyCount) : 0
   const catalogFitKey = simulation.showCatalogCloud
     ? `${catalog.baseSampleKey ?? 'unloaded'}|${JSON.stringify(catalog.filters)}`
     : ''
@@ -365,8 +391,8 @@ export function ExplorerWorkspace() {
             resolveCurrentPosition={resolveCurrentPosition}
             resolutionBodies={resolutionBodies}
             bodiesById={bodiesById}
-            julianDay={displayJulianDay}
-            trajectoryAnchor={trajectoryAnchor}
+            julianDay={renderedJulianDay}
+            trajectoryJulianDay={trajectoryJulianDay}
             onFrame={setPrimaryFrame}
             onHover={setHovered}
             catalogRecords={catalogRecords}
@@ -380,6 +406,8 @@ export function ExplorerWorkspace() {
             isPlaying={clock.isPlaying}
             render3DReady={render3DReady}
             cameraResetKey={cameraResetKey}
+            backendFrame={currentStates.configured ? (currentStates.frames.get(simulation.referenceId) ?? null) : (PRODUCT_PROFILE === 'full' ? null : undefined)}
+            backendStatus={{ ...currentStates, requestedEpochUtcJd: requestedJulianDay }}
           />
           {simulation.comparisonEnabled && (
             <FrameView
@@ -389,8 +417,8 @@ export function ExplorerWorkspace() {
               resolveCurrentPosition={resolveCurrentPosition}
               resolutionBodies={resolutionBodies}
               bodiesById={bodiesById}
-              julianDay={displayJulianDay}
-              trajectoryAnchor={trajectoryAnchor}
+              julianDay={renderedJulianDay}
+              trajectoryJulianDay={trajectoryJulianDay}
               onFrame={setSecondaryFrame}
               onHover={setHovered}
               catalogRecords={catalogRecords}
@@ -404,6 +432,8 @@ export function ExplorerWorkspace() {
               isPlaying={clock.isPlaying}
               render3DReady={render3DReady}
               cameraResetKey={cameraResetKey}
+              backendFrame={currentStates.configured ? (currentStates.frames.get(simulation.comparisonReferenceId) ?? null) : (PRODUCT_PROFILE === 'full' ? null : undefined)}
+              backendStatus={{ ...currentStates, requestedEpochUtcJd: requestedJulianDay }}
             />
           )}
         </div>

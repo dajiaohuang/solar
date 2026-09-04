@@ -258,6 +258,46 @@ func (c *Catalog) Stats() map[string]int {
 	}
 	return out
 }
+
+func (c *Catalog) AuditIdentityTuples() []map[string]string {
+	type identity struct{ source, datasetVersion, model string }
+	seen := make(map[identity]struct{})
+	for _, body := range c.bodies {
+		model := body.Model
+		switch body.Availability {
+		case AvailableFallback:
+			// The current-states endpoint is exact-only; fallback catalog
+			// elements are not an identity it can emit.
+			model = "exact-only"
+		case Missing:
+			if body.Source != "" && body.DatasetVersion != "" {
+				model = "unavailable-no-kernel"
+			}
+		}
+		if body.Source == "" || body.DatasetVersion == "" || model == "" {
+			continue
+		}
+		seen[identity{body.Source, body.DatasetVersion, model}] = struct{}{}
+	}
+	items := make([]identity, 0, len(seen))
+	for value := range seen {
+		items = append(items, value)
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].source != items[j].source {
+			return items[i].source < items[j].source
+		}
+		if items[i].datasetVersion != items[j].datasetVersion {
+			return items[i].datasetVersion < items[j].datasetVersion
+		}
+		return items[i].model < items[j].model
+	})
+	out := make([]map[string]string, 0, len(items))
+	for _, value := range items {
+		out = append(out, map[string]string{"source": value.source, "datasetVersion": value.datasetVersion, "model": value.model})
+	}
+	return out
+}
 func (c *Catalog) Get(id string) (Body, bool) { b, ok := c.byID[id]; return b, ok }
 func (c *Catalog) Page(query string, offset, limit int) []Body {
 	q := strings.ToLower(strings.TrimSpace(query))

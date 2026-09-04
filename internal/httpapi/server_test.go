@@ -14,7 +14,6 @@ import (
 
 	"github.com/dajiaohuang/solar/backend/internal/catalog"
 	"github.com/dajiaohuang/solar/backend/internal/inventory"
-	"github.com/dajiaohuang/solar/backend/internal/science"
 )
 
 func testServer(t *testing.T) *Server {
@@ -43,6 +42,50 @@ func TestCapabilitiesAndCatalogPagination(t *testing.T) {
 	}
 	if rr.Code != 200 || json.Unmarshal(rr.Body.Bytes(), &v) != nil || len(v.Items) != 2 || v.Next == "" {
 		t.Fatalf("page response %d %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestCapabilitiesAdvertiseInventoryManifestHash(t *testing.T) {
+	c, err := catalog.Load("../../src/data")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inv := fixtureInventory(t, `{"id":"sb:asteroid:1","source":"numbered"}`)
+	s := New(c, 1, inv)
+	rr := httptest.NewRecorder()
+	s.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/v1/capabilities", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("capabilities: %d %s", rr.Code, rr.Body.String())
+	}
+	var response struct {
+		Coverage struct {
+			SourceInventory struct {
+				ManifestSHA256 string `json:"manifestSha256"`
+			} `json:"sourceInventory"`
+		} `json:"coverage"`
+		Contract struct {
+			AuditIdentities []struct {
+				Source         string `json:"source"`
+				DatasetVersion string `json:"datasetVersion"`
+				Model          string `json:"model"`
+			} `json:"auditIdentities"`
+		} `json:"contract"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Coverage.SourceInventory.ManifestSHA256 != inv.ManifestHash() {
+		t.Fatalf("capabilities inventory hash=%q want=%q", response.Coverage.SourceInventory.ManifestSHA256, inv.ManifestHash())
+	}
+	found := false
+	for _, identity := range response.Contract.AuditIdentities {
+		if identity.Source == "numbered" && identity.DatasetVersion == "inventory:"+inv.ManifestHash() && identity.Model == "exact-only" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("capabilities omitted inventory audit tuple: %+v", response.Contract.AuditIdentities)
 	}
 }
 func TestTrajectoryValidationAndMissingState(t *testing.T) {
@@ -236,7 +279,7 @@ func TestCurrentStatesColumnarMatchesSingleIdentityState(t *testing.T) {
 		t.Fatal(err)
 	}
 	many := httptest.NewRecorder()
-	s.ServeHTTP(many, httptest.NewRequest(http.MethodPost, "/v1/current-states", strings.NewReader(`{"ids":["sb:asteroid:1"],"epochJd":2461201,"precision":"approximate"}`)))
+	s.ServeHTTP(many, httptest.NewRequest(http.MethodPost, "/v1/current-states", strings.NewReader(`{"ids":["sb:asteroid:1"],"epochJd":2461201,"precision":"exact"}`)))
 	if many.Code != http.StatusOK {
 		t.Fatalf("batch state: %d %s", many.Code, many.Body.String())
 	}
@@ -244,15 +287,16 @@ func TestCurrentStatesColumnarMatchesSingleIdentityState(t *testing.T) {
 	if err := json.Unmarshal(many.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}
-	if len(response.IDs) != 1 || len(response.StateValues) != 6 || !response.StatePresent[0] || response.Availability[0] != catalog.AvailableFallback {
+	if len(response.IDs) != 1 || len(response.StateValues) != 6 || response.StatePresent[0] || response.Availability[0] != catalog.Missing {
 		t.Fatalf("unexpected batch state: %+v", response)
 	}
-	if response.InventoryManifestSHA256 == "" || response.Source[0] != "numbered" || response.CenterIDs[0] != "naif:10" || response.Precision[0] != "approximate" {
+	if response.InventoryManifestSHA256 == "" || response.Source[0] != "numbered" || response.CenterIDs[0] != "naif:10" || response.Precision[0] != "exact" || response.Model[0] != "exact-only" {
 		t.Fatalf("missing source metadata: %+v", response)
 	}
-	if response.StateValues[0] != single.State.Position.X || response.StateValues[5] != single.State.Velocity.Z {
-		t.Fatalf("single/batch mismatch: single=%+v batch=%v", single.State, response.StateValues)
+	if response.StateOriginID != "naif:0" || response.DatasetVersion[0] != "inventory:"+inv.ManifestHash() {
+		t.Fatalf("missing absolute-state identity: origin=%q version=%q", response.StateOriginID, response.DatasetVersion[0])
 	}
+	_ = single // approximate identity endpoint remains separately covered above.
 }
 
 func TestCurrentStatesRealSelectionSizesAndMissingRows(t *testing.T) {
@@ -265,7 +309,7 @@ func TestCurrentStatesRealSelectionSizesAndMissingRows(t *testing.T) {
 		t.Fatalf("catalog selection size=%d", len(ids))
 	}
 	for _, size := range []int{160, 294, 510} {
-		payload, err := json.Marshal(map[string]any{"ids": ids[:size], "epochJd": 2451545.0, "frame": "ECLIPJ2000", "precision": "approximate"})
+		payload, err := json.Marshal(map[string]any{"ids": ids[:size], "epochJd": 2451545.0, "frame": "ECLIPJ2000", "precision": "exact"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -290,7 +334,7 @@ func TestCurrentStatesMatchesSingleCatalogResolverAtSharedEpoch(t *testing.T) {
 	for _, body := range s.catalog.Page("", 0, 510) {
 		ids = append(ids, body.ID)
 	}
-	payload, err := json.Marshal(map[string]any{"ids": ids, "epochJd": 2451545.0, "precision": "approximate"})
+	payload, err := json.Marshal(map[string]any{"ids": ids, "epochJd": 2451545.0, "precision": "exact"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,11 +356,6 @@ func TestCurrentStatesMatchesSingleCatalogResolverAtSharedEpoch(t *testing.T) {
 		var expectedFound bool
 		if body.Availability == catalog.AvailableOperational {
 			expected, expectedFound, err = s.catalog.OperationalState(id, 2451545)
-		} else if body.Availability == catalog.AvailableFallback && body.Elements != nil {
-			var propagated science.State
-			propagated, err = science.PropagateBoundElliptic(context.Background(), science.Elements{SemiMajorAxisAU: body.Elements.SemiMajorAxisAU, Eccentricity: body.Elements.Eccentricity, InclinationDeg: body.Elements.InclinationDeg, AscendingNodeDeg: body.Elements.AscendingNodeDeg, ArgPeriapsisDeg: body.Elements.ArgPeriapsisDeg, MeanAnomalyDeg: body.Elements.MeanAnomalyDeg, MeanMotionDegPerDay: body.Elements.MeanMotionDegPerDay}, body.EpochJD, 2451545)
-			expected = catalog.State{Position: catalog.Vec3{X: propagated.Position.X, Y: propagated.Position.Y, Z: propagated.Position.Z}, Velocity: catalog.Vec3{X: propagated.Velocity.X, Y: propagated.Velocity.Y, Z: propagated.Velocity.Z}}
-			expectedFound = err == nil
 		}
 		if err != nil {
 			t.Fatalf("single resolver %s: %v", id, err)
@@ -338,6 +377,11 @@ func TestCurrentStatesMatchesSingleCatalogResolverAtSharedEpoch(t *testing.T) {
 
 func TestCurrentStatesValidationAndCancellation(t *testing.T) {
 	s := testServer(t)
+	approx := httptest.NewRecorder()
+	s.ServeHTTP(approx, httptest.NewRequest(http.MethodPost, "/v1/current-states", strings.NewReader(`{"ids":["earth"],"epochJd":2451545,"precision":"approximate"}`)))
+	if approx.Code != http.StatusBadRequest {
+		t.Fatalf("approximate current-state precision status=%d body=%s", approx.Code, approx.Body.String())
+	}
 	tooMany := make([]string, maxCurrentStateIDs+1)
 	for n := range tooMany {
 		tooMany[n] = "synthetic:" + strconv.Itoa(n)

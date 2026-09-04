@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 import type { Page } from '@playwright/test'
 import datasetPin from '../../.github/asteroid-dataset.json' with { type: 'json' }
 import satelliteCatalog from '../../src/data/satelliteCatalog.json' with { type: 'json' }
@@ -7,13 +7,19 @@ test('complete Saturn current positions remain independent of 3D trail budgets',
   test.setTimeout(120_000)
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   const ids = ['saturn', ...satelliteCatalog.bodies.filter(body => body.parentId === 'saturn').map(body => body.naifId === 606 ? 'titan' : body.id)]
+  const currentStateRequests: Array<{ ids: string[]; precision?: string }> = []
+  page.on('request', request => {
+    if (request.url().endsWith('/solar-test-api/v1/current-states')) currentStateRequests.push(JSON.parse(request.postData() ?? '{}') as { ids: string[]; precision?: string })
+  })
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
   const query = new URLSearchParams({ v: '4', lang: 'en', speed: '0', view: '3d', ref: 'saturn', bodies: ids.join(','), jd: '2461287.5', history: '1', samples: '24' })
   await page.goto(`?${query}`)
   const canvas = page.getByTestId('trajectory-canvas-3d')
   await expect(canvas).toHaveAttribute('data-position-count', '293', { timeout: 90_000 })
-  await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('293/294')
+  await expect.poll(() => currentStateRequests.length).toBeGreaterThan(0)
+  expect(currentStateRequests.every(request => request.ids.length <= 510 && request.precision === 'exact')).toBe(true)
+  await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('293/294', { timeout: 90_000 })
   await expect(page.getByTestId('focus-layer-budget')).toContainText('160/294')
   expect(new URL(page.url()).searchParams.get('bodies')?.split(',')).toEqual(ids)
   expect(Number(await canvas.getAttribute('data-detail-count'))).toBeLessThanOrEqual(160)

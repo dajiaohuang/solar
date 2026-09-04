@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 test.use({ serviceWorkers: 'allow' })
 
@@ -8,10 +8,10 @@ test('first install can reload the application shell offline', async ({ page, co
   await page.goto('./')
   await page.evaluate(async () => { await navigator.serviceWorker.ready })
   await page.reload()
-  await expect(page.locator('.trajectory-canvas, [data-testid="trajectory-canvas-3d"]')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId('ephemeris-status')).toBeVisible({ timeout: 15_000 })
   await context.setOffline(true)
   await page.reload({ waitUntil: 'domcontentloaded' })
-  await expect(page.locator('.trajectory-canvas, [data-testid="trajectory-canvas-3d"]')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId('ephemeris-status')).toBeVisible({ timeout: 15_000 })
   await context.setOffline(false)
 })
 

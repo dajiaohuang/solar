@@ -25,7 +25,10 @@ precision/status fields.
 ## Endpoints
 
 `GET /v1/capabilities` returns API/catalog versions, scientific contract,
-resource limits and full/Pages-preview profiles. The preview profile is a
+resource limits and full/Pages-preview profiles. Its `contract.auditIdentities`
+array contains exact allowed `{source,datasetVersion,model}` tuples from the
+loaded catalog and indexed inventory; clients must reject row metadata outside
+these tuples. The preview profile is a
 product availability policy: full-only entries may be visible but restricted
 actions are blocked.
 
@@ -62,19 +65,25 @@ is an explicit opt-in for a bounded two-body source-element model; it is never
 reported as exact. A known identity without an exact state returns HTTP 200 with
 `availability: "missing"` and a machine-readable reason.
 
-`POST /v1/current-states` resolves one shared TDB Julian epoch for 1–512 unique
-catalog or source IDs. The request is bounded by the JSON body limit and the
-response is capped at 8 MiB; a saturated scientific worker pool fails fast with
+`POST /v1/current-states` is an exact-only endpoint: it resolves one shared TDB
+Julian epoch for 1–512 unique catalog or source IDs and rejects approximate
+precision. Its capabilities contract declares `currentStates.precision:
+"exact-only"` and `stateOriginId: "naif:0"`; trajectory and identity endpoints
+retain their separate explicit approximate opt-in. The request is bounded by
+the JSON body limit and response is capped at 8 MiB; a saturated scientific
+worker pool fails fast with
 `429 overloaded`. The response is compact columnar JSON: `ids` and each
 parallel metadata array use the same order, while `stateValues` is a flat
-row-major `[x,y,z,vx,vy,vz]` numeric array with `statePresent` marking rows that
+row-major `[x,y,z,vx,vy,vz]` numeric array with `stateOriginId: "naif:0"` marking
+that every present state is SSB/barycentric and `statePresent` marking rows that
 contain a state (missing rows are zero-filled). Per-ID arrays retain
 `availability`, `precision`, `source`, `datasetVersion`, `model`, `centerIds`,
 validity/evidence windows, `missingReason`, and source identity status. The
 envelope includes catalog and inventory manifest SHA-256 values, TDB,
 ECLIPJ2000, km and km/s. Exact rows use the same SPK/snapshot resolver as the
-single-state endpoint; source-element fallback remains explicit opt-in and is
-never labelled exact. Unknown IDs remain in order as `missing` with
+single-state endpoint; source-element fallback is represented as exact
+`missing` and is never labelled exact. Unknown IDs remain in order as `missing`
+with
 `missingReason: "unknown-identity"` so mixed selections are not shifted.
 
 `GET /v1/bodies/{id}` returns one catalog record. Unknown IDs are a 404; a
@@ -101,6 +110,14 @@ orbital center; no center is inferred.
 `GET /v1/preview/manifest` is a deterministic, hash-tagged Pages profile
 snapshot. It is not the full data host and does not imply that a full Web or
 native endpoint has been deployed.
+
+## Full Web boundary
+
+The full Web client reads `VITE_SOLAR_API_BASE_URL` from its deployment
+configuration and uses the current-states adapter only when that value is
+present. Pages builds intentionally omit a real backend configuration and keep
+the curated static preview; they do not request the full catalog or claim full
+coverage. The project currently has no official public full-Web backend URL.
 
 ## Errors
 

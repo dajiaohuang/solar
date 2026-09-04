@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -55,17 +56,64 @@ type recordRef struct {
 }
 
 type indexFields struct {
-	ID              string   `json:"id"`
-	Designation     string   `json:"designation"`
-	Name            string   `json:"name"`
-	Category        string   `json:"category"`
-	ParentID        string   `json:"parentId"`
-	Confirmation    string   `json:"confirmation"`
-	IdentityStatus  string   `json:"identityStatus"`
-	EphemerisStatus string   `json:"ephemerisStatus"`
-	Source          string   `json:"source"`
-	Aliases         []string `json:"aliases"`
+	ID              string               `json:"id"`
+	Designation     string               `json:"designation"`
+	Name            string               `json:"name"`
+	Category        string               `json:"category"`
+	ParentID        string               `json:"parentId"`
+	Confirmation    string               `json:"confirmation"`
+	IdentityStatus  string               `json:"identityStatus"`
+	EphemerisStatus string               `json:"ephemerisStatus"`
+	Source          string               `json:"source"`
+	Aliases         []string             `json:"aliases"`
+	NAIFID          int                  `json:"naifId"`
+	KernelEvidence  *indexKernelEvidence `json:"kernelEvidence"`
 }
+
+// indexKernelEvidence is the small subset needed to advertise exact
+// current-state identities. Avoid decoding Orbit and other large source
+// fields for every one of the 1.5M rows during startup.
+type indexKernelEvidence struct {
+	AuditET           float64              `json:"auditEt"`
+	Target            int                  `json:"target"`
+	Segments          []indexKernelSegment `json:"segments"`
+	StateAtAuditEpoch *indexEvidenceState  `json:"stateAtAuditEpoch"`
+}
+type indexKernelSegment struct {
+	KernelID string  `json:"kernelId"`
+	StartET  float64 `json:"startEt"`
+	EndET    float64 `json:"endEt"`
+	Frame    int     `json:"frame"`
+	Type     int     `json:"type"`
+}
+type indexEvidenceState struct {
+	Position indexVector `json:"position"`
+	Velocity indexVector `json:"velocity"`
+}
+type indexVector struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+	Z float64 `json:"z"`
+}
+
+func validIndexSnapshotEvidence(fields indexFields) bool {
+	e := fields.KernelEvidence
+	if e == nil || e.StateAtAuditEpoch == nil || !finiteIndex(e.AuditET) || (e.Target != 0 && fields.NAIFID != 0 && e.Target != fields.NAIFID) {
+		return false
+	}
+	s := e.StateAtAuditEpoch
+	if !finiteIndex(s.Position.X) || !finiteIndex(s.Position.Y) || !finiteIndex(s.Position.Z) || !finiteIndex(s.Velocity.X) || !finiteIndex(s.Velocity.Y) || !finiteIndex(s.Velocity.Z) {
+		return false
+	}
+	for _, segment := range e.Segments {
+		if segment.KernelID != "" && finiteIndex(segment.StartET) && finiteIndex(segment.EndET) && segment.EndET >= segment.StartET && segment.StartET <= e.AuditET && segment.EndET >= e.AuditET && segment.Frame == 1 && (segment.Type == 2 || segment.Type == 3 || segment.Type == 17 || segment.Type == 21) {
+			return true
+		}
+	}
+	return false
+}
+
+func finiteIndex(value float64) bool { return !math.IsNaN(value) && !math.IsInf(value, 0) }
 
 // termPair is packed to 12 bytes so the temporary sort buffer does not pay
 // Go's 16-byte struct alignment for a uint64 plus uint32 posting.
@@ -91,10 +139,12 @@ type sourceIndex struct {
 }
 
 type Inventory struct {
-	dir  string
-	m    manifest
-	hash string
-	idx  *sourceIndex
+	dir     string
+	m       manifest
+	hash    string
+	idx     *sourceIndex
+	sources map[string]struct{}
+	models  map[string]map[string]struct{}
 }
 
 func Load(dir string) (*Inventory, error) {
@@ -129,7 +179,7 @@ func Load(dir string) (*Inventory, error) {
 		}
 	}
 	sum := sha256.Sum256(raw)
-	i := &Inventory{dir: abs, m: m, hash: hex.EncodeToString(sum[:])}
+	i := &Inventory{dir: abs, m: m, hash: hex.EncodeToString(sum[:]), sources: make(map[string]struct{}), models: make(map[string]map[string]struct{})}
 	if err := i.buildIndex(); err != nil {
 		return nil, err
 	}
@@ -158,6 +208,32 @@ func (i *Inventory) IndexStats() map[string]int {
 		indexed = len(i.idx.records)
 	}
 	return map[string]int{"indexedRecords": indexed, "searchTerms": terms, "indexPostings": postings, "maxIndexedRecords": MaxIndexedRecords, "maxIndexPostings": MaxIndexPostings}
+}
+
+// SourceIdentities reports source labels collected while the bounded startup
+// index was built; serving capabilities never rescans the inventory shards.
+func (i *Inventory) SourceIdentities() []string {
+	values := make([]string, 0, len(i.sources))
+	for source := range i.sources {
+		values = append(values, source)
+	}
+	sort.Strings(values)
+	return values
+}
+
+// SourceIdentityModels reports only model combinations observed or selected
+// by the exact current-state resolver during the bounded startup index pass.
+func (i *Inventory) SourceIdentityModels() map[string][]string {
+	out := make(map[string][]string, len(i.models))
+	for source, models := range i.models {
+		values := make([]string, 0, len(models))
+		for model := range models {
+			values = append(values, model)
+		}
+		sort.Strings(values)
+		out[source] = values
+	}
+	return out
 }
 
 // Page returns raw source records in stable source order. Empty-query pages
@@ -372,6 +448,21 @@ func (i *Inventory) buildIndex() error {
 			}
 			if fields.ID == "" {
 				return fmt.Errorf("inventory row %d/%d has no stable id", si, row)
+			}
+			if fields.Source != "" {
+				i.sources[fields.Source] = struct{}{}
+				models := i.models[fields.Source]
+				if models == nil {
+					models = make(map[string]struct{})
+					i.models[fields.Source] = models
+				}
+				// Every exact request can produce an explicit missing row. The
+				// other models are added only when this row carries the evidence
+				// that selects them; this is not a source×model cartesian product.
+				models["exact-only"] = struct{}{}
+				if validIndexSnapshotEvidence(fields) {
+					models["source-kernel-state-at-audit-epoch"] = struct{}{}
+				}
 			}
 			ref := recordRef{Shard: uint32(si), Row: uint32(row), Ordinal: ordinal}
 			idx.records = append(idx.records, ref)

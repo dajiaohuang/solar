@@ -54,9 +54,9 @@ Opening a supported full-only scene directly must show the same explanation, pre
 
 ## Migration and acceptance / 迁移与验收
 
-**Current implementation:** React/Vite client-side Web plus Capacitor Android/iOS shells. The separately implemented [Go backend API](./backend-api-v1.md) is available in source for local execution; the three clients have not yet migrated to it, and no independent native frontend or public backend deployment is claimed. The Pages workflow publishes the [curated preview](./preview-delivery.md) after validation. It does not retain the old full catalog for installed clients; rebuilding the full clients and connecting the unified backend remains outstanding.
+**Current implementation:** React/Vite client-side Web plus Capacitor Android/iOS shells. The full Web current-position path now consumes the separately implemented [Go backend API](./backend-api-v1.md) through `POST /v1/current-states` when the deployer supplies `VITE_SOLAR_API_BASE_URL`; no official public full-Web backend URL is claimed. Pages uses the same Web frontend with its curated static profile when no backend is configured. The workflow publishes the [curated preview](./preview-delivery.md) after validation and does not retain the old full catalog for installed clients.
 
-**当前实现：** React/Vite 纯前端 Web 与 Capacitor Android/iOS 应用壳。独立开发的 [Go 后端 API](./backend-api-v1.md) 已有可本地运行的源码，但三端尚未迁移接入，不宣称已经交付独立原生前端或公开部署后端。Pages 流程验证后发布[精选预览](./preview-delivery.md)，不为已安装客户端保留旧完整目录；完整版客户端重建及统一后端接入仍未完成。
+**当前实现：** React/Vite 纯前端 Web 与 Capacitor Android/iOS 应用壳。完整版 Web 的当前位置路径在部署方提供 `VITE_SOLAR_API_BASE_URL` 时通过 `POST /v1/current-states` 接入独立开发的 [Go 后端 API](./backend-api-v1.md)；目前没有官方公开的完整版 Web 后端地址。未配置后端时，Pages 使用同一 Web 前端的精选静态配置。Pages 流程验证后发布[精选预览](./preview-delivery.md)，不为已安装客户端保留旧完整目录。
 
 1. Complete and retain the current source-backed satellite batch and its validation. Reuse its identities, scientific engine, fixtures and provenance in the migration; do not discard verified data work / 完成并保留当前权威卫星批次与验证；迁移复用身份、科学引擎、基准和来源证据，不丢弃已验证的数据工作。
 2. Define the shared versioned API/scene contract and backend boundary. Separate the Web project and add backend catalog/state access with contract, error, resource-limit and independent scientific tests / 定义统一版本化 API/场景协议及后端边界，拆出 Web 项目并接入后端目录/状态服务，覆盖协议、错误、资源限制和独立科学测试。

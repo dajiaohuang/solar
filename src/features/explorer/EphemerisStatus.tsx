@@ -4,7 +4,7 @@ import { EPHEMERIS_MANIFEST, ensureKernelFiles, kernelCoverage, kernelFilesForBo
 import { utcTimeScaleQuality } from '../../engine/ephemeris/timeScales'
 import type { CelestialBody } from '../../types'
 
-export function EphemerisStatus({ bodies, references, julianDay, historyDays }: { bodies: CelestialBody[]; references: CelestialBody[]; julianDay: number; historyDays: number }) {
+export function EphemerisStatus({ bodies, references, julianDay, historyDays, backendStatus }: { bodies: CelestialBody[]; references: CelestialBody[]; julianDay: number; historyDays: number; backendStatus?: { configured: boolean; loading: boolean; error: string | null; publishedEpochUtcJd?: number | null; requestedEpochUtcJd?: number } }) {
   const state = useEphemerides()
   const { t, language } = useI18n()
   const coverage = bodies.map(body => ({ body, model: kernelCoverage(body, julianDay).model }))
@@ -14,8 +14,19 @@ export function EphemerisStatus({ bodies, references, julianDay, historyDays }: 
   const loaded = loadedKernelIds()
   const bytes = EPHEMERIS_MANIFEST.files.filter((file) => loaded.includes(file.id)).reduce((sum, file) => sum + file.bytes, 0)
   const future = julianDay >= 2441317.5 && utcTimeScaleQuality(julianDay).status === 'future-uncertain'
+  const stale = backendStatus?.configured && backendStatus.publishedEpochUtcJd != null && backendStatus.requestedEpochUtcJd != null && Math.abs(backendStatus.publishedEpochUtcJd - backendStatus.requestedEpochUtcJd) > 1e-9
+  const backendSummary = !backendStatus?.configured
+    ? t('currentStatesNotConfigured')
+    : stale
+      ? (language === 'zh' ? `精确帧待更新 · 渲染 JD ${backendStatus.publishedEpochUtcJd!.toFixed(6)}` : `Exact frame pending · rendered JD ${backendStatus.publishedEpochUtcJd!.toFixed(6)}`)
+      : backendStatus.loading ? t('currentStatesLoading') : backendStatus.error ?? ''
   return <details className="ephemeris-status glass-panel" data-testid="ephemeris-status">
-    <summary>{t('physicalEphemerides')}: {covered.length}/{bodies.length} · {state.loading ? t('loading') : t('geometricStates')}</summary>
+    <summary>{t('physicalEphemerides')}: {covered.length}/{bodies.length} · {state.loading ? t('loading') : t('geometricStates')}{backendSummary ? ` · ${backendSummary}` : ''}</summary>
+    {backendStatus?.configured && <p role={backendStatus.error ? 'alert' : 'status'}>{backendStatus.loading ? t('currentStatesLoading') : backendStatus.error ?? t('currentStatesConnected')}</p>}
+    {backendStatus?.configured && backendStatus.publishedEpochUtcJd != null && backendStatus.requestedEpochUtcJd != null && Math.abs(backendStatus.publishedEpochUtcJd - backendStatus.requestedEpochUtcJd) > 1e-9 && (
+      <p role="status">{language === 'zh' ? `正在等待精确帧：已渲染 JD ${backendStatus.publishedEpochUtcJd.toFixed(6)}；请求 JD ${backendStatus.requestedEpochUtcJd.toFixed(6)}。` : `Exact frame refresh pending: rendered JD ${backendStatus.publishedEpochUtcJd.toFixed(6)}; requested JD ${backendStatus.requestedEpochUtcJd.toFixed(6)}.`}</p>
+    )}
+    {!backendStatus?.configured && <p>{t('currentStatesNotConfigured')}</p>}
     <p>{t('ephemerisBoundary')}</p>
     <p>{t('referenceFrame')}: {references.map((body) => `${body.id} · ${kernelCoverage(body, julianDay).model}`).join(', ')}</p>
     <p>{language === 'zh' ? '轨迹整窗可用内核' : 'Kernels covering the whole trail'}: {kernelsForWindow(julianDay - historyDays, julianDay).length}/{loaded.length}. {language === 'zh' ? '覆盖不完整的内核在整段扫描中停用，以免切换模型制造伪极值。' : 'Partially covered kernels are excluded for the whole scan to avoid model-switch artifacts.'}</p>
