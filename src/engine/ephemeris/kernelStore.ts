@@ -15,6 +15,14 @@ export type KernelFile = {
 }
 export const EPHEMERIS_MANIFEST = manifestData as { schemaVersion: number; id: string; profile?: string; files: KernelFile[] }
 const installed = new Map<string, LoadedKernel>()
+let orderedSnapshot: { ids: readonly string[]; kernels: LoadedKernel[] } | null = null
+function orderedInstalled() {
+  if (!orderedSnapshot) {
+    const ids = EPHEMERIS_MANIFEST.files.filter(file => installed.has(file.id)).map(file => file.id)
+    orderedSnapshot = { ids: Object.freeze(ids), kernels: ids.map(id => installed.get(id)!) }
+  }
+  return orderedSnapshot
+}
 // The status panel asks for many bodies at the same epoch. Share the immutable
 // pool snapshot and center cache rather than rebuilding them for every row.
 let currentResolver: { et: number; resolver: ReturnType<typeof createKernelResolver> } | null = null
@@ -41,8 +49,8 @@ const publish = (patch: Partial<typeof snapshot>) => {
 }
 export const subscribeEphemerides = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
 export const getEphemerisSnapshot = () => snapshot
-export const loadedKernelIds = () => EPHEMERIS_MANIFEST.files.filter((file) => installed.has(file.id)).map((file) => file.id)
-export const loadedKernels = () => loadedKernelIds().map((id) => installed.get(id)!)
+export const loadedKernelIds = () => [...orderedInstalled().ids]
+export const loadedKernels = () => [...orderedInstalled().kernels]
 export function kernelsForWindow(startUtcJd: number, endUtcJd: number, ids = loadedKernelIds()) {
   try {
     return kernelsCoveringInterval(loadedKernels().filter((kernel) => ids.includes(kernel.id)), utcJulianDayToEt(startUtcJd), utcJulianDayToEt(endUtcJd))
@@ -53,6 +61,7 @@ export function installKernel(id: string, buffer: ArrayBuffer) {
   const kernel = new SpkKernel(buffer)
   const file = EPHEMERIS_MANIFEST.files.find(file => file.id === id)
   installed.set(id, { id, kernel, solutionKernelIds: file?.solutionKernelIds, dependencyOnly: file?.dependencyOnly })
+  orderedSnapshot = null
   currentResolver = null
   // A different successful file must not hide a still-missing dependency.
   failures.delete(id)
@@ -143,5 +152,5 @@ export function kernelStateForBody(body: { id: string; naifId?: number }, utcJd:
 export function kernelCoverage(body: Pick<CelestialBody, 'id' | 'naifId' | 'orbit'>, utcJd: number) {
   const target = bodyNaifId(body)
   const state = kernelStateForBody(body, utcJd)
-  return { target, model: state ? 'jpl-spk' : body.id === 'sun' ? 'heliocentric-origin' : body.orbit ? 'approximate-fallback' : 'unavailable', kernelIds: loadedKernelIds(), manifestId: EPHEMERIS_MANIFEST.id }
+  return { target, model: state ? 'jpl-spk' : body.id === 'sun' ? 'heliocentric-origin' : body.orbit ? 'approximate-fallback' : 'unavailable', kernelIds: orderedInstalled().ids, manifestId: EPHEMERIS_MANIFEST.id }
 }

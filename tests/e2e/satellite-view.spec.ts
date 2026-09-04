@@ -59,13 +59,21 @@ test('uses useful moon orbital units and distinguishes the active Earth center',
   await expect(inspector).toContainText('J2000 黄道坐标')
 })
 
-test('keeps every moon-system preset in a bounded local 3D frame', async ({ page }) => {
-  test.setTimeout(120_000)
-  const errors: string[] = []
-  page.on('pageerror', error => errors.push(error.message))
-  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  await page.goto('./?v=4&lang=en&speed=0')
-  for (const id of ['jupiter-spk-moons', 'saturn-spk-moons', 'uranus-spk-moons', 'neptune-spk-moons', 'pluto-spk-moons', 'eris-spk-moons', 'haumea-spk-moons', 'quaoar-spk-moons', 'orcus-spk-moons', 'salacia-spk-moons', '1998ww31-spk-moons', '2001qw322-spk-moons', 'kagara-spk-moons', '1999oj4-spk-moons', '2003un284-spk-moons', 'earth-moon']) {
+// Each system has the same bounded assertions and deadline. A growing scene
+// library must not share one aggregate timeout or hide later cases after a
+// failure in an earlier system.
+for (const id of ['jupiter-spk-moons', 'saturn-spk-moons', 'uranus-spk-moons', 'neptune-spk-moons', 'pluto-spk-moons', 'eris-spk-moons', 'haumea-spk-moons', 'quaoar-spk-moons', 'orcus-spk-moons', 'salacia-spk-moons', '1998ww31-spk-moons', '2001qw322-spk-moons', 'kagara-spk-moons', '1999oj4-spk-moons', '2003un284-spk-moons', 'earth-moon']) {
+  test(`keeps ${id} in a bounded local 3D frame`, async ({ page }) => {
+    test.setTimeout(120_000)
+    const errors: string[] = []
+    page.on('pageerror', error => errors.push(error.message))
+    await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+    await page.goto('./?v=4&lang=en&speed=0')
+    // Preserve the original large-pool transition that exposed the CI failure.
+    if (id === 'saturn-spk-moons') {
+      await page.getByTestId('preset-jupiter-spk-moons').click()
+      await expect(page.getByTestId('ephemeris-status').locator('summary')).not.toContainText('Loading', { timeout: 60_000 })
+    }
     await page.getByTestId(`preset-${id}`).click()
     await page.waitForLoadState('networkidle')
     // A first selection now loads an entire system's split original records.
@@ -88,6 +96,6 @@ test('keeps every moon-system preset in a bounded local 3D frame', async ({ page
     await expect.poll(async () => Number(await canvas.getAttribute('data-camera-distance'))).toBeGreaterThan(0)
     await expect(page).toHaveURL(/[?&]view=3d(?:&|$)/)
     await page.screenshot({ path: test.info().outputPath(`${id}.png`), fullPage: true })
-  }
-  expect(errors).toEqual([])
-})
+    expect(errors).toEqual([])
+  })
+}

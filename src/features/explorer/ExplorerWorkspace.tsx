@@ -27,6 +27,7 @@ import { catalogSampleErrorMessage } from '../../lib/catalogSampleProfile'
 import { isOnboardingRendererReady, ONBOARDING_RENDER_READY_EVENT } from '../../lib/onboarding'
 import { SimulationControls } from './SimulationControls'
 import { EphemerisStatus } from './EphemerisStatus'
+import { VIEW_CAPABILITIES } from '../../lib/viewCapabilities'
 
 const TrajectoryCanvas3D = lazy(async () => {
   const module = await import('../../components/TrajectoryCanvas3D')
@@ -144,9 +145,9 @@ function FrameView({
     return radius > 0 ? radius * 1.08 : 0
   }, [catalogDrawCount, catalogOrigin, catalogPositions])
   const suggested = Math.max(focusSuggested, catalogSuggested)
-  const orbitEllipses = useMemo(() => simulation.showOrbits
+  const orbitEllipses = useMemo(() => VIEW_CAPABILITIES[simulation.viewMode].fullOrbits && simulation.showOrbits
     ? computeOrbitEllipses(selectedBodies.slice(0, 40), bodiesById, referenceBody.id, trajectoryAnchor)
-    : [], [bodiesById, referenceBody.id, selectedBodies, simulation.showOrbits, trajectoryAnchor])
+    : [], [bodiesById, referenceBody.id, selectedBodies, simulation.showOrbits, simulation.viewMode, trajectoryAnchor])
   const lagrangePoints = useMemo(() => {
     if (!simulation.showLagrange || referenceBody.id !== 'sun') return []
     return frame.currentPositions.filter((item) => item.body.kind === 'planet').map((item) => ({

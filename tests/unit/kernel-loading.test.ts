@@ -1,6 +1,35 @@
 import { readFileSync } from 'node:fs'
 import { expect, it, vi } from 'vitest'
 
+it('invalidates cached manifest order on install and replacement without exposing mutable shared lists', async () => {
+  vi.resetModules()
+  const store = await import('../../src/engine/ephemeris/kernelStore')
+  const files = [...store.EPHEMERIS_MANIFEST.files].sort((a, b) => a.bytes - b.bytes).slice(0, 2)
+  const install = (file: typeof files[number]) => {
+    const bytes = readFileSync(`public/data/ephemerides/${file.path}`)
+    store.installKernel(file.id, bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
+  }
+  expect(store.loadedKernelIds()).toEqual([])
+  install(files[1])
+  const oldCoverage = store.kernelCoverage({ id: 'sun' }, 2461287.5)
+  expect(Object.isFrozen(oldCoverage.kernelIds)).toBe(true)
+  expect(oldCoverage.kernelIds).toEqual([files[1].id])
+  install(files[0])
+  const order = store.EPHEMERIS_MANIFEST.files.filter(file => files.some(selected => selected.id === file.id)).map(file => file.id)
+  expect(store.loadedKernelIds()).toEqual(order)
+  expect(oldCoverage.kernelIds).toEqual([files[1].id])
+  const exposedIds = store.loadedKernelIds()
+  const exposedKernels = store.loadedKernels()
+  const previousKernel = exposedKernels.find(kernel => kernel.id === files[0].id)!.kernel
+  exposedIds.length = 0
+  exposedKernels.length = 0
+  expect(store.loadedKernelIds()).toEqual(order)
+  expect(store.loadedKernels().map(kernel => kernel.id)).toEqual(order)
+  install(files[0])
+  expect(store.loadedKernelIds()).toEqual(order)
+  expect(store.loadedKernels().find(kernel => kernel.id === files[0].id)!.kernel).not.toBe(previousKernel)
+})
+
 it('bounds concurrent loads across overlapping requests and reuses verified files', async () => {
   vi.resetModules()
   const store = await import('../../src/engine/ephemeris/kernelStore')
