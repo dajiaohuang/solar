@@ -30,6 +30,9 @@ import { EphemerisStatus } from './EphemerisStatus'
 import { VIEW_CAPABILITIES } from '../../lib/viewCapabilities'
 import { selectDetailBodies } from '../../lib/focusLayers'
 import { PagedBodyList } from '../../components/PagedBodyList'
+import { PRODUCT_PROFILE } from '../../lib/productAvailability'
+import { createBackendPositionResolver, MAX_CURRENT_STATE_BATCH, type BackendFrame } from '../../lib/currentStates'
+import { useCurrentStates } from '../../hooks/useCurrentStates'
 
 const TrajectoryCanvas3D = lazy(async () => {
   const module = await import('../../components/TrajectoryCanvas3D')
@@ -79,6 +82,8 @@ type FrameViewProps = {
   isPlaying: boolean
   render3DReady: boolean
   cameraResetKey: number
+  backendFrame?: Pick<BackendFrame, 'currentPositions' | 'missingBodyIds' | 'maxDistance'> | null
+  backendStatus: { configured: boolean; loading: boolean; error: string | null }
 }
 
 function FrameView({
@@ -103,6 +108,8 @@ function FrameView({
   isPlaying,
   render3DReady,
   cameraResetKey,
+  backendFrame,
+  backendStatus,
 }: FrameViewProps) {
   const simulation = simulationStore.useStore()
   const { t, language } = useI18n()
@@ -126,6 +133,7 @@ function FrameView({
     // Inventory expansion must not silently undersample short-period moons.
     // Only historical trails are budgeted; current positions keep all selections.
     sampleCount: Math.min(simulation.sampleCount, 240),
+    currentFrame: backendFrame,
   })
   const spacecraftFrame = useMemo(() => simulation.showSpacecraft && catalogOrigin
     ? buildSpacecraftFrame(SPACECRAFT, referenceBody.id, bodiesById, julianDay)
@@ -199,7 +207,7 @@ function FrameView({
     }}>
       <div className="frame-overlays" onWheel={event => event.stopPropagation()}>
       <div className="frame-label"><span>{bodyDisplayName(referenceBody, language)}</span><small>{simulation.viewMode.toUpperCase()}{simulation.showCatalogCloud ? ` · ${t('catalogCloudRendered')} ${catalogDrawCount.toLocaleString()} / ${catalogSampleTotal.toLocaleString()} · ${qualityLabel} · JD ${julianDay.toFixed(3)}` : ''}</small></div>
-      <EphemerisStatus bodies={selectedBodies} references={[referenceBody]} julianDay={julianDay} historyDays={simulation.historyDays} />
+      <EphemerisStatus bodies={selectedBodies} references={[referenceBody]} julianDay={julianDay} historyDays={simulation.historyDays} backendStatus={backendStatus} />
       {selectedBodies.length > trajectoryBodies.length && <div className="frame-layer-budget glass-panel" data-testid="focus-layer-budget">{t('currentPositionCount')}: {baseFrame.currentPositions.length}/{selectedBodies.length} · {t('trailBudgetCount')}: {trajectoryBodies.length}/{selectedBodies.length}</div>}
       {error && <div className="canvas-error">{error}</div>}
       {catalogOrigin && baseFrame.missingBodyIds.length > 0 && <details className="canvas-error" data-testid="missing-position-notice"><summary>{t('bodyStateUnavailable')} ({baseFrame.missingBodyIds.length})</summary><p>{baseFrame.missingBodyIds.map(id => bodyDisplayName(bodiesById.get(id)!, language)).join(', ')}</p></details>}
@@ -305,7 +313,33 @@ export function ExplorerWorkspace() {
     : clock.julianDay
   // One lazy, bounded-by-registry absolute-state cache for both frames at this
   // exact displayed epoch. The registry changes on every kernel revision.
-  const resolveCurrentPosition = useMemo(() => createBodyPositionResolver(bodiesById, displayJulianDay), [bodiesById, displayJulianDay])
+  const currentStates = useCurrentStates({
+    // A catalog selection can represent 1.5M identities. Current-state work
+    // is intentionally bounded to the interactive detail budget; the cloud
+    // remains sampled and no selection action turns into a full fetch.
+    bodies: useMemo(() => {
+      const priority = new Set([simulation.referenceId, ...(simulation.comparisonEnabled ? [simulation.comparisonReferenceId] : []), selection.focusedId].filter((id): id is string => Boolean(id)))
+      return [...selectedBodies.filter(body => priority.has(body.id)), ...selectedBodies.filter(body => !priority.has(body.id))].slice(0, MAX_CURRENT_STATE_BATCH)
+    }, [selectedBodies, selection.focusedId, simulation.comparisonEnabled, simulation.comparisonReferenceId, simulation.referenceId]),
+    resolutionBodies,
+    referenceIds: [simulation.referenceId, ...(simulation.comparisonEnabled ? [simulation.comparisonReferenceId] : [])],
+    epochUtcJd: displayJulianDay,
+  })
+  // Full Web uses the audited backend when configured. Pages remains its
+  // declared curated static preview; an unconfigured full build has no exact
+  // current-position resolver and never silently falls back to local physics.
+  // The resolver identity is intentionally tied to the atomically published
+  // backend frame; React Compiler cannot preserve this conditional memo.
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
+  const resolveCurrentPosition = useMemo(() => {
+    if (currentStates.configured) {
+      const absolute = new Map<BodyId, { x: number; y: number; z: number }>()
+      for (const frame of currentStates.frames.values()) for (const [id, position] of frame.absolutePositions) absolute.set(id, position)
+      return createBackendPositionResolver(absolute)
+    }
+    if (PRODUCT_PROFILE === 'preview') return createBodyPositionResolver(bodiesById, displayJulianDay)
+    return () => { throw new Error('Full-Web backend is not configured; exact current states are unavailable') }
+  }, [bodiesById, currentStates.configured, currentStates.frames, displayJulianDay])
   const renderBudget = useAdaptiveRenderBudget({
     viewMode: simulation.viewMode,
     quality: simulation.renderQuality,
@@ -380,6 +414,8 @@ export function ExplorerWorkspace() {
             isPlaying={clock.isPlaying}
             render3DReady={render3DReady}
             cameraResetKey={cameraResetKey}
+            backendFrame={currentStates.configured ? (currentStates.frames.get(simulation.referenceId) ?? null) : (PRODUCT_PROFILE === 'full' ? null : undefined)}
+            backendStatus={currentStates}
           />
           {simulation.comparisonEnabled && (
             <FrameView
@@ -404,6 +440,8 @@ export function ExplorerWorkspace() {
               isPlaying={clock.isPlaying}
               render3DReady={render3DReady}
               cameraResetKey={cameraResetKey}
+              backendFrame={currentStates.configured ? (currentStates.frames.get(simulation.comparisonReferenceId) ?? null) : (PRODUCT_PROFILE === 'full' ? null : undefined)}
+              backendStatus={currentStates}
             />
           )}
         </div>

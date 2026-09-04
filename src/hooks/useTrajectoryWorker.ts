@@ -10,6 +10,7 @@ import type {
   TrajectoryWorkerResponse,
   Vector3,
 } from '../types'
+import type { BackendFrame } from '../lib/currentStates'
 
 type Params = {
   bodies: CelestialBody[]
@@ -21,6 +22,7 @@ type Params = {
   trajectoryJulianDay: number
   historyDays: number
   sampleCount: number
+  currentFrame?: Pick<BackendFrame, 'currentPositions' | 'missingBodyIds' | 'maxDistance'> | null
 }
 
 function unpackTrajectories(packed: PackedTrajectoryData, bodiesById: Map<BodyId, CelestialBody>) {
@@ -56,6 +58,7 @@ export function useTrajectoryWorker(params: Params) {
     trajectoryJulianDay,
     historyDays,
     sampleCount,
+    currentFrame,
   } = params
   const workerRef = useRef<Worker | null>(null)
   const latestRequestId = useRef(0)
@@ -74,13 +77,14 @@ export function useTrajectoryWorker(params: Params) {
     [resolutionBodies],
   )
 
-  const current = useMemo(() => buildCurrentPositions({
+  const localCurrent = useMemo(() => currentFrame === undefined ? buildCurrentPositions({
     bodies,
     bodiesById,
     referenceId,
     julianDay: currentJulianDay,
     resolveBodyPosition,
-  }), [bodies, bodiesById, currentJulianDay, referenceId, resolveBodyPosition])
+  }) : { currentPositions: [], missingBodyIds: bodies.map(body => body.id), maxDistance: 0, trajectoryUnavailableBodyIds: [] as BodyId[] },
+  [bodies, bodiesById, currentFrame, currentJulianDay, referenceId, resolveBodyPosition])
 
   useEffect(() => {
     // A large preset may install hundreds of files. Current positions can
@@ -162,12 +166,14 @@ export function useTrajectoryWorker(params: Params) {
   }, [])
 
   const frame = useMemo(() => ({
-    ...current,
+    ...(currentFrame !== undefined
+      ? (currentFrame ? { ...currentFrame, trajectoryUnavailableBodyIds: [] as BodyId[] } : { currentPositions: [], missingBodyIds: bodies.map(body => body.id), maxDistance: 0, trajectoryUnavailableBodyIds: [] as BodyId[] })
+      : localCurrent),
     trajectories: completedRequestKey === requestKey
-      ? trajectories.filter(sample => !current.missingBodyIds.includes(sample.body.id))
+      ? trajectories.filter(sample => !(currentFrame ? currentFrame.missingBodyIds : localCurrent.missingBodyIds).includes(sample.body.id))
       : [],
     trajectoryUnavailableBodyIds: completedRequestKey === requestKey ? trajectoryUnavailableBodyIds : [],
-  }), [completedRequestKey, current, requestKey, trajectories, trajectoryUnavailableBodyIds])
+  }), [bodies, completedRequestKey, currentFrame, localCurrent, requestKey, trajectories, trajectoryUnavailableBodyIds])
 
   return {
     frame,

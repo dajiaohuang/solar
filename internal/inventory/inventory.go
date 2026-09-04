@@ -91,10 +91,11 @@ type sourceIndex struct {
 }
 
 type Inventory struct {
-	dir  string
-	m    manifest
-	hash string
-	idx  *sourceIndex
+	dir     string
+	m       manifest
+	hash    string
+	idx     *sourceIndex
+	sources map[string]struct{}
 }
 
 func Load(dir string) (*Inventory, error) {
@@ -129,7 +130,7 @@ func Load(dir string) (*Inventory, error) {
 		}
 	}
 	sum := sha256.Sum256(raw)
-	i := &Inventory{dir: abs, m: m, hash: hex.EncodeToString(sum[:])}
+	i := &Inventory{dir: abs, m: m, hash: hex.EncodeToString(sum[:]), sources: make(map[string]struct{})}
 	if err := i.buildIndex(); err != nil {
 		return nil, err
 	}
@@ -158,6 +159,17 @@ func (i *Inventory) IndexStats() map[string]int {
 		indexed = len(i.idx.records)
 	}
 	return map[string]int{"indexedRecords": indexed, "searchTerms": terms, "indexPostings": postings, "maxIndexedRecords": MaxIndexedRecords, "maxIndexPostings": MaxIndexPostings}
+}
+
+// SourceIdentities reports source labels collected while the bounded startup
+// index was built; serving capabilities never rescans the inventory shards.
+func (i *Inventory) SourceIdentities() []string {
+	values := make([]string, 0, len(i.sources))
+	for source := range i.sources {
+		values = append(values, source)
+	}
+	sort.Strings(values)
+	return values
 }
 
 // Page returns raw source records in stable source order. Empty-query pages
@@ -372,6 +384,9 @@ func (i *Inventory) buildIndex() error {
 			}
 			if fields.ID == "" {
 				return fmt.Errorf("inventory row %d/%d has no stable id", si, row)
+			}
+			if fields.Source != "" {
+				i.sources[fields.Source] = struct{}{}
 			}
 			ref := recordRef{Shard: uint32(si), Row: uint32(row), Ordinal: ordinal}
 			idx.records = append(idx.records, ref)

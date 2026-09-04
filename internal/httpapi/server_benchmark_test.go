@@ -170,7 +170,7 @@ func TestCurrentStateWireShapeSizes(t *testing.T) {
 
 func benchmarkCurrentStatesResponse(count int) currentStatesResponse {
 	r := currentStatesResponse{
-		APIVersion: "solar.api/v1", CatalogVersion: "bench", CatalogManifestSHA256: strings.Repeat("a", 64), EpochJD: 2451545, TimeScale: "TDB", Frame: "ECLIPJ2000", DistanceUnit: "km", VelocityUnit: "km/s", StateLayout: "row-major-[x,y,z,vx,vy,vz]", StateStride: 6,
+		APIVersion: "solar.api/v1", CatalogVersion: "bench", CatalogManifestSHA256: strings.Repeat("a", 64), EpochJD: 2451545, TimeScale: "TDB", Frame: "ECLIPJ2000", DistanceUnit: "km", VelocityUnit: "km/s", StateLayout: "row-major-[x,y,z,vx,vy,vz]", StateStride: 6, StateOriginID: "naif:0",
 		IDs: make([]string, 0, count), Availability: make([]catalog.Availability, 0, count), Precision: make([]string, 0, count), Source: make([]string, 0, count), DatasetVersion: make([]string, 0, count), Model: make([]string, 0, count), CenterIDs: make([]string, 0, count), ValidityStartET: make([]float64, 0, count), ValidityEndET: make([]float64, 0, count), ValidityPresent: make([]bool, 0, count), StateEvidence: make([]string, 0, count), EvidenceWindowStartET: make([]float64, 0, count), EvidenceWindowEndET: make([]float64, 0, count), EvidenceWindowPresent: make([]bool, 0, count), MissingReason: make([]string, 0, count), IdentityStatus: make([]string, 0, count), SourceRecord: make([]bool, 0, count), StatePresent: make([]bool, 0, count), StateValues: make([]float64, 0, count*6),
 	}
 	for n := 0; n < count; n++ {

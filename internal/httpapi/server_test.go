@@ -45,6 +45,50 @@ func TestCapabilitiesAndCatalogPagination(t *testing.T) {
 		t.Fatalf("page response %d %s", rr.Code, rr.Body.String())
 	}
 }
+
+func TestCapabilitiesAdvertiseInventoryManifestHash(t *testing.T) {
+	c, err := catalog.Load("../../src/data")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inv := fixtureInventory(t, `{"id":"sb:asteroid:1","source":"numbered"}`)
+	s := New(c, 1, inv)
+	rr := httptest.NewRecorder()
+	s.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/v1/capabilities", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("capabilities: %d %s", rr.Code, rr.Body.String())
+	}
+	var response struct {
+		Coverage struct {
+			SourceInventory struct {
+				ManifestSHA256 string `json:"manifestSha256"`
+			} `json:"sourceInventory"`
+		} `json:"coverage"`
+		Contract struct {
+			AuditIdentities []struct {
+				Source         string `json:"source"`
+				DatasetVersion string `json:"datasetVersion"`
+				Model          string `json:"model"`
+			} `json:"auditIdentities"`
+		} `json:"contract"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Coverage.SourceInventory.ManifestSHA256 != inv.ManifestHash() {
+		t.Fatalf("capabilities inventory hash=%q want=%q", response.Coverage.SourceInventory.ManifestSHA256, inv.ManifestHash())
+	}
+	found := false
+	for _, identity := range response.Contract.AuditIdentities {
+		if identity.Source == "numbered" && identity.DatasetVersion == "inventory:"+inv.ManifestHash() && identity.Model == "source-kernel-state-at-audit-epoch" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("capabilities omitted inventory audit tuple: %+v", response.Contract.AuditIdentities)
+	}
+}
 func TestTrajectoryValidationAndMissingState(t *testing.T) {
 	s := testServer(t)
 	body := strings.NewReader(`{"bodyIds":["naif:401"],"startJd":2461287.5,"endJd":2461288.5,"samples":2,"frame":"ECLIPJ2000"}`)
@@ -249,6 +293,9 @@ func TestCurrentStatesColumnarMatchesSingleIdentityState(t *testing.T) {
 	}
 	if response.InventoryManifestSHA256 == "" || response.Source[0] != "numbered" || response.CenterIDs[0] != "naif:10" || response.Precision[0] != "approximate" {
 		t.Fatalf("missing source metadata: %+v", response)
+	}
+	if response.StateOriginID != "naif:0" || response.DatasetVersion[0] != "inventory:"+inv.ManifestHash() {
+		t.Fatalf("missing absolute-state identity: origin=%q version=%q", response.StateOriginID, response.DatasetVersion[0])
 	}
 	if response.StateValues[0] != single.State.Position.X || response.StateValues[5] != single.State.Velocity.Z {
 		t.Fatalf("single/batch mismatch: single=%+v batch=%v", single.State, response.StateValues)

@@ -101,9 +101,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) capabilities(w http.ResponseWriter, _ *http.Request) {
 	coverage := map[string]any{"goal": "all-known-solar-system-bodies", "manifestProfile": s.catalog.ManifestProfile(), "manifestContract": s.catalog.ManifestContract(), "counts": s.catalog.Stats()}
 	if s.inventory != nil {
-		coverage["sourceInventory"] = map[string]any{"totalRecords": s.inventory.TotalRecords(), "compressedBytes": s.inventory.TotalBytes(), "shards": s.inventory.ShardCount(), "index": s.inventory.IndexStats(), "uniqueBodySemantics": "not-deduplicated"}
+		coverage["sourceInventory"] = map[string]any{"manifestSha256": s.inventory.ManifestHash(), "totalRecords": s.inventory.TotalRecords(), "compressedBytes": s.inventory.TotalBytes(), "shards": s.inventory.ShardCount(), "index": s.inventory.IndexStats(), "uniqueBodySemantics": "not-deduplicated"}
 	}
-	s.json(w, http.StatusOK, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "manifestSha256": s.catalog.ManifestHash(), "coverage": coverage, "contract": map[string]any{"timeScale": "TDB", "epoch": "Julian date", "frame": "ECLIPJ2000", "distanceUnit": "km", "velocityUnit": "km/s", "precisionModes": []string{"exact", "approximate-opt-in"}, "modelBoundary": "Exact requests use verified SPK coefficients or source state evidence; approximate source-element propagation is explicit opt-in", "nBody": false}, "limits": map[string]int{"catalogPageMax": 500, "trajectoryBodiesMax": 64, "trajectorySamplesMax": 10000, "currentStateIDsMax": maxCurrentStateIDs, "currentStateBodyBytes": maxBodyBytes, "currentStateResponseBytes": maxCurrentStateResponseBytes, "inventoryPageMax": 500, "inventoryMaxIndexedRecords": inventory.MaxIndexedRecords, "inventoryMaxIndexPostings": inventory.MaxIndexPostings, "inventoryMaxShards": inventory.MaxShards, "inventoryMaxShardBytes": inventory.MaxShardBytes}, "profiles": map[string]any{"full": map[string]any{"catalog": true, "identities": s.inventory != nil, "trajectory": true, "currentStates": true}, "preview": map[string]any{"catalog": "curated", "fullOnlyVisible": true, "restrictedActions": "blocked"}}})
+	identities := s.catalog.AuditIdentityTuples()
+	if s.inventory != nil {
+		inventoryVersion := "inventory:" + s.inventory.ManifestHash()
+		for _, source := range s.inventory.SourceIdentities() {
+			for _, model := range []string{"spk-original", "source-kernel-state-at-audit-epoch", "exact-only", "source-elements-two-body", "approximate-opt-in"} {
+				identities = append(identities, map[string]string{"source": source, "datasetVersion": inventoryVersion, "model": model})
+			}
+		}
+	}
+	s.json(w, http.StatusOK, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "manifestSha256": s.catalog.ManifestHash(), "coverage": coverage, "contract": map[string]any{"timeScale": "TDB", "epoch": "Julian date", "frame": "ECLIPJ2000", "distanceUnit": "km", "velocityUnit": "km/s", "precisionModes": []string{"exact", "approximate-opt-in"}, "modelBoundary": "Exact requests use verified SPK coefficients or source state evidence; approximate source-element propagation is explicit opt-in", "nBody": false, "auditIdentities": identities}, "limits": map[string]int{"catalogPageMax": 500, "trajectoryBodiesMax": 64, "trajectorySamplesMax": 10000, "currentStateIDsMax": maxCurrentStateIDs, "currentStateBodyBytes": maxBodyBytes, "currentStateResponseBytes": maxCurrentStateResponseBytes, "inventoryPageMax": 500, "inventoryMaxIndexedRecords": inventory.MaxIndexedRecords, "inventoryMaxIndexPostings": inventory.MaxIndexPostings, "inventoryMaxShards": inventory.MaxShards, "inventoryMaxShardBytes": inventory.MaxShardBytes}, "profiles": map[string]any{"full": map[string]any{"catalog": true, "identities": s.inventory != nil, "trajectory": true, "currentStates": true}, "preview": map[string]any{"catalog": "curated", "fullOnlyVisible": true, "restrictedActions": "blocked"}}})
 }
 
 func (s *Server) catalogPage(w http.ResponseWriter, r *http.Request) {
@@ -531,6 +540,7 @@ type currentStatesResponse struct {
 	VelocityUnit            string                 `json:"velocityUnit"`
 	StateLayout             string                 `json:"stateLayout"`
 	StateStride             int                    `json:"stateStride"`
+	StateOriginID           string                 `json:"stateOriginId"`
 	IDs                     []string               `json:"ids"`
 	Availability            []catalog.Availability `json:"availability"`
 	Precision               []string               `json:"precision"`
@@ -695,6 +705,7 @@ func (s *Server) currentStates(w http.ResponseWriter, r *http.Request) {
 		VelocityUnit:          "km/s",
 		StateLayout:           "row-major-[x,y,z,vx,vy,vz]",
 		StateStride:           6,
+		StateOriginID:         "naif:0",
 		IDs:                   make([]string, 0, len(ids)),
 		Availability:          make([]catalog.Availability, 0, len(ids)),
 		Precision:             make([]string, 0, len(ids)),
@@ -758,7 +769,7 @@ func (s *Server) currentStates(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		} else if record, ok := records[id]; ok {
-			row.SourceRecord, row.Source, row.IdentityStatus, row.CenterID = true, record.Source, record.IdentityStatus, record.ParentID
+			row.SourceRecord, row.Source, row.DatasetVersion, row.IdentityStatus, row.CenterID = true, record.Source, "inventory:"+s.inventory.ManifestHash(), record.IdentityStatus, record.ParentID
 			if record.Orbit != nil {
 				row.CenterID = record.Orbit.Center
 			}
