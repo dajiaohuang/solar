@@ -31,6 +31,14 @@ actions are blocked.
 `GET /v1/catalog?q=&limit=&pageToken=` returns a lexicographically stable,
 paginated list. `limit` is 1–500 and page tokens are opaque to clients.
 
+`GET /v1/inventory?q=&limit=&pageToken=` streams the optional audited all-body
+source inventory. It reports `totalRecords` and `sourceRecords: true`; rows are
+not deduplicated, promoted to selectable bodies, or counted as unique objects.
+Each row retains source designation, identity/parent status, geometry and
+ephemeris status (including open-conic and missing-parent states). The service
+loads gzip JSONL shards lazily from the explicit `-inventory-dir` argument, so
+the 1,567,193-record audit does not become an unbounded startup allocation.
+
 `GET /v1/bodies/{id}` returns one catalog record. Unknown IDs are a 404; a
 known source target without local data is a 200 catalog record with
 `availability: "missing"`.

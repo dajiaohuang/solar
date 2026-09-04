@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/dajiaohuang/solar/backend/internal/spk"
 )
 
 const APIVersion = "solar.api/v1"
@@ -74,6 +76,15 @@ type Catalog struct {
 	manifestFiles    int
 	manifestTargets  int
 	packagedFiles    int
+	kernels          map[string]*kernelBinding
+	byTarget         map[int][]*kernelBinding
+}
+
+type kernelBinding struct {
+	id             string
+	kernel         *spk.Kernel
+	dependencyOnly bool
+	solutionIDs    []string
 }
 
 type manifest struct {
@@ -83,11 +94,13 @@ type manifest struct {
 	Files    []manifestFile `json:"files"`
 }
 type manifestFile struct {
-	ID      string  `json:"id"`
-	Path    string  `json:"path"`
-	Targets []int   `json:"targets"`
-	StartET float64 `json:"startEt"`
-	EndET   float64 `json:"endEt"`
+	ID                string   `json:"id"`
+	Path              string   `json:"path"`
+	Targets           []int    `json:"targets"`
+	StartET           float64  `json:"startEt"`
+	EndET             float64  `json:"endEt"`
+	DependencyOnly    bool     `json:"dependencyOnly"`
+	SolutionKernelIDs []string `json:"solutionKernelIds"`
 }
 type ephemerisBodyFile struct {
 	EpochJD float64 `json:"epochJd"`
@@ -139,7 +152,7 @@ func Load(dataDir string) (*Catalog, error) {
 		return loadBuiltins(fmt.Errorf("parse manifest: %w", err))
 	}
 	h := sha256.Sum256(mb)
-	c := &Catalog{byID: make(map[string]Body), version: m.ID, manifestHash: hex.EncodeToString(h[:]), manifestProfile: m.Profile, manifestContract: m.Contract, manifestFiles: len(m.Files)}
+	c := &Catalog{byID: make(map[string]Body), kernels: make(map[string]*kernelBinding), byTarget: make(map[int][]*kernelBinding), version: m.ID, manifestHash: hex.EncodeToString(h[:]), manifestProfile: m.Profile, manifestContract: m.Contract, manifestFiles: len(m.Files)}
 	manifestTargetIDs := make(map[int]struct{})
 	// Keep stable, well-known body identities available even without the large kernels.
 	for _, b := range builtins() {
@@ -150,8 +163,18 @@ func Load(dataDir string) (*Catalog, error) {
 			manifestTargetIDs[target] = struct{}{}
 		}
 		present := fileExists(filepath.Join(dataDir, f.Path))
+		var binding *kernelBinding
 		if present {
-			c.packagedFiles++
+			if raw, readErr := os.ReadFile(filepath.Join(dataDir, f.Path)); readErr == nil {
+				if k, parseErr := spk.New(raw); parseErr == nil {
+					binding = &kernelBinding{id: f.ID, kernel: k, dependencyOnly: f.DependencyOnly, solutionIDs: append([]string(nil), f.SolutionKernelIDs...)}
+					c.kernels[f.ID] = binding
+					c.packagedFiles++
+					for _, target := range f.Targets {
+						c.byTarget[target] = append(c.byTarget[target], binding)
+					}
+				}
+			}
 		}
 		for _, naif := range f.Targets {
 			id := "naif:" + strconv.Itoa(naif)
@@ -165,9 +188,12 @@ func Load(dataDir string) (*Catalog, error) {
 			if f.EndET > b.ValidityEndET {
 				b.ValidityEndET = f.EndET
 			}
-			if present {
+			if binding != nil {
 				b.Availability = AvailableOperational
 				b.MissingReason = ""
+			} else if present {
+				b.Availability = Missing
+				b.MissingReason = "kernel-invalid"
 			} else if b.Availability != AvailableFallback {
 				b.Availability = Missing
 				b.MissingReason = "kernel-not-packaged"
@@ -185,6 +211,15 @@ func Load(dataDir string) (*Catalog, error) {
 			}
 		}
 	}
+	for id, b := range c.byID {
+		if b.NAIFID != 0 && len(c.byTarget[b.NAIFID]) > 0 {
+			b.Availability = AvailableOperational
+			b.MissingReason = ""
+			b.Model = "spk-original"
+			c.byID[id] = b
+		}
+	}
+	c.rebuild()
 	return c, nil
 }
 
@@ -201,6 +236,9 @@ func (c *Catalog) add(b Body) {
 		return
 	}
 	c.byID[b.ID] = b
+	c.rebuild()
+}
+func (c *Catalog) rebuild() {
 	c.bodies = c.bodies[:0]
 	for _, x := range c.byID {
 		c.bodies = append(c.bodies, x)
@@ -238,6 +276,102 @@ func (c *Catalog) Page(query string, offset, limit int) []Body {
 	}
 	return out
 }
+
+// OperationalState resolves one source-kernel state and its center chain at a
+// TDB Julian epoch. Dependency-only kernels are usable only through an
+// explicit solutionKernelIds pool; unrelated source pools are never mixed.
+func (c *Catalog) OperationalState(id string, jd float64) (State, bool, error) {
+	b, ok := c.byID[id]
+	if !ok || b.NAIFID == 0 || len(c.byTarget) == 0 || !validFloat(jd) {
+		return State{}, false, nil
+	}
+	et := (jd - 2451545.0) * 86400
+	var root *kernelBinding
+	for n := len(c.byTarget[b.NAIFID]) - 1; n >= 0; n-- {
+		candidate := c.byTarget[b.NAIFID][n]
+		if candidate.dependencyOnly {
+			continue
+		}
+		if _, found, err := candidate.kernel.Evaluate(b.NAIFID, et); err != nil {
+			return State{}, false, err
+		} else if found {
+			root = candidate
+			break
+		}
+	}
+	if root == nil {
+		return State{}, false, nil
+	}
+	var allowed map[string]bool
+	if len(root.solutionIDs) > 0 {
+		allowed = make(map[string]bool, len(root.solutionIDs)+1)
+		for _, x := range root.solutionIDs {
+			allowed[x] = true
+		}
+		allowed[root.id] = true
+	}
+	st, found, err := c.resolveOperational(b.NAIFID, et, allowed, map[int]bool{})
+	if !found || err != nil {
+		return State{}, found, err
+	}
+	return State{Position: toEcliptic(st.Position, st.Frame), Velocity: toEcliptic(st.Velocity, st.Frame)}, true, nil
+}
+
+func (c *Catalog) resolveOperational(target int, et float64, allowed map[string]bool, visiting map[int]bool) (spk.State, bool, error) {
+	if target == 0 {
+		return spk.State{Center: 0, Frame: 17}, true, nil
+	}
+	if visiting[target] {
+		return spk.State{}, false, fmt.Errorf("cyclic SPK center chain")
+	}
+	visiting[target] = true
+	defer delete(visiting, target)
+	for n := len(c.byTarget[target]) - 1; n >= 0; n-- {
+		binding := c.byTarget[target][n]
+		if allowed != nil {
+			if !allowed[binding.id] {
+				continue
+			}
+		} else if binding.dependencyOnly {
+			continue
+		}
+		st, found, err := binding.kernel.Evaluate(target, et)
+		if err != nil {
+			return spk.State{}, false, err
+		}
+		if !found {
+			continue
+		}
+		center, centerFound, err := c.resolveOperational(st.Center, et, allowed, visiting)
+		if err != nil {
+			return spk.State{}, false, err
+		}
+		if !centerFound {
+			return spk.State{}, false, nil
+		}
+		st.Position = addSPK(center.Position, convertFrame(st.Position, st.Frame))
+		st.Velocity = addSPK(center.Velocity, convertFrame(st.Velocity, st.Frame))
+		st.Frame = 17
+		st.Center = 0
+		return st, true, nil
+	}
+	return spk.State{}, false, nil
+}
+func convertFrame(v spk.Vec3, frame int) spk.Vec3 {
+	if frame == 17 {
+		return v
+	}
+	if frame != 1 {
+		return spk.Vec3{X: math.NaN(), Y: math.NaN(), Z: math.NaN()}
+	}
+	const eps = 84381.448 / 3600 * math.Pi / 180
+	return spk.Vec3{X: v.X, Y: math.Cos(eps)*v.Y + math.Sin(eps)*v.Z, Z: -math.Sin(eps)*v.Y + math.Cos(eps)*v.Z}
+}
+func toEcliptic(v spk.Vec3, frame int) Vec3 {
+	x := convertFrame(v, frame)
+	return Vec3{X: x.X, Y: x.Y, Z: x.Z}
+}
+func addSPK(a, b spk.Vec3) spk.Vec3 { return spk.Vec3{X: a.X + b.X, Y: a.Y + b.Y, Z: a.Z + b.Z} }
 
 func fromEphemeris(x struct {
 	ID        string `json:"id"`

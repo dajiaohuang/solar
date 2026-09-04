@@ -13,22 +13,28 @@ import (
 	"sync/atomic"
 
 	"github.com/dajiaohuang/solar/backend/internal/catalog"
+	"github.com/dajiaohuang/solar/backend/internal/inventory"
 	"github.com/dajiaohuang/solar/backend/internal/science"
 )
 
 const maxBodyBytes = 1 << 20
 
 type Server struct {
-	catalog  *catalog.Catalog
-	slots    chan struct{}
-	inFlight atomic.Int64
+	catalog   *catalog.Catalog
+	inventory *inventory.Inventory
+	slots     chan struct{}
+	inFlight  atomic.Int64
 }
 
-func New(c *catalog.Catalog, maxConcurrent int) *Server {
+func New(c *catalog.Catalog, maxConcurrent int, inventories ...*inventory.Inventory) *Server {
 	if maxConcurrent < 1 {
 		maxConcurrent = 1
 	}
-	return &Server{catalog: c, slots: make(chan struct{}, maxConcurrent)}
+	var inv *inventory.Inventory
+	if len(inventories) > 0 {
+		inv = inventories[0]
+	}
+	return &Server{catalog: c, inventory: inv, slots: make(chan struct{}, maxConcurrent)}
 }
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Solar-API-Version", catalog.APIVersion)
@@ -59,6 +65,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.capabilities(w, r)
 	case r.Method == "GET" && path == "catalog":
 		s.catalogPage(w, r)
+	case r.Method == "GET" && path == "inventory":
+		s.inventoryPage(w, r)
 	case r.Method == "GET" && strings.HasPrefix(path, "bodies/"):
 		s.body(w, r, strings.TrimPrefix(path, "bodies/"))
 	case r.Method == "POST" && path == "trajectory":
@@ -101,6 +109,28 @@ func (s *Server) catalogPage(w http.ResponseWriter, r *http.Request) {
 		next = base64.RawURLEncoding.EncodeToString([]byte(strconv.Itoa(offset + len(items))))
 	}
 	s.json(w, 200, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "items": items, "nextPageToken": next, "offset": offset, "limit": limit})
+}
+
+func (s *Server) inventoryPage(w http.ResponseWriter, r *http.Request) {
+	if s.inventory == nil {
+		s.error(w, http.StatusNotFound, "inventory_unavailable", "source inventory is not configured for this service")
+		return
+	}
+	limit, err := parseIntDefault(r.URL.Query().Get("limit"), 100)
+	if err != nil || limit < 1 || limit > 500 {
+		s.error(w, 400, "invalid_limit", "limit must be between 1 and 500")
+		return
+	}
+	rows, next, err := s.inventory.Page(r.Context(), r.URL.Query().Get("pageToken"), r.URL.Query().Get("q"), limit)
+	if err != nil {
+		if r.Context().Err() != nil {
+			s.error(w, 408, "cancelled", "request cancelled")
+		} else {
+			s.error(w, 400, "invalid_page_token", err.Error())
+		}
+		return
+	}
+	s.json(w, 200, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "inventoryManifestSha256": s.inventory.ManifestHash(), "sourceRecords": true, "uniqueBodySemantics": "not-deduplicated", "totalRecords": s.inventory.TotalRecords(), "shards": s.inventory.ShardCount(), "records": rows, "nextPageToken": next, "limit": limit})
 }
 
 func (s *Server) body(w http.ResponseWriter, r *http.Request, id string) {
@@ -177,6 +207,29 @@ func (s *Server) trajectory(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		tb := trajectoryBody{ID: id, Availability: b.Availability, MissingReason: b.MissingReason, Model: b.Model}
+		if b.Availability == catalog.AvailableOperational {
+			tb.States = make([]catalog.State, req.Samples)
+			for i := 0; i < req.Samples; i++ {
+				if err := r.Context().Err(); err != nil {
+					s.error(w, 408, "cancelled", "request cancelled")
+					return
+				}
+				st, found, err := s.catalog.OperationalState(id, req.StartJD+float64(i)*step)
+				if err != nil {
+					s.error(w, 422, "state_unavailable", err.Error())
+					return
+				}
+				if !found {
+					tb.States = nil
+					tb.Availability = catalog.Missing
+					tb.MissingReason = "kernel-coverage-gap"
+					break
+				}
+				tb.States[i] = st
+			}
+			out = append(out, tb)
+			continue
+		}
 		if b.Availability == catalog.Missing || b.Elements == nil {
 			if tb.MissingReason == "" {
 				tb.MissingReason = "no-supported-state-model"
