@@ -92,6 +92,15 @@ describe('catalog point worker scheduler', () => {
     expect(errors).toEqual(['worker closed'])
   })
 
+  it('surfaces an initialize error instead of ignoring it as non-compute traffic', () => {
+    const { sent, errors, scheduler } = harness()
+    scheduler.setElements(new Float64Array(8))
+    scheduler.handle({ type: 'error', requestId: sent[0].requestId, error: 'invalid elements' })
+    expect(errors).toEqual(['invalid elements'])
+    scheduler.requestJulianDay(1)
+    expect(sent).toHaveLength(1)
+  })
+
   it('resets the worker dataset before a later record set is initialized', () => {
     const { sent, scheduler } = harness()
     scheduler.setElements(new Float64Array(8))
