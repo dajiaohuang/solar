@@ -66,6 +66,36 @@ old and new benchmark loading paths differ, their latency difference is not an
 isolated causal performance comparison. Catalog propagation remains approximate
 MPC-element propagation, not a precision upgrade to SPK.
 
+## Complete-system loading under CPU constraints
+
+CI exposed a real cold-loading bottleneck: the complete Saturn scene was still
+loading at its existing 60/90-second assertions, despite successful HTTP responses.
+Every file start, install and completion previously invalidated the body registry,
+repeating current-state evaluation and renderer updates hundreds of times.
+
+The loader now separates loading/error notifications from scientific revision
+changes, combines background install notifications in a 100 ms window and flushes
+terminal successful state before returning. Initial loading is published immediately.
+Direct kernel installation still invalidates immediately; four-way concurrency,
+checksums, error reporting and overlapping-request deduplication are preserved.
+Preset tests wait for the requested scene's loader and computation, not unrelated
+background network silence. Existing deadlines and exact position counts remain.
+
+Local production Chromium 152 with ANGLE SwiftShader and synthetic 4× CPU throttling
+gave the following observed runs with the same 294 selected identities and epoch:
+
+| Implementation | Time to 293 valid positions | Script CPU time | Main-thread long tasks |
+|---|---:|---:|---:|
+| Per-file revision updates | 45.33 s | 40.63 s | 304 |
+| Batched 100 ms updates | 9.58 s | 5.47 s | 41 |
+
+Both runs retained the one missing state and had no browser page errors. This is
+a local diagnostic comparison, not a repeated statistical benchmark, a hardware
+memory-tier guarantee, or proof of physical-device performance. It measures time
+to complete current-position coverage, not completion of historical trajectories.
+The baseline's Resource Timing buffer capped network observations; those partial
+network counts are not used to claim a network-throughput improvement.
+
 ## Remaining measurement boundaries
 
 Full React/GPU allocation and frame-time comparisons, large catalog selection
