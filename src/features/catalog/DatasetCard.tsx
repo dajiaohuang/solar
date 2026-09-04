@@ -1,6 +1,7 @@
 import { useI18n } from '../../i18n/context'
 import { datasetDisplayTimestamps } from '../../lib/datasetProvenance'
 import { catalogStore } from '../../state/catalog-store'
+import { PRODUCT_PROFILE } from '../../lib/productAvailability'
 
 export function DatasetCard({ compact = false }: { compact?: boolean }) {
   const catalog = catalogStore.useStore()
@@ -32,10 +33,12 @@ export function DatasetCard({ compact = false }: { compact?: boolean }) {
     : []
   return (
     <div className={`dataset-card ${compact ? 'compact' : ''}`}>
-      <div className="dataset-status"><i /><span>{catalog.manifest.datasetMode?.toUpperCase() ?? 'LEGACY'}</span></div>
+      <div className="dataset-status"><i /><span>{PRODUCT_PROFILE === 'preview' ? t('previewSample') : catalog.manifest.datasetMode?.toUpperCase() ?? 'LEGACY'}</span></div>
+      {PRODUCT_PROFILE === 'preview' && <p className="preview-source-boundary">{t('previewSourceBoundary')}</p>}
       <dl>
         <div><dt>{t('version')}</dt><dd>{catalog.manifest.version}</dd></div>
-        <div><dt>{t('objects')}</dt><dd>{catalog.manifest.totalCount.toLocaleString()}</dd></div>
+        <div><dt>{t(PRODUCT_PROFILE === 'preview' ? 'previewSourceObjects' : 'objects')}</dt><dd>{catalog.manifest.totalCount.toLocaleString()}</dd></div>
+        {PRODUCT_PROFILE === 'preview' && <div><dt>{t('previewSample')}</dt><dd>{catalog.manifest.precomputedSamples?.mobile?.count.toLocaleString() ?? '—'}</dd></div>}
         {!compact && <>
           <div><dt>{t('source')}</dt><dd>MPCORB · Minor Planet Center</dd></div>
           <div><dt>{t('mpcSnapshot')}</dt><dd>{new Date(sourceLastModifiedAt).toLocaleString()}</dd></div>

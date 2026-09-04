@@ -8,6 +8,7 @@ import { datasetDisplayTimestamps } from '../../lib/datasetProvenance'
 import { catalogStore } from '../../state/catalog-store'
 import { DatasetCard } from '../catalog/DatasetCard'
 import { EPHEMERIS_MANIFEST } from '../../engine/ephemeris/kernelStore'
+import { PRODUCT_PROFILE } from '../../lib/productAvailability'
 
 type ValidationReport = {
   passed?: boolean
@@ -75,6 +76,7 @@ export function EvidenceWorkspace() {
       <section className="evidence-module glass-panel"><div className="module-heading"><span>{t('provenance')}</span><em>{t('dataLayer').toUpperCase()}</em></div><DatasetCard /></section>
 
       <section className="evidence-module glass-panel"><div className="module-heading"><span>{t('validation')}</span><em className={activeValidation?.passed ? 'pass' : ''}>{activeValidation ? (activeValidation.passed ? t('validationPass') : t('validationReview')) : t('validationMissing')}</em></div>{activeValidation ? <>
+        {PRODUCT_PROFILE === 'preview' && <p className="preview-source-boundary">{t('previewSourceBoundary')}</p>}
         <div className="hero-metric"><strong>{(activeValidation.validObjects ?? 0).toLocaleString()}</strong><span>{t('validatedRecords')}</span></div>
         <div className="metric-grid"><Metric label={t('rejected')} value={(activeValidation.rejectedObjects ?? 0).toLocaleString()} /><Metric label={t('rejectedFraction')} value={`${((activeValidation.rejectedFraction ?? 0) * 100).toFixed(3)}%`} /></div>
         <div className="invariant-list">{Object.entries(activeValidation.invariants ?? {}).map(([key, value]) => <div key={key}><i className={value ? 'pass' : 'fail'} />{key}<strong>{String(value)}</strong></div>)}</div>

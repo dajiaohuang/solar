@@ -2,6 +2,8 @@
 
 > **开发定位：** Web、Android、iOS 三个独立前端项目，共用统一后端。GitHub Pages 使用相同 Web 前端，开放精选核心功能；完整版内容保留可见入口，但不可选中，并提示使用完整版。当前版本仍是纯前端 Web 与 Capacitor 应用壳，迁移尚未完成。详见[产品定位与验收标准](./docs/product-direction.md)。
 
+独立的 [Go 后端实现](./backend/README.md)已有可本地运行的源码；客户端接入与后端公开部署仍是尚未完成的独立步骤。
+
 **浏览器原生的太阳系动力学与小天体图谱：场景可复现、数据可追溯、模型边界明确。**
 
 [![生产部署](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml) [![Android 与 iOS](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml/badge.svg?branch=main)](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml)
@@ -79,7 +81,7 @@ Solar Atlas 当前提供三十个一键预设，包括围绕十六个母天体�
 
 场景 URL **v4** 会记录回放工作区所需的科学与交互状态：路由、不可变数据集版本、数据模式、历元、主/对比参考系、聚焦集合、筛选器、轨迹采样、视图模式、目录点云开关、3D 性能档位、元素图、引导课程步骤、任务端点/日期、语言和视图参数。
 
-目录工作区和数据集驱动预设会把 `catalogSample=mobile|desktop` 与 manifest 声明的 `catalogSampleCount` 成对固定。字段不完整、版本不可用、档位不支持或数量不匹配时，样本加载会失败关闭。v2 和 v3 链接仍可读取，并在响应式样本解析后升级为 v4。场景还可保存在本地，并以带版本的 JSON 场景库导入或导出。
+目录工作区和数据集驱动预设会把 `catalogSample=mobile|desktop` 与 manifest 声明的 `catalogSampleCount` 成对固定。字段不完整、版本不可用、档位不支持或数量不匹配时，样本加载会失败关闭。当前实现尚能读取 v2/v3 链接，但维护旧格式兼容已不再是开发要求。场景还可保存在本地，并以携带科学数据身份的 JSON 场景库导入或导出。
 
 | 可复现保证 | 明确不保证 |
 | --- | --- |
@@ -213,6 +215,12 @@ npm run build:deploy
 npm run check:capacity
 ```
 
+### 精选预览版构建
+
+`npm run build:preview` 使用**相同 Web 前端**构建精选产品配置；本地需先安装 `.github/asteroid-dataset.json` 固定的已审计数据集。它保留 3D 综合看板、精选预设与课程、来源证据和 8,000 条展示样本。完整版入口保持可见并提供无障碍说明，受限场景链接保留原始意图。这不代表全目录或全部天体状态覆盖。
+
+Pages 流程先验证完整 Web，再构建、测试并仅发布精选预览。**不要求旧客户端兼容：** 不为旧 App 保留完整目录，切换后其在线目录访问将停止；完整版客户端与后端接入仍在开发。原生构建拒绝预览产品配置。详见[预览交付与验证](./docs/preview-delivery.md)。开发优先级现为联合优化所有前端、Go 后端及存储，尽量同时精确计算并展示更多天体，以实测性能和明确精度边界验收。
+
 常用管线变量：
 
 | 变量 | 含义 |
@@ -307,7 +315,7 @@ Android 与 iOS 工程使用独立的 Capacitor 本地应用壳构建，不注�
 
 - 从 `npm ci` 开始，并运行上方相关检查；
 - 科学改动应附主要来源、模型/有效期说明与确定性回归 fixture；
-- 保持 v4 URL 兼容，或提供明确迁移路径；
+- 验证当前场景协议，不要求兼容旧格式；
 - 同步维护中英文文案；
 - UI 改动应检查键盘、桌面/移动端、减少动态效果偏好及 2D/WebGL 回退；
 - 不要把二体或示意输出描述成业务星历、N 体结果、风险评估或导航产品。

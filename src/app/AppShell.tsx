@@ -13,6 +13,9 @@ import { AppRouteView } from './routes'
 import { CommandPalette } from './CommandPalette'
 import { IS_NATIVE_APP } from '../lib/platform'
 import { onNativeBack } from '../lib/nativeBack'
+import { PRODUCT_PROFILE, routeAvailability } from '../lib/productAvailability'
+import { availabilityActions } from '../state/availability-store'
+import { PreviewAvailability } from './PreviewAvailability'
 
 type NavLabel = 'explorer' | 'catalog' | 'elements' | 'events' | 'mission' | 'stories' | 'about'
 type NavItem = { route: AppRoute; icon: string; label: NavLabel }
@@ -126,6 +129,10 @@ export function AppShell() {
     setMobileMoreOpen(false)
   }
 
+  function availabilityProps(route: AppRoute) {
+    return routeAvailability(route).available ? {} : { 'aria-disabled': true as const, 'aria-describedby': 'preview-restriction-description' }
+  }
+
   function activateUpdate() {
     if (!waitingWorker) return
     let reloading = false
@@ -143,21 +150,22 @@ export function AppShell() {
         <span className="brand-mark"><i /><b>☉</b></span>
         <span><strong>{t('brand')}</strong><small>{t('tagline')}</small></span>
       </button>
-      <nav className="primary-navigation" aria-label={t('primaryNavigation')}>{NAVIGATION.map((item) => <button key={item.route} aria-current={ui.route === item.route ? 'page' : undefined} className={ui.route === item.route ? 'active' : ''} onClick={() => navigate(item.route)}><span>{item.icon}</span>{t(item.label)}</button>)}</nav>
+      <nav className="primary-navigation" aria-label={t('primaryNavigation')}>{NAVIGATION.map((item) => <button key={item.route} {...availabilityProps(item.route)} aria-current={ui.route === item.route ? 'page' : undefined} className={ui.route === item.route ? 'active' : ''} onClick={() => navigate(item.route)}><span>{item.icon}</span>{t(item.label)}{!routeAvailability(item.route).available && <small className="full-version-badge">{t('fullVersion')}</small>}</button>)}</nav>
       <div className="header-actions">
+        {PRODUCT_PROFILE === 'preview' && <button className="preview-profile-button" onClick={availabilityActions.explain}>{t('previewVersion')}</button>}
         <button className="command-button" onClick={() => setCommandOpen(true)} aria-label={t('globalSearch')}><span>⌕</span><kbd>⌘K</kbd></button>
-        <button className="dataset-pill" onClick={() => navigate('about')} aria-label={`${t('dataset')}: ${catalog.manifest?.version ?? t('noDataset')}`}><i className={catalog.manifest ? 'online' : ''} /><span>{catalog.manifest?.version ?? t('noDataset').toUpperCase()}</span><b>{(catalog.manifest?.datasetMode ?? catalog.mode).toUpperCase()}</b></button>
+        <button className="dataset-pill" onClick={() => navigate('about')} aria-label={`${t('dataset')}: ${catalog.manifest?.version ?? t('noDataset')}`}><i className={catalog.manifest ? 'online' : ''} /><span>{catalog.manifest?.version ?? t('noDataset').toUpperCase()}</span><b>{PRODUCT_PROFILE === 'preview' ? t('previewSample') : (catalog.manifest?.datasetMode ?? catalog.mode).toUpperCase()}</b></button>
         <button className="language-button" onClick={toggleLanguage} aria-label={language === 'zh' ? 'Switch to English' : '切换为中文'}>{language === 'zh' ? 'EN' : '中文'}</button>
       </div>
     </header>
     <div className="route-container" ref={routeContainerRef} tabIndex={-1} role={ui.route === 'explorer' || ui.route === 'home' ? undefined : 'main'}><AppRouteView route={ui.route} /></div>
 
     <nav className="mobile-navigation" aria-label={t('mobileNavigation')}>
-      {MOBILE_PRIMARY.map((item) => <button key={item.route} aria-current={ui.route === item.route ? 'page' : undefined} className={ui.route === item.route ? 'active' : ''} onClick={() => navigate(item.route)}><span>{item.icon}</span><small>{item.route === 'stories' ? t('learn') : item.route === 'catalog' ? t('search') : t(item.label)}</small></button>)}
+      {MOBILE_PRIMARY.map((item) => <button key={item.route} {...availabilityProps(item.route)} aria-current={ui.route === item.route ? 'page' : undefined} className={ui.route === item.route ? 'active' : ''} onClick={() => navigate(item.route)}><span>{item.icon}</span><small>{item.route === 'stories' ? t('learn') : item.route === 'catalog' ? t('search') : t(item.label)}</small>{!routeAvailability(item.route).available && <small className="full-version-badge">{t('fullVersion')}</small>}</button>)}
       <button aria-expanded={mobileMoreOpen} className={mobileMoreOpen || MOBILE_MORE.some((item) => item.route === ui.route) || ui.route === 'home' ? 'active' : ''} onClick={() => setMobileMoreOpen((value) => !value)}><span>•••</span><small>{t('more')}</small></button>
     </nav>
     {mobileMoreOpen && <div className="mobile-more-menu glass-panel">
-      {MOBILE_MORE.map((item) => <button key={item.route} className={ui.route === item.route ? 'active' : ''} onClick={() => navigate(item.route)}><span>{item.icon}</span>{t(item.label)}</button>)}
+      {MOBILE_MORE.map((item) => <button key={item.route} {...availabilityProps(item.route)} className={ui.route === item.route ? 'active' : ''} onClick={() => navigate(item.route)}><span>{item.icon}</span>{t(item.label)}{!routeAvailability(item.route).available && <small className="full-version-badge">{t('fullVersion')}</small>}</button>)}
     </div>}
 
     {ui.route === 'explorer' && <FirstRunGuide />}
@@ -168,5 +176,6 @@ export function AppShell() {
       <button className="primary-button" onClick={activateUpdate}>{t('refreshNow')}</button>
     </aside>}
     {ui.toast && <div className="toast" role="status">{ui.toast}</div>}
+    <PreviewAvailability />
   </div>
 }

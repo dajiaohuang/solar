@@ -1,6 +1,8 @@
 # Product direction / 产品定位
 
-Owner-directed target, 2026-09-04. This document records the next architecture, not capabilities already shipped. / 2026-09-04 用户确定的目标架构；本文不代表相关能力已经交付。
+Owner-directed target, updated 2026-09-05. This document records the next architecture, not capabilities already shipped. / 用户确定的目标架构，2026-09-05 更新；本文不代表相关能力已经交付。
+
+**Priority: maximize simultaneous scientifically valid computation and display.** Optimize all three frontends, the Go backend and storage together, using measured throughput, latency, peak memory, I/O and frame-time evidence. Old-client, old-API and old-scene compatibility are not acceptance requirements; do not add compatibility layers, duplicate catalogs or migration-only hosting. Data/source identities, checksums, precision and validity windows remain mandatory for reproducibility, not backward compatibility. Distinguish cataloged objects, objects with valid precise states, approximate display samples and currently rendered objects. Never replace unavailable precise states with approximations to inflate counts. / **优先级：尽量同时精确计算并展示更多天体。** 联合优化三个前端、Go 后端和存储，以实测吞吐、延迟、峰值内存、I/O 与帧时间验收。旧客户端、旧 API 和旧场景兼容不是验收要求；不增加兼容层、重复目录或仅用于迁移的数据托管。数据/来源身份、校验、精度和有效窗口仍是可复现性要求，不是旧版兼容。分别统计已收录对象、具有有效精确状态的对象、近似展示样本和当前渲染对象；不能为了数量用近似状态替代缺失的精确状态。
 
 The shared backend will be implemented in **Go**, as a separately owned development workstream. Optimize using reproducible latency/throughput/memory benchmarks and profiling without relaxing scientific accuracy, source coverage or validation. Frontend work stays separate and coordinates through the versioned API contract. / 统一后端确定使用 **Go**，拆为独立开发任务。通过可复现的延迟、吞吐、内存基准与性能分析进行优化，不牺牲科学精度、来源覆盖或校验。前端任务独立推进，通过版本化 API 协议协作。
 
@@ -46,15 +48,15 @@ Full-version entries can remain visible in the same preset, object and tool list
 
 预设、天体和工具列表可继续展示完整版入口；不可用内容不能被选中，也不能触发数据下载或计算。标注 **“完整版”**，明确提示 **“预览版暂不开放，请使用完整版”**。键盘聚焦与触屏操作均应能获得说明，不能只提供悬浮提示。允许打开说明，但不执行受限的科学操作。必须区分产品限制、真实星历缺失、网络失败与时间范围不支持；不暗示必须注册或付费。
 
-Existing scene URLs must remain readable. Opening a full-only scene directly must show the same explanation, preserve the requested scene for a future handoff, and never silently substitute objects. Connect full Web, Android or iOS actions only to verified available destinations; until then show an honest “not yet available” status rather than a fabricated URL. Availability controls must cover URL replay, search, presets, object selection and analysis actions consistently. Shared navigation does not justify bundling the full data or downloading unavailable assets.
+Opening a supported full-only scene directly must show the same explanation, preserve the requested scene for a future handoff, and never silently substitute objects. Old scene-schema compatibility is not required. Connect full Web, Android or iOS actions only to verified available destinations; until then show an honest “not yet available” status rather than a fabricated URL. Availability controls must cover URL replay, search, presets, object selection and analysis actions consistently. Shared navigation does not justify bundling the full data or downloading unavailable assets.
 
-旧场景链接仍应可读。直接打开完整版专属场景时显示相同说明，保留原场景请求以便后续转交，不暗中替换天体。完整 Web、Android、iOS 的入口只能连接已验证可用的地址；尚未上线时如实显示“暂未提供”，不编造网址。可用性控制必须一致覆盖链接回放、搜索、预设、天体选择和分析入口；共用界面不意味着打包全量数据或下载不可用内容。
+直接打开当前支持格式的完整版专属场景时显示相同说明，保留原场景请求以便后续转交，不暗中替换天体；不要求兼容旧场景格式。完整 Web、Android、iOS 的入口只能连接已验证可用的地址；尚未上线时如实显示“暂未提供”，不编造网址。可用性控制必须一致覆盖链接回放、搜索、预设、天体选择和分析入口；共用界面不意味着打包全量数据或下载不可用内容。
 
 ## Migration and acceptance / 迁移与验收
 
-**Current implementation:** React/Vite client-side Web plus Capacitor Android/iOS shells; no unified application backend or independent native frontend has been delivered. Existing commands, full/native SPK profiles, Pages assets and offline guarantees continue to describe this implementation until an explicitly tested migration replaces them. This documentation change does not reduce the current deployment or change its data origin.
+**Current implementation:** React/Vite client-side Web plus Capacitor Android/iOS shells. The separately implemented [Go backend API](./backend-api-v1.md) is available in source for local execution; the three clients have not yet migrated to it, and no independent native frontend or public backend deployment is claimed. The Pages workflow publishes the [curated preview](./preview-delivery.md) after validation. It does not retain the old full catalog for installed clients; rebuilding the full clients and connecting the unified backend remains outstanding.
 
-**当前实现：** React/Vite 纯前端 Web 与 Capacitor Android/iOS 应用壳；统一应用后端和独立原生前端尚未交付。现有命令、完整/原生 SPK 配置、Pages 资源和离线边界仍描述当前实现，直至经过测试的迁移替代它们。本次文档调整不会裁剪线上版本或变更数据来源。
+**当前实现：** React/Vite 纯前端 Web 与 Capacitor Android/iOS 应用壳。独立开发的 [Go 后端 API](./backend-api-v1.md) 已有可本地运行的源码，但三端尚未迁移接入，不宣称已经交付独立原生前端或公开部署后端。Pages 流程验证后发布[精选预览](./preview-delivery.md)，不为已安装客户端保留旧完整目录；完整版客户端重建及统一后端接入仍未完成。
 
 1. Complete and retain the current source-backed satellite batch and its validation. Reuse its identities, scientific engine, fixtures and provenance in the migration; do not discard verified data work / 完成并保留当前权威卫星批次与验证；迁移复用身份、科学引擎、基准和来源证据，不丢弃已验证的数据工作。
 2. Define the shared versioned API/scene contract and backend boundary. Separate the Web project and add backend catalog/state access with contract, error, resource-limit and independent scientific tests / 定义统一版本化 API/场景协议及后端边界，拆出 Web 项目并接入后端目录/状态服务，覆盖协议、错误、资源限制和独立科学测试。

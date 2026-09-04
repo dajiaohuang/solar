@@ -1,5 +1,7 @@
 # Solar Atlas mobile applications
 
+> **Breaking preview transition (2026-09-05):** old-client compatibility is no longer required. Once Pages publishes the curated preview, these baseline shells lose online full-catalog access at the old Pages URL; bundled core assets remain local. Replacement native clients and unified-backend access are still under development. Do not interpret a successful shell build as proof that its old catalog endpoint is available.
+
 > **Target architecture:** Android and iOS will become independent platform-native frontend projects consuming the same backend as full Web. The Capacitor implementation documented below is the migration baseline, not the final product shape. GitHub Pages becomes a curated preview, not the required full-product data host. See [product direction](./docs/product-direction.md); no native rewrite or backend rollout is claimed complete here.
 
 Solar Atlas includes **Capacitor 8 local-shell projects** for Android and iOS. They are buildable source projects, not published store products. CI may produce an Android debug APK signed with the standard disposable debug key, but the repository does not claim a release-signed APK, AAB, or IPA, a Play Store or App Store listing, TestFlight distribution, or completed real-device validation.

@@ -1,5 +1,8 @@
-import { readFile, stat } from 'node:fs/promises'
+import { readFile, readdir, stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import { jsonDocument, productDelivery, sha256 } from './lib/product-delivery.ts'
+import { previewDatasetPlan } from './lib/preview-dataset.mjs'
+import { verifyEphemerisAssets } from './lib/verify-ephemeris-assets.mjs'
 
 const dist = resolve('dist')
 
@@ -25,7 +28,7 @@ async function requirePngDimensions(relativePath, expectedWidth, expectedHeight)
 
 for (const path of [
   'index.html', 'manifest.webmanifest', 'sw.js', 'build-info.json', 'health.json',
-  'capacity-report.json', 'asset-manifest.json', 'sitemap.xml', 'robots.txt',
+  'capacity-report.json', 'asset-manifest.json', 'sitemap.xml', 'robots.txt', 'product-availability.json', 'ephemeris-manifest.json',
   'scientific-validation.json', 'validation/index.html', 'zh/validation/index.html',
   'privacy/index.html', 'zh/privacy/index.html',
   'stories/geocentric-model/index.html', 'zh/stories/geocentric-model/index.html',
@@ -74,6 +77,14 @@ if (sw.includes('__BUILD_SHA__') || sw.includes('const PRECACHE_URLS = ["./"]'))
 
 const capacity = JSON.parse(await readFile(join(dist, 'capacity-report.json'), 'utf8'))
 if (!capacity.withinBudget) throw new Error('Generated artifact exceeds its declared capacity budget')
+const buildInfo = JSON.parse(await readFile(join(dist, 'build-info.json'), 'utf8'))
+const delivery = productDelivery(undefined, buildInfo.productProfile, buildInfo.ephemerisProfile)
+const availabilityText = await readFile(join(dist, 'product-availability.json'), 'utf8')
+if (availabilityText !== jsonDocument(delivery.availability) || sha256(availabilityText) !== buildInfo.productAvailabilitySha256) throw new Error('Product availability identity mismatch')
+if (capacity.productProfile !== delivery.product || capacity.productAvailabilitySha256 !== delivery.availabilitySha256) throw new Error('Capacity report product identity mismatch')
+if (await readFile(join(dist, 'ephemeris-manifest.json'), 'utf8') !== jsonDocument(delivery.manifest)) throw new Error('Packaged ephemeris manifest differs from runtime selection')
+const ephemerisBytes = await verifyEphemerisAssets(join(dist, 'data', 'ephemerides'), delivery.manifest.files)
+if (capacity.ephemerisTotalBytes !== ephemerisBytes) throw new Error('Capacity report ephemeris size mismatch')
 
 const health = JSON.parse(await readFile(join(dist, 'health.json'), 'utf8'))
 const scientificValidation = JSON.parse(await readFile(join(dist, 'scientific-validation.json'), 'utf8'))
@@ -101,16 +112,39 @@ const expectedPlanetaryModelWindow = `${planetaryModelEvidence.validFrom}/${plan
 if (scientificValidation.modelWindow?.planetaryApproximation !== expectedPlanetaryModelWindow) throw new Error('Scientific validation model window is inconsistent with the canonical model evidence')
 if (health.dataset?.included) {
   const version = health.dataset.version
-  const release = `data/asteroids/releases/${version}`
-  await requireFile('data/asteroids/dataset-version.json')
+  if (!/^[a-zA-Z0-9._-]+$/.test(version) || health.dataset.root !== delivery.catalogDirectory) throw new Error('Invalid dataset delivery path')
+  const release = `${delivery.catalogDirectory}/releases/${version}`
+  await requireFile(`${delivery.catalogDirectory}/dataset-version.json`)
   const manifestPath = await requireFile(`${release}/manifest.json`)
-  await requireFile(`${release}/delivery-manifest.json`)
-  await requireFile(`${release}/catalog-sample-desktop.json.gz`)
-  await requireFile(`${release}/catalog-sample-desktop.bin`)
+  const deliveryPath = await requireFile(`${release}/delivery-manifest.json`)
+  const sample = delivery.product === 'preview' ? 'mobile' : 'desktop'
+  await requireFile(`${release}/catalog-sample-${sample}.json.gz`)
+  await requireFile(`${release}/catalog-sample-${sample}.bin`)
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
   if (!manifest.capabilities?.includes('gzip-json-v1')) throw new Error('Deployable dataset manifest does not declare gzip-json-v1')
-  if (await exists(join(dist, ...`${release}/catalog-sample-desktop.json`.split('/')))) {
-    throw new Error('Deployable artifact unexpectedly contains the uncompressed desktop sample JSON')
+  if (await exists(join(dist, ...`${release}/catalog-sample-${sample}.json`.split('/')))) {
+    throw new Error('Deployable artifact unexpectedly contains the uncompressed sample JSON')
+  }
+  if (delivery.product === 'preview') {
+    const expected = previewDatasetPlan(manifest, delivery.availabilitySha256)
+    if (JSON.stringify(manifest) !== JSON.stringify(expected.manifest)) throw new Error('Preview manifest advertises unavailable resources')
+    const files = expected.sourcePaths.map(path => path === 'catalog-sample-mobile.json' ? `${path}.gz` : path).sort()
+    const actual = (await readdir(join(dist, release))).sort()
+    if (JSON.stringify(actual) !== JSON.stringify([...files, 'delivery-manifest.json'].sort())) throw new Error('Unexpected preview dataset files')
+    // Reject legacy full assets anywhere in this artifact, not just this release.
+    if (JSON.stringify((await readdir(join(dist, 'data/asteroids'))).sort()) !== '["preview"]') throw new Error('Full dataset leaked into preview delivery')
+    if (JSON.stringify(await readdir(join(dist, 'data/asteroids/preview'))) !== JSON.stringify([delivery.availabilitySha256])) throw new Error('Unexpected preview namespace')
+    const deliveredText = await readFile(deliveryPath, 'utf8')
+    if (sha256(deliveredText) !== health.dataset.deliveryManifestSha256) throw new Error('Dataset delivery manifest hash mismatch')
+    const delivered = JSON.parse(deliveredText)
+    if (delivered.delivery?.profile !== 'preview' || delivered.delivery?.availabilitySha256 !== delivery.availabilitySha256
+      || delivered.sourceContentSha256 !== manifest.contentSha256) throw new Error('Dataset delivery provenance mismatch')
+    if (JSON.stringify(delivered.files.map(file => file.path).sort()) !== JSON.stringify(files)
+      || sha256(JSON.stringify(delivered.files)) !== delivered.deliveredContentSha256) throw new Error('Dataset delivery file identity mismatch')
+    for (const file of delivered.files) {
+      const bytes = await readFile(join(dist, release, file.path))
+      if (bytes.length !== file.bytes || sha256(bytes) !== file.sha256) throw new Error(`Preview dataset checksum mismatch: ${file.path}`)
+    }
   }
 }
 

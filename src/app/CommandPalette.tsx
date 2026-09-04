@@ -8,6 +8,8 @@ import { bodyDisplayName } from '../lib/bodyNames'
 import { catalogActions, catalogStore } from '../state/catalog-store'
 import { selectionActions } from '../state/selection-store'
 import { uiActions, type AppRoute } from '../state/ui-store'
+import { availabilityAttributes, bodyAvailability, routeAvailability, storyAvailability, type Availability } from '../lib/productAvailability'
+import { availabilityActions } from '../state/availability-store'
 
 type SearchResult = {
   id: string
@@ -15,6 +17,7 @@ type SearchResult = {
   label: string
   detail: string
   keywords: string
+  availability: Availability
   action: () => void
 }
 
@@ -58,11 +61,13 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     ]
     const routes = routeSpecs.map(([route, icon, label, detail]) => ({
       id: `route:${route}`, icon, label, detail, keywords: `${route} ${label} ${detail}`.toLowerCase(),
+      availability: routeAvailability(route),
       action: () => uiActions.navigate(route),
     }))
     const bodies = majorBodies.map((body) => ({
       id: `body:${body.id}`, icon: '●', label: bodyDisplayName(body, language), detail: `${t('objectResult')} · ${body.kind}`,
       keywords: `${body.id} ${body.name} ${bodyDisplayName(body, 'en')} ${body.kind} ${satelliteSearchTerms(body)}`.toLowerCase(),
+      availability: bodyAvailability(body.id),
       action: () => {
         selectionActions.setSelectedIds([...new Set([...majorBodies.filter((item) => item.id !== 'sun' && ['earth', 'mars'].includes(item.id)).map((item) => item.id), body.id])].filter((id) => id !== 'sun'))
         selectionActions.focus(body.id)
@@ -72,16 +77,19 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     const storyResults = stories.map((story) => ({
       id: `story:${story.id}`, icon: '◇', label: story.title[language], detail: `${t('storyResult')} · ${story.summary[language]}`,
       keywords: `${story.id} ${story.title.en} ${story.title.zh} ${story.summary.en} ${story.summary.zh}`.toLowerCase(),
+      availability: storyAvailability(story.id),
       action: () => { uiActions.selectStory(story.id, 0); uiActions.navigate('stories') },
     }))
     const glossary = stories.flatMap((story) => (story.glossary ?? []).map((entry) => ({
       id: `term:${story.id}:${entry.term.en}`, icon: '≡', label: entry.term[language], detail: `${t('termResult')} · ${entry.definition[language]}`,
       keywords: `${entry.term.en} ${entry.term.zh} ${entry.definition.en} ${entry.definition.zh}`.toLowerCase(),
+      availability: storyAvailability(story.id),
       action: () => { uiActions.selectStory(story.id, 0); uiActions.navigate('stories') },
     })))
     const featured = (catalog.manifest?.featured ?? []).map((entry) => ({
       id: `catalog:${entry.id}`, icon: '◆', label: entry.label, detail: `${t('catalogResult')} · ${entry.orbitClassCode}`,
       keywords: `${entry.label} ${entry.shortLabel} ${entry.searchKey} ${entry.permanentNumber ?? ''} ${entry.orbitClassCode}`.toLowerCase(),
+      availability: routeAvailability('catalog'),
       action: () => { catalogActions.patchFilters({ query: entry.permanentNumber ? String(entry.permanentNumber) : entry.label }); uiActions.navigate('catalog') },
     }))
     return [...routes, ...storyResults, ...bodies, ...featured, ...glossary]
@@ -93,8 +101,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     : allResults.filter((result) => result.id.startsWith('route:') || result.id.startsWith('story:')).slice(0, 12)
 
   function choose(result: SearchResult) {
-    result.action()
     onClose()
+    if (availabilityActions.require(result.availability)) result.action()
   }
 
   function moveResultFocus(event: React.KeyboardEvent<HTMLButtonElement>) {
@@ -121,12 +129,13 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       <header><span id="command-title">{t('globalSearch')}</span><div><kbd>Esc</kbd><button aria-label={t('dismiss')} onClick={onClose}>×</button></div></header>
       <label><span className="sr-only">{t('globalSearch')}</span><i aria-hidden="true">⌕</i><input ref={inputRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={openResultFromInput} placeholder={t('globalSearchPlaceholder')} /></label>
       <div ref={resultsRef} className="command-results" role="listbox" aria-label={t('searchResults')}>
-        {results.map((result) => <button role="option" aria-selected={false} key={result.id} onClick={() => choose(result)} onKeyDown={moveResultFocus}><em>{result.icon}</em><span><strong>{result.label}</strong><small>{result.detail}</small></span><b>↗</b></button>)}
-        {normalized && <button role="option" aria-selected={false} className="command-catalog-fallback" onKeyDown={moveResultFocus} onClick={() => {
+        {results.map((result) => <button role="option" aria-selected={false} {...availabilityAttributes(result.availability)} key={result.id} onClick={() => choose(result)} onKeyDown={moveResultFocus}><em>{result.icon}</em><span><strong>{result.label}{!result.availability.available && <small className="full-version-badge">{t('fullVersion')}</small>}</strong><small>{result.detail}</small></span><b>↗</b></button>)}
+        {normalized && <button role="option" aria-selected={false} {...availabilityAttributes(routeAvailability('catalog'))} className="command-catalog-fallback" onKeyDown={moveResultFocus} onClick={() => {
+          onClose()
+          if (!availabilityActions.require(routeAvailability('catalog'))) return
           catalogActions.patchFilters({ query: query.trim() })
           uiActions.navigate('catalog')
-          onClose()
-        }}><em>⌘</em><span><strong>{t('searchCatalogFor')} “{query.trim()}”</strong><small>{t('searchCatalogDescription')}</small></span><b>↗</b></button>}
+        }}><em>⌘</em><span><strong>{t('searchCatalogFor')} “{query.trim()}”{!routeAvailability('catalog').available && <small className="full-version-badge">{t('fullVersion')}</small>}</strong><small>{t('searchCatalogDescription')}</small></span><b>↗</b></button>}
       </div>
       <footer>{t('searchKeyboardHint')}</footer>
     </section>

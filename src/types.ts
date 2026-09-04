@@ -264,8 +264,8 @@ export type AsteroidManifest = {
     classCodes: string[]
   }
   precomputedSamples?: {
-    desktop: CatalogSampleArtifact
-    mobile: CatalogSampleArtifact
+    desktop?: CatalogSampleArtifact
+    mobile?: CatalogSampleArtifact
   }
   summaryPath?: string
   searchIndex?: {

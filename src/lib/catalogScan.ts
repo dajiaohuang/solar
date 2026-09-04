@@ -1,4 +1,5 @@
 import { loadAsteroidRecordsByLocators, loadAsteroidSearchLocators } from './catalogLoader'
+import { requireCatalogAccess } from './productAccess'
 import type {
   AsteroidManifest,
   AsteroidRecord,
@@ -104,6 +105,7 @@ export function resetCatalogScanWorker() {
 }
 
 export async function loadNextCatalogScanPage(scanKey: string, manifest: AsteroidManifest) {
+  requireCatalogAccess('scan')
   const queue = hydrationQueues.get(scanKey)
   if (!queue || queue.manifestVersion !== manifest.version) return { records: [], hasMore: false }
   const page = takeCatalogLocatorPage(queue.remaining)
@@ -121,6 +123,7 @@ export async function scanAsteroidCatalog(params: {
   onProgress?: (progress: number) => void
 }) {
   const scanKey = createCatalogScanKey(params.manifest.version, params.filters, params.sampleLimit)
+  requireCatalogAccess('scan')
   if (params.signal?.aborted) throw new DOMException('Catalog scan was cancelled', 'AbortError')
   const candidateLocators = params.filters.query.trim()
     ? await loadAsteroidSearchLocators(params.filters.query, params.manifest)

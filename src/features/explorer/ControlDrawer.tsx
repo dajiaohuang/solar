@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from 'react'
 import { fetchSbdbBody } from '../../data/loaders/sbdb'
 import { SCENE_PRESETS } from '../../data/presets'
+import { availabilityAttributes, bodyAvailability, catalogAvailability, PRODUCT_PROFILE, sceneAvailability } from '../../lib/productAvailability'
+import { availabilityActions } from '../../state/availability-store'
 import { satelliteSearchTerms } from '../../data/satelliteIdentities'
 import { useSimulationClock } from '../../engine/clock/useSimulationClock'
 import { useI18n } from '../../i18n/context'
@@ -48,6 +50,9 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
   const [bodyQuery, setBodyQuery] = useState('')
   const sceneImportRef = useRef<HTMLInputElement | null>(null)
   const capabilities = VIEW_CAPABILITIES[simulation.viewMode]
+  const displayedPresets = useMemo(() => PRODUCT_PROFILE === 'preview'
+    ? [...SCENE_PRESETS].sort((a, b) => Number(sceneAvailability(buildScenePresetUrlState(b, language)).available) - Number(sceneAvailability(buildScenePresetUrlState(a, language)).available))
+    : SCENE_PRESETS, [language])
   const sortedBodies = useMemo(() => [...bodies].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name)), [bodies])
   const filteredBodies = useMemo(() => {
     const query = bodyQuery.trim().toLocaleLowerCase()
@@ -76,6 +81,8 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
   }, [clock.julianDay, selection.selectedIds, simulation.comparisonEnabled, simulation.historyDays, simulation.referenceId, simulation.viewMode, simulation.viewOffset.x, simulation.viewOffset.y, simulation.zoom])
 
   function applySelectedPreset(preset: typeof SCENE_PRESETS[number]) {
+    if (!availabilityActions.require(sceneAvailability(buildScenePresetUrlState(preset, language)))) return
+    availabilityActions.explorePreview()
     if (preset.catalogSelection) {
       const query = encodeUrlState(buildScenePresetUrlState(preset, language))
       window.location.assign(`${window.location.pathname}?${query}`)
@@ -124,18 +131,21 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
         </div>
         <p className="preset-description">{t('presetListDescription')}</p>
         <div className="preset-list" aria-label={t('scenePresets')}>
-          {SCENE_PRESETS.map((preset) => {
+          {displayedPresets.map((preset) => {
             const reference = referenceOptions.find((body) => body.id === preset.referenceId)
+            const available = sceneAvailability(buildScenePresetUrlState(preset, language)).available
             return <button
               type="button"
               className={preset.id === selectedPresetId ? 'active' : ''}
               data-testid={`preset-${preset.id}`}
               aria-pressed={preset.id === selectedPresetId}
+              aria-disabled={!available || undefined}
+              aria-describedby={!available ? 'preview-restriction-description' : undefined}
               aria-label={`${t('applyPreset')}: ${preset.name[language]}`}
               key={preset.id}
               onClick={() => applySelectedPreset(preset)}
             >
-              <span><strong>{preset.name[language]}</strong><small>{preset.description[language]}</small></span>
+              <span><strong>{preset.name[language]}{!available && <small className="full-version-badge">{t('fullVersion')}</small>}</strong><small>{preset.description[language]}</small></span>
               <em>{reference ? bodyDisplayName(reference, language) : preset.referenceId} · {preset.catalogSelection ? preset.catalogSelection.sampleCount.toLocaleString() : preset.selectedMajorBodyIds.length}</em>
             </button>
           })}
@@ -152,7 +162,7 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
         <label className="field">
           <span>{t('referenceFrame')}</span>
           <select value={simulation.referenceId} onChange={(event) => simulationActions.patch({ referenceId: event.target.value })}>
-            {referenceOptions.map((body) => <option value={body.id} key={body.id}>{bodyDisplayName(body, language)}</option>)}
+            {referenceOptions.map((body) => <option disabled={!bodyAvailability(body.id).available} value={body.id} key={body.id}>{bodyDisplayName(body, language)}{!bodyAvailability(body.id).available ? ` · ${t('fullVersion')}` : ''}</option>)}
           </select>
         </label>
         <label className="toggle-row">
@@ -163,16 +173,17 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
           <label className="field">
             <span>{t('compareFrame')}</span>
             <select value={simulation.comparisonReferenceId} onChange={(event) => simulationActions.patch({ comparisonReferenceId: event.target.value })}>
-              {referenceOptions.map((body) => <option value={body.id} key={body.id}>{bodyDisplayName(body, language)}</option>)}
+              {referenceOptions.map((body) => <option disabled={!bodyAvailability(body.id).available} value={body.id} key={body.id}>{bodyDisplayName(body, language)}{!bodyAvailability(body.id).available ? ` · ${t('fullVersion')}` : ''}</option>)}
             </select>
           </label>
         )}
         <label className="field">
           <span>{t('trail')}</span>
           <select value={simulation.historyDays} onChange={(event) => simulationActions.patch({ historyDays: Number(event.target.value) })}>
-            {(!HISTORY_OPTIONS.includes(simulation.historyDays) ? [simulation.historyDays, ...HISTORY_OPTIONS] : HISTORY_OPTIONS).map((days) => <option value={days} key={days}>{days < 365 ? `${days} ${t('days')}` : `${Math.round(days / 365)} ${t('years')}`}</option>)}
+            {(!HISTORY_OPTIONS.includes(simulation.historyDays) ? [simulation.historyDays, ...HISTORY_OPTIONS] : HISTORY_OPTIONS).map((days) => <option disabled={!sceneAvailability({ history: days }).available} value={days} key={days}>{days < 365 ? `${days} ${t('days')}` : `${Math.round(days / 365)} ${t('years')}`}{!sceneAvailability({ history: days }).available ? ` · ${t('fullVersion')}` : ''}</option>)}
           </select>
         </label>
+        {PRODUCT_PROFILE === 'preview' && <button type="button" className="preview-controls-help" onClick={availabilityActions.explain}>{t('previewRestriction')}</button>}
       </section>
 
       <section className="drawer-section view-parameters">
@@ -209,8 +220,8 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
           ['showHillSphere', 'hill', capabilities.hillSphere], ['showLaplaceSoi', 'soi', capabilities.laplaceSoi], ['showSpacecraft', 'spacecraft', capabilities.spacecraft],
         ] as const).map(([property, label, supported]) => (
           <label className="toggle-row" key={property}>
-            <input type="checkbox" disabled={!supported} checked={simulation[property]} onChange={(event) => simulationActions.patch({ [property]: event.target.checked })} />
-            <span>{t(label)}{!supported ? ` · ${t('twoDOnly')}` : ''}</span>
+            <input type="checkbox" {...(property === 'showSpacecraft' ? availabilityAttributes(sceneAvailability({ layers: ['spacecraft'] })) : {})} disabled={!supported} checked={simulation[property]} onChange={(event) => simulationActions.patch({ [property]: event.target.checked })} />
+            <span>{t(label)}{!supported ? ` · ${t('twoDOnly')}` : ''}{property === 'showSpacecraft' && !sceneAvailability({ layers: ['spacecraft'] }).available ? ` · ${t('fullVersion')}` : ''}</span>
           </label>
         ))}
         <label className="toggle-row">
@@ -239,12 +250,12 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
           {filteredBodies.map((body) => (
             <div className="body-check-row" key={body.id}>
               <label className="body-check-toggle">
-                <input type="checkbox" checked={selection.selectedIds.includes(body.id)} onChange={() => selectionActions.toggle(body.id)} />
+                <input type="checkbox" {...availabilityAttributes(bodyAvailability(body.id))} checked={selection.selectedIds.includes(body.id)} onChange={() => selectionActions.toggle(body.id)} />
                 <span className="sr-only">{bodyDisplayName(body, language)} {body.orbitClassCode ?? t(BODY_KIND_TRANSLATION[body.kind])}</span>
               </label>
               <i aria-hidden="true" style={{ backgroundColor: body.color }} />
-              <button type="button" className="body-focus-button" onClick={() => selectionActions.focus(body.id)}>{bodyDisplayName(body, language)}</button>
-              <small>{body.orbitClassCode ?? t(BODY_KIND_TRANSLATION[body.kind])}</small>
+              <button type="button" {...availabilityAttributes(bodyAvailability(body.id))} className="body-focus-button" onClick={() => selectionActions.focus(body.id)}>{bodyDisplayName(body, language)}</button>
+              <small>{!bodyAvailability(body.id).available ? t('fullVersion') : body.orbitClassCode ?? t(BODY_KIND_TRANSLATION[body.kind])}</small>
             </div>
           ))}
         </div>
@@ -263,7 +274,7 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
         </div>
         {Object.entries(selection.savedCollections).map(([name, ids]) => (
           <div className="saved-row" key={name}>
-            <button onClick={() => selectionActions.setSelectedIds(ids)}>{name} <small>{ids.length}</small></button>
+            <button {...availabilityAttributes(sceneAvailability({ bodies: ids }))} onClick={() => selectionActions.setSelectedIds(ids)}>{name} <small>{ids.length}{!sceneAvailability({ bodies: ids }).available ? ` · ${t('fullVersion')}` : ''}</small></button>
             <button aria-label={`${t('deleteCollection')}: ${name}`} onClick={() => selectionActions.removeCollection(name)}>×</button>
           </div>
         ))}
@@ -301,7 +312,8 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
         <p className="fine-print">{t('ellipticOnly')}</p>
         <div className="input-action">
           <input value={sbdbQuery} onChange={(event) => setSbdbQuery(event.target.value)} placeholder="Bennu / 99942 / 2024 YR4" />
-          <button disabled={!sbdbQuery.trim() || sbdbState === 'loading'} onClick={async () => {
+          <button {...availabilityAttributes(catalogAvailability('sbdb'))} disabled={!sbdbQuery.trim() || sbdbState === 'loading'} onClick={async () => {
+            if (!availabilityActions.require(catalogAvailability('sbdb'))) return
             setSbdbState('loading')
             try {
               const body = await fetchSbdbBody(sbdbQuery.trim())
@@ -313,7 +325,7 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
               setSbdbState('error')
               uiActions.toast(error instanceof Error ? error.message : String(error))
             }
-          }}>{sbdbState === 'loading' ? '…' : t('addSbdb')}</button>
+          }}>{sbdbState === 'loading' ? '…' : t('addSbdb')}{!catalogAvailability('sbdb').available && <small className="full-version-badge">{t('fullVersion')}</small>}</button>
         </div>
       </section>
 

@@ -51,8 +51,7 @@ export function GuidedStoryOverlay() {
 
   function move(delta: number) {
     const nextIndex = Math.max(0, Math.min(story.steps.length - 1, stepIndex + delta))
-    uiActions.setStoryStep(nextIndex)
-    applyStoryScene(story.steps[nextIndex].scene)
+    if (applyStoryScene(story.steps[nextIndex].scene)) uiActions.setStoryStep(nextIndex)
   }
 
   async function copyLink() {

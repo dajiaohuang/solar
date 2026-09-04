@@ -1,5 +1,7 @@
 import type { BodyId, CelestialBody } from '../types'
 import { createStore } from './createStore'
+import { bodyAvailability, sceneAvailability } from '../lib/productAvailability'
+import { availabilityActions } from './availability-store'
 
 type SelectionState = {
   selectedIds: BodyId[]
@@ -38,9 +40,12 @@ function persistCollections(collections: Record<string, BodyId[]>) {
 
 export const selectionActions = {
   setSelectedIds(selectedIds: BodyId[]) {
+    if (!availabilityActions.require(sceneAvailability({ bodies: selectedIds }))) return false
     selectionStore.setState({ selectedIds: [...new Set(selectedIds)] })
+    return true
   },
   toggle(bodyId: BodyId) {
+    if (!selectionStore.getState().selectedIds.includes(bodyId) && !availabilityActions.require(bodyAvailability(bodyId))) return false
     selectionStore.setState((state) => ({
       selectedIds: state.selectedIds.includes(bodyId)
         ? state.selectedIds.filter((id) => id !== bodyId)
@@ -48,9 +53,11 @@ export const selectionActions = {
     }))
   },
   focus(focusedId: BodyId | null) {
+    if (!availabilityActions.require(bodyAvailability(focusedId))) return false
     selectionStore.setState({ focusedId })
   },
   addCatalogBodies(bodies: CelestialBody[], select = false) {
+    if (!availabilityActions.require(sceneAvailability({ bodies: bodies.map(body => body.id) }))) return false
     selectionStore.setState((state) => ({
       catalogBodies: {
         ...state.catalogBodies,

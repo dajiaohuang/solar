@@ -19,11 +19,22 @@ let writesSincePrune = 0
 export function datasetVersionFromUrl(url: string) {
   try {
     const pathname = new URL(url, globalThis.location?.href ?? 'https://solar-atlas.invalid/').pathname
+    const preview = pathname.match(/\/data\/asteroids\/preview\/([a-f0-9]{64})\/releases\/([^/]+)\//)
+    if (preview) return `preview:${preview[1]}:${decodeURIComponent(preview[2])}`
     const match = pathname.match(/\/data\/asteroids\/releases\/([^/]+)\//)
     return match ? decodeURIComponent(match[1]) : 'legacy'
   } catch {
     return 'legacy'
   }
+}
+
+export function isObsoleteDatasetVersion(storedVersion: string, activeVersion: string) {
+  if (storedVersion === activeVersion) return false
+  // Pre-profile records have no trustworthy release identity. Other products
+  // coexist in this database and share its global LRU byte budget.
+  if (storedVersion === 'legacy') return true
+  if (activeVersion === 'legacy') return false
+  return storedVersion.startsWith('preview:') === activeVersion.startsWith('preview:')
 }
 
 function isCacheRecord(value: unknown): value is CacheRecord {
@@ -100,7 +111,7 @@ async function pruneDatasetCache(activeVersion: string, maximumBytes: number) {
           }
           return
         }
-        if (!isCacheRecord(cursor.value) || cursor.value.datasetVersion !== activeVersion) {
+        if (!isCacheRecord(cursor.value) || isObsoleteDatasetVersion(cursor.value.datasetVersion, activeVersion)) {
           cursor.delete()
         } else {
           activeEntries.push({ key: cursor.primaryKey, record: cursor.value })
