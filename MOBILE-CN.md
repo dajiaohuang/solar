@@ -1,5 +1,7 @@
 # Solar Atlas 移动应用
 
+> **目标架构：** Android 与 iOS 将成为独立的平台原生前端项目，与完整 Web 共用统一后端。下文的 Capacitor 实现是迁移起点，不是最终产品形态。GitHub Pages 定位为精选预览版，不再作为完整版必需的数据托管中心。详见[产品定位](./docs/product-direction.md)；此处不宣称原生重构或后端上线已经完成。
+
 Solar Atlas 已包含 Android 与 iOS 的 **Capacitor 8 本地应用壳工程**。它们是可构建的源码工程，不是已经发布的商店产品。CI 可以生成由标准一次性 debug key 签名的 Android debug APK，但本仓库不宣称已有发布签名的 APK、AAB 或 IPA，不宣称已上架 Play Store / App Store、已进入 TestFlight，也不宣称已经完成真机验证。
 
 [English](./MOBILE.md) · [隐私说明](./PRIVACY-CN.md) · [中文 README](./README-CN.md)

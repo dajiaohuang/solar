@@ -2,6 +2,15 @@
 
 The roadmap records intent, not a promise of dates. Scientific correctness, reproducibility, and bounded browser performance take priority over feature count.
 
+## Active product direction — three clients and one backend
+
+- Build independent Web, Android and iOS frontend projects with platform-appropriate interaction and independent build/test/release paths, backed by one Go scientific/data backend developed in its own workstream. Optimize backend performance with reproducible benchmarks without reducing scientific correctness. Existing Capacitor shells are a migration baseline, not the final native experience.
+- Keep GitHub Pages as a curated availability profile of the same Web frontend: immediate 3D Observation Deck, preset list, optional tutorial, representative systems and the strongest guided lessons. Keep full-only entries visible but unselectable, with accessible explanations and verified full-version destinations; do not silently execute unavailable actions through a direct URL.
+- Preserve the all-known-Solar-System-body goal in the full backend/clients; preview package limits do not constrain it. Share identities, source versions, time/frame contracts and validated scientific results, not a compulsory shared UI.
+- Deliver versioned API contracts and bounded backend data access, independent native clients, and a separately verified preview profile. Preserve scene compatibility, offline/cache boundaries and rollback during migration.
+
+See the bilingual [product direction and acceptance criteria](./docs/product-direction.md). This is the accepted development target, not a claim that a backend or independent native interfaces already ship.
+
 ## 0.11.0 — geocentrism as the core guide
 
 - A dedicated six-stage course now connects the predictive power of historical geocentrism, the evidence for a moving Earth, and the continuing scientific value of modern geocentric coordinates.
@@ -30,6 +39,6 @@ The roadmap records intent, not a promise of dates. Scientific correctness, repr
 
 ## Longer-term investigations
 
-- Optional perturbation or N-body teaching modules with clearly separate validation contracts.
+- Expand source-backed physical coverage and explicit uncertainty/validity evidence; N-body integration is outside the current scope.
 - More object knowledge pages and community-authored stories.
-- Dataset delivery alternatives if GitHub Pages artifact limits become too restrictive.
+- Backend/full-client data delivery independent of the curated GitHub Pages preview.
