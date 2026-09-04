@@ -195,6 +195,7 @@ export function validateCurrentStates(raw: unknown, capabilities: BackendCapabil
   for (let index = 0; index < ids.length; index += 1) {
     const availability = response.availability![index]
     if (typeof availability !== 'string' || !AVAILABILITIES.has(availability)) throw new Error('Unknown current-state availability')
+    if (availability === 'fallback') throw new Error('Current-state response contains fallback availability')
     if (response.precision![index] !== 'exact') throw new Error('Current-state response is not exact')
     const source = response.source![index]
     if (typeof source !== 'string') throw new Error('Invalid current-state source')
@@ -207,7 +208,8 @@ export function validateCurrentStates(raw: unknown, capabilities: BackendCapabil
       if (!knownIdentity) throw new Error('Unknown current-state audit identity')
     }
     if (response.statePresent![index] !== true && response.statePresent![index] !== false) throw new Error('Invalid current-state presence')
-    if (availability === 'missing' && response.statePresent![index]) throw new Error('Missing state cannot be present')
+    if (response.statePresent![index] && availability !== 'operational' && availability !== 'snapshot') throw new Error('Present state has invalid availability')
+    if (!response.statePresent![index] && availability !== 'missing') throw new Error('Unavailable state must be marked missing')
     if (response.statePresent![index] && (!source || !datasetVersion || !model || !response.stateEvidence![index])) throw new Error('Exact state is missing audit identity')
     if (response.validityPresent![index] && (!Number.isFinite(response.validityStartEt![index]) || !Number.isFinite(response.validityEndEt![index]) || response.validityEndEt![index] < response.validityStartEt![index])) throw new Error('Invalid current-state validity window')
     if (response.evidenceWindowPresent![index] && (!Number.isFinite(response.evidenceWindowStartEt![index]) || !Number.isFinite(response.evidenceWindowEndEt![index]) || response.evidenceWindowEndEt![index] < response.evidenceWindowStartEt![index])) throw new Error('Invalid current-state evidence window')
