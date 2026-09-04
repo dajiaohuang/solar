@@ -10,7 +10,7 @@ import {
   validateCapabilities,
   validateCurrentStates,
 } from '../../src/lib/currentStates'
-import { createLatestOnlyGate, fetchCurrentStates, loadCurrentStateFrames, resetCurrentStatesCaches, sampleCurrentStateEpoch } from '../../src/hooks/useCurrentStates'
+import { createLatestOnlyGate, currentStateRequestToken, fetchCurrentStates, loadCurrentStateFrames, resetCurrentStatesCaches, sampleCurrentStateEpoch } from '../../src/hooks/useCurrentStates'
 import { bodyPositionOrNull } from '../../src/lib/ephemeris'
 import type { CelestialBody } from '../../src/types'
 
@@ -59,6 +59,15 @@ describe('current-state adapter', () => {
     expect(kmToAu(AU_IN_KM)).toBe(1)
     expect(sampleCurrentStateEpoch(epochUtc + 0.000001, true)).toBe(epochUtc + 0.000001)
     expect(sampleCurrentStateEpoch(epochUtc, false)).toBe(epochUtc)
+  })
+
+  it('uses wall-clock cadence tokens instead of simulation-JD buckets', () => {
+    const playing = { isPlaying: true, sample: 4, epochUtcJd: epochUtc, seekRevision: 2 }
+    expect(currentStateRequestToken(playing)).toBe(currentStateRequestToken({ ...playing, epochUtcJd: epochUtc + 30 / 86400 }))
+    expect(currentStateRequestToken(playing)).not.toBe(currentStateRequestToken({ ...playing, sample: 5 }))
+    expect(currentStateRequestToken(playing)).not.toBe(currentStateRequestToken({ ...playing, seekRevision: 3 }))
+    const paused = { isPlaying: false, sample: 4, epochUtcJd: epochUtc, seekRevision: 2 }
+    expect(currentStateRequestToken(paused)).not.toBe(currentStateRequestToken({ ...paused, epochUtcJd: epochUtc + 0.25 }))
   })
 
   it('fails closed on unknown API, audit, units, source and column mismatches', () => {

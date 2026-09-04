@@ -35,6 +35,12 @@ export function sampleCurrentStateEpoch(epochUtcJd: number, isPlaying: boolean) 
   return epochUtcJd
 }
 
+export function currentStateRequestToken(params: { isPlaying: boolean; sample: number; epochUtcJd: number; seekRevision: number }) {
+  return params.isPlaying
+    ? `playing:${params.sample}:seek:${params.seekRevision}`
+    : `paused:${params.epochUtcJd}:seek:${params.seekRevision}`
+}
+
 function apiBase() {
   const configured = import.meta.env.VITE_SOLAR_API_BASE_URL
   return typeof configured === 'string' && configured.trim() ? configured.trim().replace(/\/+$/, '') : null
@@ -218,9 +224,7 @@ export function useCurrentStates(params: { bodies: CelestialBody[]; resolutionBo
     const timer = window.setInterval(() => setPlayingSample(value => value + 1), CURRENT_STATE_PLAYING_SAMPLE_MS)
     return () => window.clearInterval(timer)
   }, [isPlaying])
-  const requestToken = isPlaying
-    ? `playing:${playingSample}:seek:${params.seekRevision ?? 0}`
-    : `paused:${params.epochUtcJd}:seek:${params.seekRevision ?? 0}`
+  const requestToken = currentStateRequestToken({ isPlaying, sample: playingSample, epochUtcJd: params.epochUtcJd, seekRevision: params.seekRevision ?? 0 })
   const requestKey = `${base ?? 'none'}|${requestToken}|${[...requested].map(([id, backend]) => `${id}:${backend}`).join(',')}`
 
   useEffect(() => {
