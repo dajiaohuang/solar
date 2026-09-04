@@ -24,31 +24,30 @@ export function evaluateType17(read: ReadDouble, startAddress: number, et: numbe
   if (!(a > 0)) throw new Error('Invalid SPK: type 17 semi-major axis must be positive');
   if (e > 0.9) throw new Error('Invalid SPK: type 17 eccentricity exceeds 0.9');
   const dt = et - epoch;
-  const varpi = Math.atan2(h, k) + periRate * dt;
-  const node = Math.atan2(p, q) + nodeRate * dt;
-  const inclinationParameter = Math.hypot(p, q);
-  const currentP = inclinationParameter * Math.sin(node);
-  const currentQ = inclinationParameter * Math.cos(node);
-  const meanAnomaly = longitude + meanLongitudeRate * dt - varpi;
-  const m = wrapAngle(meanAnomaly);
-  let eccentric = m;
-  for (let i = 0; i < 12; i++) {
-    const delta = (eccentric - e * Math.sin(eccentric) - m) / (1 - e * Math.cos(eccentric));
+  const dlp = periRate * dt, can = Math.cos(dlp), san = Math.sin(dlp);
+  const hh = h * can + k * san, kk = k * can - h * san;
+  const nodeDt = nodeRate * dt, cnn = Math.cos(nodeDt), snn = Math.sin(nodeDt);
+  const pp = p * cnn + q * snn, qq = q * cnn - p * snn;
+  const ml = longitude + meanLongitudeRate * dt;
+  let eccentric = wrapAngle(ml);
+  for (let i = 0; i < 15; i++) {
+    const delta = (eccentric + hh * Math.cos(eccentric) - kk * Math.sin(eccentric) - ml) /
+      (1 - hh * Math.sin(eccentric) - kk * Math.cos(eccentric));
     eccentric -= delta;
     if (Math.abs(delta) < 2e-15) break;
   }
-  const ce = Math.cos(eccentric), se = Math.sin(eccentric), beta = Math.sqrt(1 - e * e);
-  // The equinoctial basis already carries the node orientation; longitude of
-  // periapse is therefore used directly (rather than subtracting the node).
-  const periAngle = varpi;
-  const cp = Math.cos(periAngle), sp = Math.sin(periAngle);
-  const f = equinoctialBasis(currentP, currentQ, false), g = equinoctialBasis(currentP, currentQ, true);
-  const u = add(scale(f, cp), scale(g, sp));
-  const vdir = add(scale(f, -sp), scale(g, cp));
-  const den = 1 - e * ce;
-  const meanAnomalyRate = meanLongitudeRate - periRate;
-  const position = scale(add(scale(u, a * (ce - e)), scale(vdir, a * beta * se)), 1);
-  const velocity = scale(add(scale(u, -a * se), scale(vdir, a * beta * ce)), meanAnomalyRate / den);
+  const ce = Math.cos(eccentric), se = Math.sin(eccentric), b = 1 / (Math.sqrt(1 - hh * hh - kk * kk) + 1);
+  const x1 = a * ((1 - b * hh * hh) * ce + (hh * kk * b * se - kk));
+  const y1 = a * ((1 - b * kk * kk) * se + (hh * kk * b * ce - hh));
+  const rb = hh * se + kk * ce, radius = a * (1 - rb), ra = meanLongitudeRate * a * a / radius;
+  const dx1 = ra * (-se + hh * b * rb), dy1 = ra * (ce - kk * b * rb);
+  const nfac = 1 - periRate / meanLongitudeRate, argRate = periRate - nodeRate;
+  const dx = nfac * dx1 - argRate * y1, dy = nfac * dy1 + argRate * x1;
+  const f = equinoctialBasis(pp, qq, false), g = equinoctialBasis(pp, qq, true);
+  const position = add(scale(f, x1), scale(g, y1));
+  const velocity = add(scale(f, dx), scale(g, dy));
+  const temp = [-nodeRate * position[1], nodeRate * position[0], 0];
+  velocity[0] += temp[0]; velocity[1] += temp[1];
   const pole = [Math.cos(decpol) * Math.cos(rapol), Math.cos(decpol) * Math.sin(rapol), Math.sin(decpol)];
   const xaxis = [-Math.sin(rapol), Math.cos(rapol), 0];
   const yaxis = [-Math.sin(decpol) * Math.cos(rapol), -Math.sin(decpol) * Math.sin(rapol), Math.cos(decpol)];
@@ -57,7 +56,7 @@ export function evaluateType17(read: ReadDouble, startAddress: number, et: numbe
 
 function equinoctialBasis(p: number, q: number, second: boolean): number[] {
   const d = 1 + p * p + q * q;
-  return second ? [2 * p * q / d, (1 + q * q - p * p) / d, -2 * p / d] : [(1 - q * q + p * p) / d, 2 * p * q / d, 2 * q / d];
+  return second ? [2 * p * q / d, (1 + p * p - q * q) / d, 2 * q / d] : [(1 - p * p + q * q) / d, 2 * p * q / d, -2 * p / d];
 }
 function add(a: number[], b: number[]) { return a.map((v, i) => v + b[i]); }
 function scale(a: number[], x: number) { return a.map(v => v * x); }
