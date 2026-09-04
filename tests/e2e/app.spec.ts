@@ -338,7 +338,7 @@ test('offers a complete reproducible observation deck on desktop and mobile', as
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
 
   const presets = page.locator('.preset-list')
-  await expect(presets.locator(':scope > button')).toHaveCount(20)
+  await expect(presets.locator(':scope > button')).toHaveCount(22)
   const marsPreset = page.getByRole('button', { name: 'Load preset: Mars opposition 2027' })
   await marsPreset.click()
   await expect(marsPreset).toHaveAttribute('aria-pressed', 'true')

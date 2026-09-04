@@ -35,3 +35,32 @@ it('bounds concurrent loads across overlapping requests and reuses verified file
     expect(fetchMock).toHaveBeenCalledTimes(12)
   } finally { vi.unstubAllGlobals() }
 })
+
+it('retains failed dependency errors across peer successes and clears only successful retries', async () => {
+  vi.resetModules()
+  const store = await import('../../src/engine/ephemeris/kernelStore')
+  const files = [...store.EPHEMERIS_MANIFEST.files].sort((a, b) => a.bytes - b.bytes).slice(0, 3)
+  const failing = new Set(files.slice(0, 2).map(file => file.path))
+  let releasePeer!: () => void
+  const peerGate = new Promise<void>(resolve => { releasePeer = resolve })
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const path = url.split('/').at(-1)!
+    if (failing.has(path)) return new Response('unavailable', { status: 503 })
+    if (path === files[2].path) await peerGate
+    return new Response(new Uint8Array(readFileSync(`public/data/ephemerides/${path}`)))
+  }))
+  try {
+    await expect(store.ensureKernelFiles(files.map(file => file.id))).rejects.toThrow('HTTP 503')
+    releasePeer()
+    await vi.waitFor(() => expect(store.getEphemerisSnapshot().loading).toBe(0))
+    expect(store.loadedKernelIds()).toContain(files[2].id)
+    for (const file of files.slice(0, 2)) expect(store.getEphemerisSnapshot().error).toContain(file.id)
+    failing.delete(files[0].path)
+    await store.ensureKernelFiles([files[0].id])
+    expect(store.getEphemerisSnapshot().error).not.toContain(files[0].id)
+    expect(store.getEphemerisSnapshot().error).toContain(files[1].id)
+    failing.delete(files[1].path)
+    await store.ensureKernelFiles([files[1].id])
+    expect(store.getEphemerisSnapshot().error).toBeNull()
+  } finally { releasePeer(); vi.unstubAllGlobals() }
+})

@@ -1301,6 +1301,111 @@
       "integrationBatch": "satellite-expansion-20260904"
     },
     {
+      "id": "satellite-eris-v001-120136199-2020-2030-01-02",
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20136199_jpl080_20220908.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20136199_jpl080_20220908.bsp",
+        "bytes": 175898624,
+        "etag": "\"631a6afd-a7c0000\"",
+        "lastModified": "Thu, 08 Sep 2022 22:21:49 GMT"
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "de440s-2000-01-01-2051-01-01",
+        "tnosat-eris-v001-2020-01-01-2030-01-02"
+      ],
+      "solution": "ERIS-V001 + DE440",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20136199_jpl080_20220908.bsp",
+          "sha256": "d72495c7facb609d511ea9222a5ddde5bf6c06cfb3cc85a6c8a3ade1241987f7"
+        },
+        "sourceSelection": "Dysnomia original offset relative to system20136199; reuse same publication primary920136199 and system trajectory, never a fresh Horizons source. Original mixed DE440 satellite-fit/DE441 heliocentric solution provenance retained; DE440 Sun only for common-frame conversion, not a globally fitted solution.",
+        "windowPolicy": "Original prepared 2020-2030-01-02 window"
+      },
+      "path": "satellite-eris-v001-120136199-2020-2030-01-02.bsp",
+      "sha256": "181f448bcbc93c8a971de13bdc1ea01fedf5fe1a1b992f218d555bf57cb4f963",
+      "bytes": 29235200,
+      "targets": [
+        120136199
+      ],
+      "startEt": 631108800,
+      "endEt": 946814400,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "satellite-haumea-v001b-120136108-2020-2030-01-02",
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001b_20136108_jpl110_20221014.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001b_20136108_jpl110_20221014.bsp",
+        "bytes": 263605248,
+        "etag": "\"6349fbc3-fb64c00\"",
+        "lastModified": "Sat, 15 Oct 2022 00:16:03 GMT"
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "de440s-2000-01-01-2051-01-01",
+        "tnosat-haumea-v001b-2020-01-01-2030-01-02"
+      ],
+      "solution": "HAUMEA-V001B + DE440",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001b_20136108_jpl110_20221014.bsp",
+          "sha256": "6a82bfc1074d196a5a218756b8ff5ec8af0ca9147833eee8e9279765e1c1e25d"
+        },
+        "sourceSelection": "Hiiaka and Namaka original offsets relative to system20136108; reuse corrected v001b publication primary920136108 and JPL110 system trajectory. No mass inference from orbital availability. Original mixed DE440 satellite-fit/DE441 heliocentric solution provenance retained; DE440 Sun only for common-frame conversion, not a globally fitted solution.",
+        "windowPolicy": "Original prepared 2020-2030-01-02 window"
+      },
+      "path": "satellite-haumea-v001b-120136108-2020-2030-01-02.bsp",
+      "sha256": "1936c592eb8dd45b8715fc58bdfed24d716b9c03e4506fc665a2dc12de851204",
+      "bytes": 29235200,
+      "targets": [
+        120136108
+      ],
+      "startEt": 631108800,
+      "endEt": 946814400,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "satellite-haumea-v001b-220136108-2020-2030-01-02",
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001b_20136108_jpl110_20221014.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001b_20136108_jpl110_20221014.bsp",
+        "bytes": 263605248,
+        "etag": "\"6349fbc3-fb64c00\"",
+        "lastModified": "Sat, 15 Oct 2022 00:16:03 GMT"
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "de440s-2000-01-01-2051-01-01",
+        "tnosat-haumea-v001b-2020-01-01-2030-01-02"
+      ],
+      "solution": "HAUMEA-V001B + DE440",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001b_20136108_jpl110_20221014.bsp",
+          "sha256": "6a82bfc1074d196a5a218756b8ff5ec8af0ca9147833eee8e9279765e1c1e25d"
+        },
+        "sourceSelection": "Hiiaka and Namaka original offsets relative to system20136108; reuse corrected v001b publication primary920136108 and JPL110 system trajectory. No mass inference from orbital availability. Original mixed DE440 satellite-fit/DE441 heliocentric solution provenance retained; DE440 Sun only for common-frame conversion, not a globally fitted solution.",
+        "windowPolicy": "Original prepared 2020-2030-01-02 window"
+      },
+      "path": "satellite-haumea-v001b-220136108-2020-2030-01-02.bsp",
+      "sha256": "82cc281523281bb5740d24f2af5599c252f1383337038c7f3da8dd1b789d3159",
+      "bytes": 29235200,
+      "targets": [
+        220136108
+      ],
+      "startEt": 631108800,
+      "endEt": 946814400,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
       "id": "satellite-daphnis-sat393-635-2020-2031",
       "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat393_daphnis.bsp",
       "sourceIdentity": {

@@ -19,6 +19,8 @@ const installed = new Map<string, LoadedKernel>()
 // pool snapshot and center cache rather than rebuilding them for every row.
 let currentResolver: { et: number; resolver: ReturnType<typeof createKernelResolver> } | null = null
 const pending = new Map<string, Promise<void>>()
+const failures = new Map<string, string>()
+const failureMessage = () => [...failures.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, message]) => message).join('\n') || null
 let activeLoads = 0
 const loadWaiters: Array<() => void> = []
 async function withLoadSlot(load: () => Promise<void>) {
@@ -52,7 +54,9 @@ export function installKernel(id: string, buffer: ArrayBuffer) {
   const file = EPHEMERIS_MANIFEST.files.find(file => file.id === id)
   installed.set(id, { id, kernel, solutionKernelIds: file?.solutionKernelIds, dependencyOnly: file?.dependencyOnly })
   currentResolver = null
-  publish({ error: null })
+  // A different successful file must not hide a still-missing dependency.
+  failures.delete(id)
+  publish({ error: failureMessage() })
 }
 
 async function loadFile(file: KernelFile) {
@@ -100,7 +104,8 @@ export async function ensureKernelFiles(ids: string[]) {
       if (!promise) {
         publish({ loading: snapshot.loading + 1 })
         promise = withLoadSlot(() => loadFile(file)).catch((error: unknown) => {
-          publish({ error: error instanceof Error ? error.message : String(error) })
+          failures.set(id, error instanceof Error ? error.message : String(error))
+          publish({ error: failureMessage() })
           throw error
         }).finally(() => { pending.delete(id); publish({ loading: snapshot.loading - 1 }) })
         pending.set(id, promise)

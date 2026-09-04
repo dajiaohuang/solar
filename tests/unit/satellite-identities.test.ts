@@ -5,7 +5,7 @@ import { SATELLITE_IDENTITIES, satelliteIdentity, satelliteSearchTerms } from '.
 
 describe('selectable satellite identity catalog', () => {
   it('retains every frozen identity exactly once without renaming existing shared IDs', () => {
-    expect(SATELLITE_IDENTITIES).toHaveLength(461)
+    expect(SATELLITE_IDENTITIES).toHaveLength(464)
     for (const entry of SATELLITE_IDENTITIES) {
       const bodies = majorBodies.filter(body => entry.naifId === undefined ? body.id === entry.id : bodyNaifId(body) === entry.naifId)
       expect(bodies, entry.id).toHaveLength(1)

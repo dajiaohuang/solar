@@ -1301,6 +1301,111 @@
       "integrationBatch": "satellite-expansion-20260904"
     },
     {
+      "id": "satellite-eris-v001-120136199-2026-2027",
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20136199_jpl080_20220908.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20136199_jpl080_20220908.bsp",
+        "bytes": 175898624,
+        "etag": "\"631a6afd-a7c0000\"",
+        "lastModified": "Thu, 08 Sep 2022 22:21:49 GMT"
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "de440s-2000-01-01-2051-01-01",
+        "tnosat-eris-v001-2020-01-01-2030-01-02"
+      ],
+      "solution": "ERIS-V001 + DE440",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20136199_jpl080_20220908.bsp",
+          "sha256": "d72495c7facb609d511ea9222a5ddde5bf6c06cfb3cc85a6c8a3ade1241987f7"
+        },
+        "sourceSelection": "Dysnomia original offset relative to system20136199; reuse same publication primary920136199 and system trajectory, never a fresh Horizons source. Original mixed DE440 satellite-fit/DE441 heliocentric solution provenance retained; DE440 Sun only for common-frame conversion, not a globally fitted solution.",
+        "windowPolicy": "Pages large satellite records: 2026/2027"
+      },
+      "path": "satellite-eris-v001-120136199-2026-2027.bsp",
+      "sha256": "7632af8ce0d3984d22a5023a4f40df4820e2e088634a6b58f8032989b720bd30",
+      "bytes": 2923520,
+      "targets": [
+        120136199
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "satellite-haumea-v001b-120136108-2026-2027",
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001b_20136108_jpl110_20221014.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001b_20136108_jpl110_20221014.bsp",
+        "bytes": 263605248,
+        "etag": "\"6349fbc3-fb64c00\"",
+        "lastModified": "Sat, 15 Oct 2022 00:16:03 GMT"
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "de440s-2000-01-01-2051-01-01",
+        "tnosat-haumea-v001b-2020-01-01-2030-01-02"
+      ],
+      "solution": "HAUMEA-V001B + DE440",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001b_20136108_jpl110_20221014.bsp",
+          "sha256": "6a82bfc1074d196a5a218756b8ff5ec8af0ca9147833eee8e9279765e1c1e25d"
+        },
+        "sourceSelection": "Hiiaka and Namaka original offsets relative to system20136108; reuse corrected v001b publication primary920136108 and JPL110 system trajectory. No mass inference from orbital availability. Original mixed DE440 satellite-fit/DE441 heliocentric solution provenance retained; DE440 Sun only for common-frame conversion, not a globally fitted solution.",
+        "windowPolicy": "Pages large satellite records: 2026/2027"
+      },
+      "path": "satellite-haumea-v001b-120136108-2026-2027.bsp",
+      "sha256": "26f7b4bfebecc44f0f249e30d4e86ce040771ce066e6072e09637e63b11aaf87",
+      "bytes": 2923520,
+      "targets": [
+        120136108
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "satellite-haumea-v001b-220136108-2026-2027",
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001b_20136108_jpl110_20221014.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001b_20136108_jpl110_20221014.bsp",
+        "bytes": 263605248,
+        "etag": "\"6349fbc3-fb64c00\"",
+        "lastModified": "Sat, 15 Oct 2022 00:16:03 GMT"
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "de440s-2000-01-01-2051-01-01",
+        "tnosat-haumea-v001b-2020-01-01-2030-01-02"
+      ],
+      "solution": "HAUMEA-V001B + DE440",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001b_20136108_jpl110_20221014.bsp",
+          "sha256": "6a82bfc1074d196a5a218756b8ff5ec8af0ca9147833eee8e9279765e1c1e25d"
+        },
+        "sourceSelection": "Hiiaka and Namaka original offsets relative to system20136108; reuse corrected v001b publication primary920136108 and JPL110 system trajectory. No mass inference from orbital availability. Original mixed DE440 satellite-fit/DE441 heliocentric solution provenance retained; DE440 Sun only for common-frame conversion, not a globally fitted solution.",
+        "windowPolicy": "Pages large satellite records: 2026/2027"
+      },
+      "path": "satellite-haumea-v001b-220136108-2026-2027.bsp",
+      "sha256": "f8829b013f009b25a2da5d3edefe88c6cdeae0b890ab14cafadc7c0dfaf85799",
+      "bytes": 2923520,
+      "targets": [
+        220136108
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
       "id": "satellite-daphnis-sat393-635-2020-2031",
       "source": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat393_daphnis.bsp",
       "sourceIdentity": {
@@ -1356,7 +1461,7 @@
           "sha256": "22c3653286219a95473a8eed9eea0d37125a9cf13f70650d8361d7db38ea8e09"
         },
         "sourceSelection": "Distinct modern NAIF SAT415 publication, using its own embedded DE437 Sun/system barycenter and Saturn-center records; not the historical SSD container or a DE440 replacement",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-naif-sat415-610-2026-2027.bsp",
       "sha256": "ad251c7111e7deb64e6cbc732095b522641151efd9d9033308fd047a911f05ab",
@@ -1390,7 +1495,7 @@
           "sha256": "22c3653286219a95473a8eed9eea0d37125a9cf13f70650d8361d7db38ea8e09"
         },
         "sourceSelection": "Distinct modern NAIF SAT415 publication, using its own embedded DE437 Sun/system barycenter and Saturn-center records; not the historical SSD container or a DE440 replacement",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-naif-sat415-611-2026-2027.bsp",
       "sha256": "e47bb0361afab1eca7d008f031a775fa4fbd30bc5679f852e0bb3b4b8f0c68f9",
@@ -1424,7 +1529,7 @@
           "sha256": "22c3653286219a95473a8eed9eea0d37125a9cf13f70650d8361d7db38ea8e09"
         },
         "sourceSelection": "Distinct modern NAIF SAT415 publication, using its own embedded DE437 Sun/system barycenter and Saturn-center records; not the historical SSD container or a DE440 replacement",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-naif-sat415-615-2026-2027.bsp",
       "sha256": "09606bdfcc61f63af413cd89686f464e42dd23749e6777c43a71757c560d4b86",
@@ -1458,7 +1563,7 @@
           "sha256": "22c3653286219a95473a8eed9eea0d37125a9cf13f70650d8361d7db38ea8e09"
         },
         "sourceSelection": "Distinct modern NAIF SAT415 publication, using its own embedded DE437 Sun/system barycenter and Saturn-center records; not the historical SSD container or a DE440 replacement",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-naif-sat415-616-2026-2027.bsp",
       "sha256": "e818c4b8cfdab348b0b6aab1bb82756304c5f8b252bd8c1048bb9076e2a8609d",
@@ -1492,7 +1597,7 @@
           "sha256": "22c3653286219a95473a8eed9eea0d37125a9cf13f70650d8361d7db38ea8e09"
         },
         "sourceSelection": "Distinct modern NAIF SAT415 publication, using its own embedded DE437 Sun/system barycenter and Saturn-center records; not the historical SSD container or a DE440 replacement",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-naif-sat415-617-2026-2027.bsp",
       "sha256": "3163350085ef26ca91cb5216750d4a54acaa47b74b5d62ac58eb45d2a6ec95c9",
@@ -1526,7 +1631,7 @@
           "sha256": "22c3653286219a95473a8eed9eea0d37125a9cf13f70650d8361d7db38ea8e09"
         },
         "sourceSelection": "Distinct modern NAIF SAT415 publication, using its own embedded DE437 Sun/system barycenter and Saturn-center records; not the historical SSD container or a DE440 replacement",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-naif-sat415-618-2026-2027.bsp",
       "sha256": "ac2e9028ee2583f51f4cbc7d9958ec9dedbbfa07594c89d61da8f3951425f2b8",
@@ -13058,7 +13163,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "Only the14 explicitly listed URA184 rocks targets from the DE442 JWST fit; embedded older DE438/440 records are not selected",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-ura184-706-2026-2027.bsp",
       "sha256": "258b2d53a11475347efd4ba8d233bf3870857483d23ab94e68e6958f2b4f8a38",
@@ -13088,7 +13193,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "Only the14 explicitly listed URA184 rocks targets from the DE442 JWST fit; embedded older DE438/440 records are not selected",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-ura184-707-2026-2027.bsp",
       "sha256": "4768320ba092bd123b90b90970bb9a48a3c8169bf754595cbc9b393f0a3e93b3",
@@ -13118,7 +13223,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "Only the14 explicitly listed URA184 rocks targets from the DE442 JWST fit; embedded older DE438/440 records are not selected",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-ura184-708-2026-2027.bsp",
       "sha256": "0bf325eec93d8d37fb46712e61e9cfda09923f07765ba393f46cf2a5103e2480",
@@ -13148,7 +13253,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "Only the14 explicitly listed URA184 rocks targets from the DE442 JWST fit; embedded older DE438/440 records are not selected",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-ura184-709-2026-2027.bsp",
       "sha256": "7b5a7550fb425557c21d0a907bce5d584b54fab0cbc70696ee0413c9300e2f39",
@@ -13178,7 +13283,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "Only the14 explicitly listed URA184 rocks targets from the DE442 JWST fit; embedded older DE438/440 records are not selected",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-ura184-710-2026-2027.bsp",
       "sha256": "1824b81fc95ffe634162df508cf75b4e53271a68ca3c528a1e67b5cb1d936624",
@@ -13208,7 +13313,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "Only the14 explicitly listed URA184 rocks targets from the DE442 JWST fit; embedded older DE438/440 records are not selected",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-ura184-711-2026-2027.bsp",
       "sha256": "9451a3ace4c41b826576ae149d5a687a98a7c7f07fc33f9b7d1da7cafe5e64cc",
@@ -13238,7 +13343,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "Only the14 explicitly listed URA184 rocks targets from the DE442 JWST fit; embedded older DE438/440 records are not selected",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-ura184-712-2026-2027.bsp",
       "sha256": "5bbe359c4765139143466b81f924dab949e54473abb509a6afe9f56f501d8eed",
@@ -13268,7 +13373,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "Only the14 explicitly listed URA184 rocks targets from the DE442 JWST fit; embedded older DE438/440 records are not selected",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-ura184-713-2026-2027.bsp",
       "sha256": "693c06078288ab403b7617ef90a3042620ade7dfd14cc2798a37dd7dad4f15ab",
@@ -13298,7 +13403,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "Only the14 explicitly listed URA184 rocks targets from the DE442 JWST fit; embedded older DE438/440 records are not selected",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-ura184-714-2026-2027.bsp",
       "sha256": "9dc4b3baa585d221b91f21e585854bd7a835ec513a610472ec4896cc200af195",
@@ -13328,7 +13433,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "Only the14 explicitly listed URA184 rocks targets from the DE442 JWST fit; embedded older DE438/440 records are not selected",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-ura184-715-2026-2027.bsp",
       "sha256": "b57f7d6bae235564172929cee4c782805248d6bf767eb48346f9f00bfd935af0",
@@ -13358,7 +13463,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "Only the14 explicitly listed URA184 rocks targets from the DE442 JWST fit; embedded older DE438/440 records are not selected",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-ura184-725-2026-2027.bsp",
       "sha256": "17e06438673d3b2ffefe4d8b2064d4820fc2c4ac28b013517649d435efd70436",
@@ -13388,7 +13493,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "Only the14 explicitly listed URA184 rocks targets from the DE442 JWST fit; embedded older DE438/440 records are not selected",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-ura184-726-2026-2027.bsp",
       "sha256": "b054e7c0e23a260fb495f7b3abb98976a7e6b5f4b1fbef5b1d5d5bab86faae11",
@@ -13418,7 +13523,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "Only the14 explicitly listed URA184 rocks targets from the DE442 JWST fit; embedded older DE438/440 records are not selected",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-ura184-727-2026-2027.bsp",
       "sha256": "050195539301d40dc1125aade652bb08ef55843c6d1d1770bbdb94f376fa83a6",
@@ -13448,7 +13553,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "Only the14 explicitly listed URA184 rocks targets from the DE442 JWST fit; embedded older DE438/440 records are not selected",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-ura184-75052-2026-2027.bsp",
       "sha256": "ec255c1ee51ff21350a7ec60099636b669785b4802d34eca53715a68c287e984",
@@ -13838,7 +13943,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "2026 inner-system source and Neptune offset explicitly declare DE-0442/LE-0442",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-nep098-803-2026-2027.bsp",
       "sha256": "815857027f54de1bf20953e37ab035f45551057f73fc49235cac7342fe09a30c",
@@ -13868,7 +13973,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "2026 inner-system source and Neptune offset explicitly declare DE-0442/LE-0442",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-nep098-804-2026-2027.bsp",
       "sha256": "6504bf37469832d8ca559e226f2a554b89b546741bf685b508cbd4d54def83ba",
@@ -13898,7 +14003,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "2026 inner-system source and Neptune offset explicitly declare DE-0442/LE-0442",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-nep098-805-2026-2027.bsp",
       "sha256": "bbeaa9a79b114de9b984cd522fe7c804927fad7608b05376f9cd4f3f279bc864",
@@ -13928,7 +14033,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "2026 inner-system source and Neptune offset explicitly declare DE-0442/LE-0442",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-nep098-806-2026-2027.bsp",
       "sha256": "b602b037de3e0c2a6f8a579fcd4da06107d4133fa61873db4a2a24c5f89dc6b7",
@@ -13958,7 +14063,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "2026 inner-system source and Neptune offset explicitly declare DE-0442/LE-0442",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-nep098-807-2026-2027.bsp",
       "sha256": "db3a90e390eb3e04b19196f9a645f715963c0bd82ebae836d9901e4ee92a2230",
@@ -13988,7 +14093,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "2026 inner-system source and Neptune offset explicitly declare DE-0442/LE-0442",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-nep098-808-2026-2027.bsp",
       "sha256": "576ff580e649700dbb6319c823eb659a96e8fe0f9a9d83deb9790df0e214ec2b",
@@ -14018,7 +14123,7 @@
       "selectionEvidence": {
         "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
         "sourceSelection": "2026 inner-system source and Neptune offset explicitly declare DE-0442/LE-0442",
-        "windowPolicy": "Pages large inner-moon records: 2026/2027"
+        "windowPolicy": "Pages large satellite records: 2026/2027"
       },
       "path": "satellite-nep098-814-2026-2027.bsp",
       "sha256": "88c6c8188849d8e9b965e9f7c702ca76e3b9f394574ed6b73afd46498f4ec8ad",

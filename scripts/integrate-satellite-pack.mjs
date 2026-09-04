@@ -77,6 +77,7 @@ for (const config of plan.cores) {
 }
 for (const config of plan.sources) {
   if (!cores[config.core]) throw new Error('Unknown declared source core')
+  if (config.windowLabel && config.windowLabel !== '2020-2030-01-02') throw new Error('Unsupported explicit source window label')
   const split = JSON.parse(await readFile(join(config.directory, 'manifest.json'), 'utf8'))
   if (config.targets?.some(target => !split.files.some(file => file.targets.length === 1 && file.targets[0] === target))) throw new Error('Selected source target is missing from prepared files')
   for (const file of split.files) {
@@ -86,7 +87,15 @@ for (const config of plan.sources) {
     if (!knownTargets.has(target) && ![699, 799, 899].includes(target)) throw new Error(`Unaccounted source target ${target}`)
     const bytes = await readFile(join(config.directory, file.path))
     if (bytes.length !== file.bytes || digest(bytes) !== file.sha256) throw new Error('Prepared split checksum mismatch')
+    if (config.windowLabel === '2020-2030-01-02' && (file.startEt !== 631108800 || file.endEt !== 946814400)) throw new Error('Explicit component window label mismatch')
     await sourceEvidence(config, file.source, [target])
+    if (config.sourceKernelId) {
+      const dependency = baseFiles.find(entry => entry.id === config.sourceKernelId)
+      const identity = identities.bodies.find(entry => entry.naifId === target)
+      if (!dependency || dependency.source !== file.source || JSON.stringify(dependency.sourceIdentity) !== JSON.stringify(file.sourceIdentity)
+        || !identity?.primaryNaifId || !dependency.targets.includes(identity.primaryNaifId) || !dependency.targets.includes(identity.systemNaifId)
+        || parsed(bytes).segments.some(segment => segment.center !== identity.systemNaifId || segment.startEt < dependency.startEt || segment.endEt > dependency.endEt)) throw new Error('Original component source dependency mismatch')
+    }
     additions.push({ config, file, bytes, target })
   }
 }
@@ -102,7 +111,7 @@ if (new Set(additions.map(addition => addition.target)).size !== additions.lengt
 for (const addition of additions) {
   const key = `${addition.config.id}/${addition.target}`
   if (rootIds.has(key)) throw new Error('Duplicate selected source target')
-  rootIds.set(key, `satellite-${addition.config.id}-${addition.target}-2020-2031`)
+  rootIds.set(key, `satellite-${addition.config.id}-${addition.target}-${addition.config.windowLabel ?? '2020-2031'}`)
 }
 for (const profile of ['pages', 'full']) {
   const files = [...baseFiles, ...common]
@@ -113,15 +122,16 @@ for (const profile of ['pages', 'full']) {
       const source = { identity: file.sourceIdentity, size: bytes.length, read: async (start, length) => bytes.subarray(start, start + length) }
       const result = await cropSpk(source, { startEt: 820497600, endEt: 852033600, targets: [target] }) // 2026-01-01/2027-01-01 TDB
       outputBytes = result.buffer
-      id = id.replace('2020-2031', '2026-2027')
+      id = id.replace(config.windowLabel ?? '2020-2031', '2026-2027')
     }
     const solutionKernelIds = [cores[config.core]]
+    if (config.sourceKernelId) solutionKernelIds.push(config.sourceKernelId)
     if (config.id === 'sat480' && target === 65304) solutionKernelIds.push(rootIds.get('sat480/699'))
     if (solutionKernelIds.some(id => !id)) throw new Error('Unresolved center dependency')
     files.push(await publish(outputBytes, { id, source: file.source, sourceIdentity: file.sourceIdentity,
       core: false, dependencyOnly: target === 699, solutionKernelIds,
       solution: `${config.id.toUpperCase()} + ${config.core.toUpperCase()}`,
-      selectionEvidence: { surveySha256: plan.surveySha256, supplementalSource: await sourceEvidence(config, file.source, [target]), sourceSelection: config.reason, windowPolicy: shortened ? 'Pages large inner-moon records: 2026/2027' : 'Original prepared 2020/2031 window' } }))
+      selectionEvidence: { surveySha256: plan.surveySha256, supplementalSource: await sourceEvidence(config, file.source, [target]), sourceSelection: config.reason, windowPolicy: shortened ? 'Pages large satellite records: 2026/2027' : `Original prepared ${config.windowLabel ?? '2020/2031'} window` } }))
   }
   if (new Set(files.map(file => file.id)).size !== files.length) throw new Error('Duplicate manifest kernel ID')
   const kernels = []

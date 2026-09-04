@@ -151,12 +151,27 @@ coverage target.
 
 ## Integrated source pools and profiles
 
+The catalog generator also checks explicit Eris/Haumea companion selections
+against original SATEPHGEN name/number rows and every selected component,
+primary and system descriptor in the replayed `tnosat_*` sources. It records
+each source metadata hash; it does not infer target semantics from number
+prefixes, claim discovery-table membership, or promote source GM to a mass.
+The selected three TNO companions are additional to the 461 planetary-satellite
+identities in the frozen survey reconciliation.
+
 The survey itself does not select sources. The separate offline integrator accepts
 a reviewed local JSON plan: `survey` and `surveySha256`, `cores` with `id` and
 verified crop `path`, `sources` with `id`, split `directory`, declared `core`,
 optional explicit `targets` and selection `reason`, plus `centers` with `id`,
 original crop `path`, `target`, `core` and `reason`. Relative paths resolve from
 the invocation directory; machine-specific input paths are not published.
+
+A component source can declare `sourceKernelId` to reuse a baseline primary/
+system file from the exact same original source and validator identity. The
+integrator checks its primary/system targets and coverage before binding it
+after the core. `windowLabel: "2020-2030-01-02"` identifies the TNO source
+window; it does not extend coefficients. Large component records follow the
+explicit Pages 2026/2027 policy while full retains the original longer window.
 
 ```sh
 node scripts/integrate-satellite-pack.mjs VERIFIED_PLAN.json
@@ -193,9 +208,10 @@ an existing output path are refused. The legacy `data:ephemerides` generator now
 refuses to overwrite an integrated source-pool manifest. Prepare any changed
 baseline separately and review its integration rather than losing added targets.
 
-Pages and full each list 499 files and the same target identities. Pages narrows
-large inner-moon files to 2026/2027 TDB; full retains 2020/2031. At the modern
-test epoch, 489 selectable centers resolve, with the remaining gaps enumerated
+Pages and full each list 502 files and the same target identities. Pages narrows
+large satellite files to 2026/2027 TDB; full retains 2020/2031 for planetary
+satellites and 2020/2030-01-02 for the three added TNO companions. At the modern
+test epoch, 492 selectable centers resolve, with the remaining gaps enumerated
 in the [physical contract](../../docs/physical-ephemerides.md). The full package
 is a delivery profile, not a claim of complete physical coverage of all bodies.
 
@@ -212,7 +228,7 @@ manifest change, prepend `--replace-generated`. The recorder requires its own
 CSPICE provenance structure and checks that the old file did not change while
 the oracle was running. Ordinary invocation still refuses existing files.
 
-The reference pins 433 ordered root pools and 1,299 heliocentric/barycentric
+The reference pins 436 ordered root pools and 1,308 heliocentric/barycentric
 six-vector pairs, including each root's endpoints and midpoint. Tests verify
 every source hash, dependency order and numerical agreement. They do not measure
 observational uncertainty, certify all dates, or turn different source families
@@ -226,8 +242,8 @@ identity and exported manifest links; full/native does not inherit Pages' cap.
 模型中的零 GM 当成实测零质量。缺少位置时不绘制天体，参考系无数据时不虚构原点，
 轨迹有缺口时不跨越缺口连线。完整数据接入与 Pages 容量选择必须另行明确验证。
 
-补充调查会保留原始文件、独立 NAIF 编号表及冲突证据。当前生成目录有 461 个卫星
-身份（不含地球月球），其中 460 个具有核对过的 SPK 编号；S/2009 S1 未匹配。
+补充调查会保留原始文件、独立 NAIF 编号表及冲突证据。当前生成目录有 464 个卫星
+身份（不含地球月球），其中 463 个具有核对过的 SPK 编号；S/2009 S1 未匹配。
 新增身份没有伪造的轨道或物理量，预设分组不会静默丢弃超出聚焦上限的对象。
 Type 17 已加入原始记录读取与裁剪，并通过独立 CSPICE 样本校验；这仍不等于这些
 身份全部具有已交付的轨迹，也不等于完整物理或实际观测误差已经评估。

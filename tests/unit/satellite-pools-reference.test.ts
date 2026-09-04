@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { SpkKernel } from '../../src/engine/ephemeris/spk'
-import { createKernelResolver, type LoadedKernel } from '../../src/engine/ephemeris/kernelPool'
+import { createKernelResolver, toEcliptic, type LoadedKernel } from '../../src/engine/ephemeris/kernelPool'
 import { ephemerisProfile } from '../../src/data/ephemerisProfile'
 import type { KernelFile } from '../../src/engine/ephemeris/kernelStore'
 import fixture from '../fixtures/satellite-pools-cspice.json'
@@ -14,6 +14,31 @@ const pages = JSON.parse(readFileSync('src/data/ephemeris-manifest.json', 'utf8'
 const byId = new Map(full.files.map(file => [file.id, file]))
 
 describe('integrated satellite source pools and delivery profiles', () => {
+  it('subtracts the same publication primary offset for TNO moons instead of treating the system as the primary', () => {
+    for (const [target, primary, system] of [[120136199, 920136199, 20136199], [120136108, 920136108, 20136108], [220136108, 920136108, 20136108]]) {
+      const file = full.files.find(file => file.targets.includes(target))!
+      const load = (entry: KernelFile): LoadedKernel => {
+        const bytes = readFileSync(`public/data/ephemerides/${entry.path}`)
+        return { ...entry, kernel: new SpkKernel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)) }
+      }
+      const pool = [...file.solutionKernelIds!.map(id => load(byId.get(id)!)), load(file)]
+      const parentFile = byId.get(file.solutionKernelIds![1])!
+      expect(parentFile.source).toBe(file.source)
+      expect(parentFile.targets).toEqual([primary, system])
+      const et = (file.startEt + file.endEt) / 2
+      expect(createKernelResolver([pool[0], pool[2]], et).relative(target, primary)).toBeNull()
+      const resolver = createKernelResolver(pool, et)
+      const actual = resolver.relative(target, primary)!
+      const own = pool[2].kernel.evaluate(target, et)!
+      const parent = pool[1].kernel.evaluate(primary, et)!
+      expect(own.center).toBe(system)
+      for (const label of ['position', 'velocity'] as const) {
+        const expected = toEcliptic({ x: own[label].x - parent[label].x, y: own[label].y - parent[label].y, z: own[label].z - parent[label].z }, 1)
+        for (const axis of ['x', 'y', 'z'] as const) expect(Math.abs(actual[label][axis] - expected[axis])).toBeLessThan(label === 'position' ? 2e-6 : 1e-9)
+      }
+      if (primary === 920136108) expect(actual).not.toEqual(resolver.relative(target, system))
+    }
+  })
   it('retains Daphnis Type 17 and the published SAT393 embedded center chain', () => {
     const file = byId.get('satellite-daphnis-sat393-635-2020-2031')!
     expect(file.solutionKernelIds).toEqual(['sat393-embedded-satellite-2020-2031'])
@@ -59,8 +84,8 @@ describe('integrated satellite source pools and delivery profiles', () => {
     expect(digest(readFileSync('scripts/reference/spk-pool-oracle.c'))).toBe(fixture.oracleSourceSha256)
     expect(digest(manifestBytes)).toBe(fixture.manifestSha256)
     expect(fixture.contexts.map(context => context.rootId)).toEqual(full.files.filter(file => file.solutionKernelIds && !file.dependencyOnly).map(file => file.id))
-    expect(fixture.contexts).toHaveLength(433)
-    expect(fixture.samples).toHaveLength(1299)
+    expect(fixture.contexts).toHaveLength(436)
+    expect(fixture.samples).toHaveLength(1308)
     for (const context of fixture.contexts) {
       const root = byId.get(context.rootId)!
       expect(context.files.map(file => file.id)).toEqual([...root.solutionKernelIds!, root.id])
@@ -122,8 +147,8 @@ describe('integrated satellite source pools and delivery profiles', () => {
         expect(kernel.evaluate(target, file.endEt + 1)).toBeNull()
       }
     }
-    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(591139840)
-    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(238471168)
+    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(678845440)
+    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(247241728)
   })
 
   it('defaults native to full without imposing the Pages policy on explicit full Web builds', () => {

@@ -1,19 +1,32 @@
 # Physical ephemeris contract
 
-Solar Atlas uses immutable SPK files for focus-body geometry. They load on demand after the explorer's first-visit choice (or directly on analysis routes). Both delivery profiles contain 499 SHA-256-pinned files: Pages totals 238,471,168 bytes (227.4 MiB); full/native totals 591,139,840 bytes (563.8 MiB). Requesting a body may load its file outside its interval; calculation still uses only covered epochs. A documented existing approximation may be used outside coverage; bodies without one remain unavailable.
+Solar Atlas uses immutable SPK files for focus-body geometry. They load on demand after the explorer's first-visit choice (or directly on analysis routes). Both delivery profiles contain 502 SHA-256-pinned files: Pages totals 247,241,728 bytes (235.8 MiB); full/native totals 678,845,440 bytes (647.4 MiB). Requesting a body may load its file outside its interval; calculation still uses only covered epochs. A documented existing approximation may be used outside coverage; bodies without one remain unavailable.
 
 ## Coverage
 
 - `de440s` covers 2000-01-01 through 2051-01-01 for the planetary system and Earth/Moon centers.
-- Added satellite and selected small-body kernels cover 2020-01-01 through 2031-01-01 TDB in the full profile; the bundle includes 16 selected small-body targets. Pages narrows large inner-moon files to **2026-01-01 through 2027-01-01 TDB**, preserving original records and the same target identities. Per-file manifest bounds are authoritative.
+- Added planetary-satellite and selected asteroid kernels cover 2020-01-01 through 2031-01-01 TDB in the full profile; the bundle includes 16 selected asteroid targets. The Eris/Haumea systems have the shorter window described below. Pages narrows large satellite files to **2026-01-01 through 2027-01-01 TDB**, preserving original records and the same target identities. Per-file manifest bounds are authoritative.
 - Separately, Eris and Haumea primary centers cover 2020-01-01 through **2030-01-02 TDB**. Each file retains the published type 21 system trajectory and type 2 primary offset together. The 920136199/920136108 primary IDs must not be replaced with 20136199/20136108 system IDs. These two files are lazy, not core startup files.
-- At UTC JD 2461287.5, the integration test resolves **489 selectable centers**. Two registry entries lack SPK states: Makemake and S/2009 S1. Makemake's Horizons fixture does not establish a resolved primary center; S/2009 S1 has no corroborated target number. Daphnis uses the original historical SAT393 Type 17 record. Nine other Saturn moons use the distinct modern NAIF SAT415 delivery with its original DE437 dependencies, not the historical SSD container. These are explicit source and coverage boundaries, not absent observed objects.
-- The satellite identity catalog contains 461 entries in addition to Earth's Moon, with 460 corroborated SPK IDs. Identity inclusion is not state coverage, a physical-property measurement, or formal discovery confirmation. This is not yet all known Solar System bodies.
+- At UTC JD 2461287.5, the integration test resolves **492 selectable centers**. Two registry entries lack SPK states: Makemake and S/2009 S1. Makemake's Horizons fixture does not establish a resolved primary center; S/2009 S1 has no corroborated target number. Daphnis uses the original historical SAT393 Type 17 record. Nine other Saturn moons use the distinct modern NAIF SAT415 delivery with its original DE437 dependencies, not the historical SSD container. These are explicit source and coverage boundaries, not absent observed objects.
+- The satellite identity catalog contains 464 entries in addition to Earth's Moon, with 463 corroborated SPK IDs. Identity inclusion is not state coverage, a physical-property measurement, or formal discovery confirmation. This is not yet all known Solar System bodies.
 - If a kernel, center chain, or epoch is unavailable, only an existing documented approximate fallback may be used. Otherwise no position/trail is drawn; an unavailable reference suppresses the frame. No orbit is invented to fill a gap.
 
 The files preserve original NAIF SPK type 2/3/17/21 records. Chebyshev, equinoctial and extended modified-difference records are evaluated directly: they are not refit or resampled. Each file is checked for its declared byte length and SHA-256 digest. See [type 21 validation](./spk21-validation.md) and the [satellite source workflow](../scripts/reference/SATELLITE-SURVEY.md).
 
 ## Source-specific center chains
+
+Dysnomia, Hiʻiaka and Namaka use the original published component offsets,
+not new Keplerian seed orbits. Their full windows end at **2030-01-02 TDB**;
+Pages narrows these large satellite records to 2026/2027. Each root reuses the
+same publication's existing primary/system file plus the DE440 Sun conversion
+dependency. `120136199 → 20136199`, `120136108/220136108 → 20136108` are
+system-relative offsets; the named parent centers are `920136199/920136108`.
+Parent-relative displays subtract those primary offsets inside the same pool.
+The published solutions already mix satellite-fit DE440 and heliocentric
+DE441/SB441-N16 provenance; the common-frame conversion is not a claim of a
+uniform global fit. Source GM values, including Dysnomia's zero, are not used
+as measured component masses. The primary/system coefficients are not duplicated
+for each moon or independently refreshed from Horizons.
 
 The standalone Daphnis SAT393 Type 17 source retains its original 2016 fitted
 precessing ellipse. Its original comments condition scientific use on PDS placement or
@@ -31,7 +44,7 @@ Every added root declares an ordered `solutionKernelIds` pool, with the root las
 
 The Sun and parent center are resolved within the target's declared pool. Missing dependencies fail closed; unrelated files loaded for another body cannot alter that pool or an existing unbound solution. When an arbitrary observer is absent from the target pool, its independently resolved state is used: this cross-solution comparison is **not one globally fitted dynamical solution**.
 
-The independent CSPICE N0067 oracle checks all 433 added non-dependency roots at three epochs each: 1,299 heliocentric/barycentric six-vector pairs. Tests pin the manifest, source file hashes and oracle source. Position agreement within 2e-6 km and velocity within 1e-9 km/s are numerical regression tolerances, not observational uncertainty or proof of accuracy at all dates.
+The independent CSPICE N0067 oracle checks all 436 added non-dependency roots at three epochs each: 1,308 heliocentric/barycentric six-vector pairs. Tests pin the manifest, source file hashes and oracle source. Position agreement within 2e-6 km and velocity within 1e-9 km/s are numerical regression tolerances, not observational uncertainty or proof of accuracy at all dates.
 
 ## Coordinates and time
 
@@ -70,7 +83,7 @@ Ordinary `npm run build` selects Pages and does not download kernels. `npm run b
 Native kernel assets work offline when included in the installed package. Catalog samples, detail shards and live SBDB queries retain their separate online boundary. The first-visit gate and body-specific loading remain shared across Web and native. Missing or invalid data stays visibly approximate or unavailable, never disguised as physical ephemerides.
 
 The expanded Pages build with the pinned 1,561,171-object asteroid dataset
-measures approximately 667.2 MiB (433.5 MiB catalog data, 227.4 MiB SPK assets and about
+measures approximately 675.6 MiB (433.5 MiB catalog data, 235.8 MiB SPK assets and about
 6.3 MiB application shell). It passes the 700 MiB budget but exceeds the
 600 MiB warning threshold. Further source additions require a fresh deployment
 measurement; the full/native profile must not silently inherit Pages reductions.

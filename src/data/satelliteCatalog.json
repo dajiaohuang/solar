@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-04T10:21:11.272Z",
+  "generatedAt": "2026-09-04T11:42:03.736Z",
   "contract": "Auditable satellite identities; no generated orbit, GM, phase, physical radius or claim of available ephemeris states.",
   "source": {
     "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
@@ -11539,6 +11539,87 @@
           "parentNaifId": 799,
           "ephemeris": "URA184",
           "evidence": "source-comment-name-number-matched-to-descriptor"
+        }
+      ]
+    },
+    {
+      "id": "naif:120136199",
+      "naifId": 120136199,
+      "name": "Dysnomia",
+      "parentId": "eris",
+      "aliases": [],
+      "identityStatus": "source-identified-not-in-discovery-snapshot",
+      "identityResolution": "original-comment-name-number-and-system-primary-descriptors",
+      "sourceEphemerides": [
+        "tnosat_v001_20136199_jpl080_20220908"
+      ],
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20136199_jpl080_20220908.bsp",
+      "sourceSha256": "d72495c7facb609d511ea9222a5ddde5bf6c06cfb3cc85a6c8a3ade1241987f7",
+      "primaryNaifId": 920136199,
+      "systemNaifId": 20136199,
+      "provenance": "Published component relative to its system barycenter; named parent uses the distinct original primary offset. Source GM is not asserted measured mass.",
+      "sourceClaims": [
+        {
+          "name": "Dysnomia",
+          "parentNaifId": 920136199,
+          "systemNaifId": 20136199,
+          "ephemeris": "tnosat_v001_20136199_jpl080_20220908",
+          "evidence": "original-comment-name-number-and-system-primary-descriptors"
+        }
+      ]
+    },
+    {
+      "id": "naif:120136108",
+      "naifId": 120136108,
+      "name": "Hiʻiaka",
+      "parentId": "haumea",
+      "aliases": [
+        "Hiiaka",
+        "Hi'iaka"
+      ],
+      "identityStatus": "source-identified-not-in-discovery-snapshot",
+      "identityResolution": "original-comment-name-number-and-system-primary-descriptors",
+      "sourceEphemerides": [
+        "tnosat_v001b_20136108_jpl110_20221014"
+      ],
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001b_20136108_jpl110_20221014.bsp",
+      "sourceSha256": "6a82bfc1074d196a5a218756b8ff5ec8af0ca9147833eee8e9279765e1c1e25d",
+      "primaryNaifId": 920136108,
+      "systemNaifId": 20136108,
+      "provenance": "Published component relative to its system barycenter; named parent uses the distinct original primary offset. Source GM is not asserted measured mass.",
+      "sourceClaims": [
+        {
+          "name": "Hiiaka",
+          "parentNaifId": 920136108,
+          "systemNaifId": 20136108,
+          "ephemeris": "tnosat_v001b_20136108_jpl110_20221014",
+          "evidence": "original-comment-name-number-and-system-primary-descriptors"
+        }
+      ]
+    },
+    {
+      "id": "naif:220136108",
+      "naifId": 220136108,
+      "name": "Namaka",
+      "parentId": "haumea",
+      "aliases": [],
+      "identityStatus": "source-identified-not-in-discovery-snapshot",
+      "identityResolution": "original-comment-name-number-and-system-primary-descriptors",
+      "sourceEphemerides": [
+        "tnosat_v001b_20136108_jpl110_20221014"
+      ],
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001b_20136108_jpl110_20221014.bsp",
+      "sourceSha256": "6a82bfc1074d196a5a218756b8ff5ec8af0ca9147833eee8e9279765e1c1e25d",
+      "primaryNaifId": 920136108,
+      "systemNaifId": 20136108,
+      "provenance": "Published component relative to its system barycenter; named parent uses the distinct original primary offset. Source GM is not asserted measured mass.",
+      "sourceClaims": [
+        {
+          "name": "Namaka",
+          "parentNaifId": 920136108,
+          "systemNaifId": 20136108,
+          "ephemeris": "tnosat_v001b_20136108_jpl110_20221014",
+          "evidence": "original-comment-name-number-and-system-primary-descriptors"
         }
       ]
     }

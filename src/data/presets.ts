@@ -64,8 +64,8 @@ function dateToJD(dateString: string) {
 }
 
 export const SCENE_PRESETS: ScenePreset[] = [
-  ...(['mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'] as const).flatMap((parent): ScenePreset[] => {
-    const names = { mars: ['Mars', '火星'], jupiter: ['Jupiter', '木星'], saturn: ['Saturn', '土星'], uranus: ['Uranus', '天王星'], neptune: ['Neptune', '海王星'], pluto: ['Pluto', '冥王星'] }
+  ...(['mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto', 'eris', 'haumea'] as const).flatMap((parent): ScenePreset[] => {
+    const names = { mars: ['Mars', '火星'], jupiter: ['Jupiter', '木星'], saturn: ['Saturn', '土星'], uranus: ['Uranus', '天王星'], neptune: ['Neptune', '海王星'], pluto: ['Pluto', '冥王星'], eris: ['Eris', '阋神星'], haumea: ['Haumea', '妊神星'] }
     const moons = majorBodies.filter((body) => body.kind === 'moon' && body.parentId === parent)
     // At the default 180 samples, keep at least ~30 samples per fastest
     // revolution. Long-period moons may show only part of their trajectory.
@@ -81,7 +81,7 @@ export const SCENE_PRESETS: ScenePreset[] = [
       const range = moons.length > perGroup ? ` · ${first + 1}–${first + selected.length}/${moons.length}` : ''
       return {
         id: `${parent}-spk-moons${group ? `-${group + 1}` : ''}`,
-        name: { en: `${names[parent][0]} · ${selected.length} cataloged moons${range}`, zh: `${names[parent][1]} · ${selected.length} 颗目录卫星${range}` },
+        name: { en: `${names[parent][0]} · ${selected.length} cataloged ${selected.length === 1 ? 'moon' : 'moons'}${range}`, zh: `${names[parent][1]} · ${selected.length} 颗目录卫星${range}` },
         description: { en: 'All identities in this group are selected, not necessarily positioned. Loaded SPK is used within coverage; only bodies with an existing seed model can fall back. Missing states are omitted and reported. Short trails may show partial orbits.', zh: '选择本组全部目录身份，不表示全部已有位置。覆盖期内使用已加载 SPK；仅原有种子模型允许回退。缺失状态会标明并省略，短时轨迹可能不满一圈。' },
         referenceId: parent, selectedMajorBodyIds: [parent, ...selected.map((moon) => moon.id)],
         julianDay: dateToJD('2026-09-04'), viewMode: '3d', zoomLevel: 1, historyDays,
