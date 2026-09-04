@@ -4,8 +4,20 @@ import { selectionActions } from '../state/selection-store'
 import { simulationActions } from '../state/simulation-store'
 import { uiActions } from '../state/ui-store'
 import type { StoryScene } from '../content/stories/types'
+import { sceneAvailability } from './productAvailability'
+import { availabilityActions } from '../state/availability-store'
+
+export function storySceneAvailability(scene: StoryScene) {
+  return sceneAvailability({ bodies: scene.bodies,
+    ref: scene.referenceId, compareRef: scene.comparisonReferenceId,
+    history: scene.historyDays, route: scene.route,
+    layers: scene.showSpacecraft ? ['spacecraft'] : [],
+  })
+}
 
 export function applyStoryScene(scene: StoryScene) {
+  if (!availabilityActions.require(storySceneAvailability(scene))) return false
+  availabilityActions.explorePreview()
   const selectedIds = scene.bodies.filter((id) => id !== 'sun')
   selectionActions.setSelectedIds(selectedIds)
   selectionActions.focus(scene.referenceId !== 'sun' ? scene.referenceId : selectedIds[0] ?? 'sun')
@@ -36,4 +48,5 @@ export function applyStoryScene(scene: StoryScene) {
   if (scene.plot) uiActions.setElementPlot(scene.plot)
   simulationActions.seek(dateToJulianDay(new Date(`${scene.date}T12:00:00Z`)))
   uiActions.navigate(scene.route ?? 'explorer')
+  return true
 }

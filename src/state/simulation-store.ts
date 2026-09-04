@@ -2,6 +2,8 @@ import { simulationClock } from '../engine/clock/SimulationClock'
 import { todayJulianDay } from '../lib/julianDate'
 import { createStore } from './createStore'
 import type { RenderQuality } from '../types'
+import { sceneAvailability } from '../lib/productAvailability'
+import { availabilityActions } from './availability-store'
 
 export type ViewMode = '2d' | '3d'
 
@@ -45,7 +47,17 @@ export const DEFAULT_SIMULATION_STATE: SimulationState = {
 export const simulationStore = createStore(DEFAULT_SIMULATION_STATE)
 
 export const simulationActions = {
-  patch: simulationStore.setState,
+  patch(update: Parameters<typeof simulationStore.setState>[0]) {
+    const current = simulationStore.getState()
+    const patch = typeof update === 'function' ? update(current) : update
+    const next = { ...current, ...patch }
+    if (!availabilityActions.require(sceneAvailability({ ref: next.referenceId,
+      compareRef: next.comparisonReferenceId, history: next.historyDays,
+      samples: next.sampleCount, layers: next.showSpacecraft ? ['spacecraft'] : [],
+    }))) return false
+    simulationStore.setState(patch)
+    return true
+  },
   seek: (julianDay: number) => simulationClock.seek(julianDay),
   resetTime: () => simulationClock.seek(todayJulianDay()),
   setRate: (rate: number) => simulationClock.setRate(rate),

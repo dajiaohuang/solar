@@ -1,4 +1,6 @@
 import { createStore } from './createStore'
+import { routeAvailability, storyAvailability } from '../lib/productAvailability'
+import { availabilityActions } from './availability-store'
 
 export type AppRoute = 'home' | 'explorer' | 'catalog' | 'elements' | 'events' | 'mission' | 'stories' | 'about'
 export type Language = 'zh' | 'en'
@@ -40,7 +42,9 @@ export const uiStore = createStore(initialUiState)
 
 export const uiActions = {
   navigate(route: AppRoute) {
+    if (!availabilityActions.require(routeAvailability(route))) return false
     uiStore.setState({ route })
+    return true
   },
   setLanguage(language: Language) {
     try { localStorage.setItem('solar-atlas-language', language) } catch { /* optional */ }
@@ -50,12 +54,14 @@ export const uiActions = {
     uiStore.setState({ elementPlot })
   },
   selectStory(storyId: string, storyStep = 0) {
+    if (!availabilityActions.require(storyAvailability(storyId))) return false
     uiStore.setState({ storyId, storyStep: Math.max(0, Math.floor(storyStep)) })
   },
   setStoryStep(storyStep: number) {
     uiStore.setState({ storyStep: Math.max(0, Math.floor(storyStep)) })
   },
   startStory(storyId: string, storyStep = 0) {
+    if (!availabilityActions.require(storyAvailability(storyId))) return false
     uiStore.setState({ storyId, storyStep: Math.max(0, Math.floor(storyStep)), storyGuideOpen: true })
   },
   stopStory() {

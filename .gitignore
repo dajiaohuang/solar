@@ -14,6 +14,7 @@ dist-ssr
 *.local
 public/data/asteroids
 test-results
+test-results-preview
 playwright-report
 .dataset-test-*
 

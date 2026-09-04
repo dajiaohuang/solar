@@ -38,6 +38,7 @@ async function directoryBytes(path) {
 
 const bytes = await directoryBytes(dist)
 const buildInfo = JSON.parse(await readFile(join(dist, 'build-info.json'), 'utf8'))
+if (buildInfo.productProfile !== 'full') throw new Error('Native build inherited preview product restrictions')
 const profile = ephemerisProfile('native', buildInfo.ephemerisProfile)
 const ephemerisManifest = JSON.parse(await readFile(`src/data/ephemeris-manifest${profile === 'full' ? '-full' : ''}.json`, 'utf8'))
 const ephemerisBytes = await verifyEphemerisAssets(join(dist, 'data', 'ephemerides'), ephemerisManifest.files)

@@ -13,6 +13,8 @@ import type {
   OrbitClassCode,
 } from '../types'
 import { CATALOG_DATA_ROOT } from './platform'
+import { sceneAvailability } from './productAvailability'
+import { requireCatalogAccess, requireProductAccess } from './productAccess'
 
 export const dataRoot = CATALOG_DATA_ROOT
 const searchBucketCache = new Map<string, Promise<AsteroidIndexEntry[]>>()
@@ -105,6 +107,7 @@ export function isNameSearchTooShort(searchText: string, manifest = activeManife
 }
 
 export async function loadAsteroidManifest(requestedVersion?: string) {
+  requireProductAccess(sceneAvailability({ dataset: requestedVersion }))
   const generation = manifestRequestGeneration + 1
   manifestRequestGeneration = generation
   const cacheKey = requestedVersion ?? 'current'
@@ -172,6 +175,7 @@ export async function loadDatasetProvenance(): Promise<DatasetProvenance | null>
 }
 
 export function loadAsteroidSearchBucket(bucketKey: string) {
+  requireCatalogAccess('search')
   const normalizedBucket = bucketKey || 'misc'
   const cacheKey = `${activeManifest?.version ?? 'legacy'}:${normalizedBucket}`
   const existing = searchBucketCache.get(cacheKey)
@@ -227,6 +231,7 @@ function decodeBinaryChunk(metadata: AsteroidIndexEntry[], buffer: ArrayBuffer) 
 }
 
 export function loadAsteroidChunk(chunkId: string) {
+  requireCatalogAccess('details')
   const cacheKey = `${activeManifest?.version ?? 'legacy'}:${chunkId}`
   const existing = chunkCache.get(cacheKey)
   if (existing) {
@@ -301,6 +306,7 @@ function idLookupBucket(id: string) {
 }
 
 export async function loadAsteroidBodiesByIds(ids: BodyId[]) {
+  if (ids.length) requireCatalogAccess('details')
   const asteroidIds = [...new Set(ids.filter((id) => id.startsWith('asteroid:')))]
   if (!asteroidIds.length || !activeManifest || (activeManifest.schemaVersion ?? 1) < 2) return []
   const groups = new Map<string, BodyId[]>()
@@ -326,6 +332,10 @@ export async function loadAsteroidBodiesByIds(ids: BodyId[]) {
 }
 
 export function loadAsteroidSample(manifest: AsteroidManifest, size: CatalogSampleProfile) {
+  const allowed = sceneAvailability({ catalogSample: size, catalogSampleCount: manifest.precomputedSamples?.[size]?.count })
+  if (!allowed.available) {
+    try { requireProductAccess(allowed) } catch (error) { return Promise.reject<AsteroidRecord[]>(error) }
+  }
   const artifact = manifest.precomputedSamples?.[size]
   if (!artifact) return Promise.resolve<AsteroidRecord[]>([])
   const cacheKey = `${manifest.version}:${size}`
@@ -373,6 +383,7 @@ export function loadCatalogSummary(manifest: AsteroidManifest) {
 }
 
 export async function loadAsteroidRecordsByLocators(manifest: AsteroidManifest, locators: Uint32Array) {
+  if (locators.length) requireCatalogAccess('details')
   if (locators.length % 2 !== 0) throw new Error('Catalog locator array must contain chunk/row pairs')
   const groups = new Map<number, { rowIndex: number; outputIndex: number }[]>()
   for (let index = 0; index < locators.length; index += 2) {

@@ -1,5 +1,6 @@
 import type { CelestialBody } from '../../types'
 import { IS_NATIVE_APP } from '../../lib/platform'
+import { requireCatalogAccess } from '../../lib/productAccess'
 
 type SbdbElement = {
   name?: string
@@ -127,6 +128,7 @@ export function parseSbdbBody(response: SbdbResponse, fallbackDesignation: strin
 }
 
 export async function fetchSbdbBody(designation: string, signal?: AbortSignal) {
+  requireCatalogAccess('sbdb')
   const url = new URL('https://ssd-api.jpl.nasa.gov/sbdb.api')
   url.searchParams.set('sstr', designation)
   url.searchParams.set('full-prec', '1')

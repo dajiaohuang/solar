@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "solar-preview-v1",
+  "bodyIds": [
+    "sun", "mercury", "venus", "earth", "moon", "mars", "jupiter", "saturn", "uranus", "neptune",
+    "ceres", "pluto", "eris", "haumea", "makemake",
+    "io", "europa", "ganymede", "callisto", "titan", "naif:401", "naif:402",
+    "quaoar", "naif:120050000",
+    "asteroid:2", "asteroid:3", "asteroid:4", "asteroid:7", "asteroid:10", "asteroid:15", "asteroid:16",
+    "asteroid:31", "asteroid:52", "asteroid:65", "asteroid:87", "asteroid:88", "asteroid:107", "asteroid:511", "asteroid:704"
+  ],
+  "routes": ["home", "explorer", "elements", "stories", "about"],
+  "storyIds": ["geocentric-model", "retrograde-mars", "reference-frames"],
+  "maxHistoryDays": 4383,
+  "maxSamples": 360,
+  "catalog": { "profile": "mobile", "sampleCount": 8000, "kind": "display" },
+  "fullDestinations": { "web": null, "android": null, "ios": null }
+}

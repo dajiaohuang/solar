@@ -6,7 +6,9 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createGzip, constants as zlibConstants } from 'node:zlib'
 import { pipeline } from 'node:stream/promises'
-import { ephemerisProfile } from '../src/data/ephemerisProfile.ts'
+import { jsonDocument, productDelivery, sha256 } from './lib/product-delivery.ts'
+import { previewDatasetPlan } from './lib/preview-dataset.mjs'
+import { verifyEphemerisAssets } from './lib/verify-ephemeris-assets.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const CACHE_FILE = join(ROOT, '.cache', 'solar-build-info.json')
@@ -16,7 +18,8 @@ const PUBLIC = join(ROOT, 'public')
 const SITE_BASE = 'https://dajiaohuang.github.io/solar/'
 const MAX_ARTIFACT_BYTES = 700 * 1024 * 1024
 const WARN_ARTIFACT_BYTES = 600 * 1024 * 1024
-const EPHEMERIS_PROFILE = ephemerisProfile(process.env.SOLAR_ATLAS_BUILD_TARGET, process.env.SOLAR_ATLAS_EPHEMERIS_PROFILE)
+const DELIVERY = productDelivery(process.env.SOLAR_ATLAS_BUILD_TARGET, process.env.SOLAR_ATLAS_PRODUCT_PROFILE, process.env.SOLAR_ATLAS_EPHEMERIS_PROFILE)
+const EPHEMERIS_PROFILE = DELIVERY.scientificProfile
 
 function readJson(path) {
   return readFile(path, 'utf8').then((text) => JSON.parse(text))
@@ -46,6 +49,8 @@ async function prepareBuildInfo() {
     environment: process.env.SOLAR_ATLAS_BUILD_ENV ?? (process.env.GITHUB_ACTIONS ? 'github-pages' : 'local'),
     datasetVersion: candidatePointer?.activeVersion ?? pin?.version ?? null,
     ephemerisProfile: EPHEMERIS_PROFILE,
+    productProfile: DELIVERY.product,
+    productAvailabilitySha256: DELIVERY.availabilitySha256,
   }
   await mkdir(dirname(CACHE_FILE), { recursive: true })
   await writeFile(CACHE_FILE, `${JSON.stringify(info, null, 2)}\n`)
@@ -71,7 +76,7 @@ function normalizedRelative(root, path) {
 }
 
 async function copyStaticPublic() {
-  const ephemerides = await readJson(join(ROOT, 'src', 'data', `ephemeris-manifest${EPHEMERIS_PROFILE === 'full' ? '-full' : ''}.json`))
+  const ephemerides = DELIVERY.manifest
   const ephemerisPaths = new Set(ephemerides.files.map((file) => `data/ephemerides/${file.path}`))
   const files = await walkFiles(PUBLIC)
   for (const source of files) {
@@ -84,11 +89,9 @@ async function copyStaticPublic() {
   }
   // Only the pinned profile is shipped, even if a developer generated a larger
   // local pack in public/. Fail closed for missing or changed coefficients.
-  for (const file of ephemerides.files) {
-    if (!/^[a-zA-Z0-9._-]+\.bsp$/.test(file.path)) throw new Error('Unsafe ephemeris filename')
-    const path = join(DIST, 'data', 'ephemerides', file.path)
-    if ((await stat(path)).size !== file.bytes || await hashFile(path) !== file.sha256) throw new Error(`Ephemeris checksum mismatch: ${file.path}`)
-  }
+  await verifyEphemerisAssets(join(DIST, 'data', 'ephemerides'), ephemerides.files)
+  await writeFile(join(DIST, 'ephemeris-manifest.json'), jsonDocument(ephemerides))
+  await writeFile(join(DIST, 'product-availability.json'), jsonDocument(DELIVERY.availability))
 }
 
 function shouldCompressJson(relativePath) {
@@ -116,21 +119,30 @@ async function copyActiveDataset(buildInfo) {
   }
   const sourceRoot = join(PUBLIC, 'data', 'asteroids', 'releases', version)
   if (!await exists(sourceRoot)) throw new Error(`Active dataset release is missing: ${sourceRoot}`)
-  const destinationRoot = join(DIST, 'data', 'asteroids', 'releases', version)
+  const destinationRoot = join(DIST, DELIVERY.catalogDirectory, 'releases', version)
   const sourceManifest = await readJson(join(sourceRoot, 'manifest.json'))
-  const pointerDestination = join(DIST, 'data', 'asteroids', 'dataset-version.json')
+  const previewPlan = DELIVERY.product === 'preview' ? previewDatasetPlan(sourceManifest, DELIVERY.availabilitySha256) : null
+  const pointerDestination = join(DIST, DELIVERY.catalogDirectory, 'dataset-version.json')
   await mkdir(dirname(pointerDestination), { recursive: true })
   await copyFile(pointerPath, pointerDestination)
-  const sourceFiles = await walkFiles(sourceRoot)
+  const sourceFiles = previewPlan ? previewPlan.sourcePaths.map(path => join(sourceRoot, path)) : await walkFiles(sourceRoot)
+  if (previewPlan) {
+    const checksums = await readJson(join(sourceRoot, 'checksums.json'))
+    // The preview delivery hash must not bless changed source bytes. Verify
+    // each copied source artifact against the immutable release first.
+    for (const path of previewPlan.sourcePaths) {
+      if (!checksums.files?.[path] || await hashFile(join(sourceRoot, path)) !== checksums.files[path]) throw new Error(`Preview source checksum mismatch: ${path}`)
+    }
+  }
   const tasks = sourceFiles.map((source) => async () => {
     const relativePath = normalizedRelative(sourceRoot, source)
     const destination = join(destinationRoot, ...relativePath.split('/'))
     if (relativePath === 'manifest.json') {
-      const manifest = structuredClone(sourceManifest)
+      const manifest = previewPlan?.manifest ?? structuredClone(sourceManifest)
       const capabilities = new Set(manifest.capabilities ?? [])
       capabilities.add('gzip-json-v1')
       manifest.capabilities = [...capabilities]
-      manifest.delivery = {
+      manifest.delivery ??= {
         jsonCompression: 'gzip',
         suffix: '.gz',
         compressedDirectories: ['search', 'lookup', 'meta', 'chunks'],
@@ -173,14 +185,17 @@ async function copyActiveDataset(buildInfo) {
     datasetVersion: version,
     generatedAt: buildInfo.buildTime,
     sourceContentSha256: sourceManifest.contentSha256 ?? pointer.contentSha256 ?? null,
-    delivery: { jsonCompression: 'gzip', suffix: '.gz' },
+    delivery: { profile: DELIVERY.product, availabilitySha256: DELIVERY.availabilitySha256, jsonCompression: 'gzip', suffix: '.gz' },
+    deliveredContentSha256: sha256(JSON.stringify(deliveryEntries)),
     files: deliveryEntries,
   }, null, 2)}\n`)
   return {
     included: true,
     version,
+    root: DELIVERY.catalogDirectory,
+    profile: DELIVERY.product,
     fileCount: deliveryEntries.length,
-    deliveryManifestPath: `data/asteroids/releases/${version}/delivery-manifest.json`,
+    deliveryManifestPath: `${DELIVERY.catalogDirectory}/releases/${version}/delivery-manifest.json`,
     deliveryManifestSha256: await hashFile(deliveryManifestPath),
   }
 }
@@ -427,7 +442,7 @@ async function finalizeServiceWorker(buildInfo) {
   }
   const unique = [...new Set(precache)].sort()
   let source = await readFile(swPath, 'utf8')
-  source = source.replaceAll('__BUILD_SHA__', buildInfo.commitSha.slice(0, 12))
+  source = source.replaceAll('__BUILD_SHA__', `${buildInfo.commitSha.slice(0, 12)}-${DELIVERY.product}-${DELIVERY.availabilitySha256.slice(0, 12)}`)
   source = source.replace(/const PRECACHE_URLS = .*?\/\/ __SOLAR_ATLAS_PRECACHE__/, `const PRECACHE_URLS = ${JSON.stringify(unique)} // __SOLAR_ATLAS_PRECACHE__`)
   await writeFile(swPath, source)
 }
@@ -466,13 +481,15 @@ async function writeManifestsAndCapacity(buildInfo, dataset) {
   const shellEntries = entries.filter((entry) => !entry.path.startsWith('data/'))
   const bytes = (items) => items.reduce((sum, item) => sum + item.bytes, 0)
   const coldLoadEntries = entries.filter((entry) => entry.path === 'index.html' || entry.path === 'manifest.webmanifest' || entry.path.startsWith('assets/'))
-  const typicalExtra = datasetEntries.filter((entry) => /catalog-index\.bin$|catalog-sample-desktop\.(bin|json\.gz)$|manifest\.json$|provenance\.json$|dataset-version\.json$/.test(entry.path))
+  const typicalExtra = datasetEntries.filter((entry) => /catalog-index\.bin$|catalog-sample-(?:desktop|mobile)\.(bin|json\.gz)$|manifest\.json$|provenance\.json$|dataset-version\.json$/.test(entry.path))
   const totalBytes = bytes(entries)
   const report = {
     schemaVersion: 1,
     generatedAt: buildInfo.buildTime,
     thresholds: { warningBytes: WARN_ARTIFACT_BYTES, maximumBytes: MAX_ARTIFACT_BYTES },
     ephemerisProfile: EPHEMERIS_PROFILE,
+    productProfile: DELIVERY.product,
+    productAvailabilitySha256: DELIVERY.availabilitySha256,
     // Full/native coverage does not inherit a hosting platform's Pages cap.
     withinBudget: EPHEMERIS_PROFILE === 'full' || totalBytes <= MAX_ARTIFACT_BYTES,
     warning: EPHEMERIS_PROFILE === 'pages' && totalBytes > WARN_ARTIFACT_BYTES,
@@ -491,6 +508,7 @@ async function writeManifestsAndCapacity(buildInfo, dataset) {
 
 async function finalizeBuild() {
   const buildInfo = await readJson(CACHE_FILE)
+  if (buildInfo.productProfile !== DELIVERY.product || buildInfo.productAvailabilitySha256 !== DELIVERY.availabilitySha256) throw new Error('Product profile changed between prepare and finalize')
   if (!await exists(DIST)) throw new Error('dist does not exist; run Vite before finalizing')
   await copyStaticPublic()
   const dataset = await copyActiveDataset(buildInfo)

@@ -4,6 +4,8 @@ import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { ephemerisProfile } from './src/data/ephemerisProfile.ts'
+import { productProfile } from './src/data/productProfile.ts'
+import { productDelivery } from './scripts/lib/product-delivery.ts'
 
 type BuildInfo = {
   version: string
@@ -30,6 +32,7 @@ function loadBuildInfo(): BuildInfo {
 
 export default defineConfig(({ command }) => {
   const isNative = process.env.SOLAR_ATLAS_BUILD_TARGET === 'native'
+  const delivery = productDelivery(process.env.SOLAR_ATLAS_BUILD_TARGET, process.env.SOLAR_ATLAS_PRODUCT_PROFILE, process.env.SOLAR_ATLAS_EPHEMERIS_PROFILE)
   const nativeDataRoot = (process.env.SOLAR_ATLAS_DATA_BASE_URL ?? 'https://dajiaohuang.github.io/solar/data/asteroids').replace(/\/+$/, '')
   if (isNative && !nativeDataRoot.startsWith('https://')) {
     throw new Error('Native catalog data must use an HTTPS origin')
@@ -39,11 +42,16 @@ export default defineConfig(({ command }) => {
     plugins: [react()],
     base: isNative ? './' : '/solar/',
     publicDir: command === 'serve' ? 'public' : false,
+    // Dataset pipeline tests publish temporary directories atomically. Watching
+    // those generated files can hold Windows handles across their rename.
+    server: { watch: { ignored: ['**/.dataset-test-*/**', '**/test-results/**', '**/test-results-preview/**'] } },
     define: {
       __SOLAR_BUILD_INFO__: JSON.stringify(loadBuildInfo()),
       __SOLAR_NATIVE__: JSON.stringify(isNative),
+      __SOLAR_PRODUCT_PROFILE__: JSON.stringify(productProfile(process.env.SOLAR_ATLAS_BUILD_TARGET, process.env.SOLAR_ATLAS_PRODUCT_PROFILE)),
+      __SOLAR_EPHEMERIS_MANIFEST__: JSON.stringify(delivery.manifest),
       __SOLAR_EPHEMERIS_PROFILE__: JSON.stringify(ephemerisProfile(process.env.SOLAR_ATLAS_BUILD_TARGET, process.env.SOLAR_ATLAS_EPHEMERIS_PROFILE)),
-      __SOLAR_DATA_ROOT__: JSON.stringify(isNative ? nativeDataRoot : ''),
+      __SOLAR_DATA_ROOT__: JSON.stringify(isNative ? nativeDataRoot : delivery.product === 'preview' ? `/solar/${delivery.catalogDirectory}` : ''),
     },
     // Three.js is isolated in a lazy renderer chunk; 600 kB keeps the build
     // warning meaningful without flagging that deliberate route boundary.

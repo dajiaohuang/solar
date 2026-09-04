@@ -102,6 +102,30 @@ jobs:
           runs: 3
           configPath: ./.lighthouserc.json
           uploadArtifacts: true
+      - name: Fetch the audited source dataset for the curated preview contract
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, mkdirSync } from 'node:fs'
+          import { createHash } from 'node:crypto'
+          import { execFileSync } from 'node:child_process'
+          const pin = JSON.parse(readFileSync('.github/asteroid-dataset.json', 'utf8'))
+          if (!/^dataset-mpcorb-[a-f0-9]{16}-(full|lite)$/.test(pin.tag) ||
+              pin.version !== pin.tag.slice('dataset-'.length) ||
+              pin.asset !== 'asteroid-dataset.tar.gz' || !/^[a-f0-9]{64}$/.test(pin.assetSha256)) {
+            throw new Error('Invalid immutable dataset pin')
+          }
+          execFileSync('gh', ['release', 'download', pin.tag, '--pattern', pin.asset], { stdio: 'inherit' })
+          if (createHash('sha256').update(readFileSync(pin.asset)).digest('hex') !== pin.assetSha256) {
+            throw new Error('Dataset archive checksum mismatch')
+          }
+          mkdirSync('public/data/asteroids', { recursive: true })
+          execFileSync('tar', ['-xzf', pin.asset, '-C', 'public/data/asteroids'], { stdio: 'inherit' })
+          NODE
+          npm run validate:data
+      - name: Verify the same frontend with curated assets and blocked full-only actions
+        run: npm run test:preview
       - name: Upload browser diagnostics
         if: always()
         uses: actions/upload-artifact@v6
@@ -110,6 +134,7 @@ jobs:
           path: |
             playwright-report
             test-results
+            test-results-preview
           if-no-files-found: ignore
           retention-days: 14
 

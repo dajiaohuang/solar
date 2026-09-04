@@ -213,6 +213,12 @@ npm run build:deploy
 npm run check:capacity
 ```
 
+### Curated preview build
+
+`npm run build:preview` builds the **same Web frontend** with a curated product profile; it requires the audited dataset pinned in `.github/asteroid-dataset.json` to be installed locally. It retains the 3D Observation Deck, selected presets and lessons, source evidence and an 8,000-record display sample. Full-only entries remain visible with accessible explanations, and denied scene links retain their original intent. This is not full catalog/state coverage.
+
+The regular `build:deploy` still preserves the existing full catalog URL for installed clients. **Do not replace the live Pages artifact with the curated build until the full-data endpoint and client migration have been verified.** Native builds reject the preview product profile. See [preview delivery, verification and migration](./docs/preview-delivery.md) for the exact asset/cache boundaries and commands.
+
 Useful pipeline variables:
 
 | Variable | Meaning |

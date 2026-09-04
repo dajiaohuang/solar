@@ -7,6 +7,8 @@ import { IS_NATIVE_APP, shareSceneUrl } from '../../lib/platform'
 import { applyStoryScene } from '../../lib/storyScene'
 import { uiActions, uiStore } from '../../state/ui-store'
 import { StoryCheckpoint } from './StoryCheckpoint'
+import { availabilityAttributes, storyAvailability } from '../../lib/productAvailability'
+import { availabilityActions } from '../../state/availability-store'
 const stories = storiesData as Story[]
 
 export function StoriesWorkspace() {
@@ -20,8 +22,8 @@ export function StoriesWorkspace() {
   const explanationOpen = revealedStep === stepKey
 
   function applyScene(scene: StoryScene) {
-    uiActions.startStory(story.id, stepIndex)
-    applyStoryScene(scene)
+    if (!availabilityActions.require(storyAvailability(story.id))) return
+    if (applyStoryScene(scene)) uiActions.startStory(story.id, stepIndex)
   }
 
   async function copyStepLink() {
@@ -44,7 +46,7 @@ export function StoriesWorkspace() {
   return <div className="workspace-page stories-workspace">
     <div className="page-heading"><div><span className="eyebrow">{t('storiesKicker')}</span><h1>{t('stories')}</h1><p>{t('storiesDescription')}</p></div><button className="quiet-button" onClick={() => void copyStepLink()}>↗ {t(IS_NATIVE_APP ? 'shareStoryNative' : 'copyStoryLink')}</button></div>
     <div className="stories-layout">
-      <aside className="story-index glass-panel" aria-label={t('stories')}>{stories.map((item, index) => <button aria-current={item.id === story.id ? 'true' : undefined} className={`${item.id === story.id ? 'active' : ''}${item.core ? ' core' : ''}`} key={item.id} onClick={() => selectStory(item.id)}><em>{String(index + 1).padStart(2, '0')}</em><span><strong>{item.title[language]}{item.core && <i className="story-core-badge">{t('coreCourse')}</i>}</strong><small>{item.summary[language]}</small></span></button>)}</aside>
+      <aside className="story-index glass-panel" aria-label={t('stories')}>{stories.map((item, index) => <button {...availabilityAttributes(storyAvailability(item.id))} aria-current={item.id === story.id ? 'true' : undefined} className={`${item.id === story.id ? 'active' : ''}${item.core ? ' core' : ''}`} key={item.id} onClick={() => selectStory(item.id)}><em>{String(index + 1).padStart(2, '0')}</em><span><strong>{item.title[language]}{item.core && <i className="story-core-badge">{t('coreCourse')}</i>}{!storyAvailability(item.id).available && <small className="full-version-badge">{t('fullVersion')}</small>}</strong><small>{item.summary[language]}</small></span></button>)}</aside>
       <section className={`story-hero story-${story.id} glass-panel`}>
         <div className="story-orbit-art" aria-hidden="true"><i className="orbit orbit-one" /><i className="orbit orbit-two" /><i className="orbit orbit-three" /><b className="story-sun">☉</b><b className="story-body-one" /><b className="story-body-two" /></div>
         <div className="story-copy">

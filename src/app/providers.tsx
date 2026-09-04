@@ -15,6 +15,8 @@ import { IS_NATIVE_APP } from '../lib/platform'
 import { onNativeSceneLocation } from '../lib/nativeUrl'
 import { VIEW_CAPABILITIES } from '../lib/viewCapabilities'
 import { useEphemerisLoading } from '../hooks/useEphemerides'
+import { sceneAvailability } from '../lib/productAvailability'
+import { availabilityActions, availabilityStore } from '../state/availability-store'
 
 const DEFAULT_STORY = 'geocentric-model'
 const MISSION_BODY_IDS = new Set(majorBodiesWithPhysicalData.filter((body) => body.orbit && !body.parentId).map((body) => body.id))
@@ -55,6 +57,13 @@ export function AppProviders({ children }: { children: ReactNode }) {
   const datasetLoadGeneration = useRef(0)
 
   const applyUrlState = useCallback((initial: AppUrlState) => {
+    // Even a rejected history entry invalidates work from the previous scene.
+    const loadGeneration = ++datasetLoadGeneration.current
+    if (!availabilityActions.require(sceneAvailability(initial), window.location.href)) {
+      if (initial.lang) uiActions.setLanguage(initial.lang)
+      return
+    }
+    availabilityActions.explorePreview()
     const route = routeForState(initial)
     const selectedIds = initial.bodies ?? DEFAULT_SELECTED_IDS
     const focusedId = initial.focused ?? (selectedIds.includes(DEFAULT_FOCUSED_ID) ? DEFAULT_FOCUSED_ID : selectedIds[0] ?? null)
@@ -140,8 +149,6 @@ export function AppProviders({ children }: { children: ReactNode }) {
       sampleError: null,
     })
 
-    const loadGeneration = datasetLoadGeneration.current + 1
-    datasetLoadGeneration.current = loadGeneration
     void loadAsteroidManifest(initial.dataset).then(async (manifest) => {
       const provenance = manifest ? await loadDatasetProvenance() : null
       if (datasetLoadGeneration.current !== loadGeneration) return
@@ -181,12 +188,14 @@ export function AppProviders({ children }: { children: ReactNode }) {
   useEffect(() => {
     let timeout: number | null = null
     let pendingPush = false
+    let discreteFlushQueued = false
+    let active = true
     let lastDiscreteKey = discreteSceneKey()
     let lastUrl = currentRelativeUrl()
 
     const flush = () => {
       timeout = null
-      if (restoringHistory.current) return
+      if (!active || restoringHistory.current || availabilityStore.getState().preserveLocation) return
       const url = nextRelativeUrl()
       const discreteKey = discreteSceneKey()
       if (url !== lastUrl) {
@@ -202,7 +211,16 @@ export function AppProviders({ children }: { children: ReactNode }) {
       if (restoringHistory.current) return
       pendingPush = pendingPush || discreteSceneKey() !== lastDiscreteKey
       if (timeout !== null) window.clearTimeout(timeout)
-      timeout = window.setTimeout(flush, pendingPush ? 60 : 500)
+      timeout = null
+      if (pendingPush) {
+        // Coalesce one synchronous scene action, never separate user actions.
+        // A timer can swallow a fast Catalog -> Mission transition and make
+        // Back skip Catalog entirely, even though both pages were rendered.
+        if (!discreteFlushQueued) {
+          discreteFlushQueued = true
+          queueMicrotask(() => { discreteFlushQueued = false; flush() })
+        }
+      } else timeout = window.setTimeout(flush, 500)
     }
 
     const handlePopState = () => {
@@ -224,6 +242,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
       catalogStore.subscribe(schedule),
       missionStore.subscribe(schedule),
       uiStore.subscribe(schedule),
+      availabilityStore.subscribe(schedule),
       simulationClock.subscribe(schedule),
     ]
     window.addEventListener('popstate', handlePopState)
@@ -235,6 +254,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
       })
       : () => undefined
     return () => {
+      active = false
       if (timeout !== null) window.clearTimeout(timeout)
       window.removeEventListener('popstate', handlePopState)
       unsubscribeNativeScene()

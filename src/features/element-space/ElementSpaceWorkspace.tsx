@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { PRODUCT_PROFILE } from '../../lib/productAvailability'
 import { TrajectoryCanvas3D } from '../../components/TrajectoryCanvas3D'
 import { majorBodiesWithPhysicalData, useBodyRegistry } from '../../app/bodyRegistry'
 import { useSimulationClock } from '../../engine/clock/useSimulationClock'
@@ -232,7 +233,7 @@ export function ElementSpaceWorkspace() {
   const [xLabel, yLabel] = labelsFor(mode)
 
   return <div className="workspace-page elements-workspace" data-story-target="elements">
-    <div className="page-heading"><div><span className="eyebrow">{t('elementsKicker')}</span><h1>{t('elements')}</h1><p>{t('brushHint')}</p></div><strong className="selection-stat">{selection.selectedIds.length} {t('selectedCount')}</strong></div>
+    <div className="page-heading"><div><span className="eyebrow">{t('elementsKicker')}</span><h1>{t('elements')}</h1><p>{t(PRODUCT_PROFILE === 'preview' ? 'previewBrushHint' : 'brushHint')}</p></div><strong className="selection-stat">{selection.selectedIds.length} {t('selectedCount')}</strong></div>
     <div className="elements-toolbar glass-panel">
       <div className="segmented-control">{(['a-e', 'a-i', 'a-H', 'q-Q', 'a-period'] as PlotMode[]).map((item) => <button key={item} className={mode === item ? 'active' : ''} onClick={() => uiActions.setElementPlot(item)}>{item}</button>)}</div>
       <div className="legend">{Object.entries(CLASS_COLORS).slice(0, 9).map(([key, color]) => <span key={key}><i style={{ background: color }} />{key}</span>)}</div>
@@ -243,11 +244,11 @@ export function ElementSpaceWorkspace() {
         <div className="sample-caption">{t('showing')} {data.length.toLocaleString()} / {(catalog.activeResultScanKey === scanKey ? catalog.exactFilteredTotal ?? records.length : records.length).toLocaleString()} · {t('stratifiedSample')}{mode === 'a-H' ? ` · ${t('unknownMagnitudeExcluded')}` : ''}</div>
         <div className="axis-title y">{yLabel}</div><ElementScatter data={data} mode={mode} selectedIds={selectedSet} onSelect={(selected) => {
           const limited = selected.slice(0, 160)
-          selectionActions.addCatalogBodies(limited.map(asteroidRecordToBody))
-          selectionActions.setSelectedIds(limited.map((record) => record.id))
+          if (selectionActions.addCatalogBodies(limited.map(asteroidRecordToBody)) === false) return
+          if (!selectionActions.setSelectedIds(limited.map((record) => record.id))) return
           uiActions.toast(`${limited.length} ${t('selectedCount')}`)
         }} onFocus={(record) => {
-          selectionActions.addCatalogBodies([asteroidRecordToBody(record)])
+          if (selectionActions.addCatalogBodies([asteroidRecordToBody(record)]) === false) return
           selectionActions.focus(record.id)
           if (!selection.selectedIds.includes(record.id)) selectionActions.toggle(record.id)
         }} ariaLabel={t('elementScatterAria')} /><div className="axis-title x">{xLabel}</div>
