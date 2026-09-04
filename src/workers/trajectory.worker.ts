@@ -23,7 +23,7 @@ function yieldToWorker() {
   return new Promise<void>((resolve) => setTimeout(resolve, 0))
 }
 
-function packTrajectories(bodyIds: BodyId[], points: Vector2[][], points3D: Vector3[][]): PackedTrajectoryData {
+function packTrajectories(bodyIds: BodyId[], trajectoryUnavailableBodyIds: BodyId[], points: Vector2[][], points3D: Vector3[][]): PackedTrajectoryData {
   const totalPoints = points.reduce((sum, bodyPoints) => sum + bodyPoints.length, 0)
   const offsets = new Uint32Array(bodyIds.length + 1)
   const points2D = new Float64Array(totalPoints * 2)
@@ -43,7 +43,7 @@ function packTrajectories(bodyIds: BodyId[], points: Vector2[][], points3D: Vect
     }
   }
   offsets[bodyIds.length] = cursor
-  return { bodyIds, offsets, points2D, points3D: packed3D }
+  return { bodyIds, trajectoryUnavailableBodyIds, offsets, points2D, points3D: packed3D }
 }
 
 async function compute(request: TrajectoryWorkerRequest) {
@@ -75,7 +75,7 @@ async function compute(request: TrajectoryWorkerRequest) {
   }
 
   const complete = accumulator.complete(sampleCount)
-  const packed = packTrajectories(complete.map(sample => sample.body.id), complete.map(sample => sample.points), complete.map(sample => sample.points3D))
+  const packed = packTrajectories(complete.map(sample => sample.body.id), accumulator.incompleteBodyIds(), complete.map(sample => sample.points), complete.map(sample => sample.points3D))
   const response: TrajectoryWorkerResponse = { type: 'result', requestId: request.requestId, packed }
   workerScope.postMessage(response, [packed.offsets.buffer, packed.points2D.buffer, packed.points3D.buffer])
 }

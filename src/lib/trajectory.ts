@@ -101,6 +101,7 @@ export function buildCurrentPositions(params: {
   }))
   return {
     currentPositions,
+    trajectoryUnavailableBodyIds: [],
     missingBodyIds: params.bodies.filter(body => !currentPositions.some(item => item.body.id === body.id)).map(body => body.id),
     maxDistance: currentPositions.reduce((largest, item) => Math.max(largest, item.distance), 0),
   }
@@ -132,6 +133,7 @@ export function buildTrajectoryFrame(params: {
   return {
     currentPositions,
     trajectories,
+    trajectoryUnavailableBodyIds: [],
     maxDistance,
   }
 }

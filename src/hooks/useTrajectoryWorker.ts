@@ -55,6 +55,7 @@ export function useTrajectoryWorker(params: Params) {
   const workerRef = useRef<Worker | null>(null)
   const latestRequestId = useRef(0)
   const [trajectories, setTrajectories] = useState<TrajectorySample[]>([])
+  const [trajectoryUnavailableBodyIds, setTrajectoryUnavailableBodyIds] = useState<BodyId[]>([])
   const [progress, setProgress] = useState(0)
   const [isComputing, setIsComputing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -82,6 +83,8 @@ export function useTrajectoryWorker(params: Params) {
       setIsComputing(true)
       setProgress(0)
       setError(null)
+      setTrajectories([])
+      setTrajectoryUnavailableBodyIds([])
     })
 
     worker.onmessage = (event: MessageEvent<TrajectoryWorkerResponse>) => {
@@ -91,6 +94,7 @@ export function useTrajectoryWorker(params: Params) {
         setProgress(response.progress ?? 0)
       } else if (response.type === 'result' && response.packed) {
         setTrajectories(unpackTrajectories(response.packed, bodiesById))
+        setTrajectoryUnavailableBodyIds(response.packed.trajectoryUnavailableBodyIds ?? [])
         setProgress(1)
         setIsComputing(false)
       } else if (response.type === 'error') {
@@ -135,7 +139,11 @@ export function useTrajectoryWorker(params: Params) {
     workerRef.current = null
   }, [])
 
-  const frame = useMemo(() => ({ ...current, trajectories: trajectories.filter(sample => !current.missingBodyIds.includes(sample.body.id)) }), [current, trajectories])
+  const frame = useMemo(() => ({
+    ...current,
+    trajectories: trajectories.filter(sample => !current.missingBodyIds.includes(sample.body.id)),
+    trajectoryUnavailableBodyIds,
+  }), [current, trajectories, trajectoryUnavailableBodyIds])
 
   return {
     frame,

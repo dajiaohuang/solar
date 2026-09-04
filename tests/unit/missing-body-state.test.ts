@@ -5,6 +5,7 @@ import { buildCurrentPositions, buildTrajectories } from '../../src/lib/trajecto
 import { createTrajectoryAccumulator } from '../../src/lib/trajectorySamples'
 import { kernelCoverage } from '../../src/engine/ephemeris/kernelStore'
 import { computeOrbitEllipses } from '../../src/lib/orbitEllipse'
+import { buildSpacecraftFrame } from '../../src/engine/ephemeris/spacecraft'
 import type { CelestialBody } from '../../src/types'
 
 const sun: CelestialBody = { id: 'sun', name: 'Sun', kind: 'star', color: '#fff', size: 1, source: 'custom' }
@@ -48,5 +49,15 @@ describe('unavailable body states', () => {
     samples.append([{ body: moving, position }, { body: missing, position }])
     expect(samples.complete(3).map(sample => sample.body.id)).toEqual(['moving'])
     expect(samples.complete(3)[0].points3D).toEqual([position, position, position])
+  })
+  it('reports spacecraft trails whose historical reference state is unavailable', () => {
+    const spacecraft = [{
+      ...moving, id: 'probe', kind: 'spacecraft' as const,
+      trajectoryPoints: [{ jd: 2451544, x: 1, y: 0, z: 0 }, { jd: 2451545, x: 2, y: 0, z: 0 }],
+    }]
+    const frame = buildSpacecraftFrame(spacecraft, missing.id, bodiesById, 2451545)
+    expect(frame.currentPositions).toEqual([])
+    expect(frame.trajectories).toEqual([])
+    expect(frame.trajectoryUnavailableBodyIds).toEqual(['probe'])
   })
 })

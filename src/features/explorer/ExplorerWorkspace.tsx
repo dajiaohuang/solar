@@ -117,11 +117,12 @@ function FrameView({
   })
   const spacecraftFrame = useMemo(() => simulation.showSpacecraft && catalogOrigin
     ? buildSpacecraftFrame(SPACECRAFT, referenceBody.id, bodiesById, julianDay)
-    : { currentPositions: [], trajectories: [] },
+    : { currentPositions: [], trajectories: [], trajectoryUnavailableBodyIds: [] },
   [bodiesById, catalogOrigin, julianDay, referenceBody.id, simulation.showSpacecraft])
   const frame = useMemo<TrajectoryFrameData>(() => ({
     currentPositions: [...baseFrame.currentPositions, ...spacecraftFrame.currentPositions],
     trajectories: [...baseFrame.trajectories, ...spacecraftFrame.trajectories],
+    trajectoryUnavailableBodyIds: [...baseFrame.trajectoryUnavailableBodyIds, ...spacecraftFrame.trajectoryUnavailableBodyIds],
     maxDistance: Math.max(baseFrame.maxDistance, ...spacecraftFrame.currentPositions.map((item) => item.distance), 0),
   }), [baseFrame, spacecraftFrame])
   useEffect(() => onFrame(frame), [frame, onFrame])
@@ -188,6 +189,7 @@ function FrameView({
       {isComputing && <div className="compute-progress"><i style={{ width: `${progress * 100}%` }} /></div>}
       {error && <div className="canvas-error">{error}</div>}
       {catalogOrigin && baseFrame.missingBodyIds.length > 0 && <div className="canvas-error" role="status">{t('bodyStateUnavailable')}: {baseFrame.missingBodyIds.map(id => bodyDisplayName(bodiesById.get(id)!, language)).join(', ')}</div>}
+      {catalogOrigin && baseFrame.trajectoryUnavailableBodyIds.length > 0 && <div className="canvas-error" role="status">{t('trajectoryCoverageUnavailable')}: {baseFrame.trajectoryUnavailableBodyIds.map(id => bodyDisplayName(bodiesById.get(id) ?? SPACECRAFT.find(body => body.id === id)!, language)).join(', ')}</div>}
       {!catalogOrigin ? <div className="canvas-error" role="status">{t('referenceStateUnavailable')}</div> : simulation.viewMode === '3d' && !render3DReady ? (
         <SpatialPreview />
       ) : simulation.viewMode === '3d' ? (
@@ -292,8 +294,8 @@ export function ExplorerWorkspace() {
   const catalogFitKey = simulation.showCatalogCloud
     ? `${catalog.baseSampleKey ?? 'unloaded'}|${JSON.stringify(catalog.filters)}`
     : ''
-  const [primaryFrame, setPrimaryFrame] = useState<TrajectoryFrameData>({ currentPositions: [], trajectories: [], maxDistance: 0 })
-  const [secondaryFrame, setSecondaryFrame] = useState<TrajectoryFrameData>({ currentPositions: [], trajectories: [], maxDistance: 0 })
+  const [primaryFrame, setPrimaryFrame] = useState<TrajectoryFrameData>({ currentPositions: [], trajectories: [], trajectoryUnavailableBodyIds: [], maxDistance: 0 })
+  const [secondaryFrame, setSecondaryFrame] = useState<TrajectoryFrameData>({ currentPositions: [], trajectories: [], trajectoryUnavailableBodyIds: [], maxDistance: 0 })
   const [hovered, setHovered] = useState<{ body: CelestialBody; distance: number; x: number; y: number } | null>(null)
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const [measureA, setMeasureA] = useState('earth')

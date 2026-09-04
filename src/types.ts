@@ -2,7 +2,7 @@ export type BodyId = string
 
 export type BodyKind = 'star' | 'planet' | 'moon' | 'dwarfPlanet' | 'asteroid' | 'spacecraft'
 
-export type OrbitSource = 'jpl-approx' | 'jpl-satellite-mean' | 'jpl-sbdb' | 'mpcorb' | 'horizons' | 'curated-approx' | 'schematic' | 'custom' | 'jpl-spk-osculating-fallback'
+export type OrbitSource = 'jpl-approx' | 'jpl-satellite-mean' | 'jpl-satellite-inventory' | 'jpl-sbdb' | 'mpcorb' | 'horizons' | 'curated-approx' | 'schematic' | 'custom' | 'jpl-spk-osculating-fallback'
 
 export type SatelliteOrbitEvidence = {
   sourceFrame: 'jpl-ecliptic' | 'undocumented-illustrative'
@@ -144,6 +144,8 @@ export type TrajectorySample = {
 export type TrajectoryFrameData = {
   currentPositions: RenderedBodyPosition[]
   trajectories: TrajectorySample[]
+  /** Bodies omitted because at least one historical sample had no state. */
+  trajectoryUnavailableBodyIds: BodyId[]
   maxDistance: number
 }
 
@@ -166,6 +168,7 @@ export type TrajectoryWorkerCancelRequest = {
 
 export type PackedTrajectoryData = {
   bodyIds: BodyId[]
+  trajectoryUnavailableBodyIds: BodyId[]
   offsets: Uint32Array
   points2D: Float64Array
   points3D: Float64Array

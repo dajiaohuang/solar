@@ -247,6 +247,7 @@ export const zh: Record<TranslationKey, string> = {
   illuminated: '被照亮',
   bodyStateUnavailable: '所选日期缺少位置数据，未绘制以下天体',
   referenceStateUnavailable: '参考天体在所选日期没有位置数据。请更换参考系或日期；不会用虚构原点代替。',
+  trajectoryCoverageUnavailable: '历史轨迹不可用：',
   distance: '距离',
   distanceFrom: '测距起点',
   distanceTo: '测距终点',

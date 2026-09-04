@@ -11,7 +11,7 @@ import { ObservationReadout } from './ObservationReadout'
 import { simulationStore } from '../../state/simulation-store'
 import { useI18n } from '../../i18n/context'
 import { bodyDisplayName } from '../../lib/bodyNames'
-import { createBodyPositionResolver, getInstantaneousElements } from '../../lib/ephemeris'
+import { bodyPositionOrNull, createBodyPositionResolver, getInstantaneousElements } from '../../lib/ephemeris'
 import { formatDistanceAU, formatPeriodDays } from '../../lib/formatDistance'
 import { getOrbitalPeriodDays } from '../../lib/orbitalPeriod'
 import { encodeCurrentScene } from '../../lib/shareScene'
@@ -58,7 +58,10 @@ export function BodyInspector({ body, currentPositions, bodiesById }: Props) {
   const moonPhase = useMemo(() => {
     if (body?.id !== 'moon') return null
     const resolve = createBodyPositionResolver(bodiesById, clock.julianDay)
-    return computeMoonPhase(resolve('sun'), resolve('earth'), resolve('moon'))
+    const sun = bodyPositionOrNull(resolve, 'sun')
+    const earth = bodyPositionOrNull(resolve, 'earth')
+    const moon = bodyPositionOrNull(resolve, 'moon')
+    return sun && earth && moon ? computeMoonPhase(sun, earth, moon) : null
   }, [bodiesById, body?.id, clock.julianDay])
   const position = body ? currentPositions.find((item) => item.body.id === body.id) : null
   const physical = body ? BODY_PHYSICAL[body.id] : null
