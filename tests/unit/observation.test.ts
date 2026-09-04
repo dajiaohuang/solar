@@ -6,9 +6,9 @@ const jd = 2_451_545
 describe('deriveParentRelativeObservation', () => {
   it('keeps parent-relative AU elements separate from observer-relative apparent km', () => {
     const resolve = (id: string, epoch: number) => {
-      if (id === 'parent') return { position: { x: 10 * AU_IN_KM, y: 0, z: 0 }, velocity: { x: 0, y: 0, z: 0 } }
-      if (id === 'target') return { position: { x: 10 * AU_IN_KM, y: AU_IN_KM, z: 0 }, velocity: { x: 0, y: 29.7846918, z: 0 } }
-      if (id === 'observer') return { position: { x: 0, y: 0, z: 0 }, velocity: { x: 0, y: 0, z: 0 } }
+      if (id === 'parent') return { position: [10 * AU_IN_KM, 0, 0] as const, velocity: [0, 0, 0] as const }
+      if (id === 'target') return { position: [10 * AU_IN_KM, AU_IN_KM, 0] as const, velocity: [-Math.sqrt(0.0002959122082855911) * AU_IN_KM / 86400, 0, 0] as const }
+      if (id === 'observer') return { position: [0, 0, 0] as const, velocity: [0, 0, 0] as const }
       return null
     }
     const result = deriveParentRelativeObservation({ targetId: 'target', parentId: 'parent', observerId: 'observer', julianDay: jd, gmAU3PerDay2: 0.0002959122082855911, resolve, referenceFrame: 'eclipj2000', apparentMode: 'geometric' })!
@@ -21,7 +21,7 @@ describe('deriveParentRelativeObservation', () => {
     expect(result.assumptions.join(' ')).toMatch(/instantaneous two-body osculating snapshot/)
   })
   it('returns null when a body-center chain is unavailable', () => {
-    const resolve = (id: string) => id === 'observer' ? { position: { x: 0, y: 0, z: 0 }, velocity: { x: 0, y: 0, z: 0 } } : null
+    const resolve = (id: string) => id === 'observer' ? { position: [0, 0, 0] as const, velocity: [0, 0, 0] as const } : null
     expect(deriveParentRelativeObservation({ targetId: 'target', parentId: 'parent', observerId: 'observer', julianDay: jd, gmAU3PerDay2: 1, resolve })).toBeNull()
   })
 })
