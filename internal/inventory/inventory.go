@@ -66,6 +66,13 @@ func Load(dir string) (*Inventory, error) {
 func (i *Inventory) TotalRecords() int    { return i.m.TotalRecords }
 func (i *Inventory) ManifestHash() string { return i.hash }
 func (i *Inventory) ShardCount() int      { return len(i.m.Shards) }
+func (i *Inventory) TotalBytes() int64 {
+	var total int64
+	for _, s := range i.m.Shards {
+		total += int64(s.Bytes)
+	}
+	return total
+}
 
 // Page returns raw source records to preserve fields and forward compatibility.
 // Cursor is opaque and identifies a shard plus row offset; rows are never

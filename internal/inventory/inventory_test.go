@@ -50,3 +50,12 @@ func TestRejectsInventoryPathTraversal(t *testing.T) {
 		t.Fatal("expected traversal rejection")
 	}
 }
+
+func FuzzDecodeCursorNeverPanics(f *testing.F) {
+	for _, seed := range []string{"", "MDox", "0:0", "../../etc/passwd", "not-base64"} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(_ *testing.T, token string) {
+		_, _, _ = decodeCursor(token)
+	})
+}

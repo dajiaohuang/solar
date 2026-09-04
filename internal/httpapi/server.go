@@ -50,11 +50,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.error(w, http.StatusNotFound, "not_found", "unknown endpoint")
 		return
 	}
+	// Scientific work is deliberately fail-fast when the bounded worker pool is
+	// full. An unbounded wait queue would let a burst consume memory before
+	// request cancellation can be observed by the handler.
+	if err := r.Context().Err(); err != nil {
+		s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
+		return
+	}
 	select {
 	case s.slots <- struct{}{}:
 		defer func() { <-s.slots }()
-	case <-r.Context().Done():
-		s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
+	default:
+		w.Header().Set("Retry-After", "1")
+		s.error(w, http.StatusTooManyRequests, "overloaded", "scientific worker limit reached; retry later")
 		return
 	}
 	s.inFlight.Add(1)
@@ -130,7 +138,7 @@ func (s *Server) inventoryPage(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	s.json(w, 200, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "inventoryManifestSha256": s.inventory.ManifestHash(), "sourceRecords": true, "uniqueBodySemantics": "not-deduplicated", "totalRecords": s.inventory.TotalRecords(), "shards": s.inventory.ShardCount(), "records": rows, "nextPageToken": next, "limit": limit})
+	s.json(w, 200, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "inventoryManifestSha256": s.inventory.ManifestHash(), "sourceRecords": true, "uniqueBodySemantics": "not-deduplicated", "totalRecords": s.inventory.TotalRecords(), "compressedBytes": s.inventory.TotalBytes(), "shards": s.inventory.ShardCount(), "records": rows, "nextPageToken": next, "limit": limit})
 }
 
 func (s *Server) body(w http.ResponseWriter, r *http.Request, id string) {

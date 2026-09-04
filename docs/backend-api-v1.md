@@ -32,7 +32,8 @@ actions are blocked.
 paginated list. `limit` is 1–500 and page tokens are opaque to clients.
 
 `GET /v1/inventory?q=&limit=&pageToken=` streams the optional audited all-body
-source inventory. It reports `totalRecords` and `sourceRecords: true`; rows are
+source inventory. It reports `totalRecords`, declared compressed input bytes and
+`sourceRecords: true`; rows are
 not deduplicated, promoted to selectable bodies, or counted as unique objects.
 Each row retains source designation, identity/parent status, geometry and
 ephemeris status (including open-conic and missing-parent states). The service
@@ -62,4 +63,7 @@ native endpoint has been deployed.
 
 Errors are JSON objects with `apiVersion` and `error.code`/`error.message`.
 Clients should branch on codes such as `invalid_limit`, `invalid_page_token`,
-`body_not_found`, `unsupported_frame`, `state_unavailable`, and `cancelled`.
+`body_not_found`, `unsupported_frame`, `state_unavailable`, `cancelled`, and
+`overloaded`. A `429 overloaded` response includes `Retry-After: 1`; the
+backend rejects work when its configured scientific worker pool is full rather
+than accumulating an unbounded queue.
