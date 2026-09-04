@@ -1,3 +1,5 @@
+import { evaluateType21, inspectType21, type Type21Metadata } from './spkType21.ts';
+
 /**
  * Minimal, dependency-free reader for binary DAF/SPK kernels.
  *
@@ -15,6 +17,8 @@ export interface SpkSegment {
   recordCount: number;
   /** Number of double words in each data record. */
   recordSize: number;
+  /** Present only for validated extended modified-difference records. */
+  type21?: Type21Metadata;
 }
 
 export interface SpkRecordData {
@@ -86,7 +90,11 @@ export class SpkKernel {
     for (let n = this.segments.length - 1; n >= 0; n--) {
       const s = this.segments[n];
       if (s.target !== target || et < s.startEt || et > s.endEt) continue;
-      if (s.frame !== 1 && s.frame !== 17 || s.type !== 2 && s.type !== 3) { unsupported = s; break; }
+      if (s.frame !== 1 && s.frame !== 17 || s.type !== 2 && s.type !== 3 && s.type !== 21) { unsupported = s; break; }
+      if (s.type21) {
+        const v = evaluateType21((address) => this.f64(this.addressOffset(address)), s.startAddress, s.type21, et);
+        return { position: { x: v[0], y: v[1], z: v[2] }, velocity: { x: v[3], y: v[4], z: v[5] }, center: s.center, frame: s.frame };
+      }
       return this.evaluateSegment(s, et);
     }
     if (unsupported) fail(`unsupported matching segment frame=${unsupported.frame} type=${unsupported.type}`);
@@ -95,6 +103,7 @@ export class SpkKernel {
 
   getRecordData(segment: SpkSegment): SpkRecordData {
     if (!this.segments.includes(segment)) fail('segment does not belong to this kernel');
+    if (segment.type !== 2 && segment.type !== 3) fail('Chebyshev accessor requires type 2 or 3');
     const metaOff = this.addressOffset(segment.endAddress - 3);
     const init = this.f64(metaOff), interval = this.f64(metaOff + 8);
     const recordSize = this.f64(metaOff + 16), recordCount = this.f64(metaOff + 24);
@@ -132,6 +141,11 @@ export class SpkKernel {
   private parseSegment(d: number[], i: number[]): SpkSegment {
     const [startEt, endEt] = d, [target, center, frame, type, startAddress, endAddress] = i;
     if (![startEt, endEt].every(Number.isFinite) || startEt > endEt || startAddress < 1 || endAddress < startAddress || endAddress > this.bytes / 8) fail('invalid segment descriptor');
+    if (type === 21) {
+      if (endAddress - startAddress + 1 < 2) fail('truncated type 21 directory');
+      const type21 = inspectType21((address) => this.f64(this.addressOffset(address)), startAddress, endAddress, endEt);
+      return { target, center, frame, type, startEt, endEt, startAddress, endAddress, coefficientCount: 0, recordCount: type21.recordCount, recordSize: type21.recordSize, type21 };
+    }
     if (type !== 2 && type !== 3) return { target, center, frame, type, startEt, endEt, startAddress, endAddress, coefficientCount: 0, recordCount: 0, recordSize: 0 };
     const terminal = this.addressOffset(endAddress - 3);
     const rs = this.f64(terminal + 16), count = this.f64(terminal + 24);

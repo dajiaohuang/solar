@@ -5,6 +5,9 @@ export const BODY_NAIF_IDS: Record<string, number> = {
   mars: 499, jupiter: 599, saturn: 699, uranus: 799, neptune: 899, pluto: 999,
   io: 501, europa: 502, ganymede: 503, callisto: 504, titan: 606,
   ceres: 2000001, pallas: 2000002, vesta: 2000004,
+  // TNO primary centers, not the 20136xxx system barycenters. Makemake's
+  // unresolved small-body solution is not promoted to a resolved body center.
+  eris: 920136199, haumea: 920136108,
   phobos: 401, deimos: 402, amalthea: 505, thebe: 514, adrastea: 515, metis: 516,
   mimas: 601, enceladus: 602, tethys: 603, dione: 604, rhea: 605,
   hyperion: 607, iapetus: 608, phoebe: 609, helene: 612, telesto: 613, calypso: 614,

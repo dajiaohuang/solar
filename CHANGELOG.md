@@ -4,6 +4,9 @@ All notable changes to Solar Atlas are documented here. The project follows sema
 
 ## Unreleased
 
+- Read and crop original SPK type 21 modified-difference records with independent CSPICE position/velocity fixtures, strict malformed-record checks and preserved segment precedence.
+- Add source-consistent Eris/Haumea primary centers through 2030-01-02 TDB, with lazy web/native files and explicit system/primary identity mapping. Keep Makemake's unresolved primary-center coverage gap visible; do not equate generic type 21 support with all-body coverage.
+
 - Fix near-satellite 3D camera/marker/clipping scales and portrait refitting without changing physical coordinates or restoring distance fog.
 - Shorten expanded moon-preset histories to resolve fast revolutions at default sampling; keep partial arcs and manual sampling limits explicit.
 - Use km/hour readouts for close distances and fast periods, parent-relative apsis terminology, and active-SPK versus fallback Earth-center labels in the shared web/native UI.

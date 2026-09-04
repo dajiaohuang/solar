@@ -10,7 +10,7 @@ export async function inventoryKernels(root, et) {
   const manifestBytes = await readFile(join(root, 'src/data/ephemeris-manifest.json'))
   const manifest = JSON.parse(manifestBytes)
   const generated = JSON.parse(await readFile(join(root, 'src/data/ephemerisBodies.json'), 'utf8'))
-  const asteroidIds = new Map([['1', BODY_NAIF_IDS.ceres], ['2', BODY_NAIF_IDS.pallas], ['4', BODY_NAIF_IDS.vesta]])
+  const asteroidIds = new Map([['1', BODY_NAIF_IDS.ceres], ['2', BODY_NAIF_IDS.pallas], ['4', BODY_NAIF_IDS.vesta], ['136199', BODY_NAIF_IDS.eris], ['136108', BODY_NAIF_IDS.haumea]])
   const moonIds = new Map(Object.entries(BODY_NAIF_IDS).filter(([, target]) => target >= 301 && target < 999 && target % 100 !== 99))
   for (const body of generated.bodies) {
     if (body.kind === 'moon') moonIds.set(body.name.toLowerCase(), body.naifId)

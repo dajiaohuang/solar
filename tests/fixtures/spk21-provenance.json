@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "oracle": "NAIF CSPICE N0067",
+  "sources": [
+    {
+      "path": "cspice.tar.Z",
+      "bytes": 42676733,
+      "sha256": "60a95b51a6472f1afe7e40d77ebdee43c12bb5b8823676ccc74692ddfede06ce"
+    },
+    {
+      "path": "cspice/lib/cspice.a",
+      "bytes": 10715848,
+      "sha256": "22ac28890f746526217cc8a7d242887c2e78c5a83380eb8db34465c2a1092e08"
+    },
+    {
+      "path": "cspice/src/cspice/spke21.c",
+      "bytes": 17950,
+      "sha256": "740125d03952181c99c144b58e908b07256b04ea9f50faea02465e07a2c58e73"
+    },
+    {
+      "path": "cspice/src/cspice/spkr21.c",
+      "bytes": 14202,
+      "sha256": "32d549b2a3ce0dd6ebd608b3f67fd79b45d079145aec218019e51ce99a0447a3"
+    },
+    {
+      "path": "cspice/src/cspice/spkw21.c",
+      "bytes": 22304,
+      "sha256": "0bbc3497210a85f0cfef8fe0c65d97b62ca865e7ff1216eac66901921ad24bf4"
+    },
+    {
+      "path": "tnosat_v001_20136199_jpl080_20220908.bsp",
+      "bytes": 175898624,
+      "sha256": "f405b6db26e114c856622de6a4c1e29f124279598c4e04c0e01d08fa28160cfe"
+    },
+    {
+      "path": "tnosat_v001b_20136108_jpl110_20221014.bsp",
+      "bytes": 263605248,
+      "sha256": "f9a300516860638ea7b534a44b0005ce887a3b0b10393594eed9fcd9045a03e2"
+    }
+  ],
+  "horizons": [
+    {
+      "name": "eris",
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27136199%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "retrievedAt": "2026-09-04T07:50:39.339Z",
+      "bytes": 267264,
+      "sha256": "f2b30d881a5922a5a88493c91a27322de3d71f060d7a752f2a7e6e911f08cc7c",
+      "responseSha256": "fae96d8c963fdf4f7d91dd6ec04dccf8a511e73726034626c898be650f6211c7",
+      "signature": {
+        "version": "1.2",
+        "source": "NASA/JPL Horizons API"
+      },
+      "target": 20136199,
+      "designation": "136199",
+      "from": "2020-01-01",
+      "to": "2031-01-01",
+      "timeScale": "TDB",
+      "solution": "*******************************************************************************\nJPL/HORIZONS              136199 Eris (2003 UB313)         2026-Sep-04 00:50:40\nRec #:  136199 (+COV) Soln.date: 2026-Jun-06_21:06:42   # obs: 4064 (1954-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458430.5 ! 2018-Nov-08.00 (TDB)         Residual RMS= .1807\n   EC= .43980550838359     QR= 37.92836976130601   TP= 2545928.9445556137\n   OM= 35.89262158480285   W=  151.663880762629    IN= 44.1711725363427\n   A= 67.7057170838396     MA= 205.2016264101805   ADIST= 97.48306440637319\n   PER= 557.11675          N= .001769156           ANGMOM= .127120457\n   DAN= 89.10120000000001  DDN= 39.36932           L= 194.7467064\n   B= 19.3132963           MOID= 36.98189926       TP= 2258-Jun-01.4445556137\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= 25.9\n   H= -1.26                G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#103, OCC=3\n2: source=ORB\n*******************************************************************************\n\nID= '20136199'\n\n"
+    },
+    {
+      "name": "haumea",
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27136108%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "retrievedAt": "2026-09-04T07:50:41.115Z",
+      "bytes": 265216,
+      "sha256": "cb28f814428c1d4a069f7bc424e275d784ac47a1497d1bf635aea21c9e375315",
+      "responseSha256": "250da827c38c0328cb87fa6d9d2a321621d6ac4fa23923a142b3a1fcd146bd4d",
+      "signature": {
+        "source": "NASA/JPL Horizons API",
+        "version": "1.2"
+      },
+      "target": 20136108,
+      "designation": "136108",
+      "from": "2020-01-01",
+      "to": "2031-01-01",
+      "timeScale": "TDB",
+      "solution": "*******************************************************************************\nJPL/HORIZONS              136108 Haumea (2003 EL61)        2026-Sep-04 00:50:41\nRec #:  136108 (+COV) Soln.date: 2026-Jun-06_21:06:04   # obs: 6692 (1955-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458570.5 ! 2019-Mar-28.00 (TDB)         Residual RMS= .15791\n   EC= .1918267040096307   QR= 34.98943372351407   TP= 2500057.1374979508\n   OM= 122.1027094114637   W=  238.5554185666276   IN= 28.2108509315282\n   A= 43.29446901686668    MA= 216.4630598098139   ADIST= 51.59950431021929\n   PER= 284.87663          N= .003459835           ANGMOM= .111085265\n   DAN= 46.33848           DDN= 37.90787           L= 357.3460707\n   B= -23.7844384          MOID= 34.07139969       TP= 2132-Oct-27.6374979508\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= 3.9154\n   H= .140                 G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#132, OCC=1\n2: source=ORB\n*******************************************************************************\n\nID= '20136108'\n\n"
+    },
+    {
+      "name": "makemake",
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27136472%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "retrievedAt": "2026-09-04T07:50:41.856Z",
+      "bytes": 266240,
+      "sha256": "c9d637d5b2e8652552d8a6af05cdfcd9ddb36f785ded2bacccfe7ff5e8102205",
+      "responseSha256": "b846adbb0aee570a85bf91c9d4894777fd32c967cf376a0776685365fe1a8865",
+      "signature": {
+        "source": "NASA/JPL Horizons API",
+        "version": "1.2"
+      },
+      "target": 20136472,
+      "designation": "136472",
+      "from": "2020-01-01",
+      "to": "2031-01-01",
+      "timeScale": "TDB",
+      "solution": "*******************************************************************************\nJPL/HORIZONS             136472 Makemake (2005 FY9)        2026-Sep-04 00:50:42\nRec #:  136472 (+COV) Soln.date: 2026-Jun-06_21:09:02   # obs: 6348 (1955-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458666.5 ! 2019-Jul-02.00 (TDB)         Residual RMS= .14409\n   EC= .158547070219366    QR= 38.31981212406959   TP= 2407463.1848816629\n   OM= 79.64391423451013   W=  295.0360447607118   IN= 28.98052779604894\n   A= 45.54005431303155    MA= 164.2146267350034   ADIST= 52.7602965019935\n   PER= 307.32544          N= .003207109           ANGMOM= .114617246\n   DAN= 41.60388           DDN= 47.58825           L= 17.743017\n   B= -26.0393556          MOID= 37.42350006       TP= 1879-Apr-23.6848816629\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= 22.8266\n   H= -.250                G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#130, OCC=1\n2: source=ORB\n*******************************************************************************\n\nID= '20136472'\n\n"
+    }
+  ],
+  "fixtures": [
+    {
+      "path": "spk21-eris-primary.json",
+      "bytes": 18248,
+      "sha256": "79b6d6249e089355709ce217b2b7e36ed52d52aaaaf77963b176e3914f81b14f"
+    },
+    {
+      "path": "spk21-eris.json",
+      "bytes": 26188,
+      "sha256": "aa37cc21c03004a25295da4ef72b309320be8b1f90f815f5870168103ba684ca"
+    },
+    {
+      "path": "spk21-haumea-primary.json",
+      "bytes": 18392,
+      "sha256": "7141ba98e609d12f19ad02f123cd790a724986246964b155d73e9de2384548bd"
+    },
+    {
+      "path": "spk21-haumea.json",
+      "bytes": 26412,
+      "sha256": "d443e007a5fd750c425998b345ae2056ecc1023f8a6e3765a10bbdbf4098ee07"
+    },
+    {
+      "path": "spk21-horizons-eris.bsp",
+      "bytes": 205824,
+      "sha256": "f42c2edae847515c284ed2757490aa125abfd9bc6608517620524f79367d8f0b"
+    },
+    {
+      "path": "spk21-horizons-haumea.bsp",
+      "bytes": 203776,
+      "sha256": "9cd60d20fb44f7f036fc2cb981e1f743e3fcb9c20515da1e786511e704f727ff"
+    },
+    {
+      "path": "spk21-horizons-makemake.bsp",
+      "bytes": 204800,
+      "sha256": "4a63927f62d87f6741e27ef318594a500cc03009fbcf32fba9647203f5295f14"
+    },
+    {
+      "path": "spk21-makemake.json",
+      "bytes": 26603,
+      "sha256": "1fbff1c46ee1aff57be75cff083f099dda3149d2ddcfad36a11313d79cae141a"
+    },
+    {
+      "path": "spk21-synthetic.bsp",
+      "bytes": 551936,
+      "sha256": "04ddd47079878e09288a1cdbbcf09dbf1f1909fca59aea885d226efa699872d2"
+    },
+    {
+      "path": "spk21-synthetic.json",
+      "bytes": 29317,
+      "sha256": "504ee94abeec043946918aaf86ddd81284fe31b0293b88d8b9e6e27419bebf2d"
+    }
+  ]
+}

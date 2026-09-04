@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { cropSpk } from '../../scripts/crop-spk.mjs'
+import { cropSpk, inspectSpk } from '../../scripts/crop-spk.mjs'
 import { SpkKernel } from '../../src/engine/ephemeris/spk'
+import { readFileSync } from 'node:fs'
+import reference from '../fixtures/spk21-synthetic.json'
 
 function syntheticSource(options: { interval?: number; recordSize?: number } = {}) {
   const buffer = Buffer.alloc(4 * 1024), v = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength)
@@ -19,7 +21,61 @@ function syntheticSource(options: { interval?: number; recordSize?: number } = {
   return { size: buffer.length, identity: { source: 'synthetic', bytes: buffer.length }, read: async (start: number, length: number) => buffer.subarray(start, start + length), close: async () => {} }
 }
 
+function syntheticType21Source(count = 205, corruptDirectory = false) {
+  const maxdim = 15, dlsize = 4 * maxdim + 11, startAddress = 385
+  const words = count * dlsize + count + Math.floor(count / 100) + 2
+  const endAddress = startAddress + words - 1
+  const buffer = Buffer.alloc((endAddress + 1) * 8), v = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+  buffer.write('DAF/SPK ', 0, 'ascii'); buffer.write('LTL-IEEE', 88, 'ascii')
+  v.setInt32(8, 2, true); v.setInt32(12, 6, true); v.setInt32(76, 3, true); v.setInt32(80, 3, true)
+  const summary = 2 * 1024; v.setFloat64(summary + 16, 1, true)
+  v.setFloat64(summary + 24, 1000, true); v.setFloat64(summary + 32, 1204, true)
+  ;[499, 10, 1, 21, startAddress, endAddress].forEach((n, i) => v.setInt32(summary + 40 + i * 4, n, true))
+  const at = (address: number) => (address - 1) * 8
+  for (let record = 0; record < count; record++) {
+    const offset = at(startAddress + record * dlsize)
+    for (let i = 0; i < dlsize; i++) v.setFloat64(offset + i * 8, record * 1000 + i, true)
+    v.setFloat64(offset + (4 * maxdim + 7) * 8, 3, true)
+    for (let axis = 0; axis < 3; axis++) v.setFloat64(offset + (4 * maxdim + 8 + axis) * 8, 2, true)
+  }
+  const epochStart = startAddress + count * dlsize
+  for (let index = 0; index < count; index++) v.setFloat64(at(epochStart + index), 1000 + index, true)
+  for (let index = 99; index < count; index += 100) v.setFloat64(at(epochStart + count + (index - 99) / 100), corruptDirectory && index === 199 ? 9999 : 1000 + index, true)
+  v.setFloat64(at(endAddress - 1), maxdim, true); v.setFloat64(at(endAddress), count, true)
+  return { size: buffer.length, identity: { source: 'synthetic-type21', bytes: buffer.length }, read: async (start: number, length: number) => buffer.subarray(start, start + length), close: async () => {} }
+}
+
 describe('crop-spk', () => {
+  it('retains original type 21 record bytes and CSPICE states across directory boundaries', async () => {
+    const bytes = readFileSync('tests/fixtures/spk21-synthetic.bsp')
+    const source = { size: bytes.length, identity: {}, read: async (start: number, length: number) => bytes.subarray(start, start + length) }
+    const original = new SpkKernel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
+    for (const count of [99, 100, 101, 200]) {
+      const target = -210006, startEt = 1000, endEt = count * 1000
+      const result = await cropSpk(source, { startEt, endEt, targets: [target] })
+      const cropped = new SpkKernel(result.buffer.buffer.slice(result.buffer.byteOffset, result.buffer.byteOffset + result.buffer.byteLength))
+      const before = original.segments.find(s => s.target === target)!, after = cropped.segments[0]
+      expect(after.recordCount).toBe(count)
+      expect(result.buffer.subarray((after.startAddress - 1) * 8, (after.startAddress - 1 + count * after.recordSize!) * 8)).toEqual(bytes.subarray((before.startAddress - 1) * 8, (before.startAddress - 1 + count * before.recordSize!) * 8))
+      for (const sample of reference.samples.filter(s => s.target === target && s.et >= startEt && s.et <= endEt)) {
+        const state = cropped.evaluate(target, sample.et)!
+        const values = [state.position.x, state.position.y, state.position.z, state.velocity.x, state.velocity.y, state.velocity.z]
+        values.forEach((value, axis) => expect(Math.abs(value - sample.state[axis])).toBeLessThanOrEqual(axis < 3 ? 1e-7 : 1e-14))
+      }
+      expect(cropped.evaluate(target, startEt - 1e-6)).toBeNull()
+      expect(cropped.evaluate(target, endEt + 1e-6)).toBeNull()
+    }
+  })
+  it('rejects malformed copied type 21 lines before publishing a crop', async () => {
+    const original = syntheticType21Source()
+    const source = { ...original, read: async (start: number, length: number) => {
+      const bytes = Buffer.from(await original.read(start, length))
+      const badStep = 385 * 8
+      if (start <= badStep && start + length > badStep) bytes.writeDoubleLE(0, badStep - start)
+      return bytes
+    } }
+    await expect(cropSpk(source, { startEt: 1000, endEt: 1001 })).rejects.toThrow(/step size/)
+  })
   it('retains complete original records and emits a readable DAF/SPK', async () => {
     const result = await cropSpk(syntheticSource(), { startEt: 5, endEt: 15 })
     const arrayBuffer = result.buffer.buffer.slice(result.buffer.byteOffset, result.buffer.byteOffset + result.buffer.byteLength)
@@ -41,5 +97,31 @@ describe('crop-spk', () => {
   it('rejects non-finite intervals and incompatible coefficient strides', async () => {
     await expect(cropSpk(syntheticSource({ interval: Infinity }), { startEt: 5, endEt: 15 })).rejects.toThrow(/Invalid Chebyshev directory/)
     await expect(cropSpk(syntheticSource({ recordSize: 11 }), { startEt: 5, endEt: 15 })).rejects.toThrow(/Invalid Chebyshev directory/)
+  })
+
+  it('crops type 21 by final epochs and rebuilds its directory', async () => {
+    const result = await cropSpk(syntheticType21Source(), { startEt: 1000, endEt: 1200 })
+    const segment = (await inspectSpk({ size: result.buffer.length, read: async (start: number, length: number) => result.buffer.subarray(start, start + length) })).segments[0]
+    expect(segment).toMatchObject({ type: 21, startEt: 1000, endEt: 1200 })
+    const at = (address: number) => (address - 1) * 8
+    const data = result.buffer
+    const recordCount = 201, dlsize = 71
+    expect(data.readDoubleLE(at(segment.startAddress + recordCount * dlsize))).toBe(1000)
+    expect(data.readDoubleLE(at(segment.startAddress + recordCount * dlsize + 99))).toBe(1099)
+    const footerAddress = segment.startAddress + recordCount * dlsize + recordCount + 2
+    expect(data.readDoubleLE(at(footerAddress))).toBe(15)
+    expect(data.readDoubleLE(at(footerAddress + 1))).toBe(recordCount)
+    expect(data.readDoubleLE(at(segment.endAddress - 2))).toBe(1199)
+    expect(data.readDoubleLE(at(segment.endAddress - 1))).toBe(15)
+  })
+
+  it('uses first-final-epoch-at-or-after bounds and fails closed on bad directories', async () => {
+    const result = await cropSpk(syntheticType21Source(205), { startEt: 1000.5, endEt: 1003.5 })
+    const segment = (await inspectSpk({ size: result.buffer.length, read: async (start: number, length: number) => result.buffer.subarray(start, start + length) })).segments[0], data = result.buffer
+    const epochAddress = segment.startAddress + 4 * 71
+    expect(data.readDoubleLE((epochAddress - 1) * 8)).toBe(1001)
+    expect(data.readDoubleLE((epochAddress) * 8)).toBe(1002)
+    expect(data.readDoubleLE((epochAddress + 1) * 8)).toBe(1003)
+    await expect(cropSpk(syntheticType21Source(205, true), { startEt: 1000, endEt: 1200 })).rejects.toThrow(/Invalid type 21 epoch directory/)
   })
 })

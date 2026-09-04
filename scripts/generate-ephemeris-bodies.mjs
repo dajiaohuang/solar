@@ -22,7 +22,7 @@ const NAMES = {
   801: 'Triton', 802: 'Nereid', 901: 'Charon', 902: 'Nix', 903: 'Hydra', 904: 'Kerberos', 905: 'Styx',
 }
 // Bodies already represented by majorBodies are intentionally not duplicated.
-const MAJOR = new Set([10, 199, 299, 399, 301, 499, 599, 699, 799, 899, 999, 501, 502, 503, 504, 606])
+const MAJOR = new Set([10, 199, 299, 399, 301, 499, 599, 699, 799, 899, 999, 501, 502, 503, 504, 606, 920136199, 920136108])
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(name)
@@ -73,6 +73,10 @@ const parentFor = (target) => target >= 2000000 ? 10 : target >= 601 && target <
 const bodies = []
 for (const target of [...new Set(manifest.files.flatMap((f) => f.targets))].sort((a, b) => a - b)) {
   if (MAJOR.has(target)) continue
+  // This generator only knows legacy numbered-asteroid IDs. New system,
+  // primary and component IDs require explicit mappings; never invent an
+  // "Asteroid 18136199" from an Eris system barycenter.
+  if (target >= 3000000) continue
   const name = NAMES[target] ?? (target >= 2000000 ? `Asteroid ${target - 2000000}` : null)
   if (!name) continue
   let state, source
