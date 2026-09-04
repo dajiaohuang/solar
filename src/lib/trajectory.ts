@@ -3,7 +3,7 @@ import { kernelsForWindow, loadedKernelIds } from '../engine/ephemeris/kernelSto
 import { getRelativePositions, toPlanarPoint } from './referenceFrame'
 import { vector3Magnitude } from './ephemeris'
 import { createTrajectoryAccumulator } from './trajectorySamples'
-import type { BodyId, CelestialBody, TrajectoryFrameData, TrajectorySample } from '../types'
+import type { BodyId, CelestialBody, TrajectoryFrameData, TrajectorySample, Vector3 } from '../types'
 
 const trajectoryCache = new Map<string, TrajectorySample[]>()
 
@@ -90,8 +90,9 @@ export function buildCurrentPositions(params: {
   bodiesById: Map<BodyId, CelestialBody>
   referenceId: BodyId
   julianDay: number
+  resolveBodyPosition?: (id: BodyId) => Vector3
 }) {
-  const resolve = createBodyPositionResolver(params.bodiesById, params.julianDay)
+  const resolve = params.resolveBodyPosition ?? createBodyPositionResolver(params.bodiesById, params.julianDay)
   const relativePositions = getRelativePositions(params.bodies, params.referenceId, resolve)
   const currentPositions = relativePositions.map((item) => ({
     body: item.body,
@@ -99,10 +100,11 @@ export function buildCurrentPositions(params: {
     position3D: item.position,
     distance: vector3Magnitude(item.position),
   }))
+  const positionedIds = new Set(currentPositions.map(item => item.body.id))
   return {
     currentPositions,
     trajectoryUnavailableBodyIds: [],
-    missingBodyIds: params.bodies.filter(body => !currentPositions.some(item => item.body.id === body.id)).map(body => body.id),
+    missingBodyIds: params.bodies.filter(body => !positionedIds.has(body.id)).map(body => body.id),
     maxDistance: currentPositions.reduce((largest, item) => Math.max(largest, item.distance), 0),
   }
 }

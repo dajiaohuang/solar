@@ -28,6 +28,8 @@ import { isOnboardingRendererReady, ONBOARDING_RENDER_READY_EVENT } from '../../
 import { SimulationControls } from './SimulationControls'
 import { EphemerisStatus } from './EphemerisStatus'
 import { VIEW_CAPABILITIES } from '../../lib/viewCapabilities'
+import { selectDetailBodies } from '../../lib/focusLayers'
+import { PagedBodyList } from '../../components/PagedBodyList'
 
 const TrajectoryCanvas3D = lazy(async () => {
   const module = await import('../../components/TrajectoryCanvas3D')
@@ -58,6 +60,8 @@ function useTrajectoryAnchor(julianDay: number, isPlaying: boolean) {
 type FrameViewProps = {
   referenceId: BodyId
   selectedBodies: CelestialBody[]
+  trajectoryBodies: CelestialBody[]
+  resolveCurrentPosition: ReturnType<typeof createBodyPositionResolver>
   resolutionBodies: CelestialBody[]
   bodiesById: Map<BodyId, CelestialBody>
   julianDay: number
@@ -80,6 +84,8 @@ type FrameViewProps = {
 function FrameView({
   referenceId,
   selectedBodies,
+  trajectoryBodies,
+  resolveCurrentPosition,
   resolutionBodies,
   bodiesById,
   julianDay,
@@ -101,21 +107,24 @@ function FrameView({
   const simulation = simulationStore.useStore()
   const { t, language } = useI18n()
   const referenceBody = bodiesById.get(referenceId) ?? bodiesById.get('sun')!
+  const detailBodyIds = useMemo(() => trajectoryBodies.map(body => body.id), [trajectoryBodies])
   const qualityLabel = simulation.renderQuality === 'max'
     ? t('renderQualityMax')
     : simulation.renderQuality === 'balanced'
       ? t('renderQualityBalanced')
       : t('renderQualityAuto')
-  const catalogOrigin = useMemo(() => bodyPositionOrNull(createBodyPositionResolver(bodiesById, julianDay), referenceBody.id), [bodiesById, referenceBody.id, julianDay])
+  const catalogOrigin = useMemo(() => bodyPositionOrNull(resolveCurrentPosition, referenceBody.id), [resolveCurrentPosition, referenceBody.id])
   const { frame: baseFrame, progress, isComputing, error } = useTrajectoryWorker({
     bodies: selectedBodies,
+    trajectoryBodies,
+    resolveBodyPosition: resolveCurrentPosition,
     resolutionBodies,
     referenceId: referenceBody.id,
     currentJulianDay: julianDay,
     trajectoryJulianDay: trajectoryAnchor,
     historyDays: simulation.historyDays,
     // Inventory expansion must not silently undersample short-period moons.
-    // The focus-body limit bounds work independently of catalog cloud points.
+    // Only historical trails are budgeted; current positions keep all selections.
     sampleCount: Math.min(simulation.sampleCount, 240),
   })
   const spacecraftFrame = useMemo(() => simulation.showSpacecraft && catalogOrigin
@@ -191,6 +200,7 @@ function FrameView({
       <div className="frame-overlays" onWheel={event => event.stopPropagation()}>
       <div className="frame-label"><span>{bodyDisplayName(referenceBody, language)}</span><small>{simulation.viewMode.toUpperCase()}{simulation.showCatalogCloud ? ` · ${t('catalogCloudRendered')} ${catalogDrawCount.toLocaleString()} / ${catalogSampleTotal.toLocaleString()} · ${qualityLabel} · JD ${julianDay.toFixed(3)}` : ''}</small></div>
       <EphemerisStatus bodies={selectedBodies} references={[referenceBody]} julianDay={julianDay} historyDays={simulation.historyDays} />
+      {selectedBodies.length > trajectoryBodies.length && <div className="frame-layer-budget glass-panel" data-testid="focus-layer-budget">{t('currentPositionCount')}: {baseFrame.currentPositions.length}/{selectedBodies.length} · {t('trailBudgetCount')}: {trajectoryBodies.length}/{selectedBodies.length}</div>}
       {error && <div className="canvas-error">{error}</div>}
       {catalogOrigin && baseFrame.missingBodyIds.length > 0 && <details className="canvas-error" data-testid="missing-position-notice"><summary>{t('bodyStateUnavailable')} ({baseFrame.missingBodyIds.length})</summary><p>{baseFrame.missingBodyIds.map(id => bodyDisplayName(bodiesById.get(id)!, language)).join(', ')}</p></details>}
       {catalogOrigin && frame.trajectoryUnavailableBodyIds.length > 0 && <details className="canvas-error" data-testid="missing-trajectory-notice"><summary>{t('trajectoryCoverageUnavailable')} ({frame.trajectoryUnavailableBodyIds.length})</summary><p>{frame.trajectoryUnavailableBodyIds.map(id => bodyDisplayName(bodiesById.get(id) ?? SPACECRAFT.find(body => body.id === id)!, language)).join(', ')}</p></details>}
@@ -205,6 +215,7 @@ function FrameView({
             referenceBody={referenceBody}
             trajectories={frame.trajectories}
             currentPositions={frame.currentPositions}
+            detailBodyIds={detailBodyIds}
             onReferenceChange={(id) => { if (bodiesById.has(id)) simulationActions.patch({ referenceId: id }) }}
             onBodySelect={selectionActions.focus}
             onHover={(body, distance, x, y) => onHover(body ? { body, distance, x, y } : null)}
@@ -271,8 +282,11 @@ export function ExplorerWorkspace() {
     return () => window.removeEventListener(ONBOARDING_RENDER_READY_EVENT, activate)
   }, [])
   useCatalogSample(simulation.showCatalogCloud)
-  const focusBodyLimit = simulation.viewMode === '2d' ? 320 : 160
-  const selectedBodies = useMemo(() => selectedFromStore.slice(0, focusBodyLimit), [focusBodyLimit, selectedFromStore])
+  const selectedBodies = selectedFromStore
+  const detailBodyLimit = simulation.viewMode === '2d' ? 320 : 160
+  const trajectoryBodies = useMemo(() => selectDetailBodies(selectedBodies, detailBodyLimit,
+    [selection.focusedId, simulation.referenceId, simulation.comparisonEnabled ? simulation.comparisonReferenceId : null].filter((id): id is string => Boolean(id))),
+  [detailBodyLimit, selectedBodies, selection.focusedId, simulation.comparisonEnabled, simulation.comparisonReferenceId, simulation.referenceId])
   const catalogRecords = useMemo(() => simulation.showCatalogCloud
     ? filterCatalogRecords(catalog.baseSampleRecords, catalog.filters)
     : [], [catalog.baseSampleRecords, catalog.filters, simulation.showCatalogCloud])
@@ -289,6 +303,9 @@ export function ExplorerWorkspace() {
   const displayJulianDay = simulation.showCatalogCloud && catalogPointCloud.positions.length > 0
     ? catalogPointCloud.computedJulianDay
     : clock.julianDay
+  // One lazy, bounded-by-registry absolute-state cache for both frames at this
+  // exact displayed epoch. The registry changes on every kernel revision.
+  const resolveCurrentPosition = useMemo(() => createBodyPositionResolver(bodiesById, displayJulianDay), [bodiesById, displayJulianDay])
   const renderBudget = useAdaptiveRenderBudget({
     viewMode: simulation.viewMode,
     quality: simulation.renderQuality,
@@ -316,11 +333,11 @@ export function ExplorerWorkspace() {
     ? measureB
     : selectedBodyIds.find((id) => id !== measuredBodyA) ?? measuredBodyA
   const measuredDistance = useMemo(() => {
-    const resolver = createBodyPositionResolver(bodiesById, displayJulianDay)
+    const resolver = resolveCurrentPosition
     if (!bodiesById.has(measuredBodyA) || !bodiesById.has(measuredBodyB)) return null
     const a = bodyPositionOrNull(resolver, measuredBodyA), b = bodyPositionOrNull(resolver, measuredBodyB)
     return a && b ? vector3Magnitude(subtractVector3(a, b)) : null
-  }, [bodiesById, displayJulianDay, measuredBodyA, measuredBodyB])
+  }, [bodiesById, resolveCurrentPosition, measuredBodyA, measuredBodyB])
 
   return (
     <div className={`explorer-workspace ${inspectorOpen ? 'inspector-open' : ''}`}>
@@ -344,6 +361,8 @@ export function ExplorerWorkspace() {
           <FrameView
             referenceId={simulation.referenceId}
             selectedBodies={selectedBodies}
+            trajectoryBodies={trajectoryBodies}
+            resolveCurrentPosition={resolveCurrentPosition}
             resolutionBodies={resolutionBodies}
             bodiesById={bodiesById}
             julianDay={displayJulianDay}
@@ -366,6 +385,8 @@ export function ExplorerWorkspace() {
             <FrameView
               referenceId={simulation.comparisonReferenceId}
               selectedBodies={selectedBodies}
+              trajectoryBodies={trajectoryBodies}
+              resolveCurrentPosition={resolveCurrentPosition}
               resolutionBodies={resolutionBodies}
               bodiesById={bodiesById}
               julianDay={displayJulianDay}
@@ -400,11 +421,11 @@ export function ExplorerWorkspace() {
             <button onClick={() => simulationActions.patch({ zoom: Math.max(.15, simulation.zoom / 1.25) })}>{t('zoomOut')} −</button>
             <button onClick={() => { simulationActions.patch({ zoom: 1, viewOffset: { x: 0, y: 0 } }); resetView() }}>{t('resetView')}</button>
           </div>
-          <ul aria-label={t('selectedObjectList')}>{selectedBodies.map((body) => <li key={body.id}>
+          <PagedBodyList as="ul" label={t('selectedObjectList')} bodies={selectedBodies}>{body => <li key={body.id}>
             <span><i style={{ background: body.color }} />{bodyDisplayName(body, language)}</span>
             <button onClick={() => selectionActions.focus(body.id)}>{t('focusObject')}</button>
             <button onClick={() => simulationActions.patch({ referenceId: body.id })}>{t('setReference')}</button>
-          </li>)}</ul>
+          </li>}</PagedBodyList>
         </details>
         {hovered && <div className="atlas-tooltip" style={{ left: hovered.x + 14, top: hovered.y + 12 }}>
           <strong>{bodyDisplayName(hovered.body, language)}</strong><span>{formatDistanceAU(hovered.distance, language)}</span>

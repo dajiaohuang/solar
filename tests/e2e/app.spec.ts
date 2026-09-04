@@ -1,6 +1,44 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import datasetPin from '../../.github/asteroid-dataset.json' with { type: 'json' }
+import satelliteCatalog from '../../src/data/satelliteCatalog.json' with { type: 'json' }
+
+test('complete Saturn current positions remain independent of 3D trail budgets', async ({ page }) => {
+  test.setTimeout(120_000)
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  const ids = ['saturn', ...satelliteCatalog.bodies.filter(body => body.parentId === 'saturn').map(body => body.naifId === 606 ? 'titan' : body.id)]
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  const query = new URLSearchParams({ v: '4', lang: 'en', speed: '0', view: '3d', ref: 'saturn', bodies: ids.join(','), jd: '2461287.5', history: '1', samples: '24' })
+  await page.goto(`?${query}`)
+  const canvas = page.getByTestId('trajectory-canvas-3d')
+  await expect(canvas).toHaveAttribute('data-position-count', '293', { timeout: 90_000 })
+  await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('293/294')
+  await expect(page.getByTestId('focus-layer-budget')).toContainText('160/294')
+  expect(new URL(page.url()).searchParams.get('bodies')?.split(',')).toEqual(ids)
+  expect(Number(await canvas.getAttribute('data-detail-count'))).toBeLessThanOrEqual(160)
+  expect(Number(await canvas.getAttribute('data-state-point-count'))).toBeGreaterThan(130)
+  await expect(page.getByTestId('missing-position-notice')).toContainText('1')
+  await page.screenshot({ path: test.info().outputPath('saturn-complete-current-positions.png') })
+  const accessible = page.locator('.accessible-scene-controls')
+  await accessible.locator('summary').click()
+  await expect(accessible.locator('ul')).toHaveAttribute('data-total-count', '294')
+  await expect(accessible.locator('li')).toHaveCount(80)
+  await accessible.getByRole('button', { name: 'Next', exact: true }).click()
+  await expect(accessible.locator('.body-list-pagination')).toContainText('81–160 / 294')
+  await accessible.locator('summary').click()
+  query.set('compare', '1')
+  query.set('compareRef', 'titan')
+  await page.goto(`?${query}`)
+  await expect(page.getByTestId('trajectory-canvas-3d')).toHaveCount(2)
+  for (const frame of await page.getByTestId('trajectory-canvas-3d').all()) {
+    await expect(frame).toHaveAttribute('data-position-count', '293', { timeout: 90_000 })
+  }
+  await page.getByRole('button', { name: '2D', exact: true }).click()
+  await expect(page.locator('canvas.trajectory-canvas')).toHaveCount(2)
+  for (const frame of await page.locator('canvas.trajectory-canvas').all()) await expect(frame).toHaveAttribute('data-position-count', '293')
+  expect(errors).toEqual([])
+})
 
 async function openCatalog(page: Page) {
   const desktop = page.locator('.primary-navigation').getByRole('button', { name: /Catalog|小天体目录/ })

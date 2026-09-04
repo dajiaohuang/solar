@@ -97,6 +97,8 @@ export const zh: Record<TranslationKey, string> = {
   offsetX: '横向偏移',
   offsetY: '纵向偏移',
   selectedBodies: '聚焦天体',
+  currentPositionCount: '当前位置',
+  trailBudgetCount: '轨迹预算（选中对象可优先显示）',
   selectAll: '选择所有主要天体',
   filterBodies: '搜索可渲染天体',
   matchingBodies: '个匹配天体',

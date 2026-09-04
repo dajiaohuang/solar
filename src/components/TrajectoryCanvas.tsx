@@ -854,7 +854,7 @@ export function TrajectoryCanvas({
       onMouseMove={handleMouseMove}
       onMouseLeave={() => onHover?.(null, 0, 0, 0)}
     >
-      <canvas ref={canvasRef} className="trajectory-canvas" role="img" aria-label={ariaLabel} />
+      <canvas ref={canvasRef} className="trajectory-canvas" role="img" aria-label={ariaLabel} data-position-count={currentPositions.length} />
 
       <div className="canvas-label-layer" aria-hidden="true">
         <span

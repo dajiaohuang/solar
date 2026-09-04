@@ -8,10 +8,13 @@ import type {
   TrajectorySample,
   TrajectoryWorkerRequest,
   TrajectoryWorkerResponse,
+  Vector3,
 } from '../types'
 
 type Params = {
   bodies: CelestialBody[]
+  trajectoryBodies?: CelestialBody[]
+  resolveBodyPosition?: (id: BodyId) => Vector3
   resolutionBodies: CelestialBody[]
   referenceId: BodyId
   currentJulianDay: number
@@ -45,6 +48,8 @@ function unpackTrajectories(packed: PackedTrajectoryData, bodiesById: Map<BodyId
 export function useTrajectoryWorker(params: Params) {
   const {
     bodies,
+    trajectoryBodies = bodies,
+    resolveBodyPosition,
     resolutionBodies,
     referenceId,
     currentJulianDay,
@@ -61,8 +66,8 @@ export function useTrajectoryWorker(params: Params) {
   const [error, setError] = useState<string | null>(null)
   const kernelKey = loadedKernelIds().join('|')
   const ephemerisLoading = getEphemerisSnapshot().loading > 0
-  const requestKey = useMemo(() => JSON.stringify([referenceId, trajectoryJulianDay, historyDays, sampleCount, kernelKey, bodies, resolutionBodies]),
-    [referenceId, trajectoryJulianDay, historyDays, sampleCount, kernelKey, bodies, resolutionBodies])
+  const requestKey = useMemo(() => JSON.stringify([referenceId, trajectoryJulianDay, historyDays, sampleCount, kernelKey, trajectoryBodies, resolutionBodies]),
+    [referenceId, trajectoryJulianDay, historyDays, sampleCount, kernelKey, trajectoryBodies, resolutionBodies])
   const [completedRequestKey, setCompletedRequestKey] = useState<string | null>(null)
   const bodiesById = useMemo(
     () => new Map<BodyId, CelestialBody>(resolutionBodies.map((body) => [body.id, body])),
@@ -74,7 +79,8 @@ export function useTrajectoryWorker(params: Params) {
     bodiesById,
     referenceId,
     julianDay: currentJulianDay,
-  }), [bodies, bodiesById, currentJulianDay, referenceId])
+    resolveBodyPosition,
+  }), [bodies, bodiesById, currentJulianDay, referenceId, resolveBodyPosition])
 
   useEffect(() => {
     // A large preset may install hundreds of files. Current positions can
@@ -134,7 +140,7 @@ export function useTrajectoryWorker(params: Params) {
       type: 'compute',
       ephemerisFiles: loadedKernelIds(),
       requestId,
-      bodies,
+      bodies: trajectoryBodies,
       resolutionBodies,
       referenceId,
       centerJulianDay: trajectoryJulianDay,
@@ -148,7 +154,7 @@ export function useTrajectoryWorker(params: Params) {
         worker.postMessage({ type: 'cancel', requestId })
       }
     }
-  }, [bodies, bodiesById, ephemerisLoading, historyDays, referenceId, requestKey, resolutionBodies, sampleCount, trajectoryJulianDay])
+  }, [trajectoryBodies, bodiesById, ephemerisLoading, historyDays, referenceId, requestKey, resolutionBodies, sampleCount, trajectoryJulianDay])
 
   useEffect(() => () => {
     workerRef.current?.terminate()

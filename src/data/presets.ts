@@ -74,16 +74,16 @@ export const SCENE_PRESETS: ScenePreset[] = [
     const historyDays = Math.max(1, Math.floor(Math.min(30, ...moons.map((moon) =>
       moon.orbit ? getOrbitalPeriodDays(moon.orbit, 'parent') * 6 : 30,
     ))))
-    // Keep every catalog identity reachable, including missing-state entries,
-    // without silently truncating a system at the 160-body 3D focus limit.
-    const perGroup = 159
+    // Select the complete system. Only historical trails and detailed markers
+    // have a budget; missing current states remain explicit, never invented.
+    const perGroup = Math.max(1, moons.length)
     return Array.from({ length: Math.ceil(moons.length / perGroup) }, (_, group): ScenePreset => {
       const first = group * perGroup, selected = moons.slice(first, first + perGroup)
       const range = moons.length > perGroup ? ` · ${first + 1}–${first + selected.length}/${moons.length}` : ''
       return {
         id: `${parent}-spk-moons${group ? `-${group + 1}` : ''}`,
         name: { en: `${names[parent][0]} · ${selected.length} cataloged ${selected.length === 1 ? 'moon' : 'moons'}${range}`, zh: `${names[parent][1]} · ${selected.length} 颗目录卫星${range}` },
-        description: { en: 'All identities in this group are selected, not necessarily positioned. Loaded SPK is used within coverage; only bodies with an existing seed model can fall back. Missing states are omitted and reported. Short trails may show partial orbits.', zh: '选择本组全部目录身份，不表示全部已有位置。覆盖期内使用已加载 SPK；仅原有种子模型允许回退。缺失状态会标明并省略，短时轨迹可能不满一圈。' },
+        description: { en: 'All system identities are selected, not necessarily positioned. Valid current positions are independent of the trail budget. Loaded SPK is used within coverage; only existing seed models can fall back. Missing states are reported. Select a body to prioritize its trail.', zh: '选择整个系统的目录身份，不表示全部已有位置。有效当前位置不受轨迹预算限制；覆盖期内使用已加载 SPK，仅原有种子模型允许回退。缺失状态会标明。选中对象可优先显示其轨迹。' },
         referenceId: parent, selectedMajorBodyIds: [parent, ...selected.map((moon) => moon.id)],
         julianDay: dateToJD('2026-09-04'), viewMode: '3d', zoomLevel: 1, historyDays,
       }
