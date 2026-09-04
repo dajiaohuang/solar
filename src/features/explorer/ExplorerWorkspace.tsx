@@ -189,7 +189,7 @@ function FrameView({
       {isComputing && <div className="compute-progress"><i style={{ width: `${progress * 100}%` }} /></div>}
       {error && <div className="canvas-error">{error}</div>}
       {catalogOrigin && baseFrame.missingBodyIds.length > 0 && <div className="canvas-error" role="status">{t('bodyStateUnavailable')}: {baseFrame.missingBodyIds.map(id => bodyDisplayName(bodiesById.get(id)!, language)).join(', ')}</div>}
-      {catalogOrigin && baseFrame.trajectoryUnavailableBodyIds.length > 0 && <div className="canvas-error" role="status">{t('trajectoryCoverageUnavailable')}: {baseFrame.trajectoryUnavailableBodyIds.map(id => bodyDisplayName(bodiesById.get(id) ?? SPACECRAFT.find(body => body.id === id)!, language)).join(', ')}</div>}
+      {catalogOrigin && frame.trajectoryUnavailableBodyIds.length > 0 && <div className="canvas-error" role="status">{t('trajectoryCoverageUnavailable')}: {frame.trajectoryUnavailableBodyIds.map(id => bodyDisplayName(bodiesById.get(id) ?? SPACECRAFT.find(body => body.id === id)!, language)).join(', ')}</div>}
       {!catalogOrigin ? <div className="canvas-error" role="status">{t('referenceStateUnavailable')}</div> : simulation.viewMode === '3d' && !render3DReady ? (
         <SpatialPreview />
       ) : simulation.viewMode === '3d' ? (

@@ -59,6 +59,8 @@ export function useTrajectoryWorker(params: Params) {
   const [progress, setProgress] = useState(0)
   const [isComputing, setIsComputing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const requestKey = JSON.stringify([referenceId, trajectoryJulianDay, historyDays, sampleCount, bodies.map((body) => body.id), resolutionBodies.map((body) => body.id)])
+  const [completedRequestKey, setCompletedRequestKey] = useState<string | null>(null)
   const bodiesById = useMemo(
     () => new Map<BodyId, CelestialBody>(resolutionBodies.map((body) => [body.id, body])),
     [resolutionBodies],
@@ -95,6 +97,7 @@ export function useTrajectoryWorker(params: Params) {
       } else if (response.type === 'result' && response.packed) {
         setTrajectories(unpackTrajectories(response.packed, bodiesById))
         setTrajectoryUnavailableBodyIds(response.packed.trajectoryUnavailableBodyIds ?? [])
+        setCompletedRequestKey(requestKey)
         setProgress(1)
         setIsComputing(false)
       } else if (response.type === 'error') {
@@ -132,7 +135,7 @@ export function useTrajectoryWorker(params: Params) {
         worker.postMessage({ type: 'cancel', requestId })
       }
     }
-  }, [bodies, bodiesById, historyDays, referenceId, resolutionBodies, sampleCount, trajectoryJulianDay])
+  }, [bodies, bodiesById, historyDays, referenceId, requestKey, resolutionBodies, sampleCount, trajectoryJulianDay])
 
   useEffect(() => () => {
     workerRef.current?.terminate()
@@ -141,9 +144,11 @@ export function useTrajectoryWorker(params: Params) {
 
   const frame = useMemo(() => ({
     ...current,
-    trajectories: trajectories.filter(sample => !current.missingBodyIds.includes(sample.body.id)),
-    trajectoryUnavailableBodyIds,
-  }), [current, trajectories, trajectoryUnavailableBodyIds])
+    trajectories: completedRequestKey === requestKey
+      ? trajectories.filter(sample => !current.missingBodyIds.includes(sample.body.id))
+      : [],
+    trajectoryUnavailableBodyIds: completedRequestKey === requestKey ? trajectoryUnavailableBodyIds : [],
+  }), [completedRequestKey, current, requestKey, trajectories, trajectoryUnavailableBodyIds])
 
   return {
     frame,

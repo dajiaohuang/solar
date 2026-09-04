@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { bodyPositionOrNull, createBodyPositionResolver, createBodyVelocityResolver, MissingBodyStateError } from '../../src/lib/ephemeris'
 import { getRelativePositions } from '../../src/lib/referenceFrame'
-import { buildCurrentPositions, buildTrajectories } from '../../src/lib/trajectory'
+import { buildCurrentPositions, buildTrajectories, buildTrajectoryFrame } from '../../src/lib/trajectory'
 import { createTrajectoryAccumulator } from '../../src/lib/trajectorySamples'
 import { kernelCoverage } from '../../src/engine/ephemeris/kernelStore'
 import { computeOrbitEllipses } from '../../src/lib/orbitEllipse'
@@ -35,6 +35,7 @@ describe('unavailable body states', () => {
     expect(current.currentPositions[1].position3D).toEqual({ x: 1, y: 0, z: 0 })
     expect(current.missingBodyIds).toEqual(['no-state', 'dependent'])
     expect(buildTrajectories(params).map(sample => [sample.body.id, sample.points.length])).toEqual([['sun', 3], ['moving', 3]])
+    expect(buildTrajectoryFrame(params).trajectoryUnavailableBodyIds).toEqual(['no-state', 'dependent'])
   })
   it('hides the entire frame and trails when the reference is unavailable', () => {
     expect(getRelativePositions(bodies, missing.id, createBodyPositionResolver(bodiesById, 2451545, []))).toEqual([])
