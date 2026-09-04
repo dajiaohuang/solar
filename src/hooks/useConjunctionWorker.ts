@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CelestialBody } from '../types'
+import { loadedKernelIds, EPHEMERIS_MANIFEST } from '../engine/ephemeris/kernelStore'
 import { adaptiveEventSampleCount } from '../engine/events/eventSampling'
 import type {
   AnalysisEvent,
@@ -38,6 +39,7 @@ function cloneParams(params: RunEventAnalysisParams): RunEventAnalysisParams {
 
 export function eventAnalysisCacheKey(params: RunEventAnalysisParams) {
   return JSON.stringify({
+    ephemeris: [EPHEMERIS_MANIFEST.id, loadedKernelIds()],
     bodies: params.bodies.map((body) => [body.id, body.parentId, body.orbit]),
     resolution: params.resolutionBodies.map((body) => [body.id, body.parentId, body.orbit]),
     referenceId: params.referenceId,
@@ -136,7 +138,7 @@ export function useConjunctionWorker() {
       worker.terminate()
       if (workerRef.current === worker) workerRef.current = null
     }
-    const request: EventAnalysisRequest = { type: 'run', requestId, ...params }
+    const request: EventAnalysisRequest = { type: 'run', requestId, ...params, ephemerisFiles: loadedKernelIds() }
     worker.postMessage(request)
   }, [])
 

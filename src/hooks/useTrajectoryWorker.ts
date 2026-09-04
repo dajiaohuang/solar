@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildCurrentPositions } from '../lib/trajectory'
+import { loadedKernelIds } from '../engine/ephemeris/kernelStore'
 import type {
   BodyId,
   CelestialBody,
@@ -70,9 +71,9 @@ export function useTrajectoryWorker(params: Params) {
   }), [bodies, bodiesById, currentJulianDay, referenceId])
 
   useEffect(() => {
-    const previousWorker = workerRef.current
-    if (previousWorker) previousWorker.terminate()
-    const worker = new Worker(new URL('../workers/trajectory.worker.ts', import.meta.url), { type: 'module' })
+    // Preserve verified kernel buffers across clock updates; recreating a
+    // worker every trail tick would repeatedly download/hash/parse megabytes.
+    const worker = workerRef.current ?? new Worker(new URL('../workers/trajectory.worker.ts', import.meta.url), { type: 'module' })
     workerRef.current = worker
     const requestId = latestRequestId.current + 1
     latestRequestId.current = requestId
@@ -92,8 +93,6 @@ export function useTrajectoryWorker(params: Params) {
         setTrajectories(unpackTrajectories(response.packed, bodiesById))
         setProgress(1)
         setIsComputing(false)
-        worker.terminate()
-        if (workerRef.current === worker) workerRef.current = null
       } else if (response.type === 'error') {
         setError(response.error ?? 'Trajectory worker failed')
         setIsComputing(false)
@@ -111,6 +110,7 @@ export function useTrajectoryWorker(params: Params) {
 
     const request: TrajectoryWorkerRequest = {
       type: 'compute',
+      ephemerisFiles: loadedKernelIds(),
       requestId,
       bodies,
       resolutionBodies,
@@ -124,11 +124,14 @@ export function useTrajectoryWorker(params: Params) {
     return () => {
       if (workerRef.current === worker) {
         worker.postMessage({ type: 'cancel', requestId })
-        worker.terminate()
-        workerRef.current = null
       }
     }
   }, [bodies, bodiesById, historyDays, referenceId, resolutionBodies, sampleCount, trajectoryJulianDay])
+
+  useEffect(() => () => {
+    workerRef.current?.terminate()
+    workerRef.current = null
+  }, [])
 
   const frame = useMemo(() => ({ ...current, trajectories }), [current, trajectories])
 

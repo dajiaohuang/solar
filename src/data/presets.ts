@@ -1,4 +1,5 @@
 import { dateToJulianDay } from '../lib/julianDate'
+import { majorBodies } from './majorBodies'
 import datasetPin from '../../.github/asteroid-dataset.json'
 import type { AppRoute, ElementPlotMode } from '../state/ui-store'
 import type { BodyId, CatalogFilters, CatalogSampleProfile, DatasetMode } from '../types'
@@ -62,6 +63,22 @@ function dateToJD(dateString: string) {
 }
 
 export const SCENE_PRESETS: ScenePreset[] = [
+  ...(['mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'] as const).map((parent): ScenePreset => {
+    const names = { mars: ['Mars', '火星'], jupiter: ['Jupiter', '木星'], saturn: ['Saturn', '土星'], uranus: ['Uranus', '天王星'], neptune: ['Neptune', '海王星'], pluto: ['Pluto', '冥王星'] }
+    const moons = majorBodies.filter((body) => body.kind === 'moon' && body.parentId === parent)
+    return {
+      id: `${parent}-spk-moons`, name: { en: `${names[parent][0]} · ${moons.length} included moons`, zh: `${names[parent][1]} · ${moons.length} 颗已收录卫星` },
+      description: { en: 'Body-centered geometric SPK states when loaded and covered; fixed-ellipse fallback otherwise. Not every known moon.', zh: '以母星本体中心为参考系；已加载且覆盖时使用 SPK 几何星历，否则回退固定椭圆。不是该行星全部已知卫星。' },
+      referenceId: parent, selectedMajorBodyIds: [parent, ...moons.map((moon) => moon.id)],
+      julianDay: dateToJD('2026-09-04'), viewMode: '3d', zoomLevel: 1, historyDays: 30,
+    }
+  }),
+  {
+    id: 'large-asteroid-ephemerides', name: { en: '16 large asteroids · JPL SPK', zh: '16 颗大型小行星 · JPL SPK' },
+    description: { en: 'Selected DE441 companion asteroid solutions between Mars and Jupiter; not the complete belt.', zh: '火星与木星之间的 DE441 配套小行星解；并非完整小行星带。' },
+    referenceId: 'sun', selectedMajorBodyIds: ['mars', 'jupiter', 'ceres', ...majorBodies.filter((body) => body.source === 'jpl-spk-osculating-fallback' && body.kind === 'asteroid').map((body) => body.id)],
+    julianDay: dateToJD('2026-09-04'), viewMode: '3d', zoomLevel: 1, historyDays: 365,
+  },
   {
     id: 'today',
     name: { en: 'Solar System today', zh: '今日太阳系' },

@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 
 import {
-  createBodyPositionResolver,
+  createBodyPositionResolver as createResolver,
   dotVector3,
   subtractVector3,
   vector3Magnitude,
@@ -9,11 +9,13 @@ import {
 import { findSampledExtrema, refineBracketedExtremum, type ExtremumMode } from '../engine/events/sampledExtrema'
 import { adaptiveEventSampleCount } from '../engine/events/eventSampling'
 import type { BodyId, CelestialBody, Vector3 } from '../types'
+import { ensureKernelFiles, kernelsForWindow } from '../engine/ephemeris/kernelStore'
 
 export type EventKind = 'close-approach' | 'conjunction' | 'opposition' | 'perihelion' | 'aphelion' | 'periapsis' | 'apoapsis'
 
 export type EventAnalysisRequest = {
   type: 'run'
+  ephemerisFiles?: string[]
   requestId: number
   bodies: CelestialBody[]
   resolutionBodies: CelestialBody[]
@@ -38,7 +40,8 @@ export type AnalysisEvent = {
   value: number
   unit: 'AU' | 'deg'
   julianDay: number
-  model: 'sampled-two-body-local-refinement-v3'
+  model: 'sampled-ephemeris-local-refinement-v4'
+  ephemerisFiles: string[]
   sampleIntervalDays: number
   numericalRefinementHalfWidthDays: number
   physicalPredictionUncertainty: 'not-estimated'
@@ -75,6 +78,9 @@ function angleDeg(a: Vector3, b: Vector3) {
 
 async function runAnalysis(request: EventAnalysisRequest) {
   activeRequestId = request.requestId
+  await ensureKernelFiles(request.ephemerisFiles ?? [])
+  const kernels = kernelsForWindow(request.centerJulianDay - request.windowDays / 2, request.centerJulianDay + request.windowDays / 2, request.ephemerisFiles ?? [])
+  const createBodyPositionResolver = (bodies: Map<BodyId, CelestialBody>, jd: number) => createResolver(bodies, jd, kernels)
   const bodiesById = new Map<BodyId, CelestialBody>(request.resolutionBodies.map((body) => [body.id, body]))
   const sampleCount = adaptiveEventSampleCount(request.bodies, request.windowDays, request.sampleCount)
   const startJulianDay = request.centerJulianDay - request.windowDays / 2
@@ -151,7 +157,8 @@ async function runAnalysis(request: EventAnalysisRequest) {
         bodyAName: bodyA.name,
         bodyBId: bodyB.id,
         bodyBName: bodyB.name,
-        model: 'sampled-two-body-local-refinement-v3' as const,
+        model: 'sampled-ephemeris-local-refinement-v4' as const,
+        ephemerisFiles: kernels.map((kernel) => kernel.id),
       }
       if (request.eventKinds.includes('close-approach')) {
         for (const extremum of findSampledExtrema(distances, 'minimum')) {
@@ -214,7 +221,8 @@ async function runAnalysis(request: EventAnalysisRequest) {
       }
       const base = {
         bodyAId: body.id, bodyAName: body.name, centralBodyId, centralBodyName: centralBody?.name ?? centralBodyId,
-        model: 'sampled-two-body-local-refinement-v3' as const,
+        model: 'sampled-ephemeris-local-refinement-v4' as const,
+        ephemerisFiles: kernels.map((kernel) => kernel.id),
       }
       if (request.eventKinds.includes('perihelion') || request.eventKinds.includes('periapsis')) {
         for (const extremum of findSampledExtrema(radii, 'minimum')) {

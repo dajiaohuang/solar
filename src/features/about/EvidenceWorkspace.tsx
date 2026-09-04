@@ -7,6 +7,7 @@ import { BUILD_INFO } from '../../lib/buildInfo'
 import { datasetDisplayTimestamps } from '../../lib/datasetProvenance'
 import { catalogStore } from '../../state/catalog-store'
 import { DatasetCard } from '../catalog/DatasetCard'
+import { EPHEMERIS_MANIFEST } from '../../engine/ephemeris/kernelStore'
 
 type ValidationReport = {
   passed?: boolean
@@ -62,6 +63,15 @@ export function EvidenceWorkspace() {
   return <div className="workspace-page evidence-workspace">
     <div className="page-heading"><div><span className="eyebrow">{t('evidenceKicker')}</span><h1>{t('about')}</h1><p>{t('educationalWarning')}</p></div></div>
     <div className="evidence-grid">
+      <section className="evidence-module glass-panel">
+        <div className="module-heading"><span>{t('physicalEphemerides')}</span><em>JPL SPK</em></div>
+        <p>{t('ephemerisBoundary')}</p><p>{t('ephemerisTimeBoundary')}</p>
+        <p className="checksum">{EPHEMERIS_MANIFEST.id}</p>
+        <details><summary>{t('source')} · {EPHEMERIS_MANIFEST.files.length}</summary>
+          {EPHEMERIS_MANIFEST.files.map((file) => <p className="checksum" key={file.id}><a href={file.source} target="_blank" rel="noreferrer">{file.id}</a><br />SHA-256 {file.sha256}</p>)}
+        </details>
+        <p>{t('fallbackModelDetails')}</p>
+      </section>
       <section className="evidence-module glass-panel"><div className="module-heading"><span>{t('provenance')}</span><em>{t('dataLayer').toUpperCase()}</em></div><DatasetCard /></section>
 
       <section className="evidence-module glass-panel"><div className="module-heading"><span>{t('validation')}</span><em className={activeValidation?.passed ? 'pass' : ''}>{activeValidation ? (activeValidation.passed ? t('validationPass') : t('validationReview')) : t('validationMissing')}</em></div>{activeValidation ? <>

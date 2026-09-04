@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { useMemo, useSyncExternalStore } from 'react'
+import { subscribeEphemerides, getEphemerisSnapshot } from '../engine/ephemeris/kernelStore'
 import { majorBodies } from '../data/majorBodies'
 import { BODY_PHYSICAL } from '../data/physical'
 import { selectionStore } from '../state/selection-store'
@@ -10,14 +11,16 @@ export const majorBodiesWithPhysicalData = majorBodies.map((body) => ({
 }))
 
 export function useBodyRegistry() {
+  const ephemerides = useSyncExternalStore(subscribeEphemerides, getEphemerisSnapshot)
   const { catalogBodies, selectedIds } = selectionStore.useStore()
   return useMemo(() => {
     const allBodies = [...majorBodiesWithPhysicalData, ...Object.values(catalogBodies)]
     const bodiesById = new Map<BodyId, CelestialBody>(allBodies.map((body) => [body.id, body]))
     return {
+      ephemerisRevision: ephemerides.revision,
       allBodies,
       bodiesById,
       selectedBodies: selectedIds.map((id) => bodiesById.get(id)).filter((body): body is CelestialBody => Boolean(body)),
     }
-  }, [catalogBodies, selectedIds])
+  }, [catalogBodies, selectedIds, ephemerides])
 }

@@ -1,6 +1,11 @@
 import { J2000_JULIAN_DAY } from './julianDate'
 import { partitionEarthMoonBarycenter } from '../engine/ephemeris/earthMoonSystem'
 import { solveEllipticKeplerRadians } from '../engine/ephemeris/kepler'
+import { loadedKernels, kernelsForWindow } from '../engine/ephemeris/kernelStore'
+import { createKernelResolver, type LoadedKernel } from '../engine/ephemeris/kernelPool'
+import { utcJulianDayToEt, utcJulianDayToTdb } from '../engine/ephemeris/timeScales'
+import { bodyNaifId } from '../data/ephemerisTargets'
+import { AU_IN_KM, SECONDS_PER_DAY } from '../engine/units'
 import type {
   BodyId,
   CelestialBody,
@@ -74,7 +79,10 @@ function getPlanetaryElementsAtJulianDay(orbit: PlanetaryApproxOrbit, julianDay:
 }
 
 function getKeplerianElementsAtJulianDay(orbit: KeplerianOrbit, julianDay: number) {
-  const elapsedDays = julianDay - orbit.epochJd
+  // Before the supported civil-time era this is deliberately only a fallback;
+  // no historical leap-second conversion is fabricated.
+  const epoch = orbit.epochTimeScale === 'TDB' && julianDay >= 2441317.5 ? utcJulianDayToTdb(julianDay) : julianDay
+  const elapsedDays = epoch - orbit.epochJd
   const meanAnomalyDeg = orbit.meanAnomalyDeg + orbit.meanMotionDegPerDay * elapsedDays
 
   return {
@@ -168,8 +176,10 @@ export function crossVector3(a: Vector3, b: Vector3): Vector3 {
   }
 }
 
-export function createBodyPositionResolver(bodiesById: Map<BodyId, CelestialBody>, julianDay: number) {
+export function createBodyPositionResolver(bodiesById: Map<BodyId, CelestialBody>, julianDay: number, kernels: readonly LoadedKernel[] = loadedKernels()) {
   const cache = new Map<BodyId, Vector3>()
+  const precise = kernels.length && julianDay >= 2441317.5
+    ? createKernelResolver(kernels, utcJulianDayToEt(julianDay)) : null
 
   const resolveEarthMoonSystem = () => {
     const cachedEarth = cache.get('earth')
@@ -203,6 +213,14 @@ export function createBodyPositionResolver(bodiesById: Map<BodyId, CelestialBody
       throw new Error(`Unknown body: ${bodyId}`)
     }
 
+    const target = bodyNaifId(body)
+    const state = precise && target !== undefined ? precise.relative(target, 10) : null
+    if (state) {
+      const position = scaleVector3(state.position, 1 / AU_IN_KM)
+      cache.set(bodyId, position)
+      return position
+    }
+
     const earth = bodiesById.get('earth')
     if (
       (bodyId === 'earth' || bodyId === 'moon') &&
@@ -232,11 +250,20 @@ export function createBodyVelocityResolver(
   bodiesById: Map<BodyId, CelestialBody>,
   julianDay: number,
   stepDays = 0.01,
+  kernels: readonly LoadedKernel[] = loadedKernels(),
 ) {
-  const before = createBodyPositionResolver(bodiesById, julianDay - stepDays)
-  const after = createBodyPositionResolver(bodiesById, julianDay + stepDays)
+  const precise = kernels.length && julianDay >= 2441317.5
+    ? createKernelResolver(kernels, utcJulianDayToEt(julianDay)) : null
+  if (!Number.isFinite(stepDays) || stepDays <= 0) throw new RangeError('Velocity step must be positive and finite')
+  const derivativeKernels = kernelsForWindow(julianDay - stepDays, julianDay + stepDays, kernels.map((kernel) => kernel.id))
+  const before = createBodyPositionResolver(bodiesById, julianDay - stepDays, derivativeKernels)
+  const after = createBodyPositionResolver(bodiesById, julianDay + stepDays, derivativeKernels)
 
   return (bodyId: BodyId): Vector3 => {
+    const body = bodiesById.get(bodyId)
+    const target = body ? bodyNaifId(body) : undefined
+    const state = precise && target !== undefined ? precise.relative(target, 10) : null
+    if (state) return scaleVector3(state.velocity, SECONDS_PER_DAY / AU_IN_KM)
     const delta = subtractVector3(after(bodyId), before(bodyId))
     return scaleVector3(delta, 1 / (2 * stepDays))
   }

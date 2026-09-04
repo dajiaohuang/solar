@@ -15,9 +15,12 @@ Solar Atlas includes **Capacitor 8 local-shell projects** for Android and iOS. T
 | iOS | 16.4 or later |
 | Core experience | Curated bodies, presets, stories, Evidence, and the local application shell remain available offline after installation |
 | Catalog data | Version/provenance metadata is checked at startup; samples, indexes, and shards load on demand over HTTPS from `https://dajiaohuang.github.io/solar/data/asteroids` |
+| Physical ephemerides | The same manifest is used by native builds; 59 SHA-pinned SPK files (~65.6 MiB) are optional and only available offline when included/bundled. Geometric SPK states use UTC→TT→TDB from 1972 onward; future leap seconds are uncertain. |
 | Release status | Source and non-release validation paths only; release signing and store publication are not authorized or included |
 
 The native build uses relative local assets and does not register the web Service Worker. Offline native operation therefore comes from the installed local shell, not from the PWA cache. The full MPCORB catalog is intentionally not bundled: catalog samples, detail shards, and live JPL SBDB lookups require a network connection unless a previously fetched response remains in the WebView cache.
+
+SPK focus ephemerides and the geometric/light-time/stellar-aberration observation readouts follow the bundled manifest when those kernel assets are present. They do not turn the app into an all-body precision or navigation product; no gravity deflection, atmosphere, surface observer, or covariance model is included. The GPU catalog cloud remains Keplerian.
 
 ## Prerequisites
 

@@ -5,6 +5,7 @@ import {
   jplApproxWindowState,
 } from '../engine/ephemeris/modelValidity'
 import type { BodyId } from '../types'
+import { EPHEMERIS_MANIFEST, kernelCoverage, kernelsForWindow, loadedKernelIds } from '../engine/ephemeris/kernelStore'
 
 function bodyUsesJplApproximation(bodyId: BodyId, visited = new Set<BodyId>()): boolean {
   if (visited.has(bodyId)) return false
@@ -38,6 +39,18 @@ export function createSceneExportModelEvidenceLines(
   startJulianDay: number,
   endJulianDay: number,
 ) {
+  const loaded = loadedKernelIds()
+  if (loaded.length) {
+    const bodies = [...new Set([...selectedIds, referenceId])].map((id) => majorBodiesById.get(id) ?? { id })
+    const covered = bodies.filter((body) => kernelCoverage(body, endJulianDay).model === 'jpl-spk')
+    const windowFiles = kernelsForWindow(startJulianDay, endJulianDay)
+    return [
+      `${EPHEMERIS_MANIFEST.id} · J2000 ecliptic · geometric · UTC → TT → TDB`,
+      language === 'zh' ? `当前 SPK 覆盖 ${covered.length}/${bodies.length}；其余为近似模型。` : `Current SPK coverage ${covered.length}/${bodies.length}; other bodies use approximate models.`,
+      language === 'zh' ? `轨迹全窗可用 ${windowFiles.length} 个内核；不完整覆盖时整段回退，精度因对象而异。` : `${windowFiles.length} kernels cover the entire trail; incomplete coverage falls back for the whole scan. Accuracy varies by body.`,
+      'https://github.com/dajiaohuang/solar/blob/main/src/data/ephemeris-manifest.json',
+    ]
+  }
   if (!sceneUsesJplApproximation(selectedIds, referenceId)) {
     return [language === 'zh'
       ? '所选场景未使用 JPL Table 1 行星近似模型。'

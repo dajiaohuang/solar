@@ -311,7 +311,7 @@ test('offers a complete reproducible observation deck on desktop and mobile', as
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
 
   const presets = page.locator('.preset-list')
-  await expect(presets.locator(':scope > button')).toHaveCount(12)
+  await expect(presets.locator(':scope > button')).toHaveCount(19)
   const marsPreset = page.getByRole('button', { name: 'Load preset: Mars opposition 2027' })
   await marsPreset.click()
   await expect(marsPreset).toHaveAttribute('aria-pressed', 'true')
@@ -413,6 +413,7 @@ test('replays 3D zoom and labels unsupported 2D-only controls truthfully', async
   await ecliptic.uncheck()
   const withoutEcliptic = await page.getByTestId('trajectory-canvas-3d').screenshot()
   await ecliptic.check()
+  await expect(page).toHaveURL(/[?&]layers=ecliptic(?:&|$)/)
   const withEcliptic = await page.getByTestId('trajectory-canvas-3d').screenshot()
   expect(Buffer.compare(withoutEcliptic, withEcliptic)).not.toBe(0)
 
@@ -616,6 +617,8 @@ test('discloses the derived Earth geocenter and out-of-range mission extrapolati
 
 test('publishes the exact planetary model provenance in Evidence and the Earth profile', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  // This regression exercises the explicitly retained fallback provenance.
+  await page.route('**/data/ephemerides/**', (route) => route.abort())
   await page.goto('./?v=3&page=about&lang=en')
   await expect(page.getByText('jpl-approx-table-1')).toBeVisible()
   await expect(page.getByText('Fitted Keplerian elements with secular rates', { exact: true })).toBeVisible()
@@ -630,7 +633,7 @@ test('publishes the exact planetary model provenance in Evidence and the Earth p
   await expect(page.getByText('Rendered point')).toBeVisible()
   await expect(page.getByText('Earth geocenter derived from the EMB seed')).toBeVisible()
   await expect(page.getByText('Orbit seed represents')).toBeVisible()
-  await expect(page.getByText('Earth–Moon barycenter')).toBeVisible()
+  await expect(page.getByText('Earth–Moon barycenter', { exact: true })).toBeVisible()
 })
 
 test('reports only the catalog dataset loaded by the running application', async ({ page }) => {

@@ -1,4 +1,5 @@
 import type { CelestialBody, ElementSet } from '../types'
+import ephemerisBodies from './ephemerisBodies.json'
 import {
   jplHorizonsGiantSatelliteEvidence,
   jplHorizonsGiantSatelliteOrbit,
@@ -339,10 +340,25 @@ export const majorBodies: CelestialBody[] = [
   },
 ]
 
+const parentLabels: Record<string, string> = { mars: '火星', jupiter: '木星', saturn: '土星', uranus: '天王星', neptune: '海王星', pluto: '冥王星' }
+// These entries stay selectable offline, but their seed ellipses are explicitly
+// a fallback. The resolver replaces them with SPK states only when covered.
+majorBodies.push(...ephemerisBodies.bodies.map((entry): CelestialBody => ({
+  id: entry.id, naifId: entry.naifId,
+  name: entry.kind === 'moon' ? `${parentLabels[entry.parentId]}卫星 NAIF ${entry.naifId} · ${entry.name}` : `小行星 ${entry.naifId - 2000000}`,
+  shortName: entry.shortName,
+  kind: entry.kind === 'moon' ? 'moon' : 'asteroid',
+  parentId: entry.parentId === 'sun' ? undefined : entry.parentId,
+  source: 'jpl-spk-osculating-fallback',
+  color: '#b8c7d8', size: entry.kind === 'moon' ? 2.1 : 2.5,
+  orbit: { ...entry.orbit, model: 'keplerian', epochTimeScale: 'TDB' },
+  dataEpochLabel: `JD ${ephemerisBodies.epochJd} TDB · fixed osculating fallback`,
+})))
+
 export const majorBodiesById = new Map(majorBodies.map((body) => [body.id, body]))
 
 export const defaultSelectedBodyIds = majorBodies
-  .filter((body) => body.id !== 'sun')
+  .filter((body) => body.id !== 'sun' && body.source !== 'jpl-spk-osculating-fallback')
   .map((body) => body.id)
 
 export const defaultHistoryOptions = [
