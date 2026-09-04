@@ -62,13 +62,21 @@ test('uses useful moon orbital units and distinguishes the active Earth center',
 // Each system has the same bounded assertions and deadline. A growing scene
 // library must not share one aggregate timeout or hide later cases after a
 // failure in an earlier system.
-for (const id of ['jupiter-spk-moons', 'saturn-spk-moons', 'uranus-spk-moons', 'neptune-spk-moons', 'pluto-spk-moons', 'eris-spk-moons', 'haumea-spk-moons', 'quaoar-spk-moons', 'orcus-spk-moons', 'salacia-spk-moons', '1998ww31-spk-moons', '2001qw322-spk-moons', 'kagara-spk-moons', '1999oj4-spk-moons', '2003un284-spk-moons', 'earth-moon']) {
+// Check this matrix against the rendered inventory so future overflow groups
+// cannot silently go untested. Saturn's second group was previously omitted.
+const satellitePresetIds = ['mars-spk-moons', 'jupiter-spk-moons', 'saturn-spk-moons', 'saturn-spk-moons-2', 'uranus-spk-moons', 'neptune-spk-moons', 'pluto-spk-moons', 'eris-spk-moons', 'haumea-spk-moons', 'quaoar-spk-moons', 'orcus-spk-moons', 'salacia-spk-moons', '1998ww31-spk-moons', '2001qw322-spk-moons', 'kagara-spk-moons', '1999oj4-spk-moons', '2003un284-spk-moons', 'earth-moon']
+for (const id of satellitePresetIds) {
   test(`keeps ${id} in a bounded local 3D frame`, async ({ page }) => {
     test.setTimeout(120_000)
     const errors: string[] = []
     page.on('pageerror', error => errors.push(error.message))
     await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
     await page.goto('./?v=4&lang=en&speed=0')
+    if (id === 'mars-spk-moons') {
+      await expect(page.getByTestId('preset-mars-spk-moons')).toBeVisible()
+      const rendered = await page.getByTestId(/^preset-.*-spk-moons(?:-\d+)?$/).evaluateAll(elements => elements.map(element => element.getAttribute('data-testid')!.slice('preset-'.length)).sort())
+      expect(rendered).toEqual(satellitePresetIds.filter(id => id !== 'earth-moon').sort())
+    }
     // Preserve the original large-pool transition that exposed the CI failure.
     if (id === 'saturn-spk-moons') {
       await page.getByTestId('preset-jupiter-spk-moons').click()

@@ -4,8 +4,9 @@ import { majorBodies } from '../../src/data/majorBodies'
 import { getOrbitalPeriodDays } from '../../src/lib/orbitalPeriod'
 
 it('bounds moon-system preset windows to resolve the fastest seed orbit at default sampling', () => {
-  const presets = SCENE_PRESETS.filter((preset) => preset.id.endsWith('-spk-moons'))
-  expect(presets).toHaveLength(16)
+  const presets = SCENE_PRESETS.filter((preset) => /-spk-moons(?:-\d+)?$/.test(preset.id))
+  expect(presets).toHaveLength(17)
+  expect(presets.some(preset => preset.id === 'saturn-spk-moons-2')).toBe(true)
   for (const preset of presets) {
     const moons = majorBodies.filter((body) => preset.selectedMajorBodyIds.includes(body.id) && body.kind === 'moon')
     const shortest = Math.min(...moons.filter(moon => moon.orbit).map((moon) => getOrbitalPeriodDays(moon.orbit!, 'parent')))
