@@ -9,6 +9,22 @@ backpressure, allocations and process memory. It does not use a toy catalog
 or an empty handler, and the measurements are evidence for the recorded
 machine and dataset rather than universal guarantees.
 
+## Snapshot identity
+
+The benchmark below uses the retained `inventory-pr94-20260904` snapshot. Its
+manifest is 1,567,193 records in 314 gzip shards with 89,626,020 declared
+compressed bytes, manifest SHA-256
+`99312497b037caae4097b3e663283d1e8fc63799bd5e546e52a2ae3489e1e9c1`, kernel
+manifest `5c390d7bb8e02a28ebe45d32979c2f5db12983f8ec6044e4206750c5c89c29e0`,
+and identity mapping `6d36c44543bc7f28e2f1696ec8c7e18c7a5ddedc58b51aec25826ad08395188e`.
+The separately retained `inventory-20260904-final` snapshot has the same row
+and shard counts but 89,588,299 bytes, manifest SHA-256
+`e859e463c12323eff3f8318cea3b2640382c32010f7e7137cb924cc06294a8b9`, kernel
+manifest `b48c25698085cdf0288442c2e6c8b0bbb5f97deaddbe226cb73bc4bcc5249379`,
+and identity mapping `397d23592b3a63a7a174cbb35f0b0c20d238eb076b0c940c64e67c61759e4270`.
+They are different point-in-time outputs and must not be combined in a single
+claim or benchmark.
+
 Run from this worktree:
 
 ```text
@@ -56,6 +72,44 @@ once the requested rows are found. There is no unbounded response cache: the
 bounded startup index and the operating-system page cache are the only retained
 warm data paths.
 
+Current-state batch reference run (2026-09-05, same Windows amd64 Intel Core
+i9-14900KF host, PR94 inventory snapshot above, 100 requests per size, 16
+workers) recorded the following JSON evidence. Each request uses one shared
+TDB epoch and explicit `precision: "approximate"` for catalog fallback rows;
+operational rows remain exact when packaged SPK data is available.
+
+```json
+{"currentStateBatches":[{"ids":160,"requests":100,"p50Ns":1000200,"p95Ns":2999400,"p99Ns":4001100,"p50Bytes":36815,"errors":0},{"ids":294,"requests":100,"p50Ns":1051400,"p95Ns":1810600,"p99Ns":2325300,"p50Bytes":65868,"errors":0},{"ids":510,"requests":100,"p50Ns":1046200,"p95Ns":1585200,"p99Ns":2108500,"p50Bytes":110677,"errors":0}],"inventoryIndexLoadMs":10206.074,"inventoryIndexTerms":4034405,"inventoryIndexPostings":4034430,"peakRSSBytes":245587968,"peakHeapBytes":150828048,"cancelledObserved":true,"overloadRequests":32,"overloadRejected":31,"invalidResponses":0}
+```
+
+The index-load variation from the earlier run is host/cache noise; both runs
+use the same frozen PR94 manifest and posting counts. The batch workload is a
+transport/concurrency measurement, not a claim that every source row has an
+exact operational state.
+
+The same 100-request run also used the first 510 source identities from the
+PR94 inventory (500-row page plus a 10-row continuation), exercising the
+grouped `GetMany` shard reader rather than one shard open per ID:
+
+```json
+{"currentStateSourceBatches":[{"ids":160,"requests":100,"p50Ns":3000300,"p95Ns":4999400,"p99Ns":4999400,"p50Bytes":47678,"errors":0},{"ids":294,"requests":100,"p50Ns":5999800,"p95Ns":7999200,"p99Ns":9000800,"p50Bytes":87092,"errors":0},{"ids":510,"requests":100,"p50Ns":9001300,"p95Ns":12000000,"p99Ns":12998600,"p50Bytes":150652,"errors":0}]}
+```
+
+Source IDs include missing and approximate-only records by design; these values
+measure bounded source-row access and transport, not scientific coverage.
+
+The focused inventory benchmark on the same host compared 510 individual
+lookups with one grouped `GetMany` call over a synthetic one-shard fixture:
+
+```text
+BenchmarkGetManyVsIndividualGet/individual-32        4   51,996,350 ns/op   57,533,508 B/op 15,868 allocs/op
+BenchmarkGetManyVsIndividualGet/grouped-32         315      922,807 ns/op      639,574 B/op  6,185 allocs/op
+```
+
+Grouped reads were about 56x faster and used about 90x less allocated memory
+for this workload; the benchmark is an implementation signal, not a service
+SLO.
+
 The direct HTTP benchmarks from the same machine were:
 
 ```text
@@ -65,6 +119,33 @@ BenchmarkTrajectory64Samples-32        6308      43236 ns/op      21926 B/op  76
 BenchmarkTrajectory64BodyBatch-32       147    1504527 ns/op     659663 B/op 182 allocs/op
 BenchmarkTrajectory10000Samples-32       50    4852430 ns/op    3120147 B/op  92 allocs/op
 ```
+
+The same machine compared candidate one-epoch batch wire shapes using the
+same 160/294/510 row counts. Columnar JSON was selected for the shared Web,
+Android and iOS contract: it preserves auditable parallel metadata arrays and
+maps directly to typed numeric buffers without a new dependency or a custom
+decoder. A fixed little-endian binary candidate was smaller but omitted the
+rich source/model/evidence fields unless a new schema and decoder were added;
+row JSON repeated those fields per object.
+
+| IDs | Columnar JSON | Row JSON | Fixed binary candidate |
+| ---: | ---: | ---: | ---: |
+| 160 | 28,951 B | 47,517 B | 9,766 B |
+| 294 | 52,937 B | 87,583 B | 17,940 B |
+| 510 | 91,601 B | 152,167 B | 31,116 B |
+
+Serialization benchmarks (Go 1.25, Windows amd64, Intel Core i9-14900KF)
+measured columnar JSON at 80.6–241.3 µs with 2 allocs/op for 160–510 IDs,
+versus row JSON at 392.3 µs–1.44 ms with 4,002–12,753 allocs/op. The binary
+candidate measured 29.4–76.0 µs but used an intentionally minimal fixed
+metadata envelope; it is evidence for the trade-off, not a second supported
+API.
+
+The latest direct Go benchmark also measured `CatalogPage` 109,948 ns/op
+(75,862 B/op, 282 allocs/op), `Trajectory64BodyBatch` 1,672,736 ns/op
+(626,184 B/op, 181 allocs/op), and `Trajectory10000Samples` 6,722,205 ns/op
+(2,766,505 B/op, 88 allocs/op). These figures are host-specific and are kept
+alongside the earlier reference run rather than treated as universal limits.
 
 The 64-body benchmark includes missing records explicitly and returns one
 compact numeric array per body when a state exists. `stateStride: 6` and

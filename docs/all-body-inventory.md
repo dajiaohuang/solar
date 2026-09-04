@@ -113,6 +113,14 @@ satellite responses produced 1,567,193 source records in 314 gzip shards
 offline replay produced byte-identical shards and manifest. The manifest SHA-256
 was `e859e463c12323eff3f8318cea3b2640382c32010f7e7137cb924cc06294a8b9`.
 
+The backend PR94 workload used a separate point-in-time output,
+`inventory-pr94-20260904`: it also has 1,567,193 records in 314 shards but
+declares 89,626,020 compressed bytes and manifest SHA-256
+`99312497b037caae4097b3e663283d1e8fc63799bd5e546e52a2ae3489e1e9c1`.
+Its kernel manifest and effective identity mapping are different. These
+snapshots are both valid, but their counts, hashes and byte totals must not be
+merged into one evidence claim.
+
 | Source | Accounted records |
 | --- | ---: |
 | Numbered asteroid table | 895910 |

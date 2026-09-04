@@ -100,6 +100,38 @@ func TestIndexedSearchAndStableDetail(t *testing.T) {
 	}
 }
 
+func TestGetManyGroupsIndexedRowsAndPreservesExactIDs(t *testing.T) {
+	d := t.TempDir()
+	for n, rows := range [][]string{{`{"id":"sb:asteroid:1","name":"Ceres"}`, `{"id":"sb:asteroid:2","name":"Pallas"}`}, {`{"id":"sb:comet:halley","name":"Halley"}`}} {
+		path := filepath.Join(d, []string{"records-00000.jsonl.gz", "records-00001.jsonl.gz"}[n])
+		f, err := os.Create(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		gz := gzip.NewWriter(f)
+		for _, row := range rows {
+			_, _ = gz.Write([]byte(row + "\n"))
+		}
+		_ = gz.Close()
+		_ = f.Close()
+	}
+	manifest := `{"schemaVersion":1,"purpose":"source-inventory-not-runtime-catalog","totalRecords":3,"shards":[{"file":"records-00000.jsonl.gz","count":2,"bytes":0,"sha256":""},{"file":"records-00001.jsonl.gz","count":1,"bytes":0,"sha256":""}]}`
+	if err := os.WriteFile(filepath.Join(d, "manifest.json"), []byte(manifest), 0600); err != nil {
+		t.Fatal(err)
+	}
+	i, err := Load(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := i.GetMany(context.Background(), []string{"sb:asteroid:2", "sb:comet:halley", "unknown"})
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("GetMany rows=%d err=%v", len(rows), err)
+	}
+	if !strings.Contains(string(rows["sb:asteroid:2"]), "Pallas") || !strings.Contains(string(rows["sb:comet:halley"]), "Halley") {
+		t.Fatalf("GetMany returned wrong rows: %+v", rows)
+	}
+}
+
 func TestInventoryPageHonoursCancellationDuringRead(t *testing.T) {
 	d := t.TempDir()
 	path := filepath.Join(d, "records-00000.jsonl.gz")

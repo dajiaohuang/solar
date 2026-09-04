@@ -202,6 +202,71 @@ func (i *Inventory) Get(ctx context.Context, id string) (json.RawMessage, bool, 
 	return nil, false, nil
 }
 
+// GetMany resolves stable source IDs in one grouped read. Candidate rows are
+// collected from the exact ID postings, then read once per shard; the raw ID
+// is still verified after the read so hash collisions cannot select a record.
+// The returned map contains only IDs that were found and preserves the source
+// row bytes for callers that need untouched evidence.
+func (i *Inventory) GetMany(ctx context.Context, ids []string) (map[string]json.RawMessage, error) {
+	out := make(map[string]json.RawMessage, len(ids))
+	if i == nil || i.idx == nil || len(ids) == 0 {
+		return out, nil
+	}
+	refsByKey := make(map[uint64]recordRef)
+	wanted := make(map[uint64][]string)
+	for _, rawID := range ids {
+		id := strings.TrimSpace(rawID)
+		if id == "" {
+			continue
+		}
+		for _, encodedOrdinal := range i.postings(hashText(normalize(id))) {
+			if encodedOrdinal&idPostingBit == 0 {
+				continue
+			}
+			ordinal := encodedOrdinal &^ idPostingBit
+			if int(ordinal) >= len(i.idx.records) {
+				continue
+			}
+			ref := i.idx.records[ordinal]
+			key := refKey(ref)
+			refsByKey[key] = ref
+			wanted[key] = append(wanted[key], id)
+		}
+	}
+	if len(refsByKey) == 0 {
+		return out, nil
+	}
+	refs := make([]recordRef, 0, len(refsByKey))
+	for _, ref := range refsByKey {
+		refs = append(refs, ref)
+	}
+	sort.Slice(refs, func(a, b int) bool {
+		if refs[a].Shard != refs[b].Shard {
+			return refs[a].Shard < refs[b].Shard
+		}
+		return refs[a].Row < refs[b].Row
+	})
+	rows, err := i.readRefs(ctx, refs)
+	if err != nil {
+		return nil, err
+	}
+	for n, ref := range refs {
+		if rows[n] == nil {
+			continue
+		}
+		var fields indexFields
+		if err := json.Unmarshal(rows[n], &fields); err != nil {
+			return nil, fmt.Errorf("parse inventory row: %w", err)
+		}
+		for _, id := range wanted[refKey(ref)] {
+			if fields.ID == id {
+				out[id] = append(json.RawMessage(nil), rows[n]...)
+			}
+		}
+	}
+	return out, nil
+}
+
 func (i *Inventory) pageRefs(cursor, query string, limit int) ([]recordRef, string, error) {
 	if limit < 1 || limit > 500 {
 		return nil, "", fmt.Errorf("limit must be between 1 and 500")

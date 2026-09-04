@@ -14,6 +14,7 @@ import (
 
 	"github.com/dajiaohuang/solar/backend/internal/catalog"
 	"github.com/dajiaohuang/solar/backend/internal/inventory"
+	"github.com/dajiaohuang/solar/backend/internal/science"
 )
 
 func testServer(t *testing.T) *Server {
@@ -213,4 +214,168 @@ func TestCompactTrajectoryStateTransport(t *testing.T) {
 	if bodyResponse.Availability != catalog.AvailableFallback || bodyResponse.StateStride != 6 || len(bodyResponse.States) != 12 {
 		t.Fatalf("unexpected compact state: %+v", bodyResponse)
 	}
+}
+
+func TestCurrentStatesColumnarMatchesSingleIdentityState(t *testing.T) {
+	c, err := catalog.Load("../../src/data")
+	if err != nil {
+		t.Fatal(err)
+	}
+	inv := fixtureInventory(t, `{"id":"sb:asteroid:1","designation":"1","name":"Ceres","category":"asteroid","source":"numbered","orbit":{"timeScale":"TDB","frame":"ECLIPJ2000","center":"naif:10","epochJd":2461200.5,"semiMajorAxisAU":2.7,"meanAnomalyDeg":10,"eccentricity":0.08,"inclinationDeg":10,"argPeriapsisDeg":20,"ascendingNodeDeg":30,"meanMotionDegPerDay":0.2}}`)
+	s := New(c, 2, inv)
+	epoch := "2461201"
+	one := httptest.NewRecorder()
+	s.ServeHTTP(one, httptest.NewRequest(http.MethodGet, "/v1/identities/sb:asteroid:1/state?epochJd="+epoch+"&precision=approximate", nil))
+	if one.Code != http.StatusOK {
+		t.Fatalf("single state: %d %s", one.Code, one.Body.String())
+	}
+	var single struct {
+		State catalog.State `json:"state"`
+	}
+	if err := json.Unmarshal(one.Body.Bytes(), &single); err != nil {
+		t.Fatal(err)
+	}
+	many := httptest.NewRecorder()
+	s.ServeHTTP(many, httptest.NewRequest(http.MethodPost, "/v1/current-states", strings.NewReader(`{"ids":["sb:asteroid:1"],"epochJd":2461201,"precision":"approximate"}`)))
+	if many.Code != http.StatusOK {
+		t.Fatalf("batch state: %d %s", many.Code, many.Body.String())
+	}
+	var response currentStatesResponse
+	if err := json.Unmarshal(many.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.IDs) != 1 || len(response.StateValues) != 6 || !response.StatePresent[0] || response.Availability[0] != catalog.AvailableFallback {
+		t.Fatalf("unexpected batch state: %+v", response)
+	}
+	if response.InventoryManifestSHA256 == "" || response.Source[0] != "numbered" || response.CenterIDs[0] != "naif:10" || response.Precision[0] != "approximate" {
+		t.Fatalf("missing source metadata: %+v", response)
+	}
+	if response.StateValues[0] != single.State.Position.X || response.StateValues[5] != single.State.Velocity.Z {
+		t.Fatalf("single/batch mismatch: single=%+v batch=%v", single.State, response.StateValues)
+	}
+}
+
+func TestCurrentStatesRealSelectionSizesAndMissingRows(t *testing.T) {
+	s := testServer(t)
+	ids := make([]string, 0, 510)
+	for _, body := range s.catalog.Page("", 0, 510) {
+		ids = append(ids, body.ID)
+	}
+	if len(ids) != 510 {
+		t.Fatalf("catalog selection size=%d", len(ids))
+	}
+	for _, size := range []int{160, 294, 510} {
+		payload, err := json.Marshal(map[string]any{"ids": ids[:size], "epochJd": 2451545.0, "frame": "ECLIPJ2000", "precision": "approximate"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rr := httptest.NewRecorder()
+		s.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/v1/current-states", strings.NewReader(string(payload))))
+		if rr.Code != http.StatusOK {
+			t.Fatalf("size=%d status=%d body=%s", size, rr.Code, rr.Body.String())
+		}
+		var response currentStatesResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+			t.Fatal(err)
+		}
+		if len(response.IDs) != size || len(response.Availability) != size || len(response.StatePresent) != size || len(response.StateValues) != size*6 {
+			t.Fatalf("size=%d column lengths ids=%d availability=%d present=%d states=%d", size, len(response.IDs), len(response.Availability), len(response.StatePresent), len(response.StateValues))
+		}
+	}
+}
+
+func TestCurrentStatesMatchesSingleCatalogResolverAtSharedEpoch(t *testing.T) {
+	s := testServer(t)
+	ids := make([]string, 0, 510)
+	for _, body := range s.catalog.Page("", 0, 510) {
+		ids = append(ids, body.ID)
+	}
+	payload, err := json.Marshal(map[string]any{"ids": ids, "epochJd": 2451545.0, "precision": "approximate"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	s.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/v1/current-states", strings.NewReader(string(payload))))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("batch status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var response currentStatesResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	for n, id := range ids {
+		body, ok := s.catalog.Get(id)
+		if !ok {
+			t.Fatalf("catalog body disappeared: %s", id)
+		}
+		var expected catalog.State
+		var expectedFound bool
+		if body.Availability == catalog.AvailableOperational {
+			expected, expectedFound, err = s.catalog.OperationalState(id, 2451545)
+		} else if body.Availability == catalog.AvailableFallback && body.Elements != nil {
+			var propagated science.State
+			propagated, err = science.PropagateBoundElliptic(context.Background(), science.Elements{SemiMajorAxisAU: body.Elements.SemiMajorAxisAU, Eccentricity: body.Elements.Eccentricity, InclinationDeg: body.Elements.InclinationDeg, AscendingNodeDeg: body.Elements.AscendingNodeDeg, ArgPeriapsisDeg: body.Elements.ArgPeriapsisDeg, MeanAnomalyDeg: body.Elements.MeanAnomalyDeg, MeanMotionDegPerDay: body.Elements.MeanMotionDegPerDay}, body.EpochJD, 2451545)
+			expected = catalog.State{Position: catalog.Vec3{X: propagated.Position.X, Y: propagated.Position.Y, Z: propagated.Position.Z}, Velocity: catalog.Vec3{X: propagated.Velocity.X, Y: propagated.Velocity.Y, Z: propagated.Velocity.Z}}
+			expectedFound = err == nil
+		}
+		if err != nil {
+			t.Fatalf("single resolver %s: %v", id, err)
+		}
+		if response.StatePresent[n] != expectedFound {
+			t.Fatalf("state presence mismatch id=%s batch=%v single=%v", id, response.StatePresent[n], expectedFound)
+		}
+		if expectedFound {
+			got := response.StateValues[n*6 : n*6+6]
+			want := []float64{expected.Position.X, expected.Position.Y, expected.Position.Z, expected.Velocity.X, expected.Velocity.Y, expected.Velocity.Z}
+			for component := range want {
+				if got[component] != want[component] {
+					t.Fatalf("state mismatch id=%s component=%d got=%g want=%g", id, component, got[component], want[component])
+				}
+			}
+		}
+	}
+}
+
+func TestCurrentStatesValidationAndCancellation(t *testing.T) {
+	s := testServer(t)
+	tooMany := make([]string, maxCurrentStateIDs+1)
+	for n := range tooMany {
+		tooMany[n] = "synthetic:" + strconv.Itoa(n)
+	}
+	rr := httptest.NewRecorder()
+	s.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/v1/current-states", strings.NewReader(`{"ids":["earth","earth"],"epochJd":2451545}`)))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("duplicate ids status=%d", rr.Code)
+	}
+	payload, err := json.Marshal(map[string]any{"ids": tooMany, "epochJd": 2451545.0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr = httptest.NewRecorder()
+	s.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/v1/current-states", strings.NewReader(string(payload))))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("too many ids status=%d", rr.Code)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	rr = httptest.NewRecorder()
+	s.ServeHTTP(rr, httptest.NewRequestWithContext(ctx, http.MethodPost, "/v1/current-states", strings.NewReader(`{"ids":["earth"],"epochJd":2451545}`)))
+	if rr.Code != http.StatusRequestTimeout {
+		t.Fatalf("cancelled status=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func FuzzCurrentStatesJSONNeverPanics(f *testing.F) {
+	for _, seed := range []string{`{}`, `{"ids":["earth"],"epochJd":2451545}`, `{"ids":null,"epochJd":"nan"}`, `not-json`, `{"ids":["earth"],"epochJd":1e309}`} {
+		f.Add(seed)
+	}
+	c, err := catalog.Load("../../src/data")
+	if err != nil {
+		f.Fatalf("load catalog: %v", err)
+	}
+	s := New(c, 2)
+	f.Fuzz(func(_ *testing.T, raw string) {
+		rr := httptest.NewRecorder()
+		s.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/v1/current-states", strings.NewReader(raw)))
+	})
 }

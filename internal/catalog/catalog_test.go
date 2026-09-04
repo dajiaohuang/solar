@@ -63,4 +63,11 @@ func TestOperationalStateUsesPackagedSPKAndCenterPool(t *testing.T) {
 	if state.Position.X < 99999949 || state.Position.X > 99999951 {
 		t.Fatalf("unexpected operational state: %+v", state)
 	}
+	batch, foundBatch, err := c.OperationalStates([]string{"naif:-210001"}, 2451545)
+	if err != nil || !foundBatch["naif:-210001"] {
+		t.Fatalf("batch state found=%v err=%v", foundBatch, err)
+	}
+	if batch["naif:-210001"] != state {
+		t.Fatalf("single/batch mismatch: single=%+v batch=%+v", state, batch["naif:-210001"])
+	}
 }
