@@ -1,9 +1,8 @@
 import { apparentPosition, type ApparentMode, type BarycentricState } from './apparent'
 import { stateToOsculatingElements, type OsculatingElements } from './osculating'
 import type { Vector3 } from '../../types'
+import { AU_IN_KM, SECONDS_PER_DAY } from '../units'
 
-const AU_KM = 149_597_870.7
-const DAY = 86_400
 export type ObservationReferenceFrame = 'eclipj2000' | 'j2000-equatorial' | 'resolver-defined'
 export type StateResolver = (bodyId: string, julianDay: number) => BarycentricState | null
 export interface ParentRelativeObservationOptions {
@@ -25,7 +24,7 @@ export interface ParentRelativeObservation {
   apparent: { positionKm: Vector3; lightTimeSeconds: number; emissionJulianDay: number; mode: ApparentMode; converged: boolean }
   assumptions: readonly string[]
 }
-const sub = (a: Vector3, b: Vector3): Vector3 => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z })
+const sub = (a: readonly [number, number, number], b: readonly [number, number, number]): Vector3 => ({ x: a[0] - b[0], y: a[1] - b[1], z: a[2] - b[2] })
 const scale = (v: Vector3, factor: number): Vector3 => ({ x: v.x * factor, y: v.y * factor, z: v.z * factor })
 const toVector = (v: readonly number[]): Vector3 => ({ x: v[0], y: v[1], z: v[2] })
 
@@ -35,8 +34,8 @@ export function deriveParentRelativeObservation(options: ParentRelativeObservati
   if (!Number.isFinite(julianDay) || !Number.isFinite(gmAU3PerDay2) || gmAU3PerDay2 <= 0) throw new RangeError('Invalid observation epoch or gravitational parameter')
   const target = resolve(targetId, julianDay), parent = resolve(parentId, julianDay), observer = resolve(observerId, julianDay)
   if (!target || !parent || !observer) return null
-  const positionAU = scale(sub(target.position, parent.position), 1 / AU_KM)
-  const velocityAUPerDay = scale(sub(target.velocity, parent.velocity), DAY / AU_KM)
+  const positionAU = scale(sub(target.position, parent.position), 1 / AU_IN_KM)
+  const velocityAUPerDay = scale(sub(target.velocity, parent.velocity), SECONDS_PER_DAY / AU_IN_KM)
   const mode = options.apparentMode ?? 'light-time+stellar-aberration'
   const required = (id: string, epoch: number) => {
     const state = resolve(id, epoch)
