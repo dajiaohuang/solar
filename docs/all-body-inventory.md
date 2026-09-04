@@ -51,7 +51,8 @@ SPKs. Their epochs are MJD TDB, converted to JD by adding 2400000.5. Comets use
 perihelion distance and a calendar-formatted perihelion time instead of asteroid
 semimajor axis and mean anomaly. No propagation is performed by this pipeline.
 
-Each source file has its own retrieval time, size, SHA-256 and available HTTP
+The manifest pins the five generator source files and the effective identity
+mapping as well as the kernel manifest. Each source file has its own retrieval time, size, SHA-256 and available HTTP
 validators. Static metadata and validators are rechecked after serial downloads.
 JPL [API fair use](https://ssd-api.jpl.nasa.gov/doc/index.php) requires one request
 at a time. A failed request stops the command without a success marker; retry
@@ -103,3 +104,34 @@ non-elliptic trajectories, additional satellite kernels, alias reconciliation
 and full-source delivery. Pages may use a declared subset without reducing the
 complete web/native coverage goal. Unknown or undiscovered objects and missing
 public observations cannot be filled by invented data.
+
+## Dated full-source validation
+
+On 2026-09-04, the table metadata dated 2026-09-03 and the separately fetched
+satellite responses produced 1,567,193 source records in 314 gzip shards
+(89,588,299 compressed bytes). All shard hashes and row counts passed validation;
+offline replay produced byte-identical shards and manifest. The manifest SHA-256
+was `e859e463c12323eff3f8318cea3b2640382c32010f7e7137cb924cc06294a8b9`.
+
+| Source | Accounted records |
+| --- | ---: |
+| Numbered asteroid table | 895910 |
+| Unnumbered asteroid table | 666207 |
+| Comet table, including fragments | 4075 |
+| Sun, eight planets and Earth's Moon | 10 |
+| Planetary/Pluto satellite discovery table | 460 |
+| Small-body satellite API | 531 |
+
+The five dwarf planets are categorized within the asteroid source records, not
+added again. The satellite API contributes 495 confirmed and 36 candidate
+records; 467 rows lack a complete component designation. The resulting ledger
+contains 2288 open-conic element records, 903 records without elements and 88
+with unvalidated raw satellite elements. Only 63 records resolve bundled SPK
+states at the audit epoch. None of these counts is an all-sources deduplicated
+or runtime high-precision completion claim.
+
+A separate audit derived numeric field boundaries from the raw source header
+separators and compared all 10,963,344 stored orbital fields across the three
+element tables without importing the parser. All comparisons passed. This
+guards field truncation and row alignment; it does not independently validate
+the upstream orbital solutions themselves.

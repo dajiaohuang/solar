@@ -31,6 +31,10 @@ export async function buildInventory({ sources, output, root = ROOT, auditEt = 8
   expectedCounts.planetarySatellites = planetary.expected
   expectedCounts.smallBodySatellites = satellites.length
   const kernels = await inventoryKernels(root, auditEt)
+  const generatorFiles = []
+  for (const path of ['scripts/build-body-inventory.mjs', 'scripts/lib/inventory-snapshot.mjs', 'scripts/lib/jpl-element-inventory.mjs', 'scripts/lib/satellite-inventory.mjs', 'scripts/lib/inventory-kernels.mjs']) {
+    generatorFiles.push({ path, sha256: digest(await readFile(join(ROOT, path))) })
+  }
   await mkdir(output)
   const seen = new Set(), counts = { sources: {}, categories: {}, geometry: {}, ephemerides: {}, confirmations: {}, identities: {} }, shards = []
   const parents = new Set([...planetary.records, ...satellites].map((r) => r.parentId))
@@ -82,7 +86,7 @@ export async function buildInventory({ sources, output, root = ROOT, auditEt = 8
   await flush()
   const missingParents = [...parents].filter((id) => !seen.has(id)).sort()
   const manifest = { schemaVersion: 1, purpose: 'source-inventory-not-runtime-catalog',
-    snapshot, elementTableUpdated: metadata.updated, totalRecords, counts, expectedCounts, shards, kernels: kernels.evidence,
+    snapshot, generator: { id: 'body-inventory-v1', files: generatorFiles }, elementTableUpdated: metadata.updated, totalRecords, counts, expectedCounts, shards, kernels: kernels.evidence,
     missingParents, planetaryGroups: planetary.groups,
     gaps: ['Unresolved component records are snapshot-row identities, not unique-body assertions.',
       'Cross-source asteroid/comet aliases and component aliases still require reconciliation; counts are source records, not an all-known-body union.',

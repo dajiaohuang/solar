@@ -46,6 +46,7 @@ export async function inventoryKernels(root, et) {
       kernelEvidence: { target, auditEt: et, segments: byTarget.get(target) ?? [], stateAtAuditEpoch: state } }
   }
   return { attach, evidence: { manifestId: manifest.id, manifestSha256: digest(manifestBytes), auditEt: et,
+    identityMappingSha256: digest(JSON.stringify({ asteroidIds: [...asteroidIds], moonIds: [...moonIds] })),
     timeScale: 'TDB seconds past J2000', frame: 'ECLIPJ2000', positionUnit: 'km', velocityUnit: 'km/s',
     meaning: 'Integrity-checked bundled kernels evaluated with center chains at one audit epoch; not a whole-window accuracy or runtime-selection claim.' } }
 }

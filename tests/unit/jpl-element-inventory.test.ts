@@ -22,4 +22,35 @@ describe('JPL fixed-column element parser', () => {
     expect(parseElementLine('--------------------------------', 'comet')).toBeNull()
     expect(() => parseElementLine(numbered.replace('0.07969230', 'not-a-number'), 'numbered-asteroid')).toThrow(/eccentricity/)
   })
+
+  it('does not cut a two-digit magnitude into the mean anomaly', () => {
+    const faint = numbered.replace('  3.34', ' 13.34')
+    expect(parseElementLine(faint, 'numbered-asteroid')).toMatchObject({ orbit: { meanAnomalyDeg: 274.4193464 }, photometry: { absoluteMagnitude: 13.34 } })
+  })
+
+  it('preserves seven-character negative epochs and overflowing comet q fields', () => {
+    const ancient = `${'C/-146 P1'.padEnd(44)}-732000 12345.12345678 1.002 160.2 113.2 98.1 -01460801.12345 JPL 1`
+    expect(parseElementLine(ancient, 'comet')).toMatchObject({ designation: 'C/-146 P1', orbit: { epochJd: 1668000.5, perihelionAU: 12345.12345678, perihelionTimeRaw: '-01460801.12345' }, geometryStatus: 'open-conic-elements' })
+  })
+
+  it('does not merge multi-letter comet fragments or interstellar identities', () => {
+    const tail = '61200 0.5 1.2 15 20 30 20260904.12345 JPL 1'
+    const row = (name: string) => parseElementLine(name.padEnd(44) + tail, 'comet')
+    expect(row('73P-AA/Schwassmann-Wachmann').designation).toBe('73P-AA')
+    expect(row('73P-A/Schwassmann-Wachmann').designation).toBe('73P-A')
+    expect(row('73P/Schwassmann-Wachmann 3-AA').designation).toBe('73P-AA')
+    expect(row('160P/LINEAR-LONEOS').designation).toBe('160P')
+    expect(row('3I/ATLAS').designation).toBe('3I')
+    expect(row('C/2025 K1-B (ATLAS)').designation).toBe('C/2025 K1-B')
+    expect(row('D/1993 F2-Q1 (Shoemaker-Levy 9)').designation).toBe('D/1993 F2-Q1')
+  })
+
+  it('retains invalid/missing geometry without shifting fields or inventing zeroes', () => {
+    expect(parseElementLine(numbered.replace('0.07969230', '-0.07969230'), 'numbered-asteroid').geometryStatus).toBe('missing-elements')
+    expect(parseElementLine(numbered.replace('0.07969230', '1.2'), 'numbered-asteroid').geometryStatus).toBe('missing-elements')
+    const incomplete = `${'1P/Halley'.padEnd(44)}61200 0.5     15 20 30 20260904.12345 JPL 1`
+    expect(parseElementLine(incomplete, 'comet')).toMatchObject({ geometryStatus: 'missing-elements', geometryReason: 'missing-or-inconsistent-orbit-fields' })
+    expect(parseElementLine(incomplete, 'comet').orbit.eccentricity).toBeUndefined()
+    expect(() => parseElementLine(null, 'comet')).toThrow('string')
+  })
 })
