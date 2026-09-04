@@ -29,6 +29,11 @@ type Props = {
 }
 
 const HISTORY_OPTIONS = [90, 365, 1825, 4383, 7300, 12053, 43830, 90580]
+// Keep familiar primary bodies discoverable on the first page, independently
+// of selection so checking a body never moves the focused checkbox.
+const BODY_KIND_ORDER: Record<CelestialBody['kind'], number> = {
+  star: 0, planet: 1, dwarfPlanet: 2, moon: 3, asteroid: 4, spacecraft: 5,
+}
 const BODY_KIND_TRANSLATION = {
   star: 'bodyKindStar',
   planet: 'bodyKindPlanet',
@@ -54,7 +59,7 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
   const displayedPresets = useMemo(() => PRODUCT_PROFILE === 'preview'
     ? [...SCENE_PRESETS].sort((a, b) => Number(sceneAvailability(buildScenePresetUrlState(b, language)).available) - Number(sceneAvailability(buildScenePresetUrlState(a, language)).available))
     : SCENE_PRESETS, [language])
-  const sortedBodies = useMemo(() => [...bodies].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name)), [bodies])
+  const sortedBodies = useMemo(() => [...bodies].sort((a, b) => BODY_KIND_ORDER[a.kind] - BODY_KIND_ORDER[b.kind] || a.name.localeCompare(b.name)), [bodies])
   const filteredBodies = useMemo(() => {
     const query = bodyQuery.trim().toLocaleLowerCase()
     if (!query) return sortedBodies
