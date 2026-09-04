@@ -50,11 +50,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.error(w, http.StatusNotFound, "not_found", "unknown endpoint")
 		return
 	}
+	// Scientific work is deliberately fail-fast when the bounded worker pool is
+	// full. An unbounded wait queue would let a burst consume memory before
+	// request cancellation can be observed by the handler.
+	if err := r.Context().Err(); err != nil {
+		s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
+		return
+	}
 	select {
 	case s.slots <- struct{}{}:
 		defer func() { <-s.slots }()
-	case <-r.Context().Done():
-		s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
+	default:
+		w.Header().Set("Retry-After", "1")
+		s.error(w, http.StatusTooManyRequests, "overloaded", "scientific worker limit reached; retry later")
 		return
 	}
 	s.inFlight.Add(1)

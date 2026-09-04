@@ -2,6 +2,7 @@ package spk
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"math"
 	"os"
 	"path/filepath"
@@ -9,25 +10,40 @@ import (
 )
 
 func TestType17MatchesIndependentCSPICEOracle(t *testing.T) {
-	elements := []float64{123456, 42164, 0.7, 0.55, 1.3, 0.16, 0.21, 2.1e-8, 7.8e-5, -1.7e-8, 0.4, 0.9}
+	oracleBytes, err := os.ReadFile(filepath.Join("..", "..", "tests", "fixtures", "spk17-cspice.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var oracle struct {
+		Elements []float64 `json:"elements"`
+		Samples  []struct {
+			ET    float64   `json:"et"`
+			State []float64 `json:"state"`
+		} `json:"samples"`
+	}
+	if err := json.Unmarshal(oracleBytes, &oracle); err != nil {
+		t.Fatal(err)
+	}
+	if len(oracle.Elements) != 12 || len(oracle.Samples) == 0 {
+		t.Fatal("invalid CSPICE type 17 oracle fixture")
+	}
 	b := make([]byte, 12*8)
-	for i, v := range elements {
+	for i, v := range oracle.Elements {
 		binary.LittleEndian.PutUint64(b[i*8:], math.Float64bits(v))
 	}
 	k := &Kernel{data: b, little: true}
 	seg := Segment{Type: 17, Start: 1, End: 12, type17: true}
-	samples := []struct {
-		et   float64
-		want [6]float64
-	}{{-54321, [6]float64{30210.922955799404, -4765.4957694762707, -39194.25936618237, -2.032591204873182, 1.2362274238313566, 1.3673474213543435}}, {123456, [6]float64{20393.58276354703, -21751.677805987736, -865.16545939588286, 3.3092622456729881, -2.1757506595767611, -2.0170740704220966}}, {395430, [6]float64{57714.08204232197, -32873.018374250678, -42600.723477335065, 0.11732693493451804, 0.41104539186566968, -0.75022686216574275}}}
-	for _, sample := range samples {
-		got, err := k.eval17(seg, sample.et)
+	for _, sample := range oracle.Samples {
+		if len(sample.State) != 6 {
+			t.Fatal("invalid CSPICE state fixture")
+		}
+		got, err := k.eval17(seg, sample.ET)
 		if err != nil {
 			t.Fatal(err)
 		}
-		for i, w := range sample.want {
-			if math.Abs(got[i]-w) > 1e-9*math.Max(1, math.Abs(w)) {
-				t.Fatalf("et %v component %d got %.17g want %.17g", sample.et, i, got[i], w)
+		for i, want := range sample.State {
+			if math.Abs(got[i]-want) > 1e-9*math.Max(1, math.Abs(want)) {
+				t.Fatalf("et %v component %d got %.17g want %.17g", sample.ET, i, got[i], want)
 			}
 		}
 	}
@@ -81,4 +97,13 @@ func TestRepositorySPKFixturesParse(t *testing.T) {
 			t.Errorf("%s: %v", filepath.Base(path), err)
 		}
 	}
+}
+
+func FuzzSPKParserNeverPanics(f *testing.F) {
+	for _, seed := range [][]byte{nil, make([]byte, 3072), []byte("DAF/SPK")} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(_ *testing.T, data []byte) {
+		_, _ = New(data)
+	})
 }

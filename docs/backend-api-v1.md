@@ -62,4 +62,7 @@ native endpoint has been deployed.
 
 Errors are JSON objects with `apiVersion` and `error.code`/`error.message`.
 Clients should branch on codes such as `invalid_limit`, `invalid_page_token`,
-`body_not_found`, `unsupported_frame`, `state_unavailable`, and `cancelled`.
+`body_not_found`, `unsupported_frame`, `state_unavailable`, `cancelled`, and
+`overloaded`. A `429 overloaded` response includes `Retry-After: 1`; the
+backend rejects work when its configured scientific worker pool is full rather
+than accumulating an unbounded queue.

@@ -9,3 +9,9 @@ Run from the repository root with `go run ./cmd/solar-backend`. Use
 optionally, `-inventory-dir` for the audited gzip-JSONL source inventory. The
 inventory endpoint is deliberately separate from the deduplicated catalog and
 preserves source-record identity, parent, geometry and ephemeris status.
+
+The service uses a bounded scientific worker pool. When all slots are in use it
+returns `429 overloaded` with `Retry-After: 1`; it does not accumulate an
+unbounded work queue. Reproduce the measured cold/warm, batch, long-trajectory,
+mixed-load, RSS and profile evidence with the commands in
+[`BENCHMARKS.md`](../BENCHMARKS.md).

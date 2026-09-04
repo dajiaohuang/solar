@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -58,5 +59,36 @@ func TestUnknownEndpoint(t *testing.T) {
 	s.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/v1/nope", nil))
 	if rr.Code != 404 {
 		t.Fatal(rr.Code)
+	}
+}
+
+func TestOverloadFailsFastWithRetryHint(t *testing.T) {
+	c, err := catalog.Load("../../src/data")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New(c, 1)
+	// Hold the only worker so the request exercises the bounded-overload path
+	// deterministically instead of relying on goroutine scheduling.
+	s.slots <- struct{}{}
+	defer func() { <-s.slots }()
+	rr := httptest.NewRecorder()
+	s.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/v1/catalog?limit=1", nil))
+	if rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if rr.Header().Get("Retry-After") != "1" {
+		t.Fatalf("missing retry hint: %q", rr.Header().Get("Retry-After"))
+	}
+}
+
+func TestCancelledRequestIsRejectedBeforeWork(t *testing.T) {
+	s := testServer(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	rr := httptest.NewRecorder()
+	s.ServeHTTP(rr, httptest.NewRequestWithContext(ctx, http.MethodGet, "/v1/catalog?limit=1", nil))
+	if rr.Code != http.StatusRequestTimeout {
+		t.Fatalf("expected cancellation status, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
