@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-09-04T19:35:36Z",
+  "question": "Is there a public source kernel and center chain for the Makemake primary body (136472)?",
+  "requiredIdentity": {
+    "designation": "136472",
+    "systemBarycenter": 20136472,
+    "primaryCenter": 920136472,
+    "timeScale": "TDB"
+  },
+  "naif": {
+    "directoryEntries": [
+      "tnosat_v001_20000617_jpl082_20230601.bsp",
+      "tnosat_v001_20050000_jpl043_20220908.bsp",
+      "tnosat_v001_20090482_jpl043_20220908.bsp",
+      "tnosat_v001_20120347_jpl025_20220908.bsp",
+      "tnosat_v001_20136199_jpl080_20220908.bsp",
+      "tnosat_v001_20469705_jpl009_20220908.bsp",
+      "tnosat_v001_20612095_jpl006_20220908.bsp",
+      "tnosat_v001_20612687_jpl008_20220908.bsp",
+      "tnosat_v001_53031823_jpl010_20220908.bsp",
+      "tnosat_v001_53092511_jpl005_20220908.bsp",
+      "tnosat_v001b_20136108_jpl110_20221014.bsp"
+    ],
+    "summaryContainsMakemake": false,
+    "oldVersionEntries": [
+      "tnosat_v001_20136108_jpl110_20220908.bsp"
+    ],
+    "readmeContract": "Each TNO satellite SPK includes the system barycenter, main body and satellites; the filename numeric field is the system-barycenter NAIF ID.",
+    "captures": [
+      {
+        "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/tno/",
+        "retrievedAt": "2026-09-04T19:35:21.6692514Z",
+        "bytes": 15982,
+        "sha256": "e95b734e5503716edcbd810c7d7c75ee5ddd56b94765ce5a09d3a101d1356965"
+      },
+      {
+        "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/tno/aa_summaries.txt",
+        "retrievedAt": "2026-09-04T19:35:21.9551565Z",
+        "bytes": 4815,
+        "sha256": "803d7a5e4da243fcb719e0dd5bcd5bd6a99c56372c334ff7bdd7befc27517c1d"
+      },
+      {
+        "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/tno/AAREADME_TNO_SPKs",
+        "retrievedAt": "2026-09-04T19:35:22.2060870Z",
+        "bytes": 1942,
+        "sha256": "af1f50f921aea015a1dd9eee5a3863b398b16bc819bc033345cc2a441ee19cfd"
+      },
+      {
+        "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/tno/a_old_versions/",
+        "retrievedAt": "2026-09-04T19:35:22.4681894Z",
+        "bytes": 12279,
+        "sha256": "51b2f5d603503f0efa2325a6abed01cb7d208a5f3601be1419429df8c20f1164"
+      }
+    ]
+  },
+  "horizons": {
+    "lookup": {
+      "url": "https://ssd.jpl.nasa.gov/api/horizons_lookup.api?format=json&sstr=136472",
+      "retrievedAt": "2026-09-04T19:35:01.3613813Z",
+      "bytes": 250,
+      "sha256": "80be377f5a9d157f68c3fc6353999968a4f8e501f80ed1970063c63e15ac19b2",
+      "result": {
+        "name": "136472 Makemake",
+        "type": "asteroid (integrated barycenter)",
+        "spkid": "20136472"
+      }
+    },
+    "directSpk": {
+      "url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27136472%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=NO&START_TIME=%272020-01-01%27&STOP_TIME=%272030-01-02%27",
+      "retrievedAt": "2026-09-04T19:35:35.7052658Z",
+      "bytes": 339239,
+      "sha256": "2f3c414a7ad5de96f86b9997d46931b17824b51cce1a12a59f5f1382b84450f9",
+      "target": 20136472,
+      "solution": "JPL#130",
+      "center": 10,
+      "frame": "ECLIPJ2000",
+      "validity": {
+        "from": "2020-01-01",
+        "to": "2030-01-02",
+        "timeScale": "TDB"
+      },
+      "acceptedAsPrimaryCenter": false
+    },
+    "vectors": {
+      "url": "https://ssd.jpl.nasa.gov/api/horizons.api?format=text&COMMAND=%27136472%3B%27&EPHEM_TYPE=VECTORS&CENTER=%27%4010%27&START_TIME=%272020-01-01%27&STOP_TIME=%272020-01-03%27&STEP_SIZE=%271d%27&OUT_UNITS=%27KM-S%27&REF_SYSTEM=%27ICRF%27&VEC_TABLE=%273%27",
+      "retrievedAt": "2026-09-04T19:35:36.0940860Z",
+      "bytes": 7725,
+      "sha256": "0feb1d79441c1d9c6bc9bf2593c601b8395b535666610214e02f7c104f653bf1",
+      "target": 20136472,
+      "center": 10,
+      "centerSource": "DE441",
+      "targetSource": "JPL#130",
+      "frame": "Ecliptic of J2000",
+      "timeScale": "TDB"
+    }
+  },
+  "satelliteApis": {
+    "smallBodySatellites": {
+      "url": "https://ssd-api.jpl.nasa.gov/sb_sat.api?des=136472&orb=true&sigma=true&phys-par=true",
+      "retrievedAt": "2026-09-04T19:35:02.2983816Z",
+      "bytes": 332,
+      "sha256": "3cf957bea1588927ebf2aebb15b28fdb7380e201091109d558fe010c7078ebd7",
+      "result": "Confirmed S/2015 (136472) 1 is listed, but no orbit field is returned."
+    },
+    "sbdb": {
+      "url": "https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=136472&phys-par=1",
+      "retrievedAt": "2026-09-04T19:35:02.6013806Z",
+      "bytes": 2624,
+      "sha256": "44e8ed9663e0210df292970cddcc6daf0d6e7d0bdf5d1fd5e5a1b17fd702b578",
+      "result": "spkid=20136472, orbit_id=130, sb_used=SB441-N16, pe_used=DE441, satellites=null"
+    }
+  },
+  "decision": "No public source currently supplies the Makemake primary offset and a verifiable primary/system/Sun chain. Keep Makemake approximate; do not use 20136472 or an invented 920136472 offset as the primary center. Split this data-availability gate from the completed generic SPK type-21 and Eris/Haumea primary-center work."
+}

@@ -77,6 +77,37 @@ runtime state therefore remains explicitly approximate. There is no invented
 offset, mass or orbital phase. This unresolved identity/geometry distinction
 remains part of the all-body backlog.
 
+## Makemake primary-center availability audit
+
+The public-source search was repeated on 2026-09-04 and is retained in
+[`makemake-primary-availability.json`](../tests/fixtures/makemake-primary-availability.json),
+including retrieval timestamps, response sizes and SHA-256 digests. The NAIF
+[TNO directory](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/tno/),
+its [`aa_summaries.txt`](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/tno/aa_summaries.txt),
+and the [TNO SPK README](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/tno/AAREADME_TNO_SPKs)
+contain no 136472, 20136472 or 920136472 entry. The README defines the numeric
+filename field as the system-barycenter ID and says each TNO SPK contains the
+system barycenter, main body and satellites. The old-version directory contains
+only the older Haumea delivery.
+
+JPL Horizons Lookup identifies 136472 as `spkid=20136472`, type
+`asteroid (integrated barycenter)`. A direct Horizons SPK request returns a
+JPL#130 target 20136472 relative to Sun (10), frame ECLIPJ2000, with TDB
+validity 2020-01-01 through 2030-01-02. The corresponding vector header says
+the target source is JPL#130 and the center source is DE441. This is a valid
+small-body solution and a useful type-21 reader fixture, but it is not a
+published primary offset or a primary/system chain. JPL's Small-Body Satellites
+API lists confirmed S/2015 (136472) 1 without an orbit field; SBDB likewise
+returns `satellites=null` while identifying the same JPL#130 orbit.
+
+Therefore the current public data cannot satisfy the Makemake primary-center
+acceptance without inventing an offset, treating an integrated/system
+barycenter as the primary, fitting a replacement, or using N-body propagation.
+The issue acceptance should be split: generic type-21 support and the Eris and
+Haumea primary-center chains are complete; Makemake remains a separately gated
+data-availability item and must stay approximate until a source kernel exposes
+its primary center and a verifiable center/frame/TDB chain.
+
 ## Reproduction
 
 Normal unit/scientific tests read checked-in fixtures offline:
