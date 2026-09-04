@@ -10,7 +10,7 @@ import {
   validateCapabilities,
   validateCurrentStates,
 } from '../../src/lib/currentStates'
-import { createLatestOnlyGate, currentStateRequestToken, fetchCurrentStates, loadCurrentStateFrames, resetCurrentStatesCaches, sampleCurrentStateEpoch } from '../../src/hooks/useCurrentStates'
+import { createLatestOnlyGate, currentStateRequestToken, fetchCurrentStates, loadAndPublishCurrentStateFrames, resetCurrentStatesCaches, sampleCurrentStateEpoch } from '../../src/hooks/useCurrentStates'
 import { bodyPositionOrNull } from '../../src/lib/ephemeris'
 import type { CelestialBody } from '../../src/types'
 
@@ -129,8 +129,9 @@ describe('current-state adapter', () => {
         return new Response(payload, { status: 200 })
       }) as typeof fetch
       const signal = new AbortController().signal
+      let completedPublications = 0
       const [first, second] = await Promise.all([
-        fetchCurrentStates({ base: 'https://backend.test', ids, epochTdbJd: epochTdb, signal, fetcher }),
+        loadAndPublishCurrentStateFrames({ base: 'https://backend.test', ids, epochTdbJd: epochTdb, epochUtcJd: epochUtc, bodies: [earth], requestedIds: new Map([['earth', 'earth']]), referenceIds: ['earth'], signal, fetcher, publish: () => { completedPublications += 1 } }),
         fetchCurrentStates({ base: 'https://backend.test', ids, epochTdbJd: epochTdb, signal, fetcher }),
       ])
       expect(first.responses[0].ids).toHaveLength(count)
@@ -141,7 +142,6 @@ describe('current-state adapter', () => {
       expect(posts[0].requestBytes).toBeGreaterThan(0)
       expect(posts[0].responseBytes).toBeGreaterThan(0)
       const clientElapsedMs = performance.now() - startedAt
-      const completedPublications = first.responses.length === 1 && second.responses.length === 1 ? 1 : 0
       console.info(JSON.stringify({ count, requestCount: posts.length, requestBytes: posts[0].requestBytes, responseBytes: posts[0].responseBytes, clientElapsedMs, completedPublications, failedBatchPublications: 0 }))
       expect(completedPublications).toBe(1)
     }
@@ -183,7 +183,7 @@ describe('current-state adapter', () => {
       if (post === 1) return new Response(JSON.stringify(response(JSON.parse(String(init?.body)).ids)), { status: 200 })
       return new Response(JSON.stringify({ error: 'second batch failed' }), { status: 500 })
     }) as typeof fetch
-    await expect(loadCurrentStateFrames({ base: 'https://backend.test', ids, epochTdbJd: epochTdb, bodies: [earth], requestedIds: new Map([['earth', 'earth']]), referenceIds: ['earth'], signal: new AbortController().signal, fetcher }).then(() => { completedPublications += 1 })).rejects.toThrow('HTTP 500')
+    await expect(loadAndPublishCurrentStateFrames({ base: 'https://backend.test', ids, epochTdbJd: epochTdb, epochUtcJd: epochUtc, bodies: [earth], requestedIds: new Map([['earth', 'earth']]), referenceIds: ['earth'], signal: new AbortController().signal, fetcher, publish: () => { completedPublications += 1 } })).rejects.toThrow('HTTP 500')
     expect(post).toBe(2)
     expect(completedPublications).toBe(0)
   })

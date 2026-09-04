@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { TrajectoryCanvas } from '../../components/TrajectoryCanvas'
 import { SPACECRAFT } from '../../data/spacecraft'
 import { BODY_PHYSICAL } from '../../data/physical'
@@ -47,19 +47,6 @@ function SpatialPreview() {
   )
 }
 
-function useTrajectoryAnchor(julianDay: number, isPlaying: boolean) {
-  const [anchor, setAnchor] = useState(julianDay)
-  const lastUpdateRef = useRef(0)
-  useEffect(() => {
-    const now = performance.now()
-    if (!isPlaying || now - lastUpdateRef.current > 2200) {
-      lastUpdateRef.current = now
-      setAnchor(julianDay)
-    }
-  }, [isPlaying, julianDay])
-  return anchor
-}
-
 type FrameViewProps = {
   referenceId: BodyId
   selectedBodies: CelestialBody[]
@@ -68,7 +55,7 @@ type FrameViewProps = {
   resolutionBodies: CelestialBody[]
   bodiesById: Map<BodyId, CelestialBody>
   julianDay: number
-  trajectoryAnchor: number
+  trajectoryJulianDay: number
   onFrame: (frame: TrajectoryFrameData) => void
   onHover: (item: { body: CelestialBody; distance: number; x: number; y: number } | null) => void
   catalogRecords: AsteroidRecord[]
@@ -94,7 +81,7 @@ function FrameView({
   resolutionBodies,
   bodiesById,
   julianDay,
-  trajectoryAnchor,
+  trajectoryJulianDay,
   onFrame,
   onHover,
   catalogRecords,
@@ -128,7 +115,7 @@ function FrameView({
     resolutionBodies,
     referenceId: referenceBody.id,
     currentJulianDay: julianDay,
-    trajectoryJulianDay: trajectoryAnchor,
+    trajectoryJulianDay,
     historyDays: simulation.historyDays,
     // Inventory expansion must not silently undersample short-period moons.
     // Only historical trails are budgeted; current positions keep all selections.
@@ -163,8 +150,8 @@ function FrameView({
   }, [catalogDrawCount, catalogOrigin, catalogPositions])
   const suggested = Math.max(focusSuggested, catalogSuggested)
   const orbitEllipses = useMemo(() => VIEW_CAPABILITIES[simulation.viewMode].fullOrbits && simulation.showOrbits
-    ? computeOrbitEllipses(selectedBodies.slice(0, 40), bodiesById, referenceBody.id, trajectoryAnchor)
-    : [], [bodiesById, referenceBody.id, selectedBodies, simulation.showOrbits, simulation.viewMode, trajectoryAnchor])
+    ? computeOrbitEllipses(selectedBodies.slice(0, 40), bodiesById, referenceBody.id, trajectoryJulianDay)
+    : [], [bodiesById, referenceBody.id, selectedBodies, simulation.showOrbits, simulation.viewMode, trajectoryJulianDay])
   const lagrangePoints = useMemo(() => {
     if (!simulation.showLagrange || referenceBody.id !== 'sun') return []
     return frame.currentPositions.filter((item) => item.body.kind === 'planet').map((item) => ({
@@ -328,7 +315,7 @@ export function ExplorerWorkspace() {
   // All visual layers in a scene use the same authoritative epoch. During a
   // backend refresh this intentionally keeps the previous frame/cloud epoch;
   // EphemerisStatus still exposes loading so a stale snapshot is explicit.
-  const trajectoryAnchor = useTrajectoryAnchor(renderedJulianDay, clock.isPlaying)
+  const trajectoryJulianDay = renderedJulianDay
   const catalogPointCloud = useCatalogPointWorker(catalogRecords, renderedJulianDay)
   const catalogEpochAligned = !simulation.showCatalogCloud || Math.abs(catalogPointCloud.computedJulianDay - renderedJulianDay) <= 1e-9
   // Full Web uses the audited backend when configured. Pages remains its
@@ -405,7 +392,7 @@ export function ExplorerWorkspace() {
             resolutionBodies={resolutionBodies}
             bodiesById={bodiesById}
             julianDay={renderedJulianDay}
-            trajectoryAnchor={trajectoryAnchor}
+            trajectoryJulianDay={trajectoryJulianDay}
             onFrame={setPrimaryFrame}
             onHover={setHovered}
             catalogRecords={catalogRecords}
@@ -431,7 +418,7 @@ export function ExplorerWorkspace() {
               resolutionBodies={resolutionBodies}
               bodiesById={bodiesById}
               julianDay={renderedJulianDay}
-              trajectoryAnchor={trajectoryAnchor}
+              trajectoryJulianDay={trajectoryJulianDay}
               onFrame={setSecondaryFrame}
               onHover={setHovered}
               catalogRecords={catalogRecords}

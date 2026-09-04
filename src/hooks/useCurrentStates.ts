@@ -191,11 +191,21 @@ export async function loadCurrentStateFrames(params: {
   return { capabilities, responses, frames, epochUtcJd: params.epochUtcJd ?? NaN }
 }
 
+export type CurrentStateFrameSnapshot = { frames: ReadonlyMap<BodyId, BackendFrame>; publishedEpochUtcJd: number }
+
+/** Production publication boundary: the callback is reached only after all
+ * batches validate and all reference frames have been built. */
+export async function loadAndPublishCurrentStateFrames(params: Parameters<typeof loadCurrentStateFrames>[0] & { publish: (snapshot: CurrentStateFrameSnapshot) => void }) {
+  const { publish, ...loadParams } = params
+  const loaded = await loadCurrentStateFrames(loadParams)
+  publish({ frames: loaded.frames, publishedEpochUtcJd: loaded.epochUtcJd })
+  return loaded
+}
+
 export function useCurrentStates(params: { bodies: CelestialBody[]; resolutionBodies: CelestialBody[]; referenceIds: BodyId[]; epochUtcJd: number; isPlaying?: boolean; seekRevision?: number }) {
-  const [frames, setFrames] = useState<ReadonlyMap<BodyId, BackendFrame>>(new Map())
+  const [snapshot, setSnapshot] = useState<CurrentStateFrameSnapshot>({ frames: new Map(), publishedEpochUtcJd: NaN })
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [publishedEpochUtcJd, setPublishedEpochUtcJd] = useState<number | null>(null)
   const [playingSample, setPlayingSample] = useState(0)
   const latestEpochRef = useRef(params.epochUtcJd)
   useEffect(() => {
@@ -233,8 +243,7 @@ export function useCurrentStates(params: { bodies: CelestialBody[]; resolutionBo
     if (PRODUCT_PROFILE === 'preview' || !base || requested.size === 0) {
       queueMicrotask(() => {
         if (!gate.current!.isCurrent(request)) return
-        setFrames(new Map())
-        setPublishedEpochUtcJd(null)
+        setSnapshot({ frames: new Map(), publishedEpochUtcJd: NaN })
         setError(null)
         setLoading(false)
       })
@@ -250,20 +259,18 @@ export function useCurrentStates(params: { bodies: CelestialBody[]; resolutionBo
     const requestEpochUtcJd = sampleCurrentStateEpoch(latestEpochRef.current, isPlaying)
     const epochTdbJd = utcJulianDayToTdb(requestEpochUtcJd)
     const ids = [...requested.values()]
-    void loadCurrentStateFrames({ base, ids, epochTdbJd, epochUtcJd: requestEpochUtcJd, bodies: params.bodies, requestedIds: requested, referenceIds: params.referenceIds, signal: controller.signal }).then(({ frames, epochUtcJd }) => {
+    void loadAndPublishCurrentStateFrames({ base, ids, epochTdbJd, epochUtcJd: requestEpochUtcJd, bodies: params.bodies, requestedIds: requested, referenceIds: params.referenceIds, signal: controller.signal, publish: next => {
       if (!gate.current!.isCurrent(request)) return
-      setFrames(frames)
-      setPublishedEpochUtcJd(epochUtcJd)
+      setSnapshot(next)
       setLoading(false)
-    }).catch((reason: unknown) => {
+    }}).catch((reason: unknown) => {
       if (!gate.current!.isCurrent(request)) return
-      setFrames(new Map())
-      setPublishedEpochUtcJd(null)
+      setSnapshot({ frames: new Map(), publishedEpochUtcJd: NaN })
       setError(reason instanceof Error ? reason.message : String(reason))
       setLoading(false)
     })
     return () => gate.current!.cancel(request)
   }, [base, requestKey, params.bodies, params.referenceIds, requested, isPlaying, params.seekRevision])
 
-  return { configured: PRODUCT_PROFILE === 'full' && base !== null, frames, error, loading, publishedEpochUtcJd }
+  return { configured: PRODUCT_PROFILE === 'full' && base !== null, frames: snapshot.frames, error, loading, publishedEpochUtcJd: Number.isFinite(snapshot.publishedEpochUtcJd) ? snapshot.publishedEpochUtcJd : null }
 }
