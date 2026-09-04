@@ -31,7 +31,11 @@ const output = 'public/data/ephemerides'
 await mkdir(cache, { recursive: true }); await mkdir(output, { recursive: true })
 const files = []
 let existingFiles = []
-try { existingFiles = JSON.parse(await readFile('src/data/ephemeris-manifest.json', 'utf8')).files } catch { /* First pack build. */ }
+try { existingFiles = JSON.parse(await readFile('src/data/ephemeris-manifest.json', 'utf8')).files }
+catch (error) { if (error.code !== 'ENOENT') throw error }
+if (existingFiles.some(file => file.solutionKernelIds || file.integrationBatch)) {
+  throw new Error('Refusing to overwrite an expanded source-pool manifest. Prepare a separate baseline and use integrate-satellite-pack.mjs for explicit integration.')
+}
 for (const config of sources) {
   const sourceFrom = config.core ? (process.env.SOLAR_EPHEMERIS_FROM ?? '2000-01-01') : from
   const requestedTo = config.core ? (process.env.SOLAR_EPHEMERIS_TO ?? '2051-01-01') : to

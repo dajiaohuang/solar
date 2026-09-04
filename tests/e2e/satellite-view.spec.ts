@@ -60,16 +60,34 @@ test('uses useful moon orbital units and distinguishes the active Earth center',
 })
 
 test('keeps every moon-system preset in a bounded local 3D frame', async ({ page }) => {
+  test.setTimeout(120_000)
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=4&lang=en&speed=0')
   for (const id of ['jupiter-spk-moons', 'saturn-spk-moons', 'uranus-spk-moons', 'neptune-spk-moons', 'pluto-spk-moons', 'earth-moon']) {
     await page.getByTestId(`preset-${id}`).click()
     await page.waitForLoadState('networkidle')
+    // A first selection now loads an entire system's split original records.
+    // Network-idle can occur between batches; wait for the application loader,
+    // then separately bound trajectory computation after all inputs arrive.
+    await expect(page.getByTestId('ephemeris-status').locator('summary')).not.toContainText('Loading', { timeout: 60_000 })
     await expect(page.locator('.compute-progress')).toHaveCount(0)
     const canvas = page.getByTestId('trajectory-canvas-3d')
     await expect(canvas).toBeVisible()
-    await expect.poll(async () => Number(await canvas.getAttribute('data-camera-distance'))).toBeLessThan(1)
+    // Irregular moons extend beyond the old close-moon scale. Test a physical
+    // radius/FOV fit, not a fixed camera distance that clips larger systems.
+    await expect.poll(async () => {
+      const radius = Number(await canvas.getAttribute('data-scene-radius'))
+      const distance = Number(await canvas.getAttribute('data-camera-distance'))
+      const box = await canvas.boundingBox()
+      if (!(radius > 0) || !box) return Infinity
+      const halfFov = Math.min(21 * Math.PI / 180, Math.atan(Math.tan(21 * Math.PI / 180) * box.width / box.height))
+      return distance * Math.sin(halfFov) / radius
+    }, { message: `${id} should fit its actual physical radius with bounded padding` }).toBeCloseTo(1.2, 1)
     await expect.poll(async () => Number(await canvas.getAttribute('data-camera-distance'))).toBeGreaterThan(0)
     await expect(page).toHaveURL(/[?&]view=3d(?:&|$)/)
+    await page.screenshot({ path: test.info().outputPath(`${id}.png`), fullPage: true })
   }
+  expect(errors).toEqual([])
 })

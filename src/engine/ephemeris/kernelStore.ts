@@ -1,4 +1,4 @@
-import manifestData from '../../data/ephemeris-manifest.json'
+import { selectedEphemerisManifest as manifestData } from '../../data/selectedEphemerisManifest'
 import { bodyNaifId } from '../../data/ephemerisTargets'
 import { SpkKernel } from './spk'
 import { createKernelResolver, kernelsCoveringInterval, type LoadedKernel } from './kernelPool'
@@ -9,10 +9,28 @@ export type KernelFile = {
   id: string; path: string; sha256: string; bytes: number; targets: number[];
   startEt: number; endEt: number; source: string; sourceIdentity?: unknown;
   core?: boolean;
+  solutionKernelIds?: string[];
+  dependencyOnly?: boolean;
+  solution?: string;
 }
-export const EPHEMERIS_MANIFEST = manifestData as { schemaVersion: number; id: string; files: KernelFile[] }
+export const EPHEMERIS_MANIFEST = manifestData as { schemaVersion: number; id: string; profile?: string; files: KernelFile[] }
 const installed = new Map<string, LoadedKernel>()
+// The status panel asks for many bodies at the same epoch. Share the immutable
+// pool snapshot and center cache rather than rebuilding them for every row.
+let currentResolver: { et: number; resolver: ReturnType<typeof createKernelResolver> } | null = null
 const pending = new Map<string, Promise<void>>()
+let activeLoads = 0
+const loadWaiters: Array<() => void> = []
+async function withLoadSlot(load: () => Promise<void>) {
+  if (activeLoads < 4) activeLoads++
+  else await new Promise<void>(resolve => loadWaiters.push(resolve))
+  try { await load() }
+  finally {
+    const next = loadWaiters.shift()
+    if (next) next()
+    else activeLoads--
+  }
+}
 const listeners = new Set<() => void>()
 let snapshot = { revision: 0, loading: 0, error: null as string | null }
 const publish = (patch: Partial<typeof snapshot>) => {
@@ -31,7 +49,9 @@ export function kernelsForWindow(startUtcJd: number, endUtcJd: number, ids = loa
 
 export function installKernel(id: string, buffer: ArrayBuffer) {
   const kernel = new SpkKernel(buffer)
-  installed.set(id, { id, kernel })
+  const file = EPHEMERIS_MANIFEST.files.find(file => file.id === id)
+  installed.set(id, { id, kernel, solutionKernelIds: file?.solutionKernelIds, dependencyOnly: file?.dependencyOnly })
+  currentResolver = null
   publish({ error: null })
 }
 
@@ -62,26 +82,46 @@ async function loadFile(file: KernelFile) {
 
 /** Exact file set is sent to workers: no hidden high/low precision divergence. */
 export async function ensureKernelFiles(ids: string[]) {
-  for (const id of ids) {
+  const files = [...new Set(ids)].map(id => {
     const file = EPHEMERIS_MANIFEST.files.find((item) => item.id === id)
     if (!file) throw new Error(`Unknown ephemeris file ${id}`)
-    if (installed.has(id)) continue
-    let promise = pending.get(id)
-    if (!promise) {
-      publish({ loading: snapshot.loading + 1 })
-      promise = loadFile(file).catch((error: unknown) => {
-        publish({ error: error instanceof Error ? error.message : String(error) })
-        throw error
-      }).finally(() => { pending.delete(id); publish({ loading: snapshot.loading - 1 }) })
-      pending.set(id, promise)
+    return file
+  })
+  let cursor = 0
+  let failed = false
+  // Bound transient read/hash buffers. Hundreds of small per-body files should
+  // not pay a complete serial network round trip each, nor all load at once.
+  const consume = async () => {
+    while (!failed && cursor < files.length) {
+      const file = files[cursor++]
+      const id = file.id
+      if (installed.has(id)) continue
+      let promise = pending.get(id)
+      if (!promise) {
+        publish({ loading: snapshot.loading + 1 })
+        promise = withLoadSlot(() => loadFile(file)).catch((error: unknown) => {
+          publish({ error: error instanceof Error ? error.message : String(error) })
+          throw error
+        }).finally(() => { pending.delete(id); publish({ loading: snapshot.loading - 1 }) })
+        pending.set(id, promise)
+      }
+      try { await promise } catch (error) { failed = true; throw error }
     }
-    await promise
   }
+  await Promise.all(Array.from({ length: Math.min(4, files.length) }, consume))
 }
 
 export function kernelFilesForBodies(bodies: { id: string; naifId?: number }[]) {
   const targets = new Set(bodies.map(bodyNaifId).filter((id) => id !== undefined))
-  return EPHEMERIS_MANIFEST.files.filter((file) => file.core || file.targets.some((target) => targets.has(target))).map((file) => file.id)
+  const wanted = new Set(EPHEMERIS_MANIFEST.files.filter((file) => !file.dependencyOnly && (file.core || file.targets.some((target) => targets.has(target)))).map(file => file.id))
+  const byId = new Map(EPHEMERIS_MANIFEST.files.map(file => [file.id, file]))
+  for (const id of wanted) {
+    for (const dependency of byId.get(id)?.solutionKernelIds ?? []) {
+      if (!byId.has(dependency)) throw new Error(`Missing declared ephemeris dependency ${dependency}`)
+      wanted.add(dependency)
+    }
+  }
+  return EPHEMERIS_MANIFEST.files.filter(file => wanted.has(file.id)).map(file => file.id)
 }
 
 export function kernelStateForBody(body: { id: string; naifId?: number }, utcJd: number) {
@@ -91,7 +131,8 @@ export function kernelStateForBody(body: { id: string; naifId?: number }, utcJd:
   // Older scenes retain their documented approximate model, never fake UTC.
   let et: number
   try { et = utcJulianDayToEt(utcJd) } catch { return null }
-  return createKernelResolver(loadedKernels(), et).relative(target, 10)
+  if (!currentResolver || currentResolver.et !== et) currentResolver = { et, resolver: createKernelResolver(loadedKernels(), et) }
+  return currentResolver.resolver.relative(target, 10)
 }
 
 export function kernelCoverage(body: Pick<CelestialBody, 'id' | 'naifId' | 'orbit'>, utcJd: number) {

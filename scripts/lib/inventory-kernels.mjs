@@ -4,10 +4,12 @@ import { SpkKernel } from '../../src/engine/ephemeris/spk.ts'
 import { createKernelResolver } from '../../src/engine/ephemeris/kernelPool.ts'
 import { BODY_NAIF_IDS } from '../../src/data/ephemerisTargets.ts'
 import { digest } from './inventory-snapshot.mjs'
+import { ephemerisProfile } from '../../src/data/ephemerisProfile.ts'
 
 /** Only explicit existing identity mappings; never guess an ID from a name. */
-export async function inventoryKernels(root, et) {
-  const manifestBytes = await readFile(join(root, 'src/data/ephemeris-manifest.json'))
+export async function inventoryKernels(root, et, requestedProfile = 'pages') {
+  const profile = ephemerisProfile(undefined, requestedProfile)
+  const manifestBytes = await readFile(join(root, `src/data/ephemeris-manifest${profile === 'full' ? '-full' : ''}.json`))
   const manifest = JSON.parse(manifestBytes)
   const generated = JSON.parse(await readFile(join(root, 'src/data/ephemerisBodies.json'), 'utf8'))
   const satelliteCatalogBytes = await readFile(join(root, 'src/data/satelliteCatalog.json'))
@@ -43,7 +45,7 @@ export async function inventoryKernels(root, et) {
     if (!/^[\w.-]+\.bsp$/.test(file.path)) throw new Error('Invalid bundled kernel path')
     const bytes = await readFile(join(root, 'public/data/ephemerides', file.path))
     if (bytes.length !== file.bytes || digest(bytes) !== file.sha256) throw new Error(`Bundled kernel integrity mismatch: ${file.id}`)
-    kernels.push({ id: file.id, kernel: new SpkKernel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)) })
+    kernels.push({ id: file.id, solutionKernelIds: file.solutionKernelIds, dependencyOnly: file.dependencyOnly, kernel: new SpkKernel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)) })
   }
   const resolver = createKernelResolver(kernels, et)
   const byTarget = new Map()
@@ -70,7 +72,7 @@ export async function inventoryKernels(root, et) {
     return { ...record, naifId: target, ephemerisStatus: state ? 'state-available-at-audit-epoch' : 'no-state-at-audit-epoch',
       kernelEvidence: { target, auditEt: et, segments: byTarget.get(target) ?? [], stateAtAuditEpoch: state } }
   }
-  return { attach, evidence: { manifestId: manifest.id, manifestSha256: digest(manifestBytes), auditEt: et,
+  return { attach, evidence: { manifestId: manifest.id, profile, manifestSha256: digest(manifestBytes), auditEt: et,
     identityMappingSha256: digest(JSON.stringify({ asteroidIds: [...asteroidIds], moonIds: [...moonIds], discoveryIds: [...discoveryIds], moonParents: [...moonParents] })),
     satelliteCatalogSha256: digest(satelliteCatalogBytes),
     timeScale: 'TDB seconds past J2000', frame: 'ECLIPJ2000', positionUnit: 'km', velocityUnit: 'km/s',

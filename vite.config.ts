@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { ephemerisProfile } from './src/data/ephemerisProfile.ts'
 
 type BuildInfo = {
   version: string
@@ -41,6 +42,7 @@ export default defineConfig(({ command }) => {
     define: {
       __SOLAR_BUILD_INFO__: JSON.stringify(loadBuildInfo()),
       __SOLAR_NATIVE__: JSON.stringify(isNative),
+      __SOLAR_EPHEMERIS_PROFILE__: JSON.stringify(ephemerisProfile(process.env.SOLAR_ATLAS_BUILD_TARGET, process.env.SOLAR_ATLAS_EPHEMERIS_PROFILE)),
       __SOLAR_DATA_ROOT__: JSON.stringify(isNative ? nativeDataRoot : ''),
     },
     // Three.js is isolated in a lazy renderer chunk; 600 kB keeps the build

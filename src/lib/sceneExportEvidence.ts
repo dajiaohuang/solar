@@ -46,9 +46,9 @@ export function createSceneExportModelEvidenceLines(
     const windowFiles = kernelsForWindow(startJulianDay, endJulianDay)
     return [
       `${EPHEMERIS_MANIFEST.id} · J2000 ecliptic · geometric · UTC → TT → TDB`,
-      language === 'zh' ? `当前 SPK 覆盖 ${covered.length}/${bodies.length}；其余为近似模型。` : `Current SPK coverage ${covered.length}/${bodies.length}; other bodies use approximate models.`,
-      language === 'zh' ? `轨迹全窗可用 ${windowFiles.length} 个内核；不完整覆盖时整段回退，精度因对象而异。` : `${windowFiles.length} kernels cover the entire trail; incomplete coverage falls back for the whole scan. Accuracy varies by body.`,
-      'https://github.com/dajiaohuang/solar/blob/main/src/data/ephemeris-manifest.json',
+      language === 'zh' ? `当前 SPK 覆盖 ${covered.length}/${bodies.length}；其余使用已有近似模型或标记为无状态。` : `Current SPK coverage ${covered.length}/${bodies.length}; other bodies use an existing approximation or are unavailable.`,
+      language === 'zh' ? `轨迹全窗可用 ${windowFiles.length} 个内核；缺少完整中心链时整段使用已有回退或省略，精度因对象而异。` : `${windowFiles.length} kernels cover the entire trail; an incomplete center chain uses an existing fallback or omits the trail. Accuracy varies by body.`,
+      `https://github.com/dajiaohuang/solar/blob/main/src/data/ephemeris-manifest${EPHEMERIS_MANIFEST.profile === 'full' ? '-full' : ''}.json`,
     ]
   }
   if (!sceneUsesJplApproximation(selectedIds, referenceId)) {

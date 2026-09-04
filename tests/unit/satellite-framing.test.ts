@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { cameraDistanceForFit, cameraRangeForFit, sceneFramingForRadius } from '../../src/lib/camera3d'
 
 describe('satellite-scale 3D framing', () => {
-  it.each([0.00016, 0.0028, 0.013, 0.025])('fits a %s AU system in desktop and portrait viewports', (radius) => {
+  it.each([0.00016, 0.0028, 0.013, 0.025, 0.1, 0.2, 0.5, 0.9])('fits a %s AU system in desktop and portrait viewports', (radius) => {
     for (const aspect of [1.6, 0.5]) {
       const framing = sceneFramingForRadius(radius, aspect, radius / 4)
       const distance = cameraDistanceForFit(framing.fitDistance, 1)

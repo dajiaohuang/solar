@@ -149,6 +149,47 @@ subsets; compare their targets against the frozen source survey. Pages may use
 a shorter declared window or subset, while the full distribution keeps its own
 coverage target.
 
+## Integrated source pools and profiles
+
+The survey itself does not select sources. The separate offline integrator accepts
+a reviewed local JSON plan: `survey` and `surveySha256`, `cores` with `id` and
+verified crop `path`, `sources` with `id`, split `directory`, declared `core`,
+optional explicit `targets` and selection `reason`, plus `centers` with `id`,
+original crop `path`, `target`, `core` and `reason`. Relative paths resolve from
+the invocation directory; machine-specific input paths are not published.
+
+```sh
+node scripts/integrate-satellite-pack.mjs VERIFIED_PLAN.json
+```
+
+The integrator replays the frozen survey and verifies crops/checksums, preserving
+original records and explicit ordered dependency pools. It produces Pages and
+full manifests; existing identical files may be reused, but different bytes at
+an existing output path are refused. The legacy `data:ephemerides` generator now
+refuses to overwrite an integrated source-pool manifest. Prepare any changed
+baseline separately and review its integration rather than losing added targets.
+
+Pages and full each list 487 files and the same target identities. Pages narrows
+large inner-moon files to 2026/2027 TDB; full retains 2020/2031. At the modern
+test epoch, 479 selectable centers resolve, with the remaining gaps enumerated
+in the [physical contract](../../docs/physical-ephemerides.md). The full package
+is a delivery profile, not a claim of complete physical coverage of all bodies.
+
+Independent source-pool numerical references can be regenerated without calling
+the application evaluator:
+
+```sh
+cc -I /path/to/cspice/include scripts/reference/spk-pool-oracle.c /path/to/cspice/lib/cspice.a -lm -o /tmp/spk-pool-oracle
+node scripts/reference/record-satellite-pools.mjs NEW_REFERENCE.json /tmp/spk-pool-oracle /absolute/path/to/public/data/ephemerides
+```
+
+The reference pins 423 ordered root pools and 1,269 heliocentric/barycentric
+six-vector pairs, including each root's endpoints and midpoint. Tests verify
+every source hash, dependency order and numerical agreement. They do not measure
+observational uncertainty, certify all dates, or turn different source families
+into one globally fitted solution. The build profile is included in build
+identity and exported manifest links; full/native does not inherit Pages' cap.
+
 ## 中文边界
 
 这只是可重放的身份与数据覆盖调查，不代表新增星体已经上线，也不等于完整物理。

@@ -61,14 +61,14 @@ const kernels = manifest.files.map((file) => {
   if (!fs.existsSync(filePath)) throw new Error(`Kernel missing: ${filePath}`)
   const bytes = fs.readFileSync(filePath)
   if (file.sha256 && sha256(bytes) !== file.sha256) throw new Error(`SHA-256 mismatch: ${file.path}`)
-  return { id: file.id, source: file.source, targets: file.targets, kernel: new SpkKernel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)) }
+  return { id: file.id, source: file.source, targets: file.targets, solutionKernelIds: file.solutionKernelIds, dependencyOnly: file.dependencyOnly, kernel: new SpkKernel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)) }
 })
 const [kernelPoolModule, osculatingModule] = await Promise.all([
   import(pathToFileURL(path.join(sourceRoot, 'src/engine/ephemeris/kernelPool.ts')).href),
   import(pathToFileURL(path.join(sourceRoot, 'src/engine/ephemeris/osculating.ts')).href),
 ])
 const et = (epochJd - 2451545) * DAY_SECONDS
-const resolver = kernelPoolModule.createKernelResolver(kernels.map(({ id, kernel }) => ({ id, kernel })), et)
+const resolver = kernelPoolModule.createKernelResolver(kernels, et)
 const parentFor = (target) => target >= 2000000 ? 10 : target >= 601 && target < 700 ? 699 : target >= 701 && target < 800 ? 799 : target >= 801 && target < 900 ? 899 : target >= 901 ? 999 : target >= 501 && target < 600 ? 599 : target >= 401 && target < 500 ? 499 : 10
 const bodies = []
 for (const target of [...new Set(manifest.files.flatMap((f) => f.targets))].sort((a, b) => a - b)) {
@@ -81,7 +81,7 @@ for (const target of [...new Set(manifest.files.flatMap((f) => f.targets))].sort
   if (!name) continue
   let state, source
   for (let i = kernels.length - 1; i >= 0 && !state; i--) {
-    if (!kernels[i].targets.includes(target)) continue
+    if (kernels[i].dependencyOnly || !kernels[i].targets.includes(target)) continue
     const found = kernels[i].kernel.evaluate(target, et)
     if (found) { state = found; source = kernels[i] }
   }
