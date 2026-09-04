@@ -63,3 +63,22 @@ func TestRejectsMalformedSPK(t *testing.T) {
 		t.Fatal("expected malformed header rejection")
 	}
 }
+
+func TestRepositorySPKFixturesParse(t *testing.T) {
+	paths, err := filepath.Glob(filepath.Join("..", "..", "tests", "fixtures", "*.bsp"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) == 0 {
+		t.Fatal("no SPK fixtures found")
+	}
+	for _, path := range paths {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := New(raw); err != nil {
+			t.Errorf("%s: %v", filepath.Base(path), err)
+		}
+	}
+}
