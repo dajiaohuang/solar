@@ -1,94 +1,81 @@
 # Reproducible backend performance evidence
 
 The harness exercises the real `httpapi.Server` through an in-process HTTP
-server backed by the post-PR94 full manifest. It measures the startup catalog
-load (cold data path), first request, warm sequential p50/p95/p99, concurrent
-catalog throughput, a mixed catalog/trajectory/inventory workload, a 64-body
-batch, a 10,000-sample long trajectory, allocations, peak working set, a
-pre-cancelled request and fail-fast overload. It never uses a toy catalog or
-an empty HTTP handler, and it does not claim that one machine is universally
-fastest.
+server backed by the post-PR94 catalog and the audited source inventory. It
+measures cold catalog/inventory load, warm catalog latency and throughput,
+mixed catalog/trajectory/search traffic, exact source-state lookup at the
+declared audit epoch, compact trajectory transport, cancellation, overload
+backpressure, allocations and process memory. It does not use a toy catalog
+or an empty handler, and the measurements are evidence for the recorded
+machine and dataset rather than universal guarantees.
 
 Run from this worktree:
 
 ```text
-go run ./cmd/bench -requests 500 -concurrency 32 -inventory-dir D:/repo/repostew/.repostew/cache/solar-all-body-coverage/inventory-pr94-20260904
+go run ./cmd/bench -requests 500 -concurrency 32 -long-samples 10000 -inventory-dir D:/repo/repostew/.repostew/cache/solar-all-body-coverage/inventory-pr94-20260904
 go test -bench 'Benchmark(CatalogIDMapLookup|CatalogPage|Trajectory64Samples|Trajectory64BodyBatch|Trajectory10000Samples)$' -benchmem -benchtime=200ms ./internal/httpapi
 go test -race ./...
 go test -fuzz FuzzSPKParserNeverPanics -fuzztime=10s ./internal/spk
 go test -fuzz FuzzDecodeCursorNeverPanics -fuzztime=10s ./internal/inventory
 ```
 
-Record the complete JSON line together with `go version`, OS/architecture,
-CPU model, request arguments and the catalog `manifestSha256` returned by
-`/v1/capabilities`. `catalogLoadMs` and `firstRequestMs` are the cold path;
-the repeated latency and mixed runs are warm in-process paths. To separate
-binary startup from data-page cache effects, build once with `go build` and
-run the resulting executable twice without changing the data directory.
-`peakRSSBytes` is sampled process working set on Windows and `/proc` RSS on
-Linux; `peakHeapBytes` remains available on every platform. The Go benchmark
-reports authoritative `B/op` and `allocs/op`.
+The benchmark trajectory requests set `precision: "approximate"` explicitly:
+the checked-in catalog has no packaged binary SPK, so an exact request would
+correctly return an empty state array. Exact behavior is measured separately
+with `/v1/identities/sb:asteroid:1/state?epochJd=2461287.5`, which uses the
+validated source kernel snapshot and reports `availability: "snapshot"`.
+Approximate results are never labelled exact. The source-state workload is
+run with 100 successful requests; query/detail requests use the same indexed
+identity and source row.
 
-Reference harness run (2026-09-04, Windows amd64, Intel Core i9-14900KF,
-full source inventory 1,567,193 rows / 314 gzip shards (compressed input bytes
-are reported by the harness), 552 catalog entries;
-100 requests per workload, 16 workers, 5,000-sample long trajectory):
+Record the complete JSON line together with `go version`, OS/architecture, CPU
+model, request arguments and the `manifestSha256` returned by
+`/v1/capabilities`. `catalogLoadMs` and `inventoryIndexLoadMs` are cold startup
+paths. `firstRequestMs`, repeated latency and mixed runs are warm in-process
+paths. `peakRSSBytes` is sampled process working set on Windows and `/proc`
+RSS on Linux; `peakHeapBytes` remains available on every platform. Go's
+benchmark reports authoritative `B/op` and `allocs/op`.
+
+Reference harness run (2026-09-05, Windows amd64, Intel Core i9-14900KF,
+full source inventory 1,567,193 rows / 314 gzip shards, 89,626,020 declared
+compressed bytes, 552 catalog entries; 100 requests, 16 workers,
+5,000-sample long trajectory):
 
 ```json
-{"goos":"windows","goarch":"amd64","catalogEntries":552,"inventoryRecords":1567193,"inventoryShards":314,"inventoryCompressedBytes":89626020,"catalogLoadMs":28.576,"latencyRequests":800,"concurrency":16,"firstRequestMs":2,"p50Ns":124987,"p95Ns":125087,"p99Ns":125175,"minNs":0,"maxNs":250012,"throughputRequestsPerSecond":19998.000199980004,"mixedRequests":100,"mixedP50Ns":1999800,"mixedP95Ns":7000100,"mixedP99Ns":9000300,"batchBodies":64,"batchSamples":128,"batchMs":1.999,"longSamples":5000,"longTrajectoryMs":4,"longResponseBytes":857078,"overloadRequests":32,"overloadRejected":31,"peakRSSBytes":41074688,"peakHeapBytes":13771368,"allocDeltaBytes":0,"totalAllocBytes":9162264,"invalidResponses":0,"cancelledObserved":true,"overloadStatusExpected":429}
+{"goos":"windows","goarch":"amd64","catalogEntries":552,"inventoryRecords":1567193,"inventoryShards":314,"inventoryCompressedBytes":89626020,"inventoryIndexLoadMs":7139.183,"inventoryIndexTerms":4034405,"inventoryIndexPostings":4034430,"trajectoryPrecision":"approximate-opt-in","catalogLoadMs":29.31,"latencyRequests":800,"concurrency":16,"firstRequestMs":0,"p50Ns":124975,"p95Ns":125050,"p99Ns":125075,"minNs":0,"maxNs":125187,"throughputRequestsPerSecond":33334.44448148272,"mixedRequests":100,"mixedP50Ns":1000100,"mixedP95Ns":3999000,"mixedP99Ns":4999600,"exactStateRequests":100,"exactStateP50Ns":1000000,"exactStateP95Ns":1999700,"exactStateP99Ns":2999700,"identitySearchP50Ns":998600,"identitySearchP95Ns":1999700,"identityDetailP50Ns":999400,"identityDetailP95Ns":1999300,"inventoryWorkloadErrors":0,"batchBodies":64,"batchSamples":128,"batchMs":1.999,"longSamples":5000,"longTrajectoryMs":2.001,"longResponseBytes":597239,"overloadRequests":32,"overloadRejected":31,"peakRSSBytes":226906112,"peakHeapBytes":131913800,"allocDeltaBytes":7402024,"totalAllocBytes":7402024,"invalidResponses":0,"cancelledObserved":true,"overloadStatusExpected":429}
 ```
 
-The direct HTTP benchmarks on the same machine reported:
+The compact source index uses stable `recordRef` rows and sorted 64-bit term
+postings for exact normalized ID, designation, name and source-alias lookup.
+It is bounded at 2,000,000 records, 12,000,000 postings, 10,000 shards and
+64 MiB per compressed shard; those limits are exposed by `/v1/capabilities`.
+Startup scans each shard once, verifies declared byte counts/hashes while
+streaming, then releases the temporary sortable posting buffer before serving
+requests. Detail/search reads reopen only the referenced shard rows and stop
+once the requested rows are found. There is no unbounded response cache: the
+bounded startup index and the operating-system page cache are the only retained
+warm data paths.
+
+The direct HTTP benchmarks from the same machine were:
 
 ```text
-BenchmarkCatalogPage-32                3135    92240 ns/op      75544 B/op 282 allocs/op
-BenchmarkCatalogIDMapLookup-32      44948870       5.501 ns/op          0 B/op   0 allocs/op
-BenchmarkTrajectory64Samples-32        5600    51339 ns/op      24525 B/op  70 allocs/op
-BenchmarkTrajectory64BodyBatch-32       100  2131010 ns/op     764721 B/op 175 allocs/op
-BenchmarkTrajectory10000Samples-32        46  5381111 ns/op    3585515 B/op  84 allocs/op
+BenchmarkCatalogPage-32                3536      65787 ns/op      75373 B/op 282 allocs/op
+BenchmarkCatalogIDMapLookup-32      46340097          5.118 ns/op          0 B/op   0 allocs/op
+BenchmarkTrajectory64Samples-32        6308      43236 ns/op      21926 B/op  76 allocs/op
+BenchmarkTrajectory64BodyBatch-32       147    1504527 ns/op     659663 B/op 182 allocs/op
+BenchmarkTrajectory10000Samples-32       50    4852430 ns/op    3120147 B/op  92 allocs/op
 ```
 
-The batch benchmark submits all 64 catalog IDs; rows without a supported
-state are returned as explicit `missing` records, so the timing includes the
-real availability branch rather than silently dropping them.
+The 64-body benchmark includes missing records explicitly and returns one
+compact numeric array per body when a state exists. `stateStride: 6` and
+`stateLayout: "row-major-[x,y,z,vx,vy,vz]"` define the six values per sample;
+there are no parallel object-shaped state arrays to multiply response memory.
+The long response above is 597,239 bytes for 5,000 samples using that layout.
 
-The bounded-concurrency comparison used the same 552-entry catalog and 100
-requests per workload (no source inventory attached):
+The overload workload uses a one-slot server and confirms fail-fast `429`
+responses with `Retry-After: 1`; the normal worker pool never accumulates an
+unbounded queue. Pre-cancelled requests are observed by the harness, and the
+inventory reader checks cancellation while scanning rows.
 
-| workers | catalog throughput | mixed p95 | peak RSS |
-| ---: | ---: | ---: | ---: |
-| 1 | 5,882 req/s | 2.00 ms | 19.1 MiB |
-| 8 | 9,512 req/s | 5.00 ms | 29.6 MiB |
-| 32 | 19,113 req/s | 16.09 ms | 47.4 MiB |
-
-The compiled binary was then run twice without changing the data directory to
-observe cold versus warm process/page-cache behaviour. The two 16-worker runs
-measured `catalogLoadMs` 26.849 / 27.693 ms, `firstRequestMs` 1.628 / 1.994 ms,
-throughput 19,999 / 23,221 req/s, and peak RSS 43.2 / 38.9 MiB. This is a
-cache observation, not a promise of a fixed warm-up improvement.
-
-CPU and allocation profiles were captured with:
-
-```text
-go test -cpuprofile=D:/repo/repostew/.repostew/solar-backend-cpu.pprof -memprofile=D:/repo/repostew/.repostew/solar-backend-mem.pprof -bench '^BenchmarkTrajectory10000Samples$' -benchtime=3s ./internal/httpapi
-go tool pprof -top D:/repo/repostew/.repostew/solar-backend-cpu.pprof
-go tool pprof -top -alloc_space D:/repo/repostew/.repostew/solar-backend-mem.pprof
-```
-
-The profile put JSON float encoding and response-buffer growth ahead of Kepler
-math (the latter was about 14% cumulative CPU in the long-trajectory run).
-The harness reports compressed inventory input bytes and long-response bytes as
-I/O scale; rerun it with the same shard manifest to compare disk/cache paths.
-That supports the current choices: compute all requested states in one bounded
-batch, keep the 552-entry catalog as an immutable sorted slice plus ID map,
-stream the 1.5M-row inventory from gzip shards instead of materialising it,
-and load the manifest once per process. A response cache was deliberately not
-added: scientific requests have high-cardinality time/range/body keys and an
-unbounded cache would violate the memory budget; warm-process and OS page-cache
-runs are the measured cache comparison. The semaphore is fail-fast at its
-configured limit (`429 overloaded`, `Retry-After: 1`) so bursts do not create
-an unbounded scientific work queue.
-
-These figures are evidence for the recorded hardware and dataset only. They
-are not latency, RSS, accuracy or “best” guarantees for another client,
-release, operating system or data profile.
+These figures are measurements, not latency, memory, precision or “best”
+guarantees for another client, release, operating system or data profile.
