@@ -14,6 +14,25 @@ const pages = JSON.parse(readFileSync('src/data/ephemeris-manifest.json', 'utf8'
 const byId = new Map(full.files.map(file => [file.id, file]))
 
 describe('integrated satellite source pools and delivery profiles', () => {
+  it('retains Daphnis Type 17 and the published SAT393 embedded center chain', () => {
+    const file = byId.get('satellite-daphnis-sat393-635-2020-2031')!
+    expect(file.solutionKernelIds).toEqual(['sat393-embedded-satellite-2020-2031'])
+    const dependency = byId.get(file.solutionKernelIds![0])!
+    expect(dependency.source).toBe('https://naif.jpl.nasa.gov/pub/naif/pds/wgc/kernels/spk/sat393.bsp')
+    expect(dependency.dependencyOnly).toBe(true)
+    const load = (entry: KernelFile): LoadedKernel => {
+      const bytes = readFileSync(`public/data/ephemerides/${entry.path}`)
+      return { ...entry, kernel: new SpkKernel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)) }
+    }
+    const root = load(file), core = load(dependency)
+    const et = (file.startEt + file.endEt) / 2
+    expect(root.kernel.segments.map(({ target, center, type }) => [target, center, type])).toEqual([[635, 699, 17]])
+    expect(core.kernel.segments.map(({ target, center }) => [target, center]).sort((a, b) => a[0] - b[0])).toEqual([[6, 0], [10, 0], [699, 6]])
+    const legacy = load(full.files.find(entry => entry.id.startsWith('de440s-'))!)
+    expect(createKernelResolver([legacy, root], et).relative(635, 10)).toBeNull()
+    expect(createKernelResolver([core, root], et).relative(635, 10)).not.toBeNull()
+    expect(createKernelResolver([legacy, core, root], et).relative(635, 10)).toEqual(createKernelResolver([core, root], et).relative(635, 10))
+  })
   it('requires the modern SAT415 embedded DE437 pool instead of borrowing DE440', () => {
     const file = byId.get('satellite-naif-sat415-610-2020-2031')!
     expect(file.solutionKernelIds).toEqual(['de437-sat415-satellite-2020-2031'])
@@ -40,8 +59,8 @@ describe('integrated satellite source pools and delivery profiles', () => {
     expect(digest(readFileSync('scripts/reference/spk-pool-oracle.c'))).toBe(fixture.oracleSourceSha256)
     expect(digest(manifestBytes)).toBe(fixture.manifestSha256)
     expect(fixture.contexts.map(context => context.rootId)).toEqual(full.files.filter(file => file.solutionKernelIds && !file.dependencyOnly).map(file => file.id))
-    expect(fixture.contexts).toHaveLength(432)
-    expect(fixture.samples).toHaveLength(1296)
+    expect(fixture.contexts).toHaveLength(433)
+    expect(fixture.samples).toHaveLength(1299)
     for (const context of fixture.contexts) {
       const root = byId.get(context.rootId)!
       expect(context.files.map(file => file.id)).toEqual([...root.solutionKernelIds!, root.id])
@@ -103,8 +122,8 @@ describe('integrated satellite source pools and delivery profiles', () => {
         expect(kernel.evaluate(target, file.endEt + 1)).toBeNull()
       }
     }
-    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(589323264)
-    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(236654592)
+    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(591139840)
+    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(238471168)
   })
 
   it('defaults native to full without imposing the Pages policy on explicit full Web builds', () => {
@@ -113,5 +132,22 @@ describe('integrated satellite source pools and delivery profiles', () => {
     expect(ephemerisProfile('web', 'full')).toBe('full')
     expect(ephemerisProfile('native', 'pages')).toBe('pages')
     expect(() => ephemerisProfile('web', 'unknown')).toThrow('Unknown')
+  })
+
+  it('keeps English and Chinese delivery documentation aligned with both manifests', () => {
+    const fullBytes = full.files.reduce((total, file) => total + file.bytes, 0)
+    const pagesBytes = pages.files.reduce((total, file) => total + file.bytes, 0)
+    for (const path of ['README.md', 'README-CN.md', 'docs/physical-ephemerides.md']) {
+      const document = readFileSync(path, 'utf8')
+      for (const bytes of [fullBytes, pagesBytes]) {
+        expect(document, path).toContain(bytes.toLocaleString('en-US'))
+        expect(document, path).toContain(`${(bytes / 1024 / 1024).toFixed(1)} MiB`)
+      }
+    }
+    for (const path of ['MOBILE.md', 'MOBILE-CN.md']) {
+      const document = readFileSync(path, 'utf8')
+      expect(document, path).toContain(`${(fullBytes / 1024 / 1024).toFixed(1)} MiB`)
+      expect(document, path).toContain(String(full.files.length))
+    }
   })
 })

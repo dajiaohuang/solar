@@ -76,3 +76,18 @@ test('does not borrow a different core when the SAT415 dependency fails', async 
   await expect(status.getByRole('alert')).toContainText('HTTP 503')
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
 })
+
+test('renders the original Daphnis Type 17 state with its historical center pool', async ({ page }) => {
+  const errors: string[] = []
+  const kernels: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('request', request => { if (request.url().endsWith('.bsp')) kernels.push(request.url()) })
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&lang=en&view=3d&ref=saturn&bodies=saturn,naif:635&focused=naif:635&jd=2461287.5&speed=0&history=1')
+  await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('2/2', { timeout: 30_000 })
+  expect(kernels.some(url => url.includes('sat393-embedded-satellite-2020-2031.bsp'))).toBe(true)
+  expect(kernels.some(url => url.includes('satellite-daphnis-sat393-635-2020-2031.bsp'))).toBe(true)
+  await expect(page.locator('.compute-progress')).toHaveCount(0)
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
+  expect(errors).toEqual([])
+})

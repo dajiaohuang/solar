@@ -178,6 +178,14 @@ bytes and checks the exact source URL and target membership. This supplements,
 but does not rewrite, the original survey. Modern NAIF `sat415.bsp` uses this
 path; its embedded DE437 center pool is retained with the nine selected moons.
 
+Daphnis's standalone SAT393 Type 17 record also has a separately pinned archive.
+The identical file's presence in the official PDS directory establishes the PDS
+placement condition in its original comments. Its dependency-only pool retains
+SAT393 target 699 and that container's original DE431 targets 6/10. The release
+metadata's DE435 fit declaration does not override the generator's explicit
+DE431 coefficient provenance. This is an original historical published chain,
+not a modern uniform planetary fit; the independent oracle covers it as well.
+
 The integrator replays the frozen survey and verifies crops/checksums, preserving
 original records and explicit ordered dependency pools. It produces Pages and
 full manifests; existing identical files may be reused, but different bytes at
@@ -185,9 +193,9 @@ an existing output path are refused. The legacy `data:ephemerides` generator now
 refuses to overwrite an integrated source-pool manifest. Prepare any changed
 baseline separately and review its integration rather than losing added targets.
 
-Pages and full each list 497 files and the same target identities. Pages narrows
+Pages and full each list 499 files and the same target identities. Pages narrows
 large inner-moon files to 2026/2027 TDB; full retains 2020/2031. At the modern
-test epoch, 488 selectable centers resolve, with the remaining gaps enumerated
+test epoch, 489 selectable centers resolve, with the remaining gaps enumerated
 in the [physical contract](../../docs/physical-ephemerides.md). The full package
 is a delivery profile, not a claim of complete physical coverage of all bodies.
 
@@ -204,7 +212,7 @@ manifest change, prepend `--replace-generated`. The recorder requires its own
 CSPICE provenance structure and checks that the old file did not change while
 the oracle was running. Ordinary invocation still refuses existing files.
 
-The reference pins 432 ordered root pools and 1,296 heliocentric/barycentric
+The reference pins 433 ordered root pools and 1,299 heliocentric/barycentric
 six-vector pairs, including each root's endpoints and midpoint. Tests verify
 every source hash, dependency order and numerical agreement. They do not measure
 observational uncertainty, certify all dates, or turn different source families

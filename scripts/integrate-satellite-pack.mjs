@@ -67,10 +67,10 @@ async function verifiedCrop(path) {
   return { bytes, evidence }
 }
 for (const config of plan.cores) {
-  if (!['de441', 'de442', 'de437-sat415'].includes(config.id) || cores[config.id]) throw new Error('Invalid planetary core selection')
+  if (!['de441', 'de442', 'de437-sat415', 'sat393-embedded'].includes(config.id) || cores[config.id]) throw new Error('Invalid planetary core selection')
   const { bytes, evidence } = await verifiedCrop(config.path)
   const supplementalSource = await sourceEvidence(config, evidence.source.source, parsed(bytes).segments.map(segment => segment.target))
-  if (config.id === 'de437-sat415' && !supplementalSource) throw new Error('Embedded DE437 source evidence required')
+  if (['de437-sat415', 'sat393-embedded'].includes(config.id) && !supplementalSource) throw new Error('Embedded center-pool source evidence required')
   const id = `${config.id}-satellite-2020-2031`
   common.push(await publish(bytes, { id, source: evidence.source.source, sourceIdentity: evidence.source, supplementalSource, dependencyOnly: true, solution: config.id.toUpperCase() }))
   cores[config.id] = id
