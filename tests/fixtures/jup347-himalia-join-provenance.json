@@ -1,7 +1,7 @@
 {
   "oracle": "NAIF CSPICE N0067 spkgeo",
   "oracleSource": "scripts/reference/spk-state-oracle.c",
-  "oracleSourceSha256": "df34be204fc14d6e3378de08e6579f183606f6e3510f8702da9d183e51be864c",
+  "oracleSourceSha256": "63015350e3acd3290afdbf99415f2c299dcb0ed5346ee7846cdb55e45f2bcb7b",
   "fixture": "jup347-himalia-join.bsp",
   "fixtureSha256": "3ec47a85a27f6112d6e49cb2544c22c8fd2e7a7ef32e5623ae5499db9a629aec",
   "reference": "jup347-himalia-join-cspice.json",

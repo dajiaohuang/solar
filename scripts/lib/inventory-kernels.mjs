@@ -6,6 +6,18 @@ import { BODY_NAIF_IDS } from '../../src/data/ephemerisTargets.ts'
 import { digest } from './inventory-snapshot.mjs'
 import { ephemerisProfile } from '../../src/data/ephemerisProfile.ts'
 
+/** The inventory is a one-epoch audit. Retain original evaluated states and
+ * descriptors, not gigabytes of coefficients in each audit closure. All input
+ * bytes are still integrity-checked before this bounded snapshot is created. */
+export function snapshotKernelAtEpoch(kernel, et) {
+  if (!Number.isFinite(et)) throw new Error('Finite inventory epoch required')
+  const states = new Map([...new Set(kernel.segments.map(segment => segment.target))].map(target => [target, kernel.evaluate(target, et)]))
+  return { segments: kernel.segments, evaluate(target, requestedEt) {
+    if (requestedEt !== et) throw new Error('Inventory snapshot cannot evaluate another epoch')
+    return states.get(target) ?? null
+  } }
+}
+
 /** Only explicit existing identity mappings; never guess an ID from a name. */
 export async function inventoryKernels(root, et, requestedProfile = 'pages') {
   const profile = ephemerisProfile(undefined, requestedProfile)
@@ -51,7 +63,9 @@ export async function inventoryKernels(root, et, requestedProfile = 'pages') {
     if (!/^[\w.-]+\.bsp$/.test(file.path)) throw new Error('Invalid bundled kernel path')
     const bytes = await readFile(join(root, 'public/data/ephemerides', file.path))
     if (bytes.length !== file.bytes || digest(bytes) !== file.sha256) throw new Error(`Bundled kernel integrity mismatch: ${file.id}`)
-    kernels.push({ id: file.id, solutionKernelIds: file.solutionKernelIds, dependencyOnly: file.dependencyOnly, kernel: new SpkKernel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)) })
+    const buffer = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength ? bytes.buffer : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+    const kernel = snapshotKernelAtEpoch(new SpkKernel(buffer), et)
+    kernels.push({ id: file.id, solutionKernelIds: file.solutionKernelIds, dependencyOnly: file.dependencyOnly, kernel })
   }
   const resolver = createKernelResolver(kernels, et)
   const byTarget = new Map()

@@ -18,7 +18,9 @@ export async function splitSpkCrop({ input, output }) {
   const evidence = JSON.parse(evidenceBytes)
   const bytes = await readFile(input)
   if (bytes.length !== evidence.bytes || digest(bytes) !== evidence.sha256) throw new Error('Input crop integrity mismatch')
-  if (new URL(evidence.source?.source).protocol !== 'https:') throw new Error('Original HTTPS source provenance required')
+  let sourceUrl
+  try { sourceUrl = new URL(evidence.source?.source) } catch { /* Report one provenance error on every host. */ }
+  if (sourceUrl?.protocol !== 'https:') throw new Error('Original HTTPS source provenance required')
   const original = parse(bytes)
   const targets = [...new Set(original.segments.map(segment => segment.target))].sort((a, b) => a - b)
   const from = Math.min(...original.segments.map(segment => segment.startEt))

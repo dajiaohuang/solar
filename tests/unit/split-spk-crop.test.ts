@@ -35,6 +35,9 @@ it('rejects corrupted input and lost original provenance without publishing a ma
   await writeFile(`${input}.json`, JSON.stringify({ ...evidence, sha256: '0'.repeat(64) }))
   await expect(splitSpkCrop({ input, output })).rejects.toThrow('integrity')
   await expect(readFile(join(output, 'manifest.json'))).rejects.toThrow()
-  await writeFile(`${input}.json`, JSON.stringify({ ...evidence, source: { source: input } }))
-  await expect(splitSpkCrop({ input, output })).rejects.toThrow('provenance')
+  for (const source of [input, '/tmp/source.bsp', 'C:\\source.bsp', 'file:///tmp/source.bsp', 'http://example.test/source.bsp', undefined]) {
+    await writeFile(`${input}.json`, JSON.stringify({ ...evidence, source: { source } }))
+    await expect(splitSpkCrop({ input, output })).rejects.toThrow('provenance')
+    await expect(readFile(join(output, 'manifest.json'))).rejects.toThrow()
+  }
 })

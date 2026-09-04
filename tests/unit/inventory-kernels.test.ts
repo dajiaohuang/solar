@@ -1,7 +1,28 @@
 import { describe, expect, it } from 'vitest'
-import { inventoryKernels } from '../../scripts/lib/inventory-kernels.mjs'
+import { inventoryKernels, snapshotKernelAtEpoch } from '../../scripts/lib/inventory-kernels.mjs'
+import { readFileSync } from 'node:fs'
+import { SpkKernel } from '../../src/engine/ephemeris/spk'
+import { createKernelResolver } from '../../src/engine/ephemeris/kernelPool'
 
 describe('inventory does not confuse source membership with SPK coverage', () => {
+  it('retains original one-epoch states and center metadata without retaining coefficient buffers', () => {
+    const bytes = readFileSync('tests/fixtures/jup347-himalia-join.bsp')
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+    const original = new SpkKernel(buffer)
+    const et = original.segments[1].startEt
+    const expected = original.evaluate(506, et)
+    const snapshot = snapshotKernelAtEpoch(original, et)
+    expect(snapshot.segments).toEqual(original.segments)
+    expect(snapshot.evaluate(506, et)).toEqual(expected)
+    expect(snapshot.evaluate(999999, et)).toBeNull()
+    const before = createKernelResolver([{ id: 'moon', kernel: original }], et).barycentric(506)
+    expect(createKernelResolver([{ id: 'moon', kernel: snapshot as SpkKernel }], et).barycentric(506)).toEqual(before)
+    expect(before).toBeNull() // Snapshot does not manufacture the missing center.
+    new Uint8Array(buffer).fill(0)
+    expect(snapshot.evaluate(506, et)).toEqual(expected)
+    expect(() => snapshot.evaluate(506, et + 1)).toThrow('another epoch')
+    expect(() => snapshotKernelAtEpoch(original, NaN)).toThrow('Finite')
+  })
   it('audits the requested delivery profile without borrowing the full window for Pages', async () => {
     const record = { id: 'naif:706', category: 'moon', parentId: 'naif:799' }
     const et = 900000000 // After the narrow Pages interval, inside full coverage.

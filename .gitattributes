@@ -2,7 +2,10 @@
 *.bsp -text
 src/data/gm_de440.tpc -text -whitespace
 src/data/ephemeris-manifest.json text eol=lf
+src/data/ephemeris-manifest-full.json text eol=lf
 src/data/ephemerisBodies.json text eol=lf
+src/data/satelliteCatalog.json text eol=lf
 # Imported CLI shebangs and checksum-pinned fixtures must survive Windows checkout.
 *.mjs text eol=lf
-tests/fixtures/spk21-*.json text eol=lf
+tests/fixtures/*.json text eol=lf
+scripts/reference/*-oracle.c text eol=lf
