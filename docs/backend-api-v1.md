@@ -1,9 +1,9 @@
-# Solar Atlas backend API v1
+# Solar Atlas current backend contract
 
-The wire prefix is `/v1/`; responses include `apiVersion: "solar.api/v1"`.
-Unknown fields may be added, but existing field meaning and enum values are
-stable. Clients must reject an unknown major API version and preserve unknown
-body IDs as unselectable rather than substituting another body.
+The current wire prefix is `/v1/`; responses include
+`apiVersion: "solar.api/v1"`. This batch intentionally has no legacy-client
+compatibility promise: clients consume the current contract and its explicit
+precision/status fields.
 
 ## Scientific contract
 
@@ -14,10 +14,11 @@ body IDs as unselectable rather than substituting another body.
   `naifId` is the source identity and is never used to infer a different body.
 * `datasetVersion`, `source`, validity bounds and `availability` are part of
   the scientific result, not UI decoration.
-* `operational` means a packaged, validated source kernel; `fallback` means a
-  source-backed fixed osculating/two-body model; `missing` means no supported
-  state is available for the requested result. Missing states include a
-  machine-readable `missingReason`.
+* `operational` means a packaged, validated source kernel; `snapshot` means a
+  validated source state at one declared audit epoch; `fallback` means an
+  explicitly requested source-element fixed two-body approximation; `missing`
+  means no exact state is available for the requested result. Missing states
+  include a machine-readable `missingReason`.
 * No endpoint performs N-body integration. No endpoint fetches arbitrary URLs or
   reads arbitrary client-selected paths.
 
@@ -37,23 +38,50 @@ source inventory. It reports `totalRecords`, declared compressed input bytes and
 not deduplicated, promoted to selectable bodies, or counted as unique objects.
 Each row retains source designation, identity/parent status, geometry and
 ephemeris status (including open-conic and missing-parent states). The service
-loads gzip JSONL shards lazily from the explicit `-inventory-dir` argument, so
-the 1,567,193-record audit does not become an unbounded startup allocation.
+builds a bounded compact index once from the explicit `-inventory-dir` input;
+requests fetch only referenced rows and never rescan all source shards.
+The startup contract bounds indexed input at 2,000,000 records, 12,000,000
+identity postings, 10,000 shards and 64 MiB per compressed shard; these limits
+are surfaced by `/v1/capabilities`.
+
+`GET /v1/identities?q=&limit=&pageToken=` returns paginated source identity
+assertions from the same inventory. `GET /v1/identities/{id}` returns one
+identity summary plus its untouched source record. These are source assertions,
+not an all-sources deduplicated ontology: unresolved components, candidates,
+open-conic records and missing parents remain visible with explicit statuses.
+`q` is a case-insensitive exact match against an indexed ID, designation, name
+or source-provided alias (whitespace is normalized); it does not scan every
+source row for arbitrary substrings.
+`GET /v1/inventory/{id}` returns only the untouched source record envelope.
+
+`GET /v1/identities/{id}/state?epochJd=&precision=exact` returns one position /
+velocity state in ECLIPJ2000. Exact mode uses only a verified operational SPK
+state or a validated source snapshot at its audit epoch and declared kernel
+segment window (returned as `evidenceWindowEt`). `precision=approximate`
+is an explicit opt-in for a bounded two-body source-element model; it is never
+reported as exact. A known identity without an exact state returns HTTP 200 with
+`availability: "missing"` and a machine-readable reason.
 
 `GET /v1/bodies/{id}` returns one catalog record. Unknown IDs are a 404; a
 known source target without local data is a 200 catalog record with
 `availability: "missing"`.
 
-`POST /v1/trajectory` accepts:
+`POST /v1/trajectory` accepts source or catalog IDs and:
 
 ```json
-{"bodyIds":["earth"],"startJd":2451545,"endJd":2451910,"samples":64,"frame":"ECLIPJ2000"}
+{"bodyIds":["earth","sb:asteroid:1"],"startJd":2451545,"endJd":2451910,"samples":64,"frame":"ECLIPJ2000","precision":"exact"}
 ```
 
 The request is limited to 64 bodies, 10,000 samples and a 1,000-year window.
 Cancellation is honoured between samples and returns a structured `cancelled`
-error. Bodies without a supported model remain in the response with an empty
+error. Exact mode does not propagate rounded/open-conic/unvalidated source
+elements. Bodies without an exact model remain in the response with an empty
 `states` array and an explicit missing reason; they are not silently dropped.
+Returned trajectory `states` are one compact row-major numeric array per body;
+`stateStride: 6` and the response `stateLayout` identify
+`[x,y,z,vx,vy,vz]` for each sample in the declared frame and units. Source
+identity trajectories also carry `centerId` when the source declares an
+orbital center; no center is inferred.
 
 `GET /v1/preview/manifest` is a deterministic, hash-tagged Pages profile
 snapshot. It is not the full data host and does not imply that a full Web or
@@ -62,8 +90,9 @@ native endpoint has been deployed.
 ## Errors
 
 Errors are JSON objects with `apiVersion` and `error.code`/`error.message`.
-Clients should branch on codes such as `invalid_limit`, `invalid_page_token`,
-`body_not_found`, `unsupported_frame`, `state_unavailable`, `cancelled`, and
-`overloaded`. A `429 overloaded` response includes `Retry-After: 1`; the
-backend rejects work when its configured scientific worker pool is full rather
-than accumulating an unbounded queue.
+Relevant codes include `invalid_limit`, `invalid_page_token`,
+`body_not_found`, `identity_not_found`, `invalid_precision`, `invalid_epoch`,
+`unsupported_frame`, `state_unavailable`, `cancelled`, and `overloaded`. A
+`429 overloaded` response includes `Retry-After: 1`; the backend rejects work
+when its configured scientific worker pool is full rather than accumulating an
+unbounded queue.

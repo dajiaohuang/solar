@@ -1,10 +1,12 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -75,6 +77,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.catalogPage(w, r)
 	case r.Method == "GET" && path == "inventory":
 		s.inventoryPage(w, r)
+	case r.Method == "GET" && path == "identities":
+		s.identityPage(w, r)
+	case r.Method == "GET" && strings.HasPrefix(path, "identities/"):
+		s.identityRoute(w, r, strings.TrimPrefix(path, "identities/"))
+	case r.Method == "GET" && strings.HasPrefix(path, "inventory/"):
+		s.inventoryDetail(w, r, strings.TrimPrefix(path, "inventory/"))
 	case r.Method == "GET" && strings.HasPrefix(path, "bodies/"):
 		s.body(w, r, strings.TrimPrefix(path, "bodies/"))
 	case r.Method == "POST" && path == "trajectory":
@@ -87,7 +95,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) capabilities(w http.ResponseWriter, _ *http.Request) {
-	s.json(w, http.StatusOK, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "manifestSha256": s.catalog.ManifestHash(), "coverage": map[string]any{"goal": "all-known-solar-system-bodies", "manifestProfile": s.catalog.ManifestProfile(), "manifestContract": s.catalog.ManifestContract(), "counts": s.catalog.Stats()}, "contract": map[string]any{"timeScale": "TDB", "epoch": "Julian date", "frame": "ECLIPJ2000", "distanceUnit": "km", "velocityUnit": "km/s", "modelBoundary": "SPK operational states when packaged; otherwise explicit fixed two-body fallback", "nBody": false}, "limits": map[string]int{"catalogPageMax": 500, "trajectoryBodiesMax": 64, "trajectorySamplesMax": 10000}, "profiles": map[string]any{"full": map[string]any{"catalog": true, "trajectory": true}, "preview": map[string]any{"catalog": "curated", "fullOnlyVisible": true, "restrictedActions": "blocked"}}})
+	coverage := map[string]any{"goal": "all-known-solar-system-bodies", "manifestProfile": s.catalog.ManifestProfile(), "manifestContract": s.catalog.ManifestContract(), "counts": s.catalog.Stats()}
+	if s.inventory != nil {
+		coverage["sourceInventory"] = map[string]any{"totalRecords": s.inventory.TotalRecords(), "compressedBytes": s.inventory.TotalBytes(), "shards": s.inventory.ShardCount(), "index": s.inventory.IndexStats(), "uniqueBodySemantics": "not-deduplicated"}
+	}
+	s.json(w, http.StatusOK, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "manifestSha256": s.catalog.ManifestHash(), "coverage": coverage, "contract": map[string]any{"timeScale": "TDB", "epoch": "Julian date", "frame": "ECLIPJ2000", "distanceUnit": "km", "velocityUnit": "km/s", "precisionModes": []string{"exact", "approximate-opt-in"}, "modelBoundary": "Exact requests use verified SPK coefficients or source state evidence; approximate source-element propagation is explicit opt-in", "nBody": false}, "limits": map[string]int{"catalogPageMax": 500, "trajectoryBodiesMax": 64, "trajectorySamplesMax": 10000, "inventoryPageMax": 500, "inventoryMaxIndexedRecords": inventory.MaxIndexedRecords, "inventoryMaxIndexPostings": inventory.MaxIndexPostings, "inventoryMaxShards": inventory.MaxShards, "inventoryMaxShardBytes": inventory.MaxShardBytes}, "profiles": map[string]any{"full": map[string]any{"catalog": true, "identities": s.inventory != nil, "trajectory": true}, "preview": map[string]any{"catalog": "curated", "fullOnlyVisible": true, "restrictedActions": "blocked"}}})
 }
 
 func (s *Server) catalogPage(w http.ResponseWriter, r *http.Request) {
@@ -141,6 +153,115 @@ func (s *Server) inventoryPage(w http.ResponseWriter, r *http.Request) {
 	s.json(w, 200, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "inventoryManifestSha256": s.inventory.ManifestHash(), "sourceRecords": true, "uniqueBodySemantics": "not-deduplicated", "totalRecords": s.inventory.TotalRecords(), "compressedBytes": s.inventory.TotalBytes(), "shards": s.inventory.ShardCount(), "records": rows, "nextPageToken": next, "limit": limit})
 }
 
+func (s *Server) identityPage(w http.ResponseWriter, r *http.Request) {
+	if s.inventory == nil {
+		s.error(w, http.StatusNotFound, "inventory_unavailable", "source inventory is not configured for this service")
+		return
+	}
+	limit, err := parseIntDefault(r.URL.Query().Get("limit"), 100)
+	if err != nil || limit < 1 || limit > 500 {
+		s.error(w, http.StatusBadRequest, "invalid_limit", "limit must be between 1 and 500")
+		return
+	}
+	items, next, err := s.inventory.IdentityPage(r.Context(), r.URL.Query().Get("pageToken"), r.URL.Query().Get("q"), limit)
+	if err != nil {
+		if r.Context().Err() != nil {
+			s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
+		} else {
+			s.error(w, http.StatusBadRequest, "invalid_page_token", err.Error())
+		}
+		return
+	}
+	s.json(w, http.StatusOK, map[string]any{
+		"apiVersion":              catalog.APIVersion,
+		"catalogVersion":          s.catalog.Version(),
+		"inventoryManifestSha256": s.inventory.ManifestHash(),
+		"sourceRecords":           true,
+		"identityAssertions":      true,
+		"uniqueBodySemantics":     "not-deduplicated",
+		"totalRecords":            s.inventory.TotalRecords(),
+		"items":                   items,
+		"nextPageToken":           next,
+		"limit":                   limit,
+	})
+}
+
+func (s *Server) identityRoute(w http.ResponseWriter, r *http.Request, id string) {
+	if s.inventory == nil {
+		s.error(w, http.StatusNotFound, "inventory_unavailable", "source inventory is not configured for this service")
+		return
+	}
+	if strings.HasSuffix(id, "/state") {
+		s.identityState(w, r, strings.TrimSuffix(id, "/state"))
+		return
+	}
+	s.identityDetail(w, r, id)
+}
+
+func (s *Server) identityDetail(w http.ResponseWriter, r *http.Request, id string) {
+	if id == "" {
+		s.error(w, http.StatusBadRequest, "invalid_identity_id", "identity id must not be empty")
+		return
+	}
+	raw, found, err := s.inventory.Get(r.Context(), id)
+	if err != nil {
+		if r.Context().Err() != nil {
+			s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
+		} else {
+			s.error(w, http.StatusUnprocessableEntity, "inventory_unavailable", err.Error())
+		}
+		return
+	}
+	if !found {
+		s.error(w, http.StatusNotFound, "identity_not_found", "unknown source identity")
+		return
+	}
+	record, err := inventory.Decode(raw)
+	if err != nil {
+		s.error(w, http.StatusUnprocessableEntity, "invalid_source_record", err.Error())
+		return
+	}
+	s.json(w, http.StatusOK, map[string]any{
+		"apiVersion":              catalog.APIVersion,
+		"catalogVersion":          s.catalog.Version(),
+		"inventoryManifestSha256": s.inventory.ManifestHash(),
+		"sourceRecords":           true,
+		"identity":                s.inventory.Summary(record),
+		"record":                  json.RawMessage(raw),
+	})
+}
+
+func (s *Server) inventoryDetail(w http.ResponseWriter, r *http.Request, id string) {
+	if s.inventory == nil {
+		s.error(w, http.StatusNotFound, "inventory_unavailable", "source inventory is not configured for this service")
+		return
+	}
+	if id == "" {
+		s.error(w, http.StatusBadRequest, "invalid_identity_id", "identity id must not be empty")
+		return
+	}
+	raw, found, err := s.inventory.Get(r.Context(), id)
+	if err != nil {
+		if r.Context().Err() != nil {
+			s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
+		} else {
+			s.error(w, http.StatusUnprocessableEntity, "inventory_unavailable", err.Error())
+		}
+		return
+	}
+	if !found {
+		s.error(w, http.StatusNotFound, "identity_not_found", "unknown source identity")
+		return
+	}
+	s.json(w, http.StatusOK, map[string]any{
+		"apiVersion":              catalog.APIVersion,
+		"catalogVersion":          s.catalog.Version(),
+		"inventoryManifestSha256": s.inventory.ManifestHash(),
+		"sourceRecords":           true,
+		"record":                  json.RawMessage(raw),
+	})
+}
+
 func (s *Server) body(w http.ResponseWriter, r *http.Request, id string) {
 	if strings.Contains(id, "/") || id == "" {
 		s.error(w, 400, "invalid_body_id", "body id must be one stable segment")
@@ -154,19 +275,221 @@ func (s *Server) body(w http.ResponseWriter, r *http.Request, id string) {
 	s.json(w, 200, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "body": b})
 }
 
+func precisionMode(value string) (bool, error) {
+	if value == "" || value == "exact" {
+		return false, nil
+	}
+	if value == "approximate" {
+		return true, nil
+	}
+	return false, fmt.Errorf("precision must be exact or approximate")
+}
+
+func (s *Server) resolveInventoryState(ctx context.Context, record inventory.Record, jd float64, allowApproximate bool) (sourceStateResult, error) {
+	if !finite(jd) {
+		return sourceStateResult{Availability: catalog.Missing, MissingReason: "invalid-epoch"}, nil
+	}
+	if record.NAIFID != 0 {
+		catalogID := "naif:" + strconv.Itoa(record.NAIFID)
+		if body, ok := s.catalog.Get(catalogID); ok && body.Availability == catalog.AvailableOperational {
+			state, found, err := s.catalog.OperationalState(catalogID, jd)
+			if err != nil {
+				return sourceStateResult{}, err
+			}
+			if found && finiteState(state) {
+				window := map[string]float64{"startEt": body.ValidityStartET, "endEt": body.ValidityEndET}
+				return sourceStateResult{Availability: catalog.AvailableOperational, Model: "spk-original", State: &state, Evidence: "catalog-kernel", EvidenceWindow: window}, nil
+			}
+		}
+	}
+	if record.KernelEvidence != nil && record.KernelEvidence.StateAtAuditEpoch != nil && evidenceTargetMatches(record) && evidenceWindowMatches(record) {
+		auditJD := 2451545.0 + record.KernelEvidence.AuditET/86400
+		if finite(auditJD) && math.Abs(jd-auditJD) < 1e-9 {
+			v := record.KernelEvidence.StateAtAuditEpoch
+			state := catalog.State{Position: catalog.Vec3{X: v.Position.X, Y: v.Position.Y, Z: v.Position.Z}, Velocity: catalog.Vec3{X: v.Velocity.X, Y: v.Velocity.Y, Z: v.Velocity.Z}}
+			if finiteState(state) {
+				return sourceStateResult{Availability: catalog.AvailableSnapshot, Model: "source-kernel-state-at-audit-epoch", State: &state, Evidence: "inventory-kernel-evidence", EvidenceWindow: matchingEvidenceWindow(record)}, nil
+			}
+		}
+	}
+	if !allowApproximate {
+		return sourceStateResult{Availability: catalog.Missing, Model: "exact-only", MissingReason: missingInventoryStateReason(record)}, nil
+	}
+	if record.Source != "numbered" && record.Source != "unnumbered" {
+		return sourceStateResult{Availability: catalog.Missing, Model: "exact-only", MissingReason: missingInventoryStateReason(record)}, nil
+	}
+	if record.Orbit == nil || record.Orbit.EpochJD == nil || record.Orbit.SemiMajorAxisAU == nil || record.Orbit.Eccentricity == nil || record.Orbit.InclinationDeg == nil || record.Orbit.ArgPeriapsisDeg == nil || record.Orbit.AscendingNodeDeg == nil || record.Orbit.MeanAnomalyDeg == nil {
+		return sourceStateResult{Availability: catalog.Missing, Model: "approximate-opt-in", MissingReason: missingInventoryStateReason(record)}, nil
+	}
+	if record.Orbit.TimeScale != "TDB" || record.Orbit.Frame != "ECLIPJ2000" {
+		return sourceStateResult{Availability: catalog.Missing, Model: "approximate-opt-in", MissingReason: "unvalidated-source-elements"}, nil
+	}
+	if !finite(*record.Orbit.EpochJD) || !finite(*record.Orbit.SemiMajorAxisAU) || !finite(*record.Orbit.Eccentricity) || !finite(*record.Orbit.InclinationDeg) || !finite(*record.Orbit.ArgPeriapsisDeg) || !finite(*record.Orbit.AscendingNodeDeg) || !finite(*record.Orbit.MeanAnomalyDeg) || *record.Orbit.SemiMajorAxisAU <= 0 {
+		return sourceStateResult{Availability: catalog.Missing, Model: "approximate-opt-in", MissingReason: "unvalidated-source-elements"}, nil
+	}
+	if *record.Orbit.Eccentricity < 0 || *record.Orbit.Eccentricity >= 1 {
+		return sourceStateResult{Availability: catalog.Missing, Model: "approximate-opt-in", MissingReason: "open-conic-not-supported"}, nil
+	}
+	meanMotion := 0.0
+	if record.Orbit.MeanMotionDegPerDay != nil {
+		if !finite(*record.Orbit.MeanMotionDegPerDay) {
+			return sourceStateResult{Availability: catalog.Missing, Model: "approximate-opt-in", MissingReason: "unvalidated-source-elements"}, nil
+		}
+		meanMotion = *record.Orbit.MeanMotionDegPerDay
+	}
+	state, err := science.PropagateBoundElliptic(ctx, science.Elements{SemiMajorAxisAU: *record.Orbit.SemiMajorAxisAU, Eccentricity: *record.Orbit.Eccentricity, InclinationDeg: *record.Orbit.InclinationDeg, AscendingNodeDeg: *record.Orbit.AscendingNodeDeg, ArgPeriapsisDeg: *record.Orbit.ArgPeriapsisDeg, MeanAnomalyDeg: *record.Orbit.MeanAnomalyDeg, MeanMotionDegPerDay: meanMotion}, *record.Orbit.EpochJD, jd)
+	if err != nil {
+		return sourceStateResult{}, err
+	}
+	result := catalog.State{Position: catalog.Vec3{X: state.Position.X, Y: state.Position.Y, Z: state.Position.Z}, Velocity: catalog.Vec3{X: state.Velocity.X, Y: state.Velocity.Y, Z: state.Velocity.Z}}
+	return sourceStateResult{Availability: catalog.AvailableFallback, Model: "source-elements-two-body", State: &result, Evidence: "source-elements-approximation"}, nil
+}
+
+func missingInventoryStateReason(record inventory.Record) string {
+	switch {
+	case record.GeometryStatus == "open-conic-elements":
+		return "open-conic-not-supported"
+	case strings.Contains(record.GeometryStatus, "unvalidated"):
+		return "unvalidated-source-elements"
+	case record.IdentityStatus == "unresolved-component":
+		return "unresolved-component"
+	case record.KernelEvidence != nil && record.KernelEvidence.Target != 0 && record.NAIFID != 0 && record.KernelEvidence.Target != record.NAIFID:
+		return "kernel-evidence-target-mismatch"
+	case record.KernelEvidence != nil && record.KernelEvidence.StateAtAuditEpoch != nil && (!evidenceTargetMatches(record) || !evidenceWindowMatches(record)):
+		return "unvalidated-source-kernel-evidence"
+	case record.Orbit != nil && (record.Orbit.TimeScale != "TDB" || record.Orbit.Frame != "ECLIPJ2000"):
+		return "unvalidated-source-elements"
+	case record.Orbit != nil:
+		return "source-elements-not-exact"
+	default:
+		return "no-verified-state-data"
+	}
+}
+
+func evidenceTargetMatches(record inventory.Record) bool {
+	if record.KernelEvidence == nil || record.KernelEvidence.Target == 0 || record.NAIFID == 0 {
+		return true
+	}
+	return record.KernelEvidence.Target == record.NAIFID
+}
+
+func evidenceWindowMatches(record inventory.Record) bool {
+	if record.KernelEvidence == nil || !finite(record.KernelEvidence.AuditET) {
+		return false
+	}
+	for _, segment := range record.KernelEvidence.Segments {
+		if segment.KernelID == "" || !finite(segment.StartET) || !finite(segment.EndET) || segment.EndET < segment.StartET || segment.StartET > record.KernelEvidence.AuditET || segment.EndET < record.KernelEvidence.AuditET || segment.Frame != 1 || (segment.Type != 2 && segment.Type != 3 && segment.Type != 17 && segment.Type != 21) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+func matchingEvidenceWindow(record inventory.Record) map[string]float64 {
+	if record.KernelEvidence == nil {
+		return nil
+	}
+	for _, segment := range record.KernelEvidence.Segments {
+		if segment.KernelID != "" && finite(segment.StartET) && finite(segment.EndET) && segment.EndET >= segment.StartET && segment.StartET <= record.KernelEvidence.AuditET && segment.EndET >= record.KernelEvidence.AuditET && segment.Frame == 1 && (segment.Type == 2 || segment.Type == 3 || segment.Type == 17 || segment.Type == 21) {
+			return map[string]float64{"startEt": segment.StartET, "endEt": segment.EndET}
+		}
+	}
+	return nil
+}
+
+func finiteState(state catalog.State) bool {
+	for _, value := range []float64{state.Position.X, state.Position.Y, state.Position.Z, state.Velocity.X, state.Velocity.Y, state.Velocity.Z} {
+		if !finite(value) {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Server) identityState(w http.ResponseWriter, r *http.Request, id string) {
+	if id == "" {
+		s.error(w, http.StatusBadRequest, "invalid_identity_id", "identity id must not be empty")
+		return
+	}
+	epochText := r.URL.Query().Get("epochJd")
+	epoch, err := strconv.ParseFloat(epochText, 64)
+	if err != nil || !finite(epoch) {
+		s.error(w, http.StatusBadRequest, "invalid_epoch", "epochJd must be a finite Julian TDB date")
+		return
+	}
+	frame := r.URL.Query().Get("frame")
+	if frame == "" {
+		frame = "ECLIPJ2000"
+	}
+	if frame != "ECLIPJ2000" {
+		s.error(w, http.StatusBadRequest, "unsupported_frame", "only ECLIPJ2000 is supported")
+		return
+	}
+	allowApproximate, err := precisionMode(r.URL.Query().Get("precision"))
+	if err != nil {
+		s.error(w, http.StatusBadRequest, "invalid_precision", err.Error())
+		return
+	}
+	raw, found, err := s.inventory.Get(r.Context(), id)
+	if err != nil {
+		if r.Context().Err() != nil {
+			s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
+		} else {
+			s.error(w, http.StatusUnprocessableEntity, "inventory_unavailable", err.Error())
+		}
+		return
+	}
+	if !found {
+		s.error(w, http.StatusNotFound, "identity_not_found", "unknown source identity")
+		return
+	}
+	record, err := inventory.Decode(raw)
+	if err != nil {
+		s.error(w, http.StatusUnprocessableEntity, "invalid_source_record", err.Error())
+		return
+	}
+	result, err := s.resolveInventoryState(r.Context(), record, epoch, allowApproximate)
+	if err != nil {
+		s.error(w, http.StatusUnprocessableEntity, "state_unavailable", err.Error())
+		return
+	}
+	response := map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "inventoryManifestSha256": s.inventory.ManifestHash(), "identity": s.inventory.Summary(record), "epochJd": epoch, "timeScale": "TDB", "frame": frame, "distanceUnit": "km", "velocityUnit": "km/s", "precision": map[bool]string{true: "approximate", false: "exact"}[allowApproximate], "availability": result.Availability, "model": result.Model, "missingReason": result.MissingReason, "stateEvidence": result.Evidence, "evidenceWindowEt": result.EvidenceWindow}
+	if result.State != nil {
+		response["state"] = result.State
+	}
+	s.json(w, http.StatusOK, response)
+}
+
 type trajectoryRequest struct {
-	BodyIDs []string `json:"bodyIds"`
-	StartJD float64  `json:"startJd"`
-	EndJD   float64  `json:"endJd"`
-	Samples int      `json:"samples"`
-	Frame   string   `json:"frame"`
+	BodyIDs   []string `json:"bodyIds"`
+	StartJD   float64  `json:"startJd"`
+	EndJD     float64  `json:"endJd"`
+	Samples   int      `json:"samples"`
+	Frame     string   `json:"frame"`
+	Precision string   `json:"precision"`
 }
 type trajectoryBody struct {
-	ID            string               `json:"id"`
-	Availability  catalog.Availability `json:"availability"`
-	MissingReason string               `json:"missingReason,omitempty"`
-	Model         string               `json:"model,omitempty"`
-	States        []catalog.State      `json:"states,omitempty"`
+	ID             string               `json:"id"`
+	Availability   catalog.Availability `json:"availability"`
+	MissingReason  string               `json:"missingReason,omitempty"`
+	Model          string               `json:"model,omitempty"`
+	Precision      string               `json:"precision,omitempty"`
+	SourceRecord   bool                 `json:"sourceRecord,omitempty"`
+	IdentityStatus string               `json:"identityStatus,omitempty"`
+	ParentID       string               `json:"parentId,omitempty"`
+	CenterID       string               `json:"centerId,omitempty"`
+	States         []float64            `json:"states,omitempty"`
+	StateStride    int                  `json:"stateStride,omitempty"`
+}
+
+type sourceStateResult struct {
+	Availability   catalog.Availability
+	Model          string
+	MissingReason  string
+	State          *catalog.State
+	Evidence       string
+	EvidenceWindow map[string]float64
 }
 
 func (s *Server) trajectory(w http.ResponseWriter, r *http.Request) {
@@ -200,6 +523,11 @@ func (s *Server) trajectory(w http.ResponseWriter, r *http.Request) {
 		s.error(w, 400, "unsupported_frame", "only ECLIPJ2000 is supported")
 		return
 	}
+	allowApproximate, err := precisionMode(req.Precision)
+	if err != nil {
+		s.error(w, http.StatusBadRequest, "invalid_precision", err.Error())
+		return
+	}
 	step := (req.EndJD - req.StartJD) / float64(req.Samples-1)
 	out := make([]trajectoryBody, 0, len(req.BodyIDs))
 	seen := map[string]bool{}
@@ -210,13 +538,66 @@ func (s *Server) trajectory(w http.ResponseWriter, r *http.Request) {
 		}
 		seen[id] = true
 		b, ok := s.catalog.Get(id)
+		if !ok && s.inventory != nil {
+			raw, found, getErr := s.inventory.Get(r.Context(), id)
+			if getErr != nil {
+				if r.Context().Err() != nil {
+					s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
+				} else {
+					s.error(w, http.StatusUnprocessableEntity, "inventory_unavailable", getErr.Error())
+				}
+				return
+			}
+			if found {
+				record, decodeErr := inventory.Decode(raw)
+				if decodeErr != nil {
+					s.error(w, http.StatusUnprocessableEntity, "invalid_source_record", decodeErr.Error())
+					return
+				}
+				tb := trajectoryBody{ID: id, Availability: catalog.Missing, Precision: map[bool]string{true: "approximate", false: "exact"}[allowApproximate], SourceRecord: true, IdentityStatus: record.IdentityStatus, ParentID: record.ParentID}
+				if record.Orbit != nil {
+					tb.CenterID = record.Orbit.Center
+				}
+				var states []float64
+				for sample := 0; sample < req.Samples; sample++ {
+					if err := r.Context().Err(); err != nil {
+						s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
+						return
+					}
+					resolved, stateErr := s.resolveInventoryState(r.Context(), record, req.StartJD+float64(sample)*step, allowApproximate)
+					if stateErr != nil {
+						s.error(w, http.StatusUnprocessableEntity, "state_unavailable", stateErr.Error())
+						return
+					}
+					if resolved.State == nil {
+						tb.Availability = resolved.Availability
+						tb.Model = resolved.Model
+						tb.MissingReason = resolved.MissingReason
+						states = nil
+						break
+					}
+					if states == nil {
+						states = make([]float64, 0, req.Samples*6)
+					}
+					states = appendFlatState(states, *resolved.State)
+					tb.Availability = resolved.Availability
+					tb.Model = resolved.Model
+				}
+				tb.States = states
+				if len(states) > 0 {
+					tb.StateStride = 6
+				}
+				out = append(out, tb)
+				continue
+			}
+		}
 		if !ok {
 			s.error(w, 404, "body_not_found", "unknown body id: "+id)
 			return
 		}
-		tb := trajectoryBody{ID: id, Availability: b.Availability, MissingReason: b.MissingReason, Model: b.Model}
+		tb := trajectoryBody{ID: id, Availability: b.Availability, MissingReason: b.MissingReason, Model: b.Model, Precision: map[bool]string{true: "approximate", false: "exact"}[allowApproximate]}
 		if b.Availability == catalog.AvailableOperational {
-			tb.States = make([]catalog.State, req.Samples)
+			tb.States = make([]float64, 0, req.Samples*6)
 			for i := 0; i < req.Samples; i++ {
 				if err := r.Context().Err(); err != nil {
 					s.error(w, 408, "cancelled", "request cancelled")
@@ -229,11 +610,15 @@ func (s *Server) trajectory(w http.ResponseWriter, r *http.Request) {
 				}
 				if !found {
 					tb.States = nil
+					tb.StateStride = 0
 					tb.Availability = catalog.Missing
 					tb.MissingReason = "kernel-coverage-gap"
 					break
 				}
-				tb.States[i] = st
+				tb.States = appendFlatState(tb.States, st)
+			}
+			if len(tb.States) > 0 {
+				tb.StateStride = 6
 			}
 			out = append(out, tb)
 			continue
@@ -245,8 +630,14 @@ func (s *Server) trajectory(w http.ResponseWriter, r *http.Request) {
 			out = append(out, tb)
 			continue
 		}
+		if !allowApproximate {
+			tb.Availability = catalog.Missing
+			tb.MissingReason = "approximate-model-requires-explicit-opt-in"
+			out = append(out, tb)
+			continue
+		}
 		tb.Model = b.Model
-		tb.States = make([]catalog.State, req.Samples)
+		tb.States = make([]float64, 0, req.Samples*6)
 		for i := 0; i < req.Samples; i++ {
 			if err := r.Context().Err(); err != nil {
 				s.error(w, 408, "cancelled", "request cancelled")
@@ -257,11 +648,18 @@ func (s *Server) trajectory(w http.ResponseWriter, r *http.Request) {
 				s.error(w, 422, "state_unavailable", err.Error())
 				return
 			}
-			tb.States[i] = catalog.State{Position: catalog.Vec3{X: st.Position.X, Y: st.Position.Y, Z: st.Position.Z}, Velocity: catalog.Vec3{X: st.Velocity.X, Y: st.Velocity.Y, Z: st.Velocity.Z}}
+			tb.States = appendFlatState(tb.States, catalog.State{Position: catalog.Vec3{X: st.Position.X, Y: st.Position.Y, Z: st.Position.Z}, Velocity: catalog.Vec3{X: st.Velocity.X, Y: st.Velocity.Y, Z: st.Velocity.Z}})
+		}
+		if len(tb.States) > 0 {
+			tb.StateStride = 6
 		}
 		out = append(out, tb)
 	}
-	s.json(w, 200, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "frame": req.Frame, "timeScale": "TDB", "startJd": req.StartJD, "endJd": req.EndJD, "distanceUnit": "km", "velocityUnit": "km/s", "modelBoundary": "Each body retains its source/model; fallback states are not operational ephemerides.", "bodies": out})
+	s.json(w, 200, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "frame": req.Frame, "timeScale": "TDB", "startJd": req.StartJD, "endJd": req.EndJD, "distanceUnit": "km", "velocityUnit": "km/s", "precision": map[bool]string{true: "approximate", false: "exact"}[allowApproximate], "stateLayout": "row-major-[x,y,z,vx,vy,vz]", "modelBoundary": "Exact requests use only verified SPK coefficients or source state evidence; approximate source-element propagation is explicit opt-in.", "bodies": out})
+}
+
+func appendFlatState(dst []float64, state catalog.State) []float64 {
+	return append(dst, state.Position.X, state.Position.Y, state.Position.Z, state.Velocity.X, state.Velocity.Y, state.Velocity.Z)
 }
 
 func (s *Server) preview(w http.ResponseWriter, _ *http.Request) {

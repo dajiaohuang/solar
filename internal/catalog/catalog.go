@@ -22,6 +22,7 @@ type Availability string
 const (
 	AvailableOperational Availability = "operational"
 	AvailableFallback    Availability = "fallback"
+	AvailableSnapshot    Availability = "snapshot"
 	Missing              Availability = "missing"
 )
 

@@ -44,7 +44,9 @@ func BenchmarkTrajectory64Samples(b *testing.B) {
 		b.Fatal(err)
 	}
 	s := New(c, 32)
-	reqBody := `{"bodyIds":["earth"],"startJd":2451545,"endJd":2451910,"samples":64,"frame":"ECLIPJ2000"}`
+	// The catalog fixture has no packaged SPK, so scientific work is measured
+	// through the explicit approximate opt-in rather than an empty exact result.
+	reqBody := `{"bodyIds":["earth"],"startJd":2451545,"endJd":2451910,"samples":64,"frame":"ECLIPJ2000","precision":"approximate"}`
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -66,9 +68,9 @@ func BenchmarkTrajectory64BodyBatch(b *testing.B) {
 			break
 		}
 	}
-	requestBody := `{"bodyIds":["earth"],"startJd":2451545,"endJd":2451910,"samples":128,"frame":"ECLIPJ2000"}`
+	requestBody := `{"bodyIds":["earth"],"startJd":2451545,"endJd":2451910,"samples":128,"frame":"ECLIPJ2000","precision":"approximate"}`
 	if len(ids) == 64 {
-		encoded, err := json.Marshal(map[string]any{"bodyIds": ids, "startJd": 2451545.0, "endJd": 2451910.0, "samples": 128, "frame": "ECLIPJ2000"})
+		encoded, err := json.Marshal(map[string]any{"bodyIds": ids, "startJd": 2451545.0, "endJd": 2451910.0, "samples": 128, "frame": "ECLIPJ2000", "precision": "approximate"})
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -90,7 +92,7 @@ func BenchmarkTrajectory10000Samples(b *testing.B) {
 		b.Fatal(err)
 	}
 	s := New(c, 32)
-	requestBody := `{"bodyIds":["earth"],"startJd":2451545,"endJd":2451910,"samples":10000,"frame":"ECLIPJ2000"}`
+	requestBody := `{"bodyIds":["earth"],"startJd":2451545,"endJd":2451910,"samples":10000,"frame":"ECLIPJ2000","precision":"approximate"}`
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

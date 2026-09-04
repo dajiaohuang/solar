@@ -24,41 +24,54 @@ import (
 )
 
 type report struct {
-	Goos                   string  `json:"goos"`
-	Goarch                 string  `json:"goarch"`
-	Catalog                int     `json:"catalogEntries"`
-	InventoryRecords       int     `json:"inventoryRecords,omitempty"`
-	InventoryShards        int     `json:"inventoryShards,omitempty"`
-	InventoryBytes         int64   `json:"inventoryCompressedBytes,omitempty"`
-	CatalogLoadMs          float64 `json:"catalogLoadMs"`
-	Requests               int     `json:"latencyRequests"`
-	Concurrency            int     `json:"concurrency"`
-	FirstRequestMs         float64 `json:"firstRequestMs"`
-	P50Ns                  int64   `json:"p50Ns"`
-	P95Ns                  int64   `json:"p95Ns"`
-	P99Ns                  int64   `json:"p99Ns"`
-	MinNs                  int64   `json:"minNs"`
-	MaxNs                  int64   `json:"maxNs"`
-	Throughput             float64 `json:"throughputRequestsPerSecond"`
-	MixedRequests          int     `json:"mixedRequests"`
-	MixedP50Ns             int64   `json:"mixedP50Ns"`
-	MixedP95Ns             int64   `json:"mixedP95Ns"`
-	MixedP99Ns             int64   `json:"mixedP99Ns"`
-	BatchBodies            int     `json:"batchBodies"`
-	BatchSamples           int     `json:"batchSamples"`
-	BatchMs                float64 `json:"batchMs"`
-	LongSamples            int     `json:"longSamples"`
-	LongMs                 float64 `json:"longTrajectoryMs"`
-	LongResponseBytes      int64   `json:"longResponseBytes"`
-	OverloadRequests       int     `json:"overloadRequests"`
-	OverloadRejected       int64   `json:"overloadRejected"`
-	PeakRSSBytes           uint64  `json:"peakRSSBytes,omitempty"`
-	PeakHeapBytes          uint64  `json:"peakHeapBytes"`
-	AllocDelta             uint64  `json:"allocDeltaBytes"`
-	TotalAlloc             uint64  `json:"totalAllocBytes"`
-	InvalidResponses       int64   `json:"invalidResponses"`
-	CancelledObserved      bool    `json:"cancelledObserved"`
-	OverloadStatusExpected int     `json:"overloadStatusExpected"`
+	Goos                    string  `json:"goos"`
+	Goarch                  string  `json:"goarch"`
+	Catalog                 int     `json:"catalogEntries"`
+	InventoryRecords        int     `json:"inventoryRecords,omitempty"`
+	InventoryShards         int     `json:"inventoryShards,omitempty"`
+	InventoryBytes          int64   `json:"inventoryCompressedBytes,omitempty"`
+	InventoryLoadMs         float64 `json:"inventoryIndexLoadMs,omitempty"`
+	InventoryIndexTerms     int     `json:"inventoryIndexTerms,omitempty"`
+	InventoryIndexPostings  int     `json:"inventoryIndexPostings,omitempty"`
+	TrajectoryPrecision     string  `json:"trajectoryPrecision"`
+	CatalogLoadMs           float64 `json:"catalogLoadMs"`
+	Requests                int     `json:"latencyRequests"`
+	Concurrency             int     `json:"concurrency"`
+	FirstRequestMs          float64 `json:"firstRequestMs"`
+	P50Ns                   int64   `json:"p50Ns"`
+	P95Ns                   int64   `json:"p95Ns"`
+	P99Ns                   int64   `json:"p99Ns"`
+	MinNs                   int64   `json:"minNs"`
+	MaxNs                   int64   `json:"maxNs"`
+	Throughput              float64 `json:"throughputRequestsPerSecond"`
+	MixedRequests           int     `json:"mixedRequests"`
+	MixedP50Ns              int64   `json:"mixedP50Ns"`
+	MixedP95Ns              int64   `json:"mixedP95Ns"`
+	MixedP99Ns              int64   `json:"mixedP99Ns"`
+	ExactStateRequests      int     `json:"exactStateRequests"`
+	ExactStateP50Ns         int64   `json:"exactStateP50Ns"`
+	ExactStateP95Ns         int64   `json:"exactStateP95Ns"`
+	ExactStateP99Ns         int64   `json:"exactStateP99Ns"`
+	IdentitySearchP50Ns     int64   `json:"identitySearchP50Ns"`
+	IdentitySearchP95Ns     int64   `json:"identitySearchP95Ns"`
+	IdentityDetailP50Ns     int64   `json:"identityDetailP50Ns"`
+	IdentityDetailP95Ns     int64   `json:"identityDetailP95Ns"`
+	InventoryWorkloadErrors int64   `json:"inventoryWorkloadErrors"`
+	BatchBodies             int     `json:"batchBodies"`
+	BatchSamples            int     `json:"batchSamples"`
+	BatchMs                 float64 `json:"batchMs"`
+	LongSamples             int     `json:"longSamples"`
+	LongMs                  float64 `json:"longTrajectoryMs"`
+	LongResponseBytes       int64   `json:"longResponseBytes"`
+	OverloadRequests        int     `json:"overloadRequests"`
+	OverloadRejected        int64   `json:"overloadRejected"`
+	PeakRSSBytes            uint64  `json:"peakRSSBytes,omitempty"`
+	PeakHeapBytes           uint64  `json:"peakHeapBytes"`
+	AllocDelta              uint64  `json:"allocDeltaBytes"`
+	TotalAlloc              uint64  `json:"totalAllocBytes"`
+	InvalidResponses        int64   `json:"invalidResponses"`
+	CancelledObserved       bool    `json:"cancelledObserved"`
+	OverloadStatusExpected  int     `json:"overloadStatusExpected"`
 }
 
 func main() {
@@ -79,20 +92,29 @@ func main() {
 	}
 	loadMs := float64(time.Since(loadStart).Microseconds()) / 1000
 	var inv *inventory.Inventory
+	var inventoryLoadMs float64
+	var inventoryIndexTerms, inventoryIndexPostings int
 	if *inventoryDir != "" {
+		inventoryStart := time.Now()
 		inv, err = inventory.Load(*inventoryDir)
 		if err != nil {
 			panic(err)
 		}
+		inventoryLoadMs = float64(time.Since(inventoryStart).Microseconds()) / 1000
+		stats := inv.IndexStats()
+		inventoryIndexTerms, inventoryIndexPostings = stats["searchTerms"], stats["indexPostings"]
 	}
 
 	server := httptest.NewServer(httpapi.New(c, *workers, inv))
 	defer server.Close()
 	client := server.Client()
 	ids := benchmarkBodyIDs(c)
-	singlePayload := trajectoryPayload([]string{"earth"}, 64)
-	batchPayload := trajectoryPayload(ids, 128)
-	longPayload := trajectoryPayload([]string{"earth"}, *longSamples)
+	// The checked-in catalog has no packaged binary kernels. Use explicit
+	// approximate opt-in for trajectory throughput; exact inventory state work
+	// is measured separately below and never falls back silently.
+	singlePayload := trajectoryPayload([]string{"earth"}, 64, "approximate")
+	batchPayload := trajectoryPayload(ids, 128, "approximate")
+	longPayload := trajectoryPayload([]string{"earth"}, *longSamples, "approximate")
 	peak := newPeak()
 
 	firstStart := time.Now()
@@ -135,9 +157,17 @@ func main() {
 	longMs := float64(time.Since(longStart).Microseconds()) / 1000
 	peak.Sample()
 
-	// The mixed run exercises the sorted catalog index, optional streaming
+	// The mixed run exercises the sorted catalog index, optional indexed source
 	// inventory and batched trajectory path under the same bounded pool.
 	mixed := runMixed(client, server.URL, *n, *workers, batchPayload, inv != nil, peak)
+	// Leave one slot free while the benchmark turns a completed HTTP response
+	// into the next request; the handler releases its slot on return, just after
+	// the response body has been written.
+	inventoryWorkers := *workers
+	if inventoryWorkers > 1 {
+		inventoryWorkers--
+	}
+	exactState, searchP50, searchP95, detailP50, detailP95, inventoryErrors := runInventoryWorkloads(client, server.URL, *n, inventoryWorkers, inv, peak)
 
 	var before, after runtime.MemStats
 	runtime.GC()
@@ -181,10 +211,12 @@ func main() {
 	sort.Slice(lat, func(i, j int) bool { return lat[i] < lat[j] })
 	out := report{
 		Goos: runtime.GOOS, Goarch: runtime.GOARCH, Catalog: c.Len(),
-		InventoryRecords: inventoryRecords(inv), InventoryShards: inventoryShards(inv), InventoryBytes: inventoryBytes(inv), CatalogLoadMs: loadMs,
-		Requests: *n * latencyBatch, Concurrency: *workers, FirstRequestMs: firstMs,
+		InventoryRecords: inventoryRecords(inv), InventoryShards: inventoryShards(inv), InventoryBytes: inventoryBytes(inv), InventoryLoadMs: inventoryLoadMs, InventoryIndexTerms: inventoryIndexTerms, InventoryIndexPostings: inventoryIndexPostings, CatalogLoadMs: loadMs,
+		TrajectoryPrecision: "approximate-opt-in",
+		Requests:            *n * latencyBatch, Concurrency: *workers, FirstRequestMs: firstMs,
 		P50Ns: quantile(lat, .50), P95Ns: quantile(lat, .95), P99Ns: quantile(lat, .99), MinNs: quantile(lat, 0), MaxNs: quantile(lat, 1),
 		Throughput: float64(completed) / elapsed, MixedRequests: mixed.count, MixedP50Ns: mixed.p50, MixedP95Ns: mixed.p95, MixedP99Ns: mixed.p99,
+		ExactStateRequests: exactState.count, ExactStateP50Ns: exactState.p50, ExactStateP95Ns: exactState.p95, ExactStateP99Ns: exactState.p99, IdentitySearchP50Ns: searchP50, IdentitySearchP95Ns: searchP95, IdentityDetailP50Ns: detailP50, IdentityDetailP95Ns: detailP95, InventoryWorkloadErrors: inventoryErrors,
 		BatchBodies: len(ids), BatchSamples: 128, BatchMs: batchMs, LongSamples: *longSamples, LongMs: longMs, LongResponseBytes: longBytes,
 		OverloadRequests: overloadRequests, OverloadRejected: overloadRejected, OverloadStatusExpected: http.StatusTooManyRequests,
 		PeakRSSBytes: peak.rss, PeakHeapBytes: peak.heap, AllocDelta: nonNegativeDelta(after.Alloc, before.Alloc), TotalAlloc: after.TotalAlloc - before.TotalAlloc,
@@ -223,7 +255,7 @@ func runMixed(client *http.Client, base string, n, workers int, payload string, 
 				if i%3 == 1 {
 					path, method, body = "/v1/trajectory", http.MethodPost, payload
 				} else if i%3 == 2 && withInventory {
-					path = "/v1/inventory?limit=10&q=asteroid"
+					path = "/v1/identities?limit=10&q=Ceres"
 				}
 				requestStart := time.Now()
 				status, _, err := doRequest(client, method, base+path, body)
@@ -238,6 +270,80 @@ func runMixed(client *http.Client, base string, n, workers int, payload string, 
 	peak.Sample()
 	sort.Slice(times, func(i, j int) bool { return times[i] < times[j] })
 	return mixedReport{count: n, invalid: invalid, p50: quantile(times, .50), p95: quantile(times, .95), p99: quantile(times, .99)}
+}
+
+type stateReport struct {
+	count         int
+	p50, p95, p99 int64
+}
+
+func runInventoryWorkloads(client *http.Client, base string, n, workers int, inv *inventory.Inventory, peak *peakMemory) (stateReport, int64, int64, int64, int64, int64) {
+	if inv == nil {
+		return stateReport{}, 0, 0, 0, 0, 0
+	}
+	stateTimes := make([]int64, n)
+	searchTimes := make([]int64, n)
+	detailTimes := make([]int64, n)
+	for i := 0; i < n; i++ {
+		stateTimes[i], searchTimes[i], detailTimes[i] = -1, -1, -1
+	}
+	if workers < 1 {
+		workers = 1
+	}
+	var next, errors int64
+	var wg sync.WaitGroup
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				i := int(atomic.AddInt64(&next, 1)) - 1
+				if i >= n {
+					return
+				}
+				start := time.Now()
+				status, _, err := doRequest(client, http.MethodGet, base+"/v1/identities/sb:asteroid:1/state?epochJd=2461287.5", "")
+				if err == nil && status == http.StatusOK {
+					stateTimes[i] = time.Since(start).Nanoseconds()
+				} else {
+					atomic.AddInt64(&errors, 1)
+				}
+				start = time.Now()
+				status, _, err = doRequest(client, http.MethodGet, base+"/v1/identities?limit=10&q=Ceres", "")
+				if err == nil && status == http.StatusOK {
+					searchTimes[i] = time.Since(start).Nanoseconds()
+				} else {
+					atomic.AddInt64(&errors, 1)
+				}
+				start = time.Now()
+				status, _, err = doRequest(client, http.MethodGet, base+"/v1/identities/sb:asteroid:1", "")
+				if err == nil && status == http.StatusOK {
+					detailTimes[i] = time.Since(start).Nanoseconds()
+				} else {
+					atomic.AddInt64(&errors, 1)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	peak.Sample()
+	stateTimes = positiveTimes(stateTimes)
+	searchTimes = positiveTimes(searchTimes)
+	detailTimes = positiveTimes(detailTimes)
+	sort.Slice(stateTimes, func(i, j int) bool { return stateTimes[i] < stateTimes[j] })
+	sort.Slice(searchTimes, func(i, j int) bool { return searchTimes[i] < searchTimes[j] })
+	sort.Slice(detailTimes, func(i, j int) bool { return detailTimes[i] < detailTimes[j] })
+	return stateReport{count: len(stateTimes), p50: quantile(stateTimes, .50), p95: quantile(stateTimes, .95), p99: quantile(stateTimes, .99)}, quantile(searchTimes, .50), quantile(searchTimes, .95), quantile(detailTimes, .50), quantile(detailTimes, .95), errors
+}
+
+func positiveTimes(values []int64) []int64 {
+	out := values[:0]
+	for _, value := range values {
+		if value >= 0 {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 func runOverload(c *catalog.Catalog, inv *inventory.Inventory, workers int, payload string, peak *peakMemory) (int, int64) {
@@ -283,8 +389,12 @@ func doRequest(client *http.Client, method, url, body string) (int, int64, error
 	return response.StatusCode, count, nil
 }
 
-func trajectoryPayload(ids []string, samples int) string {
-	b, _ := json.Marshal(map[string]any{"bodyIds": ids, "startJd": 2451545.0, "endJd": 2451910.0, "samples": samples, "frame": "ECLIPJ2000"})
+func trajectoryPayload(ids []string, samples int, precision string) string {
+	payload := map[string]any{"bodyIds": ids, "startJd": 2451545.0, "endJd": 2451910.0, "samples": samples, "frame": "ECLIPJ2000"}
+	if precision != "" {
+		payload["precision"] = precision
+	}
+	b, _ := json.Marshal(payload)
 	return string(b)
 }
 
