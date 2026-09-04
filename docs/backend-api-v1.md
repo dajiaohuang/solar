@@ -32,7 +32,8 @@ actions are blocked.
 paginated list. `limit` is 1–500 and page tokens are opaque to clients.
 
 `GET /v1/inventory?q=&limit=&pageToken=` streams the optional audited all-body
-source inventory. It reports `totalRecords` and `sourceRecords: true`; rows are
+source inventory. It reports `totalRecords`, declared compressed input bytes and
+`sourceRecords: true`; rows are
 not deduplicated, promoted to selectable bodies, or counted as unique objects.
 Each row retains source designation, identity/parent status, geometry and
 ephemeris status (including open-conic and missing-parent states). The service

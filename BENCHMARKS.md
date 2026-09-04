@@ -30,11 +30,12 @@ Linux; `peakHeapBytes` remains available on every platform. The Go benchmark
 reports authoritative `B/op` and `allocs/op`.
 
 Reference harness run (2026-09-04, Windows amd64, Intel Core i9-14900KF,
-full source inventory 1,567,193 rows / 314 gzip shards, 552 catalog entries;
+full source inventory 1,567,193 rows / 314 gzip shards (compressed input bytes
+are reported by the harness), 552 catalog entries;
 100 requests per workload, 16 workers, 5,000-sample long trajectory):
 
 ```json
-{"goos":"windows","goarch":"amd64","catalogEntries":552,"inventoryRecords":1567193,"inventoryShards":314,"catalogLoadMs":28.816,"latencyRequests":800,"concurrency":16,"firstRequestMs":0.911,"p50Ns":125000,"p95Ns":125050,"p99Ns":250012,"minNs":0,"maxNs":250025,"throughputRequestsPerSecond":12499.062570307227,"mixedRequests":100,"mixedP50Ns":1999500,"mixedP95Ns":7002100,"mixedP99Ns":10003200,"batchBodies":64,"batchSamples":128,"batchMs":2,"longSamples":5000,"longTrajectoryMs":4.999,"longResponseBytes":857078,"overloadRequests":32,"overloadRejected":31,"peakRSSBytes":42532864,"peakHeapBytes":12184544,"allocDeltaBytes":0,"totalAllocBytes":11266360,"invalidResponses":0,"cancelledObserved":true,"overloadStatusExpected":429}
+{"goos":"windows","goarch":"amd64","catalogEntries":552,"inventoryRecords":1567193,"inventoryShards":314,"inventoryCompressedBytes":89626020,"catalogLoadMs":28.576,"latencyRequests":800,"concurrency":16,"firstRequestMs":2,"p50Ns":124987,"p95Ns":125087,"p99Ns":125175,"minNs":0,"maxNs":250012,"throughputRequestsPerSecond":19998.000199980004,"mixedRequests":100,"mixedP50Ns":1999800,"mixedP95Ns":7000100,"mixedP99Ns":9000300,"batchBodies":64,"batchSamples":128,"batchMs":1.999,"longSamples":5000,"longTrajectoryMs":4,"longResponseBytes":857078,"overloadRequests":32,"overloadRejected":31,"peakRSSBytes":41074688,"peakHeapBytes":13771368,"allocDeltaBytes":0,"totalAllocBytes":9162264,"invalidResponses":0,"cancelledObserved":true,"overloadStatusExpected":429}
 ```
 
 The direct HTTP benchmarks on the same machine reported:
@@ -76,6 +77,8 @@ go tool pprof -top -alloc_space D:/repo/repostew/.repostew/solar-backend-mem.ppr
 
 The profile put JSON float encoding and response-buffer growth ahead of Kepler
 math (the latter was about 14% cumulative CPU in the long-trajectory run).
+The harness reports compressed inventory input bytes and long-response bytes as
+I/O scale; rerun it with the same shard manifest to compare disk/cache paths.
 That supports the current choices: compute all requested states in one bounded
 batch, keep the 552-entry catalog as an immutable sorted slice plus ID map,
 stream the 1.5M-row inventory from gzip shards instead of materialising it,

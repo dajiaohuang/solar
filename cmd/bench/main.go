@@ -29,6 +29,7 @@ type report struct {
 	Catalog                int     `json:"catalogEntries"`
 	InventoryRecords       int     `json:"inventoryRecords,omitempty"`
 	InventoryShards        int     `json:"inventoryShards,omitempty"`
+	InventoryBytes         int64   `json:"inventoryCompressedBytes,omitempty"`
 	CatalogLoadMs          float64 `json:"catalogLoadMs"`
 	Requests               int     `json:"latencyRequests"`
 	Concurrency            int     `json:"concurrency"`
@@ -180,7 +181,7 @@ func main() {
 	sort.Slice(lat, func(i, j int) bool { return lat[i] < lat[j] })
 	out := report{
 		Goos: runtime.GOOS, Goarch: runtime.GOARCH, Catalog: c.Len(),
-		InventoryRecords: inventoryRecords(inv), InventoryShards: inventoryShards(inv), CatalogLoadMs: loadMs,
+		InventoryRecords: inventoryRecords(inv), InventoryShards: inventoryShards(inv), InventoryBytes: inventoryBytes(inv), CatalogLoadMs: loadMs,
 		Requests: *n * latencyBatch, Concurrency: *workers, FirstRequestMs: firstMs,
 		P50Ns: quantile(lat, .50), P95Ns: quantile(lat, .95), P99Ns: quantile(lat, .99), MinNs: quantile(lat, 0), MaxNs: quantile(lat, 1),
 		Throughput: float64(completed) / elapsed, MixedRequests: mixed.count, MixedP50Ns: mixed.p50, MixedP95Ns: mixed.p95, MixedP99Ns: mixed.p99,
@@ -323,4 +324,10 @@ func inventoryShards(i *inventory.Inventory) int {
 		return 0
 	}
 	return i.ShardCount()
+}
+func inventoryBytes(i *inventory.Inventory) int64 {
+	if i == nil {
+		return 0
+	}
+	return i.TotalBytes()
 }
