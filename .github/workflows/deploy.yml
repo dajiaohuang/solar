@@ -85,11 +85,19 @@ jobs:
           PLAYWRIGHT_REUSE_BUILD: 1
           PLAYWRIGHT_EXPECT_DATASET: 1
         run: npm run test:e2e
+      - name: Build the curated Pages artifact without legacy catalogs
+        run: npm run build:preview
+      - run: npm run check:capacity
+      - name: Verify the exact preview artifact before publication
+        env:
+          PLAYWRIGHT_BROWSER_CHANNEL: chrome
+          PLAYWRIGHT_REUSE_BUILD: 1
+        run: npm run test:preview
       - name: Enforce Lighthouse accessibility and performance budgets
         uses: treosh/lighthouse-ci-action@3e7e23fb74242897f95c0ba9cabad3d0227b9b18 # v12.6.2
         with:
           urls: |
-            http://127.0.0.1:4188/solar/?v=3&page=home&lang=en
+            http://127.0.0.1:4188/solar/?v=4&page=home&view=3d&lang=en
             http://127.0.0.1:4188/solar/stories/geocentric-model/
           runs: 3
           configPath: ./.lighthouserc.json
@@ -102,6 +110,7 @@ jobs:
           path: |
             playwright-report
             test-results
+            test-results-preview
           if-no-files-found: ignore
           retention-days: 14
       - name: Upload build identity and capacity evidence
@@ -114,6 +123,8 @@ jobs:
             dist/capacity-report.json
             dist/asset-manifest.json
             dist/scientific-validation.json
+            dist/product-availability.json
+            dist/ephemeris-manifest.json
           retention-days: 30
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5

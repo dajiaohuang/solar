@@ -50,7 +50,11 @@ test('keyboard and touch explain a restricted preset without changing the scene'
   page.on('pageerror', error => errors.push(error.message))
   await page.goto('?v=4&lang=en', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('.first-run-choice')).toBeVisible()
-  // Keep the first-visit lightweight renderer gate untouched during this test.
+  // Finish the real first-visit choice before touching the preset below it.
+  // On small screens the fixed guide can otherwise cover the touch target.
+  await page.getByRole('button', { name: 'Explore independently', exact: true }).click()
+  await expect(page.locator('.first-run-choice')).toHaveCount(0)
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
   const preset = page.locator('.preset-list button[aria-disabled="true"]').first()
   const before = await page.locator('.frame-label').innerText()
   await askWhy(page, preset, info.project.name.includes('mobile'))

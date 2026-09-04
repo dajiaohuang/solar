@@ -81,7 +81,7 @@ Global object/story/term search is available with `Ctrl/⌘ K` or `/`. Browser B
 
 Scene URL schema **v4** carries the scientific and interaction state needed to replay a workspace: route, immutable dataset version, dataset mode, epoch, reference and comparison frames, focus set, filters, trajectory sampling, view mode, catalog-cloud choice, 3D quality profile, plot, guided-story step, mission endpoints/dates, language, and view settings.
 
-Catalog workspaces and dataset-backed presets pin `catalogSample=mobile|desktop` together with the manifest-declared `catalogSampleCount`. Incomplete, unavailable, unsupported, or count-mismatched tuples fail closed where the sample is loaded. v2 and v3 links remain readable and upgrade to v4 after their responsive sample resolves. Scenes can also be saved locally and exported or imported as versioned JSON libraries.
+Catalog workspaces and dataset-backed presets pin `catalogSample=mobile|desktop` together with the manifest-declared `catalogSampleCount`. Incomplete, unavailable, unsupported, or count-mismatched tuples fail closed where the sample is loaded. The current implementation can read v2/v3 links, but maintaining old-schema compatibility is no longer a development requirement. Scenes can also be saved locally and exported or imported as JSON libraries carrying their scientific data identity.
 
 | Reproducibility guarantee | Explicit non-guarantee |
 | --- | --- |
@@ -219,7 +219,7 @@ npm run check:capacity
 
 `npm run build:preview` builds the **same Web frontend** with a curated product profile; it requires the audited dataset pinned in `.github/asteroid-dataset.json` to be installed locally. It retains the 3D Observation Deck, selected presets and lessons, source evidence and an 8,000-record display sample. Full-only entries remain visible with accessible explanations, and denied scene links retain their original intent. This is not full catalog/state coverage.
 
-The regular `build:deploy` still preserves the existing full catalog URL for installed clients. **Do not replace the live Pages artifact with the curated build until the full-data endpoint and client migration have been verified.** Native builds reject the preview product profile. See [preview delivery, verification and migration](./docs/preview-delivery.md) for the exact asset/cache boundaries and commands.
+The Pages workflow validates full Web, then builds, tests and publishes only the curated preview. **Old-client compatibility is not required:** no full catalog is retained for older installed apps, whose online catalog access will stop after this switch. Full clients and backend integration remain under development. Native builds reject the preview product profile. See [preview delivery and verification](./docs/preview-delivery.md). Development now prioritizes maximum simultaneous scientifically valid computation/display across all frontends, the Go backend and storage, with measured performance and explicit precision boundaries.
 
 Useful pipeline variables:
 
@@ -315,7 +315,7 @@ Before a pull request:
 
 - start from `npm ci` and run the relevant checks above;
 - accompany scientific changes with a primary source, model/validity statement, and deterministic regression fixture;
-- preserve v4 URL compatibility or provide an explicit migration path;
+- validate the current scene contract; old-schema compatibility is not required;
 - keep English and Chinese copy in sync;
 - verify keyboard access, desktop/mobile behavior, reduced motion, and the 2D/WebGL fallback for UI changes; and
 - do not label two-body or schematic output as an operational ephemeris, N-body result, risk assessment, or navigation product.

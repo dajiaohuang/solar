@@ -17,7 +17,7 @@ Open the displayed local `/solar/` URL. For automated desktop/mobile coverage, r
 | Command / 命令 | Product / 产品 | Data boundary / 数据边界 |
 | --- | --- | --- |
 | `npm run build` | Full Web / 完整 Web | Default Pages-window SPKs; catalog omitted by default / 默认 Pages 时间窗口 SPK，默认不复制目录 |
-| `npm run build:deploy` | Compatibility Web delivery / 兼容性 Web 交付 | Existing full catalog root retained / 保留现有完整目录根路径 |
+| `npm run build:deploy` | Full Web artifact / 完整 Web 产物 | Full catalog for full-product validation; not the Pages upload / 完整目录用于完整版验证，不作为 Pages 上传产物 |
 | `npm run build:preview` | Curated Web preview / 精选 Web 预览 | Allowed SPK dependency closure and mobile display sample only / 仅允许天体的 SPK 依赖闭包与手机展示样本 |
 | `npm run build:native` | Full native-shell baseline / 完整应用壳基线 | Full SPK profile, on-demand HTTPS catalog; rejects preview / 完整 SPK 配置，按需 HTTPS 目录，拒绝预览配置 |
 
@@ -37,6 +37,6 @@ Preview catalogs live under `data/asteroids/preview/<availability-sha256>/releas
 
 IndexedDB keys retain complete URLs. Preview versions include both the availability hash and source release. Stale-version eviction is product-scoped, while full and preview records share one global LRU budget: at most 256 MiB, further reduced by reported storage quota. This is a bounded, best-effort cache, not a persistent offline download guarantee. / IndexedDB 键保留完整 URL；预览版本同时包含可用性哈希和源发布身份。同一产品内清理旧版本，完整与预览记录共用一个全局 LRU 预算：最多 256 MiB，并根据浏览器存储配额进一步降低。这是有界、尽力而为的缓存，不是永久离线下载保证。
 
-## Live migration gate / 线上迁移前置条件
+## Pages publication and full clients / Pages 发布与完整版客户端
 
-The Pages deploy command has **not** switched to the curated artifact. Installed Capacitor clients still request the full catalog at `https://dajiaohuang.github.io/solar/data/asteroids`; removing it would break those clients. Before switching, provision an explicitly authorized full-data endpoint, validate client migration and old-client compatibility, and retain a tested rollback. A successful local preview build or a merged backend PR does not prove this gate complete. Independent native frontends and all-known-body scientific coverage remain separate outstanding requirements. / Pages 部署命令**尚未**切换到精选产物。已安装的 Capacitor 客户端仍请求 Pages 上的完整目录，移除会破坏兼容性。切换前必须提供经明确授权的完整数据端点，验证客户端迁移及旧客户端兼容，并保留经过测试的回滚。预览本地构建成功或后端 PR 合并不表示此前置条件已满足。独立原生前端和全天体科学覆盖仍是另行未完成的要求。
+The owner removed backward-compatibility requirements on 2026-09-05. The Pages workflow first validates full Web, then builds and tests the curated preview, applies Lighthouse/capacity gates and publishes only that preview. No duplicate legacy catalog is retained. Existing Capacitor builds that request `https://dajiaohuang.github.io/solar/data/asteroids` will lose online catalog access when the preview is deployed; their bundled core is separate. This is an intentional breaking transition, not a claim that replacement clients or a public backend are ready. Deployment smoke verifies the actual product identity, curated delivery checksums, permitted sample and blocked full-only actions. Only a successful deployment and live check prove publication. Independent native frontends, backend integration and all-known-body scientific coverage remain outstanding. / 用户于 2026-09-05 取消旧版兼容要求。Pages 流程先验证完整 Web，再构建并测试精选预览，通过 Lighthouse/容量门禁后仅发布预览，不保留重复的旧完整目录。部署预览后，仍请求旧 Pages 完整目录地址的 Capacitor 应用将失去在线目录访问，已内置的核心资源不受此目录删除影响。这是明确的不兼容切换，不表示替代客户端或公开后端已经可用。线上冒烟验证实际产品身份、精选交付校验、允许的样本和受限操作拦截；只有部署成功且线上验证通过才算发布。独立原生前端、后端接入及全天体科学覆盖仍未完成。

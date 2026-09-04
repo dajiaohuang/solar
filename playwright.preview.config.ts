@@ -13,7 +13,7 @@ export default defineConfig({
   reporter: 'list',
   use: { baseURL, serviceWorkers: 'block', channel: process.env.PLAYWRIGHT_BROWSER_CHANNEL, trace: 'retain-on-failure' },
   webServer: externalURL ? undefined : {
-    command: 'npx cross-env SOLAR_ATLAS_PRODUCT_PROFILE=preview SOLAR_ATLAS_INCLUDE_DATASET=1 npm run build && npm run preview -- --host 127.0.0.1 --port 4197 --strictPort',
+    command: `${process.env.PLAYWRIGHT_REUSE_BUILD === '1' ? '' : 'npm run build:preview && '}npm run preview -- --host 127.0.0.1 --port 4197 --strictPort`,
     url: baseURL,
     reuseExistingServer: false,
   },

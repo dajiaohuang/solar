@@ -47,7 +47,7 @@ Useful pipeline environment variables are `MPCORB_SOURCE_FILE`, `MPCORB_SOURCE_U
 - Preserve the first-visit renderer gate: the untouched onboarding choice uses the lightweight spatial preview, while tutorial/explore/dismiss actions and completed onboarding activate the real 3D renderer.
 - Heavy analyses are explicit, cancellable worker jobs. UI parameter changes must not silently rerun them.
 - Results and exports must state their model, epoch/window, units, and approximation limits.
-- Share URLs are a versioned scene contract. Extend `src/lib/urlState.ts` compatibly when new shareable state is added.
+- Validate the current scene contract in `src/lib/urlState.ts`. Old-client/API/scene compatibility is not required (owner direction, 2026-09-05); retain scientific source identities and explicit unsupported-state errors, not compatibility-only layers.
 
 ## Verification
 
