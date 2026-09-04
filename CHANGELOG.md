@@ -12,6 +12,7 @@ All notable changes to Solar Atlas are documented here. The project follows sema
 
 ### Added
 
+- Opt-in, reproducible JPL all-body source inventory with asteroid/comet and satellite records, explicit unresolved identities and missing geometry, bounded compressed shards, source-count/integrity validation, and separately evaluated bundled-kernel availability. This developer inventory does not imply runtime all-body coverage or increase normal web/native startup downloads.
 - Authoritative, checksum-pinned JPL SPK geometric position/velocity evaluation without a runtime N-body integrator; 63 covered selectable body centers, including 31 newly selectable moons and 15 additional large asteroids.
 - UTC/TAI/TT/TDB conversion with explicit future leap-second uncertainty, parent-relative osculating diagnostics, and separate reception light-time / stellar-aberration readouts.
 - Seven new 3D presets, a lazy 65.6 MiB SPK pack shared with native apps, reproducible range extraction, and independent Horizons/center-chain/coverage regression tests.
