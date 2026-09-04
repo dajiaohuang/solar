@@ -49,6 +49,14 @@ test('uses useful moon orbital units and distinguishes the active Earth center',
   await page.getByRole('tab', { name: 'Context', exact: true }).click()
   await expect(inspector).toContainText('Earth geocenter from the active ephemeris')
   await expect(inspector).not.toContainText('Earth geocenter derived from the EMB seed')
+  await page.goto('./?v=4&lang=zh&view=3d&ref=mars&bodies=mars,naif:401,naif:402&focused=naif:401&jd=2461287.5&speed=0&history=1')
+  await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('3/3')
+  await page.locator('.inspector-toggle').click()
+  await page.getByRole('tab', { name: '轨道', exact: true }).click()
+  await expect(inspector).toContainText('近拱点')
+  await expect(inspector).toContainText('远拱点')
+  await expect(inspector).toContainText('并非真实尺寸')
+  await expect(inspector).toContainText('J2000 黄道坐标')
 })
 
 test('keeps every moon-system preset in a bounded local 3D frame', async ({ page }) => {
