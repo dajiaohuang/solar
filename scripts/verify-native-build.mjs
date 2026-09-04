@@ -1,5 +1,7 @@
 import { readFile, readdir, stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import { ephemerisProfile } from '../src/data/ephemerisProfile.ts'
+import { verifyEphemerisAssets } from './lib/verify-ephemeris-assets.mjs'
 
 const dist = resolve('dist')
 const index = await readFile(join(dist, 'index.html'), 'utf8')
@@ -35,10 +37,10 @@ async function directoryBytes(path) {
 }
 
 const bytes = await directoryBytes(dist)
-const ephemerisManifest = JSON.parse(await readFile('src/data/ephemeris-manifest.json', 'utf8'))
-const ephemerisBytes = await directoryBytes(join(dist, 'data', 'ephemerides'))
-if (ephemerisBytes !== ephemerisManifest.files.reduce((sum, file) => sum + file.bytes, 0)) throw new Error('Native ephemeris package differs from pinned manifest')
-if (ephemerisBytes > 512 * 1024 * 1024) throw new Error(`Native ephemeris pack exceeds 512 MiB: ${ephemerisBytes}`)
+const buildInfo = JSON.parse(await readFile(join(dist, 'build-info.json'), 'utf8'))
+const profile = ephemerisProfile('native', buildInfo.ephemerisProfile)
+const ephemerisManifest = JSON.parse(await readFile(`src/data/ephemeris-manifest${profile === 'full' ? '-full' : ''}.json`, 'utf8'))
+const ephemerisBytes = await verifyEphemerisAssets(join(dist, 'data', 'ephemerides'), ephemerisManifest.files)
 const shellBytes = bytes - ephemerisBytes
 if (shellBytes > 25 * 1024 * 1024) throw new Error(`Native shell is unexpectedly large: ${shellBytes} bytes`)
 process.stdout.write(`Verified native shell: ${javascript.length} JavaScript assets, ${shellBytes} shell bytes + ${ephemerisBytes} pinned SPK bytes\n`)

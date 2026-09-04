@@ -1,5 +1,7 @@
 # Solar Atlas
 
+> **Development direction:** three independent Web, Android and iOS frontend projects sharing one backend. GitHub Pages will use the same Web frontend with curated core features enabled; full-only entries remain visible with an explanation and an invitation to use the full version. The current release is still client-side Web plus Capacitor shells; this migration is not complete. See [product direction and acceptance criteria](./docs/product-direction.md).
+
 **A browser-native Solar System dynamics and small-body atlas with reproducible scenes, traceable data, and explicit model boundaries.**
 
 [![Production deployment](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml) [![Android and iOS](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml/badge.svg?branch=main)](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml)
@@ -36,7 +38,9 @@ The default deck loads only the curated major-body model and does **not** downlo
 
 ## Built-in scene presets
 
-Solar Atlas currently ships nineteen one-click presets, including six expanded planet-centered moon systems and a 16-large-asteroid scene. Every preset defines an epoch, reference frame, focus set, view, zoom, and trajectory window; dataset-backed presets additionally pin a complete dataset/sample/filter tuple.
+Solar Atlas currently ships thirty one-click presets, including seventeen groups covering the satellite identity catalog around sixteen parent bodies, and a 16-large-asteroid scene. Every preset defines an epoch, reference frame, focus set, view, zoom, and trajectory window; dataset-backed presets additionally pin a complete dataset/sample/filter tuple.
+
+The frozen satellite catalog contains 472 identities (460 discovery-list entries, one additional planetary-satellite source identity and eleven TNO companions), in addition to Earth's Moon. Of these, 471 have corroborated SPK target numbers; S/2009 S1 remains unmatched. Catalog inclusion does **not** promise a position, a physical radius, or formal discovery confirmation. New entries have no invented fallback ellipse. Missing positions and incomplete historical trails are reported separately; an unavailable reference suppresses the frame. Saturn's 293 catalog identities are split into two preset groups to respect the 160-object 3D focus limit. See the [replayable satellite evidence workflow](./scripts/reference/SATELLITE-SURVEY.md).
 
 | Preset | Reference and epoch | Default view | What it shows and what it does not claim |
 | --- | --- | --- | --- |
@@ -55,7 +59,7 @@ Solar Atlas currently ships nineteen one-click presets, including six expanded p
 
 The list is intentionally extensible. New presets should remain one-click, bilingual, URL-replayable, honest about sample versus complete data, and explicit about the model used for every included body.
 
-Close moon systems use a scene-sized 3D camera fit, clipping range and schematic marker scale, including portrait resizing. Positions remain in AU; enlarged body markers and rings are **not physical sizes**. The six expanded moon presets use shorter windows based on the fastest included seed period (at least about 24 points per revolution with the default 180 samples). Slower moons may show partial arcs. Manually choosing a long window or fewer samples can still undersample fast orbits; a trail is a sampled history, not a fitted closed ellipse.
+Close moon systems use a scene-sized 3D camera fit, clipping range and schematic marker scale, including portrait resizing. Positions remain in AU; enlarged body markers and rings are **not physical sizes**. Expanded moon presets use shorter windows based on the fastest existing seed period (at least about 24 points per revolution for those seed orbits with the default 180 samples). This sampling bound does not establish periods for newly cataloged bodies without seed elements. Slower moons may show partial arcs. Manually choosing a long window or fewer samples can still undersample fast orbits; a trail is a sampled history, not a fitted closed ellipse.
 
 The inspector and hover readouts use kilometers below 0.01 AU and hours for periods shorter than one day. Moon orbit extrema are labelled **periapsis/apoapsis**, relative to their parent; inclinations use the J2000 ecliptic, not the planet's equator. Display digits are formatting, not an uncertainty estimate. Direct SPK Earth-center positions are distinguished from the retained EMB-derived fallback.
 
@@ -120,7 +124,7 @@ These are bounded policies, not RAM-based performance promises. A device with 12
 | Capability | Model and scope |
 | --- | --- |
 | Major planets | JPL Table 1 fitted Keplerian elements and secular rates in the mean ecliptic/equinox of J2000, valid for 1800–2050. The Earth entry seeds the internal Earth–Moon barycenter; the rendered Earth point is a derived geocenter. Out-of-range dates show an extrapolation warning. SPK-backed states use UTC→TT→TDB (NAIF leap table from 1972; future dates are explicitly uncertain); the approximate fallback retains its numeric-JD contract |
-| SPK ephemerides | Original NAIF/JPL SPK type 2/3/21 records, evaluated as geometric body-center states through ECLIPJ2000 center chains. `de440s`: 2000–2051; existing satellite/asteroid kernels: 2020–2031; Eris/Haumea primary centers: 2020-01-01–2030-01-02 TDB. No refitting, resampling, extrapolation or repeated force corrections |
+| SPK ephemerides | Original NAIF/JPL SPK type 2/3/17/21 records, geometric body-center states through source-specific ECLIPJ2000 center chains. `de440s`: 2000–2051; full satellite/asteroid kernels: 2020–2031; large Pages satellite files: 2026–2027; Eris/Haumea primary centers and their moons end at 2030-01-02 TDB. No refitting, resampling, extrapolation or repeated force corrections |
 | Moons and dwarfs | The Moon and fixed-ellipse satellite entries remain auditable fallback approximations when SPK coverage is unavailable; they are not continuous ephemerides. Earth and Moon centers are partitioned around the EMB seed using checksum-pinned [NAIF/JPL DE440 gravitational parameters](https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc). Dwarf planets use rounded `curated-approx` elements |
 | MPCORB and SBDB bodies | Elliptic (`0 ≤ e < 1`, `a > 0`) osculating elements only; parabolic and hyperbolic records are rejected explicitly |
 | Moon phase | Sun–Earth–Moon phase angle plus signed geocentric elongation |
@@ -145,7 +149,9 @@ Primary sources:
 
 ### Physical ephemeris coverage and observation boundary
 
-The physical-ephemeris bundle contains 61 SHA-256-pinned files (127,644,672 bytes, about 121.7 MiB), loaded on demand. It resolves 65 selectable body centers at the modern test epoch, including Eris and Haumea with their published system-to-primary offsets; their files stop at 2030-01-02 TDB and are not loaded for unrelated scenes. Makemake remains an explicit approximate fallback: testing its Horizons solution does not establish a resolved primary center. The registry also includes 31 added moons and 15 added asteroids. This is not universal coverage. Ordinary `npm run build` does not fetch kernels or contact the network. Web/native builds include exactly the manifest files; native SPK assets are available offline. Catalog and live SBDB requests retain their online boundary. Use `npm run data:ephemerides` to regenerate, or set `SOLAR_EPHEMERIS_FROM` / `SOLAR_EPHEMERIS_TO` for source-supported local/native intervals; see the [physical contract](./docs/physical-ephemerides.md) and [independent type 21 validation](./docs/spk21-validation.md).
+The SHA-256-pinned, on-demand SPK pack has two profiles, each with 510 files: Pages is **258.4 MiB** (270,908,416 bytes); full/native is **1094.7 MiB** (1,147,897,856 bytes). At UTC JD 2461287.5, tests resolve **508 selectable body centers**. Full planetary-satellite additions cover 2020–2031 TDB; Pages narrows large satellite files to 2026–2027. Eight new small-body binary systems span 2020-01-01/2030-01-01 in full and 2026-07-01/2027-01-01 in Pages, retaining the same target identities. Original type 2/3/17/21 records retain explicit source-specific center dependencies. Independent CSPICE tests check 444 added source pools with 1,380 position/velocity sample pairs; numerical agreement is not physical uncertainty.
+
+This is not universal coverage: S/2009 S1 has no corroborated SPK target or state in this pack. Daphnis uses original historical SAT393 records with that publication's embedded DE431 center chain, not a current globally fitted solution. Makemake retains an approximate fallback because its Horizons solution does not establish a resolved primary center. Eris/Haumea use published primary offsets through 2030-01-02 TDB. Missing states never receive invented orbits. Ordinary builds do not fetch kernels: Web defaults to Pages, native to full; `SOLAR_ATLAS_EPHEMERIS_PROFILE=full` selects a full Web distribution. Native SPK files work offline; catalogs and live SBDB queries retain their online boundary. The legacy `data:ephemerides` command is not a full satellite refresh; see the [profile and regeneration contract](./docs/physical-ephemerides.md) and [satellite evidence workflow](./scripts/reference/SATELLITE-SURVEY.md).
 
 SPK output is geometric, center-resolved state in its declared frame. It is not an N-body client, and the app does not add a second general-relativistic or J2 correction. Focus trajectories may use SPK states while the GPU catalog cloud remains Keplerian. Geometric, reception light-time, and stellar-aberration readouts are separate; no gravitational light deflection, atmosphere, surface-observer model, or covariance is provided.
 
@@ -222,13 +228,13 @@ Useful pipeline variables:
 
 ### All-body coverage inventory
 
-The all-known-body goal is broader than the built-in registry and the elliptic MPCORB catalog. An opt-in [source inventory pipeline](./docs/all-body-inventory.md) accounts for individual JPL asteroid/comet records, planetary moons and small-body satellites, including candidates and missing/unsupported orbital data. It produces reproducible, hashed shards and a coverage-gap ledger. Inventory counts are **not** a claim that every record is already selectable, rendered or covered by physical ephemerides. Ordinary Web/Android/iOS builds do not download or bundle this developer inventory; SPK type 21, open trajectories and full runtime delivery remain follow-up work.
+The all-known-body goal is broader than the built-in registry and the elliptic MPCORB catalog. An opt-in [source inventory pipeline](./docs/all-body-inventory.md) accounts for individual JPL asteroid/comet records, planetary moons and small-body satellites, including candidates and missing/unsupported orbital data. It produces reproducible, hashed shards and a coverage-gap ledger. Inventory counts are **not** a claim that every record is already selectable, rendered or covered by physical ephemerides. Ordinary Web/Android/iOS builds do not bundle this developer inventory. Type 21 evaluation is implemented; its full target integration, open trajectories and all-body runtime delivery remain follow-up work.
 
 ## Android and iOS
 
 The repository contains Capacitor 8 local-shell projects for Android and iOS under the application ID `io.github.dajiaohuang.solaratlas`. Android supports API 24 and targets API 36; iOS requires 16.4 or later. Both use the installed local shell for the curated core experience while loading catalog data on demand over HTTPS.
 
-The v0.11.0 reference validation for [commit `e9e7897`](https://github.com/dajiaohuang/solar/commit/e9e789705711bf2946f6b423cd53e9b820a554ec) passed both native jobs on 2026-08-29 in [workflow run 33269424582](https://github.com/dajiaohuang/solar/actions/runs/33269424582):
+The v0.11.0 reference validation for [commit `e9e7897`](https://github.com/dajiaohuang/solar/commit/e9e789705711bf2946f6b432cd53e9b820a554ec) passed both native jobs on 2026-08-29 in [workflow run 33269424582](https://github.com/dajiaohuang/solar/actions/runs/33269424582):
 
 | Target | Verified CI output | Boundary |
 | --- | --- | --- |

@@ -1,5 +1,7 @@
 # Solar Atlas 移动应用
 
+> **目标架构：** Android 与 iOS 将成为独立的平台原生前端项目，与完整 Web 共用统一后端。下文的 Capacitor 实现是迁移起点，不是最终产品形态。GitHub Pages 定位为精选预览版，不再作为完整版必需的数据托管中心。详见[产品定位](./docs/product-direction.md)；此处不宣称原生重构或后端上线已经完成。
+
 Solar Atlas 已包含 Android 与 iOS 的 **Capacitor 8 本地应用壳工程**。它们是可构建的源码工程，不是已经发布的商店产品。CI 可以生成由标准一次性 debug key 签名的 Android debug APK，但本仓库不宣称已有发布签名的 APK、AAB 或 IPA，不宣称已上架 Play Store / App Store、已进入 TestFlight，也不宣称已经完成真机验证。
 
 [English](./MOBILE.md) · [隐私说明](./PRIVACY-CN.md) · [中文 README](./README-CN.md)
@@ -15,8 +17,13 @@ Solar Atlas 已包含 Android 与 iOS 的 **Capacitor 8 本地应用壳工程**�
 | iOS | 16.4 及以上 |
 | 核心体验 | 安装后，内置天体、预设、故事、Evidence 与本地应用壳可离线使用 |
 | 目录数据 | 启动时检查版本/来源元数据；样本、索引和分片按需通过 HTTPS 从 `https://dajiaohuang.github.io/solar/data/asteroids` 加载 |
-| 物理星历 | 原生构建打包相同的 61 个 SHA 固定的 SPK 文件（约 121.7 MiB），可离线使用、按需加载。Type 2/3/21 与网页共享求值器；Eris/Haumea 主星中心止于 2030-01-02 TDB，Makemake 保留近似回退。几何状态使用 1972 年起的 UTC→TT→TDB；未来闰秒不确定。 |
+| 物理星历 | 原生默认完整配置：510 个 SHA 固定的 SPK 文件（1094.7 MiB），离线可用、按需加载。网页和原生共享 type 2/3/17/21 求值与显式来源中心组合。完整包新增卫星覆盖 2020–2031 TDB；Pages 不删目标身份，但将较大卫星文件缩短为 2026–2027。测试在 UTC JD 2461287.5 解析 508 个可选中心，并非所有星体。Eris/Haumea 主星中心及其卫星止于 2030-01-02 TDB，Makemake 保留近似回退。UTC→TT→TDB 从 1972 年起可用；未来闰秒不确定。 |
 | 发布状态 | 仅提供源码和非发布验证路径；未授权、未包含发布签名与商店发布 |
+
+Quaoar/Weywot、Orcus/Vanth、Salacia/Actaea、1998 WW31/Sat1、2001 QW322/Sat1、
+Kagara/Haunu、1999 OJ4/Sat1、2003 UN284/Sat1
+八组系统在原生完整配置中保留十年原始记录（2020-01-01 至 2030-01-01 TDB）；
+Pages 的对应窗口为 2026-07-01 至 2027-01-01。新增主星和伴星均不编造回退轨道。
 
 原生构建使用相对路径本地资源，并且不会注册 Web 端 Service Worker。原生离线能力来自已安装的本地应用壳，而不是 PWA 缓存。完整 MPCORB 目录有意不打包进应用：目录样本、详情分片与实时 JPL SBDB 查询需要网络；WebView 可能保留已经取回的响应，但这不构成完整离线保证。
 

@@ -10,7 +10,7 @@ import { useCatalogPointWorker } from '../../hooks/useCatalogPointWorker'
 import { useCatalogSample } from '../../hooks/useCatalogSample'
 import { useAdaptiveRenderBudget } from '../../hooks/useAdaptiveRenderBudget'
 import { useI18n } from '../../i18n/context'
-import { createBodyPositionResolver, vector3Magnitude, subtractVector3 } from '../../lib/ephemeris'
+import { bodyPositionOrNull, createBodyPositionResolver, vector3Magnitude, subtractVector3 } from '../../lib/ephemeris'
 import { computeLagrangePoints } from '../../lib/lagrange'
 import { computeOrbitEllipses } from '../../lib/orbitEllipse'
 import { getSuggestedViewRadius } from '../../lib/referenceFrame'
@@ -27,6 +27,7 @@ import { catalogSampleErrorMessage } from '../../lib/catalogSampleProfile'
 import { isOnboardingRendererReady, ONBOARDING_RENDER_READY_EVENT } from '../../lib/onboarding'
 import { SimulationControls } from './SimulationControls'
 import { EphemerisStatus } from './EphemerisStatus'
+import { VIEW_CAPABILITIES } from '../../lib/viewCapabilities'
 
 const TrajectoryCanvas3D = lazy(async () => {
   const module = await import('../../components/TrajectoryCanvas3D')
@@ -105,7 +106,7 @@ function FrameView({
     : simulation.renderQuality === 'balanced'
       ? t('renderQualityBalanced')
       : t('renderQualityAuto')
-  const catalogOrigin = useMemo(() => createBodyPositionResolver(bodiesById, julianDay)(referenceBody.id), [bodiesById, referenceBody.id, julianDay])
+  const catalogOrigin = useMemo(() => bodyPositionOrNull(createBodyPositionResolver(bodiesById, julianDay), referenceBody.id), [bodiesById, referenceBody.id, julianDay])
   const { frame: baseFrame, progress, isComputing, error } = useTrajectoryWorker({
     bodies: selectedBodies,
     resolutionBodies,
@@ -113,22 +114,26 @@ function FrameView({
     currentJulianDay: julianDay,
     trajectoryJulianDay: trajectoryAnchor,
     historyDays: simulation.historyDays,
-    sampleCount: Math.min(simulation.sampleCount, selectedBodies.length > 80 ? 64 : 240),
+    // Inventory expansion must not silently undersample short-period moons.
+    // The focus-body limit bounds work independently of catalog cloud points.
+    sampleCount: Math.min(simulation.sampleCount, 240),
   })
-  const spacecraftFrame = useMemo(() => simulation.showSpacecraft
+  const spacecraftFrame = useMemo(() => simulation.showSpacecraft && catalogOrigin
     ? buildSpacecraftFrame(SPACECRAFT, referenceBody.id, bodiesById, julianDay)
-    : { currentPositions: [], trajectories: [] },
-  [bodiesById, julianDay, referenceBody.id, simulation.showSpacecraft])
+    : { currentPositions: [], trajectories: [], trajectoryUnavailableBodyIds: [] },
+  [bodiesById, catalogOrigin, julianDay, referenceBody.id, simulation.showSpacecraft])
   const frame = useMemo<TrajectoryFrameData>(() => ({
     currentPositions: [...baseFrame.currentPositions, ...spacecraftFrame.currentPositions],
     trajectories: [...baseFrame.trajectories, ...spacecraftFrame.trajectories],
+    trajectoryUnavailableBodyIds: [...baseFrame.trajectoryUnavailableBodyIds, ...spacecraftFrame.trajectoryUnavailableBodyIds],
     maxDistance: Math.max(baseFrame.maxDistance, ...spacecraftFrame.currentPositions.map((item) => item.distance), 0),
   }), [baseFrame, spacecraftFrame])
   useEffect(() => onFrame(frame), [frame, onFrame])
   const focusSuggested = useMemo(() => getSuggestedViewRadius(
-    selectedBodies.map((body) => body.id), referenceBody.id, bodiesById,
-  ), [bodiesById, referenceBody.id, selectedBodies])
+    selectedBodies.map((body) => body.id), referenceBody.id, bodiesById, baseFrame.maxDistance,
+  ), [bodiesById, referenceBody.id, selectedBodies, baseFrame.maxDistance])
   const catalogSuggested = useMemo(() => {
+    if (!catalogOrigin) return 0
     const count = Math.min(catalogDrawCount, Math.floor(catalogPositions.length / 2))
     let radius = 0
     for (let index = 0; index < count; index += 1) {
@@ -138,11 +143,11 @@ function FrameView({
       ))
     }
     return radius > 0 ? radius * 1.08 : 0
-  }, [catalogDrawCount, catalogOrigin.x, catalogOrigin.y, catalogPositions])
+  }, [catalogDrawCount, catalogOrigin, catalogPositions])
   const suggested = Math.max(focusSuggested, catalogSuggested)
-  const orbitEllipses = useMemo(() => simulation.showOrbits
+  const orbitEllipses = useMemo(() => VIEW_CAPABILITIES[simulation.viewMode].fullOrbits && simulation.showOrbits
     ? computeOrbitEllipses(selectedBodies.slice(0, 40), bodiesById, referenceBody.id, trajectoryAnchor)
-    : [], [bodiesById, referenceBody.id, selectedBodies, simulation.showOrbits, trajectoryAnchor])
+    : [], [bodiesById, referenceBody.id, selectedBodies, simulation.showOrbits, simulation.viewMode, trajectoryAnchor])
   const lagrangePoints = useMemo(() => {
     if (!simulation.showLagrange || referenceBody.id !== 'sun') return []
     return frame.currentPositions.filter((item) => item.body.kind === 'planet').map((item) => ({
@@ -183,10 +188,16 @@ function FrameView({
       const factor = event.deltaY < 0 ? 1.12 : 0.89
       simulationActions.patch({ zoom: Math.max(0.15, Math.min(12, simulation.zoom * factor)) })
     }}>
+      <div className="frame-overlays" onWheel={event => event.stopPropagation()}>
       <div className="frame-label"><span>{bodyDisplayName(referenceBody, language)}</span><small>{simulation.viewMode.toUpperCase()}{simulation.showCatalogCloud ? ` · ${t('catalogCloudRendered')} ${catalogDrawCount.toLocaleString()} / ${catalogSampleTotal.toLocaleString()} · ${qualityLabel} · JD ${julianDay.toFixed(3)}` : ''}</small></div>
-      {isComputing && <div className="compute-progress"><i style={{ width: `${progress * 100}%` }} /></div>}
+      <EphemerisStatus bodies={selectedBodies} references={[referenceBody]} julianDay={julianDay} historyDays={simulation.historyDays} />
       {error && <div className="canvas-error">{error}</div>}
-      {simulation.viewMode === '3d' && !render3DReady ? (
+      {catalogOrigin && baseFrame.missingBodyIds.length > 0 && <details className="canvas-error" data-testid="missing-position-notice"><summary>{t('bodyStateUnavailable')} ({baseFrame.missingBodyIds.length})</summary><p>{baseFrame.missingBodyIds.map(id => bodyDisplayName(bodiesById.get(id)!, language)).join(', ')}</p></details>}
+      {catalogOrigin && frame.trajectoryUnavailableBodyIds.length > 0 && <details className="canvas-error" data-testid="missing-trajectory-notice"><summary>{t('trajectoryCoverageUnavailable')} ({frame.trajectoryUnavailableBodyIds.length})</summary><p>{frame.trajectoryUnavailableBodyIds.map(id => bodyDisplayName(bodiesById.get(id) ?? SPACECRAFT.find(body => body.id === id)!, language)).join(', ')}</p></details>}
+      {!catalogOrigin && <div className="canvas-error" role="status">{t('referenceStateUnavailable')}</div>}
+      </div>
+      {isComputing && <div className="compute-progress"><i style={{ width: `${progress * 100}%` }} /></div>}
+      {!catalogOrigin ? null : simulation.viewMode === '3d' && !render3DReady ? (
         <SpatialPreview />
       ) : simulation.viewMode === '3d' ? (
         <Suspense fallback={<SpatialPreview />}>
@@ -290,8 +301,8 @@ export function ExplorerWorkspace() {
   const catalogFitKey = simulation.showCatalogCloud
     ? `${catalog.baseSampleKey ?? 'unloaded'}|${JSON.stringify(catalog.filters)}`
     : ''
-  const [primaryFrame, setPrimaryFrame] = useState<TrajectoryFrameData>({ currentPositions: [], trajectories: [], maxDistance: 0 })
-  const [secondaryFrame, setSecondaryFrame] = useState<TrajectoryFrameData>({ currentPositions: [], trajectories: [], maxDistance: 0 })
+  const [primaryFrame, setPrimaryFrame] = useState<TrajectoryFrameData>({ currentPositions: [], trajectories: [], trajectoryUnavailableBodyIds: [], maxDistance: 0 })
+  const [secondaryFrame, setSecondaryFrame] = useState<TrajectoryFrameData>({ currentPositions: [], trajectories: [], trajectoryUnavailableBodyIds: [], maxDistance: 0 })
   const [hovered, setHovered] = useState<{ body: CelestialBody; distance: number; x: number; y: number } | null>(null)
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const [measureA, setMeasureA] = useState('earth')
@@ -307,7 +318,8 @@ export function ExplorerWorkspace() {
   const measuredDistance = useMemo(() => {
     const resolver = createBodyPositionResolver(bodiesById, displayJulianDay)
     if (!bodiesById.has(measuredBodyA) || !bodiesById.has(measuredBodyB)) return null
-    return vector3Magnitude(subtractVector3(resolver(measuredBodyA), resolver(measuredBodyB)))
+    const a = bodyPositionOrNull(resolver, measuredBodyA), b = bodyPositionOrNull(resolver, measuredBodyB)
+    return a && b ? vector3Magnitude(subtractVector3(a, b)) : null
   }, [bodiesById, displayJulianDay, measuredBodyA, measuredBodyB])
 
   return (
@@ -315,7 +327,6 @@ export function ExplorerWorkspace() {
       <ControlDrawer bodies={allBodies} referenceOptions={allBodies.filter((body) => body.kind !== 'spacecraft')} onResetView={resetView} />
       <main className="explorer-stage">
         <SimulationControls />
-        <EphemerisStatus bodies={selectedBodies} references={[simulation.referenceId, ...(simulation.comparisonEnabled ? [simulation.comparisonReferenceId] : [])].map((id) => bodiesById.get(id)).filter((body): body is CelestialBody => Boolean(body))} julianDay={displayJulianDay} historyDays={simulation.historyDays} />
         {simulation.showCatalogCloud && catalog.sampleError && (
           <div className="error-banner catalog-cloud-error" role="alert">{catalogSampleErrorMessage(catalog.sampleError, t)}</div>
         )}

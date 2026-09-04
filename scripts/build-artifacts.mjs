@@ -6,6 +6,7 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createGzip, constants as zlibConstants } from 'node:zlib'
 import { pipeline } from 'node:stream/promises'
+import { ephemerisProfile } from '../src/data/ephemerisProfile.ts'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const CACHE_FILE = join(ROOT, '.cache', 'solar-build-info.json')
@@ -15,6 +16,7 @@ const PUBLIC = join(ROOT, 'public')
 const SITE_BASE = 'https://dajiaohuang.github.io/solar/'
 const MAX_ARTIFACT_BYTES = 700 * 1024 * 1024
 const WARN_ARTIFACT_BYTES = 600 * 1024 * 1024
+const EPHEMERIS_PROFILE = ephemerisProfile(process.env.SOLAR_ATLAS_BUILD_TARGET, process.env.SOLAR_ATLAS_EPHEMERIS_PROFILE)
 
 function readJson(path) {
   return readFile(path, 'utf8').then((text) => JSON.parse(text))
@@ -43,6 +45,7 @@ async function prepareBuildInfo() {
     buildTime: new Date().toISOString(),
     environment: process.env.SOLAR_ATLAS_BUILD_ENV ?? (process.env.GITHUB_ACTIONS ? 'github-pages' : 'local'),
     datasetVersion: candidatePointer?.activeVersion ?? pin?.version ?? null,
+    ephemerisProfile: EPHEMERIS_PROFILE,
   }
   await mkdir(dirname(CACHE_FILE), { recursive: true })
   await writeFile(CACHE_FILE, `${JSON.stringify(info, null, 2)}\n`)
@@ -68,7 +71,7 @@ function normalizedRelative(root, path) {
 }
 
 async function copyStaticPublic() {
-  const ephemerides = await readJson(join(ROOT, 'src', 'data', 'ephemeris-manifest.json'))
+  const ephemerides = await readJson(join(ROOT, 'src', 'data', `ephemeris-manifest${EPHEMERIS_PROFILE === 'full' ? '-full' : ''}.json`))
   const ephemerisPaths = new Set(ephemerides.files.map((file) => `data/ephemerides/${file.path}`))
   const files = await walkFiles(PUBLIC)
   for (const source of files) {
@@ -469,8 +472,10 @@ async function writeManifestsAndCapacity(buildInfo, dataset) {
     schemaVersion: 1,
     generatedAt: buildInfo.buildTime,
     thresholds: { warningBytes: WARN_ARTIFACT_BYTES, maximumBytes: MAX_ARTIFACT_BYTES },
-    withinBudget: totalBytes <= MAX_ARTIFACT_BYTES,
-    warning: totalBytes > WARN_ARTIFACT_BYTES,
+    ephemerisProfile: EPHEMERIS_PROFILE,
+    // Full/native coverage does not inherit a hosting platform's Pages cap.
+    withinBudget: EPHEMERIS_PROFILE === 'full' || totalBytes <= MAX_ARTIFACT_BYTES,
+    warning: EPHEMERIS_PROFILE === 'pages' && totalBytes > WARN_ARTIFACT_BYTES,
     distTotalBytes: totalBytes,
     applicationShellBytes: bytes(shellEntries),
     datasetTotalBytes: bytes(datasetEntries),

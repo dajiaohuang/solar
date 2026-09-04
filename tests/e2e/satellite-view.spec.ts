@@ -5,7 +5,7 @@ test('frames close moons at their own scale and preserves zoom, reset and portra
   page.on('pageerror', (error) => errors.push(error.message))
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=4&lang=en&speed=0')
-  await page.getByRole('button', { name: 'Load preset: Mars · 2 included moons', exact: true }).click()
+  await page.getByTestId('preset-mars-spk-moons').click()
   await page.waitForLoadState('networkidle')
   const canvas = page.getByTestId('trajectory-canvas-3d')
   await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('3/3')
@@ -59,17 +59,51 @@ test('uses useful moon orbital units and distinguishes the active Earth center',
   await expect(inspector).toContainText('J2000 黄道坐标')
 })
 
-test('keeps every moon-system preset in a bounded local 3D frame', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  await page.goto('./?v=4&lang=en&speed=0')
-  for (const name of ['Jupiter · 8 included moons', 'Saturn · 14 included moons', 'Uranus · 5 included moons', 'Neptune · 2 included moons', 'Pluto · 5 included moons', 'Earth–Moon system']) {
-    await page.getByRole('button', { name: `Load preset: ${name}`, exact: true }).click()
+// Each system has the same bounded assertions and deadline. A growing scene
+// library must not share one aggregate timeout or hide later cases after a
+// failure in an earlier system.
+// Check this matrix against the rendered inventory so future overflow groups
+// cannot silently go untested. Saturn's second group was previously omitted.
+const satellitePresetIds = ['mars-spk-moons', 'jupiter-spk-moons', 'saturn-spk-moons', 'saturn-spk-moons-2', 'uranus-spk-moons', 'neptune-spk-moons', 'pluto-spk-moons', 'eris-spk-moons', 'haumea-spk-moons', 'quaoar-spk-moons', 'orcus-spk-moons', 'salacia-spk-moons', '1998ww31-spk-moons', '2001qw322-spk-moons', 'kagara-spk-moons', '1999oj4-spk-moons', '2003un284-spk-moons', 'earth-moon']
+for (const id of satellitePresetIds) {
+  test(`keeps ${id} in a bounded local 3D frame`, async ({ page }) => {
+    test.setTimeout(120_000)
+    const errors: string[] = []
+    page.on('pageerror', error => errors.push(error.message))
+    await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+    await page.goto('./?v=4&lang=en&speed=0')
+    if (id === 'mars-spk-moons') {
+      await expect(page.getByTestId('preset-mars-spk-moons')).toBeVisible()
+      const rendered = await page.getByTestId(/^preset-.*-spk-moons(?:-\d+)?$/).evaluateAll(elements => elements.map(element => element.getAttribute('data-testid')!.slice('preset-'.length)).sort())
+      expect(rendered).toEqual(satellitePresetIds.filter(id => id !== 'earth-moon').sort())
+    }
+    // Preserve the original large-pool transition that exposed the CI failure.
+    if (id === 'saturn-spk-moons') {
+      await page.getByTestId('preset-jupiter-spk-moons').click()
+      await expect(page.getByTestId('ephemeris-status').locator('summary')).not.toContainText('Loading', { timeout: 60_000 })
+    }
+    await page.getByTestId(`preset-${id}`).click()
     await page.waitForLoadState('networkidle')
+    // A first selection now loads an entire system's split original records.
+    // Network-idle can occur between batches; wait for the application loader,
+    // then separately bound trajectory computation after all inputs arrive.
+    await expect(page.getByTestId('ephemeris-status').locator('summary')).not.toContainText('Loading', { timeout: 60_000 })
     await expect(page.locator('.compute-progress')).toHaveCount(0)
     const canvas = page.getByTestId('trajectory-canvas-3d')
     await expect(canvas).toBeVisible()
-    await expect.poll(async () => Number(await canvas.getAttribute('data-camera-distance'))).toBeLessThan(1)
+    // Irregular moons extend beyond the old close-moon scale. Test a physical
+    // radius/FOV fit, not a fixed camera distance that clips larger systems.
+    await expect.poll(async () => {
+      const radius = Number(await canvas.getAttribute('data-scene-radius'))
+      const distance = Number(await canvas.getAttribute('data-camera-distance'))
+      const box = await canvas.boundingBox()
+      if (!(radius > 0) || !box) return Infinity
+      const halfFov = Math.min(21 * Math.PI / 180, Math.atan(Math.tan(21 * Math.PI / 180) * box.width / box.height))
+      return distance * Math.sin(halfFov) / radius
+    }, { message: `${id} should fit its actual physical radius with bounded padding` }).toBeCloseTo(1.2, 1)
     await expect.poll(async () => Number(await canvas.getAttribute('data-camera-distance'))).toBeGreaterThan(0)
     await expect(page).toHaveURL(/[?&]view=3d(?:&|$)/)
-  }
-})
+    await page.screenshot({ path: test.info().outputPath(`${id}.png`), fullPage: true })
+    expect(errors).toEqual([])
+  })
+}

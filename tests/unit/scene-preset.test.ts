@@ -7,7 +7,7 @@ import { decodeUrlState, encodeUrlState } from '../../src/lib/urlState'
 
 describe('observation-deck scene presets', () => {
   it('maps every built-in preset to a deterministic, bounded scene update', () => {
-    expect(SCENE_PRESETS).toHaveLength(19)
+    expect(SCENE_PRESETS).toHaveLength(30)
     for (const preset of SCENE_PRESETS) {
       const application = buildScenePresetApplication(preset)
       expect(application.julianDay).toBe(preset.julianDay)
@@ -123,7 +123,7 @@ describe('observation-deck scene presets', () => {
   it('defines a bounded, viewport-independent main-belt catalog selection', () => {
     for (const parent of ['mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto']) {
       const preset = SCENE_PRESETS.find((item) => item.id === `${parent}-spk-moons`)!
-      expect(preset.selectedMajorBodyIds).toEqual([parent, ...majorBodies.filter((body) => body.kind === 'moon' && body.parentId === parent).map((body) => body.id)])
+      expect(preset.selectedMajorBodyIds).toEqual([parent, ...majorBodies.filter((body) => body.kind === 'moon' && body.parentId === parent).slice(0, 159).map((body) => body.id)])
       expect(preset.viewMode).toBe('3d')
     }
     const belt = SCENE_PRESETS.find((preset) => preset.id === 'mars-main-belt-jupiter')!

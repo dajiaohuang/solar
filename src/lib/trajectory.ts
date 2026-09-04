@@ -2,7 +2,8 @@ import { createBodyPositionResolver } from './ephemeris'
 import { kernelsForWindow, loadedKernelIds } from '../engine/ephemeris/kernelStore'
 import { getRelativePositions, toPlanarPoint } from './referenceFrame'
 import { vector3Magnitude } from './ephemeris'
-import type { BodyId, CelestialBody, TrajectoryFrameData, TrajectorySample, Vector2, Vector3 } from '../types'
+import { createTrajectoryAccumulator } from './trajectorySamples'
+import type { BodyId, CelestialBody, TrajectoryFrameData, TrajectorySample } from '../types'
 
 const trajectoryCache = new Map<string, TrajectorySample[]>()
 
@@ -58,11 +59,7 @@ export function buildTrajectories(params: {
     return cached
   }
 
-  const trajectories = bodies.map((body) => ({
-    body,
-    points: [] as Vector2[],
-    points3D: [] as Vector3[],
-  }))
+  const accumulator = createTrajectoryAccumulator(bodies)
 
   // One resolver per sample shares the same parent-body and reference-frame cache
   // across every focused body at that instant.
@@ -72,12 +69,10 @@ export function buildTrajectories(params: {
     const julianDay = centerJulianDay - historyDays + progress * historyDays
     const resolve = createBodyPositionResolver(bodiesById, julianDay, kernels)
     const positions = getRelativePositions(bodies, referenceId, resolve)
-    for (let bodyIndex = 0; bodyIndex < positions.length; bodyIndex += 1) {
-      trajectories[bodyIndex].points.push(toPlanarPoint(positions[bodyIndex].position))
-      trajectories[bodyIndex].points3D.push(positions[bodyIndex].position)
-    }
+    accumulator.append(positions)
   }
 
+  const trajectories = accumulator.complete(sampleCount)
   trajectoryCache.set(cacheKey, trajectories)
 
   if (trajectoryCache.size > 40) {
@@ -106,6 +101,8 @@ export function buildCurrentPositions(params: {
   }))
   return {
     currentPositions,
+    trajectoryUnavailableBodyIds: [],
+    missingBodyIds: params.bodies.filter(body => !currentPositions.some(item => item.body.id === body.id)).map(body => body.id),
     maxDistance: currentPositions.reduce((largest, item) => Math.max(largest, item.distance), 0),
   }
 }
@@ -133,9 +130,11 @@ export function buildTrajectoryFrame(params: {
     historyDays,
     sampleCount,
   })
+  const completeIds = new Set(trajectories.map((sample) => sample.body.id))
   return {
     currentPositions,
     trajectories,
+    trajectoryUnavailableBodyIds: bodies.filter((body) => !completeIds.has(body.id)).map((body) => body.id),
     maxDistance,
   }
 }

@@ -24,7 +24,9 @@ export function cameraRangeForFit(fitDistance: number, contentRadius: number) {
 /** AU coordinates stay physical; only the camera and illustrative markers scale. */
 export function sceneFramingForRadius(contentRadius: number, aspect: number, nearestRadius = contentRadius) {
   const radius = Number.isFinite(contentRadius) && contentRadius > 0 ? contentRadius : 0
-  if (radius > 0 && radius < 0.1) {
+  // Complete irregular-moon systems extend well beyond the former 0.1 AU
+  // cutoff. Keep their physical scale instead of imposing a solar-system floor.
+  if (radius > 0 && radius < 1) {
     const halfVertical = 21 * Math.PI / 180
     const halfHorizontal = Math.atan(Math.tan(halfVertical) * (Number.isFinite(aspect) && aspect > 0 ? aspect : 1))
     const distance = radius * 1.2 / Math.sin(Math.min(halfVertical, halfHorizontal))

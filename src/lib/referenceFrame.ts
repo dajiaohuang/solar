@@ -1,4 +1,4 @@
-import { subtractVector3, vector3Magnitude } from './ephemeris'
+import { bodyPositionOrNull, subtractVector3, vector3Magnitude } from './ephemeris'
 import type { BodyId, BodyPosition, CelestialBody, Vector2, Vector3 } from '../types'
 
 export function toPlanarPoint(vector: Vector3): Vector2 {
@@ -10,18 +10,20 @@ export function getRelativePositions(
   referenceId: BodyId,
   resolveBodyPosition: (bodyId: BodyId) => Vector3,
 ): BodyPosition[] {
-  const referencePosition = resolveBodyPosition(referenceId)
+  const referencePosition = bodyPositionOrNull(resolveBodyPosition, referenceId)
+  if (!referencePosition) return []
 
-  return bodies.map((body) => ({
-    body,
-    position: subtractVector3(resolveBodyPosition(body.id), referencePosition),
-  }))
+  return bodies.flatMap((body) => {
+    const position = bodyPositionOrNull(resolveBodyPosition, body.id)
+    return position ? [{ body, position: subtractVector3(position, referencePosition) }] : []
+  })
 }
 
 export function getSuggestedViewRadius(
   bodyIds: BodyId[],
   referenceId: BodyId,
   bodiesById: Map<BodyId, CelestialBody>,
+  observedReach = 0,
 ) {
   const referencePath = getReachToAncestors(referenceId, bodiesById)
 
@@ -43,7 +45,10 @@ export function getSuggestedViewRadius(
     return Math.max(largest, relativeReach ?? bodyPath.totalReach + (referencePath?.totalReach ?? 0))
   }, 0)
 
-  return (maxReach || 0.02) * 1.18
+  // SPK-only identities have no seed ellipse. Use the actual relative extent
+  // for framing, without manufacturing orbital elements from a display bound.
+  const reach = Math.max(maxReach, Number.isFinite(observedReach) ? observedReach : 0)
+  return (reach || 0.02) * 1.18
 }
 
 function getLocalOrbitReach(body: CelestialBody) {

@@ -33,8 +33,11 @@ describe('shared physical ephemeris integration', () => {
     const late = 2463000.5
     expect(kernelCoverage(body('haumea'), late).model).toBe('approximate-fallback')
   })
-  it('covers 65 actual selectable body centers, not mislabeled system barycenters', () => {
-    expect(majorBodies.filter((entry) => kernelCoverage(entry, jd).model === 'jpl-spk')).toHaveLength(65)
+  it('covers 508 actual selectable body centers and accounts for every remaining identity gap', () => {
+    expect(majorBodies.filter((entry) => kernelCoverage(entry, jd).model === 'jpl-spk')).toHaveLength(508)
+    expect(majorBodies.filter(entry => kernelCoverage(entry, jd).model !== 'jpl-spk').map(entry => entry.id).sort()).toEqual([
+      'makemake', 'sat:planet:saturn:provisional:S/2009 S1',
+    ].sort())
     expect(kernelCoverage(body('makemake'), jd).model).toBe('approximate-fallback')
     expect(bodyNaifId(body('eris'))).toBe(920136199)
     expect(bodyNaifId(body('haumea'))).toBe(920136108)
@@ -44,8 +47,9 @@ describe('shared physical ephemeris integration', () => {
     expect(mars).not.toEqual(pool.relative(4, 10))
   })
 
-  it('matches newly generated states against the actual packaged center chains', () => {
-    const pool = createKernelResolver(loadedKernels(), (seeds.epochJd - 2451545) * SECONDS_PER_DAY)
+  it('retains frozen fallback seeds against their original packaged source pool, not newly selected solutions', () => {
+    const originalSources = loadedKernels().filter(kernel => kernel.solutionKernelIds === undefined && !kernel.dependencyOnly)
+    const pool = createKernelResolver(originalSources, (seeds.epochJd - 2451545) * SECONDS_PER_DAY)
     for (const entry of seeds.bodies) {
       const parentId = bodyNaifId(body(entry.parentId))!
       const actual = pool.relative(entry.naifId, parentId)!

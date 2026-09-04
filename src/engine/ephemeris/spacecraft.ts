@@ -1,4 +1,5 @@
-import { createBodyPositionResolver, subtractVector3, vector3Magnitude } from '../../lib/ephemeris'
+import { bodyPositionOrNull, createBodyPositionResolver, subtractVector3, vector3Magnitude } from '../../lib/ephemeris'
+import { kernelsForWindow } from './kernelStore'
 import type { SpacecraftDef } from '../../data/spacecraft'
 import type { BodyId, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector3 } from '../../types'
 
@@ -23,7 +24,8 @@ export function buildSpacecraftFrame(
   julianDay: number,
 ) {
   const resolver = createBodyPositionResolver(bodiesById, julianDay)
-  const reference = resolver(referenceId)
+  const reference = bodyPositionOrNull(resolver, referenceId)
+  if (!reference) return { currentPositions: [], trajectories: [], trajectoryUnavailableBodyIds: spacecraft.map((body) => body.id) }
   const currentPositions: RenderedBodyPosition[] = spacecraft.filter((body) => julianDay >= body.trajectoryPoints[0].jd).map((body) => {
     const relative = subtractVector3(interpolate(body.trajectoryPoints, julianDay), reference)
     return {
@@ -33,14 +35,21 @@ export function buildSpacecraftFrame(
       distance: vector3Magnitude(relative),
     }
   })
-  const trajectories: TrajectorySample[] = spacecraft.map((body) => ({
-    body,
-    points: body.trajectoryPoints.map((point) => {
-      const relative = subtractVector3(point, createBodyPositionResolver(bodiesById, point.jd)(referenceId))
-      return { x: relative.x, y: relative.y }
-    }),
-    points3D: body.trajectoryPoints.map((point) =>
-      subtractVector3(point, createBodyPositionResolver(bodiesById, point.jd)(referenceId))),
-  }))
-  return { currentPositions, trajectories }
+  const trajectoryUnavailableBodyIds: BodyId[] = []
+  const trajectories: TrajectorySample[] = spacecraft.flatMap((body) => {
+    const historicalKernels = body.trajectoryPoints.length
+      ? kernelsForWindow(body.trajectoryPoints[0].jd, body.trajectoryPoints[body.trajectoryPoints.length - 1].jd)
+      : []
+    const points3D = body.trajectoryPoints.map((point) => {
+      const historicalReference = bodyPositionOrNull(createBodyPositionResolver(bodiesById, point.jd, historicalKernels), referenceId)
+      return historicalReference ? subtractVector3(point, historicalReference) : null
+    })
+    if (points3D.some((point): point is null => point === null)) {
+      trajectoryUnavailableBodyIds.push(body.id)
+      return []
+    }
+    const completePoints = points3D as Vector3[]
+    return [{ body, points3D: completePoints, points: completePoints.map((point) => ({ x: point.x, y: point.y })) }]
+  })
+  return { currentPositions, trajectories, trajectoryUnavailableBodyIds }
 }

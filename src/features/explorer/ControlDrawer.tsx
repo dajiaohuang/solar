@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { fetchSbdbBody } from '../../data/loaders/sbdb'
 import { SCENE_PRESETS } from '../../data/presets'
+import { satelliteSearchTerms } from '../../data/satelliteIdentities'
 import { useSimulationClock } from '../../engine/clock/useSimulationClock'
 import { useI18n } from '../../i18n/context'
 import { bodyDisplayName } from '../../lib/bodyNames'
@@ -51,7 +52,7 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
   const filteredBodies = useMemo(() => {
     const query = bodyQuery.trim().toLocaleLowerCase()
     if (!query) return sortedBodies
-    return sortedBodies.filter((body) => [bodyDisplayName(body, language), body.name, body.id, body.kind, body.orbitClassCode]
+    return sortedBodies.filter((body) => [bodyDisplayName(body, language), body.name, body.id, body.kind, body.orbitClassCode, satelliteSearchTerms(body)]
       .filter(Boolean)
       .some((value) => String(value).toLocaleLowerCase().includes(query)))
   }, [bodyQuery, language, sortedBodies])
@@ -128,6 +129,7 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
             return <button
               type="button"
               className={preset.id === selectedPresetId ? 'active' : ''}
+              data-testid={`preset-${preset.id}`}
               aria-pressed={preset.id === selectedPresetId}
               aria-label={`${t('applyPreset')}: ${preset.name[language]}`}
               key={preset.id}

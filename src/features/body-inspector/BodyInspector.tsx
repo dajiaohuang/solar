@@ -8,10 +8,11 @@ import { kernelCoverage, EPHEMERIS_MANIFEST } from '../../engine/ephemeris/kerne
 import { useEphemerides } from '../../hooks/useEphemerides'
 import { currentOsculatingElements } from '../../engine/ephemeris/diagnostics'
 import { ObservationReadout } from './ObservationReadout'
+import { SatelliteIdentityReadout } from './SatelliteIdentityReadout'
 import { simulationStore } from '../../state/simulation-store'
 import { useI18n } from '../../i18n/context'
 import { bodyDisplayName } from '../../lib/bodyNames'
-import { createBodyPositionResolver, getInstantaneousElements } from '../../lib/ephemeris'
+import { bodyPositionOrNull, createBodyPositionResolver, getInstantaneousElements } from '../../lib/ephemeris'
 import { formatDistanceAU, formatPeriodDays } from '../../lib/formatDistance'
 import { getOrbitalPeriodDays } from '../../lib/orbitalPeriod'
 import { encodeCurrentScene } from '../../lib/shareScene'
@@ -35,10 +36,11 @@ export function BodyInspector({ body, currentPositions, bodiesById }: Props) {
   const [tab, setTab] = useState<Tab>('overview')
   const details = useMemo(() => {
     void ephemerides.revision // The external kernel pool can change while paused.
-    if (!body?.orbit) return null
+    if (!body) return null
     const parent = bodiesById.get(body.parentId ?? 'sun')
     const osculating = parent ? currentOsculatingElements(body, parent, clock.julianDay) : null
-    const elements = osculating ?? getInstantaneousElements(body.orbit, clock.julianDay)
+    const elements = osculating ?? (body.orbit ? getInstantaneousElements(body.orbit, clock.julianDay) : null)
+    if (!elements) return null
     const physical = BODY_PHYSICAL[body.id]
     const parentPhysical = BODY_PHYSICAL[body.parentId ?? 'sun']
     return {
@@ -47,7 +49,7 @@ export function BodyInspector({ body, currentPositions, bodiesById }: Props) {
       perihelionAU: elements.semiMajorAxisAU * (1 - elements.eccentricity),
       aphelionAU: elements.semiMajorAxisAU * (1 + elements.eccentricity),
       periodDays: osculating ? 360 / osculating.meanMotionDegPerDay : getOrbitalPeriodDays(
-        body.orbit,
+        body.orbit!,
         body.parentId ? 'parent' : 'sun',
         elements.semiMajorAxisAU,
       ),
@@ -57,7 +59,10 @@ export function BodyInspector({ body, currentPositions, bodiesById }: Props) {
   const moonPhase = useMemo(() => {
     if (body?.id !== 'moon') return null
     const resolve = createBodyPositionResolver(bodiesById, clock.julianDay)
-    return computeMoonPhase(resolve('sun'), resolve('earth'), resolve('moon'))
+    const sun = bodyPositionOrNull(resolve, 'sun')
+    const earth = bodyPositionOrNull(resolve, 'earth')
+    const moon = bodyPositionOrNull(resolve, 'moon')
+    return sun && earth && moon ? computeMoonPhase(sun, earth, moon) : null
   }, [bodiesById, body?.id, clock.julianDay])
   const position = body ? currentPositions.find((item) => item.body.id === body.id) : null
   const physical = body ? BODY_PHYSICAL[body.id] : null
@@ -113,6 +118,8 @@ export function BodyInspector({ body, currentPositions, bodiesById }: Props) {
     {!body || !profile || !kindLabels ? <p className="muted-copy">{t('noBody')}</p> : <>
       <header className="inspector-header"><i style={{ background: body.color }} /><div><h2>{bodyDisplayName(body, language)}</h2><p>{body.orbitClassName ?? kindLabels[body.kind]}</p></div></header>
       <p className="fine-print" data-testid="body-model">{modelDescription}</p>
+      <SatelliteIdentityReadout body={body} />
+      {tab === 'sources' && <SatelliteIdentityReadout body={body} sources />}
       {viewMode === '3d' && <p className="fine-print">{t('schematicMarkerScale')}</p>}
       {hasEphemeris && <p className="fine-print">{t('ephemerisBoundary')}</p>}
       {tab === 'orbit' && <p className="fine-print">{t(details?.isOsculating ? 'osculatingElements' : 'seedElementsOnly')}</p>}

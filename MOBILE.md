@@ -1,5 +1,7 @@
 # Solar Atlas mobile applications
 
+> **Target architecture:** Android and iOS will become independent platform-native frontend projects consuming the same backend as full Web. The Capacitor implementation documented below is the migration baseline, not the final product shape. GitHub Pages becomes a curated preview, not the required full-product data host. See [product direction](./docs/product-direction.md); no native rewrite or backend rollout is claimed complete here.
+
 Solar Atlas includes **Capacitor 8 local-shell projects** for Android and iOS. They are buildable source projects, not published store products. CI may produce an Android debug APK signed with the standard disposable debug key, but the repository does not claim a release-signed APK, AAB, or IPA, a Play Store or App Store listing, TestFlight distribution, or completed real-device validation.
 
 [中文说明](./MOBILE-CN.md) · [Privacy](./PRIVACY.md) · [Main README](./README.md)
@@ -15,8 +17,14 @@ Solar Atlas includes **Capacitor 8 local-shell projects** for Android and iOS. T
 | iOS | 16.4 or later |
 | Core experience | Curated bodies, presets, stories, Evidence, and the local application shell remain available offline after installation |
 | Catalog data | Version/provenance metadata is checked at startup; samples, indexes, and shards load on demand over HTTPS from `https://dajiaohuang.github.io/solar/data/asteroids` |
-| Physical ephemerides | Native builds include the same 61 SHA-pinned SPK files (~121.7 MiB), usable offline and loaded on demand. Type 2/3/21 shares the web evaluator; Eris/Haumea primary centers end at 2030-01-02 TDB, and Makemake retains its approximate fallback. Geometric states use UTC→TT→TDB from 1972 onward; future leap seconds are uncertain. |
+| Physical ephemerides | Native defaults to the full profile: 510 SHA-pinned SPK files (1094.7 MiB), offline and loaded on demand. Web and native share type 2/3/17/21 evaluation and explicit source-specific center pools. Full satellite additions span 2020–2031 TDB; Pages shortens large satellite files to 2026–2027 without dropping target identities. Tests resolve 508 selectable centers at UTC JD 2461287.5, not all bodies. Eris/Haumea primary centers and their moons end at 2030-01-02 TDB; Makemake retains an approximate fallback. UTC→TT→TDB is supported from 1972; future leap seconds are uncertain. |
 | Release status | Source and non-release validation paths only; release signing and store publication are not authorized or included |
+
+Quaoar/Weywot, Orcus/Vanth, Salacia/Actaea, 1998 WW31/Sat1, 2001 QW322/Sat1,
+Kagara/Haunu, 1999 OJ4/Sat1 and 2003 UN284/Sat1
+retain ten-year original system files (2020-01-01/2030-01-01 TDB) in the native
+full profile. Pages uses 2026-07-01/2027-01-01 for these eight systems. Neither
+profile invents a fallback for these new primaries or companions.
 
 The native build uses relative local assets and does not register the web Service Worker. Offline native operation therefore comes from the installed local shell, not from the PWA cache. The full MPCORB catalog is intentionally not bundled: catalog samples, detail shards, and live JPL SBDB lookups require a network connection unless a previously fetched response remains in the WebView cache.
 
