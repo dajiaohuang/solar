@@ -1,6 +1,68 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-04T11:42:03.736Z",
+  "generatedAt": "2026-09-04T12:04:36.366Z",
+  "primaries": [
+    {
+      "id": "quaoar",
+      "naifId": 920050000,
+      "systemNaifId": 20050000,
+      "name": "Quaoar",
+      "designation": "50000",
+      "inventoryId": "sb:asteroid:50000",
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20050000_jpl043_20220908.bsp",
+      "sourceSha256": "38631343d3cdd89a51e152d85b6d2b21d9c0e65eeb91b93190d6de6624857a82",
+      "sourceEphemeris": "tnosat_v001_20050000_jpl043_20220908",
+      "meaning": "Named primary from original component offsets, not its system barycenter; no invented orbit or physical properties."
+    },
+    {
+      "id": "orcus",
+      "naifId": 920090482,
+      "systemNaifId": 20090482,
+      "name": "Orcus",
+      "designation": "90482",
+      "inventoryId": "sb:asteroid:90482",
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20090482_jpl043_20220908.bsp",
+      "sourceSha256": "013513ee679cc6867e4ab78fa039f1f5178ba3a2d5f13a9ad084255a99960373",
+      "sourceEphemeris": "tnosat_v001_20090482_jpl043_20220908",
+      "meaning": "Named primary from original component offsets, not its system barycenter; no invented orbit or physical properties."
+    },
+    {
+      "id": "salacia",
+      "naifId": 920120347,
+      "systemNaifId": 20120347,
+      "name": "Salacia",
+      "designation": "120347",
+      "inventoryId": "sb:asteroid:120347",
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20120347_jpl025_20220908.bsp",
+      "sourceSha256": "39a712760ed44f2e4805ece53764248e01b1a7910bfe8ac8d4d15f99bebccb1d",
+      "sourceEphemeris": "tnosat_v001_20120347_jpl025_20220908",
+      "meaning": "Named primary from original component offsets, not its system barycenter; no invented orbit or physical properties."
+    },
+    {
+      "id": "1998ww31",
+      "naifId": 953031823,
+      "systemNaifId": 53031823,
+      "name": "1998 WW31",
+      "designation": "1998 WW31",
+      "inventoryId": "sb:asteroid:1998 WW31",
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_53031823_jpl010_20220908.bsp",
+      "sourceSha256": "8057e72ca98ab869a65347e6d3e3e0ad2f41990804f8c016f69f0cc20d4c24a8",
+      "sourceEphemeris": "tnosat_v001_53031823_jpl010_20220908",
+      "meaning": "Named primary from original component offsets, not its system barycenter; no invented orbit or physical properties."
+    },
+    {
+      "id": "2001qw322",
+      "naifId": 953092511,
+      "systemNaifId": 53092511,
+      "name": "2001 QW322",
+      "designation": "2001 QW322",
+      "inventoryId": "sb:asteroid:2001 QW322",
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_53092511_jpl005_20220908.bsp",
+      "sourceSha256": "6864d723ebe662e772aea8f9238a8c9eb31ea958d58358bcb516c32b916d0392",
+      "sourceEphemeris": "tnosat_v001_53092511_jpl005_20220908",
+      "meaning": "Named primary from original component offsets, not its system barycenter; no invented orbit or physical properties."
+    }
+  ],
   "contract": "Auditable satellite identities; no generated orbit, GM, phase, physical radius or claim of available ephemeris states.",
   "source": {
     "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
@@ -11619,6 +11681,136 @@
           "parentNaifId": 920136108,
           "systemNaifId": 20136108,
           "ephemeris": "tnosat_v001b_20136108_jpl110_20221014",
+          "evidence": "original-comment-name-number-and-system-primary-descriptors"
+        }
+      ]
+    },
+    {
+      "id": "naif:120050000",
+      "naifId": 120050000,
+      "name": "Weywot",
+      "parentId": "quaoar",
+      "aliases": [],
+      "identityStatus": "source-identified-not-in-discovery-snapshot",
+      "identityResolution": "original-comment-name-number-and-system-primary-descriptors",
+      "sourceEphemerides": [
+        "tnosat_v001_20050000_jpl043_20220908"
+      ],
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20050000_jpl043_20220908.bsp",
+      "sourceSha256": "38631343d3cdd89a51e152d85b6d2b21d9c0e65eeb91b93190d6de6624857a82",
+      "primaryNaifId": 920050000,
+      "systemNaifId": 20050000,
+      "provenance": "Published component relative to its system barycenter; named parent uses the distinct original primary offset. Source GM is not asserted measured mass.",
+      "sourceClaims": [
+        {
+          "name": "Weywot",
+          "parentNaifId": 920050000,
+          "systemNaifId": 20050000,
+          "ephemeris": "tnosat_v001_20050000_jpl043_20220908",
+          "evidence": "original-comment-name-number-and-system-primary-descriptors"
+        }
+      ]
+    },
+    {
+      "id": "naif:120090482",
+      "naifId": 120090482,
+      "name": "Vanth",
+      "parentId": "orcus",
+      "aliases": [],
+      "identityStatus": "source-identified-not-in-discovery-snapshot",
+      "identityResolution": "original-comment-name-number-and-system-primary-descriptors",
+      "sourceEphemerides": [
+        "tnosat_v001_20090482_jpl043_20220908"
+      ],
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20090482_jpl043_20220908.bsp",
+      "sourceSha256": "013513ee679cc6867e4ab78fa039f1f5178ba3a2d5f13a9ad084255a99960373",
+      "primaryNaifId": 920090482,
+      "systemNaifId": 20090482,
+      "provenance": "Published component relative to its system barycenter; named parent uses the distinct original primary offset. Source GM is not asserted measured mass.",
+      "sourceClaims": [
+        {
+          "name": "Vanth",
+          "parentNaifId": 920090482,
+          "systemNaifId": 20090482,
+          "ephemeris": "tnosat_v001_20090482_jpl043_20220908",
+          "evidence": "original-comment-name-number-and-system-primary-descriptors"
+        }
+      ]
+    },
+    {
+      "id": "naif:120120347",
+      "naifId": 120120347,
+      "name": "Actaea",
+      "parentId": "salacia",
+      "aliases": [],
+      "identityStatus": "source-identified-not-in-discovery-snapshot",
+      "identityResolution": "original-comment-name-number-and-system-primary-descriptors",
+      "sourceEphemerides": [
+        "tnosat_v001_20120347_jpl025_20220908"
+      ],
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20120347_jpl025_20220908.bsp",
+      "sourceSha256": "39a712760ed44f2e4805ece53764248e01b1a7910bfe8ac8d4d15f99bebccb1d",
+      "primaryNaifId": 920120347,
+      "systemNaifId": 20120347,
+      "provenance": "Published component relative to its system barycenter; named parent uses the distinct original primary offset. Source GM is not asserted measured mass.",
+      "sourceClaims": [
+        {
+          "name": "Actaea",
+          "parentNaifId": 920120347,
+          "systemNaifId": 20120347,
+          "ephemeris": "tnosat_v001_20120347_jpl025_20220908",
+          "evidence": "original-comment-name-number-and-system-primary-descriptors"
+        }
+      ]
+    },
+    {
+      "id": "naif:153031823",
+      "naifId": 153031823,
+      "name": "1998 WW31 · Sat1",
+      "parentId": "1998ww31",
+      "aliases": [],
+      "identityStatus": "source-identified-not-in-discovery-snapshot",
+      "identityResolution": "original-comment-name-number-and-system-primary-descriptors",
+      "sourceEphemerides": [
+        "tnosat_v001_53031823_jpl010_20220908"
+      ],
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_53031823_jpl010_20220908.bsp",
+      "sourceSha256": "8057e72ca98ab869a65347e6d3e3e0ad2f41990804f8c016f69f0cc20d4c24a8",
+      "primaryNaifId": 953031823,
+      "systemNaifId": 53031823,
+      "provenance": "Published component relative to its system barycenter; named parent uses the distinct original primary offset. Source GM is not asserted measured mass.",
+      "sourceClaims": [
+        {
+          "name": "Sat1",
+          "parentNaifId": 953031823,
+          "systemNaifId": 53031823,
+          "ephemeris": "tnosat_v001_53031823_jpl010_20220908",
+          "evidence": "original-comment-name-number-and-system-primary-descriptors"
+        }
+      ]
+    },
+    {
+      "id": "naif:153092511",
+      "naifId": 153092511,
+      "name": "2001 QW322 · Sat1",
+      "parentId": "2001qw322",
+      "aliases": [],
+      "identityStatus": "source-identified-not-in-discovery-snapshot",
+      "identityResolution": "original-comment-name-number-and-system-primary-descriptors",
+      "sourceEphemerides": [
+        "tnosat_v001_53092511_jpl005_20220908"
+      ],
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_53092511_jpl005_20220908.bsp",
+      "sourceSha256": "6864d723ebe662e772aea8f9238a8c9eb31ea958d58358bcb516c32b916d0392",
+      "primaryNaifId": 953092511,
+      "systemNaifId": 53092511,
+      "provenance": "Published component relative to its system barycenter; named parent uses the distinct original primary offset. Source GM is not asserted measured mass.",
+      "sourceClaims": [
+        {
+          "name": "Sat1",
+          "parentNaifId": 953092511,
+          "systemNaifId": 53092511,
+          "ephemeris": "tnosat_v001_53092511_jpl005_20220908",
           "evidence": "original-comment-name-number-and-system-primary-descriptors"
         }
       ]

@@ -15,8 +15,13 @@ Solar Atlas includes **Capacitor 8 local-shell projects** for Android and iOS. T
 | iOS | 16.4 or later |
 | Core experience | Curated bodies, presets, stories, Evidence, and the local application shell remain available offline after installation |
 | Catalog data | Version/provenance metadata is checked at startup; samples, indexes, and shards load on demand over HTTPS from `https://dajiaohuang.github.io/solar/data/asteroids` |
-| Physical ephemerides | Native defaults to the full profile: 502 SHA-pinned SPK files (647.4 MiB), offline and loaded on demand. Web and native share type 2/3/17/21 evaluation and explicit source-specific center pools. Full satellite additions span 2020–2031 TDB; Pages shortens large satellite files to 2026–2027 without dropping target identities. Tests resolve 492 selectable centers at UTC JD 2461287.5, not all bodies. Eris/Haumea primary centers and their moons end at 2030-01-02 TDB; Makemake retains an approximate fallback. UTC→TT→TDB is supported from 1972; future leap seconds are uncertain. |
+| Physical ephemerides | Native defaults to the full profile: 507 SHA-pinned SPK files (927.0 MiB), offline and loaded on demand. Web and native share type 2/3/17/21 evaluation and explicit source-specific center pools. Full satellite additions span 2020–2031 TDB; Pages shortens large satellite files to 2026–2027 without dropping target identities. Tests resolve 502 selectable centers at UTC JD 2461287.5, not all bodies. Eris/Haumea primary centers and their moons end at 2030-01-02 TDB; Makemake retains an approximate fallback. UTC→TT→TDB is supported from 1972; future leap seconds are uncertain. |
 | Release status | Source and non-release validation paths only; release signing and store publication are not authorized or included |
+
+Quaoar/Weywot, Orcus/Vanth, Salacia/Actaea, 1998 WW31/Sat1 and 2001 QW322/Sat1
+retain ten-year original system files (2020-01-01/2030-01-01 TDB) in the native
+full profile. Pages uses 2026-07-01/2027-01-01 for these five systems. Neither
+profile invents a fallback for these new primaries or companions.
 
 The native build uses relative local assets and does not register the web Service Worker. Offline native operation therefore comes from the installed local shell, not from the PWA cache. The full MPCORB catalog is intentionally not bundled: catalog samples, detail shards, and live JPL SBDB lookups require a network connection unless a previously fetched response remains in the WebView cache.
 

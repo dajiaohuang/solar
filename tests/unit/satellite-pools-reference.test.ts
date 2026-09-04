@@ -6,6 +6,7 @@ import { createKernelResolver, toEcliptic, type LoadedKernel } from '../../src/e
 import { ephemerisProfile } from '../../src/data/ephemerisProfile'
 import type { KernelFile } from '../../src/engine/ephemeris/kernelStore'
 import fixture from '../fixtures/satellite-pools-cspice.json'
+import { SMALL_BODY_PRIMARIES, SATELLITE_IDENTITIES } from '../../src/data/satelliteIdentities'
 
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex')
 const manifestBytes = readFileSync('src/data/ephemeris-manifest-full.json')
@@ -14,6 +15,34 @@ const pages = JSON.parse(readFileSync('src/data/ephemeris-manifest.json', 'utf8'
 const byId = new Map(full.files.map(file => [file.id, file]))
 
 describe('integrated satellite source pools and delivery profiles', () => {
+  it('keeps each new binary in one original source with distinct primary and component identities', () => {
+    const load = (entry: KernelFile): LoadedKernel => {
+      const bytes = readFileSync(`public/data/ephemerides/${entry.path}`)
+      expect(digest(bytes)).toBe(entry.sha256)
+      return { ...entry, kernel: new SpkKernel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)) }
+    }
+    const core = load(full.files.find(file => file.id.startsWith('de440s-'))!)
+    for (const primary of SMALL_BODY_PRIMARIES) {
+      const companion = SATELLITE_IDENTITIES.find(moon => moon.parentId === primary.id)!
+      const long = full.files.find(file => file.id === `system-${primary.id}-2020-2030`)!
+      const short = pages.files.find(file => file.id === `system-${primary.id}-2026-07-01-2027-01-01`)!
+      expect(long.source).toBe(primary.sourceUrl)
+      expect(companion.sourceEphemerides).toEqual([primary.sourceEphemeris])
+      expect([...long.targets].sort((a, b) => a - b)).toEqual([primary.naifId, primary.systemNaifId, companion.naifId!].sort((a, b) => a - b))
+      expect([long.startEt, long.endEt]).toEqual([631108800, 946728000])
+      expect([short.startEt, short.endEt]).toEqual([836136000, 852033600])
+      const original = load(long), narrowed = load(short)
+      for (const et of [short.startEt, (short.startEt + short.endEt) / 2, short.endEt]) {
+        for (const target of long.targets) expect(narrowed.kernel.evaluate(target, et)).toEqual(original.kernel.evaluate(target, et))
+        const resolver = createKernelResolver([core, narrowed], et)
+        expect(resolver.relative(companion.naifId!, primary.naifId)).not.toBeNull()
+        expect(createKernelResolver([narrowed], et).barycentric(primary.naifId)).toBeNull()
+      }
+      expect(narrowed.kernel.evaluate(primary.naifId, short.startEt - 1)).toBeNull()
+      expect(narrowed.kernel.evaluate(companion.naifId!, short.endEt + 1)).toBeNull()
+      expect(original.kernel.evaluate(primary.naifId, short.startEt - 1)).not.toBeNull()
+    }
+  })
   it('subtracts the same publication primary offset for TNO moons instead of treating the system as the primary', () => {
     for (const [target, primary, system] of [[120136199, 920136199, 20136199], [120136108, 920136108, 20136108], [220136108, 920136108, 20136108]]) {
       const file = full.files.find(file => file.targets.includes(target))!
@@ -84,8 +113,8 @@ describe('integrated satellite source pools and delivery profiles', () => {
     expect(digest(readFileSync('scripts/reference/spk-pool-oracle.c'))).toBe(fixture.oracleSourceSha256)
     expect(digest(manifestBytes)).toBe(fixture.manifestSha256)
     expect(fixture.contexts.map(context => context.rootId)).toEqual(full.files.filter(file => file.solutionKernelIds && !file.dependencyOnly).map(file => file.id))
-    expect(fixture.contexts).toHaveLength(436)
-    expect(fixture.samples).toHaveLength(1308)
+    expect(fixture.contexts).toHaveLength(441)
+    expect(fixture.samples).toHaveLength(1353)
     for (const context of fixture.contexts) {
       const root = byId.get(context.rootId)!
       expect(context.files.map(file => file.id)).toEqual([...root.solutionKernelIds!, root.id])
@@ -109,7 +138,9 @@ describe('integrated satellite source pools and delivery profiles', () => {
         return loaded
       })
       const samples = fixture.samples.filter(sample => sample.context === index)
-      expect(samples).toHaveLength(3)
+      const root = byId.get(context.rootId)!
+      expect(samples).toHaveLength(3 * root.targets.length)
+      for (const target of root.targets) expect(samples.filter(sample => sample.target === target).map(sample => sample.et)).toEqual([root.startEt, (root.startEt + root.endEt) / 2, root.endEt])
       for (const sample of samples) {
         const resolver = createKernelResolver(pool, sample.et)
         for (const [label, actual] of [ ['heliocentric', resolver.relative(sample.target, 10)], ['barycentric', resolver.barycentric(sample.target)] ] as const) {
@@ -147,8 +178,8 @@ describe('integrated satellite source pools and delivery profiles', () => {
         expect(kernel.evaluate(target, file.endEt + 1)).toBeNull()
       }
     }
-    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(678845440)
-    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(247241728)
+    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(972007424)
+    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(262033408)
   })
 
   it('defaults native to full without imposing the Pages policy on explicit full Web builds', () => {

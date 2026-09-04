@@ -20,6 +20,10 @@ export async function inventoryKernels(root, et, requestedProfile = 'pages') {
   const parentIds = new Map([['earth', 'naif:399'], ['mars', 'naif:499'], ['jupiter', 'naif:599'], ['saturn', 'naif:699'], ['uranus', 'naif:799'], ['neptune', 'naif:899'], ['pluto', 'sb:asteroid:134340']])
   parentIds.set('eris', 'sb:asteroid:136199')
   parentIds.set('haumea', 'sb:asteroid:136108')
+  for (const primary of satelliteCatalog.primaries ?? []) {
+    parentIds.set(primary.id, primary.inventoryId)
+    asteroidIds.set(primary.designation, primary.naifId)
+  }
   const moonIds = new Map(), discoveryIds = new Map(), moonParents = new Map()
   const aliasKey = (parent, name) => JSON.stringify([parent, String(name ?? '').trim().toLowerCase().replace(/\s+/g, ' ')])
   function addMoon(body) {

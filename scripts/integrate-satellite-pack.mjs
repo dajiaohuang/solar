@@ -9,6 +9,7 @@ import { SpkKernel } from '../src/engine/ephemeris/spk.ts'
 import { createKernelResolver, kernelsCoveringInterval } from '../src/engine/ephemeris/kernelPool.ts'
 import { cropSpk } from './crop-spk.mjs'
 import { replaySpkSurvey } from './lib/spk-source-survey.mjs'
+import { SMALL_BODY_SATELLITE_SOURCES, smallBodySatelliteIdentities, smallBodyPrimaryIdentity } from './lib/small-body-satellites.mjs'
 
 const planPath = process.argv[2]
 if (!planPath) throw new Error('Usage: node scripts/integrate-satellite-pack.mjs VERIFIED_PLAN.json')
@@ -113,6 +114,29 @@ for (const addition of additions) {
   if (rootIds.has(key)) throw new Error('Duplicate selected source target')
   rootIds.set(key, `satellite-${addition.config.id}-${addition.target}-${addition.config.windowLabel ?? '2020-2031'}`)
 }
+const systems = []
+for (const config of plan.systems ?? []) {
+  const selection = SMALL_BODY_SATELLITE_SOURCES.find(entry => entry.id === config.sourceEvidence?.id && entry.parentId === config.id)
+  if (!selection?.designation || config.core !== 'de440') throw new Error('Unknown reviewed small-body system')
+  const { bytes, evidence } = await verifiedCrop(config.path)
+  const targets = [selection.primary, selection.system, ...selection.moons.map(moon => moon.target)]
+  const source = await sourceEvidence(config, evidence.source.source, targets)
+  const record = supplemental.get(config.sourceEvidence.sha256)
+  if (JSON.stringify(record.source) !== JSON.stringify(evidence.source)) throw new Error('System crop source validator mismatch')
+  smallBodySatelliteIdentities(selection, record, config.sourceEvidence.sha256)
+  const primary = smallBodyPrimaryIdentity(selection, record, config.sourceEvidence.sha256)
+  if (!identities.primaries.some(entry => JSON.stringify(entry) === JSON.stringify(primary))) throw new Error('System primary identity was not generated')
+  const kernel = parsed(bytes)
+  const actualTargets = [...new Set(kernel.segments.map(segment => segment.target))]
+  if (actualTargets.length !== targets.length || actualTargets.some(target => !targets.includes(target))
+    || kernel.segments.some(segment => segment.frame !== 1 || segment.startEt < 631108800 || segment.endEt > 946728000
+      || segment.center !== (segment.target === selection.system ? 10 : selection.system)
+      || segment.type !== (segment.target === selection.system ? 21 : 2))
+    || kernelsCoveringInterval([{ id: config.id, kernel }], 631108800, 946728000).length !== 1) throw new Error('Incomplete original small-body system')
+  if (systems.some(system => system.config.id === config.id) || targets.some(target => knownTargets.has(target) && !selection.moons.some(moon => moon.target === target)
+    || additions.some(addition => addition.target === target))) throw new Error('Duplicate small-body system selection')
+  systems.push({ config, bytes, evidence, source, targets })
+}
 for (const profile of ['pages', 'full']) {
   const files = [...baseFiles, ...common]
   for (const { config, file, bytes, target } of additions) {
@@ -132,6 +156,16 @@ for (const profile of ['pages', 'full']) {
       core: false, dependencyOnly: target === 699, solutionKernelIds,
       solution: `${config.id.toUpperCase()} + ${config.core.toUpperCase()}`,
       selectionEvidence: { surveySha256: plan.surveySha256, supplementalSource: await sourceEvidence(config, file.source, [target]), sourceSelection: config.reason, windowPolicy: shortened ? 'Pages large satellite records: 2026/2027' : `Original prepared ${config.windowLabel ?? '2020/2031'} window` } }))
+  }
+  for (const { config, bytes, evidence, source, targets } of systems) {
+    const pages = profile === 'pages'
+    const output = pages ? (await cropSpk({ identity: evidence.source, size: bytes.length, read: async (start, length) => bytes.subarray(start, start + length) },
+      { startEt: 836136000, endEt: 852033600, targets })).buffer : bytes
+    files.push(await publish(output, { id: `system-${config.id}-${pages ? '2026-07-01-2027-01-01' : '2020-2030'}`,
+      source: evidence.source.source, sourceIdentity: evidence.source, core: false, solutionKernelIds: [baseCore.id],
+      solution: `${config.id.toUpperCase()} published system + DE440 Sun conversion`,
+      selectionEvidence: { surveySha256: plan.surveySha256, supplementalSource: source, sourceSelection: config.reason,
+        windowPolicy: pages ? 'New small-body systems: 2026-07-01/2027-01-01 TDB; preserve existing Pages coverage' : 'Original prepared 2020-01-01/2030-01-01 TDB' } }))
   }
   if (new Set(files.map(file => file.id)).size !== files.length) throw new Error('Duplicate manifest kernel ID')
   const kernels = []

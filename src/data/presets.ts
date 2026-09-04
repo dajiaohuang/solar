@@ -1,5 +1,6 @@
 import { dateToJulianDay } from '../lib/julianDate'
 import { majorBodies } from './majorBodies'
+import { SMALL_BODY_PRIMARIES } from './satelliteIdentities'
 import { getOrbitalPeriodDays } from '../lib/orbitalPeriod'
 import datasetPin from '../../.github/asteroid-dataset.json'
 import type { AppRoute, ElementPlotMode } from '../state/ui-store'
@@ -64,8 +65,8 @@ function dateToJD(dateString: string) {
 }
 
 export const SCENE_PRESETS: ScenePreset[] = [
-  ...(['mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto', 'eris', 'haumea'] as const).flatMap((parent): ScenePreset[] => {
-    const names = { mars: ['Mars', '火星'], jupiter: ['Jupiter', '木星'], saturn: ['Saturn', '土星'], uranus: ['Uranus', '天王星'], neptune: ['Neptune', '海王星'], pluto: ['Pluto', '冥王星'], eris: ['Eris', '阋神星'], haumea: ['Haumea', '妊神星'] }
+  ...['mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto', 'eris', 'haumea', ...SMALL_BODY_PRIMARIES.map(body => body.id)].flatMap((parent): ScenePreset[] => {
+    const names: Record<string, string[]> = { mars: ['Mars', '火星'], jupiter: ['Jupiter', '木星'], saturn: ['Saturn', '土星'], uranus: ['Uranus', '天王星'], neptune: ['Neptune', '海王星'], pluto: ['Pluto', '冥王星'], eris: ['Eris', '阋神星'], haumea: ['Haumea', '妊神星'], ...Object.fromEntries(SMALL_BODY_PRIMARIES.map(body => [body.id, [body.name, body.name]])) }
     const moons = majorBodies.filter((body) => body.kind === 'moon' && body.parentId === parent)
     // At the default 180 samples, keep at least ~30 samples per fastest
     // revolution. Long-period moons may show only part of their trajectory.

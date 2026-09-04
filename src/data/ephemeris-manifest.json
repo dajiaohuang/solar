@@ -14465,6 +14465,181 @@
       "startEt": 631108800,
       "endEt": 978264000,
       "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "system-quaoar-2026-07-01-2027-01-01",
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20050000_jpl043_20220908.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20050000_jpl043_20220908.bsp",
+        "bytes": 175923200,
+        "etag": "\"631a6af9-a7c6000\"",
+        "lastModified": "Thu, 08 Sep 2022 22:21:45 GMT"
+      },
+      "core": false,
+      "solutionKernelIds": [
+        "de440s-2000-01-01-2051-01-01"
+      ],
+      "solution": "QUAOAR published system + DE440 Sun conversion",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20050000_jpl043_20220908.bsp",
+          "sha256": "38631343d3cdd89a51e152d85b6d2b21d9c0e65eeb91b93190d6de6624857a82"
+        },
+        "sourceSelection": "Original Quaoar primary920050000 and Weywot120050000 offsets with the same publication system20050000 trajectory. DE440 satellite-fit/DE441 SB441-N16 system provenance; DE440 Sun conversion, not one global fit. No inferred mass/orbit.",
+        "windowPolicy": "New small-body systems: 2026-07-01/2027-01-01 TDB; preserve existing Pages coverage"
+      },
+      "path": "system-quaoar-2026-07-01-2027-01-01.bsp",
+      "sha256": "3ccf25b120e6657a43012d88e6178ebfbc16dc9fc6f86bf865ce1116b2860f59",
+      "bytes": 2958336,
+      "targets": [
+        120050000,
+        920050000,
+        20050000
+      ],
+      "startEt": 836136000,
+      "endEt": 852033600,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "system-orcus-2026-07-01-2027-01-01",
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20090482_jpl043_20220908.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20090482_jpl043_20220908.bsp",
+        "bytes": 175923200,
+        "etag": "\"631a6afa-a7c6000\"",
+        "lastModified": "Thu, 08 Sep 2022 22:21:46 GMT"
+      },
+      "core": false,
+      "solutionKernelIds": [
+        "de440s-2000-01-01-2051-01-01"
+      ],
+      "solution": "ORCUS published system + DE440 Sun conversion",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20090482_jpl043_20220908.bsp",
+          "sha256": "013513ee679cc6867e4ab78fa039f1f5178ba3a2d5f13a9ad084255a99960373"
+        },
+        "sourceSelection": "Original Orcus primary920090482 and Vanth120090482 offsets with same publication system20090482. Preserve mixed DE440/DE441 published provenance; no mass or primary offset invention.",
+        "windowPolicy": "New small-body systems: 2026-07-01/2027-01-01 TDB; preserve existing Pages coverage"
+      },
+      "path": "system-orcus-2026-07-01-2027-01-01.bsp",
+      "sha256": "ae4c233602100b3e834a6fc15a7ce5bac726ab05078b87ddb5937a7566861765",
+      "bytes": 2958336,
+      "targets": [
+        120090482,
+        920090482,
+        20090482
+      ],
+      "startEt": 836136000,
+      "endEt": 852033600,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "system-salacia-2026-07-01-2027-01-01",
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20120347_jpl025_20220908.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20120347_jpl025_20220908.bsp",
+        "bytes": 175915008,
+        "etag": "\"631a6afb-a7c4000\"",
+        "lastModified": "Thu, 08 Sep 2022 22:21:47 GMT"
+      },
+      "core": false,
+      "solutionKernelIds": [
+        "de440s-2000-01-01-2051-01-01"
+      ],
+      "solution": "SALACIA published system + DE440 Sun conversion",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20120347_jpl025_20220908.bsp",
+          "sha256": "39a712760ed44f2e4805ece53764248e01b1a7910bfe8ac8d4d15f99bebccb1d"
+        },
+        "sourceSelection": "Original Salacia primary920120347 and Actaea120120347 offsets with same publication system20120347. Preserve mixed DE440/DE441 published provenance; no measured mass inferred from zero GM.",
+        "windowPolicy": "New small-body systems: 2026-07-01/2027-01-01 TDB; preserve existing Pages coverage"
+      },
+      "path": "system-salacia-2026-07-01-2027-01-01.bsp",
+      "sha256": "5c7df3c6856865eea98e8ea54489755fe67b5515a55f85426ad816097df09b13",
+      "bytes": 2958336,
+      "targets": [
+        120120347,
+        920120347,
+        20120347
+      ],
+      "startEt": 836136000,
+      "endEt": 852033600,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "system-1998ww31-2026-07-01-2027-01-01",
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_53031823_jpl010_20220908.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_53031823_jpl010_20220908.bsp",
+        "bytes": 175926272,
+        "etag": "\"631a6b00-a7c6c00\"",
+        "lastModified": "Thu, 08 Sep 2022 22:21:52 GMT"
+      },
+      "core": false,
+      "solutionKernelIds": [
+        "de440s-2000-01-01-2051-01-01"
+      ],
+      "solution": "1998WW31 published system + DE440 Sun conversion",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_53031823_jpl010_20220908.bsp",
+          "sha256": "8057e72ca98ab869a65347e6d3e3e0ad2f41990804f8c016f69f0cc20d4c24a8"
+        },
+        "sourceSelection": "Original 1998WW31 primary953031823 and source-named Sat1 target153031823; system53031823 explicitly remapped from3031823 in original BSPIDMOD comments. Preserve mixed DE440/DE441 provenance, no formal name or measured zero mass invented.",
+        "windowPolicy": "New small-body systems: 2026-07-01/2027-01-01 TDB; preserve existing Pages coverage"
+      },
+      "path": "system-1998ww31-2026-07-01-2027-01-01.bsp",
+      "sha256": "8eadf0216625cdc805ab7eb4b56fa390348158c3b64629ad563adc436c8ea03d",
+      "bytes": 2958336,
+      "targets": [
+        153031823,
+        953031823,
+        53031823
+      ],
+      "startEt": 836136000,
+      "endEt": 852033600,
+      "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "system-2001qw322-2026-07-01-2027-01-01",
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_53092511_jpl005_20220908.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_53092511_jpl005_20220908.bsp",
+        "bytes": 175918080,
+        "etag": "\"631a6b01-a7c4c00\"",
+        "lastModified": "Thu, 08 Sep 2022 22:21:53 GMT"
+      },
+      "core": false,
+      "solutionKernelIds": [
+        "de440s-2000-01-01-2051-01-01"
+      ],
+      "solution": "2001QW322 published system + DE440 Sun conversion",
+      "selectionEvidence": {
+        "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
+        "supplementalSource": {
+          "url": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_53092511_jpl005_20220908.bsp",
+          "sha256": "6864d723ebe662e772aea8f9238a8c9eb31ea958d58358bcb516c32b916d0392"
+        },
+        "sourceSelection": "Original 2001QW322 primary953092511 and source-named Sat1 target153092511; system53092511 explicitly remapped from3092511 in original BSPIDMOD comments. Preserve mixed DE440/DE441 provenance, no formal name or measured zero mass invented.",
+        "windowPolicy": "New small-body systems: 2026-07-01/2027-01-01 TDB; preserve existing Pages coverage"
+      },
+      "path": "system-2001qw322-2026-07-01-2027-01-01.bsp",
+      "sha256": "03a5c10e4a8c24186fc32c12627c6ee9ce75fbb0f3f0b50d26f1b3e686107262",
+      "bytes": 2958336,
+      "targets": [
+        153092511,
+        953092511,
+        53092511
+      ],
+      "startEt": 836136000,
+      "endEt": 852033600,
+      "integrationBatch": "satellite-expansion-20260904"
     }
   ]
 }

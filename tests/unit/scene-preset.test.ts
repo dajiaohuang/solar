@@ -7,7 +7,7 @@ import { decodeUrlState, encodeUrlState } from '../../src/lib/urlState'
 
 describe('observation-deck scene presets', () => {
   it('maps every built-in preset to a deterministic, bounded scene update', () => {
-    expect(SCENE_PRESETS).toHaveLength(22)
+    expect(SCENE_PRESETS).toHaveLength(27)
     for (const preset of SCENE_PRESETS) {
       const application = buildScenePresetApplication(preset)
       expect(application.julianDay).toBe(preset.julianDay)

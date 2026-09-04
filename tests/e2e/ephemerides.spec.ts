@@ -122,3 +122,23 @@ test('does not substitute a system center when a TNO primary dependency is missi
   await status.locator('summary').click()
   await expect(status.getByRole('alert')).toContainText('HTTP 503')
 })
+
+test('loads five original binary systems and omits their positions outside the Pages interval', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&lang=en&view=3d&speed=0')
+  for (const parent of ['quaoar', 'orcus', 'salacia', '1998ww31', '2001qw322']) {
+    await page.getByTestId(`preset-${parent}-spk-moons`).click()
+    await page.waitForLoadState('networkidle')
+    await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('2/2', { timeout: 30_000 })
+    await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
+    await expect(page).toHaveURL(new RegExp(`[?&]ref=${parent}(?:&|$)`))
+  }
+  await page.goto('./?v=4&lang=en&view=3d&ref=quaoar&bodies=quaoar,naif:120050000&focused=naif:120050000&jd=2460000.5&speed=0')
+  await expect(page.getByTestId('ephemeris-status').locator('summary')).not.toContainText('Loading', { timeout: 30_000 })
+  await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('0/2')
+  await expect(page.locator('.frame-overlays .canvas-error[role="status"]')).toContainText('reference')
+  await expect(page.locator('.frame-view canvas')).toHaveCount(0)
+  expect(errors).toEqual([])
+})
