@@ -56,14 +56,16 @@ export class SpkKernel {
     const nd = this.i32(8), ni = this.i32(12);
     if (nd !== 2 || ni !== 6) fail(`unsupported summary dimensions ND=${nd}, NI=${ni}`);
     const first = this.i32(76), last = this.i32(80);
-    if (first !== 3 || last < first || last > this.bytes / RECORD_BYTES) fail('invalid summary record bounds');
+    if (first < 2 || last < first || last > this.bytes / RECORD_BYTES) fail('invalid summary record bounds');
     const summaries: Array<{ d: number[]; i: number[] }> = [];
     let rec = first, previous = 0, seen = 0;
+    const visited = new Set<number>();
     while (rec !== 0) {
-      if (++seen > MAX_SUMMARY_RECORDS || !Number.isInteger(rec) || rec < 3 || rec > this.bytes / RECORD_BYTES) fail('invalid summary record chain');
+      if (++seen > MAX_SUMMARY_RECORDS || visited.has(rec) || !Number.isInteger(rec) || rec < 2 || rec > this.bytes / RECORD_BYTES) fail('invalid summary record chain');
+      visited.add(rec);
       const off = (rec - 1) * RECORD_BYTES;
       const next = this.controlInt(off), prev = this.controlInt(off + 8), count = this.controlInt(off + 16);
-      if (prev !== previous || count < 0 || count > 50) fail('invalid summary record links or count');
+      if (prev !== previous || count < 0 || count > 25) fail('invalid summary record links or count');
       for (let n = 0; n < count; n++) {
         const so = off + 24 + n * 40;
         const d = [this.f64(so), this.f64(so + 8)];
@@ -78,6 +80,7 @@ export class SpkKernel {
   }
 
   evaluate(target: number, et: number): SpkState | null {
+    if (!Number.isFinite(target) || !Number.isFinite(et)) fail('target and epoch must be finite');
     let unsupported: SpkSegment | undefined;
     // DAF/SPK precedence is last matching segment (later segments override).
     for (let n = this.segments.length - 1; n >= 0; n--) {
@@ -95,7 +98,7 @@ export class SpkKernel {
     const metaOff = this.addressOffset(segment.endAddress - 3);
     const init = this.f64(metaOff), interval = this.f64(metaOff + 8);
     const recordSize = this.f64(metaOff + 16), recordCount = this.f64(metaOff + 24);
-    if (![init, interval, recordSize, recordCount].every(Number.isFinite) || recordSize !== segment.recordSize || recordCount !== segment.recordCount) fail('invalid segment terminal metadata');
+    if (![init, interval, recordSize, recordCount].every(Number.isFinite) || interval <= 0 || recordSize !== segment.recordSize || recordCount !== segment.recordCount) fail('invalid segment terminal metadata');
     return { segment, coefficientCount: segment.coefficientCount, recordCount: segment.recordCount, recordSize: segment.recordSize,
       metadata: { init, interval, recordSize, recordCount }, readRecord: (index: number) => {
         if (!Number.isInteger(index) || index < 0 || index >= segment.recordCount) fail('record index out of range');
@@ -136,7 +139,16 @@ export class SpkKernel {
     const words = endAddress - startAddress + 1;
     if (words !== count * rs + 4 || (type === 2 ? (rs - 2) % 3 : (rs - 2) % 6) !== 0) fail('inconsistent segment record count/size');
     const coefficientCount = type === 2 ? (rs - 2) / 3 : (rs - 2) / 6;
-    if (coefficientCount < 2) fail('too few Chebyshev coefficients');
+    if (coefficientCount < 1) fail('too few Chebyshev coefficients');
+    if (!Number.isFinite(this.f64(terminal)) || !Number.isFinite(this.f64(terminal + 8)) || this.f64(terminal + 8) <= 0) fail('invalid segment time metadata');
+    for (let n = 0; n < count; n++) {
+      const ro = this.addressOffset(startAddress + n * rs);
+      const mid = this.f64(ro), radius = this.f64(ro + 8);
+      if (!Number.isFinite(mid) || !Number.isFinite(radius) || radius <= 0) fail('invalid record midpoint or radius');
+      for (let j = 0; j < 3 * (type === 2 ? coefficientCount : coefficientCount * 2); j++) {
+        if (!Number.isFinite(this.f64(ro + 16 + j * 8))) fail('nonfinite Chebyshev coefficient');
+      }
+    }
     return { target, center, frame, type, startEt, endEt, startAddress, endAddress, coefficientCount, recordCount: count, recordSize: rs };
   }
 
