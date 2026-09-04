@@ -25,6 +25,7 @@ import { bodyDisplayName } from '../../lib/bodyNames'
 import { catalogSampleErrorMessage } from '../../lib/catalogSampleProfile'
 import { isOnboardingRendererReady, ONBOARDING_RENDER_READY_EVENT } from '../../lib/onboarding'
 import { SimulationControls } from './SimulationControls'
+import { EphemerisStatus } from './EphemerisStatus'
 
 const TrajectoryCanvas3D = lazy(async () => {
   const module = await import('../../components/TrajectoryCanvas3D')
@@ -313,6 +314,7 @@ export function ExplorerWorkspace() {
       <ControlDrawer bodies={allBodies} referenceOptions={allBodies.filter((body) => body.kind !== 'spacecraft')} onResetView={resetView} />
       <main className="explorer-stage">
         <SimulationControls />
+        <EphemerisStatus bodies={selectedBodies} references={[simulation.referenceId, ...(simulation.comparisonEnabled ? [simulation.comparisonReferenceId] : [])].map((id) => bodiesById.get(id)).filter((body): body is CelestialBody => Boolean(body))} julianDay={displayJulianDay} historyDays={simulation.historyDays} />
         {simulation.showCatalogCloud && catalog.sampleError && (
           <div className="error-banner catalog-cloud-error" role="alert">{catalogSampleErrorMessage(catalog.sampleError, t)}</div>
         )}

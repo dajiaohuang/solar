@@ -1,13 +1,12 @@
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { SpkKernel, type SpkState } from '../../src/engine/ephemeris/spk'
 import fixture from '../fixtures/jpl-spk-states.json'
 
 const manifestPath = resolve(process.cwd(), 'src/data/ephemeris-manifest.json')
-const hasManifest = existsSync(manifestPath)
-const manifest = hasManifest ? JSON.parse(readFileSync(manifestPath, 'utf8')) : null
+const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
 const entries = (Array.isArray(manifest) ? manifest : manifest?.files ?? manifest?.kernels ?? []) as Array<Record<string, unknown>>
 const AU_KM = 149597870.7
 const EPS = 84381.448 * Math.PI / (180 * 3600)
@@ -25,19 +24,19 @@ function toReference(s: SpkState) {
   return [p.x / AU_KM, p.y / AU_KM, p.z / AU_KM, v.x * 86400 / AU_KM, v.y * 86400 / AU_KM, v.z * 86400 / AU_KM]
 }
 
-describe.skipIf(!hasManifest)('packaged SPK provenance and Horizons references', () => {
+describe('packaged SPK provenance and Horizons references', () => {
   const loaded = entries.map((entry) => {
-    const path = resolve(process.cwd(), String(entry.path))
+    const path = resolve(process.cwd(), 'public/data/ephemerides', String(entry.path))
     const bytes = readFileSync(path)
-    return { entry, path, kernel: new SpkKernel(bytes), bytes }
+    return { entry, path, kernel: new SpkKernel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)), bytes }
   })
   const state = (target: number, et: number, seen = new Set<string>()): SpkState | null => {
-    for (const item of loaded) {
+    for (const item of [...loaded].reverse()) {
       const segment = item.kernel.segments.find((s) => s.target === target && et >= s.startEt && et <= s.endEt)
       if (!segment) continue
       const key = `${item.path}:${target}`
       if (seen.has(key)) throw new Error(`SPK center cycle at ${target}`)
-      const own = item.kernel.evaluate(target, et)!
+      const own = rotateToEcliptic(item.kernel.evaluate(target, et)!)
       if (own.center === 0) return own
       const parent = state(own.center, et, new Set([...seen, key]))
       if (!parent) continue
@@ -47,6 +46,7 @@ describe.skipIf(!hasManifest)('packaged SPK provenance and Horizons references',
   }
 
   it('matches every manifest byte count and SHA-256', () => {
+    expect(loaded.length).toBeGreaterThan(0)
     for (const item of loaded) {
       const expectedBytes = Number(item.entry.bytes)
       const expectedSha = String(item.entry.sha256)
@@ -66,9 +66,15 @@ describe.skipIf(!hasManifest)('packaged SPK provenance and Horizons references',
     for (const [id, ref] of Object.entries(expected)) {
       const actual = state(Number(id), et)
       if (!actual) continue
-      const got = toReference(actual)
+      const sun = state(10, et)!
+      const relative = { ...actual,
+        position: { x: actual.position.x - sun.position.x, y: actual.position.y - sun.position.y, z: actual.position.z - sun.position.z },
+        velocity: { x: actual.velocity.x - sun.velocity.x, y: actual.velocity.y - sun.velocity.y, z: actual.velocity.z - sun.velocity.z },
+      }
+      const got = toReference(relative)
       const toleranceKm = Number(id) === 301 ? 100 : [501, 599, 606, 699].includes(Number(id)) ? 100 : 10
       expect(Math.hypot(...got.slice(0, 3).map((v, i) => (v - ref[i]) * AU_KM)), `${jd}/${id}`).toBeLessThan(toleranceKm)
+      expect(Math.hypot(...got.slice(3).map((v, i) => (v - ref[i + 3]) * AU_KM / 86400)), `${jd}/${id} velocity`).toBeLessThan(0.001)
     }
   })
 })

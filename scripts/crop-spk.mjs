@@ -43,7 +43,7 @@ export async function openSource(source) {
   return {
     size, identity: { source, bytes: size, etag, lastModified: modified },
     async read(start, length) {
-      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(length) || start < 0 || length <= 0 || start + length > size) throw new Error('SPK range outside source')
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(length) || start < 0 || length <= 0 || length > MAX_RANGE_BYTES || start + length > size) throw new Error('SPK range outside source')
       const response = await fetch(source, {
         headers: { Range: `bytes=${start}-${start + length - 1}`, ...(etag ? { 'If-Match': etag } : { 'If-Unmodified-Since': modified }) },
         signal: AbortSignal.timeout(120000),
@@ -55,8 +55,19 @@ export async function openSource(source) {
       if ((etag && response.headers.get('etag') !== etag) || (modified && response.headers.get('last-modified') !== modified)) {
         await response.body?.cancel(); throw new Error('Source SPK changed during extraction')
       }
-      const buffer = Buffer.from(await response.arrayBuffer())
-      if (buffer.length !== length) throw new Error('Truncated SPK range')
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('Missing SPK range body')
+      const buffer = Buffer.alloc(length)
+      let offset = 0
+      try {
+        while (true) {
+          const chunk = await reader.read()
+          if (chunk.done) break
+          if (offset + chunk.value.length > length) throw new Error('Oversized SPK range')
+          buffer.set(chunk.value, offset); offset += chunk.value.length
+        }
+      } catch (error) { await reader.cancel(); throw error }
+      if (offset !== length) throw new Error('Truncated SPK range')
       return buffer
     },
     async close() {},
@@ -109,7 +120,7 @@ export async function cropSpk(source, { startEt, endEt, targets }) {
     const init = input.double(directory, 0), interval = input.double(directory, 8)
     const recordSize = input.double(directory, 16), count = input.double(directory, 24)
     const validStride = segment.type === 2 ? (recordSize - 2) % 3 === 0 : (recordSize - 2) % 6 === 0
-    if (!Number.isFinite(init) || !Number.isFinite(interval) || !(interval > 0) || !Number.isInteger(recordSize) || recordSize < 5 || !validStride || !Number.isInteger(count) || count < 1 || !Number.isSafeInteger(count * recordSize) || count * recordSize + 4 !== segment.endAddress - segment.startAddress + 1 || segment.startEt > init || segment.endEt < init + count * interval) throw new Error('Invalid Chebyshev directory')
+    if (!Number.isFinite(init) || !Number.isFinite(interval) || !(interval > 0) || !Number.isInteger(recordSize) || recordSize < 5 || !validStride || !Number.isInteger(count) || count < 1 || !Number.isSafeInteger(count * recordSize) || count * recordSize + 4 !== segment.endAddress - segment.startAddress + 1 || segment.startEt < init || segment.endEt > init + count * interval) throw new Error('Invalid Chebyshev directory')
     const from = Math.max(startEt, segment.startEt), to = Math.min(endEt, segment.endEt)
     const first = Math.max(0, Math.min(count - 1, Math.floor((from - init) / interval)))
     const last = Math.max(first, Math.min(count - 1, Math.floor((to - init) / interval)))

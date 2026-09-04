@@ -15,6 +15,7 @@ import { BUILD_INFO } from '../../lib/buildInfo'
 import { createBodyPositionResolver, dotVector3, subtractVector3, vector3Magnitude } from '../../lib/ephemeris'
 import type { CelestialBody, Vector3 } from '../../types'
 import { saveTextExport } from '../../lib/platform'
+import { EPHEMERIS_MANIFEST, kernelsForWindow } from '../../engine/ephemeris/kernelStore'
 
 const ALL_KINDS: EventKind[] = ['close-approach', 'conjunction', 'opposition', 'perihelion', 'aphelion']
 const EVENT_ALGORITHM_VERSION = 'event-search-v4'
@@ -25,13 +26,15 @@ function angularSeparation(a: Vector3, b: Vector3) {
   return Math.acos(Math.max(-1, Math.min(1, dotVector3(a, b) / denominator))) * 180 / Math.PI
 }
 
-function EventDetailCurve({ event, bodies, referenceId, onOpen, label }: { event: AnalysisEvent; bodies: CelestialBody[]; referenceId: string; onOpen: () => void; label: string }) {
+function EventDetailCurve({ event, bodies, referenceId, searchCenter, searchWindow, onOpen, label }: { event: AnalysisEvent; bodies: CelestialBody[]; referenceId: string; searchCenter: number; searchWindow: number; onOpen: () => void; label: string }) {
   const curve = useMemo(() => {
     const bodiesById = new Map(bodies.map((body) => [body.id, body]))
-    const halfWindow = Math.min(60, Math.max(event.sampleIntervalDays * 1.25, event.numericalRefinementHalfWidthDays * 10, .25))
+    // Stay inside the original search interval so its frozen kernel set remains valid.
+    const halfWindow = Math.max(0, Math.min(60, Math.max(event.sampleIntervalDays * 1.25, event.numericalRefinementHalfWidthDays * 10, .25), event.julianDay - (searchCenter - searchWindow / 2), searchCenter + searchWindow / 2 - event.julianDay))
     const samples = Array.from({ length: 81 }, (_, index) => event.julianDay - halfWindow + index / 80 * halfWindow * 2)
+    const kernels = kernelsForWindow(searchCenter - searchWindow / 2, searchCenter + searchWindow / 2, event.ephemerisFiles)
     const values = samples.map((julianDay) => {
-      const resolve = createBodyPositionResolver(bodiesById, julianDay)
+      const resolve = createBodyPositionResolver(bodiesById, julianDay, kernels)
       if (event.kind === 'conjunction' || event.kind === 'opposition') {
         const reference = resolve(referenceId)
         return angularSeparation(subtractVector3(resolve(event.bodyAId), reference), subtractVector3(resolve(event.bodyBId!), reference))
@@ -44,10 +47,10 @@ function EventDetailCurve({ event, bodies, referenceId, onOpen, label }: { event
     const maximum = finiteValues.length ? Math.max(...finiteValues) : 1
     const yFor = (value: number) => 92 - ((Number.isFinite(value) ? value : minimum) - minimum) / Math.max(maximum - minimum, 1e-12) * 78
     const points = values.map((value, index) => `${(index / 80 * 100).toFixed(2)},${yFor(value).toFixed(2)}`).join(' ')
-    const coarseOffset = Math.min(45, event.sampleIntervalDays / halfWindow * 50)
-    const refinementHalfWidth = Math.max(.25, Math.min(45, event.numericalRefinementHalfWidthDays / halfWindow * 50))
+    const coarseOffset = Math.min(45, event.sampleIntervalDays / Math.max(halfWindow, 1e-12) * 50)
+    const refinementHalfWidth = Math.max(.25, Math.min(45, event.numericalRefinementHalfWidthDays / Math.max(halfWindow, 1e-12) * 50))
     return { halfWindow, minimum, maximum, points, centerY: yFor(values[40]), coarseOffset, refinementHalfWidth }
-  }, [bodies, event, referenceId])
+  }, [bodies, event, referenceId, searchCenter, searchWindow])
   return <article className="event-detail-curve">
     <header><div><span>{label}</span><strong>{event.bodyAName}{event.bodyBName ? ` ↔ ${event.bodyBName}` : ''}</strong></div><button aria-label={`${label}: ${event.bodyAName}${event.bodyBName ? ` ${event.bodyBName}` : ''}`} onClick={onOpen}>↗</button></header>
     <svg viewBox="0 0 100 100" role="img" aria-label={`${label}: ${event.value.toFixed(5)} ${event.unit}`} preserveAspectRatio="none">
@@ -89,7 +92,9 @@ export function EventsWorkspace() {
     generatedAt: new Date().toISOString(),
     datasetVersion: catalog.datasetVersion !== 'unavailable' ? catalog.datasetVersion : catalog.requestedDatasetVersion,
     algorithmVersion: EVENT_ALGORITHM_VERSION,
-    model: 'sampled-two-body-local-refinement-v3',
+    model: 'sampled-ephemeris-local-refinement-v4',
+    ephemerisManifest: EPHEMERIS_MANIFEST.id,
+    ephemerisFiles: analysis.events[0]?.ephemerisFiles ?? [],
     build: BUILD_INFO,
     inputs: analysis.lastRun ? {
       bodyIds: analysis.lastRun.bodies.map((body) => body.id),
@@ -140,7 +145,7 @@ export function EventsWorkspace() {
 
       <section className="timeline-panel glass-panel">
         <div className="section-heading"><span>{t('eventTimeline').toUpperCase()}</span><strong>{analysis.events.length}</strong></div>
-        {selectedEvent && analysis.lastRun && <EventDetailCurve event={selectedEvent} bodies={analysis.lastRun.resolutionBodies} referenceId={analysis.lastRun.referenceId} label={t('localRefinementCurve')} onOpen={() => { simulationActions.seek(selectedEvent.julianDay); uiActions.navigate('explorer') }} />}
+        {selectedEvent && analysis.lastRun && <EventDetailCurve event={selectedEvent} bodies={analysis.lastRun.resolutionBodies} referenceId={analysis.lastRun.referenceId} searchCenter={analysis.lastRun.centerJulianDay} searchWindow={analysis.lastRun.windowDays} label={t('localRefinementCurve')} onOpen={() => { simulationActions.seek(selectedEvent.julianDay); uiActions.navigate('explorer') }} />}
         {!analysis.events.length && analysis.status !== 'running' && <div className="empty-state"><span>⌁</span><p>{t('noEvents')}</p></div>}
         <div className="event-timeline">{analysis.events.map((event, index) => <button className={index === activeEventIndex ? 'selected' : ''} key={`${event.kind}-${event.bodyAId}-${event.bodyBId}-${index}`} onClick={() => setSelectedEventIndex(index)}>
           <time>{formatJulianDayAsDate(event.julianDay)}</time><i className={`event-${event.kind}`} />

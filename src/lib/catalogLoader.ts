@@ -444,6 +444,8 @@ export function asteroidRecordToBody(record: AsteroidRecord): CelestialBody {
     color: record.isPha ? '#ff685d' : record.isNeo ? '#ff9f7f' : record.orbitClassCode === 'TNO' ? '#b9a8ff' : '#b8c9d9',
     size: record.id.startsWith('dwarf:') ? 4.2 : 2.1,
     source: 'mpcorb',
+    naifId: Number.isSafeInteger(record.permanentNumber) && record.permanentNumber! > 0 && record.permanentNumber! < 1000000
+      ? 2000000 + record.permanentNumber! : undefined,
     orbitClassCode: record.orbitClassCode,
     orbitClassName: record.orbitClassName || getOrbitClassName(record.orbitClassCode),
     absoluteMagnitude: record.absoluteMagnitude,

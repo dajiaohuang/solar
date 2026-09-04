@@ -5,6 +5,7 @@ import { solveBodyToBodyLambert, type LambertSolution, type PorkchopPoint } from
 import { createPorkchopWindow } from '../../engine/mission/porkchopWindow'
 import { useI18n } from '../../i18n/context'
 import { createBodyPositionResolver, crossVector3, dotVector3 } from '../../lib/ephemeris'
+import { loadedKernelIds } from '../../engine/ephemeris/kernelStore'
 import { dateToJulianDay, julianDayToDate } from '../../lib/julianDate'
 import type { BodyId, CelestialBody } from '../../types'
 import type { PorkchopWorkerRequest, PorkchopWorkerResponse } from '../../workers/porkchop.worker'
@@ -147,6 +148,7 @@ export function MissionWorkspace() {
     }
     worker.onerror = (event) => { setTransferError(event.message || t('porkchopFailed')); setPorkchopStatus('error'); worker.terminate(); if (workerRef.current === worker) workerRef.current = null }
     const request: PorkchopWorkerRequest = {
+      ephemerisFiles: loadedKernelIds(),
       requestId,
       departureBodyId: departureId,
       arrivalBodyId: arrivalId,

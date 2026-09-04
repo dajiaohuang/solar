@@ -35,5 +35,10 @@ async function directoryBytes(path) {
 }
 
 const bytes = await directoryBytes(dist)
-if (bytes > 25 * 1024 * 1024) throw new Error(`Native shell is unexpectedly large: ${bytes} bytes`)
-process.stdout.write(`Verified native shell: ${javascript.length} JavaScript assets, ${bytes} bytes\n`)
+const ephemerisManifest = JSON.parse(await readFile('src/data/ephemeris-manifest.json', 'utf8'))
+const ephemerisBytes = await directoryBytes(join(dist, 'data', 'ephemerides'))
+if (ephemerisBytes !== ephemerisManifest.files.reduce((sum, file) => sum + file.bytes, 0)) throw new Error('Native ephemeris package differs from pinned manifest')
+if (ephemerisBytes > 512 * 1024 * 1024) throw new Error(`Native ephemeris pack exceeds 512 MiB: ${ephemerisBytes}`)
+const shellBytes = bytes - ephemerisBytes
+if (shellBytes > 25 * 1024 * 1024) throw new Error(`Native shell is unexpectedly large: ${shellBytes} bytes`)
+process.stdout.write(`Verified native shell: ${javascript.length} JavaScript assets, ${shellBytes} shell bytes + ${ephemerisBytes} pinned SPK bytes\n`)

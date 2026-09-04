@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
 import { createBodyPositionResolver } from '../lib/ephemeris'
+import { ensureKernelFiles, kernelsForWindow } from '../engine/ephemeris/kernelStore'
 import { getRelativePositions, toPlanarPoint } from '../lib/referenceFrame'
 import type {
   BodyId,
@@ -46,6 +47,8 @@ function packTrajectories(bodyIds: BodyId[], points: Vector2[][], points3D: Vect
 
 async function compute(request: TrajectoryWorkerRequest) {
   activeRequestId = request.requestId
+  await ensureKernelFiles(request.ephemerisFiles ?? [])
+  const kernels = kernelsForWindow(request.centerJulianDay - request.historyDays, request.centerJulianDay, request.ephemerisFiles ?? [])
   const bodiesById = new Map<BodyId, CelestialBody>(request.resolutionBodies.map((body) => [body.id, body]))
   const points = request.bodies.map(() => [] as Vector2[])
   const points3D = request.bodies.map(() => [] as Vector3[])
@@ -58,7 +61,7 @@ async function compute(request: TrajectoryWorkerRequest) {
     }
     const progress = index / (sampleCount - 1)
     const julianDay = request.centerJulianDay - request.historyDays + progress * request.historyDays
-    const resolve = createBodyPositionResolver(bodiesById, julianDay)
+    const resolve = createBodyPositionResolver(bodiesById, julianDay, kernels)
     const positions = getRelativePositions(request.bodies, request.referenceId, resolve)
     for (let bodyIndex = 0; bodyIndex < positions.length; bodyIndex += 1) {
       points[bodyIndex].push(toPlanarPoint(positions[bodyIndex].position))

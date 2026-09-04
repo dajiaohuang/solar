@@ -7,7 +7,7 @@ import { decodeUrlState, encodeUrlState } from '../../src/lib/urlState'
 
 describe('observation-deck scene presets', () => {
   it('maps every built-in preset to a deterministic, bounded scene update', () => {
-    expect(SCENE_PRESETS).toHaveLength(12)
+    expect(SCENE_PRESETS).toHaveLength(19)
     for (const preset of SCENE_PRESETS) {
       const application = buildScenePresetApplication(preset)
       expect(application.julianDay).toBe(preset.julianDay)
@@ -108,19 +108,24 @@ describe('observation-deck scene presets', () => {
 
     const jupiter = SCENE_PRESETS.find((preset) => preset.id === 'jupiter-galilean-moons')!
     expect(jupiter.referenceId).toBe('jupiter')
-    expect(jupiter.selectedMajorBodyIds).toEqual(['jupiter', ...expectedMoons('jupiter')])
+    expect(jupiter.selectedMajorBodyIds).toEqual(['jupiter', 'io', 'europa', 'ganymede', 'callisto'])
     expect(jupiter.viewMode).toBe('3d')
     expect(jupiter.description.en).toContain('modeled Galilean moons')
     expect(jupiter.description.zh).toContain('已建模伽利略卫星')
 
     const saturn = SCENE_PRESETS.find((preset) => preset.id === 'saturn-titan')!
     expect(saturn.referenceId).toBe('saturn')
-    expect(saturn.selectedMajorBodyIds).toEqual(['saturn', ...expectedMoons('saturn')])
+    expect(saturn.selectedMajorBodyIds).toEqual(['saturn', 'titan'])
     expect(saturn.description.en).toContain('modeled moon')
     expect(saturn.description.zh).toContain('已建模卫星')
   })
 
   it('defines a bounded, viewport-independent main-belt catalog selection', () => {
+    for (const parent of ['mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto']) {
+      const preset = SCENE_PRESETS.find((item) => item.id === `${parent}-spk-moons`)!
+      expect(preset.selectedMajorBodyIds).toEqual([parent, ...majorBodies.filter((body) => body.kind === 'moon' && body.parentId === parent).map((body) => body.id)])
+      expect(preset.viewMode).toBe('3d')
+    }
     const belt = SCENE_PRESETS.find((preset) => preset.id === 'mars-main-belt-jupiter')!
     expect(belt.referenceId).toBe('sun')
     expect(belt.selectedMajorBodyIds).toEqual(['mars', 'ceres', 'jupiter'])

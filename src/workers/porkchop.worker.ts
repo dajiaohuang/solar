@@ -2,8 +2,10 @@
 
 import { computePorkchopGrid } from '../engine/mission/lambert'
 import type { BodyId, CelestialBody } from '../types'
+import { ensureKernelFiles } from '../engine/ephemeris/kernelStore'
 
 export type PorkchopWorkerRequest = {
+  ephemerisFiles?: string[]
   requestId: number
   departureBodyId: BodyId
   arrivalBodyId: BodyId
@@ -21,11 +23,13 @@ export type PorkchopWorkerResponse = {
 }
 
 const workerScope = self as DedicatedWorkerGlobalScope
-workerScope.onmessage = (event: MessageEvent<PorkchopWorkerRequest>) => {
+workerScope.onmessage = async (event: MessageEvent<PorkchopWorkerRequest>) => {
   const request = event.data
   try {
+    await ensureKernelFiles(request.ephemerisFiles ?? [])
     const bodiesById = new Map<BodyId, CelestialBody>(request.bodies.map((body) => [body.id, body]))
     const result = computePorkchopGrid({
+      ephemerisFiles: request.ephemerisFiles ?? [],
       departureBodyId: request.departureBodyId,
       arrivalBodyId: request.arrivalBodyId,
       bodiesById,

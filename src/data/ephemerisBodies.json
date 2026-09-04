@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-04T03:29:04.763Z",
+  "generatedAt": "2026-09-04T03:44:08.249Z",
   "epochJd": 2461287.5,
   "epochTimeScale": "TDB",
   "source": {
@@ -8,7 +8,7 @@
     "manifestId": "jpl-spk-2020-01-01-2031-01-01-v1",
     "manifestSha256": "b48c25698085cdf0288442c2e6c8b0bbb5f97deaddbe226cb73bc4bcc5249379",
     "gmUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
-    "gmFile": "gm_de440.tpc",
+    "gmFile": "src/data/gm_de440.tpc",
     "gmSha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
     "gmKm3S2": {
       "1": 22031.868551400003,

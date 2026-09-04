@@ -31,7 +31,8 @@ export function apparentPosition(options: ApparentPositionOptions): ApparentPosi
   if (!Number.isFinite(julianDay)) throw new RangeError('Julian day must be finite')
   const maxIterations = options.maxIterations ?? 12
   const toleranceSeconds = options.toleranceSeconds ?? 1e-9
-  if (maxIterations < 1 || toleranceSeconds <= 0) throw new RangeError('Invalid convergence settings')
+  if (!Number.isInteger(maxIterations) || maxIterations < 1 || maxIterations > 100 || !Number.isFinite(toleranceSeconds) || toleranceSeconds <= 0) throw new RangeError('Invalid convergence settings')
+  if (!['geometric', 'light-time', 'light-time+stellar-aberration'].includes(mode)) throw new RangeError('Unknown apparent-position mode')
   const observerState = observer(julianDay); valid(observerState)
   const geometricTarget = target(julianDay); valid(geometricTarget)
   let emissionJulianDay = julianDay
@@ -52,7 +53,8 @@ export function apparentPosition(options: ApparentPositionOptions): ApparentPosi
     resolvedTarget = target(emissionJulianDay); valid(resolvedTarget)
   }
   let position = subtract(resolvedTarget.position, observerState.position)
-  if (mode === 'light-time+stellar-aberration') position = aberrate(position.map(v => v / norm(position)) as [number, number, number], observerState.velocity).map(v => v * norm(position)) as [number, number, number]
+  const distance = norm(position)
+  if (mode === 'light-time+stellar-aberration' && distance > 0) position = aberrate(position.map(v => v / distance) as [number, number, number], observerState.velocity).map(v => v * distance) as [number, number, number]
   return { position, mode, lightTimeSeconds, emissionJulianDay, iterations, converged, assumptions: [
     mode === 'geometric' ? 'Geometric target and observer states are evaluated at the observation epoch.' : 'Reception light time solves target(emission) to observer(observation) iteratively.',
     ...(mode === 'light-time+stellar-aberration' ? ['Stellar aberration uses an exact special-relativistic photon-direction transform from observer barycentric velocity.'] : []),

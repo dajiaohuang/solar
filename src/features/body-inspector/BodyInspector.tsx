@@ -4,6 +4,11 @@ import { BODY_PHYSICAL } from '../../data/physical'
 import { useSimulationClock } from '../../engine/clock/useSimulationClock'
 import { computeMoonPhase } from '../../engine/ephemeris/moonPhase'
 import { computeInfluenceRadii } from '../../engine/ephemeris/spheresOfInfluence'
+import { kernelCoverage, EPHEMERIS_MANIFEST } from '../../engine/ephemeris/kernelStore'
+import { useEphemerides } from '../../hooks/useEphemerides'
+import { currentOsculatingElements } from '../../engine/ephemeris/diagnostics'
+import { ObservationReadout } from './ObservationReadout'
+import { simulationStore } from '../../state/simulation-store'
 import { useI18n } from '../../i18n/context'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { createBodyPositionResolver, getInstantaneousElements } from '../../lib/ephemeris'
@@ -21,25 +26,33 @@ const TABS: Tab[] = ['overview', 'orbit', 'physical', 'context', 'sources']
 export function BodyInspector({ body, currentPositions, bodiesById }: Props) {
   const { t, language } = useI18n()
   const clock = useSimulationClock()
+  const ephemerides = useEphemerides()
+  const { referenceId } = simulationStore.useStore()
+  const observer = bodiesById.get(referenceId)
+  const hasEphemeris = body ? kernelCoverage(body, clock.julianDay).model === 'jpl-spk' : false
   const catalog = catalogStore.useStore()
   const [tab, setTab] = useState<Tab>('overview')
   const details = useMemo(() => {
+    void ephemerides.revision // The external kernel pool can change while paused.
     if (!body?.orbit) return null
-    const elements = getInstantaneousElements(body.orbit, clock.julianDay)
+    const parent = bodiesById.get(body.parentId ?? 'sun')
+    const osculating = parent ? currentOsculatingElements(body, parent, clock.julianDay) : null
+    const elements = osculating ?? getInstantaneousElements(body.orbit, clock.julianDay)
     const physical = BODY_PHYSICAL[body.id]
     const parentPhysical = BODY_PHYSICAL[body.parentId ?? 'sun']
     return {
       ...elements,
+      isOsculating: Boolean(osculating),
       perihelionAU: elements.semiMajorAxisAU * (1 - elements.eccentricity),
       aphelionAU: elements.semiMajorAxisAU * (1 + elements.eccentricity),
-      periodDays: getOrbitalPeriodDays(
+      periodDays: osculating ? 360 / osculating.meanMotionDegPerDay : getOrbitalPeriodDays(
         body.orbit,
         body.parentId ? 'parent' : 'sun',
         elements.semiMajorAxisAU,
       ),
       influence: physical && parentPhysical ? computeInfluenceRadii(elements.semiMajorAxisAU, elements.eccentricity, physical.massKg, parentPhysical.massKg) : null,
     }
-  }, [body, clock.julianDay])
+  }, [body, bodiesById, clock.julianDay, ephemerides.revision])
   const moonPhase = useMemo(() => {
     if (body?.id !== 'moon') return null
     const resolve = createBodyPositionResolver(bodiesById, clock.julianDay)
@@ -49,13 +62,14 @@ export function BodyInspector({ body, currentPositions, bodiesById }: Props) {
   const physical = body ? BODY_PHYSICAL[body.id] : null
   const profile = body ? BODY_PROFILES[body.id] ?? { ...fallbackBodyProfile(body.kind, body.orbitClassName), sources: [] } : null
   const satelliteEvidence = body?.satelliteOrbitEvidence
-  const modelDescription = !body?.orbit
+  const fallbackDescription = !body?.orbit
     ? body?.kind === 'star' ? t('heliocentricOrigin') : body?.kind === 'spacecraft' ? t('schematicTrajectoryModel') : t('noPropagationModel')
     : satelliteEvidence?.precision === 'fixed-osculating-ellipse-at-epoch-not-ephemeris' ? t('jplHorizonsEpochModel')
     : satelliteEvidence?.precision === 'fixed-mean-ellipse-not-ephemeris' ? t('jplSatelliteMeanModel')
     : satelliteEvidence ? t('illustrativeSatelliteModel')
     : body.orbitRepresents === 'earth-moon-barycenter' ? t('earthOrbitSeedModel')
     : body.orbit.model === 'planetaryApprox' ? t('jplApproxModel') : t('ellipticTwoBodyModel')
+  const modelDescription = hasEphemeris ? `${t('physicalEphemerides')} · ${t('geometricStates')}` : fallbackDescription
   const satelliteSourceFrame = satelliteEvidence?.sourceFrame === 'jpl-ecliptic'
     ? t('jplEclipticFrame')
     : t('undocumentedIllustrativeFrame')
@@ -97,11 +111,17 @@ export function BodyInspector({ body, currentPositions, bodiesById }: Props) {
     <div className="section-kicker">{t('bodyInspector').toUpperCase()}</div>
     {!body || !profile || !kindLabels ? <p className="muted-copy">{t('noBody')}</p> : <>
       <header className="inspector-header"><i style={{ background: body.color }} /><div><h2>{bodyDisplayName(body, language)}</h2><p>{body.orbitClassName ?? kindLabels[body.kind]}</p></div></header>
+      <p className="fine-print" data-testid="body-model">{modelDescription}</p>
+      {hasEphemeris && <p className="fine-print">{t('ephemerisBoundary')}</p>}
+      {tab === 'orbit' && <p className="fine-print">{t(details?.isOsculating ? 'osculatingElements' : 'seedElementsOnly')}</p>}
+      {tab === 'orbit' && observer && <ObservationReadout body={body} observer={observer} julianDay={clock.julianDay} />}
+      {tab === 'context' && hasEphemeris && <p className="fine-print">{t('fallbackModelDetails')}</p>}
+      {tab === 'sources' && hasEphemeris && <div className="source-list">{EPHEMERIS_MANIFEST.files.filter((file) => file.targets.includes(kernelCoverage(body, clock.julianDay).target ?? -1)).map((file) => <a key={file.id} href={file.source} target="_blank" rel="noreferrer">{file.id} · SHA-256 {file.sha256}</a>)}</div>}
       <div className="inspector-tabs" role="tablist" aria-label={t('bodyProfileSections')}>{TABS.map((item, index) => <button id={`${profileId}-tab-${item}`} role="tab" aria-controls={`${profileId}-panel-${item}`} aria-selected={tab === item} tabIndex={tab === item ? 0 : -1} className={tab === item ? 'active' : ''} key={item} onClick={() => setTab(item)} onKeyDown={(event) => handleTabKey(event, index)}>{t(({ overview: 'profileOverview', orbit: 'profileOrbit', physical: 'profilePhysical', context: 'profileContext', sources: 'profileSources' } as const)[item])}</button>)}</div>
 
       {tab === 'overview' && <section className="profile-section" {...panelProps('overview')}><p className="profile-lead">{profile.overview[language]}</p><div className="science-callout"><span aria-hidden="true">◎</span><div><strong>{t('whyItMatters')}</strong><p>{profile.significance[language]}</p></div></div><div className="metric-grid compact"><Metric label={t('source')} value={body.source.toUpperCase()} /><Metric label={t('orbitClass')} value={body.orbitClassCode ?? kindLabels[body.kind]} />{body.absoluteMagnitude !== undefined && <Metric label={t('absoluteMagnitude')} value={body.absoluteMagnitude.toFixed(2)} />}<Metric label={t('distance')} value={position ? `${position.distance.toFixed(position.distance < .1 ? 5 : 3)} AU` : '—'} /></div></section>}
 
-      {tab === 'orbit' && <section className="profile-section" {...panelProps('orbit')}>{details ? <div className="metric-grid compact"><Metric label={t('semiMajorAxis')} value={`${details.semiMajorAxisAU.toFixed(5)} AU`} /><Metric label={t('eccentricity')} value={details.eccentricity.toFixed(6)} /><Metric label={t('inclination')} value={`${details.inclinationDeg.toFixed(3)}°`} /><Metric label={t('perihelion')} value={`${details.perihelionAU.toFixed(4)} AU`} /><Metric label={t('aphelion')} value={`${details.aphelionAU.toFixed(4)} AU`} /><Metric label={t('orbitalPeriod')} value={`${details.periodDays.toFixed(1)} d`} /></div> : <p className="muted-copy">{t('noPropagationModel')}</p>}<div className="model-note"><b>{t('model')}</b><p>{modelDescription}</p><small>{body.dataEpochLabel ?? (body.orbit?.model === 'keplerian' ? `JD ${body.orbit.epochJd}` : body.orbit?.model === 'planetaryApprox' ? t('j2000Approximation') : t('modelSpecificReference'))}</small></div></section>}
+      {tab === 'orbit' && <section className="profile-section" {...panelProps('orbit')}>{details ? <div className="metric-grid compact"><Metric label={t('semiMajorAxis')} value={`${details.semiMajorAxisAU.toFixed(5)} AU`} /><Metric label={t('eccentricity')} value={details.eccentricity.toFixed(6)} /><Metric label={t('inclination')} value={`${details.inclinationDeg.toFixed(3)}°`} /><Metric label={t('perihelion')} value={`${details.perihelionAU.toFixed(4)} AU`} /><Metric label={t('aphelion')} value={`${details.aphelionAU.toFixed(4)} AU`} /><Metric label={t('orbitalPeriod')} value={`${details.periodDays.toFixed(1)} d`} /></div> : <p className="muted-copy">{t('noPropagationModel')}</p>}<div className="model-note"><b>{t('model')}</b><p>{modelDescription}</p><small>{hasEphemeris ? `JD ${clock.julianDay.toFixed(6)} UTC → TDB` : body.dataEpochLabel ?? (body.orbit?.model === 'keplerian' ? `JD ${body.orbit.epochJd}` : body.orbit?.model === 'planetaryApprox' ? t('j2000Approximation') : t('modelSpecificReference'))}</small></div></section>}
 
       {tab === 'physical' && <section className="profile-section" {...panelProps('physical')}>{physical ? <div className="metric-grid compact"><Metric label={t('mass')} value={`${physical.massKg.toExponential(5)} kg`} /><Metric label={t('meanRadius')} value={`${physical.radiusKm.toLocaleString()} km`} /><Metric label={t('diameter')} value={`${(physical.radiusKm * 2).toLocaleString()} km`} /></div> : <p className="muted-copy">{t('physicalDataUnavailable')}</p>}{moonPhase && <div className="science-callout moon-callout"><span className="moon-disc">◐</span><div><strong>{t('moonPhase')}</strong><p>{(moonPhase.illuminatedFraction * 100).toFixed(1)}% {t('illuminated')} · {phaseNames[moonPhase.name]}</p></div></div>}{details?.influence && <div className="definition-list"><div><span>{t('hill')}</span><strong>{details.influence.hillRadiusAU.toExponential(3)} AU</strong></div><div><span>{t('soi')}</span><strong>{details.influence.laplaceSoiRadiusAU.toExponential(3)} AU</strong></div></div>}</section>}
 

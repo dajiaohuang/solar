@@ -50,7 +50,7 @@ export function stateToOsculatingElements(positionAU: Vector3, velocityAUPerDay:
   if (eccentricity > EPS) {
     argPeriapsisDeg = nodeMag > EPS
       ? angle(Math.atan2(dot(cross(node, eVector), h) / hMag, dot(node, eVector)) * deg)
-      : angle(Math.atan2(eVector.y, eVector.x) * deg)
+      : angle(Math.atan2(h.z < 0 ? -eVector.y : eVector.y, eVector.x) * deg)
   }
   const hUnit = { x: h.x / hMag, y: h.y / hMag, z: h.z / hMag }
   let trueAnomaly: number
@@ -59,7 +59,7 @@ export function stateToOsculatingElements(positionAU: Vector3, velocityAUPerDay:
   } else if (nodeMag > EPS) {
     trueAnomaly = Math.atan2(dot(positionAU, cross(hUnit, { x: node.x / nodeMag, y: node.y / nodeMag, z: 0 })), dot(positionAU, { x: node.x / nodeMag, y: node.y / nodeMag, z: 0 }))
   } else {
-    trueAnomaly = Math.atan2(positionAU.y, positionAU.x)
+    trueAnomaly = Math.atan2(h.z < 0 ? -positionAU.y : positionAU.y, positionAU.x)
   }
   const eccentricAnomaly = 2 * Math.atan2(Math.sqrt(1 - eccentricity) * Math.sin(trueAnomaly / 2), Math.sqrt(1 + eccentricity) * Math.cos(trueAnomaly / 2))
   const meanAnomaly = eccentricity > EPS ? eccentricAnomaly - eccentricity * Math.sin(eccentricAnomaly) : trueAnomaly

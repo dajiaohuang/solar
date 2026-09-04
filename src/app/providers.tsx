@@ -14,6 +14,7 @@ import { DEFAULT_MISSION_STATE, missionActions, missionStore } from '../state/mi
 import { IS_NATIVE_APP } from '../lib/platform'
 import { onNativeSceneLocation } from '../lib/nativeUrl'
 import { VIEW_CAPABILITIES } from '../lib/viewCapabilities'
+import { useEphemerisLoading } from '../hooks/useEphemerides'
 
 const DEFAULT_STORY = 'geocentric-model'
 const MISSION_BODY_IDS = new Set(majorBodiesWithPhysicalData.filter((body) => body.orbit && !body.parentId).map((body) => body.id))
@@ -48,6 +49,7 @@ function nextRelativeUrl() {
 }
 
 export function AppProviders({ children }: { children: ReactNode }) {
+  useEphemerisLoading()
   const initialized = useRef(false)
   const restoringHistory = useRef(false)
   const datasetLoadGeneration = useRef(0)
@@ -159,8 +161,8 @@ export function AppProviders({ children }: { children: ReactNode }) {
             : null,
       })
       const [datasetBodies, sbdbBodies] = await Promise.all([
-        manifest && selectedIds.some((id) => id.startsWith('asteroid:'))
-          ? loadAsteroidBodiesByIds(selectedIds)
+        manifest && selectedIds.some((id) => id.startsWith('asteroid:') && !majorBodiesWithPhysicalData.some((body) => body.id === id))
+          ? loadAsteroidBodiesByIds(selectedIds.filter((id) => !majorBodiesWithPhysicalData.some((body) => body.id === id)))
           : Promise.resolve([]),
         Promise.all(selectedIds.filter((id) => id.startsWith('sbdb:')).map((id) =>
           fetchSbdbBody(id.slice('sbdb:'.length).replaceAll('_', ' ')).catch(() => null))),

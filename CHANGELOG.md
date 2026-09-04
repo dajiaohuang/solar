@@ -8,6 +8,10 @@ All notable changes to Solar Atlas are documented here. The project follows sema
 
 ### Added
 
+- Authoritative, checksum-pinned JPL SPK geometric position/velocity evaluation without a runtime N-body integrator; 63 covered selectable body centers, including 31 newly selectable moons and 15 additional large asteroids.
+- UTC/TAI/TT/TDB conversion with explicit future leap-second uncertainty, parent-relative osculating diagnostics, and separate reception light-time / stellar-aberration readouts.
+- Seven new 3D presets, a lazy 65.6 MiB SPK pack shared with native apps, reproducible range extraction, and independent Horizons/center-chain/coverage regression tests.
+- Whole-window kernel selection for trails, events and porkchop maps to avoid artificial extrema at model boundaries; uncovered objects and dates retain labelled approximate fallback.
 - An optional worker-propagated asteroid catalog cloud in the Observation Deck, rendered as one GPU point buffer instead of one mesh or trajectory per catalog object.
 - Auto, Balanced, and Maximum 3D performance profiles with separate mobile/desktop budgets, conservative capability hints, frame-time adaptation, and deterministic unit coverage.
 - Reproducible v4 scene fields for catalog-cloud intent and quality profile, plus browser coverage for the default no-download path and 2D/3D replay.

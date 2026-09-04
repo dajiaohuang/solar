@@ -1,4 +1,5 @@
 import { createBodyPositionResolver } from './ephemeris'
+import { kernelsForWindow, loadedKernelIds } from '../engine/ephemeris/kernelStore'
 import { getRelativePositions, toPlanarPoint } from './referenceFrame'
 import { vector3Magnitude } from './ephemeris'
 import type { BodyId, CelestialBody, TrajectoryFrameData, TrajectorySample, Vector2, Vector3 } from '../types'
@@ -41,6 +42,7 @@ export function buildTrajectories(params: {
   const { bodies, bodiesById, referenceId, centerJulianDay, historyDays, sampleCount } = params
   const roundedCenter = Math.round(centerJulianDay * 4) / 4
   const cacheKey = [
+    loadedKernelIds().join(','),
     referenceId,
     historyDays,
     sampleCount,
@@ -64,10 +66,11 @@ export function buildTrajectories(params: {
 
   // One resolver per sample shares the same parent-body and reference-frame cache
   // across every focused body at that instant.
+  const kernels = kernelsForWindow(centerJulianDay - historyDays, centerJulianDay)
   for (let index = 0; index < sampleCount; index += 1) {
     const progress = sampleCount === 1 ? 0 : index / (sampleCount - 1)
     const julianDay = centerJulianDay - historyDays + progress * historyDays
-    const resolve = createBodyPositionResolver(bodiesById, julianDay)
+    const resolve = createBodyPositionResolver(bodiesById, julianDay, kernels)
     const positions = getRelativePositions(bodies, referenceId, resolve)
     for (let bodyIndex = 0; bodyIndex < positions.length; bodyIndex += 1) {
       trajectories[bodyIndex].points.push(toPlanarPoint(positions[bodyIndex].position))

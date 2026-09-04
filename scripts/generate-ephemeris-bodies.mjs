@@ -31,7 +31,7 @@ function arg(name, fallback) {
 const root = path.resolve(arg('--root', path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')))
 const sourceRoot = path.resolve(arg('--source-root', root))
 const manifestPath = path.resolve(arg('--manifest', path.join(sourceRoot, 'src/data/ephemeris-manifest.json')))
-const gmPath = arg('--gm', path.join(sourceRoot, 'public/data/ephemerides/gm_de440.tpc'))
+const gmPath = arg('--gm', path.join(sourceRoot, 'src/data/gm_de440.tpc'))
 const outputPath = path.resolve(arg('--output', path.join(root, 'src/data/ephemerisBodies.json')))
 const epochIso = arg('--epoch-iso', DEFAULT_EPOCH_ISO)
 const epochJd = Number(arg('--epoch-jd', 2451545 + (Date.parse(epochIso) - Date.parse('2000-01-01T12:00:00Z')) / 86400000))
@@ -49,33 +49,6 @@ function readGm(file) {
   const gm = new Map()
   for (const m of text.matchAll(/BODY(\d+)_GM\s*=\s*\(\s*([+\-0-9.EDed]+)\s*\)/g)) gm.set(Number(m[1]), Number(m[2].replace(/[dD]/g, 'E')))
   return gm
-}
-function vecMag(v) { return Math.hypot(v.x, v.y, v.z) }
-function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z }
-function cross(a, b) { return { x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x } }
-function elements(positionKm, velocityKmS, gmKm3S2) {
-  const r = vecMag(positionKm), speed2 = dot(velocityKmS, velocityKmS), h = cross(positionKm, velocityKmS)
-  const hMag = Math.hypot(h.x, h.y, h.z)
-  if (!(r > 0) || !(hMag > 0)) return null
-  const energy = speed2 / 2 - gmKm3S2 / r
-  if (!(energy < 0)) return null
-  const a = -gmKm3S2 / (2 * energy)
-  const ev = { x: ((speed2 - gmKm3S2 / r) * positionKm.x - dot(positionKm, velocityKmS) * velocityKmS.x) / gmKm3S2,
-    y: ((speed2 - gmKm3S2 / r) * positionKm.y - dot(positionKm, velocityKmS) * velocityKmS.y) / gmKm3S2,
-    z: ((speed2 - gmKm3S2 / r) * positionKm.z - dot(positionKm, velocityKmS) * velocityKmS.z) / gmKm3S2 }
-  const e = vecMag(ev)
-  if (!(e >= 0 && e < 1)) return null
-  const i = Math.atan2(Math.hypot(h.x, h.y), h.z)
-  const node = { x: -h.y, y: h.x, z: 0 }, nodeMag = Math.hypot(node.x, node.y)
-  const angle = (x) => (x % 360 + 360) % 360
-  const omega = e > 1e-12 ? Math.atan2(dot(cross(node, ev), h) / hMag, dot(node, ev)) : 0
-  const trueAnomaly = e > 1e-12 ? Math.atan2(dot(cross(ev, positionKm), h) / (hMag * e * r), dot(ev, positionKm) / (e * r)) : 0
-  const eccAnomaly = 2 * Math.atan2(Math.sqrt(1 - e) * Math.sin(trueAnomaly / 2), Math.sqrt(1 + e) * Math.cos(trueAnomaly / 2))
-  const meanAnomaly = e > 1e-12 ? eccAnomaly - e * Math.sin(eccAnomaly) : trueAnomaly
-  return { semiMajorAxisAU: a / AU_KM, eccentricity: e, inclinationDeg: i * 180 / Math.PI,
-    ascendingNodeDeg: nodeMag > 1e-12 ? angle(Math.atan2(node.y, node.x) * 180 / Math.PI) : 0,
-    argPeriapsisDeg: angle(omega * 180 / Math.PI), meanAnomalyDeg: angle(meanAnomaly * 180 / Math.PI),
-    meanMotionDegPerDay: Math.sqrt(gmKm3S2 / a ** 3) * DAY_SECONDS * 180 / Math.PI }
 }
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
@@ -127,7 +100,7 @@ for (const target of [...new Set(manifest.files.flatMap((f) => f.targets))].sort
     sourceUrl: source.source, sourceKernelId: source.id })
 }
 const result = { schemaVersion: 1, generatedAt: new Date().toISOString(), epochJd, epochTimeScale: 'TDB', source: {
-  manifestPath: 'src/data/ephemeris-manifest.json', manifestId: manifest.id, manifestSha256: sha256(manifestBytes), gmUrl: GM_URL, gmFile: 'gm_de440.tpc', gmSha256: sha256(gmBytes), gmKm3S2: Object.fromEntries(gm),
+  manifestPath: 'src/data/ephemeris-manifest.json', manifestId: manifest.id, manifestSha256: sha256(manifestBytes), gmUrl: GM_URL, gmFile: 'src/data/gm_de440.tpc', gmSha256: sha256(gmBytes), gmKm3S2: Object.fromEntries(gm),
   kernelContract: manifest.contract }, bodies }
 fs.mkdirSync(path.dirname(outputPath), { recursive: true })
 fs.writeFileSync(outputPath, `${JSON.stringify(result, null, 2)}\n`)

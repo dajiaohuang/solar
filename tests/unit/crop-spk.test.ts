@@ -27,6 +27,11 @@ describe('crop-spk', () => {
     expect(kernel.segments[0]).toMatchObject({ target: 499, startEt: 5, endEt: 15, recordCount: 2, recordSize: 8 })
     expect(kernel.evaluate(499, 5)!.position.x).toBeCloseTo(1)
     expect(kernel.evaluate(499, 15)!.position.x).toBeCloseTo(2)
+    const nestedSource = { size: result.buffer.length, identity: {}, read: async (start: number, length: number) => result.buffer.subarray(start, start + length) }
+    const nested = await cropSpk(nestedSource, { startEt: 6, endEt: 14 })
+    const nestedKernel = new SpkKernel(nested.buffer.buffer.slice(nested.buffer.byteOffset, nested.buffer.byteOffset + nested.buffer.byteLength))
+    expect(nestedKernel.evaluate(499, 6)).toEqual(kernel.evaluate(499, 6))
+    expect(nestedKernel.evaluate(499, 5)).toBeNull()
   })
 
   it('rejects a crop window with no coverage', async () => {

@@ -24,6 +24,17 @@ const report = {
   modelWindow: { planetaryApproximation: `${planetaryModelEvidence.validFrom}/${planetaryModelEvidence.validTo}`, outsideWindow: 'explicitly-labelled-extrapolation' },
   modelEvidence,
   benchmarks: {
+    spkStates: {
+      passed: suites.find((suite) => suite.file.endsWith('spk-reference.test.ts'))?.passed ?? false,
+      source: 'NASA/JPL Horizons independent state-vector samples',
+      sourceUrl: 'https://ssd.jpl.nasa.gov/api/horizons.api',
+      contract: 'Body centers, heliocentric ECLIPJ2000 position/velocity, source-dependent residual tolerances; not a universal accuracy certificate.',
+    },
+    timeAndObservation: {
+      passed: suites.find((suite) => suite.file.endsWith('time-scales-apparent.test.ts'))?.passed ?? false,
+      source: 'NAIF leap-second kernel and reception light-time / stellar-aberration equations',
+      contract: 'UTC/TAI/TT/TDB, light-time, finite relativistic aberration; no gravitational light deflection.',
+    },
     horizonsEvents: {
       passed: suites.find((suite) => suite.file.endsWith('event-benchmarks.test.ts'))?.passed ?? false,
       count: horizons.events.length,

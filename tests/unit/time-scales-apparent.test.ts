@@ -3,11 +3,15 @@ import { apparentPosition } from '../../src/engine/ephemeris/apparent'
 import { J2000_JULIAN_DAY, utcJulianDayToEt, utcJulianDayToTdb, utcTimeScaleQuality } from '../../src/engine/ephemeris/timeScales'
 
 describe('NAIF time-scale approximation', () => {
-  it('uses the NAIF 37-second leap table at J2000 and TT=TAl+32.184', () => {
+  it('uses TAI−UTC=32 seconds at J2000 and returns ET in seconds', () => {
     const tdb = utcJulianDayToTdb(J2000_JULIAN_DAY)
-    expect((tdb - J2000_JULIAN_DAY) * 86400).toBeCloseTo(69.184, 3)
-    expect(utcJulianDayToEt(J2000_JULIAN_DAY)).toBe(tdb)
+    expect((tdb - J2000_JULIAN_DAY) * 86400).toBeCloseTo(64.183927, 3)
+    expect(utcJulianDayToEt(J2000_JULIAN_DAY)).toBeCloseTo(64.183927, 6)
     expect(utcTimeScaleQuality(J2000_JULIAN_DAY).status).toBe('supported')
+  })
+  it('uses the IERS confirmed present-day offset without labeling 2017–2026 future', () => {
+    expect(utcTimeScaleQuality(2461288.5)).toMatchObject({ leapSeconds: 37, status: 'supported' })
+    expect(utcJulianDayToEt(2461288.5) - (2461288.5 - J2000_JULIAN_DAY) * 86400).toBeCloseTo(69.184, 2)
   })
   it('throws for pre-1972 UTC and marks future leap holding explicit', () => {
     expect(() => utcJulianDayToTdb(2_440_000)).toThrow(/1972/)

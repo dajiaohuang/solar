@@ -13,11 +13,21 @@ const LSK_ENTRIES: readonly [string, number][] = [
 ]
 const calendarJulianDay = (date: string) => Date.parse(`${date}T00:00:00Z`) / 86_400_000 + 2_440_587.5
 const LEAPS = LSK_ENTRIES.map(([date, value]) => [calendarJulianDay(date), value] as [number, number])
-const SOURCES = ['https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/time.html', 'https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/deltet_c.html'] as const
+const SOURCES = ['https://naif.jpl.nasa.gov/pub/naif/generic_kernels/lsk/naif0012.tls', 'https://datacenter.iers.org/data/html/bulletinc-072.html', 'https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/deltet_c.html'] as const
 export interface TimeScaleQuality { scale: 'TDB' | 'ET'; status: 'supported' | 'future-uncertain'; leapSeconds: number; assumptions: readonly string[]; sources: readonly string[] }
 function finiteJd(jd: number) { if (!Number.isFinite(jd)) throw new RangeError('Julian day must be finite') }
 function leapSecondsAt(jd: number) { if (jd < LEAPS[0][0]) throw new RangeError('UTC conversion supports 1972-01-01 onward'); let value = LEAPS[0][1]; for (const [date, seconds] of LEAPS) if (jd >= date) value = seconds; return value }
-export function utcTimeScaleQuality(jd: number, scale: 'TDB' | 'ET' = 'TDB'): TimeScaleQuality { finiteJd(jd); const leapSeconds = leapSecondsAt(jd); const future = jd > LEAPS[LEAPS.length - 1][0]; return { scale, status: future ? 'future-uncertain' : 'supported', leapSeconds, assumptions: ['Numeric UTC Julian days cannot represent the UTC leap-second label itself.', ...(future ? ['Future leap seconds are unknown; the last NAIF value is held constant (explicit extrapolation).'] : []), 'TDB-TT uses the NAIF DELTET periodic approximation, not a full relativistic time ephemeris.'], sources: SOURCES } }
-export function utcJulianDayToTdb(jd: number): number { finiteJd(jd); const deltaAt = leapSecondsAt(jd); const utcSeconds = (jd - J2000_JULIAN_DAY) * SECONDS_PER_DAY; const ttSeconds = utcSeconds + deltaAt + 32.184; const meanAnomaly = 6.239996 + 1.99096871e-7 * ttSeconds; const eccentricAnomaly = meanAnomaly + 1.671e-2 * Math.sin(meanAnomaly); const periodic = 1.657e-3 * Math.sin(eccentricAnomaly); const result = jd + (deltaAt + 32.184 + periodic) / SECONDS_PER_DAY; if (!Number.isFinite(result)) throw new RangeError('UTC to TDB conversion produced a non-finite result'); return result }
-/** SPICE ET is TDB in this application. */
-export const utcJulianDayToEt = utcJulianDayToTdb
+export function utcTimeScaleQuality(jd: number, scale: 'TDB' | 'ET' = 'TDB'): TimeScaleQuality { finiteJd(jd); const leapSeconds = leapSecondsAt(jd); const future = jd >= calendarJulianDay('2027-01-01'); return { scale, status: future ? 'future-uncertain' : 'supported', leapSeconds, assumptions: ['Numeric UTC Julian days cannot represent the UTC leap-second label itself.', ...(future ? ['Beyond the IERS Bulletin C 72 confirmation window, unknown future leap seconds are held at the last value.'] : []), 'TDB-TT uses the NAIF DELTET periodic approximation, not a full relativistic time ephemeris.'], sources: SOURCES } }
+/** Seconds TDB past J2000 (NOT a Julian date). NAIF naif0012.tls DELTET constants. */
+export function utcJulianDayToEt(jd: number): number {
+  finiteJd(jd)
+  const ttSeconds = (jd - J2000_JULIAN_DAY) * SECONDS_PER_DAY + leapSecondsAt(jd) + 32.184
+  const meanAnomaly = 6.239996 + 1.99096871e-7 * ttSeconds
+  const eccentricAnomaly = meanAnomaly + 1.671e-2 * Math.sin(meanAnomaly)
+  const result = ttSeconds + 1.657e-3 * Math.sin(eccentricAnomaly)
+  if (!Number.isFinite(result)) throw new RangeError('UTC to ET conversion produced a non-finite result')
+  return result
+}
+export function utcJulianDayToTdb(jd: number): number {
+  return J2000_JULIAN_DAY + utcJulianDayToEt(jd) / SECONDS_PER_DAY
+}

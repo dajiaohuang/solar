@@ -68,13 +68,23 @@ function normalizedRelative(root, path) {
 }
 
 async function copyStaticPublic() {
+  const ephemerides = await readJson(join(ROOT, 'src', 'data', 'ephemeris-manifest.json'))
+  const ephemerisPaths = new Set(ephemerides.files.map((file) => `data/ephemerides/${file.path}`))
   const files = await walkFiles(PUBLIC)
   for (const source of files) {
     const relativePath = normalizedRelative(PUBLIC, source)
     if (relativePath.startsWith('data/asteroids/')) continue
+    if (relativePath.startsWith('data/ephemerides/') && !ephemerisPaths.has(relativePath)) continue
     const destination = join(DIST, ...relativePath.split('/'))
     await mkdir(dirname(destination), { recursive: true })
     await copyFile(source, destination)
+  }
+  // Only the pinned profile is shipped, even if a developer generated a larger
+  // local pack in public/. Fail closed for missing or changed coefficients.
+  for (const file of ephemerides.files) {
+    if (!/^[a-zA-Z0-9._-]+\.bsp$/.test(file.path)) throw new Error('Unsafe ephemeris filename')
+    const path = join(DIST, 'data', 'ephemerides', file.path)
+    if ((await stat(path)).size !== file.bytes || await hashFile(path) !== file.sha256) throw new Error(`Ephemeris checksum mismatch: ${file.path}`)
   }
 }
 
@@ -449,7 +459,8 @@ async function writeManifestsAndCapacity(buildInfo, dataset) {
     return { path: normalizedRelative(DIST, file), bytes: fileStat.size }
   }))
   const datasetEntries = entries.filter((entry) => entry.path.startsWith('data/asteroids/'))
-  const shellEntries = entries.filter((entry) => !entry.path.startsWith('data/asteroids/'))
+  const ephemerisEntries = entries.filter((entry) => entry.path.startsWith('data/ephemerides/'))
+  const shellEntries = entries.filter((entry) => !entry.path.startsWith('data/'))
   const bytes = (items) => items.reduce((sum, item) => sum + item.bytes, 0)
   const coldLoadEntries = entries.filter((entry) => entry.path === 'index.html' || entry.path === 'manifest.webmanifest' || entry.path.startsWith('assets/'))
   const typicalExtra = datasetEntries.filter((entry) => /catalog-index\.bin$|catalog-sample-desktop\.(bin|json\.gz)$|manifest\.json$|provenance\.json$|dataset-version\.json$/.test(entry.path))
@@ -463,6 +474,7 @@ async function writeManifestsAndCapacity(buildInfo, dataset) {
     distTotalBytes: totalBytes,
     applicationShellBytes: bytes(shellEntries),
     datasetTotalBytes: bytes(datasetEntries),
+    ephemerisTotalBytes: bytes(ephemerisEntries),
     coldLoadTransferBytes: bytes(coldLoadEntries),
     typicalCatalogSessionBytes: bytes(coldLoadEntries) + bytes(typicalExtra),
     fileCount: entries.length,

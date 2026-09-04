@@ -36,17 +36,17 @@ The default deck loads only the curated major-body model and does **not** downlo
 
 ## Built-in scene presets
 
-Solar Atlas currently ships twelve one-click presets. Every preset defines an epoch, reference frame, focus set, view, zoom, and trajectory window; dataset-backed presets additionally pin a complete dataset/sample/filter tuple.
+Solar Atlas currently ships nineteen one-click presets, including six expanded planet-centered moon systems and a 16-large-asteroid scene. Every preset defines an epoch, reference frame, focus set, view, zoom, and trajectory window; dataset-backed presets additionally pin a complete dataset/sample/filter tuple.
 
 | Preset | Reference and epoch | Default view | What it shows and what it does not claim |
 | --- | --- | --- | --- |
 | Solar System today | Sun · current date | 3D | Major planets, Moon, Ceres, and Pluto at the current approximate epoch |
-| Earth–Moon system | Earth · 2026-07-01 | 3D | Earth and the modeled Moon in an Earth-centered frame; not a DE440 position ephemeris |
+| Earth–Moon system | Earth · 2026-07-01 | 3D | DE440s Earth/Moon body centers when loaded; documented mean-ellipse fallback otherwise |
 | Inner Solar System | Sun · 2026-07-01 | 3D | Mercury through Mars and the Moon across a 180-day trajectory window |
 | Outer Solar System | Sun · 2026-07-01 | 3D | Jupiter through Neptune across a twelve-year window |
 | Dwarf-planet orbits | Sun · 2026-07-01 | 3D | Ceres, Pluto, Eris, Haumea, and Makemake across a 33-year window |
 | Mars opposition 2027 | Sun · 2027-02-19 | 3D | Heliocentric Earth–Mars–Jupiter geometry near the February 2027 opposition |
-| Jupiter and its modeled Galilean moons | Jupiter · 2026-07-01 | 3D | Jupiter, Io, Europa, Ganymede, and Callisto using auditable fixed-ellipse approximations |
+| Jupiter and its modeled Galilean moons | Jupiter · 2026-07-01 | 3D | Jupiter, Io, Europa, Ganymede, and Callisto; JUP365 when loaded, fixed-ellipse fallback otherwise |
 | Saturn–Titan system | Saturn · 2026-07-01 | 3D | Saturn and Titan using the same bounded satellite-model contract |
 | Mars–main belt–Jupiter | Sun · 2026-07-01 | Element Space / `a–e` | The MBA subset of a pinned 8,000-object display sample, with Mars, Ceres, and Jupiter as heliocentric landmarks; not the complete main belt |
 | Main-belt element comparison | Sun · 2026-07-01 | Element Space / `a–i` | The MBA subset of the same pinned sample, comparing semi-major axis and inclination; not the complete main belt |
@@ -141,7 +141,7 @@ Primary sources:
 
 ### Physical ephemeris coverage and observation boundary
 
-The optional physical-ephemeris bundle is 59 SHA-256-pinned files (about 65.6 MiB) loaded on demand: `de440s` spans 2000–2051, while satellite and 16 selected small-body kernels span 2020–2031. The manifest currently includes 46 additional target entries whose seed/center mapping is being corrected; those entries are not a claim of universal coverage. Ordinary `npm run build` does not fetch kernels or contact the network. Native builds carry the same manifest and can use already bundled kernel assets offline; catalog and live SBDB requests remain online.
+The physical-ephemeris bundle contains 59 SHA-256-pinned files (about 65.6 MiB), loaded on demand: `de440s` spans 2000–2051, while satellite and 16 selected small-body kernels span 2020–2031. The registry adds 31 moons and 15 asteroids, with tested parent-center/frame mappings and reconstructable fallback seeds. This is not universal coverage. Ordinary `npm run build` does not fetch kernels or contact the network. Web/native builds include exactly the manifest files; native SPK assets are available offline. Catalog and live SBDB requests retain their online boundary. Use `npm run data:ephemerides` to regenerate, or set `SOLAR_EPHEMERIS_FROM` / `SOLAR_EPHEMERIS_TO` for wider local/native intervals; see the [physical contract](./docs/physical-ephemerides.md).
 
 SPK output is geometric, center-resolved state in its declared frame. It is not an N-body client, and the app does not add a second general-relativistic or J2 correction. Focus trajectories may use SPK states while the GPU catalog cloud remains Keplerian. Geometric, reception light-time, and stellar-aberration readouts are separate; no gravitational light deflection, atmosphere, surface-observer model, or covariance is provided.
 

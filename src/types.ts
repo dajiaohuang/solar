@@ -2,7 +2,7 @@ export type BodyId = string
 
 export type BodyKind = 'star' | 'planet' | 'moon' | 'dwarfPlanet' | 'asteroid' | 'spacecraft'
 
-export type OrbitSource = 'jpl-approx' | 'jpl-satellite-mean' | 'jpl-sbdb' | 'mpcorb' | 'horizons' | 'curated-approx' | 'schematic' | 'custom'
+export type OrbitSource = 'jpl-approx' | 'jpl-satellite-mean' | 'jpl-sbdb' | 'mpcorb' | 'horizons' | 'curated-approx' | 'schematic' | 'custom' | 'jpl-spk-osculating-fallback'
 
 export type SatelliteOrbitEvidence = {
   sourceFrame: 'jpl-ecliptic' | 'undocumented-illustrative'
@@ -88,6 +88,7 @@ export type PlanetaryApproxOrbit = {
 export type KeplerianOrbit = {
   model: 'keplerian'
   epochJd: number
+  epochTimeScale?: 'TDB'
   semiMajorAxisAU: number
   eccentricity: number
   inclinationDeg: number
@@ -101,6 +102,7 @@ export type OrbitDefinition = PlanetaryApproxOrbit | KeplerianOrbit
 
 export type CelestialBody = {
   id: BodyId
+  naifId?: number
   name: string
   shortName?: string
   kind: BodyKind
@@ -147,6 +149,7 @@ export type TrajectoryFrameData = {
 
 export type TrajectoryWorkerRequest = {
   type: 'compute'
+  ephemerisFiles?: string[]
   requestId: number
   bodies: CelestialBody[]
   resolutionBodies: CelestialBody[]

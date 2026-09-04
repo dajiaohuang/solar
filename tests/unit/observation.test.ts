@@ -5,7 +5,7 @@ import { AU_IN_KM } from '../../src/engine/units'
 const jd = 2_451_545
 describe('deriveParentRelativeObservation', () => {
   it('keeps parent-relative AU elements separate from observer-relative apparent km', () => {
-    const resolve = (id: string, epoch: number) => {
+    const resolve = (id: string) => {
       if (id === 'parent') return { position: [10 * AU_IN_KM, 0, 0] as const, velocity: [0, 0, 0] as const }
       if (id === 'target') return { position: [10 * AU_IN_KM, AU_IN_KM, 0] as const, velocity: [-Math.sqrt(0.0002959122082855911) * AU_IN_KM / 86400, 0, 0] as const }
       if (id === 'observer') return { position: [0, 0, 0] as const, velocity: [0, 0, 0] as const }
