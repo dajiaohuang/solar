@@ -96,7 +96,82 @@ struct ProtocolTests {
         }
     }
 
+    static func sourceIdentityChecks() throws {
+        let base = URL(string: "https://example.test/full/")!
+        let manifestObject: [String: Any] = ["apiVersion": "solar.api/v1", "catalogVersion": "fixture", "catalogManifestSha256": hashA, "inventoryManifestSha256": hashB]
+        let manifest = try JSONSerialization.data(withJSONObject: manifestObject)
+        let rows: [[String: Any]] = (0..<50).map { index in
+            ["id": "unknown:source:\(index)", "name": "来源 \(index)", "category": "comet", "source": "synthetic-only",
+             "sourceRow": index, "identityStatus": "source-designation", "ephemerisStatus": "unmapped"]
+        }
+        let object: [String: Any] = ["apiVersion": "solar.api/v1", "catalogVersion": "fixture", "inventoryManifestSha256": hashB,
+            "sourceRecords": true, "identityAssertions": true, "uniqueBodySemantics": "not-deduplicated",
+            "totalRecords": NativeSourceIdentityPage.maxSafeInteger, "limit": 50, "items": rows, "nextPageToken": "next"]
+        let data = try JSONSerialization.data(withJSONObject: object)
+        let page = try NativeSourceIdentityPage(validating: data, catalogManifest: manifest, base: base, query: "火星+moon")
+        precondition(page.rows.map(\.id) == (0..<50).map { "unknown:source:\($0)" })
+        precondition(page.rows[49].name == "来源 49" && page.rows[49].sourceRow == 49)
+        precondition(page.totalRecords == NativeSourceIdentityPage.maxSafeInteger && page.next == "next")
+        precondition(page.query == "火星+moon" && page.inventoryHash == hashB && page.catalogHash == hashA)
+        try page.requireManifest(manifest, base: URL(string: "https://example.test/full")!)
+
+        func reject(_ operation: () throws -> Void) throws {
+            do { try operation() } catch { return }
+            throw StateTileFailure.invalid("Invalid source identity contract accepted")
+        }
+        func rejectPage(_ mutate: (inout [String: Any]) -> Void) throws {
+            var changed = object; mutate(&changed)
+            let altered = try JSONSerialization.data(withJSONObject: changed)
+            try reject { _ = try NativeSourceIdentityPage(validating: altered, catalogManifest: manifest, base: base, query: "") }
+        }
+        for (key, value) in [("apiVersion", "other"), ("catalogVersion", "other"), ("inventoryManifestSha256", hashA), ("uniqueBodySemantics", "deduplicated")] {
+            try rejectPage { $0[key] = value }
+        }
+        for key in ["sourceRecords", "identityAssertions"] {
+            try rejectPage { $0[key] = false }
+            try rejectPage { $0[key] = 1 }
+            try rejectPage { $0.removeValue(forKey: key) }
+        }
+        for value in [-1, 1.5, true, NativeSourceIdentityPage.maxSafeInteger + 1, "100"] as [Any] {
+            try rejectPage { $0["totalRecords"] = value }
+        }
+        try rejectPage { $0["totalRecords"] = 49 }
+        try rejectPage { $0["limit"] = 51 }
+        try rejectPage { $0["items"] = rows + [rows[0]] }
+        try rejectPage { $0["items"] = [rows[0], rows[0]] }
+        try rejectPage { $0["items"] = []; $0["nextPageToken"] = "next" }
+        try rejectPage { $0["nextPageToken"] = String(repeating: "x", count: 4097) }
+        for value in ["", "id,split", "id split", "id\n", String(repeating: "x", count: 513)] as [Any] {
+            try rejectPage { var row = rows[0]; row["id"] = value; $0["items"] = [row] }
+        }
+        for value in [-1, 0.5, true, NativeSourceIdentityPage.maxSafeInteger + 1] as [Any] {
+            try rejectPage { var row = rows[0]; row["sourceRow"] = value; $0["items"] = [row] }
+        }
+        for key in ["source", "category", "identityStatus", "ephemerisStatus"] {
+            try rejectPage { var row = rows[0]; row[key] = "\u{7f}"; $0["items"] = [row] }
+        }
+        var empty = object; empty["items"] = []; empty["totalRecords"] = 0; empty["nextPageToken"] = NSNull()
+        let emptyPage = try NativeSourceIdentityPage(validating: JSONSerialization.data(withJSONObject: empty), catalogManifest: manifest, base: base, query: "")
+        precondition(emptyPage.rows.isEmpty && emptyPage.next.isEmpty && emptyPage.totalRecords == 0)
+        for key in ["apiVersion", "catalogVersion", "catalogManifestSha256", "inventoryManifestSha256"] {
+            var changed = manifestObject; changed[key] = key.hasSuffix("Sha256") ? String(repeating: "c", count: 64) : "changed"
+            let altered = try JSONSerialization.data(withJSONObject: changed)
+            try reject { try page.requireManifest(altered, base: base) }
+        }
+        try reject { try page.requireManifest(manifest, base: URL(string: "https://other.test/full")!) }
+        for value in ["http://example.test", "https://user@example.test", "https://example.test/?q=x", "https://example.test/#x"] {
+            try reject { _ = try NativeSourceIdentityPage.validatedBase(URL(string: value)!) }
+        }
+        try NativeSourceIdentityPage.validateQuery(String(repeating: "x", count: 256))
+        try reject { try NativeSourceIdentityPage.validateQuery(String(repeating: "火", count: 86)) }
+        try reject { try NativeSourceIdentityPage.validateQuery("bad\nquery") }
+        try reject { _ = try NativeSourceIdentityPage(validating: Data(repeating: 32, count: NativeSourceIdentityPage.maxBytes + 1), catalogManifest: manifest, base: base, query: "") }
+        try reject { try page.requireManifest(Data(repeating: 32, count: NativeSourceIdentityPage.maxManifestBytes + 1), base: base) }
+        print("Source identity protocol checks passed (synthetic, not a scientific oracle)")
+    }
+
     static func main() async throws {
+        try sourceIdentityChecks()
         let coverage = try coverageFixture()
         let coverageManifest = try JSONSerialization.data(withJSONObject: ["apiVersion": "solar.api/v1", "catalogVersion": "fixture", "catalogManifestSha256": String(repeating: "a", count: 64), "inventoryManifestSha256": String(repeating: "a", count: 64)])
         _ = try NativeCoverageReport(validating: coverage, catalogManifest: coverageManifest)

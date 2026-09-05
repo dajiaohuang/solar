@@ -24,7 +24,7 @@ for (const [callback, phase] of [['sceneDidBecomeActive', 'active'], ['sceneWill
   }
 }
 if (/BridgeActivity|WebView/.test(activity) || /implementation project\(':capacitor/.test(android)) throw new Error('Android still embeds the Web shell')
-for (const source of ['NativeObservationDeck.swift', 'StateTileDecoder.swift', 'StateTileCache.swift', 'StateTileService.swift', 'NativeStateProjection.swift', 'NativeCoverageReport.swift', 'NativePointGeometry.swift']) {
+for (const source of ['NativeObservationDeck.swift', 'StateTileDecoder.swift', 'StateTileCache.swift', 'StateTileService.swift', 'NativeStateProjection.swift', 'NativeCoverageReport.swift', 'NativePointGeometry.swift', 'NativeSourceIdentityPage.swift', 'NativeSourceDirectory.swift']) {
   if (!project.includes(`${source} in Sources`)) throw new Error(`iOS source is not in its build target: ${source}`)
   await read(`ios/App/App/${source}`)
 }

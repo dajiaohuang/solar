@@ -35,7 +35,7 @@ final class ObservationModel: ObservableObject {
         if requestGate.shouldCancel(reference: reference) { cancel() }
     }
 
-    func load(address: String, ids: [String], epoch: String, reference: String) {
+    func load(address: String, ids: [String], epoch: String, reference: String, selectedPage: NativeSourceIdentityPage? = nil) {
         cancel(); frame = nil
         guard let url = URL(string: address.trimmingCharacters(in: .whitespacesAndNewlines)),
               let jd = Double(epoch), jd.isFinite else {
@@ -49,7 +49,7 @@ final class ObservationModel: ObservableObject {
                 if cache == nil { cache = try StateTileCache() }
                 guard let cache = cache else { return }
                 let service = try StateTileService(base: url, cache: cache)
-                let result = try await service.load(ids: ids, epochJd: jd)
+                let result = try await service.load(ids: ids, epochJd: jd, selectedPage: selectedPage)
                 try Task.checkCancellation()
                 guard requestGate.isCurrent(current) else { return }
                 frame = result
@@ -136,6 +136,7 @@ private struct NativePreset: Identifiable {
 
 struct ObservationDeckView: View {
     @StateObject private var model = ObservationModel()
+    @StateObject private var sourceDirectory = NativeSourceDirectoryModel()
     @AppStorage("native.backend.address") private var address = ""
     @AppStorage("native.onboarding.complete") private var onboarded = false
     @Environment(\.scenePhase) private var scenePhase
@@ -145,6 +146,7 @@ struct ObservationDeckView: View {
     @State private var epoch = "2461287.5"
     @State private var customIDs = ""
     @State private var reference = "naif:10"
+    @State private var selectedSourcePage: NativeSourceIdentityPage?
 
     private var preset: NativePreset { NativePreset.all.first { $0.id == selected } ?? NativePreset.all[0] }
     @State private var coverageExpanded = false
@@ -154,7 +156,23 @@ struct ObservationDeckView: View {
         let supplied = customIDs.split { $0.isWhitespace || $0 == "," }.map(String.init)
         var seen = Set<String>()
         let ids = ((supplied.isEmpty ? preset.ids : supplied) + [reference]).filter { !$0.isEmpty && seen.insert($0).inserted }
-        model.load(address: address, ids: ids, epoch: epoch, reference: reference)
+        model.load(address: address, ids: ids, epoch: epoch, reference: reference, selectedPage: selectedSourcePage)
+    }
+
+    private func invalidateObservation() {
+        model.cancel(); model.frame = nil; model.message = SourceDirectoryCopy.edited
+    }
+
+    // User edits invalidate immediately. onChange would also fire after a
+    // programmatic preset/page selection and could cancel its new request.
+    private var editedIDs: Binding<String> {
+        Binding(get: { customIDs }, set: { customIDs = $0; selectedSourcePage = nil; invalidateObservation() })
+    }
+    private var editedEpoch: Binding<String> {
+        Binding(get: { epoch }, set: { epoch = $0; invalidateObservation() })
+    }
+    private var editedReference: Binding<String> {
+        Binding(get: { reference }, set: { reference = $0; invalidateObservation() })
     }
 
     var body: some View {
@@ -197,7 +215,7 @@ struct ObservationDeckView: View {
                 Section("Preset scenes") {
                     ForEach(NativePreset.all) { item in
                         Button {
-                            selected = item.id; reference = item.reference; customIDs = ""
+                            selected = item.id; reference = item.reference; customIDs = ""; selectedSourcePage = nil
                             if !address.isEmpty { load() } else { model.cancel(); model.frame = nil }
                         } label: {
                             HStack {
@@ -208,6 +226,12 @@ struct ObservationDeckView: View {
                         }
                         .accessibilityIdentifier("preset.\(item.id)")
                     }
+                }
+                NativeSourceDirectorySection(model: sourceDirectory, address: address) { page in
+                    invalidateObservation()
+                    customIDs = page.rows.map(\.id).joined(separator: ", ")
+                    selectedSourcePage = page
+                    model.message = SourceDirectoryCopy.selected
                 }
                 Section(CoverageCopy.title) {
                     // Keep every audit item a separate List row. A single nested
@@ -264,11 +288,11 @@ struct ObservationDeckView: View {
                 DisclosureGroup("Advanced") {
                     TextField("Full-version backend HTTPS address", text: $address)
                         .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
-                    TextField("Julian date (TDB)", text: $epoch)
+                    TextField("Julian date (TDB)", text: editedEpoch)
                         .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.numbersAndPunctuation)
-                    TextField("Reference body ID", text: $reference)
+                    TextField("Reference body ID", text: editedReference)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    TextField("Body IDs, separated by commas", text: $customIDs, axis: .vertical)
+                    TextField("Body IDs, separated by commas", text: editedIDs, axis: .vertical)
                         .textInputAutocapitalization(.never).autocorrectionDisabled().lineLimit(2...5)
                         .accessibilityIdentifier("observation.ids")
                     Text("Enter audited catalog or source IDs. Requests are partitioned without dropping IDs. The reference body must have a verified state at the same epoch.")
@@ -307,11 +331,11 @@ struct ObservationDeckView: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { tutorial = false } } }
                 }
             }
-            .onChange(of: scenePhase) { phase in if phase != .active { model.cancel() } }
-            .onChange(of: address) { _ in model.clearCoverage() }
+            .onChange(of: scenePhase) { phase in if phase != .active { model.cancel(); sourceDirectory.clear() } }
+            .onChange(of: address) { _ in selectedSourcePage = nil; sourceDirectory.clear(); invalidateObservation() }
             .onChange(of: coverageExpanded) { expanded in if !expanded { model.clearCoverage() } }
             .onChange(of: reference) { value in model.referenceChanged(value) }
-            .onDisappear { model.cancel() }
+            .onDisappear { model.cancel(); sourceDirectory.clear() }
         }
     }
 }

@@ -154,8 +154,8 @@ observations; query/backend edits, collapse, timeout and backgrounding cancel
 directory work and clear its displayed results. This does not provide offline
 catalog recovery or establish that every source record has precise states.
 The native harness separates `/identity-fixture/` synthetic pagination and
-stale-selection cases from real SPK state verification. iOS source browsing
-and full native/Web product parity remain incomplete.
+stale-selection cases from real SPK state verification. Full native/Web product
+parity remains incomplete; the iOS source-browser implementation is described below.
 
 The 2026-09-06 local API 36 emulator run passed the two synthetic 50-row pages,
 explicit page selection and rejection of a changed inventory before any state
@@ -184,6 +184,36 @@ full catalog hash `7e7fa1df8080b505abba52cc8ca9a4d8bd6d1c10d47d3e421953e7c1b8494
 No source archive is fetched from the internet, rewritten or packaged into the app. Without both inventory
 inputs, the report explicitly marks this additional case `not-configured`;
 ordinary hosted native smoke alone does not prove real-directory selection.
+
+### iOS all-source directory
+
+iOS now includes its own initially collapsed native source list. Opening it
+does not make requests. Load first page or Next page fetches a fresh HTTPS
+manifest (at most 8 MiB) and at most 50 source rows (256 KiB); only one page is
+retained. Queries are limited to 256 UTF-8 bytes. Original source IDs, row
+numbers, identity assertions and ephemeris status remain visible, with explicit
+warnings that source records are not unique bodies or verified states.
+
+Selecting a page replaces the custom IDs and closes the list without computing
+states. Load observation includes the reference ID and checks the selected
+page's backend/catalog/inventory identities against a fresh manifest before
+requesting a state plan. Changed identities reject the load. Editing custom
+IDs releases that selection pin; epoch/reference edits retain it but invalidate
+the old observation. Backend edits also clear the pin and directory results.
+Query edits, collapsing and backgrounding cancel directory requests and clear
+the displayed page; late responses cannot republish it. Each HTTP transfer is
+bounded, rejects redirects, and uses a 30-second request/120-second resource
+timeout; these are not a hard deadline for the entire two-request operation.
+
+Hermetic Swift checks cover malformed fields, semantic flags, sizes, numeric
+bounds, duplicate IDs and identity drift. The macOS native smoke includes a
+separate synthetic two-page test: preserve all 50 original selected IDs and
+reject a changed inventory before any state plan. Its five HTTPS GETs are
+checked independently of the existing real-SPK state/cache tests. These new
+Swift protocol/build/UI checks require hosted macOS verification; Windows
+source/packaging checks alone do not prove they passed. Real-inventory iOS
+selection, Chinese runtime UI, device FPS and full product parity are not yet
+verified. No source directory or SPK is bundled into the app.
 
 ### On-demand source coverage audit
 

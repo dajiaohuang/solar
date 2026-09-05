@@ -64,13 +64,14 @@ actor StateTileService {
         return try await NativeHTTPTransfer(contentType: type, limit: limit).receive(request)
     }
 
-    func load(ids: [String], epochJd: Double) async throws -> NativeStateFrame {
+    func load(ids: [String], epochJd: Double, selectedPage: NativeSourceIdentityPage? = nil) async throws -> NativeStateFrame {
         guard epochJd.isFinite, !ids.isEmpty, ids.count <= Self.maxAggregateRows, Set(ids).count == ids.count,
               ids.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 1024 }) else {
             throw StateTileFailure.invalid("A finite TDB epoch and unique body IDs are required.")
         }
         let decoder = JSONDecoder()
         let (manifestData, _) = try await receive(path: "v1/catalog/manifest")
+        try selectedPage?.requireManifest(manifestData, base: base)
         let manifest = try decoder.decode(NativeManifest.self, from: manifestData)
         guard manifest.apiVersion == "solar.api/v1", !manifest.catalogVersion.isEmpty,
               StateTileDecoder.isHash(manifest.catalogManifestSha256),
@@ -278,3 +279,42 @@ actor NativeCoverageService {
 }
 
 struct NativeCoverageUnavailable: Error {}
+
+/// Browsing never calls the state planner and retains only the requested page.
+actor NativeSourceIdentityService {
+    private let base: URL
+    init(base: URL) throws { self.base = try NativeSourceIdentityPage.validatedBase(base) }
+
+    func load(query: String, previous: NativeSourceIdentityPage? = nil) async throws -> NativeSourceIdentityPage {
+        try NativeSourceIdentityPage.validateQuery(query)
+        if let previous = previous {
+            guard previous.base == base, previous.query == query, !previous.next.isEmpty else {
+                throw NativeSourceIdentityFailure.cursor
+            }
+        }
+        try Task.checkCancellation()
+        let manifest = try await receive(base.appendingPathComponent("v1/catalog/manifest"), limit: NativeSourceIdentityPage.maxManifestBytes)
+        try previous?.requireManifest(manifest, base: base)
+        try Task.checkCancellation()
+        guard var components = URLComponents(url: base.appendingPathComponent("v1/identities"), resolvingAgainstBaseURL: false) else {
+            throw NativeSourceIdentityFailure.address
+        }
+        components.queryItems = [URLQueryItem(name: "q", value: query), URLQueryItem(name: "limit", value: String(NativeSourceIdentityPage.size))]
+        if let previous = previous { components.queryItems?.append(URLQueryItem(name: "pageToken", value: previous.next)) }
+        // Go parses query '+' as space; preserve literal query text.
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        guard let url = components.url else { throw NativeSourceIdentityFailure.query }
+        let data = try await receive(url, limit: NativeSourceIdentityPage.maxBytes)
+        let page = try NativeSourceIdentityPage(validating: data, catalogManifest: manifest, base: base, query: query)
+        guard previous == nil || page.next.isEmpty || page.next != previous?.next else { throw NativeSourceIdentityFailure.cursor }
+        try Task.checkCancellation()
+        return page
+    }
+
+    private func receive(_ url: URL, limit: Int) async throws -> Data {
+        var request = URLRequest(url: url)
+        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        let (data, _) = try await NativeHTTPTransfer(contentType: "application/json", limit: limit).receive(request)
+        return data
+    }
+}

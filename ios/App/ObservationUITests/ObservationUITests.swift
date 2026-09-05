@@ -116,6 +116,53 @@ final class ObservationUITests: XCTestCase {
         app.terminate()
     }
 
+    func testSourceDirectorySelectionRejectsChangedInventory() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-native.backend.address", "https://127.0.0.1:18791/identity-fixture",
+                               "-native.onboarding.complete", "YES", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        XCTAssertTrue(app.buttons["observation.mode"].waitForExistence(timeout: 15))
+        let disclosure = app.buttons["identity.disclosure"]
+        reveal(app, disclosure)
+        XCTAssertEqual(disclosure.value as? String, "Collapsed")
+        XCTAssertFalse(app.buttons["identity.load"].exists)
+        setExpanded(app, disclosure, true)
+        let load = app.buttons["identity.load"]
+        reveal(app, load)
+        waitForLabel(app.staticTexts["identity.status"], "Browse source records on demand; browsing does not compute states.")
+        load.tap()
+        waitForLabel(app.staticTexts["identity.status"], "Source records loaded.")
+        reveal(app, app.staticTexts["identity.counts"])
+        XCTAssertEqual(app.staticTexts["identity.counts"].label, "This page: 50 · total source records: 100")
+        XCTAssertFalse(app.staticTexts["observation.displayed"].exists)
+        let next = app.buttons["identity.next"]
+        reveal(app, next); next.tap()
+        waitForLabel(app.staticTexts["identity.status"], "Source records loaded.")
+        reveal(app, next)
+        XCTAssertFalse(next.isEnabled)
+        let first = app.descendants(matching: .any).matching(identifier: "identity.row.unknown:source:50").firstMatch
+        reveal(app, first)
+        XCTAssertTrue(first.label.contains("unknown:source:50"))
+        screenshot(app, "source-directory-synthetic-page-two")
+        let select = app.buttons["identity.select"]
+        reveal(app, select); select.tap()
+        reveal(app, disclosure)
+        XCTAssertEqual(disclosure.value as? String, "Collapsed")
+        let advanced = app.buttons["observation.advanced"]
+        reveal(app, advanced); advanced.tap()
+        let ids = app.descendants(matching: .any).matching(identifier: "observation.ids").firstMatch
+        reveal(app, ids)
+        XCTAssertEqual(ids.value as? String, (50..<100).map { "unknown:source:\($0)" }.joined(separator: ", "))
+        reveal(app, app.buttons["observation.load"])
+        XCTAssertFalse(app.staticTexts["observation.displayed"].exists)
+        app.buttons["observation.load"].tap()
+        waitForLabel(app.staticTexts["observation.status"], "Inventory changed; restart browsing")
+        XCTAssertFalse(app.staticTexts["observation.displayed"].exists)
+        screenshot(app, "source-directory-rejects-stale-selection")
+        app.terminate()
+    }
+
     func testSourceCoverageIsExplicitBoundedAndClears() {
         continueAfterFailure = false
         let app = XCUIApplication()

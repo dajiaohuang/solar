@@ -9,6 +9,7 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { stageBackendProfile } from './stage-backend-profile.mjs'
 import { createNativeCoverageResponder, verifyNativeCoverageTraffic } from './native-coverage-fixture.mjs'
+import { createNativeIdentityResponder, verifyNativeIdentityTraffic } from './native-identity-fixture.mjs'
 
 const uuidPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i
 
@@ -191,7 +192,7 @@ export async function nativeSmoke() {
     await command(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', 'tests/unit/state-tiles-golden.test.ts'],
       { env: goldenEnv, log: join(artifact, 'real-web-golden.log') })
     await command('swiftc', ['ios/App/App/StateTileDecoder.swift', 'ios/App/App/StateTileCache.swift',
-      'ios/App/App/NativeStateProjection.swift', 'ios/App/App/NativeCoverageReport.swift', 'ios/ProtocolTests/ProtocolTests.swift', '-o', join(temporary, 'protocol-tests')])
+      'ios/App/App/NativeStateProjection.swift', 'ios/App/App/NativeCoverageReport.swift', 'ios/App/App/NativeSourceIdentityPage.swift', 'ios/ProtocolTests/ProtocolTests.swift', '-o', join(temporary, 'protocol-tests')])
     await command(join(temporary, 'protocol-tests'), [], { env: goldenEnv, log: join(artifact, 'real-swift-golden.log') })
     report.golden = JSON.parse(await readFile(join(temporary, 'real-golden/manifest.json'), 'utf8'))
     if (report.golden.plan.exactCount !== 3 || report.golden.plan.missingCount !== 1) throw new Error('Real Earth/Moon/Sun fixture must contain three exact states and one explicit gap')
@@ -214,8 +215,9 @@ export async function nativeSmoke() {
     backend.once('close', () => backendLog.end())
     await waitForBackend(backend, report.profile.manifestSha256)
     const coverageReply = createNativeCoverageResponder()
+    const identityReply = createNativeIdentityResponder()
     proxy = https.createServer({ key: await readFile(join(temporary, 'server.key')), cert: await readFile(join(temporary, 'server.crt')) }, (request, response) => {
-      const fixtureReply = coverageReply(request.method, request.url)
+      const fixtureReply = coverageReply(request.method, request.url) ?? identityReply(request.method, request.url)
       if (fixtureReply) {
         const body = Buffer.from(JSON.stringify(fixtureReply.body))
         traffic.push({ method: request.method, path: request.url, status: fixtureReply.status, bytes: body.length })
@@ -240,8 +242,9 @@ export async function nativeSmoke() {
     await command('xcodebuild', testArguments(device, join(artifact, 'Observation.xcresult')),
       { log: join(artifact, 'xcode-test.log'), timeout: 12 * 60_000 })
     report.pointGeometry = verifyPointPixelEvidence(await readFile(join(artifact, 'xcode-test.log'), 'utf8'))
-    verifyTraffic(traffic.filter(row => !row.path.startsWith('/coverage-fixture/')))
+    verifyTraffic(traffic.filter(row => !row.path.startsWith('/coverage-fixture/') && !row.path.startsWith('/identity-fixture/')))
     report.coverageUi = verifyNativeCoverageTraffic(traffic)
+    report.identityUi = verifyNativeIdentityTraffic(traffic)
     report.status = 'passed'
   } catch (error) {
     report.status = 'failed'; report.error = error.message
