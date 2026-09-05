@@ -27,6 +27,7 @@ import { bodyDisplayName } from '../../lib/bodyNames'
 import { catalogSampleErrorMessage } from '../../lib/catalogSampleProfile'
 import { CATALOG_ORBIT_CLASS_FILTERS } from '../../lib/catalogFilters'
 import { DatasetCard } from './DatasetCard'
+import { SourceIdentityBrowser } from './SourceIdentityBrowser'
 
 export function CatalogWorkspace() {
   useCatalogSample()
@@ -236,6 +237,7 @@ export function CatalogWorkspace() {
         </div>
       </div>
 
+      <SourceIdentityBrowser />
       <div className="catalog-layout">
         <aside className="filter-panel glass-panel">
           <DatasetCard />

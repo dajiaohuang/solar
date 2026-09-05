@@ -1,6 +1,21 @@
 import type { TranslationKey } from './en'
 
 export const zh: Record<TranslationKey, string> = {
+  sourceIdentityTitle: '全来源目录与状态检查',
+  sourceIdentityCancel: '取消请求',
+  sourceIdentityBoundary: '每页浏览 50 条来源记录，包括内置列表之外的天体。记录可能是别名，不等于独立天体；来源声明不代表精确状态证明。状态检查由你主动触发，仅检查本页，不改变综合看板或声称全目录已有精确星历。',
+  sourceIdentityQuery: '来源 ID、编号或名称（留空顺序浏览）',
+  sourceIdentityBrowse: '从第一页浏览',
+  sourceIdentityNext: '下一页来源记录',
+  sourceIdentityError: '无法验证本次请求，结果已清空。请检查完整版后端并从第一页重新浏览。',
+  sourceIdentityRows: '本页来源记录',
+  sourceIdentityEmpty: '本页没有来源记录。请更换搜索条件或留空浏览。',
+  sourceIdentityAssertion: '来源声明',
+  sourceIdentityEpoch: '检查时刻：儒略日（显式输入 TDB）',
+  sourceIdentityInspect: '检查本页精确状态与缺口',
+  sourceIdentityVerified: '已验证精确状态',
+  sourceIdentityMissing: '明确缺失',
+  sourceIdentityValidity: '有效期（J2000 起算的 TDB 秒）',
   exactDisplayCount: '已验证状态：已显示 / 已计算',
   exactDisplayUnshown: '未显示',
   exactDisplayPolicy: '仅显示候选上限：已选参考天体及焦点优先，其后按来源顺序；保留科学状态和缺口。比较视图共享上限',

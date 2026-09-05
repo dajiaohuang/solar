@@ -19,6 +19,15 @@
   --safe-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
 }
 
+.source-identity-browser { padding: 16px; margin-bottom: 20px; min-width: 0; overflow-wrap: anywhere; }
+.source-identity-browser > summary { cursor: pointer; color: var(--text); font-weight: 600; }
+.source-identity-browser p { max-width: 78ch; }
+.source-identity-browser .field { max-width: 48rem; }
+.source-identity-browser ul { padding-left: 20px; }
+.source-identity-browser li { margin-block: 12px; border-bottom: 1px solid var(--line); }
+.source-identity-browser .inline-actions { flex-wrap: wrap; }
+.source-identity-browser button { white-space: normal; }
+
 * { box-sizing: border-box; }
 button, input, select { font: inherit; }
 button { color: inherit; }

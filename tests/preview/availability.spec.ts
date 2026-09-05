@@ -1,5 +1,20 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
+test('preview rejects the full catalog route before requesting identities or states', async ({ page }) => {
+  const requests: string[] = []
+  page.on('request', request => { if (/\/v1\/(identities|state\/|catalog\/manifest)/.test(request.url())) requests.push(request.url()) })
+  await page.goto('?v=4&page=catalog&lang=en&view=3d')
+  const dialog = page.locator('dialog.preview-availability')
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toContainText('This workspace is available in the full version')
+  await expect(dialog.locator('textarea')).toHaveValue(page.url())
+  await expect(page.getByTestId('source-identity-browser')).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Dismiss', exact: true }).click()
+  await page.waitForLoadState('networkidle')
+  await expect(page.getByTestId('source-identity-browser')).toHaveCount(0)
+  expect(requests).toEqual([])
+})
+
 test('preview evidence never requests full-backend coverage', async ({ page }) => {
   const requests: string[] = []
   page.on('request', request => { if (/\/v1\/(coverage|catalog\/manifest)/.test(request.url())) requests.push(request.url()) })
