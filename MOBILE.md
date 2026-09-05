@@ -215,8 +215,14 @@ Swift protocol and simulator-build checks passed in
 at `8e911ca`, but the new UI test failed to reveal the selected-ID editor.
 Advanced now uses independently accessible List rows and an explicit expanded
 state; the regression also checks that closing/reopening preserves all IDs.
-That repair still requires hosted macOS runtime verification; Windows
-source/packaging checks alone do not prove it passed. Real-inventory iOS
+In [CI 33986754016](https://github.com/dajiaohuang/solar/actions/runs/33986754016)
+at `77c2a8a`, both 50-ID assertions and closing/reopening passed, but the final
+load did not reach the server: the captured button frame was behind the
+navigation bar despite XCTest reporting it hittable. The scroll helper now
+requires the target to be fully inside the content area and captures the
+pre-tap screen. The inventory-change rejection and five-request ledger remain
+unchanged and still require hosted runtime verification; Windows checks do
+not prove that end-to-end test passed. Real-inventory iOS
 selection, Chinese runtime UI, device FPS and full product parity are not yet
 verified. No source directory or SPK is bundled into the app.
 

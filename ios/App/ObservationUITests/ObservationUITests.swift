@@ -31,10 +31,23 @@ final class ObservationUITests: XCTestCase {
         add(attachment)
     }
 
+    private func isRevealed(_ app: XCUIApplication, _ element: XCUIElement) -> Bool {
+        guard element.exists, element.isHittable else { return false }
+        // XCTest can report a scrolled List button as hittable even when its
+        // frame is behind the navigation/status bar. A tap there never reaches
+        // the action. Derive the content boundary from the actual hierarchy.
+        let navigation = app.navigationBars.firstMatch
+        let top = navigation.exists ? max(app.frame.minY, navigation.frame.maxY) : app.frame.minY
+        let frame = element.frame
+        return frame.width > 0 && frame.height > 0 && frame.minY >= top
+            && frame.maxY <= app.frame.maxY && frame.minX >= app.frame.minX
+            && frame.maxX <= app.frame.maxX
+    }
+
     private func reveal(_ app: XCUIApplication, _ element: XCUIElement) {
-        for _ in 0..<10 { if element.exists && element.isHittable { return }; app.swipeUp() }
-        for _ in 0..<10 { if element.exists && element.isHittable { return }; app.swipeDown() }
-        XCTAssertTrue(element.exists && element.isHittable, "Element could not be revealed: \(element)")
+        for _ in 0..<10 { if isRevealed(app, element) { return }; app.swipeUp() }
+        for _ in 0..<10 { if isRevealed(app, element) { return }; app.swipeDown() }
+        XCTAssertTrue(isRevealed(app, element), "Element could not be revealed: \(element.debugDescription)")
     }
 
     private func setExpanded(_ app: XCUIApplication, _ element: XCUIElement, _ expanded: Bool) {
@@ -163,6 +176,7 @@ final class ObservationUITests: XCTestCase {
         setExpanded(app, advanced, false)
         reveal(app, app.buttons["observation.load"])
         XCTAssertFalse(app.staticTexts["observation.displayed"].exists)
+        screenshot(app, "source-directory-load-visible-before-tap")
         app.buttons["observation.load"].tap()
         waitForLabel(app.staticTexts["observation.status"], "Inventory changed; restart browsing")
         XCTAssertFalse(app.staticTexts["observation.displayed"].exists)
