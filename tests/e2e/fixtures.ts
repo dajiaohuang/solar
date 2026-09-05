@@ -29,7 +29,7 @@ function unavailableIdsAt(epochJd: number) {
     : Math.abs(epochJd - 2460000.5) < 0.01 ? new Set(['naif:920050000', 'naif:120050000']) : new Set<string>()
 }
 
-async function installStateTilesBackend(page: Page) {
+async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: boolean) {
   let slowStateTiles = false
   const plans = new Map<string, { bodyIds: string[]; epochJd: number }>()
   await page.route('**/solar-test-api/v1/catalog/manifest', route => route.fulfill({
@@ -47,7 +47,10 @@ async function installStateTilesBackend(page: Page) {
     plans.set(planId, { bodyIds: ids, epochJd })
     const unavailable = unavailableIdsAt(epochJd)
     const exactCount = ids.filter(id => knownBackendIds.has(id) && !unavailable.has(id)).length
-    return route.fulfill({ json: { apiVersion: 'solar.api/v1', catalogVersion: datasetVersion, planId, requestIdsSha256: await digestStateTileRequestIds(ids), catalogManifestSha256: catalogHash, epochJd, timeScale: 'TDB', frame: 'ECLIPJ2000', precision: 'exact', stateOriginId: 'naif:0', distanceUnit: 'km', velocityUnit: 'km/s', stride: 6, fieldMask: ['position', 'velocity'], tileCount: 1, bodyCount: ids.length, exactCount, approximateCount: 0, missingCount: ids.length - exactCount, tiles: [{ sequence: 0, ordinalStart: 0, ordinalCount: ids.length }] } })
+    // Keep the plan internally well formed but deliberately disagree with the
+    // valid tile bits in the explicit protocol-rejection scenario only.
+    const declaredExactCount = mismatchedStateTileCounts ? (exactCount > 0 ? exactCount - 1 : 1) : exactCount
+    return route.fulfill({ json: { apiVersion: 'solar.api/v1', catalogVersion: datasetVersion, planId, requestIdsSha256: await digestStateTileRequestIds(ids), catalogManifestSha256: catalogHash, epochJd, timeScale: 'TDB', frame: 'ECLIPJ2000', precision: 'exact', stateOriginId: 'naif:0', distanceUnit: 'km', velocityUnit: 'km/s', stride: 6, fieldMask: ['position', 'velocity'], tileCount: 1, bodyCount: ids.length, exactCount: declaredExactCount, approximateCount: 0, missingCount: ids.length - declaredExactCount, tiles: [{ sequence: 0, ordinalStart: 0, ordinalCount: ids.length }] } })
   })
   await page.route('**/solar-test-api/v1/state/tiles', async route => {
     const request = route.request()
@@ -70,9 +73,10 @@ async function installStateTilesBackend(page: Page) {
   })
 }
 
-export const test = base.extend<{ stateTilesBackend: void }>({
-  stateTilesBackend: [async ({ page }, use) => {
-    await installStateTilesBackend(page)
+export const test = base.extend<{ stateTilesBackend: void; mismatchedStateTileCounts: boolean }>({
+  mismatchedStateTileCounts: [false, { option: true }],
+  stateTilesBackend: [async ({ page, mismatchedStateTileCounts }, use) => {
+    await installStateTilesBackend(page, mismatchedStateTileCounts)
     await use()
   }, { auto: true }],
 })

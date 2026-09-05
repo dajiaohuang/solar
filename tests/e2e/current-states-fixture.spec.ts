@@ -1,6 +1,18 @@
 import { expect, test } from './fixtures'
 import satelliteCatalog from '../../src/data/satelliteCatalog.json' with { type: 'json' }
 
+test.describe('mismatched precision totals', () => {
+  test.use({ mismatchedStateTileCounts: true })
+  test('rejects an otherwise valid tile set when its plan claims different coverage', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+    await page.goto('./?v=4&lang=en&view=3d&speed=0&ref=earth&bodies=earth,moon,mars&jd=2461287.5')
+    const status = page.getByTestId('ephemeris-status')
+    await status.locator('summary').click()
+    await expect(status.getByRole('alert')).toContainText('plan precision count mismatch')
+    await expect(page.locator('.frame-view canvas[data-position-count]:not([data-position-count="0"])')).toHaveCount(0)
+  })
+})
+
 test('full-Web fixture preflights manifest/plan and preserves unknown identities in binary tiles', async ({ page }) => {
   await page.goto('./?v=4&lang=en')
   const result = await page.evaluate(async () => {

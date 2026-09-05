@@ -71,6 +71,9 @@ model and state-evidence provenance and must not carry a missing reason.
 comes from the actual selected kernel and segment at the requested epoch,
 including its checksum, center and validity. An audited snapshot additionally
 requires its source identity status and verified evidence-kernel checksum.
+Its validity start and end both equal the single audit epoch; a separate
+evidence window describes the source kernel segment, not permission to reuse
+that snapshot at other times.
 Missing rows require a machine-readable reason and six zero state components.
 Every numeric component must be finite.
 
@@ -81,6 +84,9 @@ or catalog version, manifest hash, plan hash, inventory hash, epoch, frame,
 origin, units, field mask, stride, tile count, sequence, ordinal span, section
 offset, payload hash, metadata count, provenance/status relation, or nonfinite
 state. It also rejects incomplete or conflicting duplicate tile sets.
+After reconciling duplicate tiles, the client counts each row once and requires
+the actual exact/approximate/missing totals to equal the validated plan totals
+before publishing any frame. A matching total body count alone is insufficient.
 Transport checks require the declared Content-Type and bounded Content-Length;
 the strong ETag must equal the tile payload checksum. Approximate and unused
 bitmap bits are zero. Failed or cancelled downloads release their streams.

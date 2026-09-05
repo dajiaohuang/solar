@@ -84,6 +84,9 @@ export type StateTilePlan = {
   fieldMask: number
   tileCount: number
   recordCount: number
+  exactCount: number
+  approximateCount: number
+  missingCount: number
   tiles: StateTileDescriptor[]
 }
 
@@ -223,7 +226,7 @@ export function validateStateTilePlan(raw: unknown, manifest: StateTileManifest,
   })
   if (tiles[0]?.ordinalStart !== 0 || tiles.some((tile, index) => index > 0 && tile.ordinalStart !== tiles[index - 1].ordinalStart + tiles[index - 1].recordCount) || tiles.reduce((sum, tile) => sum + tile.recordCount, 0) !== bodyCount) fail('plan record count or ordinal continuity mismatch')
   if (requestIds.length !== bodyCount || !isSha(expectedRequestIdsSha256) || value.requestIdsSha256 !== expectedRequestIdsSha256) fail('plan request identity mismatch')
-  return { apiVersion: STATE_TILE_API_VERSION, catalogVersion: value.catalogVersion, planHash, requestIdsSha256: value.requestIdsSha256 as string, requestIds: [...requestIds], catalogManifestSha256: value.catalogManifestSha256, inventoryManifestSha256: value.inventoryManifestSha256 as string | undefined, epochJd: value.epochJd, timeScale: 'TDB', frame: 'ECLIPJ2000', stateOriginId: 'naif:0', stride: STATE_TILE_STRIDE, fieldMask: STATE_TILE_FIELD_MASK, tileCount, recordCount: bodyCount, tiles }
+  return { apiVersion: STATE_TILE_API_VERSION, catalogVersion: value.catalogVersion, planHash, requestIdsSha256: value.requestIdsSha256 as string, requestIds: [...requestIds], catalogManifestSha256: value.catalogManifestSha256, inventoryManifestSha256: value.inventoryManifestSha256 as string | undefined, epochJd: value.epochJd, timeScale: 'TDB', frame: 'ECLIPJ2000', stateOriginId: 'naif:0', stride: STATE_TILE_STRIDE, fieldMask: STATE_TILE_FIELD_MASK, tileCount, recordCount: bodyCount, exactCount, approximateCount, missingCount, tiles }
 }
 
 export async function decodeStateTile(input: ArrayBuffer | Uint8Array, expected: { planHash: string; catalogManifestSha256: string; inventoryManifestSha256?: string; sequence?: number; tileCount?: number }): Promise<StateTile> {
@@ -327,7 +330,21 @@ export function assembleStateTiles(tiles: readonly StateTile[], plan: StateTileP
   for (const tile of tiles) { if (tile.tileCount !== plan.tileCount || tile.planHash !== plan.planHash || tile.catalogManifestSha256 !== plan.catalogManifestSha256 || tile.inventoryManifestSha256 !== plan.inventoryManifestSha256) fail('tile does not belong to plan'); const previous = bySequence.get(tile.sequence); if (previous && previous.payloadSha256 !== tile.payloadSha256) fail('conflicting duplicate tile'); bySequence.set(tile.sequence, tile) }
   if (bySequence.size !== plan.tileCount || plan.tiles.some(descriptor => !bySequence.has(descriptor.sequence))) fail('tile set is incomplete')
   const ordered = [...bySequence.values()].sort((a, b) => a.sequence - b.sequence)
-  ordered.forEach((tile, index) => { const descriptor = plan.tiles[index]; if (tile.ordinalStart !== descriptor.ordinalStart || tile.recordCount !== descriptor.recordCount || tile.epochJd !== plan.epochJd) fail('tile descriptor mismatch'); for (let row = 0; row < tile.recordCount; row += 1) if (tile.metadata[row]?.id !== plan.requestIds[tile.ordinalStart + row]) fail('tile metadata ordinal mismatch') })
+  let exactCount = 0, approximateCount = 0, missingCount = 0
+  ordered.forEach((tile, index) => {
+    const descriptor = plan.tiles[index]
+    if (tile.ordinalStart !== descriptor.ordinalStart || tile.recordCount !== descriptor.recordCount || tile.epochJd !== plan.epochJd) fail('tile descriptor mismatch')
+    // Count each verified row once, after duplicate tiles have been reconciled.
+    // Plan totals are scientific coverage claims, not optional display hints.
+    for (let row = 0; row < tile.recordCount; row += 1) {
+      if (tile.metadata[row]?.id !== plan.requestIds[tile.ordinalStart + row]) fail('tile metadata ordinal mismatch')
+      const byte = row >> 3, bit = 1 << (row % 8)
+      if (tile.exactBitmap[byte] & bit) exactCount++
+      if (tile.approximateBitmap[byte] & bit) approximateCount++
+      if (tile.missingBitmap[byte] & bit) missingCount++
+    }
+  })
+  if (exactCount !== plan.exactCount || approximateCount !== plan.approximateCount || missingCount !== plan.missingCount) fail('plan precision count mismatch')
   return ordered
 }
 

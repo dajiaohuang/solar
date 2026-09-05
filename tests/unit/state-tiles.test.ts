@@ -26,6 +26,20 @@ async function replaceMetadata(buffer: ArrayBuffer, text: string) {
 function response(buffer: ArrayBuffer, ok = true, extraHeaders: Record<string, string> = {}): Response { const bytes = new Uint8Array(buffer); const payloadHash = [...bytes.slice(168, 200)].map(value => value.toString(16).padStart(2, '0')).join(''); return { ok, status: ok ? 200 : 503, headers: new Headers({ 'content-type': 'application/vnd.solar.state-tile+binary', 'content-length': String(bytes.byteLength), etag: `"${payloadHash}"`, ...extraHeaders }), arrayBuffer: async () => buffer } as Response }
 
 describe('state tile binary protocol', () => {
+  it('rejects assembled exact/missing totals that disagree with the validated plan', async () => {
+    const mixedPlan = validateStateTilePlan({ ...plan, precision: 'exact', distanceUnit: 'km', velocityUnit: 'km/s',
+      fieldMask: ['position', 'velocity'], bodyCount: 2, exactCount: 1, approximateCount: 0, missingCount: 1,
+      tiles: plan.tiles.map(item => ({ ...item, ordinalCount: item.recordCount })) }, manifest, plan.epochJd, plan.requestIds, requestIdsSha256)
+    const earth = await decodeStateTile(await tile(0, 'earth', 1), { planHash, catalogManifestSha256 })
+    const mars = await decodeStateTile(await tile(1, 'mars', 4), { planHash, catalogManifestSha256 })
+    expect(() => assembleStateTiles([mars, earth], mixedPlan)).toThrow(/precision count mismatch/i)
+    const missing = await decodeStateTile(await encodeStateTile({ sequence: 1, tileCount: 2, ordinalStart: 1,
+      epochJd: plan.epochJd, metadata: [{ ...metadata('mars'), missingReason: 'kernel-coverage-gap' }],
+      exact: [], states: new Float64Array(6), planHash, catalogManifestSha256 }), { planHash, catalogManifestSha256 })
+    expect(assembleStateTiles([missing, earth, earth], mixedPlan)).toEqual([earth, missing])
+    expect(() => assembleStateTiles([missing, earth], plan)).toThrow(/precision count mismatch/i)
+  })
+
   it('requires the plan inventory identity to equal the manifest, including absence', () => {
     const raw = { ...plan, precision: 'exact', distanceUnit: 'km', velocityUnit: 'km/s', fieldMask: ['position', 'velocity'], bodyCount: 2, exactCount: 2, approximateCount: 0, missingCount: 0, tiles: plan.tiles.map(tile => ({ ...tile, ordinalCount: tile.recordCount })) }
     const check = (value: unknown, source = manifest) => validateStateTilePlan(value, source, plan.epochJd, plan.requestIds, requestIdsSha256)
