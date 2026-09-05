@@ -136,6 +136,27 @@ describe('state tile binary protocol', () => {
     const result = await fetchStateTiles({ base: 'https://fixture', plan, signal: new AbortController().signal, fetcher }); expect(result.map(item => item.metadata[0].id)).toEqual(['earth', 'mars']); expect(attempts).toBe(2); expect(maximum).toBeLessThanOrEqual(2)
   })
 
+  it('aborts sibling transfers immediately when a tile fails without aborting the caller', async () => {
+    const controller = new AbortController()
+    let siblingSignal: AbortSignal | null | undefined
+    let siblingAborted = false
+    const fetcher = (async (_url, init) => {
+      const sequence = JSON.parse(String(init?.body)).sequence
+      if (sequence === 0) return new Response(null, { status: 400 })
+      siblingSignal = init?.signal
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          siblingAborted = true
+          reject(new DOMException('Aborted', 'AbortError'))
+        }, { once: true })
+      })
+    }) as typeof fetch
+    await expect(fetchStateTiles({ base: 'https://fixture', plan, signal: controller.signal, fetcher })).rejects.toThrow(/HTTP 400/)
+    expect(siblingSignal).toBeTruthy()
+    expect(siblingAborted).toBe(true)
+    expect(controller.signal.aborted).toBe(false)
+  })
+
   it('does not retry protocol, content-type, length, or 4xx failures', async () => {
     const buffer = await tile(0, 'earth', 1)
     for (const [name, makeResponse] of [

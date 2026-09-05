@@ -1,6 +1,6 @@
 # Solar Atlas / 太阳系图谱
 
-> **开发定位：** Web、Android、iOS 三个独立前端项目，共用统一后端。GitHub Pages 是精选 Web 预览。原生目前仍是精确当前位置状态瓦片的第一竖切原型：Android 已使用 GLES 点渲染器并通过模拟器空场景冒烟，iOS 源码尚未在 macOS 编译，不宣称原生客户端已发布。详见[产品定位与验收标准](./docs/product-direction.md)。
+> **开发定位：** Web、Android、iOS 三个独立前端项目，共用统一后端。GitHub Pages 是精选 Web 预览。原生目前仍是精确当前位置状态瓦片的第一竖切原型：Android 已使用 GLES 点渲染器并通过模拟器空场景冒烟，iOS 已通过 macOS CI 协议测试及未签名模拟器构建（运行交互与真机验证仍待完成），不宣称原生客户端已发布。详见[产品定位与验收标准](./docs/product-direction.md)。
 
 独立的 [Go 后端实现](./backend/README.md)已有可本地运行的源码。完整版 Web 只有在部署方提供 `VITE_SOLAR_API_BASE_URL` 时，才接入经过审计的“清单 → 计划 → 二进制状态瓦片”链路；单个计划当前最多覆盖 32,768 个身份，不再沿用 Web 端 510 行截断。未提供后端时 Pages 继续使用精选静态内容。目前没有官方公开的完整版 Web 后端地址。
 
@@ -219,7 +219,7 @@ npm run check:capacity
 
 `npm run build:preview` 使用**相同 Web 前端**构建精选产品配置；本地需先安装 `.github/asteroid-dataset.json` 固定的已审计数据集。它保留 3D 综合看板、精选预设与课程、来源证据和 8,000 条展示样本。完整版入口保持可见并提供无障碍说明，受限场景链接保留原始意图。这不代表全目录或全部天体状态覆盖。
 
-Pages 流程先验证完整 Web，再构建、测试并仅发布精选预览。完整版 Web 部署需要运营方提供后端地址；目前没有官方公开的完整版 Web 端点。当前线上构建提交为 `2d2b99ca17b9a287024cb661a658c5922127e9fc`，报告 `productProfile=preview`、`ephemerisProfile=pages`、36 个 SPK 文件/90,800,128 字节 SPK，以及 93.2 MiB 总容量。原生源码项目是使用状态瓦片协议的独立第一竖切原型，不是另一套 Web 产品配置；Android 已使用 GLES 点渲染器并通过模拟器空场景冒烟，iOS 尚未在 macOS 编译。详见[预览交付与验证](./docs/preview-delivery.md)。开发优先级现为联合优化所有前端、Go 后端及存储，尽量同时精确计算并展示更多天体，以实测性能和明确精度边界验收。
+Pages 流程先验证完整 Web，再构建、测试并仅发布精选预览。完整版 Web 部署需要运营方提供后端地址；目前没有官方公开的完整版 Web 端点。当前线上构建提交为 `2d2b99ca17b9a287024cb661a658c5922127e9fc`，报告 `productProfile=preview`、`ephemerisProfile=pages`、36 个 SPK 文件/90,800,128 字节 SPK，以及 93.2 MiB 总容量。原生源码项目是使用状态瓦片协议的独立第一竖切原型，不是另一套 Web 产品配置；Android 已使用 GLES 点渲染器并通过模拟器空场景冒烟，iOS 已通过 macOS CI 协议测试及未签名模拟器构建（运行交互与真机验证仍待完成）。详见[预览交付与验证](./docs/preview-delivery.md)。开发优先级现为联合优化所有前端、Go 后端及存储，尽量同时精确计算并展示更多天体，以实测性能和明确精度边界验收。
 
 常用管线变量：
 
@@ -240,7 +240,7 @@ Pages 流程先验证完整 Web，再构建、测试并仅发布精选预览。�
 
 ## Android 与 iOS
 
-Android 与 iOS 是独立原生项目，不是 Web 壳。当前源码是从用户选择的 HTTPS 后端加载精确当前位置二进制瓦片的第一竖切原型：Android 已使用 GLES 点渲染器并通过模拟器空场景冒烟，iOS 源码尚未在 macOS 编译。计划中的 iOS 第一竖切支持 TDB 儒略日、预设或自定义 ID、参考 ID，默认原生 3D 并可切换原生 2D，拥有有界 256 MiB 已验证瓦片缓存。Manifest 与 plan 仍需在线，尚未实现完整离线 plan 恢复。不声称完整功能、真机、签名、商店或构建已通过。详见 [MOBILE-CN.md](./MOBILE-CN.md) 与 [PRIVACY-CN.md](./PRIVACY-CN.md)。
+Android 与 iOS 是独立原生项目，不是 Web 壳。当前源码是从用户选择的 HTTPS 后端加载精确当前位置二进制瓦片的第一竖切原型：Android 已使用 GLES 点渲染器并通过模拟器空场景冒烟，iOS 已通过 macOS CI 协议测试及未签名模拟器构建（运行交互与真机验证仍待完成）。计划中的 iOS 第一竖切支持 TDB 儒略日、预设或自定义 ID、参考 ID，默认原生 3D 并可切换原生 2D，拥有有界 256 MiB 已验证瓦片缓存。Manifest 与 plan 仍需在线，尚未实现完整离线 plan 恢复。不声称完整功能、真机、生产签名或商店发布已通过；构建证据见 MOBILE-CN.md。详见 [MOBILE-CN.md](./MOBILE-CN.md) 与 [PRIVACY-CN.md](./PRIVACY-CN.md)。
 
 
 ## 架构

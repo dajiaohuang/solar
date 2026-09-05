@@ -14,7 +14,7 @@ See the bilingual [product direction and acceptance criteria](./docs/product-dir
 ## Current status (2026-09-05)
 
 - **Live:** GitHub Pages publishes the curated Web preview. Its health/capacity evidence reports commit `2d2b99ca17b9a287024cb661a658c5922127e9fc`, 36 SPK files / 90,800,128 SPK bytes and 93.2 MiB total capacity.
-- **In development:** the Go backend, full-Web state-tile path and source-profile delivery are locally runnable and contract-tested, but there is no public full-Web backend endpoint. The native projects are first-slice prototypes; Android now uses a GLES point renderer validated in an empty-scene emulator smoke test and iOS has not yet been compiled on macOS.
+- **In development:** the Go backend, full-Web state-tile path and source-profile delivery are locally runnable and contract-tested, but there is no public full-Web backend endpoint. The native projects are first-slice prototypes; Android now uses a GLES point renderer validated in an empty-scene emulator smoke test and iOS has passed macOS CI protocol tests and an unsigned simulator build (runtime/device validation remains pending).
 - **Planned:** measured backend/full-client throughput, multi-plan memory/render limits, broader all-body runtime delivery, and native build/device/release evidence. None of these is implied by the Pages publication.
 
 ## 0.11.0 — geocentrism as the core guide

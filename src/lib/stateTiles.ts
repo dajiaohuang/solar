@@ -332,9 +332,73 @@ export function assembleStateTiles(tiles: readonly StateTile[], plan: StateTileP
 }
 
 export async function fetchStateTiles(params: { base: string; plan: StateTilePlan; signal: AbortSignal; fetcher?: typeof fetch }): Promise<StateTile[]> {
-  const fetcher = params.fetcher ?? fetch; const results = new Map<number, StateTile>(); let cursor = 0; let firstError: unknown
-  const worker = async () => { while (firstError === undefined) { const descriptor = params.plan.tiles[cursor++]; if (!descriptor) return; let reason: unknown; for (let attempt = 0; attempt < 2; attempt += 1) { if (params.signal.aborted) throw new DOMException('Aborted', 'AbortError'); try { const response = await fetcher(descriptor.url ?? `${params.base}/v1/state/tiles`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ planId: params.plan.planHash, sequence: descriptor.sequence }), signal: params.signal }); if (!response.ok) { const error = new StateTileRetryableError(`State tile HTTP ${response.status}`); if (!retryableStatus(response.status)) throw new StateTileProtocolError(error.message); throw error } const body = await readBounded(response, STATE_TILE_MEDIA_TYPE, MAX_STATE_TILE_BYTES); let tile: StateTile; try { tile = await decodeStateTile(body, { planHash: params.plan.planHash, catalogManifestSha256: params.plan.catalogManifestSha256, inventoryManifestSha256: params.plan.inventoryManifestSha256, sequence: descriptor.sequence, tileCount: params.plan.tileCount }) } catch (error) { throw new StateTileProtocolError(error instanceof Error ? error.message : String(error)) } const etag = response.headers.get('etag')?.trim().replace(/^"|"$/g, ''); if (!etag || etag !== tile.payloadSha256) throw new StateTileProtocolError('State tile ETag does not match payload checksum'); const previous = results.get(tile.sequence); if (previous && previous.payloadSha256 !== tile.payloadSha256) fail('conflicting duplicate tile'); results.set(tile.sequence, tile); reason = undefined; break } catch (error) { reason = error; if (params.signal.aborted) throw new DOMException('Aborted', 'AbortError'); if (error instanceof StateTileProtocolError || !(error instanceof StateTileRetryableError) && attempt === 1) break } } if (reason !== undefined) { firstError = reason; throw reason } } }
-  await Promise.all(Array.from({ length: Math.min(STATE_TILE_CONCURRENCY, params.plan.tiles.length) }, () => worker())); return assembleStateTiles([...results.values()], params.plan)
+  const fetcher = params.fetcher ?? fetch
+  const results = new Map<number, StateTile>()
+  const controller = new AbortController()
+  const cancel = () => controller.abort()
+  params.signal.addEventListener('abort', cancel, { once: true })
+  if (params.signal.aborted) cancel()
+  const signal = controller.signal
+  let cursor = 0
+  let firstError: unknown
+  const checkCancellation = () => { if (signal.aborted) throw new DOMException('Aborted', 'AbortError') }
+  const worker = async () => {
+    while (firstError === undefined) {
+      checkCancellation()
+      const descriptor = params.plan.tiles[cursor++]
+      if (!descriptor) return
+      let reason: unknown
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        checkCancellation()
+        try {
+          const response = await fetcher(descriptor.url ?? `${params.base}/v1/state/tiles`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ planId: params.plan.planHash, sequence: descriptor.sequence }), signal,
+          })
+          if (!response.ok) {
+            void response.body?.cancel().catch(() => undefined)
+            const error = new StateTileRetryableError(`State tile HTTP ${response.status}`)
+            if (!retryableStatus(response.status)) throw new StateTileProtocolError(error.message)
+            throw error
+          }
+          const body = await readBounded(response, STATE_TILE_MEDIA_TYPE, MAX_STATE_TILE_BYTES)
+          checkCancellation()
+          let tile: StateTile
+          try {
+            tile = await decodeStateTile(body, { planHash: params.plan.planHash, catalogManifestSha256: params.plan.catalogManifestSha256, inventoryManifestSha256: params.plan.inventoryManifestSha256, sequence: descriptor.sequence, tileCount: params.plan.tileCount })
+          } catch (error) {
+            throw new StateTileProtocolError(error instanceof Error ? error.message : String(error))
+          }
+          checkCancellation()
+          const etag = response.headers.get('etag')?.trim().replace(/^"|"$/g, '')
+          if (!etag || etag !== tile.payloadSha256) throw new StateTileProtocolError('State tile ETag does not match payload checksum')
+          const previous = results.get(tile.sequence)
+          if (previous && previous.payloadSha256 !== tile.payloadSha256) fail('conflicting duplicate tile')
+          results.set(tile.sequence, tile)
+          reason = undefined
+          break
+        } catch (error) {
+          reason = error
+          checkCancellation()
+          if (error instanceof StateTileProtocolError || !(error instanceof StateTileRetryableError) && attempt === 1) break
+        }
+      }
+      if (reason !== undefined) { firstError = reason; throw reason }
+    }
+  }
+  try {
+    await Promise.all(Array.from({ length: Math.min(STATE_TILE_CONCURRENCY, params.plan.tiles.length) }, () => worker()))
+    checkCancellation()
+    return assembleStateTiles([...results.values()], params.plan)
+  } catch (error) {
+    // A failed plan cannot publish a partial frame. Stop the other transfers
+    // and release retained tiles, without cancelling the caller's controller.
+    cancel()
+    results.clear()
+    throw error
+  } finally {
+    params.signal.removeEventListener('abort', cancel)
+  }
 }
 
 function subtract(a: Vector3, b: Vector3): Vector3 { return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z } }
