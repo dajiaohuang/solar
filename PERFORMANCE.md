@@ -65,6 +65,25 @@ The local timing is diagnostic, not a cross-machine performance guarantee. Stabl
 
 Production uses `npm run build:deploy`. The builder excludes stale releases, copies only the audited active version, keeps binary numeric artifacts byte-identical, and deterministically gzip-compresses large search, lookup, metadata, legacy chunk, and sample JSON. The generated capacity report separates application shell, total dataset, cold-load, and typical Catalog-session bytes; it fails closed above the Pages budget.
 
+## Shared backend tile encoding
+
+Exact-state tiles retain a 64 MiB byte-bounded response cache and two concurrent
+encoder slots, behind the server's bounded request admission. Requests for the
+same plan and tile sequence share one in-progress encoding and immutable result;
+waiters do not allocate another state array or take an encoder slot. Each waiter
+can cancel independently. If the owner cancels, healthy waiters may retry under
+their own contexts and the same admission limits. Failed or partial results are
+not cached. Oversized-to-cache results are shared only with already-joined
+waiters and do not raise the resident cache budget.
+
+`TileCacheStats` reports `coalesced` joins and `activeEncodings` alongside resident
+bytes/hits/misses to the local benchmark harness, not as a public metrics API.
+This avoids duplicate encoding, not duplicate plan computation; it is not yet
+a fair priority scheduler or evidence of real-device throughput. Run the
+deterministic cancellation/concurrency and loopback HTTP regressions with
+`go test ./internal/httpapi -run 'TestTileFlight|TestHTTPDuplicateTiles'`;
+Linux CI also executes the backend race detector.
+
 ## Reference run
 
 Measured on 2026-08-20 with `mpcorb-919b585f403b185a-full` (1,557,710 valid objects):

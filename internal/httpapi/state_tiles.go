@@ -126,20 +126,22 @@ type stateTileCacheEntry struct {
 }
 
 type stateTileCache struct {
-	mu       sync.Mutex
-	maxBytes int64
-	bytes    int64
-	hits     uint64
-	misses   uint64
-	items    map[string]*list.Element
-	order    *list.List
+	mu        sync.Mutex
+	maxBytes  int64
+	bytes     int64
+	hits      uint64
+	misses    uint64
+	coalesced uint64
+	flights   map[string]*stateTileFlight
+	items     map[string]*list.Element
+	order     *list.List
 }
 
 func newStateTileCache(maxBytes int64) *stateTileCache {
 	if maxBytes < 1 {
 		maxBytes = 1
 	}
-	return &stateTileCache{maxBytes: maxBytes, items: make(map[string]*list.Element), order: list.New()}
+	return &stateTileCache{maxBytes: maxBytes, items: make(map[string]*list.Element), order: list.New(), flights: make(map[string]*stateTileFlight)}
 }
 
 func (c *stateTileCache) get(key string) (stateTileCacheValue, bool) {
@@ -208,7 +210,7 @@ func (c *stateTileCache) put(key string, value stateTileCacheValue) {
 func (c *stateTileCache) stats() map[string]uint64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return map[string]uint64{"items": uint64(len(c.items)), "residentBytes": uint64(c.bytes), "maxResidentBytes": uint64(c.maxBytes), "hits": c.hits, "misses": c.misses}
+	return map[string]uint64{"items": uint64(len(c.items)), "residentBytes": uint64(c.bytes), "maxResidentBytes": uint64(c.maxBytes), "hits": c.hits, "misses": c.misses, "coalesced": c.coalesced, "activeEncodings": uint64(len(c.flights))}
 }
 
 func newStatePlanCache(max int, maxBytes ...int64) *statePlanCache {
@@ -655,34 +657,37 @@ func (s *Server) stateTiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cacheKey := req.PlanID + ":" + strconv.FormatUint(uint64(req.Sequence), 10)
-	if cached, ok := s.tiles.get(cacheKey); ok {
-		if err := r.Context().Err(); err != nil {
+	value, err := s.tiles.load(r.Context(), cacheKey, func() (stateTileCacheValue, error) {
+		return s.encodeStateTile(r.Context(), plan, req.Sequence)
+	})
+	if err != nil {
+		var failure *stateTileBuildError
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
-			return
+		} else if errors.As(err, &failure) {
+			if failure.status == http.StatusTooManyRequests {
+				w.Header().Set("Retry-After", "1")
+			}
+			s.error(w, failure.status, failure.code, failure.message)
+		} else {
+			s.error(w, http.StatusUnprocessableEntity, "encode_tile", err.Error())
 		}
-		writeStateTile(w, cached.raw, cached.etag)
 		return
 	}
+	writeStateTile(w, value.raw, value.etag)
+}
+
+func (s *Server) encodeStateTile(ctx context.Context, plan *statePlan, sequence uint32) (stateTileCacheValue, error) {
 	select {
 	case s.tileSlots <- struct{}{}:
 		defer func() { <-s.tileSlots }()
 	default:
-		w.Header().Set("Retry-After", "1")
-		s.error(w, http.StatusTooManyRequests, "overloaded", "tile calculation limit reached; retry later")
-		return
+		return stateTileCacheValue{}, &stateTileBuildError{http.StatusTooManyRequests, "overloaded", "tile calculation limit reached; retry later"}
 	}
-	if err := r.Context().Err(); err != nil {
-		s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
-		return
+	if err := ctx.Err(); err != nil {
+		return stateTileCacheValue{}, err
 	}
-	// A concurrent miss may have filled the response while this request was
-	// waiting for the bounded encoder slot. Reuse it without allocating the
-	// tile a second time.
-	if cached, ok := s.tiles.peek(cacheKey); ok {
-		writeStateTile(w, cached.raw, cached.etag)
-		return
-	}
-	tile := plan.response.Tiles[req.Sequence]
+	tile := plan.response.Tiles[sequence]
 	start, end := int(tile.OrdinalStart), int(tile.OrdinalStart+tile.OrdinalCount)
 	rows := plan.rows[start:end]
 	metadata := make([]statewire.Metadata, len(rows))
@@ -691,9 +696,8 @@ func (s *Server) stateTiles(w http.ResponseWriter, r *http.Request) {
 	missingBits := make([]bool, len(rows))
 	states := make([]float64, len(rows)*statewire.Stride)
 	for n, row := range rows {
-		if err := r.Context().Err(); err != nil {
-			s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
-			return
+		if err := ctx.Err(); err != nil {
+			return stateTileCacheValue{}, err
 		}
 		metadata[n] = row.metadata
 		if row.exact && row.state != nil && finiteState(*row.state) {
@@ -713,23 +717,19 @@ func (s *Server) stateTiles(w http.ResponseWriter, r *http.Request) {
 	if maxTileBytes <= 0 {
 		maxTileBytes = maxStateTileBytes
 	}
-	raw, err := statewire.EncodeLimited(statewire.Tile{Sequence: req.Sequence, TileCount: uint32(plan.response.TileCount), OrdinalStart: tile.OrdinalStart, EpochJD: plan.response.EpochJD, FieldMask: statewire.FieldState, PlanHash: plan.hash, CatalogManifestHash: catalogHash, InventoryManifestHash: inventoryHash, Metadata: metadata, Exact: exactBits, Approximate: approxBits, Missing: missingBits, States: states}, maxTileBytes)
+	raw, err := statewire.EncodeLimited(statewire.Tile{Sequence: sequence, TileCount: uint32(plan.response.TileCount), OrdinalStart: tile.OrdinalStart, EpochJD: plan.response.EpochJD, FieldMask: statewire.FieldState, PlanHash: plan.hash, CatalogManifestHash: catalogHash, InventoryManifestHash: inventoryHash, Metadata: metadata, Exact: exactBits, Approximate: approxBits, Missing: missingBits, States: states}, maxTileBytes)
 	if err != nil {
 		if errors.Is(err, statewire.ErrTooLarge) {
-			s.error(w, http.StatusRequestEntityTooLarge, "tile_too_large", "tile exceeds the configured byte limit")
-			return
+			return stateTileCacheValue{}, &stateTileBuildError{http.StatusRequestEntityTooLarge, "tile_too_large", "tile exceeds the configured byte limit"}
 		}
-		s.error(w, http.StatusUnprocessableEntity, "encode_tile", err.Error())
-		return
+		return stateTileCacheValue{}, err
 	}
-	if err := r.Context().Err(); err != nil {
-		s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
-		return
+	if err := ctx.Err(); err != nil {
+		return stateTileCacheValue{}, err
 	}
 	sum := sha256.Sum256(raw[200:])
 	etag := `"` + fmt.Sprintf("%x", sum[:]) + `"`
-	s.tiles.put(cacheKey, stateTileCacheValue{raw: raw, etag: etag})
-	writeStateTile(w, raw, etag)
+	return stateTileCacheValue{raw: raw, etag: etag}, nil
 }
 
 func writeStateTile(w http.ResponseWriter, raw []byte, etag string) {
