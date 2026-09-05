@@ -54,6 +54,7 @@ export async function loadBackendTrajectories(params: {
   expectedCatalogManifestSha256?: string
   expectedInventoryManifestSha256?: string
   fetcher?: typeof fetch
+  acquireTile?: import('./stateTileAdmission').AcquireStateTile
   onProgress?: (progress: number) => void
 }): Promise<BackendTrajectoryResult> {
   if (!Number.isFinite(params.centerUtcJd) || !Number.isFinite(params.historyDays) || params.historyDays <= 0 || params.historyDays > 365_250 || params.sampleCount < 2) throw new Error('Invalid backend trajectory window')
@@ -99,7 +100,7 @@ export async function loadBackendTrajectories(params: {
           params.expectedInventoryManifestSha256 && manifest.inventoryManifestSha256 !== params.expectedInventoryManifestSha256) throw new Error('Backend trajectory source snapshot changed')
       audit.catalogManifestSha256 = manifest.catalogManifestSha256
       audit.inventoryManifestSha256 = manifest.inventoryManifestSha256
-      const tiles = await fetchStateTiles({ base: params.base, plan: planned.plan, signal: controller.signal, fetcher })
+      const tiles = await fetchStateTiles({ base: params.base, plan: planned.plan, signal: controller.signal, fetcher, acquireTile: params.acquireTile })
       check()
       const snapshot = new StateTileSnapshot(tiles, requested)
       const referenceIndex = snapshot.indexOf(params.referenceBody.id)

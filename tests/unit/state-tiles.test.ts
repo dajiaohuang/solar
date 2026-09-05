@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Buffer } from 'node:buffer'
 import { assembleStateTiles, chunkStatePlanIds, StateTileSnapshot, decodeStateTile, digestStateTileRequestIds, encodeStateTile, fetchStateTiles, STATE_TILE_HEADER_BYTES, STATE_TILE_MAGIC, validateStateTileManifest, validateStateTilePlan } from '../../src/lib/stateTiles'
+import { createStateTileAdmissionPool, createWorkerTileAdmission, serveStateTileAdmission } from '../../src/lib/stateTileAdmission'
 
 const catalogManifestSha256 = 'a'.repeat(64)
 const planHash = 'b'.repeat(64)
@@ -27,6 +28,60 @@ async function replaceMetadata(buffer: ArrayBuffer, text: string) {
 function response(buffer: ArrayBuffer, ok = true, extraHeaders: Record<string, string> = {}): Response { const bytes = new Uint8Array(buffer); const payloadHash = [...bytes.slice(168, 200)].map(value => value.toString(16).padStart(2, '0')).join(''); return { ok, status: ok ? 200 : 503, headers: new Headers({ 'content-type': 'application/vnd.solar.state-tile+binary', 'content-length': String(bytes.byteLength), etag: `"${payloadHash}"`, ...extraHeaders }), arrayBuffer: async () => buffer } as Response }
 
 describe('state tile binary protocol', () => {
+  it.each(['status', 'type', 'length'])('holds admission until an unread %s failure body is canceled', async invalid => {
+    const pool = createStateTileAdmissionPool(1)
+    let finishCancellation!: () => void
+    const cancel = vi.fn(() => new Promise<void>(resolve => { finishCancellation = resolve }))
+    const streamed = new Response(new ReadableStream<Uint8Array>({ cancel }), {
+      status: invalid === 'status' ? 400 : 200,
+      headers: { 'content-type': invalid === 'type' ? 'text/plain' : 'application/vnd.solar.state-tile+binary',
+        'content-length': invalid === 'length' ? '-1' : '1024' },
+    })
+    const fetcher = vi.fn(async () => streamed)
+    const pending = fetchStateTiles({ base: 'https://fixture.invalid', plan: { ...plan, tiles: [plan.tiles[0]], tileCount: 1, recordCount: 1 },
+      signal: new AbortController().signal, fetcher, acquireTile: pool.acquire })
+    const rejected = expect(pending).rejects.toThrow(/HTTP 400|content type|content length/)
+    await vi.waitFor(() => expect(cancel).toHaveBeenCalledTimes(1))
+    const next = pool.acquire(new AbortController().signal)
+    expect(pool.snapshot()).toMatchObject({ active: 1, queued: 1, admitted: 1 })
+    finishCancellation(); await rejected
+    const release = await next; release()
+    expect(pool.snapshot()).toMatchObject({ active: 0, queued: 0, admitted: 2 })
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
+  it('holds a shared cross-worker permit through complete body read and decode instead of doubling the per-plan limit', async () => {
+    const tiles = [await tile(0, 'earth', 1), await tile(1, 'mars', 4)]
+    async function run(shared: boolean) {
+      const pool = createStateTileAdmissionPool(), channels = [new MessageChannel(), new MessageChannel()]
+      const detach = channels.map(channel => serveStateTileAdmission(channel.port1, pool))
+      const workers = channels.map(channel => createWorkerTileAdmission(channel.port2))
+      let active = 0, peak = 0, completed = 0
+      const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+        const sequence = JSON.parse(String(init?.body)).sequence as number
+        active++; peak = Math.max(peak, active)
+        // Receiving headers does not mean the transfer has completed.
+        const received = response(tiles[sequence])
+        received.arrayBuffer = async () => {
+          await new Promise(resolve => setTimeout(resolve, 5))
+          active--; completed++
+          return tiles[sequence].slice(0)
+        }
+        return received
+      })
+      try {
+        const results = await Promise.all(workers.map(worker => fetchStateTiles({ base: 'https://fixture.invalid', plan,
+          signal: new AbortController().signal, fetcher, acquireTile: shared ? worker.acquire : undefined })))
+        expect(results.map(rows => rows.map(row => row.metadata.idAt(0)))).toEqual([['earth', 'mars'], ['earth', 'mars']])
+        expect(completed).toBe(4)
+        if (shared) await vi.waitFor(() => expect(pool.snapshot()).toMatchObject({ active: 0, queued: 0, admitted: 4 }))
+        return peak
+      } finally { workers.forEach(worker => worker.dispose()); detach.forEach(close => close()) }
+    }
+    expect(await run(false)).toBe(4) // Reproduces the old pair of independent two-tile limits.
+    expect(await run(true)).toBe(2)
+  })
+
   it('retains a maximum synthetic tile as columns and interns repeated provenance without materializing ID reads', async () => {
     const count = 32_768
     const records = Array.from({ length: count }, (_, index) => metadata(`synthetic:${index}`))

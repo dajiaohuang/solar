@@ -1,12 +1,14 @@
 /// <reference lib="webworker" />
 import { currentStateObservationTransfers, loadCurrentStateObservation } from '../lib/currentStateObservation'
 import type { CurrentStateWorkerRequest, CurrentStateWorkerResponse } from './current-states.protocol'
+import { createWorkerTileAdmission } from '../lib/stateTileAdmission'
 
 const scope = self as DedicatedWorkerGlobalScope
 let pending: Extract<CurrentStateWorkerRequest, { type: 'load' }> | null = null
 let active: { requestId: number; controller: AbortController } | null = null
 let running = false
 const DEADLINE_MS = 120_000
+let admission: ReturnType<typeof createWorkerTileAdmission> | null = null
 
 async function drain() {
   if (running) return
@@ -18,7 +20,8 @@ async function drain() {
       active = { requestId: job.requestId, controller }
       const deadline = setTimeout(() => controller.abort(new Error('Current-state worker deadline exceeded')), DEADLINE_MS)
       try {
-        const result = await loadCurrentStateObservation({ ...job.request, signal: controller.signal })
+        if (!admission) throw new Error('Current-state tile admission is not configured')
+        const result = await loadCurrentStateObservation({ ...job.request, signal: controller.signal, acquireTile: admission.acquire })
         controller.signal.throwIfAborted()
         scope.postMessage({ type: 'result', requestId: job.requestId, result } satisfies CurrentStateWorkerResponse, currentStateObservationTransfers(result))
       } catch (error) {
@@ -35,6 +38,11 @@ async function drain() {
 
 scope.onmessage = (event: MessageEvent<CurrentStateWorkerRequest>) => {
   const request = event.data
+  if (request.type === 'init-tile-admission') {
+    if (admission) { request.port.close(); return }
+    admission = createWorkerTileAdmission(request.port)
+    return
+  }
   if (request.type === 'cancel') {
     if (active?.requestId === request.requestId) active.controller.abort()
     if (pending?.requestId === request.requestId) pending = null

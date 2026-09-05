@@ -4,6 +4,7 @@ import type { BackendTrajectoryAudit } from '../lib/backendTrajectories'
 import { trajectoryViews } from '../lib/trajectorySamples'
 import type { BackendTrajectoryWorkerRequest, BackendTrajectoryWorkerResponse } from '../workers/backend-trajectories.protocol'
 import type { CelestialBody, TrajectorySample } from '../types'
+import { attachStateTileAdmission } from '../lib/stateTileAdmission'
 
 type Params = Omit<BackendTrajectoryJob, 'requestId' | 'base' | 'referenceBody'> & { enabled: boolean; base: string | null; referenceBody?: CelestialBody; sourceKey: string; seekRevision: number }
 const empty = { trajectories: [] as TrajectorySample[], unavailableBodyIds: [] as string[], audit: undefined as BackendTrajectoryAudit | undefined }
@@ -26,10 +27,21 @@ export function useBackendTrajectoryWorker(params: Params) {
     })
     if (!current.enabled || !current.base || !current.referenceBody || !current.bodies.length) return () => { active = false }
     const bodiesById = new Map(current.bodies.map(body => [body.id, body]))
-    const worker = new Worker(new URL('../workers/backend-trajectories.worker.ts', import.meta.url), { type: 'module' })
+    let opened: Worker | undefined, detach: () => void
+    try {
+      opened = new Worker(new URL('../workers/backend-trajectories.worker.ts', import.meta.url), { type: 'module' })
+      detach = attachStateTileAdmission(opened)
+    } catch (error) {
+      opened?.terminate()
+      queueMicrotask(() => { if (active) setStatus({ scopeKey, progress: 0, isComputing: false, error: error instanceof Error ? error.message : String(error) }) })
+      return () => { active = false }
+    }
+    const worker = opened
+    let closed = false
+    const terminate = () => { if (closed) return; closed = true; worker.terminate(); detach() }
     workerRef.current = worker
     worker.onmessage = (event: MessageEvent<BackendTrajectoryWorkerResponse>) => {
-      if (!active) return
+      if (!active || closed) return
       const response = event.data
       if (response.type === 'progress') setStatus({ scopeKey, progress: response.progress, isComputing: true, error: null })
       else if (response.type === 'result') {
@@ -45,15 +57,15 @@ export function useBackendTrajectoryWorker(params: Params) {
       }
     }
     worker.onerror = event => {
-      if (!active) return
+      if (!active || closed) return
       setResult({ scopeKey, ...empty })
       setStatus({ scopeKey, progress: 0, isComputing: false, error: event.message || 'Historical worker failed' })
-      worker.terminate(); if (workerRef.current === worker) workerRef.current = null
+      terminate(); if (workerRef.current === worker) workerRef.current = null
     }
     return () => {
       active = false
-      worker.postMessage({ type: 'dispose' } satisfies BackendTrajectoryWorkerRequest)
-      worker.terminate()
+      try { if (!closed) worker.postMessage({ type: 'dispose' } satisfies BackendTrajectoryWorkerRequest) }
+      finally { terminate() }
       if (workerRef.current === worker) workerRef.current = null
     }
   }, [scopeKey])

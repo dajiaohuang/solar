@@ -6,8 +6,10 @@ import { utcJulianDayToTdb } from '../../src/engine/ephemeris/timeScales'
 import { AU_IN_KM } from '../../src/engine/units'
 import type { CelestialBody } from '../../src/types'
 import type { BackendTrajectoryWorkerRequest, BackendTrajectoryWorkerResponse } from '../../src/workers/backend-trajectories.protocol'
+import { createStateTileAdmissionPool, serveStateTileAdmission } from '../../src/lib/stateTileAdmission'
 
-afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
+const channels: (() => void)[] = []
+afterEach(() => { for (const close of channels.splice(0)) close(); vi.unstubAllGlobals(); vi.useRealTimers() })
 
 const body = (id: string): CelestialBody => ({ id, name: id, kind: 'asteroid', color: '#fff', size: 1, source: 'custom' })
 const bodies = ['a', 'b', 'c'].map(body), referenceBody = body('reference')
@@ -163,6 +165,9 @@ describe('backend historical state tiles', () => {
       } }
     vi.stubGlobal('fetch', runtime.fetcher); vi.stubGlobal('self', scope)
     await import('../../src/workers/backend-trajectories.worker')
+    const channel = new MessageChannel(), detach = serveStateTileAdmission(channel.port1, createStateTileAdmissionPool())
+    channels.push(() => { detach(); channel.port2.close() })
+    scope.onmessage!({ data: { type: 'init-tile-admission', port: channel.port2 } } as MessageEvent<BackendTrajectoryWorkerRequest>)
     scope.onmessage!({ data: { type: 'compute', job: { ...input, requestId: 1 } } } as MessageEvent<BackendTrajectoryWorkerRequest>)
     await vi.waitFor(() => expect(messages.at(-1)?.type).toBe('result'))
     const last = messages.at(-1)!

@@ -1,6 +1,6 @@
 import type { BackendTrajectoryResult, loadBackendTrajectories } from './backendTrajectories'
 
-export type BackendTrajectoryJob = Omit<Parameters<typeof loadBackendTrajectories>[0], 'signal' | 'fetcher' | 'onProgress'> & { requestId: number }
+export type BackendTrajectoryJob = Omit<Parameters<typeof loadBackendTrajectories>[0], 'signal' | 'fetcher' | 'onProgress' | 'acquireTile'> & { requestId: number }
 type Run = (job: BackendTrajectoryJob, signal: AbortSignal, progress: (value: number) => void) => Promise<BackendTrajectoryResult>
 
 /** One running job and one latest desired epoch. Clock ticks cannot starve a

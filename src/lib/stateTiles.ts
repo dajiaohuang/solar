@@ -446,7 +446,7 @@ export function assembleStateTiles(tiles: readonly StateTile[], plan: StateTileP
   return ordered
 }
 
-export async function fetchStateTiles(params: { base: string; plan: StateTilePlan; signal: AbortSignal; fetcher?: typeof fetch }): Promise<StateTile[]> {
+export async function fetchStateTiles(params: { base: string; plan: StateTilePlan; signal: AbortSignal; fetcher?: typeof fetch; acquireTile?: import('./stateTileAdmission').AcquireStateTile }): Promise<StateTile[]> {
   const fetcher = params.fetcher ?? fetch
   const results = new Map<number, StateTile>()
   const controller = new AbortController()
@@ -465,13 +465,15 @@ export async function fetchStateTiles(params: { base: string; plan: StateTilePla
       let reason: unknown
       for (let attempt = 0; attempt < 2; attempt += 1) {
         checkCancellation()
+        const release = await params.acquireTile?.(signal)
+        let response: Response | undefined
         try {
-          const response = await fetcher(descriptor.url ?? `${params.base}/v1/state/tiles`, {
+          checkCancellation()
+          response = await fetcher(descriptor.url ?? `${params.base}/v1/state/tiles`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ planId: params.plan.planHash, sequence: descriptor.sequence }), signal,
           })
           if (!response.ok) {
-            void response.body?.cancel().catch(() => undefined)
             const error = new StateTileRetryableError(`State tile HTTP ${response.status}`)
             if (!retryableStatus(response.status)) throw new StateTileProtocolError(error.message)
             throw error
@@ -496,6 +498,11 @@ export async function fetchStateTiles(params: { base: string; plan: StateTilePla
           reason = error
           checkCancellation()
           if (error instanceof StateTileProtocolError || !(error instanceof StateTileRetryableError) && attempt === 1) break
+        } finally {
+          // Header/status rejection can leave an unread body. Keep admission
+          // until its cancellation completes, including before a tile retry.
+          await response?.body?.cancel().catch(() => undefined)
+          release?.()
         }
       }
       if (reason !== undefined) { firstError = reason; throw reason }

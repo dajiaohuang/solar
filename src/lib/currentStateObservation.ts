@@ -24,7 +24,7 @@ export type CurrentStateObservation = {
   epochUtcJd: number
 }
 
-export async function loadCurrentStateObservation(params: CurrentStateObservationRequest & { signal: AbortSignal; fetcher?: typeof fetch }): Promise<CurrentStateObservation> {
+export async function loadCurrentStateObservation(params: CurrentStateObservationRequest & { signal: AbortSignal; fetcher?: typeof fetch; acquireTile?: import('./stateTileAdmission').AcquireStateTile }): Promise<CurrentStateObservation> {
   params.signal.throwIfAborted()
   if (!Number.isFinite(params.epochTdbJd) || !Number.isFinite(params.epochUtcJd) || !params.requestedIds.size) throw new Error('Invalid current-state observation request')
   const fetcher = params.fetcher ?? fetch
@@ -35,7 +35,7 @@ export async function loadCurrentStateObservation(params: CurrentStateObservatio
   for (const bodyIds of chunkStatePlanIds([...params.requestedIds.values()])) {
     params.signal.throwIfAborted()
     const { plan } = await fetchStateTilePlan({ ...params, bodyIds, manifest })
-    const planTiles = await fetchStateTiles({ base: params.base, plan, signal: params.signal, fetcher })
+    const planTiles = await fetchStateTiles({ base: params.base, plan, signal: params.signal, fetcher, acquireTile: params.acquireTile })
     params.signal.throwIfAborted()
     planRecordCounts.push(plan.recordCount)
     for (const tile of planTiles) tiles.push(tile)

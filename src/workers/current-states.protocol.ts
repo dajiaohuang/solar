@@ -1,6 +1,7 @@
 import type { CurrentStateObservation, CurrentStateObservationRequest } from '../lib/currentStateObservation'
 
 export type CurrentStateWorkerRequest =
+  | import('../lib/stateTileAdmission').StateTileAdmissionInit
   | { type: 'load'; requestId: number; request: CurrentStateObservationRequest }
   | { type: 'cancel'; requestId: number }
 

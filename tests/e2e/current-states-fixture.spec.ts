@@ -1,6 +1,44 @@
 import { expect, test } from './fixtures'
 import satelliteCatalog from '../../src/data/satelliteCatalog.json' with { type: 'json' }
 
+test.describe('shared current/history tile admission', () => {
+  test.use({ stateTileRowsPerTile: 1 })
+  test('keeps both real workers progressing with at most two numeric tile responses preparing combined', async ({ page, stateTileActivity }) => {
+    test.setTimeout(45_000)
+    const active = new Set<object>(), errors: string[] = [], workers: string[] = []
+    let currentCompleted = 0, historyCompleted = 0
+    page.on('worker', worker => workers.push(worker.url()))
+    page.on('pageerror', error => errors.push(error.message))
+    page.on('request', request => {
+      if (!request.url().includes('/v1/state/tiles')) return
+      active.add(request)
+    })
+    page.on('requestfinished', request => {
+      if (!active.delete(request)) return
+      if (request.url().includes('workload=trajectory')) historyCompleted++
+      else currentCompleted++
+    })
+    page.on('requestfailed', request => { active.delete(request) })
+    await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+    await page.goto('?v=4&lang=en&view=3d&bodies=earth,mars&ref=sun&jd=2461287.5&history=1&samples=32&speed=0&slow-state-tiles=1')
+    const canvas = page.getByTestId('trajectory-canvas-3d')
+    await expect(canvas).toHaveAttribute('data-position-count', '2')
+    // Start the clock while the deliberately slow historical job is still
+    // loading. Each job has three one-row tiles, not a single fixture response.
+    await expect.poll(() => historyCompleted).toBeGreaterThan(0)
+    const initialCurrent = currentCompleted
+    await page.locator('.simulation-bar .primary-button').click()
+    await expect.poll(() => currentCompleted, { timeout: 15_000 }).toBeGreaterThan(initialCurrent + 2)
+    await expect.poll(() => historyCompleted, { timeout: 15_000 }).toBeGreaterThan(5)
+    expect(stateTileActivity.completed).toBeGreaterThanOrEqual(12)
+    expect(stateTileActivity.peak).toBe(2)
+    expect(workers.filter(url => url.includes('current-states.worker'))).toHaveLength(1)
+    expect(workers.filter(url => url.includes('backend-trajectories.worker'))).toHaveLength(1)
+    await expect(canvas).toHaveAttribute('data-position-count', '2')
+    expect(errors).toEqual([])
+  })
+})
+
 test.describe('backend coverage evidence', () => {
   test.use({ missingStateTileIds: ['naif:301'] })
   test('counts verified backend states rather than local kernel coverage', async ({ page }) => {

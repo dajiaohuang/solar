@@ -191,11 +191,31 @@ stays on the UI side and is not copied into each worker request.
 Clock samples reuse the worker. Explicit changes cancel the active request and
 coalesce queued changes; late request IDs and mismatched epochs cannot publish.
 A 120-second whole-observation deadline aborts stalled I/O and reports failure.
-Current-state and history workers still have separate per-job admission limits;
-this is not a verified global client memory/concurrency budget or device SLO.
+Current-state and history workers share one page-level pool of two in-flight
+numeric tiles and at most 32 queued acquisitions. FIFO admission prevents one
+worker's subsequent tiles/retries from jumping already queued work. The permit
+covers HTTP body consumption and checksum/metadata decoding, not just response
+headers. Cancellation removes queued work immediately; active work releases in
+its completion/failure path, after canceling any unread rejected response body.
+Worker termination precedes forced lease release,
+and closing one worker does not discard another worker's pending requests.
+The coordinator receives only integer permit messages over transferred
+MessagePorts, never scientific buffers; neither worker has an uncoordinated
+production fallback. `stateTileAdmissionSnapshot()` exposes active/queued,
+peak, admitted and rejected counts. Separate-page tabs, small manifest/plan
+requests and retained scientific snapshots are outside this tile pool; it is
+not a full client memory budget or a measured device SLO.
 Actual-worker tests cover numeric ownership detachment, byte-identical Float64
 six-vectors (including signed zero), alias/gap provenance, zero-reindex adoption,
 corrupt transport, cancellation, queue replacement and deadline behavior.
+Cross-worker tests reproduce four concurrent transfers with independent limits
+and two with shared admission, retain full source results, and cover FIFO queue
+rejection, cancelled/late grants and terminated-worker cleanup. A slow multi-tile
+browser scenario runs both production workers during clock playback and checks
+combined backend response-preparation concurrency and independent progress on
+desktop/mobile. It counts backend work on one event loop, not cross-worker
+`requestfinished` notification ordering; body-read and decoding lifetime are
+covered by the loader tests, not inferred from those browser notifications.
 
 Reference-relative current positions are scalar views over that same scientific
 snapshot. Each frame retains two Uint32 ordinal columns (capacity eight bytes

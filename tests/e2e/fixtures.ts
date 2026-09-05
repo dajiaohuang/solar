@@ -30,7 +30,10 @@ function unavailableIdsAt(epochJd: number) {
     : Math.abs(epochJd - 2460000.5) < 0.01 ? new Set(['naif:920050000', 'naif:120050000']) : new Set<string>()
 }
 
-async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: boolean, missingStateTileIds: string[]) {
+type StateTileActivity = { active: number; peak: number; completed: number }
+
+async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: boolean, missingStateTileIds: string[], stateTileRowsPerTile: number, activity: StateTileActivity) {
+  if (!Number.isInteger(stateTileRowsPerTile) || stateTileRowsPerTile < 1 || stateTileRowsPerTile > 32768) throw new Error('Invalid fixture tile size')
   let slowStateTiles = false
   const plans = new Map<string, { bodyIds: string[]; epochJd: number }>()
   await page.route('**/solar-test-api/v1/catalog/manifest', route => route.fulfill({
@@ -53,34 +56,46 @@ async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: b
     // Keep the plan internally well formed but deliberately disagree with the
     // valid tile bits in the explicit protocol-rejection scenario only.
     const declaredExactCount = mismatchedStateTileCounts ? (exactCount > 0 ? exactCount - 1 : 1) : exactCount
-    return route.fulfill({ json: { apiVersion: 'solar.api/v1', catalogVersion: datasetVersion, planId, requestIdsSha256: await digestStateTileRequestIds(ids), catalogManifestSha256: catalogHash, epochJd, timeScale: 'TDB', frame: 'ECLIPJ2000', precision: 'exact', stateOriginId: 'naif:0', distanceUnit: 'km', velocityUnit: 'km/s', stride: 6, fieldMask: ['position', 'velocity'], tileCount: 1, bodyCount: ids.length, exactCount: declaredExactCount, approximateCount: 0, missingCount: ids.length - declaredExactCount, tiles: [{ sequence: 0, ordinalStart: 0, ordinalCount: ids.length }] } })
+    const tiles = Array.from({ length: Math.ceil(ids.length / stateTileRowsPerTile) }, (_, sequence) => ({ sequence, ordinalStart: sequence * stateTileRowsPerTile, ordinalCount: Math.min(stateTileRowsPerTile, ids.length - sequence * stateTileRowsPerTile) }))
+    return route.fulfill({ json: { apiVersion: 'solar.api/v1', catalogVersion: datasetVersion, planId, requestIdsSha256: await digestStateTileRequestIds(ids), catalogManifestSha256: catalogHash, epochJd, timeScale: 'TDB', frame: 'ECLIPJ2000', precision: 'exact', stateOriginId: 'naif:0', distanceUnit: 'km', velocityUnit: 'km/s', stride: 6, fieldMask: ['position', 'velocity'], tileCount: tiles.length, bodyCount: ids.length, exactCount: declaredExactCount, approximateCount: 0, missingCount: ids.length - declaredExactCount, tiles } })
   })
   await page.route('**/solar-test-api/v1/state/tiles*', async route => {
     const request = route.request()
     if (request.method() !== 'POST') return route.fulfill({ status: 405 })
     const body = JSON.parse(request.postData() ?? '{}') as { planId?: string; sequence?: number }
     const plan = body.planId ? plans.get(body.planId) : undefined
-    if (!plan || body.sequence !== 0) return route.fulfill({ status: 400, json: { error: 'invalid state tile request' } })
+    if (!plan || !Number.isInteger(body.sequence) || body.sequence! < 0 || body.sequence! >= Math.ceil(plan.bodyIds.length / stateTileRowsPerTile)) return route.fulfill({ status: 400, json: { error: 'invalid state tile request' } })
+    const sequence = body.sequence!, ordinalStart = sequence * stateTileRowsPerTile
+    const tileIds = plan.bodyIds.slice(ordinalStart, ordinalStart + stateTileRowsPerTile)
     // The app canonicalizes its URL after boot and may remove test-only query
     // parameters. Capture the opt-in on the first request so every later
     // response in this page keeps the intended slow-backend behavior.
     slowStateTiles ||= page.url().includes('slow-state-tiles=1')
-    if (slowStateTiles) await new Promise(resolve => setTimeout(resolve, 1_200))
-    const unavailableByEpoch = new Set([...unavailableIdsAt(plan.epochJd), ...missingStateTileIds])
-    const present = plan.bodyIds.map(id => knownBackendIds.has(id) && !unavailableByEpoch.has(id))
-    const metadata: StateTileMetadata[] = plan.bodyIds.map((id, index) => ({ id, availability: present[index] ? 'operational' : 'missing', precision: 'exact', source: knownBackendIds.has(id) ? source : '', datasetVersion: knownBackendIds.has(id) ? datasetVersion : '', datasetSha256: catalogHash, kernelSha256: 'b'.repeat(64), model: present[index] || unavailableByEpoch.has(id) ? 'spk-original' : '', centerId: knownBackendIds.has(id) ? 'naif:0' : '', validityStartEt: -1e12, validityEndEt: 1e12, validityPresent: true, stateEvidence: present[index] ? 'fixture-kernel' : '', evidenceWindowStartEt: -1e12, evidenceWindowEndEt: 1e12, evidenceWindowPresent: false, missingReason: present[index] ? '' : unavailableByEpoch.has(id) ? 'kernel-coverage-gap' : 'unknown-identity', identityStatus: '', sourceRecord: false }))
-    const states = new Float64Array(plan.bodyIds.length * 6); plan.bodyIds.forEach((id, index) => { if (present[index]) states.set(fixtureState(id), index * 6) })
-    const tile = await encodeStateTile({ sequence: 0, tileCount: 1, ordinalStart: 0, epochJd: plan.epochJd, metadata, exact: present.flatMap((value, index) => value ? [index] : []), states, planHash: body.planId!, catalogManifestSha256: catalogHash })
-    const tileBytes = Buffer.from(tile); const payloadHash = tileBytes.subarray(168, 200).toString('hex')
-    await route.fulfill({ headers: { 'content-type': 'application/vnd.solar.state-tile+binary', 'content-length': String(tileBytes.length), etag: `"${payloadHash}"`, 'x-solar-fixture-state-tile': 'complete' }, body: tileBytes })
+    activity.active++; activity.peak = Math.max(activity.peak, activity.active)
+    try {
+      if (slowStateTiles) await new Promise(resolve => setTimeout(resolve, 1_200))
+      const unavailableByEpoch = new Set([...unavailableIdsAt(plan.epochJd), ...missingStateTileIds])
+      const present = tileIds.map(id => knownBackendIds.has(id) && !unavailableByEpoch.has(id))
+      const metadata: StateTileMetadata[] = tileIds.map((id, index) => ({ id, availability: present[index] ? 'operational' : 'missing', precision: 'exact', source: knownBackendIds.has(id) ? source : '', datasetVersion: knownBackendIds.has(id) ? datasetVersion : '', datasetSha256: catalogHash, kernelSha256: 'b'.repeat(64), model: present[index] || unavailableByEpoch.has(id) ? 'spk-original' : '', centerId: knownBackendIds.has(id) ? 'naif:0' : '', validityStartEt: -1e12, validityEndEt: 1e12, validityPresent: true, stateEvidence: present[index] ? 'fixture-kernel' : '', evidenceWindowStartEt: -1e12, evidenceWindowEndEt: 1e12, evidenceWindowPresent: false, missingReason: present[index] ? '' : unavailableByEpoch.has(id) ? 'kernel-coverage-gap' : 'unknown-identity', identityStatus: '', sourceRecord: false }))
+      const states = new Float64Array(tileIds.length * 6); tileIds.forEach((id, index) => { if (present[index]) states.set(fixtureState(id), index * 6) })
+      const tile = await encodeStateTile({ sequence, tileCount: Math.ceil(plan.bodyIds.length / stateTileRowsPerTile), ordinalStart, epochJd: plan.epochJd, metadata, exact: present.flatMap((value, index) => value ? [index] : []), states, planHash: body.planId!, catalogManifestSha256: catalogHash })
+      const tileBytes = Buffer.from(tile); const payloadHash = tileBytes.subarray(168, 200).toString('hex')
+      activity.completed++
+      // Measure backend work on this one event loop. Cross-worker browser
+      // requestfinished callbacks can arrive after a later worker's request.
+      // Body consumption/integrity lifetime is separately tested at the loader.
+      return route.fulfill({ headers: { 'content-type': 'application/vnd.solar.state-tile+binary', 'content-length': String(tileBytes.length), etag: `"${payloadHash}"`, 'x-solar-fixture-state-tile': 'complete' }, body: tileBytes })
+    } finally { activity.active-- }
   })
 }
 
-export const test = base.extend<{ stateTilesBackend: void; mismatchedStateTileCounts: boolean; missingStateTileIds: string[] }>({
+export const test = base.extend<{ stateTilesBackend: void; stateTileActivity: StateTileActivity; mismatchedStateTileCounts: boolean; missingStateTileIds: string[]; stateTileRowsPerTile: number }>({
   mismatchedStateTileCounts: [false, { option: true }],
   missingStateTileIds: [[], { option: true }],
-  stateTilesBackend: [async ({ page, mismatchedStateTileCounts, missingStateTileIds }, use) => {
-    await installStateTilesBackend(page, mismatchedStateTileCounts, missingStateTileIds)
+  stateTileRowsPerTile: [32768, { option: true }],
+  stateTileActivity: async ({ page }, provide) => { void page; await provide({ active: 0, peak: 0, completed: 0 }) },
+  stateTilesBackend: [async ({ page, mismatchedStateTileCounts, missingStateTileIds, stateTileRowsPerTile, stateTileActivity }, use) => {
+    await installStateTilesBackend(page, mismatchedStateTileCounts, missingStateTileIds, stateTileRowsPerTile, stateTileActivity)
     await use()
   }, { auto: true }],
 })

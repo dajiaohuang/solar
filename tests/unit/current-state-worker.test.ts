@@ -6,8 +6,10 @@ import { decodeStateTile, digestStateTileRequestIds, encodeStateTile, StateTileS
 import type { CurrentStateWorkerRequest, CurrentStateWorkerResponse } from '../../src/workers/current-states.protocol'
 import type { CelestialBody } from '../../src/types'
 import { AU_IN_KM } from '../../src/engine/units'
+import { createStateTileAdmissionPool, serveStateTileAdmission } from '../../src/lib/stateTileAdmission'
 
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers() })
+const channels: (() => void)[] = []
+afterEach(() => { for (const close of channels.splice(0)) close(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers() })
 const hash = 'a'.repeat(64), planHash = 'b'.repeat(64), epoch = 2451545
 const body = (id: string): CelestialBody => ({ id, name: id, kind: 'asteroid', color: '#fff', size: 1, source: 'custom' })
 const input = { base: 'https://fixture.invalid', selectedIds: ['a', 'alias', 'gap'],
@@ -50,6 +52,9 @@ async function workerScope(fetcher: typeof fetch) {
     postMessage(message: CurrentStateWorkerResponse, transfer?: Transferable[]) { messages.push(structuredClone(message, { transfer })); transfers.push(transfer ?? []) } }
   vi.stubGlobal('self', scope); vi.stubGlobal('fetch', fetcher)
   await import('../../src/workers/current-states.worker')
+  const channel = new MessageChannel(), detach = serveStateTileAdmission(channel.port1, createStateTileAdmissionPool())
+  channels.push(() => { detach(); channel.port2.close() })
+  scope.onmessage!({ data: { type: 'init-tile-admission', port: channel.port2 } } as MessageEvent<CurrentStateWorkerRequest>)
   return { messages, transfers, send: (data: CurrentStateWorkerRequest) => scope.onmessage!({ data } as MessageEvent<CurrentStateWorkerRequest>) }
 }
 
@@ -161,6 +166,7 @@ describe('current-state worker transfer', () => {
 function clientPort() {
   const port = { postMessage: vi.fn(), terminate: vi.fn(), onmessage: null as Worker['onmessage'], onerror: null as Worker['onerror'] }
   const factory = vi.fn(() => port), client = createCurrentStateWorkerClient(factory)
+  port.postMessage.mockClear() // The mandatory admission channel is set up before jobs.
   return { port, factory, client, send: (data: unknown) => port.onmessage!.call(port as unknown as Worker, { data } as MessageEvent<CurrentStateWorkerResponse>) }
 }
 const result = { epochTdbJd: epoch, epochUtcJd: epoch - 0.001 } as CurrentStateObservation
