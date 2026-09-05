@@ -11,16 +11,18 @@ The application opens in 3D and falls back to 2D if WebGL is unavailable or lost
 
 These are point counts, not focus-body or dataset-size limits. A split comparison view shares one total budget between both panels.
 
-| Device profile | 2D | 3D Auto | 3D Balanced | 3D Maximum |
+| Device profile | 2D Auto | 3D Auto | 3D Balanced | 3D Maximum |
 | --- | ---: | ---: | ---: | ---: |
-| Conservative mobile (≤4 GB hint) | fixed 8,000 | 4,000 initial; 2,000–8,000 | fixed 4,000 | 6,000 initial; 2,000–10,000 |
-| Mobile 12 GB target tier | fixed 500,000 | 100,000 initial; 25,000–250,000 | fixed 75,000 | 150,000 initial; 25,000–250,000 |
-| Desktop 16 GB target tier | fixed 1,250,000 | 250,000 initial; 50,000–750,000 | fixed 250,000 | 500,000 initial; 50,000–750,000 |
-| Desktop 32 GB target tier | fixed 1,567,193 | 500,000 initial; 100,000–1,567,193 | fixed 500,000 | 1,000,000 initial; 100,000–1,567,193 |
+| Conservative mobile (≤4 GB hint) | 8,000 nominal initial; 2,000–8,000 | 4,000 initial; 2,000–8,000 | fixed 4,000 | 6,000 initial; 2,000–10,000 |
+| Mobile target | 100,000 initial; 25,000–500,000 | 100,000 initial; 25,000–250,000 | fixed 75,000 | 150,000 initial; 25,000–250,000 |
+| Desktop default | 250,000 initial; 50,000–1,250,000 | 250,000 initial; 50,000–750,000 | fixed 250,000 | 500,000 initial; 50,000–1,567,193 |
+| Desktop higher-memory ceiling | 250,000 initial; 50,000–1,567,193 | 250,000 initial; 50,000–1,567,193 | fixed 250,000 | 500,000 initial; 50,000–1,567,193 |
 
-Viewport width selects mobile or desktop first; a coarse-pointer landscape device up to 1,180 px remains mobile. A ≤4 GB browser memory hint selects the conservative mobile tier. Desktop hints of at least 24 GB or 16 logical processors select the 32 GB target tier; other desktops use the 16 GB target. Browsers may clamp or omit these hints, so this is a target classification rather than a detected physical-RAM claim. Both renderers cap device pixel ratio.
+Viewport width selects mobile or desktop first; a coarse-pointer landscape device up to 1,180 px remains mobile. A ≤4 GB browser memory hint selects the conservative mobile tier. CPU concurrency never implies physical RAM. A finite memory hint of at least 24 GB may raise the desktop Auto ceiling, but never its initial count or minimum. Maximum can explore the larger desktop ceiling even without that hint. Low-memory/low-concurrency hints may reduce adaptive initial counts further. Both renderers cap device pixel ratio.
 
-Auto and Maximum evaluate two-second frame windows after a two-second warm-up. Two consecutive slow windows (p90 above 28 ms or more than 15% long frames) reduce the count by 25%; four consecutive fast windows (p90 below 18.5 ms and fewer than 5% long frames) raise it by 12.5%. Adjustments use 5,000-point quanta and a five-second cooldown. Hidden tabs, paused simulations, and warm-up periods do not influence the controller. Balanced is a deterministic fixed-count option.
+2D Balanced is fixed at 8,000 conservative-mobile, 100,000 mobile or 500,000 desktop points. 2D Maximum starts at 8,000 / 150,000 / 500,000 respectively, with ranges 2,000–10,000 / 25,000–500,000 / 50,000–1,567,193. Its adaptive state is independent from 3D. These are catalog-cloud policies, not an exact-current-state admission controller.
+
+Auto and Maximum evaluate two-second frame windows after a two-second warm-up in both modes. 3D reports its draw-loop intervals; 2D samples animation-frame delivery while its clock-driven workload is active. Neither is a GPU timer or a physical-device SLO. Two consecutive slow windows (p90 above 28 ms or more than 15% long frames) reduce the count by 25%; four consecutive fast windows (p90 below 18.5 ms and fewer than 5% long frames) raise it by 12.5%, but only if loaded points exercise the current budget. Adjustments use 5,000-point quanta and a five-second cooldown. Hidden tabs, paused simulations, and warm-up periods do not influence the controller. Balanced is a deterministic fixed-count option.
 
 The raised ceilings are capacity envelopes for the single-buffer renderer, not proof that the current 8,000/30,000 display samples contain that many points or that every target device is smooth. The active count remains capped by loaded data, and real-device p90 frame time, dropped frames, memory, thermal state and context-loss evidence are required before making a hardware smoothness claim.
 

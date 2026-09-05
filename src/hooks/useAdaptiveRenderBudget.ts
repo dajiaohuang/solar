@@ -93,10 +93,30 @@ export function useAdaptiveRenderBudget(options: Options) {
           visible: !document.hidden,
           warmedUp: now - startedAt.current >= 2_000,
           samplingActive: options.samplingActive,
+          availableCount: options.availableCount,
         }, policy),
       }
     })
-  }, [hints, options.samplingActive, policy, policyKey])
+  }, [hints, options.availableCount, options.samplingActive, policy, policyKey])
+
+  useEffect(() => {
+    // 2D paints when simulation data changes rather than running the 3D draw
+    // loop. Sample delivered animation-frame intervals during that workload;
+    // do not count an idle, hidden, paused or empty canvas as capacity evidence.
+    if (options.viewMode !== '2d' || !options.samplingActive || options.availableCount <= 0) return
+    let handle = 0
+    let previous: number | null = null
+    const frame = (timestamp: number) => {
+      if (document.hidden) previous = null
+      else {
+        if (previous !== null) onFrameDuration(timestamp - previous)
+        previous = timestamp
+      }
+      handle = window.requestAnimationFrame(frame)
+    }
+    handle = window.requestAnimationFrame(frame)
+    return () => window.cancelAnimationFrame(handle)
+  }, [onFrameDuration, options.availableCount, options.samplingActive, options.viewMode])
 
   const activeState = budget.policyKey === policyKey
     ? budget.state

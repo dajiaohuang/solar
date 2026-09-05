@@ -108,16 +108,18 @@ Solar Atlas separates three limits that answer different questions:
 2. **Visible catalog-point budget** — the prefix drawn in the Observation Deck when Catalog point cloud is explicitly enabled.
 3. **Trail/detail budget** — at most 160 requested historical trails in 3D or 320 in 2D. This does not truncate current positions: all selected resolvable bodies remain drawn and interactive. Extra 3D positions share fixed-pixel GPU points instead of individual meshes; object lists paginate without dropping selection. These points retain their actual SPK/fallback/missing-state classification and are not the approximate catalog cloud.
 
-The initial device class comes from viewport width, while coarse-pointer landscape devices up to 1,180 px remain mobile. A ≤4 GB memory hint selects the conservative mobile policy; desktop hints of at least 24 GB or 16 logical processors select the 32 GB target envelope, with other desktops on the 16 GB target. Browser hints may be clamped or absent, so runtime frame measurements remain authoritative and both renderers cap device pixel ratio. Split-frame comparison gives both frames the same deterministic prefix within one shared total budget.
+The initial device class comes from viewport width, while coarse-pointer landscape devices up to 1,180 px remain mobile. A ≤4 GB memory hint selects the conservative mobile policy. CPU thread counts never imply a RAM tier; a finite desktop memory hint of at least 24 GB may raise the Auto ceiling, but never the initial count or minimum. Maximum explicitly permits the larger desktop ceiling even when memory hints are absent. Browser hints may be clamped or absent, so runtime frame measurements remain authoritative and both renderers cap device pixel ratio. Split-frame comparison gives both frames the same deterministic prefix within one shared total budget.
 
 | View and profile | Mobile visible points | Desktop visible points | Runtime behavior |
 | --- | ---: | ---: | --- |
-| 2D, any profile | 500,000 (8,000 on ≤4 GB hint) | 1,250,000 on the 16 GB target; 1,567,193 on the 32 GB target | Fixed capacity envelope; batched WebGL points |
-| 3D Auto | nominal 100,000; range 25,000–250,000 | nominal 250,000 / 500,000; range 50,000–750,000 / 100,000–1,567,193 for 16 GB / 32 GB targets | Reduces after repeated slow frame windows and increases only after sustained headroom |
-| 3D Balanced | 75,000 | 250,000 / 500,000 | Fixed deterministic budget |
-| 3D Maximum | nominal 150,000; range 25,000–250,000 | nominal 500,000 / 1,000,000; range 50,000–750,000 / 100,000–1,567,193 | Higher adaptive target; still allowed to protect responsiveness |
+| 2D Auto | nominal 100,000; range 25,000–500,000 | nominal 250,000; range 50,000–1,250,000 (higher-memory ceiling 1,567,193) | Adaptive, not a full-ceiling startup allocation |
+| 2D Balanced | 100,000 | 500,000 | Fixed deterministic budget |
+| 2D Maximum | nominal 150,000; range 25,000–500,000 | nominal 500,000; range 50,000–1,567,193 | Adaptive |
+| 3D Auto | nominal 100,000; range 25,000–250,000 | nominal 250,000; range 50,000–750,000 (higher-memory ceiling 1,567,193) | Reduces after repeated slow windows; grows only with sustained measured headroom |
+| 3D Balanced | 75,000 | 250,000 | Fixed deterministic budget |
+| 3D Maximum | nominal 150,000; range 25,000–250,000 | nominal 500,000; range 50,000–1,567,193 | Higher adaptive ceiling; still protects responsiveness |
 
-Adaptive changes occur in 5,000-point steps with hysteresis and cooldown while the 3D catalog cloud is actively animating. The current `visible / sample` count is shown in the frame label. Turning the cloud off releases the catalog workload from the deck. Current immutable display samples still contain only 8,000 mobile or 30,000 desktop rows, so the new ceilings are forward capacity rather than a claim that those points are already delivered.
+Adaptive changes occur in 5,000-point steps with hysteresis and cooldown while the 2D or 3D catalog cloud is actively animating. Growth requires enough loaded points to exercise the current budget; a fast small sample is not evidence for a larger workload. Low-memory mobile hints use smaller policies (see [PERFORMANCE.md](./PERFORMANCE.md)). The current `visible / sample` count is shown in the frame label. Turning the cloud off releases the catalog workload from the deck. Current immutable display samples still contain only 8,000 mobile or 30,000 desktop rows, so the new ceilings are forward capacity rather than a claim that those points are already delivered.
 
 These are bounded policies, not RAM-based performance promises. A device with 12, 16, or 32 GB of system memory can still differ substantially in browser limits, GPU, thermal state, display resolution, extensions, and background load. See [PERFORMANCE.md](./PERFORMANCE.md) for measured byte, request, artifact, and browser budgets.
 

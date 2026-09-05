@@ -337,7 +337,7 @@ export function ExplorerWorkspace() {
     quality: simulation.renderQuality,
     comparisonEnabled: simulation.comparisonEnabled,
     availableCount: catalogRecords.length,
-    samplingActive: clock.isPlaying && simulation.showCatalogCloud && simulation.viewMode === '3d',
+    samplingActive: clock.isPlaying && simulation.showCatalogCloud,
   })
   const primaryCatalogDrawCount = catalogEpochAligned ? Math.min(renderBudget.primary, catalogPointCloud.readyCount) : 0
   const secondaryCatalogDrawCount = catalogEpochAligned ? Math.min(renderBudget.secondary, catalogPointCloud.readyCount) : 0

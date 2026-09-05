@@ -30,6 +30,7 @@ export type RenderPerformanceWindow = {
   visible: boolean
   warmedUp: boolean
   samplingActive: boolean
+  availableCount?: number
 }
 
 export type SplitRenderBudget = {
@@ -47,15 +48,33 @@ export function classifyRenderDevice(viewportWidth: number, coarsePointer: boole
 
 export function classifyRenderCapacity(deviceClass: RenderDeviceClass, hints: RenderDeviceHints = {}): RenderCapacityTier {
   if (deviceClass === 'mobile') return hints.deviceMemoryGb !== undefined && hints.deviceMemoryGb <= 4 ? 'mobile-conservative' : 'mobile12'
-  if ((hints.deviceMemoryGb !== undefined && hints.deviceMemoryGb >= 24) || (hints.hardwareConcurrency !== undefined && hints.hardwareConcurrency >= 16)) return 'desktop32'
+  // CPU parallelism says nothing about RAM. Memory hints only select a
+  // candidate ceiling; they must never promote the initial workload.
+  if (hints.deviceMemoryGb !== undefined && Number.isFinite(hints.deviceMemoryGb) && hints.deviceMemoryGb >= 24) return 'desktop32'
   return 'desktop16'
 }
 
-const TWO_DIMENSIONAL_BUDGETS: Record<RenderCapacityTier, RenderBudgetPolicy> = {
-  'mobile-conservative': { minimum: 8_000, initial: 8_000, maximum: 8_000, adaptive: false },
-  mobile12: { minimum: 500_000, initial: 500_000, maximum: 500_000, adaptive: false },
-  desktop16: { minimum: 1_250_000, initial: 1_250_000, maximum: 1_250_000, adaptive: false },
-  desktop32: { minimum: MAX_SOURCE_INVENTORY_ROWS, initial: MAX_SOURCE_INVENTORY_ROWS, maximum: MAX_SOURCE_INVENTORY_ROWS, adaptive: false },
+const TWO_DIMENSIONAL_BUDGETS: Record<RenderCapacityTier, Record<RenderQuality, RenderBudgetPolicy>> = {
+  'mobile-conservative': {
+    auto: { minimum: 2_000, initial: 8_000, maximum: 8_000, adaptive: true },
+    balanced: { minimum: 8_000, initial: 8_000, maximum: 8_000, adaptive: false },
+    max: { minimum: 2_000, initial: 8_000, maximum: 10_000, adaptive: true },
+  },
+  mobile12: {
+    auto: { minimum: 25_000, initial: 100_000, maximum: 500_000, adaptive: true },
+    balanced: { minimum: 100_000, initial: 100_000, maximum: 100_000, adaptive: false },
+    max: { minimum: 25_000, initial: 150_000, maximum: 500_000, adaptive: true },
+  },
+  desktop16: {
+    auto: { minimum: 50_000, initial: 250_000, maximum: 1_250_000, adaptive: true },
+    balanced: { minimum: 500_000, initial: 500_000, maximum: 500_000, adaptive: false },
+    max: { minimum: 50_000, initial: 500_000, maximum: MAX_SOURCE_INVENTORY_ROWS, adaptive: true },
+  },
+  desktop32: {
+    auto: { minimum: 50_000, initial: 250_000, maximum: MAX_SOURCE_INVENTORY_ROWS, adaptive: true },
+    balanced: { minimum: 500_000, initial: 500_000, maximum: 500_000, adaptive: false },
+    max: { minimum: 50_000, initial: 500_000, maximum: MAX_SOURCE_INVENTORY_ROWS, adaptive: true },
+  },
 }
 
 const THREE_DIMENSIONAL_BUDGETS: Record<RenderCapacityTier, Record<RenderQuality, RenderBudgetPolicy>> = {
@@ -72,12 +91,12 @@ const THREE_DIMENSIONAL_BUDGETS: Record<RenderCapacityTier, Record<RenderQuality
   desktop16: {
     auto: { minimum: 50_000, initial: 250_000, maximum: 750_000, adaptive: true },
     balanced: { minimum: 250_000, initial: 250_000, maximum: 250_000, adaptive: false },
-    max: { minimum: 50_000, initial: 500_000, maximum: 750_000, adaptive: true },
+    max: { minimum: 50_000, initial: 500_000, maximum: MAX_SOURCE_INVENTORY_ROWS, adaptive: true },
   },
   desktop32: {
-    auto: { minimum: 100_000, initial: 500_000, maximum: MAX_SOURCE_INVENTORY_ROWS, adaptive: true },
-    balanced: { minimum: 500_000, initial: 500_000, maximum: 500_000, adaptive: false },
-    max: { minimum: 100_000, initial: 1_000_000, maximum: MAX_SOURCE_INVENTORY_ROWS, adaptive: true },
+    auto: { minimum: 50_000, initial: 250_000, maximum: MAX_SOURCE_INVENTORY_ROWS, adaptive: true },
+    balanced: { minimum: 250_000, initial: 250_000, maximum: 250_000, adaptive: false },
+    max: { minimum: 50_000, initial: 500_000, maximum: MAX_SOURCE_INVENTORY_ROWS, adaptive: true },
   },
 }
 
@@ -101,7 +120,7 @@ export function resolveRenderBudgetPolicy(
 ): RenderBudgetPolicy {
   const tier = classifyRenderCapacity(deviceClass, hints)
   const policy = viewMode === '2d'
-    ? TWO_DIMENSIONAL_BUDGETS[tier]
+    ? TWO_DIMENSIONAL_BUDGETS[tier][quality]
     : THREE_DIMENSIONAL_BUDGETS[tier][quality]
   return { ...policy }
 }
@@ -142,7 +161,9 @@ export function advanceAdaptiveRenderBudget(
   ) return state
 
   const slow = window.p90FrameTimeMs > 28 || window.longFrameRatio > 0.15
-  const fast = window.p90FrameTimeMs < 18.5 && window.longFrameRatio < 0.05
+  // A tiny loaded sample cannot prove that the unexercised budget is fast.
+  const budgetExercised = window.availableCount === undefined || window.availableCount >= state.count
+  const fast = budgetExercised && window.p90FrameTimeMs < 18.5 && window.longFrameRatio < 0.05
   const consecutiveSlowWindows = slow ? state.consecutiveSlowWindows + 1 : 0
   const consecutiveFastWindows = fast ? state.consecutiveFastWindows + 1 : 0
 
