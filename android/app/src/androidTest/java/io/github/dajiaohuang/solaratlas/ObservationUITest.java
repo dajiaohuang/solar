@@ -5,6 +5,7 @@ import static androidx.test.espresso.action.ViewActions.clearText;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.action.ViewActions.closeSoftKeyboard;
 import static androidx.test.espresso.action.ViewActions.replaceText;
+import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
@@ -59,29 +60,30 @@ public final class ObservationUITest {
 
             // Exercise the unconfigured first screen before entering network data.
             waitForText(containsString("No observation loaded"));
-            onView(withText("Tutorial")).perform(click());
+            onView(withText("Tutorial")).perform(scrollTo(), click());
             waitForText(containsString("First observation"));
             onView(withText("Done")).perform(click());
-            onView(withText("Load observation")).perform(click());
+            onView(withText("Load observation")).perform(scrollTo(), click());
             waitForText(containsString("Enter an HTTPS backend"));
 
+            onView(withText("Earth - Moon")).perform(scrollTo(), click());
             fill(BACKEND_HINT, backend);
             fill(EPOCH_HINT, "2461287.5");
             fill(IDS_HINT, "naif:399,naif:301,naif:10,unknown:fixture");
-            onView(withText("Load observation")).perform(click());
+            onView(withText("Load observation")).perform(scrollTo(), click());
             waitForText(containsString("3 verified states - 1 data gaps"));
             waitForText(containsString("3D GPU points 3/3 (limit 250000)"));
             waitForEvidence("naif:399 - VERIFIED", "naif:301 - VERIFIED", "naif:10 - VERIFIED", "unknown:fixture - MISSING");
             screenshot("observation-3d.png");
 
-            onView(withText("Switch to 2D")).perform(click());
+            onView(withText("Switch to 2D")).perform(scrollTo(), click());
             waitForText(containsString("2D GPU points 3/3 (limit 500000)"));
             screenshot("observation-2d.png");
 
             scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);
             scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);
             waitForText(containsString("Observation released while inactive"));
-            onView(withText("Load observation")).perform(click());
+            onView(withText("Load observation")).perform(scrollTo(), click());
             waitForText(containsString("3 verified states - 1 data gaps"));
             waitForText(containsString("2D GPU points 3/3 (limit 500000)"));
             waitForEvidence("naif:399 - VERIFIED", "naif:301 - VERIFIED", "naif:10 - VERIFIED", "unknown:fixture - MISSING");
@@ -91,8 +93,11 @@ public final class ObservationUITest {
             try {
                 if (scenario != null && !passed) screenshot("observation-failure.png");
             } finally {
-                if (scenario != null) scenario.close();
-                HttpsURLConnection.setDefaultSSLSocketFactory(previousFactory);
+                try {
+                    if (scenario != null) scenario.close();
+                } finally {
+                    HttpsURLConnection.setDefaultSSLSocketFactory(previousFactory);
+                }
             }
         }
     }
@@ -118,7 +123,7 @@ public final class ObservationUITest {
     }
 
     private static void fill(String hint, String value) {
-        onView(withHint(hint)).perform(click(), clearText(), replaceText(value), closeSoftKeyboard());
+        onView(withHint(hint)).perform(scrollTo(), click(), clearText(), replaceText(value), closeSoftKeyboard());
     }
 
     private static void waitForEvidence(String... rows) {
@@ -130,10 +135,10 @@ public final class ObservationUITest {
         AssertionError last = null;
         while (SystemClock.uptimeMillis() < deadline) {
             try {
-                onView(withText(matcher)).check(matches(isDisplayed()));
+                onView(withText(matcher)).perform(scrollTo()).check(matches(isDisplayed()));
                 return;
-            } catch (AssertionError error) {
-                last = error;
+            } catch (AssertionError | androidx.test.espresso.NoMatchingViewException error) {
+                if (error instanceof AssertionError) last = (AssertionError) error;
                 SystemClock.sleep(100);
             }
         }
