@@ -105,11 +105,18 @@ type kernelBinding struct {
 	mu             sync.Mutex
 	loading        bool
 	ready          chan struct{}
+	closed         bool
 	verified       bool
 	terminalErr    error
 	integrityBytes int64
 	integrityReads uint64
 }
+
+var errCatalogClosed = errors.New("catalog is closed")
+
+// Kept as a narrow seam for the lifecycle regression test. Production code
+// always uses the SPK package implementation.
+var openKernelWithCache = spk.OpenWithCache
 
 type manifest struct {
 	ID       string         `json:"id"`
@@ -342,6 +349,10 @@ func (b *kernelBinding) kernelFor(ctx context.Context, pageCacheBytes int64) (*s
 	}
 	for {
 		b.mu.Lock()
+		if b.closed {
+			b.mu.Unlock()
+			return nil, errCatalogClosed
+		}
 		if b.kernel != nil {
 			k := b.kernel
 			b.mu.Unlock()
@@ -373,18 +384,29 @@ func (b *kernelBinding) kernelFor(ctx context.Context, pageCacheBytes int64) (*s
 		}
 		var kernel *spk.Kernel
 		if err == nil {
-			kernel, err = spk.OpenWithCache(b.path, spk.DefaultPageSize, pageCacheBytes)
+			kernel, err = openKernelWithCache(b.path, spk.DefaultPageSize, pageCacheBytes)
 		}
 
 		b.mu.Lock()
 		b.loading = false
 		b.integrityReads++
 		b.integrityBytes += integrityBytes
+		closed := b.closed
+		if err == nil && closed {
+			err = errCatalogClosed
+		}
 		if err == nil {
 			b.kernel = kernel
 			b.verified = true
-		} else if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		} else if !closed && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			b.terminalErr = err
+		}
+		if closed && kernel != nil {
+			// Close while holding the binding lock and before waking Close's
+			// waiter. Otherwise Catalog.Close could observe ready closed and
+			// return while this newly opened resource was still live.
+			_ = kernel.Close()
+			kernel = nil
 		}
 		close(ready)
 		b.ready = nil
@@ -441,11 +463,29 @@ func (c *Catalog) ManifestHash() string     { return c.manifestHash }
 func (c *Catalog) ManifestProfile() string  { return c.manifestProfile }
 func (c *Catalog) ManifestContract() string { return c.manifestContract }
 func (c *Catalog) Close() error {
-	var firstErr error
+	// Mark every binding before waiting on any one loader. This prevents a
+	// second binding from publishing a kernel while Close is waiting on the
+	// first one.
 	for _, binding := range c.kernels {
 		binding.mu.Lock()
-		kernel := binding.kernel
+		binding.closed = true
 		binding.mu.Unlock()
+	}
+	var firstErr error
+	for _, binding := range c.kernels {
+		var kernel *spk.Kernel
+		for {
+			binding.mu.Lock()
+			ready := binding.ready
+			if ready == nil {
+				kernel = binding.kernel
+				binding.kernel = nil
+				binding.mu.Unlock()
+				break
+			}
+			binding.mu.Unlock()
+			<-ready
+		}
 		if kernel != nil {
 			if err := kernel.Close(); err != nil && firstErr == nil {
 				firstErr = err

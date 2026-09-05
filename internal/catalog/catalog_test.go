@@ -1,13 +1,18 @@
 package catalog
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/dajiaohuang/solar/backend/internal/spk"
 )
 
 func TestLoadManifestRetainsSourceOnlyTargets(t *testing.T) {
@@ -53,6 +58,99 @@ func TestLazyVerificationRejectsPackagedKernelWithManifestIdentityMismatch(t *te
 	}
 	if stats := c.Stats(); stats["kernelFilesPending"] != 0 || stats["kernelFilesInvalid"] != 1 {
 		t.Fatalf("unexpected post-request kernel stats: %+v", stats)
+	}
+}
+
+func TestCatalogCloseWaitsForLazyKernelLoad(t *testing.T) {
+	d := t.TempDir()
+	fixture, err := os.ReadFile(filepath.Join("..", "..", "tests", "fixtures", "spk21-synthetic.bsp"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(d, "synthetic.bsp"), fixture, 0600); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(fixture)
+	manifest := fmt.Sprintf(`{"id":"spk-test","files":[{"id":"synthetic","path":"synthetic.bsp","targets":[-210001],"bytes":%d,"sha256":"%s"}]}`, len(fixture), hex.EncodeToString(sum[:]))
+	if err := os.WriteFile(filepath.Join(d, "ephemeris-manifest.json"), []byte(manifest), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	binding := c.kernels["synthetic"]
+	if binding == nil {
+		t.Fatal("lazy kernel binding was not retained")
+	}
+	previousOpen := openKernelWithCache
+	defer func() { openKernelWithCache = previousOpen }()
+	openStarted := make(chan struct{})
+	releaseOpen := make(chan struct{})
+	released := false
+	defer func() {
+		if !released {
+			close(releaseOpen)
+		}
+	}()
+	var opened *spk.Kernel
+	openKernelWithCache = func(path string, pageSize int, maxBytes int64) (*spk.Kernel, error) {
+		kernel, openErr := previousOpen(path, pageSize, maxBytes)
+		opened = kernel
+		close(openStarted)
+		<-releaseOpen
+		return kernel, openErr
+	}
+	loadDone := make(chan error, 1)
+	go func() {
+		_, loadErr := binding.kernelFor(context.Background(), spk.DefaultCacheBytes)
+		loadDone <- loadErr
+	}()
+	select {
+	case <-openStarted:
+	case <-time.After(time.Second):
+		t.Fatal("lazy kernel loader did not reach the open barrier")
+	}
+	closeDone := make(chan error, 1)
+	go func() { closeDone <- c.Close() }()
+	deadline := time.NewTimer(time.Second)
+	ticker := time.NewTicker(time.Millisecond)
+	defer deadline.Stop()
+	defer ticker.Stop()
+	closed := false
+	for !closed {
+		binding.mu.Lock()
+		closed = binding.closed
+		binding.mu.Unlock()
+		if closed {
+			break
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatal("Catalog.Close did not mark binding closed")
+		}
+	}
+	close(releaseOpen)
+	released = true
+	if loadErr := <-loadDone; !errors.Is(loadErr, errCatalogClosed) {
+		t.Fatalf("lazy loader result after close=%v, want catalog closed", loadErr)
+	}
+	if closeErr := <-closeDone; closeErr != nil {
+		t.Fatalf("Catalog.Close: %v", closeErr)
+	}
+	if opened == nil {
+		t.Fatal("open barrier did not receive a kernel")
+	}
+	binding.mu.Lock()
+	remainingKernel, stillLoading := binding.kernel, binding.loading
+	binding.mu.Unlock()
+	if remainingKernel != nil || stillLoading {
+		t.Fatalf("closed binding retained a kernel or loader: kernel=%v loading=%v", remainingKernel != nil, stillLoading)
+	}
+	if _, loadErr := binding.kernelFor(context.Background(), spk.DefaultCacheBytes); !errors.Is(loadErr, errCatalogClosed) {
+		t.Fatalf("post-close lazy load result=%v, want catalog closed", loadErr)
 	}
 }
 
