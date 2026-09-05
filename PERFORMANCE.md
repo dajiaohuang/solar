@@ -84,6 +84,41 @@ deterministic cancellation/concurrency and loopback HTTP regressions with
 `go test ./internal/httpapi -run 'TestTileFlight|TestHTTPDuplicateTiles'`;
 Linux CI also executes the backend race detector.
 
+## Backend cold-process startup
+
+Run `go run ./cmd/bench -startup-only -data-dir <full-data-dir> -inventory-dir <inventory-dir>`
+to measure catalog and inventory loading without starting the HTTP workload.
+The report's `mode` is `startup-only`; zero request-workload fields in this mode
+mean **not run**, not a measured zero cost. `startup` separates resident/heap
+boundary samples from an OS process high-water mark. The latter is currently
+implemented on Windows; other platforms report `processPeakAvailable: false`
+instead of substituting an ordinary RSS sample. The normal benchmark also
+retains this startup evidence before running its mixed workloads.
+
+A frozen executable was run in three sequential fresh Windows amd64 processes
+on an i9-14900KF (2026-09-05), with the same 1,567,193-source-record inventory,
+314 shards / 97,111,820 compressed bytes, and 510 packaged SPK candidates:
+
+| Run | Catalog + index startup | OS process peak working set |
+| --- | ---: | ---: |
+| 1 | 7.682 s | 461.70 MiB |
+| 2 | 7.649 s | 424.30 MiB |
+| 3 | 7.758 s | 422.55 MiB |
+
+All three observed peaks are below the 512 MiB startup target **for this data,
+machine and cold-process workload only**. Filesystem caches were not flushed;
+other user processes were not stopped. This does not prove cold-disk latency,
+cross-platform memory, first-use integrity costs, concurrent request memory or
+native rendering smoothness. All 510 candidates remained pending verification
+with zero integrity bytes read; they are not 510 verified current states.
+
+The measured catalog manifest SHA-256 was
+`7e7fa1df8080b505abba52cc8ca9a4d8bd6d1c10d47d3e421953e7c1b8494257`;
+inventory manifest SHA-256 was
+`bef21e3bc5820db0b70c24ad464262cb67df279f8d0a3e2b8731ca5ca9c39583`.
+The exact executable SHA-256 and raw reports are retained with local benchmark
+evidence; generated datasets and the executable are not committed.
+
 ## Reference run
 
 Measured on 2026-08-20 with `mpcorb-919b585f403b185a-full` (1,557,710 valid objects):

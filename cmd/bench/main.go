@@ -26,6 +26,8 @@ import (
 )
 
 type report struct {
+	Mode                    string              `json:"mode"`
+	Startup                 startupEvidence     `json:"startup"`
 	Goos                    string              `json:"goos"`
 	Goarch                  string              `json:"goarch"`
 	Catalog                 int                 `json:"catalogEntries"`
@@ -96,17 +98,22 @@ func main() {
 	inventoryDir := flag.String("inventory-dir", "", "optional audited source-inventory directory")
 	longSamples := flag.Int("long-samples", 10000, "samples in the long-trajectory workload")
 	stateEpochJD := flag.Float64("epoch-jd", 2461287.5, "TDB epoch for state-plan/tile workloads (default is the reproducible audit epoch)")
+	startupOnly := flag.Bool("startup-only", false, "report catalog/inventory cold-process startup without running request workloads")
 	flag.Parse()
 	if *n < 1 || *workers < 1 || *longSamples < 2 || math.IsNaN(*stateEpochJD) || math.IsInf(*stateEpochJD, 0) {
 		panic("requests, concurrency and long-samples must be positive")
 	}
 
+	peak := newPeak()
+	peak.Sample()
 	loadStart := time.Now()
 	c, err := catalog.Load(*dataDir)
 	if err != nil {
 		panic(err)
 	}
 	loadMs := elapsedMilliseconds(loadStart)
+	defer c.Close()
+	peak.Sample()
 	var inv *inventory.Inventory
 	var inventoryLoadMs float64
 	var inventoryIndexTerms, inventoryIndexPostings int
@@ -119,6 +126,25 @@ func main() {
 		inventoryLoadMs = elapsedMilliseconds(inventoryStart)
 		stats := inv.IndexStats()
 		inventoryIndexTerms, inventoryIndexPostings = stats["searchTerms"], stats["indexPostings"]
+	}
+	peak.Sample()
+	startup := captureStartup(loadStart)
+	if *startupOnly {
+		out := report{
+			Mode:    "startup-only",
+			Startup: startup, Goos: runtime.GOOS, Goarch: runtime.GOARCH,
+			Catalog: c.Len(), CatalogPackagedFiles: c.Stats()["packagedFiles"], CatalogManifestSHA256: c.ManifestHash(),
+			InventoryManifestSHA256: inventoryManifestHash(inv), InventoryRecords: inventoryRecords(inv),
+			InventoryShards: inventoryShards(inv), InventoryBytes: inventoryBytes(inv), InventoryLoadMs: inventoryLoadMs,
+			InventoryIndexTerms: inventoryIndexTerms, InventoryIndexPostings: inventoryIndexPostings,
+			CatalogLoadMs: loadMs, CatalogIntegrity: c.IntegrityStats(),
+			PeakRSSBytes: peak.rss, PeakRSSSampled: peak.rss > 0, RSSMeasurement: "startup boundary samples; use startup.processPeakRSSBytes when available",
+			PeakHeapBytes: peak.heap,
+		}
+		if err := json.NewEncoder(os.Stdout).Encode(out); err != nil {
+			panic(err)
+		}
+		return
 	}
 
 	service := httpapi.New(c, *workers, inv)
@@ -133,7 +159,6 @@ func main() {
 	longPayload := trajectoryPayload([]string{"earth"}, *longSamples, "approximate")
 	stateTileIDs := benchmarkStateTileIDs(c)
 	stateTileSourceIDs := benchmarkInventoryStateTileIDs(c, inv)
-	peak := newPeak()
 
 	firstStart := time.Now()
 	firstStatus, _, err := doRequest(client, http.MethodPost, server.URL+"/v1/trajectory", singlePayload)
@@ -224,7 +249,9 @@ func main() {
 	catalogStats := c.Stats()
 	catalogRead := c.ReadStats()
 	out := report{
-		Goos: runtime.GOOS, Goarch: runtime.GOARCH, Catalog: c.Len(), CatalogPackagedFiles: catalogStats["packagedFiles"], CatalogManifestSHA256: c.ManifestHash(), InventoryManifestSHA256: inventoryManifestHash(inv),
+		Mode:    "mixed-workloads",
+		Startup: startup,
+		Goos:    runtime.GOOS, Goarch: runtime.GOARCH, Catalog: c.Len(), CatalogPackagedFiles: catalogStats["packagedFiles"], CatalogManifestSHA256: c.ManifestHash(), InventoryManifestSHA256: inventoryManifestHash(inv),
 		InventoryRecords: inventoryRecords(inv), InventoryShards: inventoryShards(inv), InventoryBytes: inventoryBytes(inv), InventoryLoadMs: inventoryLoadMs, InventoryIndexTerms: inventoryIndexTerms, InventoryIndexPostings: inventoryIndexPostings, InventoryBlockCache: inventoryBlockCacheStats(inv), CatalogLoadMs: loadMs,
 		DirectoryQueries: append([]string(nil), benchmarkDirectoryQueries...),
 		CatalogIntegrity: c.IntegrityStats(), CatalogSPKRead: map[string]uint64{"cachedBytes": uint64(catalogRead.CachedBytes), "loadedBytes": uint64(catalogRead.LoadedBytes), "pageLoads": catalogRead.PageLoads, "cacheHits": catalogRead.CacheHits, "cacheMisses": catalogRead.CacheMisses},
