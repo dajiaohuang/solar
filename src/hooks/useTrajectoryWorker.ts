@@ -11,6 +11,7 @@ import type {
   Vector3,
 } from '../types'
 import type { BackendFrame } from '../lib/backendFrames'
+import { EMPTY_CURRENT_POSITIONS } from '../lib/currentPositions'
 
 type Params = {
   bodies: CelestialBody[]
@@ -83,7 +84,7 @@ export function useTrajectoryWorker(params: Params) {
     referenceId,
     julianDay: currentJulianDay,
     resolveBodyPosition,
-  }) : { currentPositions: [], missingBodyIds: bodies.map(body => body.id), maxDistance: 0, trajectoryUnavailableBodyIds: [] as BodyId[] },
+  }) : { currentPositions: EMPTY_CURRENT_POSITIONS, missingBodyIds: bodies.map(body => body.id), maxDistance: 0, trajectoryUnavailableBodyIds: [] as BodyId[] },
   [bodies, bodiesById, currentFrame, currentJulianDay, referenceId, resolveBodyPosition])
 
   useEffect(() => {
@@ -167,7 +168,7 @@ export function useTrajectoryWorker(params: Params) {
 
   const frame = useMemo(() => ({
     ...(currentFrame !== undefined
-      ? (currentFrame ? { ...currentFrame, trajectoryUnavailableBodyIds: [] as BodyId[] } : { currentPositions: [], missingBodyIds: bodies.map(body => body.id), maxDistance: 0, trajectoryUnavailableBodyIds: [] as BodyId[] })
+      ? (currentFrame ? { ...currentFrame, trajectoryUnavailableBodyIds: [] as BodyId[] } : { currentPositions: EMPTY_CURRENT_POSITIONS, missingBodyIds: bodies.map(body => body.id), maxDistance: 0, trajectoryUnavailableBodyIds: [] as BodyId[] })
       : localCurrent),
     trajectories: completedRequestKey === requestKey
       ? trajectories.filter(sample => !(currentFrame ? currentFrame.missingBodyIds : localCurrent.missingBodyIds).includes(sample.body.id))

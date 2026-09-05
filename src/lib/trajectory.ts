@@ -1,7 +1,7 @@
 import { createBodyPositionResolver } from './ephemeris'
 import { kernelsForWindow, loadedKernelIds } from '../engine/ephemeris/kernelStore'
-import { getRelativePositions, toPlanarPoint } from './referenceFrame'
-import { vector3Magnitude } from './ephemeris'
+import { getRelativePositions } from './referenceFrame'
+import { packedCurrentPositions } from './currentPositions'
 import { createTrajectoryAccumulator } from './trajectorySamples'
 import type { BodyId, CelestialBody, TrajectoryFrameData, TrajectorySample, Vector3 } from '../types'
 
@@ -94,18 +94,20 @@ export function buildCurrentPositions(params: {
 }) {
   const resolve = params.resolveBodyPosition ?? createBodyPositionResolver(params.bodiesById, params.julianDay)
   const relativePositions = getRelativePositions(params.bodies, params.referenceId, resolve)
-  const currentPositions = relativePositions.map((item) => ({
-    body: item.body,
-    planarPosition: toPlanarPoint(item.position),
-    position3D: item.position,
-    distance: vector3Magnitude(item.position),
-  }))
-  const positionedIds = new Set(currentPositions.map(item => item.body.id))
+  const coordinates = new Float64Array(relativePositions.length * 3)
+  const positionedBodies: CelestialBody[] = []
+  for (let index = 0; index < relativePositions.length; index++) {
+    const { body, position } = relativePositions[index]
+    positionedBodies.push(body)
+    coordinates[index * 3] = position.x; coordinates[index * 3 + 1] = position.y; coordinates[index * 3 + 2] = position.z
+  }
+  const currentPositions = packedCurrentPositions(positionedBodies, coordinates)
+  const positionedIds = new Set(positionedBodies.map(body => body.id))
   return {
     currentPositions,
     trajectoryUnavailableBodyIds: [],
     missingBodyIds: params.bodies.filter(body => !positionedIds.has(body.id)).map(body => body.id),
-    maxDistance: currentPositions.reduce((largest, item) => Math.max(largest, item.distance), 0),
+    maxDistance: currentPositions.maxDistance(),
   }
 }
 

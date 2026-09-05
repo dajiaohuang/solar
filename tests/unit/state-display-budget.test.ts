@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { advanceStateDisplayBudget, resetDisplayEvidence, selectStateDisplayPositions, StateDisplaySampler, type StateDisplayBudget } from '../../src/lib/stateDisplayBudget'
 import { resolveRenderBudgetPolicy } from '../../src/lib/renderBudget'
-import type { RenderedBodyPosition } from '../../src/types'
+import { CurrentPositions } from '../../src/lib/currentPositions'
+import type { CelestialBody } from '../../src/types'
 
 const initial = (): StateDisplayBudget => ({ count: 100_000, fast: 0, slow: 0, adjustedAt: null, reason: 'initial' })
 const policy = resolveRenderBudgetPolicy('mobile', '3d', 'auto')
@@ -66,21 +67,23 @@ describe('bounded renderer interval sampler', () => {
 })
 
 describe('display-only source prefix', () => {
-  const source = Array.from({ length: 10 }, (_, i) => ({ body: { id: `body-${i}` }, distance: i, planarPosition: { x: i, y: i }, position3D: { x: 1e12 + i, y: i, z: i } })) as RenderedBodyPosition[]
+  const bodies = Array.from({ length: 10 }, (_, i) => ({ id: `body-${i}` })) as CelestialBody[]
+  const source = new CurrentPositions(10, i => bodies[i], (i, axis) => axis === 0 ? 1e12 + i : i)
+  const ids = (positions: CurrentPositions) => Array.from({ length: positions.length }, (_, i) => positions.bodyAt(i).id)
   it('keeps priority rows and deterministic source order without mutating scientific objects', () => {
-    const before = structuredClone(source)
+    const before = Array.from({ length: source.length }, (_, i) => source.rowAt(i))
     const displayed = selectStateDisplayPositions(source, 4, ['body-8', 'body-6', 'missing'])
-    expect(displayed.map(row => row.body.id)).toEqual(['body-6', 'body-8', 'body-0', 'body-1'])
-    expect(displayed[0]).toBe(source[6]); expect(source).toEqual(before)
+    expect(ids(displayed)).toEqual(['body-6', 'body-8', 'body-0', 'body-1'])
+    expect(displayed.bodyAt(0)).toBe(source.bodyAt(6)); expect(Array.from({ length: source.length }, (_, i) => source.rowAt(i))).toEqual(before)
     expect(selectStateDisplayPositions(source, 10, [])).toBe(source)
-    expect(selectStateDisplayPositions(source, 0, [])).toEqual([])
+    expect(selectStateDisplayPositions(source, 0, []).length).toBe(0)
     expect(() => selectStateDisplayPositions(source, -1, [])).toThrow()
   })
   it('shares a capacity limit rather than halving a small available sample', () => {
     const perPane = Math.floor(100_000 / 2)
-    const otherFrame = source.map(row => ({ ...row, position3D: { x: row.position3D!.x - 2, y: 0, z: 0 } }))
+    const otherFrame = new CurrentPositions(source.length, i => source.bodyAt(i), (i, axis) => axis === 0 ? source.coordinateAt(i, 0) - 2 : 0)
     expect(selectStateDisplayPositions(source, perPane, []).length).toBe(10)
-    expect(selectStateDisplayPositions(otherFrame, 4, ['body-6']).map(row => row.body.id))
-      .toEqual(selectStateDisplayPositions(source, 4, ['body-6']).map(row => row.body.id))
+    expect(ids(selectStateDisplayPositions(otherFrame, 4, ['body-6'])))
+      .toEqual(ids(selectStateDisplayPositions(source, 4, ['body-6'])))
   })
 })

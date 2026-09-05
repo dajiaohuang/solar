@@ -1,5 +1,5 @@
 import { RENDER_BUDGET_COOLDOWN_MS, RENDER_BUDGET_QUANTUM, type RenderBudgetPolicy } from './renderBudget'
-import type { RenderedBodyPosition } from '../types'
+import { selectCurrentPositions, type CurrentPositions } from './currentPositions'
 
 export type DisplayWindow = { samples: number; p50Ms: number; p95Ms: number; missedRatio: number }
 export type StateDisplayBudget = { count: number; slow: number; fast: number; adjustedAt: number | null; reason: 'initial' | 'slow' | 'headroom' }
@@ -44,17 +44,17 @@ export class StateDisplaySampler {
 }
 
 /** Stable priority IDs followed by source order; references are not invented. */
-export function selectStateDisplayPositions(source: RenderedBodyPosition[], limit: number, priorityIds: string[]): RenderedBodyPosition[] {
+export function selectStateDisplayPositions(source: CurrentPositions, limit: number, priorityIds: string[]): CurrentPositions {
   if (!Number.isSafeInteger(limit) || limit < 0) throw new Error('Invalid state display limit')
   if (source.length <= limit) return source
-  const priority = new Set(priorityIds), selected = new Set<string>(), result: RenderedBodyPosition[] = []
-  for (const item of source) {
-    if (result.length >= limit) break
-    if (priority.has(item.body.id)) { result.push(item); selected.add(item.body.id) }
+  const priority = new Set(priorityIds), selected = new Set<string>(), ordinals = new Uint32Array(limit)
+  let count = 0
+  for (let index = 0; index < source.length && count < limit; index++) {
+    const id = source.bodyAt(index).id
+    if (priority.has(id)) { ordinals[count++] = index; selected.add(id) }
   }
-  for (const item of source) {
-    if (result.length >= limit) break
-    if (!selected.has(item.body.id)) result.push(item)
+  for (let index = 0; index < source.length && count < limit; index++) {
+    if (!selected.has(source.bodyAt(index).id)) ordinals[count++] = index
   }
-  return result
+  return selectCurrentPositions(source, ordinals.subarray(0, count))
 }

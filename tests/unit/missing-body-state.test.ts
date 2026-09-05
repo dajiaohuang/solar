@@ -31,8 +31,8 @@ describe('unavailable body states', () => {
   })
   it('does not move later body positions into a missing earlier body slot', () => {
     const current = buildCurrentPositions({ ...params, julianDay: 2451545 })
-    expect(current.currentPositions.map(item => item.body.id)).toEqual(['sun', 'moving'])
-    expect(current.currentPositions[1].position3D).toEqual({ x: 1, y: 0, z: 0 })
+    expect(Array.from({ length: current.currentPositions.length }, (_, i) => current.currentPositions.bodyAt(i).id)).toEqual(['sun', 'moving'])
+    expect(current.currentPositions.rowAt(1).position3D).toEqual({ x: 1, y: 0, z: 0 })
     expect(current.missingBodyIds).toEqual(['no-state', 'dependent'])
     expect(buildTrajectories(params).map(sample => [sample.body.id, sample.points.length])).toEqual([['sun', 3], ['moving', 3]])
     expect(buildTrajectoryFrame(params).trajectoryUnavailableBodyIds).toEqual(['no-state', 'dependent'])
@@ -57,7 +57,7 @@ describe('unavailable body states', () => {
       trajectoryPoints: [{ jd: 2451544, x: 1, y: 0, z: 0 }, { jd: 2451545, x: 2, y: 0, z: 0 }],
     }]
     const frame = buildSpacecraftFrame(spacecraft, missing.id, bodiesById, 2451545)
-    expect(frame.currentPositions).toEqual([])
+    expect(frame.currentPositions.length).toBe(0)
     expect(frame.trajectories).toEqual([])
     expect(frame.trajectoryUnavailableBodyIds).toEqual(['probe'])
   })

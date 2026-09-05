@@ -118,6 +118,18 @@ test('complete Saturn current positions remain independent of 3D trail budgets',
   await expect(accessible.locator('li')).toHaveCount(80)
   await accessible.getByRole('button', { name: 'Next', exact: true }).click()
   await expect(accessible.locator('.body-list-pagination')).toContainText('81–160 / 294')
+  await accessible.getByRole('button', { name: 'Next', exact: true }).click()
+  await expect(accessible.locator('.body-list-pagination')).toContainText('161–240 / 294')
+  // Promote an originally bulk-only position into the bounded focus layer.
+  // Ordinal remapping must not change full coverage or lose its original ID.
+  const lateRow = accessible.locator('li').last()
+  const lateName = (await lateRow.locator('span').innerText()).trim()
+  await lateRow.getByRole('button', { name: 'Focus object', exact: true }).click()
+  await expect(page.locator('.inspector-toggle')).toContainText(lateName)
+  await expect(canvas).toHaveAttribute('data-position-count', '293')
+  expect(Number(await canvas.getAttribute('data-detail-count'))).toBeLessThanOrEqual(160)
+  expect(Number(await canvas.getAttribute('data-state-point-count'))).toBeGreaterThan(130)
+  await expect(displayBudget).toHaveAttribute('data-computed', '293')
   await accessible.locator('summary').click()
   query.set('compare', '1')
   query.set('compareRef', 'titan')

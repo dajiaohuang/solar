@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { coveragePage, summarizeBackendCoverage } from '../../src/lib/backendCoverage'
 import type { BackendFrame, StateTileAudit } from '../../src/lib/backendFrames'
+import { EMPTY_CURRENT_POSITIONS } from '../../src/lib/currentPositions'
 
 function audit(bodyId: string, backendId = bodyId, missingReason = ''): StateTileAudit {
   return { bodyId, backendId, availability: missingReason ? 'missing' : 'operational', precision: missingReason ? 'unavailable' : 'exact',
@@ -11,7 +12,7 @@ function frame(rows: StateTileAudit[]): BackendFrame {
     backendIdAt: (index: number) => rows[index].backendId, rowAt: (index: number) => rows[index],
     statusAt: (index: number): 'exact' | 'approximate' | 'missing' => rows[index].availability === 'operational' ? 'exact' : rows[index].availability === 'missing' ? 'missing' : 'approximate',
     missingReasonAt: (index: number) => rows[index].missingReason, hasPosition: () => false, positionAu: () => undefined }
-  return { evidence, currentPositions: [], missingBodyIds: [], maxDistance: 0,
+  return { evidence, currentPositions: EMPTY_CURRENT_POSITIONS, missingBodyIds: [], maxDistance: 0,
     catalogManifestSha256: 'a'.repeat(64), epochJd: 2451545, epochTdbJd: 2451545 }
 }
 

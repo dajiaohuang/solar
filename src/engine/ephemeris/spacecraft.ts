@@ -1,7 +1,8 @@
-import { bodyPositionOrNull, createBodyPositionResolver, subtractVector3, vector3Magnitude } from '../../lib/ephemeris'
+import { bodyPositionOrNull, createBodyPositionResolver, subtractVector3 } from '../../lib/ephemeris'
+import { EMPTY_CURRENT_POSITIONS, packedCurrentPositions } from '../../lib/currentPositions'
 import { kernelsForWindow } from './kernelStore'
 import type { SpacecraftDef } from '../../data/spacecraft'
-import type { BodyId, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector3 } from '../../types'
+import type { BodyId, CelestialBody, TrajectorySample, Vector3 } from '../../types'
 
 function interpolate(points: SpacecraftDef['trajectoryPoints'], julianDay: number): Vector3 {
   if (julianDay <= points[0].jd) return points[0]
@@ -25,16 +26,15 @@ export function buildSpacecraftFrame(
 ) {
   const resolver = createBodyPositionResolver(bodiesById, julianDay)
   const reference = bodyPositionOrNull(resolver, referenceId)
-  if (!reference) return { currentPositions: [], trajectories: [], trajectoryUnavailableBodyIds: spacecraft.map((body) => body.id) }
-  const currentPositions: RenderedBodyPosition[] = spacecraft.filter((body) => julianDay >= body.trajectoryPoints[0].jd).map((body) => {
+  if (!reference) return { currentPositions: EMPTY_CURRENT_POSITIONS, trajectories: [], trajectoryUnavailableBodyIds: spacecraft.map((body) => body.id) }
+  const visible = spacecraft.filter((body) => julianDay >= body.trajectoryPoints[0].jd)
+  const coordinates = new Float64Array(visible.length * 3)
+  for (let index = 0; index < visible.length; index++) {
+    const body = visible[index]
     const relative = subtractVector3(interpolate(body.trajectoryPoints, julianDay), reference)
-    return {
-      body,
-      planarPosition: { x: relative.x, y: relative.y },
-      position3D: relative,
-      distance: vector3Magnitude(relative),
-    }
-  })
+    coordinates[index * 3] = relative.x; coordinates[index * 3 + 1] = relative.y; coordinates[index * 3 + 2] = relative.z
+  }
+  const currentPositions = packedCurrentPositions(visible, coordinates)
   const trajectoryUnavailableBodyIds: BodyId[] = []
   const trajectories: TrajectorySample[] = spacecraft.flatMap((body) => {
     const historicalKernels = body.trajectoryPoints.length

@@ -18,9 +18,10 @@ import { getOrbitalPeriodDays } from '../../lib/orbitalPeriod'
 import { encodeCurrentScene } from '../../lib/shareScene'
 import { catalogStore } from '../../state/catalog-store'
 import { uiActions } from '../../state/ui-store'
-import type { BodyId, CelestialBody, RenderedBodyPosition } from '../../types'
+import type { BodyId, CelestialBody } from '../../types'
+import type { CurrentPositions } from '../../lib/currentPositions'
 
-type Props = { body: CelestialBody | null; currentPositions: RenderedBodyPosition[]; bodiesById: Map<BodyId, CelestialBody> }
+type Props = { body: CelestialBody | null; currentPositions: CurrentPositions; bodiesById: Map<BodyId, CelestialBody> }
 type Tab = 'overview' | 'orbit' | 'physical' | 'context' | 'sources'
 
 const TABS: Tab[] = ['overview', 'orbit', 'physical', 'context', 'sources']
@@ -64,7 +65,8 @@ export function BodyInspector({ body, currentPositions, bodiesById }: Props) {
     const moon = bodyPositionOrNull(resolve, 'moon')
     return sun && earth && moon ? computeMoonPhase(sun, earth, moon) : null
   }, [bodiesById, body?.id, clock.julianDay])
-  const position = body ? currentPositions.find((item) => item.body.id === body.id) : null
+  const positionIndex = currentPositions.indexOf(body?.id)
+  const position = positionIndex >= 0 ? currentPositions.rowAt(positionIndex) : null
   const physical = body ? BODY_PHYSICAL[body.id] : null
   const profile = body ? BODY_PROFILES[body.id] ?? { ...fallbackBodyProfile(body.kind, body.orbitClassName), sources: [] } : null
   const satelliteEvidence = body?.satelliteOrbitEvidence

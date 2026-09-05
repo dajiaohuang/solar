@@ -177,11 +177,33 @@ The synthetic 32,768+1-row regression covers mixed states, aliases, absent
 responses, two references sharing one snapshot, all six-vector bytes and bounded
 evidence reads. Retained Go golden tests check the snapshot's scalar reads too.
 
-This is not yet packed delivery end to end: reference-relative current-position
-objects and historical trajectory unpacking remain to be replaced. Bulk render
-consumers must ultimately read typed buffers directly; a full-size object adapter
-is not the migration target. None of these structural tests measures total heap,
-cross-device smoothness or complete astronomical coverage.
+Reference-relative current positions are scalar views over that same scientific
+snapshot. Each frame retains two Uint32 ordinal columns (capacity eight bytes
+per selected body) and one three-value Float64 reference origin, not per-body
+vectors, a planar copy or an audit Map. Coordinates retain the original
+convert-to-AU-then-subtract arithmetic. Display selection stores Uint32 ordinals;
+joining the bounded spacecraft layer creates a view, not a copied full array.
+Both views keep full coverage and missing-reference semantics independent of
+display budgets. Scientific buffers are never converted to Float32 in place.
+
+The mounted renderer consumes scalar positions directly. 2D allocates its final
+Float32 point-position/color/size columns, without a full intermediate number
+array or projected-point objects. 3D writes its reusable GPU point buffer from
+source ordinals and uses those same ordinals for picking. Equal-sized ordinal
+changes also refresh colors. Only bounded detail meshes, labels, auxiliary
+overlays and explicit hover/inspection create row objects (no array-compatible
+full-row adapter). The preview's local current positions use one packed Float64
+triple per body, not retained parallel 2D and 3D vectors.
+
+Synthetic regressions exercise a million scalar reads, 32,769 source selections,
+all relative-coordinate Float64 bytes, the actual 2D point packing arithmetic,
+3D axis/color mapping and equal-sized selection changes. They assert no detail
+row reads in the bulk paths. Desktop/mobile browser checks cover full Saturn
+counts, late bulk-to-focus selection and reference/mode changes. These are
+structural/behavior checks, not total heap, real-device FPS or new astronomical
+coverage evidence. Historical trajectory per-point generation/unpacking and
+the approximate catalog worker's simultaneous 2D/3D buffers still require
+migration; packed delivery is not yet end to end.
 
 ## Shared backend tile encoding
 

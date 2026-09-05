@@ -6,12 +6,12 @@ export async function exportAsJSON(frame: TrajectoryFrameData) {
     exportedAt: new Date().toISOString(),
     maxDistanceAU: frame.maxDistance,
     bodyCount: frame.currentPositions.length,
-    currentPositions: frame.currentPositions.map((item) => ({
-      bodyId: item.body.id,
-      bodyName: item.body.name,
-      x: item.planarPosition.x,
-      y: item.planarPosition.y,
-      distanceAU: item.distance,
+    currentPositions: Array.from({ length: frame.currentPositions.length }, (_, index) => ({
+      bodyId: frame.currentPositions.bodyAt(index).id,
+      bodyName: frame.currentPositions.bodyAt(index).name,
+      x: frame.currentPositions.coordinateAt(index, 0),
+      y: frame.currentPositions.coordinateAt(index, 1),
+      distanceAU: frame.currentPositions.distanceAt(index),
     })),
     trajectories: frame.trajectories.map((trajectory) => ({
       bodyId: trajectory.body.id,

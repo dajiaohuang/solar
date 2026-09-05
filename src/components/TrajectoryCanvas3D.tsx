@@ -5,13 +5,14 @@ import { PREPARE_CANVAS_CAPTURE_EVENT } from '../lib/canvasCapture'
 import { cameraDistanceForFit, cameraRangeForFit, clamp3dZoom, sceneFramingForRadius } from '../lib/camera3d'
 import type { LagrangePoint } from '../lib/lagrange'
 import { createCatalogPointMaterial, createTrajectoryScene } from '../lib/trajectoryScene3d'
-import { updatePointGeometry } from '../lib/pointGeometry3d'
+import { updateCurrentPointGeometry, updatePointGeometry } from '../lib/pointGeometry3d'
 import type { AsteroidRecord, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector3 } from '../types'
+import type { CurrentPositions } from '../lib/currentPositions'
 
 type Props = {
   referenceBody: CelestialBody
   trajectories: TrajectorySample[]
-  currentPositions: RenderedBodyPosition[]
+  currentPositions: CurrentPositions
   stateFitKey?: string
   stateFitRadius?: number
   detailBodyIds?: string[]
@@ -54,7 +55,7 @@ type SceneResources = {
   glowTexture: THREE.Texture
   catalogPoints: THREE.Points
   currentPoints: THREE.Points
-  pointBodyIds: string[]
+  pointBodyOrdinals: Uint32Array
   bodyScale: number
   fitDistance: number
   contentRadius: number
@@ -274,7 +275,7 @@ export function TrajectoryCanvas3D({
       glowTexture,
       catalogPoints,
       currentPoints,
-      pointBodyIds: [],
+      pointBodyOrdinals: new Uint32Array(),
       bodyScale: 1,
       fitDistance: 8.7,
       contentRadius: 0,
@@ -440,15 +441,22 @@ export function TrajectoryCanvas3D({
       }
     }
 
-    const bodyPositions = new Map(currentPositions.map((item) => [item.body.id, item]))
+    const detailedIds = new Set(detailBodyIds?.slice(0, 160) ?? Array.from({ length: Math.min(160, currentPositions.length) }, (_, index) => currentPositions.bodyAt(index).id))
+    detailedIds.add(referenceBody.id)
+    const bodyPositions = new Map<string, RenderedBodyPosition>()
+    const pointOrdinals = new Uint32Array(currentPositions.length)
+    let pointCount = 0
+    for (let index = 0; index < currentPositions.length; index++) {
+      const id = currentPositions.bodyAt(index).id
+      if (detailedIds.has(id)) bodyPositions.set(id, currentPositions.rowAt(index))
+      else pointOrdinals[pointCount++] = index
+    }
     bodyPositions.set(referenceBody.id, {
       body: referenceBody,
       planarPosition: { x: 0, y: 0 },
       position3D: { x: 0, y: 0, z: 0 },
       distance: 0,
     })
-    const detailedIds = new Set(detailBodyIds ?? currentPositions.slice(0, 160).map(item => item.body.id))
-    detailedIds.add(referenceBody.id)
     for (const [id, item] of bodyPositions) {
       if (!detailedIds.has(id)) continue
       let mesh = resources.bodyMeshes.get(id)
@@ -469,23 +477,13 @@ export function TrajectoryCanvas3D({
         resources.bodyMeshes.delete(id)
       }
     }
-    const pointBodies = currentPositions.filter(item => !detailedIds.has(item.body.id) && item.position3D)
-    resources.pointBodyIds = pointBodies.map(item => item.body.id)
-    const colorKey = pointBodies.map(item => `${item.body.id}:${item.body.color}`).join('|')
-    const pointColor = new THREE.Color()
-    resources.currentPoints.geometry = updatePointGeometry(resources.currentPoints.geometry, pointBodies.length, colorKey,
-      (values, index) => {
-        const point = pointBodies[index].position3D!
-        values[index * 3] = point.x; values[index * 3 + 1] = point.z; values[index * 3 + 2] = point.y
-      }, (values, index) => {
-        pointColor.set(pointBodies[index].body.color)
-        pointColor.toArray(values, index * 3)
-      })
-    resources.currentPoints.visible = pointBodies.length > 0
+    resources.pointBodyOrdinals = pointOrdinals.subarray(0, pointCount)
+    resources.currentPoints.geometry = updateCurrentPointGeometry(resources.currentPoints.geometry, currentPositions, resources.pointBodyOrdinals)
+    resources.currentPoints.visible = pointCount > 0
     if (containerRef.current) {
       containerRef.current.dataset.positionCount = String(currentPositions.length)
       containerRef.current.dataset.detailCount = String(resources.bodyMeshes.size)
-      containerRef.current.dataset.statePointCount = String(pointBodies.length)
+      containerRef.current.dataset.statePointCount = String(pointCount)
       containerRef.current.dataset.trailCount = String(resources.trajectoryLines.size)
     }
 
@@ -493,18 +491,16 @@ export function TrajectoryCanvas3D({
     // user camera moves during clock playback while keeping story/catalog
     // scenes (including outbound spacecraft paths) discoverable.
     const catalogReady = catalogDrawCount > 0 && catalogPositions3D.length >= 3
-    const fitKey = `${referenceBody.id}|${stateFitKey ?? [...bodyPositions.keys()].sort().join(',')}|${trajectories.map((item) => `${item.body.id}:${item.points3D?.length ?? 0}`).sort().join(',')}|${catalogReady ? catalogFitKey : ''}|${resetViewKey}`
+    const fitKey = `${referenceBody.id}|${stateFitKey ?? Array.from({ length: currentPositions.length }, (_, index) => currentPositions.bodyAt(index).id).sort().join(',')}|${trajectories.map((item) => `${item.body.id}:${item.points3D?.length ?? 0}`).sort().join(',')}|${catalogReady ? catalogFitKey : ''}|${resetViewKey}`
     if (fitKeyRef.current !== fitKey) {
       fitKeyRef.current = fitKey
       fitGenerationRef.current += 1
       let radius = stateFitRadius ?? 0
       let nearest = Infinity
-      for (const item of bodyPositions.values()) {
-        if (item.position3D) {
-          const distance = Math.hypot(item.position3D.x, item.position3D.y, item.position3D.z)
-          radius = Math.max(radius, distance)
-          if (distance > 0) nearest = Math.min(nearest, distance)
-        }
+      for (let index = 0; index < currentPositions.length; index++) {
+        const distance = currentPositions.distanceAt(index)
+        radius = Math.max(radius, distance)
+        if (distance > 0) nearest = Math.min(nearest, distance)
       }
       for (const trajectory of trajectories) {
         if (trajectory.body.kind === 'spacecraft') continue
@@ -605,11 +601,11 @@ export function TrajectoryCanvas3D({
     const positions = resources.currentPoints.geometry.getAttribute('position')
     const projected = new THREE.Vector3()
     let nearestId: string | undefined, nearestDistance = 9
-    for (let index = 0; index < resources.pointBodyIds.length; index++) {
+    for (let index = 0; index < resources.pointBodyOrdinals.length; index++) {
       projected.fromBufferAttribute(positions, index).project(resources.camera)
       if (projected.z < -1 || projected.z > 1) continue
       const distance = Math.hypot((projected.x - pointer.x) * rect.width / 2, (projected.y - pointer.y) * rect.height / 2)
-      if (distance < nearestDistance) { nearestDistance = distance; nearestId = resources.pointBodyIds[index] }
+      if (distance < nearestDistance) { nearestDistance = distance; nearestId = positionsRef.current.bodyAt(resources.pointBodyOrdinals[index]).id }
     }
     return nearestId
   }, [])
@@ -675,7 +671,8 @@ export function TrajectoryCanvas3D({
       }}
       onMouseMove={(event) => {
         const id = intersectBody(event)
-        const position = positionsRef.current.find((item) => item.body.id === id)
+        const index = positionsRef.current.indexOf(id)
+        const position = index >= 0 ? positionsRef.current.rowAt(index) : null
         if (position) onHover?.(position.body, position.distance, event.clientX, event.clientY)
         else onHover?.(null, 0, 0, 0)
       }}

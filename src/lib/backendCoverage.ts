@@ -9,7 +9,10 @@ export function summarizeBackendCoverage(selectedIds: readonly BodyId[], frame?:
   const selected = new Set(selectedIds)
   const selectedCount = selected.size
   const projected = new Set<BodyId>()
-  for (const item of frame?.currentPositions ?? []) if (selected.has(item.body.id)) projected.add(item.body.id)
+  if (frame) for (let index = 0; index < frame.currentPositions.length; index++) {
+    const id = frame.currentPositions.bodyAt(index).id
+    if (selected.has(id)) projected.add(id)
+  }
   const projectedCount = projected.size
   const evidence = frame?.evidence
   const ordinals = new Uint32Array(Math.min(selectedCount, evidence?.length ?? 0))

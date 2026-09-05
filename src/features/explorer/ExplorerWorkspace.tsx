@@ -36,6 +36,7 @@ import { useStateTiles } from '../../hooks/useStateTiles'
 import { useStateDisplayBudget } from '../../hooks/useStateDisplayBudget'
 import { selectStateDisplayPositions } from '../../lib/stateDisplayBudget'
 import { summarizeBackendCoverage } from '../../lib/backendCoverage'
+import { concatCurrentPositions, currentPositionDetails, EMPTY_CURRENT_POSITIONS } from '../../lib/currentPositions'
 
 const TrajectoryCanvas3D = lazy(async () => {
   const module = await import('../../components/TrajectoryCanvas3D')
@@ -134,19 +135,19 @@ function FrameView({
   })
   const spacecraftFrame = useMemo(() => simulation.showSpacecraft && catalogOrigin
     ? buildSpacecraftFrame(SPACECRAFT, referenceBody.id, bodiesById, julianDay)
-    : { currentPositions: [], trajectories: [], trajectoryUnavailableBodyIds: [] },
+    : { currentPositions: EMPTY_CURRENT_POSITIONS, trajectories: [], trajectoryUnavailableBodyIds: [] },
   [bodiesById, catalogOrigin, julianDay, referenceBody.id, simulation.showSpacecraft])
   const frame = useMemo<TrajectoryFrameData>(() => ({
-    currentPositions: [...baseFrame.currentPositions, ...spacecraftFrame.currentPositions],
+    currentPositions: concatCurrentPositions(baseFrame.currentPositions, spacecraftFrame.currentPositions),
     trajectories: [...baseFrame.trajectories, ...spacecraftFrame.trajectories],
     trajectoryUnavailableBodyIds: [...baseFrame.trajectoryUnavailableBodyIds, ...spacecraftFrame.trajectoryUnavailableBodyIds],
-    maxDistance: Math.max(baseFrame.maxDistance, ...spacecraftFrame.currentPositions.map((item) => item.distance), 0),
+    maxDistance: Math.max(baseFrame.maxDistance, spacecraftFrame.currentPositions.maxDistance()),
   }), [baseFrame, spacecraftFrame])
   const displayedStates = useMemo(() => backendFrame
     ? selectStateDisplayPositions(baseFrame.currentPositions, stateDisplay.limitPerPane, statePriorityIds)
     : baseFrame.currentPositions, [backendFrame, baseFrame.currentPositions, stateDisplay.limitPerPane, statePriorityIds])
   const receivedExactCount = useMemo(() => summarizeBackendCoverage(selectedBodies.map(body => body.id), backendFrame).exactCount, [selectedBodies, backendFrame])
-  const displayPositions = useMemo(() => [...displayedStates, ...spacecraftFrame.currentPositions], [displayedStates, spacecraftFrame.currentPositions])
+  const displayPositions = useMemo(() => concatCurrentPositions(displayedStates, spacecraftFrame.currentPositions), [displayedStates, spacecraftFrame.currentPositions])
   const stateFitKey = useMemo(() => backendFrame ? `${selectedBodies.map(body => body.id).join(',')}|${baseFrame.currentPositions.length}` : undefined,
     [backendFrame, selectedBodies, baseFrame.currentPositions.length])
   useEffect(() => onFrame(frame), [frame, onFrame])
@@ -169,16 +170,19 @@ function FrameView({
   const orbitEllipses = useMemo(() => VIEW_CAPABILITIES[simulation.viewMode].fullOrbits && simulation.showOrbits
     ? computeOrbitEllipses(selectedBodies.slice(0, 40), bodiesById, referenceBody.id, trajectoryJulianDay)
     : [], [bodiesById, referenceBody.id, selectedBodies, simulation.showOrbits, simulation.viewMode, trajectoryJulianDay])
+  const auxiliaryPositions = useMemo(() => referenceBody.id === 'sun' && (simulation.showLagrange || simulation.showHillSphere || simulation.showLaplaceSoi)
+    ? currentPositionDetails(frame.currentPositions, detailBodyIds, simulation.viewMode === '2d' ? 320 : 160) : [],
+  [frame.currentPositions, detailBodyIds, referenceBody.id, simulation.showLagrange, simulation.showHillSphere, simulation.showLaplaceSoi, simulation.viewMode])
   const lagrangePoints = useMemo(() => {
     if (!simulation.showLagrange || referenceBody.id !== 'sun') return []
-    return frame.currentPositions.filter((item) => item.body.kind === 'planet').map((item) => ({
-      body: item.body,
-      points: computeLagrangePoints(item.body, item.planarPosition),
-    })).filter((group) => group.points.length)
-  }, [frame.currentPositions, referenceBody.id, simulation.showLagrange])
+    return auxiliaryPositions.filter(item => item.body.kind === 'planet').flatMap(item => {
+      const points = computeLagrangePoints(item.body, item.planarPosition)
+      return points.length ? [{ body: item.body, points }] : []
+    })
+  }, [auxiliaryPositions, referenceBody.id, simulation.showLagrange])
   const influenceCircles = useMemo(() => {
-    if (referenceBody.id !== 'sun') return []
-    return frame.currentPositions.flatMap((item) => {
+    if (referenceBody.id !== 'sun' || (!simulation.showHillSphere && !simulation.showLaplaceSoi)) return []
+    return auxiliaryPositions.flatMap(item => {
       if (!item.body.orbit || item.body.parentId) return []
       const physical = BODY_PHYSICAL[item.body.id]
       if (!physical) return []
@@ -200,7 +204,7 @@ function FrameView({
         }] : []),
       ]
     })
-  }, [frame.currentPositions, referenceBody.id, simulation.showHillSphere, simulation.showLaplaceSoi])
+  }, [auxiliaryPositions, referenceBody.id, simulation.showHillSphere, simulation.showLaplaceSoi])
 
   return (
     <div className="frame-view" onWheel={(event) => {
@@ -398,8 +402,8 @@ export function ExplorerWorkspace() {
   const catalogFitKey = simulation.showCatalogCloud
     ? `${catalog.baseSampleKey ?? 'unloaded'}|${JSON.stringify(catalog.filters)}`
     : ''
-  const [primaryFrame, setPrimaryFrame] = useState<TrajectoryFrameData>({ currentPositions: [], trajectories: [], trajectoryUnavailableBodyIds: [], maxDistance: 0 })
-  const [secondaryFrame, setSecondaryFrame] = useState<TrajectoryFrameData>({ currentPositions: [], trajectories: [], trajectoryUnavailableBodyIds: [], maxDistance: 0 })
+  const [primaryFrame, setPrimaryFrame] = useState<TrajectoryFrameData>({ currentPositions: EMPTY_CURRENT_POSITIONS, trajectories: [], trajectoryUnavailableBodyIds: [], maxDistance: 0 })
+  const [secondaryFrame, setSecondaryFrame] = useState<TrajectoryFrameData>({ currentPositions: EMPTY_CURRENT_POSITIONS, trajectories: [], trajectoryUnavailableBodyIds: [], maxDistance: 0 })
   const [hovered, setHovered] = useState<{ body: CelestialBody; distance: number; x: number; y: number } | null>(null)
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const [measureA, setMeasureA] = useState('earth')

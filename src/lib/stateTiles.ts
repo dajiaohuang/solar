@@ -1,6 +1,7 @@
 import { AU_IN_KM } from '../engine/units'
 import type { BackendFrame, BackendStateEvidence, StateTileAudit } from './backendFrames'
-import type { BodyId, CelestialBody, RenderedBodyPosition, Vector3 } from '../types'
+import type { BodyId, CelestialBody, Vector3 } from '../types'
+import { CurrentPositions } from './currentPositions'
 
 export const STATE_TILE_MAGIC = Uint8Array.from([0x53, 0x4c, 0x52, 0x54, 0x49, 0x4c, 0x45, 0x00])
 export const STATE_TILE_VERSION = 1
@@ -477,8 +478,6 @@ export async function fetchStateTiles(params: { base: string; plan: StateTilePla
   }
 }
 
-function subtract(a: Vector3, b: Vector3): Vector3 { return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z } }
-
 /** All reference views share the verified tile buffers and compact evidence.
  * Only identity-to-ordinal bindings survive assembly, not resolved-state,
  * absolute-position or audit objects for every received source record. */
@@ -531,6 +530,7 @@ export class StateTileSnapshot implements BackendStateEvidence {
   }
 
   get length() { return this.#bodyIds.length }
+  indexOf(bodyId: BodyId) { return this.#byBody.get(bodyId) ?? -1 }
   get bindingByteLength() { return this.#tileIndexes.byteLength + this.#rowIndexes.byteLength }
   #check(index: number) { if (!Number.isInteger(index) || index < 0 || index >= this.length) throw new RangeError('Snapshot evidence ordinal is out of range') }
   bodyIdAt(index: number) { this.#check(index); return this.#bodyIds[index] }
@@ -570,16 +570,23 @@ export class StateTileSnapshot implements BackendStateEvidence {
 
 export function buildBackendFrame(params: { bodies: CelestialBody[]; referenceId: BodyId; evidence: StateTileSnapshot }): BackendFrame {
   const { evidence } = params
-  const reference = evidence.positionAu(params.referenceId)
-  const currentPositions: RenderedBodyPosition[] = [], missingBodyIds: BodyId[] = []
-  let maxDistance = 0
-  for (const body of params.bodies) {
-    const position = reference ? evidence.positionAu(body.id) : undefined
-    if (!position || !reference) { missingBodyIds.push(body.id); continue }
-    const relative = subtract(position, reference), distance = Math.hypot(relative.x, relative.y, relative.z)
-    currentPositions.push({ body, planarPosition: { x: relative.x, y: relative.y }, position3D: relative, distance })
-    maxDistance = Math.max(maxDistance, distance)
+  const referenceIndex = evidence.indexOf(params.referenceId)
+  const referenceAvailable = referenceIndex >= 0 && evidence.statusAt(referenceIndex) === 'exact'
+  const referenceAu = new Float64Array(3)
+  if (referenceAvailable) for (let axis = 0; axis < 3; axis++) referenceAu[axis] = evidence.stateValueAt(referenceIndex, axis) / AU_IN_KM
+  const bodyOrdinals = new Uint32Array(params.bodies.length), stateOrdinals = new Uint32Array(params.bodies.length)
+  const missingBodyIds: BodyId[] = []
+  let count = 0
+  for (let index = 0; index < params.bodies.length; index++) {
+    const body = params.bodies[index], stateIndex = evidence.indexOf(body.id)
+    if (!referenceAvailable || stateIndex < 0 || evidence.statusAt(stateIndex) !== 'exact') { missingBodyIds.push(body.id); continue }
+    bodyOrdinals[count] = index; stateOrdinals[count++] = stateIndex
   }
+  // Reference transforms read the same scientific Float64 storage on demand.
+  // Preserve conversion-before-subtraction arithmetic; no full relative vectors.
+  const currentPositions = new CurrentPositions(count, index => params.bodies[bodyOrdinals[index]],
+    (index, axis) => evidence.stateValueAt(stateOrdinals[index], axis) / AU_IN_KM - referenceAu[axis])
+  const maxDistance = currentPositions.maxDistance()
   return { currentPositions, missingBodyIds, maxDistance, evidence, catalogManifestSha256: evidence.catalogManifestSha256,
     inventoryManifestSha256: evidence.inventoryManifestSha256, epochJd: evidence.epochJd, epochTdbJd: evidence.epochJd }
 }

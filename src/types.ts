@@ -142,7 +142,7 @@ export type TrajectorySample = {
 }
 
 export type TrajectoryFrameData = {
-  currentPositions: RenderedBodyPosition[]
+  currentPositions: import('./lib/currentPositions').CurrentPositions
   trajectories: TrajectorySample[]
   /** Bodies omitted because at least one historical sample had no state. */
   trajectoryUnavailableBodyIds: BodyId[]

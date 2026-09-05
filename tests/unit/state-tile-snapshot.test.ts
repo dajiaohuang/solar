@@ -55,6 +55,25 @@ describe('shared column-backed scientific snapshots', () => {
     expect(firstRows).not.toHaveBeenCalled(); expect(lastRows).not.toHaveBeenCalled()
 
     const selected = [...requested.keys()]
+    const positionRead = vi.spyOn(snapshot, 'positionAu')
+    const projected = buildBackendFrame({ bodies: selected.map(body), referenceId: 'body:1', evidence: snapshot })
+    expect(positionRead).not.toHaveBeenCalled()
+    positionRead.mockRestore()
+    const relativeActual = new Float64Array(projected.currentPositions.length * 3)
+    const relativeExpected = new Float64Array(relativeActual.length)
+    let projectedIndex = 0
+    for (let index = 0; index <= count; index++) {
+      const sourceIndex = index === count ? 1 : index
+      if (sourceIndex % 7 === 0) continue
+      for (let axis = 0; axis < 3; axis++) {
+        relativeActual[projectedIndex * 3 + axis] = projected.currentPositions.coordinateAt(projectedIndex, axis)
+        relativeExpected[projectedIndex * 3 + axis] = expected[sourceIndex * 6 + axis] / AU_IN_KM - expected[6 + axis] / AU_IN_KM
+      }
+      projectedIndex++
+    }
+    expect(projectedIndex).toBe(projected.currentPositions.length)
+    expect(Buffer.from(relativeActual.buffer).equals(Buffer.from(relativeExpected.buffer))).toBe(true)
+    expect(firstRows).not.toHaveBeenCalled(); expect(lastRows).not.toHaveBeenCalled()
     // This case intentionally projects none: missing reference does not erase
     // received exact states, aliases, original provenance or explicit gaps.
     const frame = buildBackendFrame({ bodies: selected.map(body), referenceId: 'body:0', evidence: snapshot })
@@ -83,12 +102,12 @@ describe('shared column-backed scientific snapshots', () => {
     const second = buildBackendFrame({ bodies, referenceId: 'body:2', evidence: snapshot })
     expect(first.evidence).toBe(second.evidence)
     expect(first.missingBodyIds).toEqual(['body:0'])
-    expect(first.currentPositions.map(item => item.body.id)).toEqual(['body:1', 'body:2', 'alias'])
-    const relative = first.currentPositions[1].position3D!
+    expect(Array.from({ length: first.currentPositions.length }, (_, index) => first.currentPositions.bodyAt(index).id)).toEqual(['body:1', 'body:2', 'alias'])
+    const relative = first.currentPositions.rowAt(1).position3D!
     expect(relative).toEqual({ x: states[12] / AU_IN_KM - states[6] / AU_IN_KM,
       y: states[13] / AU_IN_KM - states[7] / AU_IN_KM, z: states[14] / AU_IN_KM - states[8] / AU_IN_KM })
-    expect(first.currentPositions[1].distance).toBe(Math.hypot(relative.x, relative.y, relative.z))
-    expect(second.currentPositions[1].distance).toBe(0)
+    expect(first.currentPositions.distanceAt(1)).toBe(Math.hypot(relative.x, relative.y, relative.z))
+    expect(second.currentPositions.distanceAt(1)).toBe(0)
     const resolve = createBackendPositionResolver(id => snapshot.positionAu(id), epochJd)
     expect(resolve('alias')).toEqual(resolve('body:2'))
     expect(() => resolve('body:0')).toThrow(/No position model/)

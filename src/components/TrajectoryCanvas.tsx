@@ -1,20 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PREPARE_CANVAS_CAPTURE_EVENT } from '../lib/canvasCapture'
-import { GRID_LEVELS, SVG_PADDING, createProjection, projectPoint, unprojectPoint, type Projection } from '../lib/viewProjection'
+import { SVG_PADDING, createProjection, projectPoint, unprojectPoint } from '../lib/viewProjection'
 import type { LagrangePoint } from '../lib/lagrange'
 import type { AsteroidRecord, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector2 } from '../types'
+import type { CurrentPositions } from '../lib/currentPositions'
 import { bodyDisplayName } from '../lib/bodyNames'
+import { buildGeometry, type Geometry, type OrbitEllipse } from '../lib/trajectoryGeometry2d'
 
-type OrbitEllipse = {
-  body: CelestialBody
-  points: Vector2[]
-}
 
 type Props = {
   language?: 'zh' | 'en'
   referenceBody: CelestialBody
   trajectories: TrajectorySample[]
-  currentPositions: RenderedBodyPosition[]
+  currentPositions: CurrentPositions
   viewRadiusAU: number
   viewOffsetAU: { x: number; y: number }
   showEcliptic?: boolean
@@ -45,13 +43,6 @@ type Props = {
   onFrameDuration?: (durationMs: number) => void
 }
 
-type Geometry = {
-  linePositions: Float32Array
-  lineColors: Float32Array
-  pointPositions: Float32Array
-  pointColors: Float32Array
-  pointSizes: Float32Array
-}
 
 type GlResources = {
   gl: WebGLRenderingContext
@@ -67,7 +58,6 @@ type GlResources = {
 const CANVAS_SIZE = 880
 const MAJOR_LABEL_LIMIT = 18
 const ASTEROID_LABEL_LIMIT = 6
-const RING_SEGMENTS = 72
 const EMPTY_CATALOG_RECORDS: AsteroidRecord[] = []
 const EMPTY_CATALOG_POSITIONS = new Float32Array()
 const HELIOCENTRIC_ORIGIN = { x: 0, y: 0 }
@@ -100,88 +90,6 @@ function useElementSize<T extends HTMLElement>() {
   return [ref, size] as const
 }
 
-const NEO_CLASSES = new Set(['APO', 'ATE', 'AMO', 'ATI'])
-
-function isNeo(body: CelestialBody) {
-  return body.orbitClassCode !== undefined && NEO_CLASSES.has(body.orbitClassCode)
-}
-
-function isComet(body: CelestialBody) {
-  if (!body.orbit) {
-    return false
-  }
-
-  const e = body.orbit.model === 'planetaryApprox'
-    ? body.orbit.base.eccentricity
-    : body.orbit.eccentricity
-
-  return e > 0.9
-}
-
-function neoDistanceColor(distanceAU: number, alpha: number) {
-  const logDistance = Math.log(Math.max(distanceAU, 0.001))
-  const t = Math.max(0, Math.min(1, (logDistance - Math.log(0.01)) / (Math.log(1.0) - Math.log(0.01))))
-
-  const red = 1.0 - t
-  const green = t < 0.5 ? t * 2 : 2 - t * 2
-  const blue = t
-
-  return [red, green, blue, alpha]
-}
-
-function getMagnitudeScaledSize(body: CelestialBody) {
-  if (body.absoluteMagnitude === undefined) {
-    return body.size
-  }
-
-  const factor = 1 + (15 - body.absoluteMagnitude) * 0.12
-  return body.size * Math.max(0.6, Math.min(3, factor))
-}
-
-function hexToRgba(hexColor: string, alpha: number) {
-  const normalized = hexColor.replace('#', '')
-  const value = normalized.length === 3
-    ? normalized
-        .split('')
-        .map((part) => part + part)
-        .join('')
-    : normalized
-
-  const red = Number.parseInt(value.slice(0, 2), 16) / 255
-  const green = Number.parseInt(value.slice(2, 4), 16) / 255
-  const blue = Number.parseInt(value.slice(4, 6), 16) / 255
-
-  return [red, green, blue, alpha]
-}
-
-function toClipSpace(point: { x: number; y: number }, projection: Projection) {
-  return {
-    x: (point.x / projection.width) * 2 - 1,
-    y: 1 - (point.y / projection.height) * 2,
-  }
-}
-
-function pushVertex(
-  positions: number[],
-  colors: number[],
-  x: number,
-  y: number,
-  rgba: number[],
-) {
-  positions.push(x, y)
-  colors.push(rgba[0], rgba[1], rgba[2], rgba[3])
-}
-
-function pushLineSegment(
-  positions: number[],
-  colors: number[],
-  start: { x: number; y: number },
-  end: { x: number; y: number },
-  rgba: number[],
-) {
-  pushVertex(positions, colors, start.x, start.y, rgba)
-  pushVertex(positions, colors, end.x, end.y, rgba)
-}
 
 function createShader(gl: WebGLRenderingContext, type: number, source: string) {
   const shader = gl.createShader(type)
@@ -314,189 +222,6 @@ function resetVertexAttributes(gl: WebGLRenderingContext) {
   }
 }
 
-function buildGeometry(
-  projection: Projection,
-  referenceBody: CelestialBody,
-  trajectories: TrajectorySample[],
-  currentPositions: RenderedBodyPosition[],
-  showEcliptic: boolean,
-  showOrbits: boolean,
-  orbitEllipses: OrbitEllipse[],
-  planetOpacity: number,
-  asteroidOpacity: number,
-  moonOpacity: number,
-  catalogRecords: AsteroidRecord[],
-  catalogPositions: Float32Array,
-  catalogDrawCount: number,
-  catalogOrigin: Vector2,
-): Geometry {
-  const linePositions: number[] = []
-  const lineColors: number[] = []
-  const pointPositions: number[] = []
-  const pointColors: number[] = []
-  const pointSizes: number[] = []
-  const gridColor = [173 / 255, 201 / 255, 1, 0.18]
-  const haloColor = [1, 1, 1, 0.18]
-  const projectedReferencePoint = projectPoint({ x: 0, y: 0 }, projection)
-
-  if (showEcliptic) {
-    for (const ratio of GRID_LEVELS) {
-      for (let index = 0; index < RING_SEGMENTS; index += 1) {
-        const startAngle = (index / RING_SEGMENTS) * Math.PI * 2
-        const endAngle = ((index + 1) / RING_SEGMENTS) * Math.PI * 2
-        const radius = projection.drawableRadius * ratio
-
-        pushLineSegment(
-          linePositions,
-          lineColors,
-          toClipSpace(
-            {
-              x: projection.centerX + Math.cos(startAngle) * radius,
-              y: projection.centerY + Math.sin(startAngle) * radius,
-            },
-            projection,
-          ),
-          toClipSpace(
-            {
-              x: projection.centerX + Math.cos(endAngle) * radius,
-              y: projection.centerY + Math.sin(endAngle) * radius,
-            },
-            projection,
-          ),
-          gridColor,
-        )
-      }
-    }
-    pushLineSegment(
-      linePositions,
-      lineColors,
-      toClipSpace({ x: projection.padding, y: projection.centerY }, projection),
-      toClipSpace({ x: projection.width - projection.padding, y: projection.centerY }, projection),
-      gridColor,
-    )
-    pushLineSegment(
-      linePositions,
-      lineColors,
-      toClipSpace({ x: projection.centerX, y: projection.padding }, projection),
-      toClipSpace({ x: projection.centerX, y: projection.height - projection.padding }, projection),
-      gridColor,
-    )
-  }
-
-  const haloSegments = 48
-  for (let index = 0; index < haloSegments; index += 1) {
-    const startAngle = (index / haloSegments) * Math.PI * 2
-    const endAngle = ((index + 1) / haloSegments) * Math.PI * 2
-    const radius = 16
-
-    pushLineSegment(
-      linePositions,
-      lineColors,
-      toClipSpace(
-        {
-          x: projectedReferencePoint.x + Math.cos(startAngle) * radius,
-          y: projectedReferencePoint.y + Math.sin(startAngle) * radius,
-        },
-        projection,
-      ),
-      toClipSpace(
-        {
-          x: projectedReferencePoint.x + Math.cos(endAngle) * radius,
-          y: projectedReferencePoint.y + Math.sin(endAngle) * radius,
-        },
-        projection,
-      ),
-      haloColor,
-    )
-  }
-
-  const distanceByBodyId = new Map(
-    currentPositions.map((item) => [item.body.id, item.distance]),
-  )
-  const isEarthReference = referenceBody.id === 'earth'
-
-  for (const trajectory of trajectories) {
-    if (trajectory.points.length < 2) {
-      continue
-    }
-
-    const bodyDistance = distanceByBodyId.get(trajectory.body.id) ?? 0
-    const useNeoColor = isEarthReference && isNeo(trajectory.body)
-    const isCometBody = isComet(trajectory.body)
-    const color = isCometBody
-      ? hexToRgba('#44dddd', 0.5 * asteroidOpacity)
-      : useNeoColor
-        ? neoDistanceColor(bodyDistance, 0.6)
-        : hexToRgba(
-            trajectory.body.color,
-            (trajectory.body.kind === 'asteroid' ? 0.3 : trajectory.body.kind === 'moon' ? 0.75 : 0.92) *
-              (trajectory.body.kind === 'planet' || trajectory.body.kind === 'dwarfPlanet' ? planetOpacity : trajectory.body.kind === 'moon' ? moonOpacity : asteroidOpacity),
-          )
-
-    for (let index = 1; index < trajectory.points.length; index += 1) {
-      const previous = toClipSpace(projectPoint(trajectory.points[index - 1], projection), projection)
-      const current = toClipSpace(projectPoint(trajectory.points[index], projection), projection)
-      pushLineSegment(linePositions, lineColors, previous, current, color)
-    }
-  }
-
-  if (showOrbits) {
-    for (const ellipse of orbitEllipses) {
-      if (ellipse.points.length < 2) {
-        continue
-      }
-
-      const color = hexToRgba(ellipse.body.color, 0.18)
-
-      for (let index = 1; index < ellipse.points.length; index += 1) {
-        const previous = toClipSpace(projectPoint(ellipse.points[index - 1], projection), projection)
-        const current = toClipSpace(projectPoint(ellipse.points[index], projection), projection)
-        pushLineSegment(linePositions, lineColors, previous, current, color)
-      }
-    }
-  }
-
-  const referenceColor = hexToRgba(referenceBody.color, 1)
-  const referencePoint = toClipSpace(projectedReferencePoint, projection)
-
-  const cloudCount = Math.min(catalogDrawCount, catalogRecords.length, Math.floor(catalogPositions.length / 2))
-  for (let index = 0; index < cloudCount; index += 1) {
-    const record = catalogRecords[index]
-    const projected = toClipSpace(projectPoint({
-      x: catalogPositions[index * 2] - catalogOrigin.x,
-      y: catalogPositions[index * 2 + 1] - catalogOrigin.y,
-    }, projection), projection)
-    const color = record.isPha ? [1, 0.35, 0.3, 0.82] : record.isNeo ? [1, 0.62, 0.5, 0.76] : [0.62, 0.7, 0.76, 0.52]
-    pushVertex(pointPositions, pointColors, projected.x, projected.y, color)
-    pointSizes.push(record.isPha ? 2.8 : record.isNeo ? 2.2 : 1.4)
-  }
-
-  pushVertex(pointPositions, pointColors, referencePoint.x, referencePoint.y, referenceColor)
-  pointSizes.push(7)
-
-  for (const item of currentPositions) {
-    const projected = toClipSpace(projectPoint(item.planarPosition, projection), projection)
-    const useNeoColor = isEarthReference && isNeo(item.body)
-    const typeOpacity = item.body.kind === 'planet' || item.body.kind === 'dwarfPlanet'
-      ? planetOpacity
-      : item.body.kind === 'moon'
-        ? moonOpacity
-        : asteroidOpacity
-    const color = useNeoColor
-      ? neoDistanceColor(item.distance, 0.92 * typeOpacity)
-      : hexToRgba(item.body.color, (item.body.kind === 'asteroid' ? 0.92 : 1) * typeOpacity)
-    pushVertex(pointPositions, pointColors, projected.x, projected.y, color)
-    pointSizes.push(getMagnitudeScaledSize(item.body))
-  }
-
-  return {
-    linePositions: new Float32Array(linePositions),
-    lineColors: new Float32Array(lineColors),
-    pointPositions: new Float32Array(pointPositions),
-    pointColors: new Float32Array(pointColors),
-    pointSizes: new Float32Array(pointSizes),
-  }
-}
 
 function drawLines(resources: GlResources, geometry: Geometry, upload = true) {
   const { gl, lineProgram, linePositionBuffer, lineColorBuffer } = resources
@@ -618,8 +343,13 @@ export function TrajectoryCanvas({
   )
 
   const labels = useMemo(() => {
-    const majorBodies = currentPositions.filter((item) => item.body.kind !== 'asteroid').slice(0, MAJOR_LABEL_LIMIT)
-    const asteroidBodies = currentPositions.filter((item) => item.body.kind === 'asteroid').slice(0, ASTEROID_LABEL_LIMIT)
+    const majorBodies: RenderedBodyPosition[] = [], asteroidBodies: RenderedBodyPosition[] = []
+    for (let index = 0; index < currentPositions.length; index++) {
+      const asteroid = currentPositions.bodyAt(index).kind === 'asteroid'
+      if (asteroid && asteroidBodies.length < ASTEROID_LABEL_LIMIT) asteroidBodies.push(currentPositions.rowAt(index))
+      if (!asteroid && majorBodies.length < MAJOR_LABEL_LIMIT) majorBodies.push(currentPositions.rowAt(index))
+      if (majorBodies.length === MAJOR_LABEL_LIMIT && asteroidBodies.length === ASTEROID_LABEL_LIMIT) break
+    }
     return [...majorBodies, ...asteroidBodies]
   }, [currentPositions])
 
@@ -742,14 +472,14 @@ export function TrajectoryCanvas({
       let nearestBody: string | null = null
       let nearestDistance = Number.POSITIVE_INFINITY
 
-      for (const item of currentPositions) {
-        const dx = item.planarPosition.x - worldPoint.x
-        const dy = item.planarPosition.y - worldPoint.y
+      for (let index = 0; index < currentPositions.length; index++) {
+        const dx = currentPositions.coordinateAt(index, 0) - worldPoint.x
+        const dy = currentPositions.coordinateAt(index, 1) - worldPoint.y
         const dist = Math.hypot(dx, dy)
 
         if (dist < thresholdAU && dist < nearestDistance) {
           nearestDistance = dist
-          nearestBody = item.body.id
+          nearestBody = currentPositions.bodyAt(index).id
         }
       }
 
@@ -775,22 +505,22 @@ export function TrajectoryCanvas({
       const worldPoint = unprojectPoint(clickPoint, projection)
       const thresholdAU = viewRadiusAU * 0.06
 
-      let nearestItem: (typeof currentPositions)[number] | null = null
+      let nearestIndex = -1
       let nearestDistance = Number.POSITIVE_INFINITY
 
-      for (const item of currentPositions) {
-        const dx = item.planarPosition.x - worldPoint.x
-        const dy = item.planarPosition.y - worldPoint.y
+      for (let index = 0; index < currentPositions.length; index++) {
+        const dx = currentPositions.coordinateAt(index, 0) - worldPoint.x
+        const dy = currentPositions.coordinateAt(index, 1) - worldPoint.y
         const dist = Math.hypot(dx, dy)
 
         if (dist < thresholdAU && dist < nearestDistance) {
           nearestDistance = dist
-          nearestItem = item
+          nearestIndex = index
         }
       }
 
-      if (nearestItem) {
-        onHover(nearestItem.body, nearestItem.distance, event.clientX, event.clientY)
+      if (nearestIndex >= 0) {
+        onHover(currentPositions.bodyAt(nearestIndex), currentPositions.distanceAt(nearestIndex), event.clientX, event.clientY)
       } else {
         onHover(null, 0, 0, 0)
       }
@@ -802,19 +532,20 @@ export function TrajectoryCanvas({
     const rect = event.currentTarget.getBoundingClientRect()
     const worldPoint = unprojectPoint({ x: event.clientX - rect.left, y: event.clientY - rect.top }, projection)
     const thresholdAU = viewRadiusAU * 0.1
-    let nearestItem: (typeof currentPositions)[number] | null = null
+    let nearestIndex = -1
     let nearestDistance = Number.POSITIVE_INFINITY
-    for (const item of currentPositions) {
-      const distance = Math.hypot(item.planarPosition.x - worldPoint.x, item.planarPosition.y - worldPoint.y)
+    for (let index = 0; index < currentPositions.length; index++) {
+      const distance = Math.hypot(currentPositions.coordinateAt(index, 0) - worldPoint.x, currentPositions.coordinateAt(index, 1) - worldPoint.y)
       if (distance < thresholdAU && distance < nearestDistance) {
         nearestDistance = distance
-        nearestItem = item
+        nearestIndex = index
       }
     }
-    if (!nearestItem) {
+    if (nearestIndex < 0) {
       lastTouchTapRef.current = null
       return
     }
+    const nearestItem = currentPositions.rowAt(nearestIndex)
     onHover?.(nearestItem.body, nearestItem.distance, event.clientX, event.clientY)
     const now = performance.now()
     const previous = lastTouchTapRef.current

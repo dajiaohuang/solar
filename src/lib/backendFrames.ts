@@ -1,9 +1,10 @@
 import { AU_IN_KM, SECONDS_PER_DAY } from '../engine/units'
 import { MissingBodyStateError } from './ephemeris'
-import type { BodyId, RenderedBodyPosition, Vector3 } from '../types'
+import type { BodyId, Vector3 } from '../types'
+import type { CurrentPositions } from './currentPositions'
 
 export type BackendFrame = {
-  currentPositions: RenderedBodyPosition[]
+  currentPositions: CurrentPositions
   missingBodyIds: BodyId[]
   maxDistance: number
   catalogManifestSha256: string
