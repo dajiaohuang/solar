@@ -320,6 +320,7 @@ private struct ProjectionKey: Hashable {
     let frame: UUID?
     let reference: String
     let mode3D: Bool
+    let active: Bool
 }
 
 private struct NativeStateViewport: View {
@@ -327,10 +328,37 @@ private struct NativeStateViewport: View {
     let reference: String
     let mode3D: Bool
 
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var pressure = NativeDisplayPressure()
+    // Reading thermalState before subscription enables Foundation notifications.
+    @State private var thermalState = ProcessInfo.processInfo.thermalState
     @State private var projection = NativeProjection()
     @State private var projectedKey: ProjectionKey?
     @State private var projectionError: String?
-    private var key: ProjectionKey { ProjectionKey(frame: frame?.identity, reference: reference, mode3D: mode3D) }
+    private var key: ProjectionKey { ProjectionKey(frame: frame?.identity, reference: reference, mode3D: mode3D, active: scenePhase == .active) }
+    private var limit: Int { pressure.limit(mode3D: mode3D) }
+
+    private func applyThermal() {
+        thermalState = ProcessInfo.processInfo.thermalState
+        let value: NativeDisplayPressure.Thermal
+        switch thermalState {
+        case .nominal: value = .nominal
+        case .fair: value = .fair
+        case .serious: value = .serious
+        case .critical: value = .critical
+        @unknown default: value = .serious
+        }
+        pressure.thermalChanged(value, now: ProcessInfo.processInfo.systemUptime)
+    }
+
+    private var pressureMessage: String {
+        let zh = CoverageCopy.isChinese
+        switch pressure.reason {
+        case .initial: return zh ? "初始显示预算；尚无帧率自适应或真机性能保证。" : "Initial display budget; frame-time adaptation and device performance are not verified."
+        case .thermal: return zh ? "温度压力已降低显示预算；科学状态未删除，冷却不会立即恢复上限。" : "Thermal pressure lowered the display budget; scientific states retained. Cooling does not restore the limit."
+        case .memory: return zh ? "内存警告已降低显示预算；科学状态未删除。" : "Memory warning lowered the display budget; scientific states retained."
+        }
+    }
 
     var body: some View {
         let positions = projectedKey == key ? projection.points : []
@@ -350,27 +378,42 @@ private struct NativeStateViewport: View {
                     }
                 }
             }
-            if !positions.isEmpty {
-                Text("\(positions.count)/\(projection.candidates) displayed · \(mode3D ? "250,000" : "500,000") display limit")
-                    .font(.caption2).foregroundStyle(.white).padding(8).background(.black.opacity(0.7))
-                    .accessibilityIdentifier("observation.displayed")
+            if frame != nil && projectedKey == key {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("\(positions.count)/\(projection.candidates) displayed · \(limit.formatted(.number.locale(Locale(identifier: "en_US")))) display limit")
+                        .accessibilityIdentifier("observation.displayed")
+                    Text(pressureMessage).accessibilityIdentifier("observation.pressure")
+                }.font(.caption2).foregroundStyle(.white).padding(8).background(.black.opacity(0.7))
             }
         }.clipShape(RoundedRectangle(cornerRadius: 12))
         .task(id: key) {
             let expected = key
             projectionError = nil
-            let source = frame, sourceReference = reference, renderLimit = mode3D ? 250_000 : 500_000
+            guard expected.active else { projection = NativeProjection(); projectedKey = nil; return }
+            applyThermal()
+            let source = frame, sourceReference = reference, renderLimit = limit
             let worker = Task.detached(priority: .userInitiated) {
                 try NativeProjection.make(frame: source, reference: sourceReference, limit: renderLimit)
             }
             do {
                 let result = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
                 try Task.checkCancellation()
-                projection = result; projectedKey = expected
+                // A pressure warning may arrive while the detached task runs.
+                // Clamp against the current policy, not the captured old limit.
+                projection = try result.limited(to: limit); projectedKey = expected
             } catch is CancellationError {
-                // SwiftUI restarts the task only when the observation/reference/mode changes.
-            } catch { projectionError = error.localizedDescription }
+                // SwiftUI restarts for observation/reference/mode/activity changes.
+            } catch { if !Task.isCancelled { projectionError = error.localizedDescription } }
         }
+        .onChange(of: limit) { value in
+            // No new detached task, full-state copy, scale or camera reset is
+            // needed for pressure-only reductions. Scene identity stays mounted.
+            if let reduced = try? projection.limited(to: value) { projection = reduced }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification).receive(on: RunLoop.main)) { _ in
+            pressure.memoryWarning(now: ProcessInfo.processInfo.systemUptime)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification).receive(on: RunLoop.main)) { _ in applyThermal() }
     }
 }
 

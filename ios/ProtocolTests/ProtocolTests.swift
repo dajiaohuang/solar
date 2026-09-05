@@ -160,13 +160,53 @@ struct ProtocolTests {
         // Large absolute origin and small displacement must be subtracted as
         // Float64 before any Float32 conversion. Reference is last in the list.
         frame.states[0] = 1_000_000_001; frame.states[6] = 1_000_000_000
+        let sourceBits = frame.states.map(\.bitPattern)
         let projected = try NativeProjection.make(frame: frame, reference: ids[0], limit: 2)
         precondition(projected.points == [SIMD3<Float>.zero, SIMD3<Float>(5, 0, 0)] && projected.candidates == 2)
         let capped = try NativeProjection.make(frame: frame, reference: ids[0], limit: 1)
         precondition(capped.points == [.zero] && capped.candidates == 2)
+        let reduced = try projected.limited(to: 1)
+        precondition(reduced.points == capped.points && reduced.candidates == 2)
+        precondition(reduced.identity != projected.identity)
+        let unchanged = try projected.limited(to: 10)
+        precondition(unchanged.identity == projected.identity)
+        let fullExtent = NativeProjection(points: [.zero, SIMD3<Float>(1, 2, 3), SIMD3<Float>(5, 5, 5)], candidates: 3)
+        let smallerExtent = try fullExtent.limited(to: 2)
+        precondition(smallerExtent.points == [.zero, SIMD3<Float>(1, 2, 3)] && smallerExtent.candidates == 3)
+        precondition(frame.states.map(\.bitPattern) == sourceBits)
+        var invalidLimitRejected = false
+        do { _ = try projected.limited(to: 0) } catch { invalidLimitRejected = true }
+        precondition(invalidLimitRejected)
+        let unknownReference = try NativeProjection.make(frame: frame, reference: "unknown-reference", limit: 1)
+        precondition(unknownReference.points.isEmpty && unknownReference.candidates == 2)
+
+        var pressure = NativeDisplayPressure()
+        precondition(pressure.limit(mode3D: true) == 100_000 && pressure.limit(mode3D: false) == 250_000)
+        pressure.thermalChanged(.nominal, now: 1)
+        precondition(pressure.revision == 0 && pressure.reason == .initial)
+        pressure.thermalChanged(.fair, now: 2)
+        precondition(pressure.spatialLimit == 75_000 && pressure.planarLimit == 100_000 && pressure.reason == .thermal)
+        pressure.thermalChanged(.nominal, now: 3)
+        precondition(pressure.spatialLimit == 75_000 && pressure.planarLimit == 100_000 && pressure.lastPressureTime == 2)
+        pressure.thermalChanged(.serious, now: 4)
+        precondition(pressure.spatialLimit == 25_000 && pressure.planarLimit == 25_000)
+        pressure.thermalChanged(.fair, now: 5)
+        precondition(pressure.spatialLimit == 25_000 && pressure.planarLimit == 25_000)
+        pressure.memoryWarning(now: 6)
+        let revision = pressure.revision
+        pressure.memoryWarning(now: 7)
+        precondition(pressure.revision == revision + 1 && pressure.lastPressureTime == 7 && pressure.reason == .memory)
+        pressure.thermalChanged(.critical, now: 8)
+        precondition(pressure.reason == .memory && pressure.spatialLimit == 25_000 && pressure.planarLimit == 25_000)
+        pressure.memoryWarning(now: .nan)
+        precondition(pressure.lastPressureTime == 8)
+        pressure.memoryWarning(now: 0)
+        precondition(pressure.lastPressureTime == 8)
+        precondition(frame.states.map(\.bitPattern) == sourceBits)
+        print("iOS display pressure: independent mode limits, thermal/memory reductions, repeated warnings, no automatic restoration, immutable prefix and missing-reference exact counts passed")
         frame.exact[1] = false
         let absent = try NativeProjection.make(frame: frame, reference: ids[0], limit: 2)
-        precondition(absent.points.isEmpty)
+        precondition(absent.points.isEmpty && absent.candidates == 1)
         frame.exact[1] = true
         frame.states[0] = Double.greatestFiniteMagnitude; frame.states[6] = -Double.greatestFiniteMagnitude
         var overflowRejected = false

@@ -85,6 +85,32 @@ feedback, thermal sensing and explicit 30 FPS degraded mode remain incomplete.
 Synthetic policy tests and desktop/mobile-viewport browser lifecycle tests do
 not establish 12/16/32 GB physical-device performance or new exact-body coverage.
 
+## iOS pressure-only display limits
+
+Native 3D/2D start at 100K/250K. Foundation thermal notifications lower the
+limits to 75K/100K for fair state and 25K/25K for serious or critical state;
+UIKit memory warnings lower both to 25K. The current thermal state is read
+before subscribing and whenever the viewport becomes active. Repeated warnings
+advance the pressure revision even at the floor. Nominal temperature does not
+restore high limits; neither do reloads or mode switches in the current view.
+
+Reduction copies only the existing immutable coordinate prefix and releases
+its former larger backing array when no longer referenced. It does not rescan
+the scientific frame or change the full-source scale/camera. Detached projection
+results are clamped again to the current policy before publication. Background
+transitions cancel projection tasks and release display coordinates, preserving
+the source frame for reprojection on return. Missing-reference projections keep
+the count of exact source targets while publishing no coordinates.
+
+This is pressure response, not frame-time adaptation: actual-draw sampling,
+automatic growth, GPU/native-memory measurement and device SLOs remain pending.
+OS memory warnings are best-effort; retaining scientific source arrays is not
+a proof that every full-catalog observation fits memory. See Apple's
+[memory warning guidance](https://developer.apple.com/documentation/uikit/responding-to-memory-warnings)
+and [thermal notification contract](https://developer.apple.com/documentation/foundation/processinfo/thermalstatedidchangenotification).
+Pure Swift policy/prefix tests and real-SPK simulator mode/cache checks are
+separate gates from physical thermal-stress and 12/16/32 GB target-load evidence.
+
 ## Data and delivery budgets
 
 | Budget | Limit | Enforcement |

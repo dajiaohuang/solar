@@ -47,6 +47,17 @@ final class ObservationUITests: XCTestCase {
                        "Disclosure did not reach \(expected): \(element.debugDescription)")
     }
 
+    private func waitForDisplayed(_ app: XCUIApplication, mode3D: Bool) {
+        // The simulator can inherit actual host thermal pressure. Check exact
+        // state counts and only valid mode-specific limits, not a nominal host.
+        let limits = mode3D ? "100,000|75,000|25,000" : "250,000|100,000|25,000"
+        let predicate = NSPredicate(format: "label MATCHES %@", "3/3 displayed · (\(limits)) display limit")
+        let element = app.staticTexts["observation.displayed"]
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 30), .completed, element.debugDescription)
+        XCTAssertTrue(app.staticTexts["observation.pressure"].exists)
+    }
+
     func testRealEarthMoonStatesAndNativeModes() {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -63,24 +74,25 @@ final class ObservationUITests: XCTestCase {
         XCTAssertTrue(earth.waitForExistence(timeout: 10))
         earth.tap()
         waitForLabel(app.staticTexts["observation.status"], "3 verified states · 0 data gaps")
-        waitForLabel(app.staticTexts["observation.displayed"], "3/3 displayed · 250,000 display limit")
+        waitForDisplayed(app, mode3D: true)
         screenshot(app, "earth-moon-native-3d")
 
         app.buttons["observation.mode"].tap()
-        waitForLabel(app.staticTexts["observation.displayed"], "3/3 displayed · 500,000 display limit")
+        waitForDisplayed(app, mode3D: false)
         screenshot(app, "earth-moon-native-2d")
         app.buttons["observation.mode"].tap()
-        waitForLabel(app.staticTexts["observation.displayed"], "3/3 displayed · 250,000 display limit")
+        waitForDisplayed(app, mode3D: true)
 
         // Repeat the same online plan. The server-side request ledger proves
         // that a verified disk tile is reused without another tile download.
         app.buttons["observation.load"].tap()
         waitForLabel(app.staticTexts["observation.status"], "3 verified states · 0 data gaps")
-        waitForLabel(app.staticTexts["observation.displayed"], "3/3 displayed · 250,000 display limit")
+        waitForDisplayed(app, mode3D: true)
         XCUIDevice.shared.press(.home)
         app.activate()
         XCTAssertTrue(app.buttons["observation.load"].waitForExistence(timeout: 10))
         waitForLabel(app.staticTexts["observation.status"], "3 verified states · 0 data gaps")
+        waitForDisplayed(app, mode3D: true)
         screenshot(app, "earth-moon-resumed")
         app.terminate()
     }

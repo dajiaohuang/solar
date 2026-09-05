@@ -32,18 +32,73 @@ struct NativeStateFrame: Sendable {
     var exact: [Bool] = []
 }
 
+/// Display-only pressure policy. Cooling down never proves rendering headroom.
+/// Frame-time-driven growth is deliberately not implemented by this reducer.
+struct NativeDisplayPressure: Sendable {
+    enum Thermal: Sendable { case nominal, fair, serious, critical }
+    enum Reason: Sendable { case initial, thermal, memory }
+    private(set) var spatialLimit = 100_000
+    private(set) var planarLimit = 250_000
+    private(set) var reason = Reason.initial
+    private(set) var revision: UInt64 = 0
+    private(set) var lastPressureTime: Double?
+    static let minimum = 25_000
+
+    func limit(mode3D: Bool) -> Int { mode3D ? spatialLimit : planarLimit }
+
+    mutating func memoryWarning(now: Double) {
+        spatialLimit = Self.minimum; planarLimit = Self.minimum
+        record(.memory, now: now)
+    }
+
+    mutating func thermalChanged(_ thermal: Thermal, now: Double) {
+        switch thermal {
+        case .nominal: return // No automatic restoration after a pressure event.
+        case .fair:
+            spatialLimit = min(spatialLimit, 75_000)
+            planarLimit = min(planarLimit, 100_000)
+        case .serious, .critical:
+            spatialLimit = Self.minimum; planarLimit = Self.minimum
+        }
+        // A later mild thermal event must not hide a more restrictive memory warning.
+        record(reason == .memory ? .memory : .thermal, now: now)
+    }
+
+    private mutating func record(_ reason: Reason, now: Double) {
+        self.reason = reason
+        revision &+= 1 // Repeated warnings invalidate evidence even at the floor.
+        if now.isFinite { lastPressureTime = max(lastPressureTime ?? now, now) }
+    }
+}
+
 /// Immutable render-only coordinates; source states retain Float64 precision.
 struct NativeProjection: Sendable {
     let identity = UUID()
     var points: [SIMD3<Float>] = []
     var candidates = 0
 
+    /// A smaller prefix preserves the full-source scale and camera coordinates.
+    /// Never retain a slice referencing the discarded oversized backing buffer.
+    func limited(to limit: Int) throws -> NativeProjection {
+        guard limit > 0 else { throw StateTileFailure.invalid("Invalid display limit.") }
+        if points.count <= limit { return self }
+        return NativeProjection(points: Array(points.prefix(limit)), candidates: candidates)
+    }
+
     static func make(frame: NativeStateFrame?, reference: String, limit: Int) throws -> NativeProjection {
         guard limit > 0 else { throw StateTileFailure.invalid("Invalid display limit.") }
         guard let frame = frame else { return NativeProjection() }
         guard frame.metadata.count == frame.exact.count, frame.states.count / 6 == frame.exact.count,
               frame.states.count % 6 == 0 else { throw StateTileFailure.invalid("Incomplete render source.") }
-        guard let origin = frame.metadata.firstIndex(where: { $0.id == reference }), frame.exact[origin] else { return NativeProjection() }
+        guard let origin = frame.metadata.firstIndex(where: { $0.id == reference }), frame.exact[origin] else {
+            var candidates = 0
+            for row in frame.exact.indices {
+                if row % 4096 == 0 { try Task.checkCancellation() }
+                if frame.exact[row] { candidates += 1 }
+            }
+            // An unavailable reference prevents projection, not exact target states.
+            return NativeProjection(candidates: candidates)
+        }
         let offset = origin * 6
         var radius = 0.0, candidates = 0
         for row in frame.exact.indices {
