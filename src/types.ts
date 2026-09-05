@@ -181,22 +181,6 @@ export type TrajectoryWorkerResponse = {
   error?: string
 }
 
-export type CatalogPointWorkerRequest = {
-  type: 'compute'
-  requestId: number
-  julianDay: number
-  elements: Float64Array
-}
-
-export type CatalogPointWorkerResponse = {
-  type: 'progress' | 'result' | 'error'
-  requestId: number
-  progress?: number
-  positions?: Float32Array
-  positions3D?: Float32Array
-  error?: string
-}
-
 export type AsteroidIndexEntry = {
   id: BodyId
   packedDesignation?: string

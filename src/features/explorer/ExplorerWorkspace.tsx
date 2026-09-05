@@ -65,7 +65,6 @@ type FrameViewProps = {
   onHover: (item: { body: CelestialBody; distance: number; x: number; y: number } | null) => void
   catalogRecords: AsteroidRecord[]
   catalogPositions: Float32Array
-  catalogPositions3D: Float32Array
   catalogDrawCount: number
   catalogSampleTotal: number
   catalogFitKey: string
@@ -94,7 +93,6 @@ function FrameView({
   onHover,
   catalogRecords,
   catalogPositions,
-  catalogPositions3D,
   catalogDrawCount,
   catalogSampleTotal,
   catalogFitKey,
@@ -251,7 +249,7 @@ function FrameView({
             fallbackLabel={t('webgl3dUnavailable')}
             onUnavailable={() => simulationActions.patch({ viewMode: '2d' })}
             catalogRecords={catalogRecords}
-            catalogPositions3D={catalogPositions3D}
+            catalogPositions3D={catalogPositions}
             catalogDrawCount={catalogDrawCount}
             catalogOrigin={catalogOrigin}
             catalogFitKey={catalogFitKey}
@@ -350,7 +348,7 @@ export function ExplorerWorkspace() {
   // backend refresh this intentionally keeps the previous frame/cloud epoch;
   // EphemerisStatus still exposes loading so a stale snapshot is explicit.
   const trajectoryJulianDay = renderedJulianDay
-  const catalogPointCloud = useCatalogPointWorker(catalogRecords, renderedJulianDay)
+  const catalogPointCloud = useCatalogPointWorker(catalogRecords, renderedJulianDay, simulation.viewMode)
   const catalogEpochAligned = !simulation.showCatalogCloud || Math.abs(catalogPointCloud.computedJulianDay - renderedJulianDay) <= 1e-9
   // Full Web uses the audited backend when configured. Pages remains its
   // declared curated static preview; an unconfigured full build has no exact
@@ -457,7 +455,6 @@ export function ExplorerWorkspace() {
             onHover={setHovered}
             catalogRecords={catalogRecords}
             catalogPositions={catalogPointCloud.positions}
-            catalogPositions3D={catalogPointCloud.positions3D}
             catalogDrawCount={primaryCatalogDrawCount}
             catalogSampleTotal={renderBudget.sampleTotal}
             catalogFitKey={catalogFitKey}
@@ -486,7 +483,6 @@ export function ExplorerWorkspace() {
               onHover={setHovered}
               catalogRecords={catalogRecords}
               catalogPositions={catalogPointCloud.positions}
-              catalogPositions3D={catalogPointCloud.positions3D}
               catalogDrawCount={secondaryCatalogDrawCount}
               catalogSampleTotal={renderBudget.sampleTotal}
               catalogFitKey={catalogFitKey}

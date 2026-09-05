@@ -220,8 +220,26 @@ renderer mappings, missing first/middle/last rows, actual worker transfer and
 cancellation at the final yield. The maximum-detail allocation test is synthetic,
 not a heap or real-device FPS measurement. Historical science still uses the
 existing browser resolver and kernels, not the Go trajectory service. The
-approximate catalog worker's simultaneous 2D/3D buffers also remain to migrate;
-the overall Go/packed migration is not yet complete.
+overall Go/packed migration is not yet complete.
+
+The separately identified approximate catalog cloud now computes and transfers
+only the active view's Float32 positions: 8 bytes per object for 2D or 12 for 3D,
+instead of retaining both coordinate arrays. A mode or dataset change terminates
+the old worker, releases its source elements and invalidates the old output;
+the replacement worker reinitializes from the existing catalog records without
+downloading the sample again. This trades recomputation on a mode switch for
+single-mode resident output. An empty/disabled cloud creates no worker. The
+scheduler rejects mismatched mode, epoch or result size before publishing.
+
+Byte-level regressions compare both modes with the existing two-body focus
+model, preserve the Float64 input elements, and test a million synthetic records
+(8 MB 2D / 12 MB 3D output, not measured heap usage). Actual worker tests verify
+single-buffer transfer/detachment; desktop/mobile browser tests cover 3D/2D/3D,
+Catalog/Explorer navigation and disabling the cloud, with at most one live
+catalog worker. These changes do not add exact ephemeris coverage or establish
+a real-device frame-rate claim. The renderer-sampling lifecycle assertion still
+requires 12 real intervals but allows 30 seconds on shared software-rendered CI;
+it is not a performance benchmark.
 
 ## Shared backend tile encoding
 

@@ -133,7 +133,7 @@ export function CatalogWorkspace() {
   const pointRecords = useMemo(() => exactResultIsPartial && !catalog.filters.query.trim()
     ? filterCatalogRecords(catalog.baseSampleRecords, catalog.filters)
     : filtered, [catalog.baseSampleRecords, catalog.filters, exactResultIsPartial, filtered])
-  const pointCloud = useCatalogPointWorker(pointRecords, catalogEpoch)
+  const pointCloud = useCatalogPointWorker(pointRecords, catalogEpoch, '2d')
 
   async function scanEntireCatalog() {
     if (!catalog.manifest) return null

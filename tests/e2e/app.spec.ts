@@ -4,6 +4,43 @@ import datasetPin from '../../.github/asteroid-dataset.json' with { type: 'json'
 import satelliteCatalog from '../../src/data/satelliteCatalog.json' with { type: 'json' }
 import { coverageSummaryFixture } from '../fixtures/coverageReport'
 
+type CatalogWorkerEvent = { type: 'start' | 'stop' | 'compute' | 'result'; id: number; mode?: string; bytes?: number; arrays?: number }
+type CatalogWorkerAuditWindow = Window & { catalogWorkerAudit: CatalogWorkerEvent[] }
+
+async function auditCatalogWorkers(page: Page) {
+  await page.addInitScript(() => {
+    const events: CatalogWorkerEvent[] = []
+    ;(window as CatalogWorkerAuditWindow).catalogWorkerAudit = events
+    const NativeWorker = window.Worker
+    let sequence = 0
+    window.Worker = class extends NativeWorker {
+      private auditId: number
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(url, options)
+        this.auditId = String(url).includes('catalog-points.worker') ? ++sequence : 0
+        if (!this.auditId) return
+        events.push({ type: 'start', id: this.auditId })
+        this.addEventListener('message', event => {
+          const result = event.data as { type: string; mode?: string; positions?: Float32Array }
+          if (result.type !== 'result') return
+          events.push({ type: 'result', id: this.auditId, mode: result.mode, bytes: result.positions?.byteLength,
+            arrays: Object.values(result).filter(value => ArrayBuffer.isView(value)).length })
+        })
+      }
+      override postMessage(data: unknown, options?: Transferable[] | StructuredSerializeOptions) {
+        const request = data as { type: string; mode?: string }
+        if (this.auditId && request.type === 'compute') events.push({ type: 'compute', id: this.auditId, mode: request.mode })
+        if (Array.isArray(options)) super.postMessage(data, options)
+        else super.postMessage(data, options)
+      }
+      override terminate() {
+        if (this.auditId) events.push({ type: 'stop', id: this.auditId })
+        super.terminate()
+      }
+    }
+  })
+}
+
 test('all-source audit loads on demand and rejects stale totals on retry', async ({ page }, info) => {
   const errors: string[] = []; const requests: string[] = []
   page.on('pageerror', error => errors.push(error.message))
@@ -123,7 +160,10 @@ test('complete Saturn current positions remain independent of 3D trail budgets',
     await page.mouse.down()
     try {
       await expect(displayBudget.first()).toHaveAttribute('data-sampling', 'true')
-      await expect.poll(async () => Number(await displayBudget.first().getAttribute('data-samples'))).toBeGreaterThanOrEqual(12)
+      // Shared CI software rendering can take over 10 seconds for the two
+      // warmup frames plus 12 measured intervals. This verifies live sampling,
+      // not an FPS floor; keep the full sample requirement on slower hosts.
+      await expect.poll(async () => Number(await displayBudget.first().getAttribute('data-samples')), { timeout: 30_000 }).toBeGreaterThanOrEqual(12)
     } finally { await page.mouse.up() }
     await expect(displayBudget.first()).toHaveAttribute('data-sampling', 'false')
     await expect(displayBudget.first()).toHaveAttribute('data-computed', '293')
@@ -293,6 +333,9 @@ test('lazy-loads catalog samples only inside catalog workspaces and only once', 
 })
 
 test('renders an explicitly enabled reproducible catalog cloud without reloading it across view changes', async ({ page }, testInfo) => {
+  await auditCatalogWorkers(page)
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
   const sampleRequests: string[] = []
   page.on('request', (request) => {
     if (/catalog-sample-(desktop|mobile)\.(json|bin)$/.test(request.url())) sampleRequests.push(request.url())
@@ -309,13 +352,42 @@ test('renders an explicitly enabled reproducible catalog cloud without reloading
   await expect(page.locator('.frame-label small')).toContainText(`catalog ${sampleCount.toLocaleString()} / ${sampleCount.toLocaleString()} · Maximum`)
   await expect(page).toHaveURL(/[?&]catalogCloud=1(?:&|$)/)
   await expect(page).toHaveURL(/[?&]quality=max(?:&|$)/)
+  const latestResult = () => page.evaluate(() => (window as CatalogWorkerAuditWindow).catalogWorkerAudit.filter(event => event.type === 'result').at(-1))
+  await expect.poll(latestResult).toMatchObject({ mode: '3d', bytes: sampleCount * 12, arrays: 1 })
+  await page.getByTestId('trajectory-canvas-3d').screenshot({ path: testInfo.outputPath('single-mode-cloud-3d.png') })
 
   const viewSwitch = page.locator('.simulation-bar .segmented-control')
   await viewSwitch.getByRole('button', { name: '2D' }).click()
   await expect(page.locator('.trajectory-canvas')).toBeVisible()
+  await expect.poll(latestResult).toMatchObject({ mode: '2d', bytes: sampleCount * 8, arrays: 1 })
+  await expect(page.getByTestId('trajectory-canvas-3d')).toHaveCount(0)
+  await expect(page.locator('.frame-label small')).toContainText(`catalog ${sampleCount.toLocaleString()} / ${sampleCount.toLocaleString()}`)
+  await page.locator('.trajectory-canvas').screenshot({ path: testInfo.outputPath('single-mode-cloud-2d.png') })
   await viewSwitch.getByRole('button', { name: '3D' }).click()
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
+  await expect.poll(latestResult).toMatchObject({ mode: '3d', bytes: sampleCount * 12, arrays: 1 })
+  await expect(page.locator('.trajectory-canvas')).toHaveCount(0)
+  // The dedicated catalog workspace is always planar, independently of the
+  // Explorer's last mode. It must retire the Explorer worker on navigation.
+  await openCatalog(page)
+  await expect(page.locator('canvas.catalog-point-canvas')).toBeVisible()
+  await expect.poll(latestResult).toMatchObject({ mode: '2d', arrays: 1 })
+  await openExplorer(page)
+  await expect.poll(latestResult).toMatchObject({ mode: '3d', arrays: 1 })
+  await page.locator('.advanced-controls > summary').click()
+  await page.getByRole('checkbox', { name: 'Catalog point cloud', exact: true }).uncheck()
+  await expect.poll(() => page.evaluate(() => (window as CatalogWorkerAuditWindow).catalogWorkerAudit
+    .reduce((active, event) => active + (event.type === 'start' ? 1 : event.type === 'stop' ? -1 : 0), 0))).toBe(0)
+  const audit = await page.evaluate(() => (window as CatalogWorkerAuditWindow).catalogWorkerAudit)
+  let active = 0
+  for (const event of audit) {
+    active += event.type === 'start' ? 1 : event.type === 'stop' ? -1 : 0
+    expect(active).toBeGreaterThanOrEqual(0)
+    expect(active).toBeLessThanOrEqual(1)
+  }
+  expect(audit.filter(event => event.type === 'result').every(event => event.arrays === 1)).toBe(true)
   expect(sampleRequests).toHaveLength(2)
+  expect(errors).toEqual([])
 })
 
 test('fails closed visibly when an enabled catalog cloud has an invalid sample tuple', async ({ page }) => {
