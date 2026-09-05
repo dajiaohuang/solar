@@ -13,7 +13,12 @@ explicit precision/status fields.
   `naifId` is the source identity and is never used to infer a different body.
 * `datasetVersion`, `source`, validity bounds and `availability` are part of
   the scientific result, not UI decoration.
-* `operational` means a packaged, validated source kernel; `snapshot` means a
+* Catalog `operational` identifies a packaged kernel candidate admitted from
+  the manifest, not a verified state or an operational-navigation guarantee.
+  Full-file integrity verification and SPK parsing are lazy; manifest counts
+  expose verified, pending and invalid kernel files separately. Only the
+  evaluated plan/tile status establishes exact availability at a requested
+  epoch after verification and center-chain resolution. `snapshot` means a
   validated source state at one declared audit epoch; `fallback` means an
   explicitly requested source-element fixed two-body approximation; `missing`
   means no exact state is available for the requested result. Missing states
