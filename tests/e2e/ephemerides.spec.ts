@@ -103,7 +103,8 @@ test('loads all TNO companion roots with their original primary/system dependenc
   await page.goto('./?v=4&lang=en&view=3d&speed=0')
   for (const [parent, count] of [['eris', 2], ['haumea', 3]] as const) {
     await page.getByTestId(`preset-${parent}-spk-moons`).click()
-    await page.waitForLoadState('networkidle')
+    // Presets can run the clock; backend history/current requests need not
+    // become idle. Observe the selected source loader and result instead.
     await expect(page.getByTestId('local-ephemeris-evidence').locator(':scope > summary')).toContainText(`${count}/${count}`, { timeout: 30_000 })
     await expect(page.locator('.compute-progress')).toHaveCount(0)
     await expect(page).toHaveURL(new RegExp(`[?&]ref=${parent}(?:&|$)`))
@@ -133,7 +134,8 @@ test('loads eight original binary systems and omits their positions outside the 
   await page.goto('./?v=4&lang=en&view=3d&speed=0')
   for (const parent of ['quaoar', 'orcus', 'salacia', '1998ww31', '2001qw322', 'kagara', '1999oj4', '2003un284']) {
     await page.getByTestId(`preset-${parent}-spk-moons`).click()
-    await page.waitForLoadState('networkidle')
+    // Backend requests continue while the preset clock runs; source readiness
+    // and selected reference are the relevant assertions, not network silence.
     await expect(page.getByTestId('local-ephemeris-evidence').locator(':scope > summary')).toContainText('2/2', { timeout: 30_000 })
     await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
     await expect(page).toHaveURL(new RegExp(`[?&]ref=${parent}(?:&|$)`))

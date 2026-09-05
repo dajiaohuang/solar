@@ -281,6 +281,11 @@ func TestRequestSchedulerRouteClasses(t *testing.T) {
 	}{
 		{"POST", "/v1/state/plan", interactiveRequest},
 		{"POST", "/v1/state/tiles", interactiveRequest},
+		{"POST", "/v1/state/plan?workload=trajectory", trajectoryWork},
+		{"POST", "/v1/state/tiles?workload=trajectory", trajectoryWork},
+		{"POST", "/v1/state/tiles?workload=interactive", interactiveRequest},
+		{"GET", "/v1/identities?workload=trajectory", bulkRequest},
+		{"GET", "/v1/catalog?workload=interactive", bulkRequest},
 		{"GET", "/v1/catalog/manifest", interactiveRequest},
 		{"GET", "/v1/coverage/targets", interactiveRequest},
 		{"GET", "/v1/identities/sb:1", interactiveRequest},

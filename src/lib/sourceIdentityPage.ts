@@ -1,4 +1,4 @@
-import { fetchStateTilePlan } from '../hooks/useStateTiles'
+import { fetchStateTilePlan } from './stateTileClient'
 import { assembleStateTiles, fetchStateTiles, readStateTileJson, validateStateTileManifest, type StateTileManifest } from './stateTiles'
 
 export const SOURCE_PAGE_SIZE = 50

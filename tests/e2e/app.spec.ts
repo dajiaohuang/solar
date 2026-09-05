@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures'
 import type { Page } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
 import datasetPin from '../../.github/asteroid-dataset.json' with { type: 'json' }
 import satelliteCatalog from '../../src/data/satelliteCatalog.json' with { type: 'json' }
 import { coverageSummaryFixture } from '../fixtures/coverageReport'
@@ -97,11 +98,21 @@ test('all-source audit treats absent reports as unavailable, not zero coverage',
 
 test('packed historical trails survive switching the active renderer without a second canvas', async ({ page }, info) => {
   const errors: string[] = []
+  const workers: string[] = [], historicalRequests: string[] = []
+  page.on('worker', worker => workers.push(worker.url()))
+  page.on('request', request => { if (request.url().includes('workload=trajectory')) historicalRequests.push(request.url()) })
   page.on('pageerror', error => errors.push(error.message))
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('?v=4&lang=en&view=3d&bodies=earth%2Cmars&ref=sun&jd=2461287.5&history=365&samples=180&speed=0')
   const spatial = page.getByTestId('trajectory-canvas-3d'), planar = page.locator('canvas.trajectory-canvas')
   await expect(spatial).toHaveAttribute('data-trail-count', '2', { timeout: 30_000 })
+  const audit = page.getByTestId('backend-trajectory-audit')
+  await expect(audit).toHaveAttribute('data-samples', '180')
+  await expect(audit).toHaveAttribute('data-start-utc-jd', String(2461287.5 - 365))
+  await expect(audit).toHaveAttribute('data-end-utc-jd', '2461287.5')
+  expect(historicalRequests.length).toBeGreaterThanOrEqual(360)
+  expect(workers.some(url => url.includes('backend-trajectories.worker'))).toBe(true)
+  expect(workers.some(url => /\/trajectory\.worker[-.]/.test(url))).toBe(false)
   await expect(planar).toHaveCount(0)
   await spatial.screenshot({ path: info.outputPath('packed-trails-3d.png') })
   await page.getByRole('button', { name: '2D', exact: true }).click()
@@ -111,7 +122,46 @@ test('packed historical trails survive switching the active renderer without a s
   await page.getByRole('button', { name: '3D', exact: true }).click()
   await expect(spatial).toHaveAttribute('data-trail-count', '2', { timeout: 30_000 })
   await expect(planar).toHaveCount(0)
+  await audit.locator('summary').click()
+  await expect(audit).toContainText('Connecting lines are visual interpolation')
+  const downloadPromise = page.waitForEvent('download')
+  await audit.getByRole('button', { name: 'Download historical source audit' }).click()
+  const download = await downloadPromise
+  const downloaded = JSON.parse(await readFile((await download.path())!, 'utf8')) as { bodyIds: string[]; epochsTdbJd: number[]; sourceOrdinals: number[]; sources: { source: string }[]; tiles: unknown[] }
+  expect(downloaded.bodyIds).toEqual(['earth', 'mars', 'sun'])
+  expect(downloaded.epochsTdbJd).toHaveLength(180)
+  expect(downloaded.sourceOrdinals).toHaveLength(540)
+  expect(downloaded.tiles).toHaveLength(180)
+  expect(downloaded.sources.every(source => source.source === 'fixture-state-tiles')).toBe(true)
   expect(errors).toEqual([])
+})
+
+test('backend historical failures never invoke browser trajectories or erase verified current states', async ({ page }) => {
+  const workers: string[] = [], errors: string[] = []
+  page.on('worker', worker => workers.push(worker.url()))
+  page.on('pageerror', error => errors.push(error.message))
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.route('**/solar-test-api/v1/state/tiles?workload=trajectory', route => route.fulfill({ status: 503, body: 'unavailable' }))
+  await page.goto('?v=4&lang=en&view=3d&bodies=earth%2Cmars&ref=sun&jd=2461287.5&history=1&samples=32&speed=0')
+  const canvas = page.getByTestId('trajectory-canvas-3d')
+  await expect(canvas).toHaveAttribute('data-position-count', '2')
+  await expect(page.locator('.canvas-error').filter({ hasText: 'State tile HTTP 503' })).toBeVisible()
+  await expect(canvas).toHaveAttribute('data-trail-count', '0')
+  await expect(page.getByTestId('backend-trajectory-audit')).toHaveCount(0)
+  expect(workers.some(url => /\/trajectory\.worker[-.]/.test(url))).toBe(false)
+  expect(errors).toEqual([])
+})
+
+test('backend historical source window and boundary are readable in Chinese', async ({ page }, info) => {
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('?v=4&lang=zh&view=2d&bodies=earth%2Cmars&ref=sun&jd=2461287.5&history=1&samples=32&speed=0')
+  const audit = page.getByTestId('backend-trajectory-audit')
+  await expect(audit).toHaveAttribute('data-trails', '2')
+  await expect(audit).toHaveAttribute('data-samples', '32')
+  await audit.locator('summary').click()
+  await expect(audit).toContainText('连线只是可视化插值')
+  await expect(audit.getByRole('button', { name: '下载历史轨迹来源审计' })).toBeVisible()
+  await audit.screenshot({ path: info.outputPath('backend-history-audit-zh.png') })
 })
 
 test('complete Saturn current positions remain independent of 3D trail budgets', async ({ page }) => {

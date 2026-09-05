@@ -1,6 +1,6 @@
 # Solar Atlas contributor guide
 
-Solar Atlas has a React 19 + TypeScript 6 + Vite 8 Web frontend, a Go scientific/data backend, and independent Android/iOS native prototypes. Pages remains a static, route-level code-split Web preview; full Web can use the Go backend for current states. Historical Web trajectories and analyses are not yet fully migrated to Go.
+Solar Atlas has a React 19 + TypeScript 6 + Vite 8 Web frontend, a Go scientific/data backend, and independent Android/iOS native prototypes. Pages remains a static, route-level code-split Web preview; full Web uses verified Go state tiles for current states and sampled historical trails. Heavy analyses are not yet fully migrated to Go. Historical connecting lines are display interpolation, not certified continuous ephemerides; preserve the actual completed window, source audit and whole-trail gap semantics.
 
 ## Commands
 

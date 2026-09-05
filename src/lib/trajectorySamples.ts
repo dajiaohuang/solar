@@ -1,4 +1,5 @@
 import type { BodyPosition, CelestialBody, PackedTrajectoryData, TrajectorySample } from '../types'
+import type { CurrentPositions } from './currentPositions'
 
 /** Bounded detail trails only. Resolver objects live for one epoch; retained
  * samples are written directly into a single Float64 xyz buffer. */
@@ -13,28 +14,37 @@ export function createTrajectoryAccumulator(bodies: CelestialBody[], sampleCount
   const seen = new Uint8Array(bodies.length)
   let epochIndex = 0
   let result: PackedTrajectoryData | undefined
+  const beginEpoch = () => {
+    if (result || epochIndex >= sampleCount) throw new RangeError('Trajectory sample count exceeded')
+    seen.fill(0)
+  }
+  const writePosition = (id: string, x: number, y: number, z: number) => {
+    const ordinal = ids.get(id)
+    if (ordinal === undefined) throw new Error('Unknown trajectory body identity')
+    if (seen[ordinal]) throw new Error('Duplicate trajectory sample identity')
+    seen[ordinal] = 1
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) { incomplete[ordinal] = 1; return }
+    const offset = (ordinal * sampleCount + epochIndex) * 3
+    coordinates[offset] = x; coordinates[offset + 1] = y; coordinates[offset + 2] = z
+  }
+  const endEpoch = () => {
+    for (let ordinal = 0; ordinal < bodies.length; ordinal++) if (!seen[ordinal]) incomplete[ordinal] = 1
+    epochIndex++
+  }
   return {
     append(positions: BodyPosition[]) {
-      if (result || epochIndex >= sampleCount) throw new RangeError('Trajectory sample count exceeded')
-      seen.fill(0)
+      beginEpoch()
       for (const { body, position } of positions) {
-        const ordinal = ids.get(body.id)
-        if (ordinal === undefined) throw new Error('Unknown trajectory body identity')
-        if (seen[ordinal]) throw new Error('Duplicate trajectory sample identity')
-        seen[ordinal] = 1
-        if (!Number.isFinite(position.x) || !Number.isFinite(position.y) || !Number.isFinite(position.z)) {
-          incomplete[ordinal] = 1
-          continue
-        }
-        const offset = (ordinal * sampleCount + epochIndex) * 3
-        coordinates[offset] = position.x
-        coordinates[offset + 1] = position.y
-        coordinates[offset + 2] = position.z
+        writePosition(body.id, position.x, position.y, position.z)
       }
-      for (let ordinal = 0; ordinal < bodies.length; ordinal++) {
-        if (!seen[ordinal]) incomplete[ordinal] = 1
+      endEpoch()
+    },
+    appendCurrent(positions: CurrentPositions) {
+      beginEpoch()
+      for (let index = 0; index < positions.length; index++) {
+        writePosition(positions.bodyAt(index).id, positions.coordinateAt(index, 0), positions.coordinateAt(index, 1), positions.coordinateAt(index, 2))
       }
-      epochIndex++
+      endEpoch()
     },
     finish(): PackedTrajectoryData {
       if (result) return result

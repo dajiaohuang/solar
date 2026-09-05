@@ -218,9 +218,23 @@ use the same storage shape without changing their model classification.
 Regressions compare every retained source byte (including signed zero), both
 renderer mappings, missing first/middle/last rows, actual worker transfer and
 cancellation at the final yield. The maximum-detail allocation test is synthetic,
-not a heap or real-device FPS measurement. Historical science still uses the
-existing browser resolver and kernels, not the Go trajectory service. The
-overall Go/packed migration is not yet complete.
+not a heap or real-device FPS measurement. Full-Web historical samples now use
+verified Go state tiles; only the Pages preview retains the browser resolver.
+The overall Go/packed migration, heavy analysis and native parity remain incomplete.
+
+The full-Web history worker retains one epoch's verified Float64 six-vectors
+while writing packed relative xyz, plus an interned provenance dictionary and
+epoch-major source ordinals. Each job admits at most two tile transfers at once,
+has a 120-second deadline and an 8 MiB serialized provenance-text budget. These
+are per-job limits, not a global multi-view connection or measured heap bound.
+One active job and one coalesced latest clock request avoid restarting at every
+tick; a source/body/reference/window/explicit-seek change terminates the worker.
+The last completed history retains its actual window in the audit rather than
+claiming the current clock's window. Any missing body or reference sample drops
+that entire trail. Network, integrity or budget errors return no partial history
+and never switch to approximate local science. Export expands the packed audit
+only on explicit download. Each epoch currently requires a plan and its tiles;
+multi-epoch transport optimization and device SLO measurements remain pending.
 
 The separately identified approximate catalog cloud now computes and transfers
 only the active view's Float32 positions: 8 bytes per object for 2D or 12 for 3D,

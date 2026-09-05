@@ -147,6 +147,7 @@ export type TrajectoryFrameData = {
   /** Bodies omitted because at least one historical sample had no state. */
   trajectoryUnavailableBodyIds: BodyId[]
   maxDistance: number
+  trajectoryAudit?: import('./lib/backendTrajectories').BackendTrajectoryAudit
 }
 
 export type TrajectoryWorkerRequest = {

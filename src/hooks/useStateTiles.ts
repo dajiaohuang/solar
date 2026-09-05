@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { utcJulianDayToTdb } from '../engine/ephemeris/timeScales'
 import { PRODUCT_PROFILE } from '../lib/productAvailability'
 import { backendBodyId } from '../lib/currentStateIdentity'
-import { assembleStateTiles, buildBackendFrame, chunkStatePlanIds, StateTileSnapshot, digestStateTileRequestIds, fetchStateTiles, readStateTileJson, validateStateTileManifest, validateStateTilePlan, type StateTile, type StateTileManifest, type StateTilePlan } from '../lib/stateTiles'
+import { assembleStateTiles, buildBackendFrame, chunkStatePlanIds, StateTileSnapshot, fetchStateTiles, readStateTileJson, validateStateTileManifest, type StateTile, type StateTilePlan } from '../lib/stateTiles'
+import { fetchStateTilePlan } from '../lib/stateTileClient'
 import type { BackendFrame } from '../lib/backendFrames'
 import type { BodyId, CelestialBody } from '../types'
 
@@ -20,15 +21,6 @@ export function sampleStateTileEpoch(epochUtcJd: number, isPlaying: boolean) { i
 export function shouldStartStateTileSample(params: { isPlaying: boolean; requestActive: boolean; latestSample: number; requestedSample: number }) { return params.isPlaying && !params.requestActive && params.latestSample > params.requestedSample }
 
 function apiBase() { const configured = import.meta.env.VITE_SOLAR_API_BASE_URL; return typeof configured === 'string' && configured.trim() ? configured.trim().replace(/\/+$/, '') : null }
-export async function fetchStateTilePlan(params: { base: string; bodyIds: string[]; epochTdbJd: number; signal: AbortSignal; fetcher?: FetchLike; manifest?: StateTileManifest }): Promise<{ manifest: StateTileManifest; plan: StateTilePlan }> {
-  const fetcher = params.fetcher ?? fetch
-  const manifest = params.manifest ?? validateStateTileManifest(await readStateTileJson(await fetcher(`${params.base}/v1/catalog/manifest`, { signal: params.signal }), 'State catalog manifest'))
-  const request = { ids: [...params.bodyIds], epochJd: params.epochTdbJd, frame: 'ECLIPJ2000' as const, timeScale: 'TDB' as const, fieldMask: ['position', 'velocity'], precision: 'exact' as const }
-  const response = await fetcher(`${params.base}/v1/state/plan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request), signal: params.signal })
-  const plan = validateStateTilePlan(await readStateTileJson(response, 'State tile plan'), manifest, params.epochTdbJd, params.bodyIds, await digestStateTileRequestIds(params.bodyIds))
-  return { manifest, plan }
-}
-
 export async function loadStateTileFrames(params: { base: string; bodyIds: string[]; epochTdbJd: number; epochUtcJd?: number; bodies: CelestialBody[]; requestedIds: Map<BodyId, string>; referenceIds: BodyId[]; signal: AbortSignal; fetcher?: FetchLike }) {
   const fetcher = params.fetcher ?? fetch
   const manifestResponse = await fetcher(`${params.base}/v1/catalog/manifest`, { signal: params.signal }); const manifest = validateStateTileManifest(await readStateTileJson(manifestResponse, 'State catalog manifest'))

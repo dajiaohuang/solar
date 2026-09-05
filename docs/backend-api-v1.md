@@ -164,6 +164,26 @@ value is present. Pages builds intentionally omit a real backend configuration a
 the curated static preview; they do not request the full catalog or claim full
 coverage. The project currently has no official public full-Web backend URL.
 
+Full-Web historical trails use the same exact binary transport once per sampled
+TDB epoch, not the JSON `/v1/trajectory` endpoint above. Their plan/tile POSTs
+append `?workload=trajectory` to enter the existing lower-priority trajectory
+queue; this hint cannot promote bulk requests. Current-state requests stay
+interactive. Each history job requests at most 320 trails plus its reference,
+2–600 samples and a 1,000-year window, with a 120-second deadline. It validates
+each tile and the current frame's source manifest identity, retaining one epoch's
+six-vectors while appending packed Float64 AU relative positions. Missing any
+sample or the reference removes the whole trail; no browser-kernel fallback is
+used. Transport/integrity failures clear the historical result without removing
+independently verified current states.
+
+The UI and PNG evidence state the actual completed UTC window. The audit download
+retains TDB epochs, backend identities, source metadata, source ordinals, tile
+and plan hashes, and the first missing sample per body. Only explicit export
+expands typed audit arrays to JSON. Connected samples are display interpolation,
+not certified continuous ephemerides. See [performance boundaries](../PERFORMANCE.md)
+for queue coalescing, cancellation and per-job memory limits. Heavy analyses and
+full native historical-feature parity are not completed by this Web path.
+
 ## Errors
 
 Errors are JSON objects with `apiVersion` and `error.code`/`error.message`.

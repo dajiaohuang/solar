@@ -37,6 +37,9 @@ import { useStateDisplayBudget } from '../../hooks/useStateDisplayBudget'
 import { selectStateDisplayPositions } from '../../lib/stateDisplayBudget'
 import { summarizeBackendCoverage } from '../../lib/backendCoverage'
 import { concatCurrentPositions, currentPositionDetails, EMPTY_CURRENT_POSITIONS } from '../../lib/currentPositions'
+import { exportBackendTrajectoryAudit } from '../../lib/backendTrajectories'
+import { saveTextExport } from '../../lib/platform'
+import { uiActions } from '../../state/ui-store'
 
 const TrajectoryCanvas3D = lazy(async () => {
   const module = await import('../../components/TrajectoryCanvas3D')
@@ -61,6 +64,7 @@ type FrameViewProps = {
   bodiesById: Map<BodyId, CelestialBody>
   julianDay: number
   trajectoryJulianDay: number
+  seekRevision: number
   onFrame: (frame: TrajectoryFrameData) => void
   onHover: (item: { body: CelestialBody; distance: number; x: number; y: number } | null) => void
   catalogRecords: AsteroidRecord[]
@@ -89,6 +93,7 @@ function FrameView({
   bodiesById,
   julianDay,
   trajectoryJulianDay,
+  seekRevision,
   onFrame,
   onHover,
   catalogRecords,
@@ -126,6 +131,7 @@ function FrameView({
     currentJulianDay: julianDay,
     trajectoryJulianDay,
     historyDays: simulation.historyDays,
+    seekRevision,
     // Inventory expansion must not silently undersample short-period moons.
     // Only historical trails are budgeted; current positions keep all selections.
     sampleCount: Math.min(simulation.sampleCount, 240),
@@ -140,6 +146,7 @@ function FrameView({
     trajectories: [...baseFrame.trajectories, ...spacecraftFrame.trajectories],
     trajectoryUnavailableBodyIds: [...baseFrame.trajectoryUnavailableBodyIds, ...spacecraftFrame.trajectoryUnavailableBodyIds],
     maxDistance: Math.max(baseFrame.maxDistance, spacecraftFrame.currentPositions.maxDistance()),
+    trajectoryAudit: baseFrame.trajectoryAudit,
   }), [baseFrame, spacecraftFrame])
   const displayedStates = useMemo(() => backendFrame
     ? selectStateDisplayPositions(baseFrame.currentPositions, stateDisplay.limitPerPane, statePriorityIds)
@@ -153,7 +160,9 @@ function FrameView({
     selectedBodies.map((body) => body.id), referenceBody.id, bodiesById, baseFrame.maxDistance,
   ), [bodiesById, referenceBody.id, selectedBodies, baseFrame.maxDistance])
   const catalogSuggested = useMemo(() => {
-    if (!catalogOrigin) return 0
+    // The 3D renderer fits its own xyz data. Do not scan a spatial buffer as
+    // planar pairs or compute an unused 2D extent while 3D is active.
+    if (!catalogOrigin || simulation.viewMode !== '2d') return 0
     const count = Math.min(catalogDrawCount, Math.floor(catalogPositions.length / 2))
     let radius = 0
     for (let index = 0; index < count; index += 1) {
@@ -163,7 +172,7 @@ function FrameView({
       ))
     }
     return radius > 0 ? radius * 1.08 : 0
-  }, [catalogDrawCount, catalogOrigin, catalogPositions])
+  }, [catalogDrawCount, catalogOrigin, catalogPositions, simulation.viewMode])
   const suggested = Math.max(focusSuggested, catalogSuggested)
   const orbitEllipses = useMemo(() => VIEW_CAPABILITIES[simulation.viewMode].fullOrbits && simulation.showOrbits
     ? computeOrbitEllipses(selectedBodies.slice(0, 40), bodiesById, referenceBody.id, trajectoryJulianDay)
@@ -214,6 +223,16 @@ function FrameView({
       <div className="frame-overlays" onWheel={event => event.stopPropagation()}>
       <div className="frame-label"><span>{bodyDisplayName(referenceBody, language)}</span><small>{simulation.viewMode.toUpperCase()}{simulation.showCatalogCloud ? ` · ${t('catalogCloudRendered')} ${catalogDrawCount.toLocaleString()} / ${catalogSampleTotal.toLocaleString()} · ${qualityLabel} · JD ${julianDay.toFixed(3)}` : ''}</small></div>
       <EphemerisStatus bodies={selectedBodies} references={[referenceBody]} julianDay={julianDay} historyDays={simulation.historyDays} backendStatus={backendStatus} backendFrame={backendFrame} />
+      {frame.trajectoryAudit && <details className="frame-layer-budget glass-panel" data-testid="backend-trajectory-audit"
+        data-start-utc-jd={frame.trajectoryAudit.startUtcJd} data-end-utc-jd={frame.trajectoryAudit.endUtcJd}
+        data-samples={frame.trajectoryAudit.epochsTdbJd.length} data-trails={baseFrame.trajectories.length}>
+        <summary>{t('trajectoryBackendEvidence')}: {baseFrame.trajectories.length}/{trajectoryBodies.length}</summary>
+        <p>{t('trajectoryBackendBoundary')}</p>
+        <p>UTC JD {frame.trajectoryAudit.startUtcJd.toFixed(6)} → {frame.trajectoryAudit.endUtcJd.toFixed(6)} · TDB / ECLIPJ2000 / AU · {referenceId}</p>
+        <p><code style={{ overflowWrap: 'anywhere' }}>{frame.trajectoryAudit.catalogManifestSha256}</code></p>
+        {frame.trajectoryAudit.gaps.map(gap => <p key={gap.bodyId}>{bodyDisplayName(bodiesById.get(gap.bodyId)!, language)}: <code>{gap.reason}</code> · TDB JD {frame.trajectoryAudit!.epochsTdbJd[gap.epochIndex].toFixed(6)}</p>)}
+        <button onClick={() => void saveTextExport(JSON.stringify(exportBackendTrajectoryAudit(frame.trajectoryAudit!), null, 2), 'solar-history-audit.json', 'application/json').catch((reason: unknown) => uiActions.toast(String(reason)))}>{t('trajectoryExportAudit')}</button>
+      </details>}
       {backendFrame && <details className="frame-layer-budget glass-panel" data-testid="exact-display-budget"
         data-computed={receivedExactCount} data-displayed={displayedStates.length}
         data-limit={stateDisplay.limitPerPane} data-sampling={samplingActive} data-samples={stateDisplay.metrics?.samples ?? 0}>
@@ -423,7 +442,7 @@ export function ExplorerWorkspace() {
 
   return (
     <div className={`explorer-workspace ${inspectorOpen ? 'inspector-open' : ''}`}>
-      <ControlDrawer bodies={allBodies} referenceOptions={allBodies.filter((body) => body.kind !== 'spacecraft')} onResetView={resetView} />
+      <ControlDrawer bodies={allBodies} referenceOptions={allBodies.filter((body) => body.kind !== 'spacecraft')} onResetView={resetView} trajectoryAudit={primaryFrame.trajectoryAudit ?? (PRODUCT_PROFILE === 'full' ? null : undefined)} />
       <main className="explorer-stage">
         <SimulationControls />
         {simulation.showCatalogCloud && catalog.sampleError && (
@@ -451,6 +470,7 @@ export function ExplorerWorkspace() {
             bodiesById={bodiesById}
             julianDay={renderedJulianDay}
             trajectoryJulianDay={trajectoryJulianDay}
+            seekRevision={clock.seekRevision}
             onFrame={setPrimaryFrame}
             onHover={setHovered}
             catalogRecords={catalogRecords}
@@ -479,6 +499,7 @@ export function ExplorerWorkspace() {
               bodiesById={bodiesById}
               julianDay={renderedJulianDay}
               trajectoryJulianDay={trajectoryJulianDay}
+              seekRevision={clock.seekRevision}
               onFrame={setSecondaryFrame}
               onHover={setHovered}
               catalogRecords={catalogRecords}

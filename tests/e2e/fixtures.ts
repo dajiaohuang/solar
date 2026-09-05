@@ -1,4 +1,5 @@
 import { test as base, expect } from '@playwright/test'
+import { createHash } from 'node:crypto'
 import type { Page } from '@playwright/test'
 import ephemerisBodies from '../../src/data/ephemerisBodies.json' with { type: 'json' }
 import satelliteCatalog from '../../src/data/satelliteCatalog.json' with { type: 'json' }
@@ -35,7 +36,7 @@ async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: b
   await page.route('**/solar-test-api/v1/catalog/manifest', route => route.fulfill({
     json: { apiVersion: 'solar.api/v1', catalogVersion: datasetVersion, catalogManifestSha256: catalogHash },
   }))
-  await page.route('**/solar-test-api/v1/state/plan', async route => {
+  await page.route('**/solar-test-api/v1/state/plan*', async route => {
     const request = route.request()
     if (request.method() !== 'POST') return route.fulfill({ status: 405 })
     const body = JSON.parse(request.postData() ?? '{}') as { ids?: string[]; epochJd?: number; frame?: string; timeScale?: string; fieldMask?: string[]; precision?: string }
@@ -43,7 +44,9 @@ async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: b
     if (ids.length < 1 || ids.length > 32768 || new Set(ids).size !== ids.length || body.frame !== 'ECLIPJ2000' || body.timeScale !== 'TDB' || JSON.stringify(body.fieldMask) !== JSON.stringify(['position', 'velocity']) || body.precision !== 'exact') return route.fulfill({ status: 400, json: { error: 'strict state-tile fixture contract' } })
     const epochJd = body.epochJd ?? NaN
     if (!Number.isFinite(epochJd)) return route.fulfill({ status: 400, json: { error: 'invalid epoch' } })
-    const planId = `${Math.abs(Math.round(epochJd * 1000)).toString(16)}${ids.length.toString(16)}`.padEnd(64, 'b').slice(0, 64)
+    // Concurrent current/history plans can have equal row counts but different
+    // identities or sub-millisecond epochs. Bind the complete request tuple.
+    const planId = createHash('sha256').update(JSON.stringify([epochJd, ids])).digest('hex')
     plans.set(planId, { bodyIds: ids, epochJd })
     const unavailable = new Set([...unavailableIdsAt(epochJd), ...missingStateTileIds])
     const exactCount = ids.filter(id => knownBackendIds.has(id) && !unavailable.has(id)).length
@@ -52,7 +55,7 @@ async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: b
     const declaredExactCount = mismatchedStateTileCounts ? (exactCount > 0 ? exactCount - 1 : 1) : exactCount
     return route.fulfill({ json: { apiVersion: 'solar.api/v1', catalogVersion: datasetVersion, planId, requestIdsSha256: await digestStateTileRequestIds(ids), catalogManifestSha256: catalogHash, epochJd, timeScale: 'TDB', frame: 'ECLIPJ2000', precision: 'exact', stateOriginId: 'naif:0', distanceUnit: 'km', velocityUnit: 'km/s', stride: 6, fieldMask: ['position', 'velocity'], tileCount: 1, bodyCount: ids.length, exactCount: declaredExactCount, approximateCount: 0, missingCount: ids.length - declaredExactCount, tiles: [{ sequence: 0, ordinalStart: 0, ordinalCount: ids.length }] } })
   })
-  await page.route('**/solar-test-api/v1/state/tiles', async route => {
+  await page.route('**/solar-test-api/v1/state/tiles*', async route => {
     const request = route.request()
     if (request.method() !== 'POST') return route.fulfill({ status: 405 })
     const body = JSON.parse(request.postData() ?? '{}') as { planId?: string; sequence?: number }

@@ -1,11 +1,13 @@
 import type { TrajectoryFrameData } from '../types'
 import { saveTextExport } from './platform'
+import { exportBackendTrajectoryAudit } from './backendTrajectories'
 
 export async function exportAsJSON(frame: TrajectoryFrameData) {
   const exportData = {
     exportedAt: new Date().toISOString(),
     maxDistanceAU: frame.maxDistance,
     bodyCount: frame.currentPositions.length,
+    trajectoryEvidence: frame.trajectoryAudit ? exportBackendTrajectoryAudit(frame.trajectoryAudit) : undefined,
     currentPositions: Array.from({ length: frame.currentPositions.length }, (_, index) => ({
       bodyId: frame.currentPositions.bodyAt(index).id,
       bodyName: frame.currentPositions.bodyAt(index).name,
@@ -19,6 +21,7 @@ export async function exportAsJSON(frame: TrajectoryFrameData) {
       sampleCount: trajectory.coordinates.length / 3,
       points: Array.from({ length: trajectory.coordinates.length / 3 }, (_, index) => ({
         x: trajectory.coordinates[index * 3], y: trajectory.coordinates[index * 3 + 1],
+        z: trajectory.coordinates[index * 3 + 2],
       })),
     })),
   }

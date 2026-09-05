@@ -26,9 +26,13 @@ var (
 	requestSchedule        = [...]requestClass{interactiveRequest, interactiveRequest, interactiveRequest, interactiveRequest, trajectoryWork, trajectoryWork, bulkRequest}
 )
 
-// Routes, not client-supplied priorities, select the admission class. Bulk here
-// means directory scans; no background precomputation service is implied.
+// Routes select the admission class. State-tile clients may explicitly lower
+// historical samples to the trajectory queue, but cannot raise bulk priority.
+// Bulk here means directory scans; no background precomputation is implied.
 func classifyRequest(r *http.Request) requestClass {
+	if r.Method == http.MethodPost && (r.URL.Path == "/v1/state/plan" || r.URL.Path == "/v1/state/tiles") && r.URL.Query().Get("workload") == "trajectory" {
+		return trajectoryWork
+	}
 	if r.Method == http.MethodPost && r.URL.Path == "/v1/trajectory" {
 		return trajectoryWork
 	}

@@ -21,10 +21,17 @@ Solar Atlas connects a spatial workbench, orbital-element space, event analysis,
 ## Start in seconds
 
 The full-Web deck reports coverage from its verified backend frame, separately
-from local trajectory kernels. Expand its status to inspect selected/received
+from its bounded historical sampling job. Expand its status to inspect selected/received
 entries, distinct request IDs, exact/missing/pending states, reference-relative
 positions, TDB epoch and source hashes. Per-entry evidence is paginated; these
 counts are neither whole-catalog coverage nor proof of visible pixels or FPS.
+
+Full-Web historical trails also use verified Go binary state tiles, not browser
+kernels or approximate fallback. Their separate audit shows the actual completed
+window (which may lag the running clock), source hashes and missing samples,
+with a downloadable provenance record. Connecting lines are display interpolation,
+not certified continuous ephemerides. Pages retains its distinct static-preview
+resolver; heavy analyses and full native feature parity are still pending.
 
 | Goal | Fastest path |
 | --- | --- |
