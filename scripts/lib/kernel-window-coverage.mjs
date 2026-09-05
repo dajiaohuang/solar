@@ -29,10 +29,22 @@ function validate(kernels, target, startEt, endEt) {
   return ids
 }
 
-function boundaries(kernels, startEt, endEt) {
+function potentialTargets(kernels, target) {
+  const targets = new Set([target]), queue = [target]
+  for (let index = 0; index < queue.length; index++) {
+    const current = queue[index]
+    for (const kernel of kernels) for (const segment of kernel.segments) {
+      if (segment.target === current && !targets.has(segment.center)) { targets.add(segment.center); queue.push(segment.center) }
+    }
+  }
+  return targets
+}
+
+function boundaries(kernels, target, startEt, endEt) {
+  const targets = potentialTargets(kernels, target)
   const values = new Set([startEt, endEt])
   for (const kernel of kernels) for (const segment of kernel.segments) {
-    if (segment.endEt >= startEt && segment.startEt <= endEt) { values.add(Math.max(startEt, segment.startEt)); values.add(Math.min(endEt, segment.endEt)) }
+    if (targets.has(segment.target) && segment.endEt >= startEt && segment.startEt <= endEt) { values.add(Math.max(startEt, segment.startEt)); values.add(Math.min(endEt, segment.endEt)) }
   }
   if (values.size > MAX_BOUNDARIES) fail('too many boundaries')
   return [...values].sort((a, b) => a - b)
@@ -76,7 +88,7 @@ function cell(kernels, target, et, endEt = et) { return resolveTarget(kernels, t
 /** Descriptor/dependency coverage only; never emits an exact-window claim. */
 export function analyzeKernelWindow({ kernels, target, startEt, endEt }) {
   validate(kernels, target, startEt, endEt)
-  const cuts = boundaries(kernels, startEt, endEt)
+  const cuts = boundaries(kernels, target, startEt, endEt)
   const points = cuts.map(et => ({ et, ...cell(kernels, target, et) }))
   const intervals = []
   for (let i = 0; i + 1 < cuts.length; i++) {

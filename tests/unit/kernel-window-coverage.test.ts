@@ -18,6 +18,15 @@ describe('kernel window descriptor coverage', () => {
     expect(result.descriptorCoverage.points.find(x => x.et === 5)?.state).toBe('covered')
   })
 
+  it('ignores unrelated segment boundaries while including possible center switches', () => {
+    const base = [{ id: 'k', segments: [seg(5, 1, 0, 5), seg(5, 2, 5, 10), seg(1, 0), seg(2, 0)] }]
+    const noisy = [...base, { id: 'unrelated', segments: [seg(900, 0, 1, 2), seg(900, 0, 3, 4), seg(901, 0, 6, 7)] }]
+    const clean = run(base), expanded = run(noisy)
+    expect(expanded.descriptorCoverage.points.map(x => x.et)).toEqual(clean.descriptorCoverage.points.map(x => x.et))
+    expect(clean.descriptorCoverage.points.map(x => x.et)).toEqual([0, 5, 10])
+    expect(clean.descriptorCoverage.intervals.every(x => x.state === 'covered')).toBe(true)
+  })
+
   it('reports an internal gap instead of using min/max', () => {
     const result = run([{ id: 'k', segments: [seg(5, 0, 0, 3), seg(5, 0, 7, 10)] }])
     expect(result.gaps.some(x => x.kind === 'interval' && x.startEt === 3 && x.endEt === 7)).toBe(true)
@@ -55,6 +64,6 @@ describe('kernel window descriptor coverage', () => {
   it('rejects nonfinite and reversed numeric windows', () => {
     expect(() => run([{ id: 'k', segments: [] }], 5, Number.NaN, 1)).toThrow('finite ordered window')
     expect(() => run([{ id: 'k', segments: [] }], 5, 2, 1)).toThrow('finite ordered window')
-    expect(() => run([{ id: 'k', segments: [seg(5, 0, 4, Number.POSITIVE_INFINITY)] })).toThrow('invalid segment')
+    expect(() => run([{ id: 'k', segments: [seg(5, 0, 4, Number.POSITIVE_INFINITY)] }])).toThrow('invalid segment')
   })
 })
