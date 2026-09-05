@@ -138,6 +138,33 @@ scientific manifest/golden identity, HTTPS traffic and cleanup errors; screensho
 and logs are retained without private keys. Local success does not establish
 hosted CI success for later commits; require the exact Android runtime job.
 
+### Android all-source directory
+
+Android has a separate, initially collapsed source browser backed by the full
+backend's `/v1/identities`. Each explicit request reads at most 50 records and
+256 KiB of page JSON; source totals are not deduplicated bodies or exact-state
+counts. Original IDs, source rows and assertions are shown without inferring
+NAIF mappings. Cursors remain bound to the backend, query and manifest hashes.
+
+Using a page replaces the custom ID selection but does not load or render it.
+Check the reference and TDB epoch, then load; the reference is included when
+absent from the selection. The next online manifest must still match the
+selected page before any state plan is requested. Input edits invalidate old
+observations; query/backend edits, collapse, timeout and backgrounding cancel
+directory work and clear its displayed results. This does not provide offline
+catalog recovery or establish that every source record has precise states.
+The native harness separates `/identity-fixture/` synthetic pagination and
+stale-selection cases from real SPK state verification. iOS source browsing
+and full native/Web product parity remain incomplete.
+
+The 2026-09-06 local API 36 emulator run passed the two synthetic 50-row pages,
+explicit page selection and rejection of a changed inventory before any state
+plan. Its five directory requests are isolated from the real-SPK state/cache
+smoke. All 24 recorded implementation/test source hashes match the tested
+files; the source-panel screenshot was inspected. This is not yet an end-to-end
+test selecting real full-inventory records into the native renderer, a Chinese
+runtime UI check, or a physical-device performance result.
+
 ### On-demand source coverage audit
 
 Both native sources include a collapsed source-coverage disclosure, separate

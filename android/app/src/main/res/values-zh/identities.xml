@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="identity_title">全来源目录</string>
+    <string name="identity_close">收起来源目录</string>
+    <string name="identity_intro">每页浏览 50 条来源记录。记录可能是别名，不等于独立天体；来源声明不证明精确状态。选择本页将替换自定义 ID，加载时会补入参考天体。浏览不会计算或绘制状态。</string>
+    <string name="identity_query">来源 ID、编号或名称（留空顺序浏览）</string>
+    <string name="identity_load">从第一页浏览</string>
+    <string name="identity_next">下一页来源记录</string>
+    <string name="identity_select">将本页用于综合看板</string>
+    <string name="identity_selected">来源 ID 已选入。请检查上方参考天体和 TDB 时刻，再点击加载观测。尚未计算新的状态。</string>
+    <string name="identity_idle">尚未加载来源记录。</string>
+    <string name="identity_loading">正在加载一页来源记录…</string>
+    <string name="identity_failed">无法验证来源记录，结果已清空。请检查 HTTPS 后端并从第一页重新浏览。</string>
+    <string name="identity_counts">本页来源记录：%1$d\n来源记录总数：%2$d（不等于独立天体数或精确状态数）</string>
+    <string name="identity_hash">目录清单 SHA-256：%1$s</string>
+    <string name="identity_inputs_changed">观测参数已更改，请重新加载并验证状态。</string>
+</resources>

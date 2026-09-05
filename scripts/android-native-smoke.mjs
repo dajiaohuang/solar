@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { certificates, command, verifyTraffic } from './ios-native-smoke.mjs'
 import { stageBackendProfile } from './stage-backend-profile.mjs'
 import { createNativeCoverageResponder, verifyNativeCoverageTraffic } from './native-coverage-fixture.mjs'
+import { createNativeIdentityResponder, verifyNativeIdentityTraffic } from './native-identity-fixture.mjs'
 
 const appId = 'io.github.dajiaohuang.solaratlas'
 const windows = process.platform === 'win32'
@@ -85,7 +86,7 @@ export async function androidNativeSmoke() {
   const assertOwned = async () => validateEmulatorIdentity(serial, await deviceCommand(['emu', 'avd', 'name']), name)
   try {
     report.source = { commit: await command('git', ['rev-parse', 'HEAD']), files: {} }
-    for (const file of ['scripts/android-native-smoke.mjs', 'scripts/ios-native-smoke.mjs', 'scripts/native-coverage-fixture.mjs',
+    for (const file of ['scripts/android-native-smoke.mjs', 'scripts/ios-native-smoke.mjs', 'scripts/native-coverage-fixture.mjs', 'scripts/native-identity-fixture.mjs',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/MainActivity.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/NativeObservationDeck.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/NativeRenderBudget.java',
@@ -96,6 +97,10 @@ export async function androidNativeSmoke() {
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/CoverageReport.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/CoverageService.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/CoveragePanel.java',
+      'android/app/src/main/java/io/github/dajiaohuang/solaratlas/SourceIdentityPage.java',
+      'android/app/src/main/java/io/github/dajiaohuang/solaratlas/SourceIdentityService.java',
+      'android/app/src/main/java/io/github/dajiaohuang/solaratlas/SourceIdentityPanel.java',
+      'android/app/src/main/res/values/identities.xml', 'android/app/src/main/res/values-zh/identities.xml',
       'android/app/src/main/res/values/coverage.xml', 'android/app/src/main/res/values-zh/coverage.xml',
       'android/app/src/main/res/values/render-budget.xml', 'android/app/src/main/res/values-zh/render-budget.xml',
       'android/app/src/androidTest/java/io/github/dajiaohuang/solaratlas/ObservationUITest.java']) {
@@ -150,8 +155,9 @@ export async function androidNativeSmoke() {
     }
     if (!ready) throw new Error('Owned Go backend did not serve the staged manifest')
     const coverageReply = createNativeCoverageResponder()
+    const identityReply = createNativeIdentityResponder()
     proxy = https.createServer({ key: await readFile(join(temporary, 'server.key')), cert: await readFile(join(temporary, 'server.crt')) }, (request, response) => {
-      const fixtureReply = coverageReply(request.method, request.url)
+      const fixtureReply = coverageReply(request.method, request.url) ?? identityReply(request.method, request.url)
       if (fixtureReply) {
         const body = Buffer.from(JSON.stringify(fixtureReply.body))
         traffic.push({ method: request.method, path: request.url, status: fixtureReply.status, bytes: body.length })
@@ -174,7 +180,8 @@ export async function androidNativeSmoke() {
       '-e', 'class', `${appId}.ObservationUITest`, '-e', 'solarBackend', 'https://127.0.0.1:18791',
       '-e', 'solarCaBase64', (await readFile(join(temporary, 'root.crt'))).toString('base64'), `${appId}.test/androidx.test.runner.AndroidJUnitRunner`],
     { env, log: join(artifact, 'instrumentation.log'), timeout: 240_000 })
-    verifyInstrumentation(output); verifyTraffic(traffic.filter(row => !row.path.startsWith('/coverage-fixture/')))
+    verifyInstrumentation(output); verifyTraffic(traffic.filter(row => !row.path.startsWith('/coverage-fixture/') && !row.path.startsWith('/identity-fixture/')))
+    report.identityUi = verifyNativeIdentityTraffic(traffic)
     report.coverageUi = verifyNativeCoverageTraffic(traffic)
     report.status = 'passed'
   } catch (error) {

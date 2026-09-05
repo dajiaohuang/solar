@@ -34,7 +34,8 @@ public final class CoverageService implements Closeable {
         return report;
     }
 
-    private byte[] receive(String path, int limit) throws IOException {
+    // Shared bounded HTTPS reader for the separate on-demand identity browser.
+    byte[] receive(String path, int limit) throws IOException {
         checkCancelled();
         HttpURLConnection connection = (HttpURLConnection) new URL(base + "/" + path).openConnection();
         synchronized (this) { if (cancelled) { connection.disconnect(); throw new IOException("Coverage cancelled"); } active = connection; }

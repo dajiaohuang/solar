@@ -58,10 +58,20 @@ public final class StateTileService {
     }
 
     public Frame load(List<String> inputIds, double epochJd) throws IOException {
+        return load(inputIds, epochJd, null);
+    }
+
+    /** A directory selection must still match the current server inventory. */
+    public Frame load(List<String> inputIds, double epochJd, SourceIdentityPage selectedPage) throws IOException {
         checkCancelled();
         if (!Double.isFinite(epochJd) || inputIds == null || inputIds.isEmpty() || inputIds.size() > MAX_AGGREGATE_ROWS) throw new StateTileDecoder.ProtocolException("finite TDB epoch and bounded IDs are required");
         List<String> ids = normalizeIds(inputIds);
-        Map<String, Object> manifest = object(receive("v1/catalog/manifest", null, false));
+        byte[] manifestBytes = receive("v1/catalog/manifest", null, false);
+        if (selectedPage != null) {
+            require(baseUrl.equals(selectedPage.base), "source selection belongs to another backend");
+            selectedPage.requireManifest(manifestBytes);
+        }
+        Map<String, Object> manifest = object(manifestBytes);
         String catalogHash = hashField(manifest, "catalogManifestSha256");
         String inventoryHash = optionalHash(manifest, "inventoryManifestSha256");
         require(string(manifest, "apiVersion").equals(API_VERSION), "manifest API version mismatch");

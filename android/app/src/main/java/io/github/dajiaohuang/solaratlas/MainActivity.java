@@ -41,6 +41,8 @@ public final class MainActivity extends Activity {
     private EditText backend, epoch, reference, bodyIds;
     private NativeObservationDeck viewport;
     private CoveragePanel coveragePanel;
+    private SourceIdentityPanel identityPanel;
+    private SourceIdentityPage selectedSourcePage;
     private StateTileCache tileCache;
     private Thread loadThread;
     private Thread renderThread;
@@ -108,6 +110,31 @@ public final class MainActivity extends Activity {
         pager.addView(evidencePrevious, new LinearLayout.LayoutParams(0, -2, 1)); pager.addView(evidencePage, new LinearLayout.LayoutParams(0, -2, 1)); pager.addView(evidenceNext, new LinearLayout.LayoutParams(0, -2, 1)); content.addView(pager);
         updateEvidencePageControls(0, 0);
         coveragePanel = new CoveragePanel(this, backend); content.addView(coveragePanel);
+        identityPanel = new SourceIdentityPanel(this, backend, page -> {
+            List<String> ids = new ArrayList<>();
+            for (SourceIdentityPage.Row row : page.rows) ids.add(row.id);
+            bodyIds.setText(String.join(",", ids));
+            selectedSourcePage = page;
+            status.setText(R.string.identity_selected);
+        });
+        content.addView(identityPanel);
+        android.text.TextWatcher invalidate = new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                selectedSourcePage = null; cancelLoad(); showEvidence(null, ""); status.setText(R.string.identity_inputs_changed);
+            }
+            @Override public void afterTextChanged(android.text.Editable text) { }
+        };
+        // No stale frame or pending result may survive changed observation inputs.
+        backend.addTextChangedListener(invalidate); bodyIds.addTextChangedListener(invalidate);
+        android.text.TextWatcher changeEpochOrReference = new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
+                cancelLoad(); showEvidence(null, ""); status.setText(R.string.identity_inputs_changed);
+            }
+            @Override public void afterTextChanged(android.text.Editable text) { }
+        };
+        epoch.addTextChangedListener(changeEpochOrReference); reference.addTextChangedListener(changeEpochOrReference);
         ScrollView scroll = new ScrollView(this);
         scroll.addView(content);
         FrameLayout safeContent = new FrameLayout(this);
@@ -138,6 +165,7 @@ public final class MainActivity extends Activity {
         final String address = backend.getText().toString().trim();
         final String epochText = epoch.getText().toString().trim();
         final String referenceId = reference.getText().toString().trim();
+        final SourceIdentityPage sourcePage = selectedSourcePage;
         final List<String> ids = parseIds(bodyIds.getText().toString(), referenceId);
         final double epochJd;
         try { epochJd = Double.parseDouble(epochText); } catch (NumberFormatException error) { status.setText("Enter a finite TDB Julian date."); return; }
@@ -146,7 +174,7 @@ public final class MainActivity extends Activity {
         loadThread = new Thread(() -> {
             try {
                 if (tileCache == null) throw new StateTileDecoder.ProtocolException("tile cache is unavailable");
-                StateTileService.Frame loaded = new StateTileService(address, tileCache).load(ids, epochJd);
+                StateTileService.Frame loaded = new StateTileService(address, tileCache).load(ids, epochJd, sourcePage);
                 if (Thread.currentThread().isInterrupted()) throw new StateTileDecoder.ProtocolException("state load cancelled");
                 runOnUiThread(() -> publish(requestGeneration, loaded, referenceId, epochText));
             } catch (Exception error) {
@@ -274,6 +302,7 @@ public final class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 29 && thermalMonitor != null) { thermalMonitor.close(); thermalMonitor = null; }
         budget3d.resetEvidence(); budget2d.resetEvidence();
         coveragePanel.cancelAndClear(R.string.coverage_idle);
+        identityPanel.clear();
         cancelLoad(); showEvidence(null, "");
         status.setText("Observation released while inactive. Load again to resume verified states.");
         viewport.onPause(); super.onPause();

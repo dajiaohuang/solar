@@ -159,6 +159,25 @@ public final class ObservationUITest {
             waitForText(containsString("Coverage could not be verified."));
             onView(withTagValue(is((Object) "coverage-toggle"))).perform(scrollTo(), click());
             onView(withTagValue(is((Object) "coverage-summary"))).check(matches(withEffectiveVisibility(GONE)));
+            // Synthetic directory rows are never used as a science oracle.
+            // The state request must reject changed inventory before planning.
+            fill(BACKEND_HINT, backend + "/identity-fixture");
+            onView(withTagValue(is((Object) "identity-toggle"))).perform(scrollTo(), click());
+            onView(withTagValue(is((Object) "identity-summary"))).check(matches(withText("No source page loaded.")));
+            onView(withTagValue(is((Object) "identity-load"))).perform(scrollTo(), click());
+            waitForText(containsString("Records on this page: 50"));
+            onView(withTagValue(is((Object) "identity-records"))).check(matches(withText(containsString("unknown:source:0"))));
+            panelScreenshot(scenario, "identity-summary", "source-directory-synthetic.png");
+            onView(withTagValue(is((Object) "identity-next"))).perform(scrollTo(), click());
+            waitForText(containsString("Records on this page: 50"));
+            onView(withTagValue(is((Object) "identity-records"))).check(matches(withText(containsString("unknown:source:50"))));
+            onView(withTagValue(is((Object) "identity-next"))).check(matches(withEffectiveVisibility(GONE)));
+            onView(withTagValue(is((Object) "identity-select"))).perform(scrollTo(), click());
+            onView(withHint(IDS_HINT)).check(matches(withText(containsString("unknown:source:50"))));
+            onView(withText("Load observation")).perform(scrollTo(), click());
+            waitForText(containsString("Inventory changed; restart browsing"));
+            onView(withTagValue(is((Object) "identity-toggle"))).perform(scrollTo(), click());
+            onView(withTagValue(is((Object) "identity-records"))).check(matches(withText("")));
             passed = true;
         } finally {
             try {
@@ -302,13 +321,17 @@ public final class ObservationUITest {
     }
 
     private static void coverageScreenshot(ActivityScenario<MainActivity> scenario, String name) throws Exception {
+        panelScreenshot(scenario, "coverage-summary", name);
+    }
+
+    private static void panelScreenshot(ActivityScenario<MainActivity> scenario, String tag, String name) throws Exception {
         scenario.onActivity(activity -> {
             View focus = activity.getCurrentFocus();
             if (focus != null) focus.clearFocus();
             View root = activity.findViewById(android.R.id.content);
             root.setFocusableInTouchMode(true); root.requestFocus();
         });
-        onView(withTagValue(is((Object) "coverage-summary"))).perform(scrollTo()).check(matches(isCompletelyDisplayed()));
+        onView(withTagValue(is((Object) tag))).perform(scrollTo()).check(matches(isCompletelyDisplayed()));
         CountDownLatch presented = new CountDownLatch(1);
         scenario.onActivity(activity -> activity.getWindow().getDecorView().postOnAnimation(() ->
                 activity.getWindow().getDecorView().postOnAnimation(presented::countDown)));
