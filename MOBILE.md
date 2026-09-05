@@ -48,7 +48,7 @@ On Windows use `android/gradlew.bat -p android` with the same tasks. iOS validat
 
 ```text
 xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
-swiftc ios/App/App/StateTileDecoder.swift ios/App/App/StateTileCache.swift ios/App/App/NativeStateProjection.swift ios/App/App/NativeCoverageReport.swift ios/ProtocolTests/ProtocolTests.swift -o <temporary-output>
+swiftc ios/App/App/StateTileDecoder.swift ios/App/App/StateTileCache.swift ios/App/App/NativeStateProjection.swift ios/App/App/NativeCoverageReport.swift ios/App/App/NativeSourceIdentityPage.swift ios/ProtocolTests/ProtocolTests.swift -o <temporary-output>
 <temporary-output>
 ```
 
@@ -210,8 +210,13 @@ bounds, duplicate IDs and identity drift. The macOS native smoke includes a
 separate synthetic two-page test: preserve all 50 original selected IDs and
 reject a changed inventory before any state plan. Its five HTTPS GETs are
 checked independently of the existing real-SPK state/cache tests. These new
-Swift protocol/build/UI checks require hosted macOS verification; Windows
-source/packaging checks alone do not prove they passed. Real-inventory iOS
+Swift protocol and simulator-build checks passed in
+[CI 33985751898](https://github.com/dajiaohuang/solar/actions/runs/33985751898)
+at `8e911ca`, but the new UI test failed to reveal the selected-ID editor.
+Advanced now uses independently accessible List rows and an explicit expanded
+state; the regression also checks that closing/reopening preserves all IDs.
+That repair still requires hosted macOS runtime verification; Windows
+source/packaging checks alone do not prove it passed. Real-inventory iOS
 selection, Chinese runtime UI, device FPS and full product parity are not yet
 verified. No source directory or SPK is bundled into the app.
 

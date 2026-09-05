@@ -45,7 +45,7 @@ Windows 使用 `android/gradlew.bat -p android` 执行相同任务。iOS 需要 
 
 ```text
 xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
-swiftc ios/App/App/StateTileDecoder.swift ios/App/App/StateTileCache.swift ios/App/App/NativeStateProjection.swift ios/App/App/NativeCoverageReport.swift ios/ProtocolTests/ProtocolTests.swift -o <temporary-output>
+swiftc ios/App/App/StateTileDecoder.swift ios/App/App/StateTileCache.swift ios/App/App/NativeStateProjection.swift ios/App/App/NativeCoverageReport.swift ios/App/App/NativeSourceIdentityPage.swift ios/ProtocolTests/ProtocolTests.swift -o <temporary-output>
 <temporary-output>
 ```
 
@@ -170,8 +170,12 @@ iOS 新增独立、默认收起的原生来源列表；展开不会请求数据�
 独立 Swift 协议检查覆盖错误字段、语义标志、大小、整数边界、重复 ID 和身份变化。
 macOS 原生测试新增隔离的两页合成用例：保留全部 50 个原始选中 ID，清单改变后在
 任何状态计划前拒绝请求；5 次 HTTPS GET 与原有真实 SPK 状态及缓存测试独立核对。
-新增 Swift 协议、构建与界面测试需要托管 macOS 验证；Windows 源码/打包检查不能
-证明这些测试通过。真实来源目录的 iOS 选入、中文运行时界面、设备帧率及完整产品
+新增 Swift 协议及模拟器构建已在 `8e911ca` 的
+[CI 33985751898](https://github.com/dajiaohuang/solar/actions/runs/33985751898)
+通过，但新增界面测试未能找到已选 ID 编辑框。Advanced 现改为独立可访问的列表行，
+并显式保存展开状态；回归测试还核对收起/重新展开后全部 ID 保持不变。
+此修复仍需托管 macOS 运行时验证；Windows 源码/打包检查不能证明其通过。
+真实来源目录的 iOS 选入、中文运行时界面、设备帧率及完整产品
 一致性仍未验证。App 不打包来源目录或 SPK。
 
 ### 按需来源覆盖审计

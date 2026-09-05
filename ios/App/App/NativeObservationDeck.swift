@@ -151,6 +151,7 @@ struct ObservationDeckView: View {
     private var preset: NativePreset { NativePreset.all.first { $0.id == selected } ?? NativePreset.all[0] }
     @State private var coverageExpanded = false
     @State private var coverageDetailsExpanded = false
+    @State private var advancedExpanded = false
 
     private func load() {
         let supplied = customIDs.split { $0.isWhitespace || $0 == "," }.map(String.init)
@@ -285,24 +286,36 @@ struct ObservationDeckView: View {
                         }
                     }
                 }
-                DisclosureGroup("Advanced") {
-                    TextField("Full-version backend HTTPS address", text: $address)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
-                    TextField("Julian date (TDB)", text: editedEpoch)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.numbersAndPunctuation)
-                    TextField("Reference body ID", text: editedReference)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    TextField("Body IDs, separated by commas", text: editedIDs, axis: .vertical)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled().lineLimit(2...5)
-                        .accessibilityIdentifier("observation.ids")
-                    Text("Enter audited catalog or source IDs. Requests are partitioned without dropping IDs. The reference body must have a verified state at the same epoch.")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Button("Open tutorial") { tutorial = true }
-                    if let frame = model.frame {
-                        Text("Catalog SHA-256: \(frame.catalogHash)").font(.caption).textSelection(.enabled)
+                Section {
+                    // Each editor is its own List row. A container identifier on
+                    // DisclosureGroup can replace its children's identifiers.
+                    Button { advancedExpanded.toggle() } label: {
+                        HStack {
+                            Text("Advanced")
+                            Spacer()
+                            Image(systemName: advancedExpanded ? "chevron.down" : "chevron.right").accessibilityHidden(true)
+                        }
+                    }
+                    .accessibilityIdentifier("observation.advanced")
+                    .accessibilityValue(advancedExpanded ? CoverageCopy.expanded : CoverageCopy.collapsed)
+                    if advancedExpanded {
+                        TextField("Full-version backend HTTPS address", text: $address)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                        TextField("Julian date (TDB)", text: editedEpoch)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.numbersAndPunctuation)
+                        TextField("Reference body ID", text: editedReference)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        TextField("Body IDs, separated by commas", text: editedIDs, axis: .vertical)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled().lineLimit(2...5)
+                            .accessibilityIdentifier("observation.ids")
+                        Text("Enter audited catalog or source IDs. Requests are partitioned without dropping IDs. The reference body must have a verified state at the same epoch.")
+                            .font(.caption).foregroundStyle(.secondary)
+                        Button("Open tutorial") { tutorial = true }
+                        if let frame = model.frame {
+                            Text("Catalog SHA-256: \(frame.catalogHash)").font(.caption).textSelection(.enabled)
+                        }
                     }
                 }
-                .accessibilityIdentifier("observation.advanced")
                 if let frame = model.frame {
                     DisclosureGroup("State evidence and data gaps (\(frame.metadata.count))") {
                         ForEach(frame.metadata.indices, id: \.self) { index in

@@ -150,10 +150,17 @@ final class ObservationUITests: XCTestCase {
         reveal(app, disclosure)
         XCTAssertEqual(disclosure.value as? String, "Collapsed")
         let advanced = app.buttons["observation.advanced"]
-        reveal(app, advanced); advanced.tap()
+        setExpanded(app, advanced, true)
         let ids = app.descendants(matching: .any).matching(identifier: "observation.ids").firstMatch
         reveal(app, ids)
         XCTAssertEqual(ids.value as? String, (50..<100).map { "unknown:source:\($0)" }.joined(separator: ", "))
+        screenshot(app, "source-directory-selected-original-ids")
+        setExpanded(app, advanced, false)
+        XCTAssertFalse(ids.exists)
+        setExpanded(app, advanced, true)
+        reveal(app, ids)
+        XCTAssertEqual(ids.value as? String, (50..<100).map { "unknown:source:\($0)" }.joined(separator: ", "))
+        setExpanded(app, advanced, false)
         reveal(app, app.buttons["observation.load"])
         XCTAssertFalse(app.staticTexts["observation.displayed"].exists)
         app.buttons["observation.load"].tap()
