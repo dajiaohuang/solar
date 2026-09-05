@@ -107,6 +107,8 @@ private enum CoverageCopy {
     static var reload: String { zh ? "重新加载覆盖" : "Reload coverage" }
     static var cancel: String { zh ? "取消" : "Cancel" }
     static var reasons: String { zh ? "原因与哈希" : "Reasons and hashes" }
+    static var expanded: String { zh ? "已展开" : "Expanded" }
+    static var collapsed: String { zh ? "已收起" : "Collapsed" }
     static var counts: (UInt64, UInt64, UInt64) -> String { { a, b, c in zh ? "来源记录：\(a) · 已映射：\(b) · 未解析：\(c)" : "Source records: \(a) · mapped: \(b) · unresolved: \(c)" } }
     static var targets: (UInt64, UInt64) -> String { { a, b in zh ? "显式目标：\(a) · 审计时可用：\(b)" : "Explicit targets: \(a) · available at audit: \(b)" } }
     static var dependency: (UInt64, UInt64) -> String { { a, b in zh ? "依赖窗口：\(a) 个完整 · \(b) 个有缺口" : "Dependency window: \(a) covered · \(b) gaps" } }
@@ -146,6 +148,7 @@ struct ObservationDeckView: View {
 
     private var preset: NativePreset { NativePreset.all.first { $0.id == selected } ?? NativePreset.all[0] }
     @State private var coverageExpanded = false
+    @State private var coverageDetailsExpanded = false
 
     private func load() {
         let supplied = customIDs.split { $0.isWhitespace || $0 == "," }.map(String.init)
@@ -207,9 +210,27 @@ struct ObservationDeckView: View {
                     }
                 }
                 Section(CoverageCopy.title) {
-                    DisclosureGroup(isExpanded: $coverageExpanded) {
+                    // Keep every audit item a separate List row. A single nested
+                    // disclosure row can clip its controls and propagate its
+                    // accessibility identifier to the contained load button.
+                    Button {
+                        coverageExpanded.toggle()
+                        coverageDetailsExpanded = false
+                    } label: {
+                        HStack {
+                            Text(CoverageCopy.audit)
+                            Spacer()
+                            Image(systemName: coverageExpanded ? "chevron.down" : "chevron.right").accessibilityHidden(true)
+                        }
+                    }
+                    .accessibilityIdentifier("coverage.disclosure")
+                    .accessibilityValue(coverageExpanded ? CoverageCopy.expanded : CoverageCopy.collapsed)
+                    if coverageExpanded {
                         Text(model.coverageMessage).font(.callout).foregroundStyle(.secondary).accessibilityIdentifier("coverage.status")
-                        Button { if model.coverageLoading { model.clearCoverage() } else { model.loadCoverage(address: address) } } label: {
+                        Button {
+                            coverageDetailsExpanded = false
+                            if model.coverageLoading { model.clearCoverage() } else { model.loadCoverage(address: address) }
+                        } label: {
                             Label(model.coverageLoading ? CoverageCopy.cancel : (model.coverage == nil ? CoverageCopy.load : CoverageCopy.reload), systemImage: model.coverageLoading ? "xmark.circle" : "arrow.clockwise")
                         }.accessibilityIdentifier("coverage.load")
                         if let report = model.coverage {
@@ -218,7 +239,16 @@ struct ObservationDeckView: View {
                             Text(CoverageCopy.dependency(report.windowCounts.dependencyCoveredTargets, report.windowCounts.targetsWithDependencyGaps)).accessibilityIdentifier("coverage.windowCounts")
                             Text(CoverageCopy.auditWindow(report.auditEt, report.requestedWindow.startEt, report.requestedWindow.endEt, report.timeScale) + " · ECLIPJ2000").accessibilityIdentifier("coverage.audit")
                             Text(CoverageCopy.caveat).accessibilityIdentifier("coverage.caveat")
-                            DisclosureGroup(CoverageCopy.reasons) {
+                            Button { coverageDetailsExpanded.toggle() } label: {
+                                HStack {
+                                    Text(CoverageCopy.reasons)
+                                    Spacer()
+                                    Image(systemName: coverageDetailsExpanded ? "chevron.down" : "chevron.right").accessibilityHidden(true)
+                                }
+                            }
+                            .accessibilityIdentifier("coverage.details")
+                            .accessibilityValue(coverageDetailsExpanded ? CoverageCopy.expanded : CoverageCopy.collapsed)
+                            if coverageDetailsExpanded {
                                 ForEach(report.unresolvedReasons.keys.sorted(), id: \.self) { reason in Text("\(reason): \(report.unresolvedReasons[reason] ?? 0)") }
                                 Text(CoverageCopy.version(report.catalogVersion)).textSelection(.enabled)
                                 Text(CoverageCopy.hash(CoverageCopy.isChinese ? "报告 SHA-256" : "Report SHA-256", report.reportSha256)).textSelection(.enabled)
@@ -227,9 +257,9 @@ struct ObservationDeckView: View {
                                 Text(CoverageCopy.hash(CoverageCopy.isChinese ? "来源快照 SHA-256" : "Source snapshot SHA-256", report.sourceSnapshotSha256)).textSelection(.enabled)
                                 Text(CoverageCopy.hash(CoverageCopy.isChinese ? "身份映射 SHA-256" : "Identity mapping SHA-256", report.identityMappingSha256)).textSelection(.enabled)
                                 Text(CoverageCopy.hash(CoverageCopy.isChinese ? "卫星目录 SHA-256" : "Satellite catalog SHA-256", report.satelliteCatalogSha256)).textSelection(.enabled)
-                            }.accessibilityIdentifier("coverage.details")
+                            }
                         }
-                    } label: { Text(CoverageCopy.audit) }.accessibilityIdentifier("coverage.disclosure")
+                    }
                 }
                 DisclosureGroup("Advanced") {
                     TextField("Full-version backend HTTPS address", text: $address)

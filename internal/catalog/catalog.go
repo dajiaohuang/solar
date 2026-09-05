@@ -348,6 +348,9 @@ func (b *kernelBinding) kernelFor(ctx context.Context, pageCacheBytes int64) (*s
 		ctx = context.Background()
 	}
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		b.mu.Lock()
 		if b.closed {
 			b.mu.Unlock()
@@ -392,6 +395,9 @@ func (b *kernelBinding) kernelFor(ctx context.Context, pageCacheBytes int64) (*s
 		b.integrityReads++
 		b.integrityBytes += integrityBytes
 		closed := b.closed
+		if cancelled := ctx.Err(); cancelled != nil {
+			err = cancelled
+		}
 		if err == nil && closed {
 			err = errCatalogClosed
 		}
@@ -401,7 +407,7 @@ func (b *kernelBinding) kernelFor(ctx context.Context, pageCacheBytes int64) (*s
 		} else if !closed && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 			b.terminalErr = err
 		}
-		if closed && kernel != nil {
+		if err != nil && kernel != nil {
 			// Close while holding the binding lock and before waking Close's
 			// waiter. Otherwise Catalog.Close could observe ready closed and
 			// return while this newly opened resource was still live.
@@ -741,6 +747,9 @@ func (c *Catalog) OperationalStates(ids []string, jd float64) (map[string]State,
 }
 
 func (c *Catalog) OperationalStatesContext(ctx context.Context, ids []string, jd float64) (map[string]State, map[string]bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 	states := make(map[string]State, len(ids))
 	found := make(map[string]bool, len(ids))
 	if !validFloat(jd) || len(c.byTarget) == 0 {
@@ -806,7 +815,7 @@ func (c *Catalog) operationalRoot(ctx context.Context, target int, et float64) (
 			// if none exists, the caller will report a missing state.
 			continue
 		}
-		if _, found, err := kernel.Evaluate(target, et); err != nil {
+		if _, found, err := kernel.EvaluateContext(ctx, target, et); err != nil {
 			return nil, err
 		} else if found {
 			return candidate, nil
@@ -828,6 +837,9 @@ func operationalPool(root *kernelBinding) (map[string]bool, string) {
 }
 
 func (c *Catalog) resolveOperationalCached(ctx context.Context, target int, et float64, allowed map[string]bool, pool string, cache map[operationalCacheKey]operationalCacheEntry, visiting map[int]bool) (spk.State, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return spk.State{}, false, err
+	}
 	key := operationalCacheKey{target: target, pool: pool}
 	if cache != nil {
 		if entry, ok := cache[key]; ok {
@@ -869,7 +881,7 @@ func (c *Catalog) resolveOperationalCached(ctx context.Context, target int, et f
 			}
 			return spk.State{}, false, err
 		}
-		st, found, err := kernel.Evaluate(target, et)
+		st, found, err := kernel.EvaluateContext(ctx, target, et)
 		if err != nil {
 			if cache != nil {
 				cache[key] = operationalCacheEntry{err: err}

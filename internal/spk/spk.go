@@ -5,6 +5,7 @@ package spk
 
 import (
 	"container/list"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -176,6 +177,9 @@ type Kernel struct {
 	size     int64
 	little   bool
 	Segments []Segment
+	// Set only on an evaluation-local shallow copy. Shared source/cache and
+	// immutable descriptors never retain a request context.
+	ctx context.Context
 }
 
 type pathReaderAt string
@@ -307,11 +311,43 @@ func (k *Kernel) Close() error {
 }
 
 func (k *Kernel) Evaluate(target int, et float64) (State, bool, error) {
+	return k.evaluate(target, et)
+}
+
+// EvaluateContext cooperatively cancels descriptor scans, coefficient reads
+// and evaluation loops. A file ReadAt already in the OS must still return;
+// cancellation does not close a source shared by other requests.
+func (k *Kernel) EvaluateContext(ctx context.Context, target int, et float64) (State, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return State{}, false, err
+	}
+	evaluation := *k
+	evaluation.ctx = ctx
+	state, found, err := evaluation.evaluate(target, et)
+	if cancelled := ctx.Err(); cancelled != nil {
+		return State{}, false, cancelled
+	}
+	return state, found, err
+}
+
+func (k *Kernel) contextError() error {
+	if k.ctx != nil {
+		return k.ctx.Err()
+	}
+	return nil
+}
+
+func (k *Kernel) evaluate(target int, et float64) (State, bool, error) {
 	if !finite(et) {
 		return State{}, false, fmt.Errorf("invalid SPK: nonfinite epoch")
 	}
 	var unsupported *Segment
 	for n := len(k.Segments) - 1; n >= 0; n-- {
+		if n&63 == 0 {
+			if err := k.contextError(); err != nil {
+				return State{}, false, err
+			}
+		}
 		s := &k.Segments[n]
 		if s.Target != target || et < s.StartET || et > s.EndET {
 			continue
@@ -349,6 +385,9 @@ func (k *Kernel) eval21Correct(s Segment, et float64) ([6]float64, error) {
 	m := *s.type21
 	lo, hi := 0, m.Records
 	for lo < hi {
+		if err := k.contextError(); err != nil {
+			return out, err
+		}
 		mid := (lo + hi) / 2
 		if k.addr(m.Epochs+mid) < et {
 			lo = mid + 1
@@ -378,6 +417,9 @@ func (k *Kernel) eval21Correct(s Segment, et float64) ([6]float64, error) {
 	}
 	ks, jx, ks1 := max-1, 0, max-2
 	for ks >= 2 {
+		if err := k.contextError(); err != nil {
+			return out, err
+		}
 		jx++
 		for j := 1; j <= jx; j++ {
 			w[j+ks-1] = fc[j]*w[j+ks1-1] - wc[j-1]*w[j+ks-1]
@@ -501,12 +543,19 @@ func (k *Kernel) evalCheb(s Segment, et float64) ([6]float64, error) {
 	}
 	for axis := 0; axis < 3; axis++ {
 		c := s.Coefficients
-		v := k.cheb(off+2+axis*c, c, x)
+		v, err := k.cheb(off+2+axis*c, c, x)
+		if err != nil {
+			return out, err
+		}
 		out[axis] = v[0]
 		if s.Type == 2 {
 			out[axis+3] = v[1] / rad
 		} else {
-			out[axis+3] = k.cheb(off+2+3*c+axis*c, c, x)[0]
+			velocity, err := k.cheb(off+2+3*c+axis*c, c, x)
+			if err != nil {
+				return out, err
+			}
+			out[axis+3] = velocity[0]
 		}
 	}
 	for _, value := range out {
@@ -516,15 +565,20 @@ func (k *Kernel) evalCheb(s Segment, et float64) ([6]float64, error) {
 	}
 	return out, nil
 }
-func (k *Kernel) cheb(off, c int, x float64) [2]float64 {
+func (k *Kernel) cheb(off, c int, x float64) ([2]float64, error) {
 	var b1, b2, d1, d2 float64
 	for j := c - 1; j >= 1; j-- {
+		if j&63 == 0 {
+			if err := k.contextError(); err != nil {
+				return [2]float64{}, err
+			}
+		}
 		b := 2*x*b1 - b2 + k.addr(off+j)
 		b2, b1 = b1, b
 		dd := 2*x*d1 - d2 + 2*b2
 		d2, d1 = d1, dd
 	}
-	return [2]float64{x*b1 - b2 + k.addr(off), x*d1 - d2 + b1}
+	return [2]float64{x*b1 - b2 + k.addr(off), x*d1 - d2 + b1}, nil
 }
 
 func (k *Kernel) eval17(s Segment, et float64) ([6]float64, error) {
@@ -552,6 +606,9 @@ func (k *Kernel) eval17(s Segment, et float64) ([6]float64, error) {
 	ecc := ml
 	ok := false
 	for j := 0; j < 20; j++ {
+		if err := k.contextError(); err != nil {
+			return o, err
+		}
 		del := (ecc + hh*math.Cos(ecc) - kk*math.Sin(ecc) - ml) / (1 - hh*math.Sin(ecc) - kk*math.Cos(ecc))
 		ecc -= del
 		if math.Abs(del) < 2e-15 {
@@ -562,6 +619,9 @@ func (k *Kernel) eval17(s Segment, et float64) ([6]float64, error) {
 	if !ok {
 		lo, hi := ml-e, ml+e
 		for j := 0; j < 80; j++ {
+			if err := k.contextError(); err != nil {
+				return o, err
+			}
 			m := (lo + hi) / 2
 			if m+hh*math.Cos(m)-kk*math.Sin(m)-ml > 0 {
 				hi = m
@@ -724,6 +784,9 @@ func (k *Kernel) length() int64 {
 }
 
 func (k *Kernel) readAt(dst []byte, off int64) (int, error) {
+	if err := k.contextError(); err != nil {
+		return 0, err
+	}
 	if k.source != nil {
 		return k.source.ReadAt(dst, off)
 	}

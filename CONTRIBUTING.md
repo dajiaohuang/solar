@@ -35,6 +35,14 @@ Renderer changes must keep the focus layer and catalog cloud separate. Named foc
 
 ## Native applications
 
+Validate the shared Go backend with `go vet ./cmd/... ./internal/...` and
+`go test ./cmd/... ./internal/...`. The Linux native quality job also runs
+`go test -race ./cmd/... ./internal/...`; local race detection requires a
+supported C compiler and CGO. Cancellation tests cover request isolation,
+descriptor scans and coefficient reads without changing state arithmetic.
+Cancellation cannot interrupt an OS file read already in progress or kernel
+opening/parsing; do not claim a hard cancellation-latency bound.
+
 Android and iOS are independent platform-native projects. The current scope is the first vertical slice for exact current-state binary tiles (`manifest → plan → tile`), not a full-feature app. There is no Capacitor Web shell or native SPK packaging. Native 3D is the default, native 2D is independent, and the iOS slice accepts an HTTPS backend, TDB Julian date, preset/custom IDs and a reference ID. iOS keeps a bounded 256 MiB verified-tile cache; manifest and plan loading remains online, so complete offline plan recovery is not implemented.
 
 Run the static project check after ordinary Web checks:

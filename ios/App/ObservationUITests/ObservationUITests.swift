@@ -37,6 +37,16 @@ final class ObservationUITests: XCTestCase {
         XCTAssertTrue(element.exists && element.isHittable, "Element could not be revealed: \(element)")
     }
 
+    private func setExpanded(_ app: XCUIApplication, _ element: XCUIElement, _ expanded: Bool) {
+        reveal(app, element)
+        let expected = expanded ? "Expanded" : "Collapsed"
+        if element.value as? String != expected { element.tap() }
+        let predicate = NSPredicate(format: "value == %@", expected)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 10), .completed,
+                       "Disclosure did not reach \(expected): \(element.debugDescription)")
+    }
+
     func testRealEarthMoonStatesAndNativeModes() {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -104,7 +114,7 @@ final class ObservationUITests: XCTestCase {
         XCTAssertTrue(app.buttons["observation.mode"].waitForExistence(timeout: 15))
         reveal(app, disclosure)
         XCTAssertFalse(app.buttons["coverage.load"].exists)
-        disclosure.tap()
+        setExpanded(app, disclosure, true)
         let load = app.buttons["coverage.load"]
         reveal(app, load)
         waitForLabel(app.staticTexts["coverage.status"], "Load source coverage when you need an audit summary.")
@@ -122,7 +132,7 @@ final class ObservationUITests: XCTestCase {
         screenshot(app, "coverage-synthetic-summary")
         let details = app.buttons["coverage.details"]
         reveal(app, details)
-        details.tap()
+        setExpanded(app, details, true)
         for (label, character) in [("Report", "a"), ("Catalog", "b"), ("Inventory", "c"), ("Source snapshot", "d"), ("Identity mapping", "e"), ("Satellite catalog", "f")] {
             let value = app.staticTexts["\(label) SHA-256: \(String(repeating: character, count: 64))"]
             reveal(app, value)
@@ -136,9 +146,9 @@ final class ObservationUITests: XCTestCase {
         XCTAssertFalse(app.buttons["coverage.details"].exists)
         screenshot(app, "coverage-unavailable-clears-counts")
         reveal(app, disclosure)
-        disclosure.tap()
+        setExpanded(app, disclosure, false)
         XCTAssertFalse(load.exists)
-        disclosure.tap()
+        setExpanded(app, disclosure, true)
         waitForLabel(app.staticTexts["coverage.status"], "Load source coverage when you need an audit summary.")
         app.terminate()
 
@@ -149,7 +159,7 @@ final class ObservationUITests: XCTestCase {
         let invalidDisclosure = invalid.buttons["coverage.disclosure"]
         XCTAssertTrue(invalid.buttons["observation.mode"].waitForExistence(timeout: 15))
         reveal(invalid, invalidDisclosure)
-        invalidDisclosure.tap()
+        setExpanded(invalid, invalidDisclosure, true)
         reveal(invalid, invalid.buttons["coverage.load"])
         invalid.buttons["coverage.load"].tap()
         waitForLabel(invalid.staticTexts["coverage.status"], "Coverage could not be loaded. Check the HTTPS backend and try again.")

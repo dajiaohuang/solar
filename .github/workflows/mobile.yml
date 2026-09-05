@@ -56,6 +56,10 @@ jobs:
       - run: npm ci
       - name: Verify independent native projects
         run: npm run native:check
+      - name: Verify shared Go backend and concurrent cancellation
+        run: |
+          go vet ./cmd/... ./internal/...
+          go test -race ./cmd/... ./internal/...
       - name: Generate Go handler tiles and verify Web numeric parity
         env:
           SOLAR_STATE_TILE_FIXTURE_DIR: ${{ runner.temp }}/solar-state-tile-fixture
