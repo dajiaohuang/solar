@@ -137,7 +137,7 @@ test('real preview artifacts support curated 3D and the pinned belt sample witho
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('?v=4&lang=en', { waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
-  await expect(page.locator('.ephemeris-status summary')).toContainText('7/7', { timeout: 25_000 })
+  await expect(page.locator('.ephemeris-status > summary')).toContainText('7/7', { timeout: 25_000 })
   expect(requests.filter(url => /catalog-sample-/.test(url))).toEqual([])
   await page.getByTestId('preset-mars-main-belt-jupiter').click()
   await expect(page.locator('.element-scatter')).toBeVisible()
