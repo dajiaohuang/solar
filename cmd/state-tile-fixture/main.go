@@ -5,12 +5,14 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -40,10 +42,6 @@ type planFile struct {
 		OrdinalStart uint32 `json:"ordinalStart"`
 		OrdinalCount uint32 `json:"ordinalCount"`
 	} `json:"tiles"`
-}
-
-type metadataRow struct {
-	ID string `json:"id"`
 }
 
 type expectedRow struct {
@@ -83,7 +81,7 @@ func main() {
 	inventoryDir := flag.String("inventory-dir", "", "optional real addressable inventory directory")
 	spkPath := flag.String("synthetic-spk", "tests/fixtures/spk21-synthetic.bsp", "synthetic SPK used when -data-dir is omitted")
 	idsFlag := flag.String("ids", "", "comma-separated IDs; defaults to an exact+missing synthetic or audit set")
-	epochFlag := flag.Float64("epoch-jd", 0, "TDB epoch; defaults to 2451545 for synthetic and 2461287.5 for real data")
+	epochFlag := flag.Float64("epoch-jd", 0, "TDB epoch; defaults to synthetic audit ET=500 or 2461287.5 for real data")
 	tileSize := flag.Int("tile-size", 2, "rows per binary tile")
 	flag.Parse()
 	if *out == "" {
@@ -100,7 +98,7 @@ func main() {
 	epochJD := *epochFlag
 	if epochJD == 0 {
 		if synthetic {
-			epochJD = 2451545
+			epochJD = syntheticAuditEpochJD()
 		} else {
 			epochJD = 2461287.5
 		}
@@ -108,7 +106,7 @@ func main() {
 	ids := splitIDs(*idsFlag)
 	if len(ids) == 0 {
 		if synthetic {
-			ids = []string{"naif:-210001", "unknown:fixture"}
+			ids = defaultSyntheticIDs()
 		} else {
 			ids = []string{"earth", "naif:10", "unknown:fixture"}
 		}
@@ -130,8 +128,19 @@ func main() {
 	}
 	defer c.Close()
 	var inv *inventory.Inventory
-	if *inventoryDir != "" {
-		inv, err = inventory.Load(*inventoryDir)
+	var inventoryCleanup func()
+	inventoryPath := strings.TrimSpace(*inventoryDir)
+	if synthetic && inventoryPath == "" {
+		inventoryPath, inventoryCleanup, err = makeSyntheticInventory()
+		if err != nil {
+			fatalf("prepare synthetic inventory: %v", err)
+		}
+	} else {
+		inventoryCleanup = func() {}
+	}
+	defer inventoryCleanup()
+	if inventoryPath != "" {
+		inv, err = inventory.Load(inventoryPath)
 		if err != nil {
 			fatalf("load inventory: %v", err)
 		}
@@ -211,29 +220,89 @@ func describeTile(raw []byte) (tileFile, error) {
 	}
 	metadataBytes := raw[header.MetadataOffset : header.MetadataOffset+header.MetadataLength]
 	lines := bytes.Split(bytes.TrimSuffix(metadataBytes, []byte{'\n'}), []byte{'\n'})
+	if len(lines) != int(header.RecordCount) {
+		return tileFile{}, fmt.Errorf("metadata row count %d does not match record count %d", len(lines), header.RecordCount)
+	}
+	for _, offset := range []uint32{header.ExactBitmapOffset, header.ApproxBitmapOffset, header.MissingBitmapOffset} {
+		if bitmapPaddingSet(raw[offset:offset+header.BitmapLength], header.RecordCount) {
+			return tileFile{}, fmt.Errorf("status bitmap has bits beyond record count")
+		}
+	}
 	rows := make([]expectedRow, header.RecordCount)
 	for n := range rows {
-		var metadata metadataRow
-		if n >= len(lines) || json.Unmarshal(lines[n], &metadata) != nil {
+		var metadata statewire.Metadata
+		if json.Unmarshal(lines[n], &metadata) != nil {
 			return tileFile{}, fmt.Errorf("metadata row %d is invalid", n)
 		}
-		status := "missing"
-		if raw[header.ExactBitmapOffset+uint32(n/8)]&(1<<uint(n%8)) != 0 {
-			status = "exact"
+		exact := raw[header.ExactBitmapOffset+uint32(n/8)]&(1<<uint(n%8)) != 0
+		approximate := raw[header.ApproxBitmapOffset+uint32(n/8)]&(1<<uint(n%8)) != 0
+		missing := raw[header.MissingBitmapOffset+uint32(n/8)]&(1<<uint(n%8)) != 0
+		if exact && approximate || exact && missing || approximate && missing || !exact && !approximate && !missing {
+			return tileFile{}, fmt.Errorf("row %d has inconsistent status bitmap", n)
 		}
-		if raw[header.ApproxBitmapOffset+uint32(n/8)]&(1<<uint(n%8)) != 0 {
+		status := "missing"
+		if exact {
+			status = "exact"
+		} else if approximate {
 			status = "approximate"
 		}
 		bits := make([]string, header.Stride)
+		values := make([]float64, header.Stride)
 		for component := range bits {
-			value := binary.LittleEndian.Uint64(raw[header.StatesOffset+(uint32(n)*uint32(header.Stride)+uint32(component))*8:])
-			bits[component] = fmt.Sprintf("%016x", value)
+			offset := header.StatesOffset + (uint32(n)*uint32(header.Stride)+uint32(component))*8
+			valueBits := binary.LittleEndian.Uint64(raw[offset:])
+			values[component] = math.Float64frombits(valueBits)
+			bits[component] = fmt.Sprintf("%016x", valueBits)
+		}
+		if err := validateTileRow(metadata, status, (header.EpochJD-2451545.0)*86400, values); err != nil {
+			return tileFile{}, fmt.Errorf("row %d: %w", n, err)
 		}
 		rows[n] = expectedRow{ID: metadata.ID, Status: status, StateIEEE754BitsLE: bits}
 	}
 	payloadHash := hex.EncodeToString(header.PayloadSHA256[:])
 	wholeHash := sha256.Sum256(raw)
 	return tileFile{Bytes: len(raw), SHA256: hex.EncodeToString(wholeHash[:]), PayloadSHA256: payloadHash, OrdinalStart: header.OrdinalStart, RecordCount: header.RecordCount, ExpectedRows: rows}, nil
+}
+
+func bitmapPaddingSet(bitmap []byte, recordCount uint32) bool {
+	if recordCount%8 == 0 || len(bitmap) == 0 {
+		return false
+	}
+	return bitmap[len(bitmap)-1]&^byte((1<<uint(recordCount%8))-1) != 0
+}
+
+const tileEpochToleranceET = 1e-4
+
+func validateTileRow(metadata statewire.Metadata, status string, epochET float64, values []float64) error {
+	if strings.TrimSpace(metadata.ID) == "" {
+		return fmt.Errorf("metadata has no identity")
+	}
+	if metadata.ValidityPresent && (!finite(metadata.ValidityStartET) || !finite(metadata.ValidityEndET) || metadata.ValidityEndET < metadata.ValidityStartET) {
+		return fmt.Errorf("metadata has invalid validity window")
+	}
+	if metadata.EvidenceWindowPresent && (!finite(metadata.EvidenceWindowStartET) || !finite(metadata.EvidenceWindowEndET) || metadata.EvidenceWindowEndET < metadata.EvidenceWindowStartET) {
+		return fmt.Errorf("metadata has invalid evidence window")
+	}
+	if status == "approximate" {
+		return fmt.Errorf("approximate state is unsupported in exact-only fixture")
+	}
+	if status == "exact" {
+		if !metadata.ValidityPresent || !finite(metadata.ValidityStartET) || !finite(metadata.ValidityEndET) {
+			return fmt.Errorf("exact metadata has no finite validity")
+		}
+		if !finite(epochET) || epochET < metadata.ValidityStartET-tileEpochToleranceET || epochET > metadata.ValidityEndET+tileEpochToleranceET {
+			return fmt.Errorf("exact epoch %.9g is outside validity [%.9g,%.9g]", epochET, metadata.ValidityStartET, metadata.ValidityEndET)
+		}
+	}
+	for component, value := range values {
+		if !finite(value) {
+			return fmt.Errorf("component %d is nonfinite", component)
+		}
+		if status == "missing" && value != 0 {
+			return fmt.Errorf("missing component %d is nonzero", component)
+		}
+	}
+	return nil
 }
 
 func makeSyntheticData(source string) (string, func(), error) {
@@ -256,8 +325,73 @@ func makeSyntheticData(source string) (string, func(), error) {
 		cleanup()
 		return "", func() {}, err
 	}
+	bodies := fmt.Sprintf(`{"epochJd":%s,"bodies":[{"id":"naif:-210001","name":"Synthetic SPK target","kind":"synthetic","naifId":-210001,"source":"synthetic-catalog-summary"}]}`, strconv.FormatFloat(syntheticAuditEpochJD(), 'f', -1, 64))
+	if err := os.WriteFile(filepath.Join(dir, "ephemerisBodies.json"), []byte(bodies), 0600); err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
 	return dir, cleanup, nil
 }
+
+const syntheticAuditET = 500.0
+
+func syntheticAuditEpochJD() float64 { return 2451545.0 + syntheticAuditET/86400.0 }
+
+func defaultSyntheticIDs() []string {
+	return []string{"naif:-210001", "sb:synthetic:operational", "sb:synthetic:snapshot", "unknown:fixture"}
+}
+
+func makeSyntheticInventory() (string, func(), error) {
+	dir, err := os.MkdirTemp("", "solar-state-tile-inventory-")
+	if err != nil {
+		return "", func() {}, err
+	}
+	cleanup := func() { _ = os.RemoveAll(dir) }
+	rows := []map[string]any{
+		{"id": "sb:synthetic:operational", "name": "Synthetic operational alias", "source": "synthetic", "naifId": -210001, "aliases": []string{"synthetic-operational"}, "identityStatus": "confirmed", "geometryStatus": "synthetic", "ephemerisStatus": "validated"},
+		{"id": "sb:synthetic:snapshot", "name": "Synthetic audit snapshot", "source": "synthetic", "naifId": -210002, "identityStatus": "confirmed", "geometryStatus": "synthetic", "ephemerisStatus": "validated", "kernelEvidence": map[string]any{"auditEt": syntheticAuditET, "target": -210002, "segments": []any{map[string]any{"kernelId": "synthetic", "startEt": 0, "endEt": 1000, "center": 399, "frame": 1, "type": 2}}, "stateAtAuditEpoch": map[string]any{"position": map[string]any{"x": 1, "y": 2, "z": 3}, "velocity": map[string]any{"x": 4, "y": 5, "z": 6}}}},
+	}
+	var raw bytes.Buffer
+	for _, row := range rows {
+		encoded, marshalErr := json.Marshal(row)
+		if marshalErr != nil {
+			cleanup()
+			return "", func() {}, marshalErr
+		}
+		raw.Write(encoded)
+		raw.WriteByte('\n')
+	}
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	if _, err := writer.Write(raw.Bytes()); err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+	if err := writer.Close(); err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+	file := "records-00000.jsonl.bgz"
+	fileBytes := compressed.Bytes()
+	if err := os.WriteFile(filepath.Join(dir, file), fileBytes, 0600); err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+	digest := sha256.Sum256(fileBytes)
+	manifest := map[string]any{"schemaVersion": 2, "purpose": "source-inventory-addressable-v2", "totalRecords": len(rows), "shards": []any{map[string]any{"file": file, "count": len(rows), "bytes": len(fileBytes), "sha256": hex.EncodeToString(digest[:]), "blocks": []any{map[string]any{"rowStart": 0, "count": len(rows), "offset": 0, "bytes": len(fileBytes), "uncompressedBytes": len(raw.Bytes()), "sha256": hex.EncodeToString(digest[:])}}}}}
+	manifestBytes, err := json.Marshal(manifest)
+	if err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "manifest.json"), manifestBytes, 0600); err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+	return dir, cleanup, nil
+}
+
+func finite(value float64) bool { return !math.IsNaN(value) && !math.IsInf(value, 0) }
 
 func prepareOutput(path string) error {
 	info, err := os.Stat(path)
