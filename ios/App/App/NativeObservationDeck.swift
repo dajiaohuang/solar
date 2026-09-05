@@ -9,7 +9,7 @@ final class ObservationModel: ObservableObject {
     @Published var loading = false
     @Published var coverage: NativeCoverageReport?
     @Published var coverageLoading = false
-    @Published var coverageMessage = "Load source coverage when you need an audit summary."
+    @Published var coverageMessage = CoverageCopy.empty
     private var request: Task<Void, Never>?
     private var coverageRequest: Task<Void, Never>?
     private var coverageGeneration = 0
@@ -28,6 +28,7 @@ final class ObservationModel: ObservableObject {
         coverageGeneration += 1
         coverageRequest?.cancel(); coverageRequest = nil
         coverage = nil; coverageLoading = false
+        coverageMessage = CoverageCopy.empty
     }
 
     func referenceChanged(_ reference: String) {
@@ -65,27 +66,54 @@ final class ObservationModel: ObservableObject {
     func loadCoverage(address: String) {
         clearCoverage()
         guard let url = URL(string: address.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-            coverageMessage = "Enter an HTTPS backend address to load source coverage."
+            coverageMessage = CoverageCopy.badAddress
             return
         }
         coverageLoading = true
-        coverageMessage = "Loading source coverage…"
+        coverageMessage = CoverageCopy.loading
         let generation = coverageGeneration
         coverageRequest = Task {
             do {
                 let result = try await NativeCoverageService(base: url).load()
                 try Task.checkCancellation()
                 guard generation == coverageGeneration else { return }
-                coverage = result; coverageMessage = "Source coverage loaded."
+                coverage = result; coverageMessage = CoverageCopy.loaded
             } catch is CancellationError {
                 // Cancellation clears the report and leaves the disclosure actionable.
+            } catch is NativeCoverageUnavailable {
+                guard generation == coverageGeneration else { return }
+                coverage = nil; coverageMessage = CoverageCopy.unavailable
             } catch {
                 guard generation == coverageGeneration else { return }
-                coverage = nil; coverageMessage = error.localizedDescription
+                coverage = nil; coverageMessage = CoverageCopy.failure
             }
             if generation == coverageGeneration { coverageLoading = false; coverageRequest = nil }
         }
     }
+}
+
+private enum CoverageCopy {
+    static var isChinese: Bool { Locale.current.language.languageCode?.identifier == "zh" }
+    private static var zh: Bool { isChinese }
+    static var empty: String { zh ? "需要审计摘要时加载来源覆盖。" : "Load source coverage when you need an audit summary." }
+    static var badAddress: String { zh ? "输入 HTTPS 后端地址以加载来源覆盖。" : "Enter an HTTPS backend address to load source coverage." }
+    static var loading: String { zh ? "正在加载来源覆盖…" : "Loading source coverage…" }
+    static var loaded: String { zh ? "来源覆盖已加载。" : "Source coverage loaded." }
+    static var unavailable: String { zh ? "来源覆盖不可用；后端未发布报告。" : "Source coverage is unavailable; no report was published." }
+    static var failure: String { zh ? "无法加载覆盖，请检查 HTTPS 后端后重试。" : "Coverage could not be loaded. Check the HTTPS backend and try again." }
+    static var title: String { zh ? "来源覆盖" : "Source coverage" }
+    static var audit: String { zh ? "来源身份与依赖窗口审计" : "Source identity and dependency-window audit" }
+    static var load: String { zh ? "加载覆盖" : "Load coverage" }
+    static var reload: String { zh ? "重新加载覆盖" : "Reload coverage" }
+    static var cancel: String { zh ? "取消" : "Cancel" }
+    static var reasons: String { zh ? "原因与哈希" : "Reasons and hashes" }
+    static var counts: (UInt64, UInt64, UInt64) -> String { { a, b, c in zh ? "来源记录：\(a) · 已映射：\(b) · 未解析：\(c)" : "Source records: \(a) · mapped: \(b) · unresolved: \(c)" } }
+    static var targets: (UInt64, UInt64) -> String { { a, b in zh ? "显式目标：\(a) · 审计时可用：\(b)" : "Explicit targets: \(a) · available at audit: \(b)" } }
+    static var dependency: (UInt64, UInt64) -> String { { a, b in zh ? "依赖窗口：\(a) 个完整 · \(b) 个有缺口" : "Dependency window: \(a) covered · \(b) gaps" } }
+    static var auditWindow: (Double, Double, Double, String) -> String { { a, s, e, scale in zh ? "审计 ET：\(a) · 窗口：\(s)–\(e)（\(scale)）" : "Audit ET: \(a) · Window: \(s)–\(e) (\(scale))" } }
+    static var caveat: String { zh ? "没有全窗口数值认证。来源记录和别名不是显示帧；依赖可用性不等于当前帧覆盖。" : "No whole-window numerical certification. Source records and aliases are not displayed frames; dependency availability is not current-frame coverage." }
+    static var version: (String) -> String { { zh ? "版本：\($0)" : "Version: \($0)" } }
+    static var hash: (String, String) -> String { { label, value in "\(label): \(value)" } }
 }
 
 private struct NativePreset: Identifiable {
@@ -117,7 +145,7 @@ struct ObservationDeckView: View {
     @State private var reference = "naif:10"
 
     private var preset: NativePreset { NativePreset.all.first { $0.id == selected } ?? NativePreset.all[0] }
-    private var coverageTitle: String { Locale.current.language.languageCode?.identifier == "zh" ? "来源覆盖" : "Source coverage" }
+    @State private var coverageExpanded = false
 
     private func load() {
         let supplied = customIDs.split { $0.isWhitespace || $0 == "," }.map(String.init)
@@ -163,30 +191,6 @@ struct ObservationDeckView: View {
                     }
                     .buttonStyle(.borderless)
                 }
-                Section(coverageTitle) {
-                    DisclosureGroup {
-                        Text(model.coverageMessage).font(.callout).foregroundStyle(.secondary)
-                            .accessibilityIdentifier("coverage.status")
-                        Button {
-                            if model.coverageLoading { model.clearCoverage() } else { model.loadCoverage(address: address) }
-                        } label: {
-                            Label(model.coverageLoading ? (Locale.current.language.languageCode?.identifier == "zh" ? "取消" : "Cancel") : (model.coverage == nil ? (Locale.current.language.languageCode?.identifier == "zh" ? "加载覆盖" : "Load coverage") : (Locale.current.language.languageCode?.identifier == "zh" ? "重新加载覆盖" : "Reload coverage")), systemImage: model.coverageLoading ? "xmark.circle" : "arrow.clockwise")
-                        }
-                        .accessibilityIdentifier("coverage.load")
-                        if let report = model.coverage {
-                            Text("\(report.counts.sourceRecords) source records · \(report.counts.mappedSourceRecords) mapped · \(report.counts.unresolvedSourceRecords) unresolved")
-                            Text("\(report.counts.explicitNaifTargets) explicit targets · \(report.counts.availableTargetsAtAuditEpoch) available at audit")
-                            Text("Window: \(report.requestedWindow.startEt)–\(report.requestedWindow.endEt) \(report.timeScale)")
-                            DisclosureGroup("Reasons and hashes") {
-                                ForEach(report.unresolvedReasons.keys.sorted(), id: \.self) { reason in Text("\(reason): \(report.unresolvedReasons[reason] ?? 0)") }
-                                Text("Catalog SHA-256: \(report.catalogManifestSha256)").textSelection(.enabled)
-                                Text("Inventory SHA-256: \(report.inventoryManifestSha256)").textSelection(.enabled)
-                                Text("Source snapshot SHA-256: \(report.sourceSnapshotSha256)").textSelection(.enabled)
-                            }
-                        }
-                    } label: { Text(Locale.current.language.languageCode?.identifier == "zh" ? "来源身份与依赖窗口审计" : "Source identity and dependency-window audit") }
-                    .accessibilityIdentifier("coverage.disclosure")
-                }
                 Section("Preset scenes") {
                     ForEach(NativePreset.all) { item in
                         Button {
@@ -201,6 +205,31 @@ struct ObservationDeckView: View {
                         }
                         .accessibilityIdentifier("preset.\(item.id)")
                     }
+                }
+                Section(CoverageCopy.title) {
+                    DisclosureGroup(isExpanded: $coverageExpanded) {
+                        Text(model.coverageMessage).font(.callout).foregroundStyle(.secondary).accessibilityIdentifier("coverage.status")
+                        Button { if model.coverageLoading { model.clearCoverage() } else { model.loadCoverage(address: address) } } label: {
+                            Label(model.coverageLoading ? CoverageCopy.cancel : (model.coverage == nil ? CoverageCopy.load : CoverageCopy.reload), systemImage: model.coverageLoading ? "xmark.circle" : "arrow.clockwise")
+                        }.accessibilityIdentifier("coverage.load")
+                        if let report = model.coverage {
+                            Text(CoverageCopy.counts(report.counts.sourceRecords, report.counts.mappedSourceRecords, report.counts.unresolvedSourceRecords)).accessibilityIdentifier("coverage.counts")
+                            Text(CoverageCopy.targets(report.counts.explicitNaifTargets, report.counts.availableTargetsAtAuditEpoch)).accessibilityIdentifier("coverage.targets")
+                            Text(CoverageCopy.dependency(report.windowCounts.dependencyCoveredTargets, report.windowCounts.targetsWithDependencyGaps)).accessibilityIdentifier("coverage.windowCounts")
+                            Text(CoverageCopy.auditWindow(report.auditEt, report.requestedWindow.startEt, report.requestedWindow.endEt, report.timeScale)).accessibilityIdentifier("coverage.audit")
+                            Text(CoverageCopy.caveat).accessibilityIdentifier("coverage.caveat")
+                            DisclosureGroup(CoverageCopy.reasons) {
+                                ForEach(report.unresolvedReasons.keys.sorted(), id: \.self) { reason in Text("\(reason): \(report.unresolvedReasons[reason] ?? 0)") }
+                                Text(CoverageCopy.version(report.catalogVersion)).textSelection(.enabled)
+                                Text(CoverageCopy.hash(CoverageCopy.isChinese ? "报告 SHA-256" : "Report SHA-256", report.reportSha256)).textSelection(.enabled)
+                                Text(CoverageCopy.hash(CoverageCopy.isChinese ? "目录 SHA-256" : "Catalog SHA-256", report.catalogManifestSha256)).textSelection(.enabled)
+                                Text(CoverageCopy.hash(CoverageCopy.isChinese ? "清单 SHA-256" : "Inventory SHA-256", report.inventoryManifestSha256)).textSelection(.enabled)
+                                Text(CoverageCopy.hash(CoverageCopy.isChinese ? "来源快照 SHA-256" : "Source snapshot SHA-256", report.sourceSnapshotSha256)).textSelection(.enabled)
+                                Text(CoverageCopy.hash(CoverageCopy.isChinese ? "身份映射 SHA-256" : "Identity mapping SHA-256", report.identityMappingSha256)).textSelection(.enabled)
+                                Text(CoverageCopy.hash(CoverageCopy.isChinese ? "卫星目录 SHA-256" : "Satellite catalog SHA-256", report.satelliteCatalogSha256)).textSelection(.enabled)
+                            }.accessibilityIdentifier("coverage.details")
+                        }
+                    } label: { Text(CoverageCopy.audit) }.accessibilityIdentifier("coverage.disclosure")
                 }
                 DisclosureGroup("Advanced") {
                     TextField("Full-version backend HTTPS address", text: $address)
@@ -250,6 +279,7 @@ struct ObservationDeckView: View {
             }
             .onChange(of: scenePhase) { phase in if phase != .active { model.cancel() } }
             .onChange(of: address) { _ in model.clearCoverage() }
+            .onChange(of: coverageExpanded) { expanded in if !expanded { model.clearCoverage() } }
             .onChange(of: reference) { value in model.referenceChanged(value) }
             .onDisappear { model.cancel() }
         }

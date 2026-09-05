@@ -242,3 +242,30 @@ private final class NativeHTTPTransfer: NSObject, URLSessionDataDelegate, @unche
         finish(result)
     }
 }
+
+struct NativeHTTPStatusFailure: Error { let statusCode: Int }
+
+actor NativeCoverageService {
+    private let base: URL
+    init(base: URL) throws {
+        guard base.scheme == "https", base.host != nil, base.user == nil, base.password == nil,
+              base.query == nil, base.fragment == nil else { throw StateTileFailure.invalid("Enter an HTTPS backend address without credentials, query or fragment.") }
+        self.base = base
+    }
+
+    func load() async throws -> NativeCoverageReport {
+        let (manifestData, _) = try await NativeHTTPTransfer(contentType: "application/json", limit: 8 * 1024 * 1024).receive(URLRequest(url: base.appendingPathComponent("v1/catalog/manifest")))
+        let manifest = try JSONDecoder().decode(NativeCoverageManifest.self, from: manifestData)
+        guard manifest.apiVersion == "solar.api/v1", !manifest.catalogVersion.isEmpty,
+              NativeCoverageReport.isHash(manifest.catalogManifestSha256), NativeCoverageReport.isHash(manifest.inventoryManifestSha256) else { throw StateTileFailure.invalid("Unsupported catalog manifest.") }
+        let request = URLRequest(url: base.appendingPathComponent("v1/coverage"))
+        do {
+            let (data, _) = try await NativeHTTPTransfer(contentType: "application/json", limit: NativeCoverageReport.maxBytes).receive(request)
+            return try NativeCoverageReport(validating: data, catalogManifest: manifestData)
+        } catch let error as NativeHTTPStatusFailure where error.statusCode == 404 {
+            throw NativeCoverageUnavailable()
+        }
+    }
+}
+
+struct NativeCoverageUnavailable: Error {}

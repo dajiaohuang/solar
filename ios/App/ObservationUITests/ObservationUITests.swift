@@ -86,4 +86,47 @@ final class ObservationUITests: XCTestCase {
         screenshot(app, "missing-backend-no-invented-states")
         app.terminate()
     }
+
+    func testSourceCoverageIsExplicitBoundedAndClears() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-native.backend.address", "https://127.0.0.1:18791/coverage-fixture/valid",
+                               "-native.onboarding.complete", "YES", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        let disclosure = app.buttons["coverage.disclosure"]
+        XCTAssertTrue(disclosure.waitForExistence(timeout: 15))
+        XCTAssertFalse(app.buttons["coverage.load"].exists)
+        disclosure.tap()
+        let load = app.buttons["coverage.load"]
+        XCTAssertTrue(load.waitForExistence(timeout: 10))
+        load.tap()
+        XCTAssertTrue(app.staticTexts["coverage.counts"].waitForExistence(timeout: 20))
+        XCTAssertTrue(app.staticTexts["coverage.audit"].label.contains("500.125"))
+        XCTAssertTrue(app.staticTexts["coverage.windowCounts"].label.contains("1"))
+        XCTAssertTrue(app.staticTexts["coverage.caveat"].exists)
+        let details = app.buttons["coverage.details"]
+        XCTAssertTrue(details.waitForExistence(timeout: 10))
+        details.tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Report SHA-256'")).firstMatch.exists)
+        disclosure.tap()
+        XCTAssertFalse(app.staticTexts["coverage.counts"].exists)
+        disclosure.tap()
+        XCTAssertTrue(load.waitForExistence(timeout: 10))
+        load.tap()
+        XCTAssertTrue(app.staticTexts["coverage.status"].waitForExistence(timeout: 20))
+        XCTAssertFalse(app.staticTexts["coverage.counts"].exists)
+        app.terminate()
+
+        let invalid = XCUIApplication()
+        invalid.launchArguments = ["-native.backend.address", "https://127.0.0.1:18791/coverage-fixture/invalid",
+                                   "-native.onboarding.complete", "YES", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        invalid.launch()
+        let invalidDisclosure = invalid.buttons["coverage.disclosure"]
+        XCTAssertTrue(invalidDisclosure.waitForExistence(timeout: 15))
+        invalidDisclosure.tap()
+        invalid.buttons["coverage.load"].tap()
+        XCTAssertTrue(invalid.staticTexts["coverage.status"].waitForExistence(timeout: 20))
+        XCTAssertFalse(invalid.staticTexts["coverage.counts"].exists)
+        invalid.terminate()
+    }
 }

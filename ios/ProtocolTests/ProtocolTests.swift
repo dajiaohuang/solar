@@ -100,11 +100,35 @@ struct ProtocolTests {
         let coverage = try coverageFixture()
         let coverageManifest = try JSONSerialization.data(withJSONObject: ["apiVersion": "solar.api/v1", "catalogVersion": "fixture", "catalogManifestSha256": String(repeating: "a", count: 64), "inventoryManifestSha256": String(repeating: "a", count: 64)])
         _ = try NativeCoverageReport(validating: coverage, catalogManifest: coverageManifest)
+        if let directory = ProcessInfo.processInfo.environment["SOLAR_COVERAGE_NATIVE_FIXTURE_DIR"] {
+            let root = URL(fileURLWithPath: directory, isDirectory: true)
+            let summary = try Data(contentsOf: root.appendingPathComponent("summary.json"))
+            let manifest = try Data(contentsOf: root.appendingPathComponent("manifest.json"))
+            precondition(summary.count <= NativeCoverageReport.maxBytes && manifest.count <= 8 * 1024 * 1024)
+            _ = try NativeCoverageReport(validating: summary, catalogManifest: manifest)
+        }
+        var boundary = try JSONSerialization.jsonObject(with: coverage) as! [String: Any]
+        boundary["auditEt"] = -Double.greatestFiniteMagnitude
+        boundary["requestedWindow"] = ["startEt": -1.5, "endEt": 1.5, "timeScale": "TDB seconds past J2000"]
+        boundary["counts"] = ["sourceRecords": 0, "mappedSourceRecords": 0, "unresolvedSourceRecords": 0, "explicitNaifTargets": 0, "availableTargetsAtAuditEpoch": 0]
+        boundary["windowCounts"] = ["dependencyCoveredTargets": 0, "targetsWithDependencyGaps": 0, "numericallyCertifiedWholeWindowTargets": NSNull()]
+        boundary["unresolvedReasons"] = [:]
+        _ = try NativeCoverageReport(validating: JSONSerialization.data(withJSONObject: boundary), catalogManifest: coverageManifest)
         try coverageRejects(coverage, manifest: coverageManifest) { $0["sourceBytesVerified"] = false }
         try coverageRejects(coverage, manifest: coverageManifest) { $0["windowCounts"] = ["dependencyCoveredTargets": 1, "targetsWithDependencyGaps": 1] }
         try coverageRejects(coverage, manifest: coverageManifest) { $0["counts"] = ["sourceRecords": 10, "mappedSourceRecords": 3, "unresolvedSourceRecords": 8, "explicitNaifTargets": 2, "availableTargetsAtAuditEpoch": 2] }
         try coverageRejects(coverage, manifest: coverageManifest) { $0["unresolvedReasons"] = ["Bad reason": 7] }
         try coverageRejects(coverage, manifest: coverageManifest) { $0["reportSha256"] = "not-a-hash" }
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["reportSha256"] = String(repeating: "a", count: 64) + "\n" }
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["unresolvedReasons"] = ["bad\nreason": 7] }
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["windowCounts"] = ["dependencyCoveredTargets": 1, "targetsWithDependencyGaps": 1, "numericallyCertifiedWholeWindowTargets": 0] }
+        var reasons128: [String: Int] = [:]
+        for index in 0..<128 { reasons128[String(format: "r%03d", index)] = index == 0 ? 7 : 0 }
+        var valid128 = try JSONSerialization.jsonObject(with: coverage) as! [String: Any]; valid128["unresolvedReasons"] = reasons128
+        _ = try NativeCoverageReport(validating: JSONSerialization.data(withJSONObject: valid128), catalogManifest: coverageManifest)
+        reasons128["r128"] = 0
+        var invalid129 = valid128; invalid129["unresolvedReasons"] = reasons128
+        try rejectsCoverage(try JSONSerialization.data(withJSONObject: invalid129), manifest: coverageManifest)
         try coverageRejects(coverage, manifest: coverageManifest) { $0["counts"] = ["sourceRecords": 10, "mappedSourceRecords": 3, "unresolvedSourceRecords": 7, "explicitNaifTargets": 3, "availableTargetsAtAuditEpoch": 2] }
         var requests = NativeObservationRequestGate()
         let oldRequest = requests.begin(reference: "naif:10")
