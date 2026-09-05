@@ -86,6 +86,10 @@ export async function androidNativeSmoke() {
     report.source = { commit: await command('git', ['rev-parse', 'HEAD']), files: {} }
     for (const file of ['scripts/android-native-smoke.mjs', 'scripts/ios-native-smoke.mjs',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/MainActivity.java',
+      'android/app/src/main/java/io/github/dajiaohuang/solaratlas/StateTileService.java',
+      'android/app/src/main/java/io/github/dajiaohuang/solaratlas/StateTileDecoder.java',
+      'android/app/src/main/java/io/github/dajiaohuang/solaratlas/StateTileClient.java',
+      'android/app/src/main/java/io/github/dajiaohuang/solaratlas/StateTileCache.java',
       'android/app/src/androidTest/java/io/github/dajiaohuang/solaratlas/ObservationUITest.java']) {
       report.source.files[file] = createHash('sha256').update(await readFile(file)).digest('hex')
     }

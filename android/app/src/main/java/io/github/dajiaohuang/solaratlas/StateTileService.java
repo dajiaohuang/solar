@@ -67,10 +67,7 @@ public final class StateTileService {
         require(string(manifest, "apiVersion").equals(API_VERSION), "manifest API version mismatch");
         String catalogVersion = string(manifest, "catalogVersion");
         require(!catalogVersion.isEmpty(), "manifest catalog version is missing");
-        List<StateTileDecoder.Metadata> metadata = new ArrayList<>();
-        List<Double> states = new ArrayList<>();
-        List<Boolean> exact = new ArrayList<>();
-        long residentBytes = 0;
+        StateAccumulator accumulator = new StateAccumulator(ids.size(), MAX_RESIDENT_STATE_BYTES);
         for (int start = 0; start < ids.size(); start += StateTileDecoder.MAX_ROWS) {
             checkCancelled();
             List<String> chunk = new ArrayList<>(ids.subList(start, Math.min(ids.size(), start + StateTileDecoder.MAX_ROWS)));
@@ -94,23 +91,72 @@ public final class StateTileService {
                         ? StateTileClient.fetchTile(baseUrl, planId, sequence, tileCount, catalogHash, inventoryHash, cache, requestKey)
                         : StateTileDecoder.decode(cached, planId, catalogHash, inventoryHash, sequence, tileCount);
                 require(tile.recordCount == descriptorCount && tile.ordinalStart == descriptorStart && tile.epochJd == epochJd, "tile descriptor mismatch");
-                long tileResidentBytes = tileResidentBytes(tile);
-                require(tileResidentBytes <= MAX_RESIDENT_STATE_BYTES - residentBytes, "observation exceeds native state memory budget");
-                residentBytes += tileResidentBytes;
-                for (int row = 0; row < tile.recordCount; row++) {
-                    require(tile.metadata.get(row).id.equals(chunk.get(ordinal + row)), "tile body identity mismatch");
-                    metadata.add(tile.metadata.get(row));
-                    for (int component = 0; component < StateTileDecoder.STRIDE; component++) states.add(tile.states[row * StateTileDecoder.STRIDE + component]);
-                    boolean isExact = (tile.exactBitmap[row / 8] & (1 << (row % 8))) != 0;
-                    exact.add(isExact); if (isExact) decodedExact++;
-                }
+                decodedExact += accumulator.append(tile, ids, start + ordinal);
                 ordinal += descriptorCount;
             }
             require(ordinal == chunk.size() && decodedExact == exactCount, "incomplete plan or precision count mismatch");
         }
-        double[] stateValues = new double[states.size()]; for (int i = 0; i < states.size(); i++) stateValues[i] = states.get(i);
-        boolean[] exactValues = new boolean[exact.size()]; for (int i = 0; i < exact.size(); i++) exactValues[i] = exact.get(i);
-        return new Frame(epochJd, catalogHash, inventoryHash, metadata, stateValues, exactValues);
+        return accumulator.finish(epochJd, catalogHash, inventoryHash);
+    }
+
+    /** Single final primitive allocation; budget is an estimate, not a process RSS cap. */
+    static final class StateAccumulator {
+        private final double[] states;
+        private final boolean[] exact;
+        private final List<StateTileDecoder.Metadata> metadata;
+        private final long budget;
+        private long residentBytes;
+        private int size;
+        private boolean finished;
+
+        StateAccumulator(int rows, long budget) throws StateTileDecoder.ProtocolException {
+            checkCancelled();
+            require(rows > 0 && rows <= MAX_AGGREGATE_ROWS, "invalid native state row capacity");
+            // Reserve six doubles, one flag and both metadata reference arrays (up to
+            // eight bytes/reference), including the immutable list made by Frame.
+            residentBytes = 96L + rows * ((long) StateTileDecoder.STRIDE * Double.BYTES + 1L + 16L);
+            require(residentBytes <= budget, "observation exceeds native state memory budget");
+            this.budget = budget;
+            states = new double[rows * StateTileDecoder.STRIDE];
+            exact = new boolean[rows];
+            metadata = new ArrayList<>(rows);
+        }
+
+        int append(StateTileDecoder.DecodedTile tile, List<String> ids, int start) throws StateTileDecoder.ProtocolException {
+            checkCancelled();
+            require(!finished && start == size && tile.recordCount > 0 && tile.recordCount <= exact.length - size,
+                    "native state assembly ordering is invalid");
+            require(ids.size() == exact.length, "native state request size mismatch");
+            long nextBytes = residentBytes;
+            for (int row = 0; row < tile.recordCount; row++) {
+                if ((row & 1023) == 0) checkCancelled();
+                StateTileDecoder.Metadata value = tile.metadata.get(row);
+                require(value.id.equals(ids.get(start + row)), "tile body identity mismatch");
+                long bytes = metadataBytes(value);
+                require(bytes <= budget - nextBytes, "observation exceeds native state memory budget");
+                nextBytes += bytes;
+            }
+            checkCancelled();
+            System.arraycopy(tile.states, 0, states, start * StateTileDecoder.STRIDE, tile.states.length);
+            int exactCount = 0;
+            for (int row = 0; row < tile.recordCount; row++) {
+                if ((row & 1023) == 0) checkCancelled();
+                boolean isExact = (tile.exactBitmap[row / 8] & (1 << (row % 8))) != 0;
+                exact[start + row] = isExact;
+                if (isExact) exactCount++;
+            }
+            metadata.addAll(tile.metadata);
+            size += tile.recordCount;
+            residentBytes = nextBytes;
+            return exactCount;
+        }
+
+        Frame finish(double epochJd, String catalogHash, String inventoryHash) throws StateTileDecoder.ProtocolException {
+            checkCancelled();
+            require(!finished && size == exact.length, "incomplete native state assembly");
+            finished = true;
+            return new Frame(epochJd, catalogHash, inventoryHash, metadata, states, exact);
+        }
     }
 
     private void validatePlan(Map<String, Object> plan, List<String> ids, double epochJd, String catalogVersion, String catalogHash, String inventoryHash) throws StateTileDecoder.ProtocolException {
@@ -159,15 +205,10 @@ public final class StateTileService {
     private static int integer(Map<String, Object> value, String key) throws StateTileDecoder.ProtocolException { double result = number(value, key); if (result < 0 || result != Math.rint(result) || result > Integer.MAX_VALUE) throw new StateTileDecoder.ProtocolException("invalid integer: " + key); return (int) result; }
     private static double number(Map<String, Object> value, String key) throws StateTileDecoder.ProtocolException { Object result = value.get(key); if (!(result instanceof Number) || !Double.isFinite(((Number) result).doubleValue())) throw new StateTileDecoder.ProtocolException("invalid number: " + key); return ((Number) result).doubleValue(); }
     private static boolean isHash(String value) { if (value == null || value.length() != 64) return false; for (int i = 0; i < value.length(); i++) { char c = value.charAt(i); if (!(c >= '0' && c <= '9' || c >= 'a' && c <= 'f')) return false; } return true; }
-    private static long tileResidentBytes(StateTileDecoder.DecodedTile tile) {
-        long bytes = (long) tile.states.length * 8L + tile.recordCount;
-        for (StateTileDecoder.Metadata row : tile.metadata) bytes += metadataBytes(row);
-        return bytes;
-    }
     private static long metadataBytes(StateTileDecoder.Metadata row) {
-        return 256L + utf8(row.id) + utf8(row.source) + utf8(row.datasetVersion) + utf8(row.datasetSha256) + utf8(row.kernelSha256) + utf8(row.model) + utf8(row.centerId) + utf8(row.stateEvidence) + utf8(row.missingReason) + utf8(row.identityStatus);
+        return 512L + stringBytes(row.id) + stringBytes(row.source) + stringBytes(row.datasetVersion) + stringBytes(row.datasetSha256) + stringBytes(row.kernelSha256) + stringBytes(row.model) + stringBytes(row.centerId) + stringBytes(row.stateEvidence) + stringBytes(row.missingReason) + stringBytes(row.identityStatus);
     }
-    private static long utf8(String value) { return value == null ? 0L : value.getBytes(StandardCharsets.UTF_8).length; }
+    private static long stringBytes(String value) { return value == null ? 0L : (long) value.length() * Character.BYTES; }
     private static void require(boolean condition, String message) throws StateTileDecoder.ProtocolException { if (!condition) throw new StateTileDecoder.ProtocolException(message); }
     private static void checkCancelled() throws StateTileDecoder.ProtocolException { if (Thread.currentThread().isInterrupted()) throw new StateTileDecoder.ProtocolException("state load cancelled"); }
 }

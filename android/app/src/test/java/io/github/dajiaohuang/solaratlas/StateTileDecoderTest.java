@@ -82,7 +82,7 @@ public class StateTileDecoderTest {
     private static byte[] tile(String id, boolean exact, boolean approximate, double value, String extraMetadata) throws Exception {
         String metadata = exact
                 ? "{\"id\":\"" + id + "\",\"source\":\"jpl\",\"datasetVersion\":\"fixture\",\"datasetSha256\":\"" + CATALOG + "\",\"kernelSha256\":\"" + repeat('c') + "\",\"model\":\"spk-original\",\"centerId\":\"naif:0\",\"validityStartEt\":0,\"validityEndEt\":0,\"validityPresent\":false,\"stateEvidence\":\"fixture-kernel\",\"evidenceWindowStartEt\":0,\"evidenceWindowEndEt\":0,\"evidenceWindowPresent\":false,\"missingReason\":\"\",\"identityStatus\":\"\",\"sourceRecord\":false}\n"
-                : "{\"id\":\"" + id + "\",\"missingReason\":\"approximate-state-not-allowed\"}\n";
+                : "{\"id\":\"" + id + "\",\"source\":\"\",\"datasetVersion\":\"\",\"datasetSha256\":\"\",\"kernelSha256\":\"\",\"model\":\"\",\"centerId\":\"\",\"validityStartEt\":0,\"validityEndEt\":0,\"validityPresent\":false,\"stateEvidence\":\"\",\"evidenceWindowStartEt\":0,\"evidenceWindowEndEt\":0,\"evidenceWindowPresent\":false,\"missingReason\":\"approximate-state-not-allowed\",\"identityStatus\":\"\",\"sourceRecord\":false}\n";
         byte[] metadataBytes = (metadata + extraMetadata).getBytes(StandardCharsets.UTF_8);
         int bitmapLength = 1;
         int metadataOffset = StateTileDecoder.HEADER_BYTES;

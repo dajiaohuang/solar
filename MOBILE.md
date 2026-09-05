@@ -19,6 +19,17 @@
 
 The native slice preserves scientific provenance, epoch, units, reference frame, validity and missing-state semantics. Missing precise states remain visibly unavailable; they are not replaced by approximate positions. The native slice does not claim all-body coverage, navigation accuracy, complete ephemeris access, or full Web feature parity.
 
+Android assembles current states directly into one final `double[]` and one
+`boolean[]`, without per-component `Double` boxing or a final numeric-buffer
+copy. Capacity is checked before allocation; tile identities, order, missing
+flags and cancellation are checked before publishing the complete frame. The
+1.5 GiB assembly estimate includes the primitive buffers, metadata references
+and estimated string/object storage. It is not a process RSS cap: HTTP parsing,
+cache, renderer and runtime allocations need additional headroom. The two-million
+row input ceiling is not a promise of simultaneous availability or smoothness.
+The Go golden test verifies every final assembled Float64 bit as well as each
+decoded tile.
+
 ## Prerequisites and checks
 
 Verified on 2026-09-05 at commit `9461362762a9f0366abea6b665554c6dc6c9bf47`: [macOS iOS job](https://github.com/dajiaohuang/solar/actions/runs/33943036884/job/101244140251) passed the Go-to-Swift golden check, malformed-payload/cache/cancellation/projection tests, and an unsigned arm64/x86_64 simulator build with Xcode 26.6. The [Android job](https://github.com/dajiaohuang/solar/actions/runs/33943036884/job/101244140351) passed its build and Java golden checks. These are historical job results for that commit, not a claim that later checkouts or the entire PR are green. Neither job launched a simulator or verified live native HTTPS rendering.

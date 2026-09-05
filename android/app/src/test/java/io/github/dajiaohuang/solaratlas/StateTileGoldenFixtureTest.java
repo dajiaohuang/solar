@@ -49,6 +49,12 @@ public class StateTileGoldenFixtureTest {
         List<?> descriptors = list(plan, "tiles");
         assertEquals(tileCount, descriptors.size());
         List<String> actualIds = new ArrayList<>();
+        List<String> requestedIds = new ArrayList<>();
+        for (Object id : list(manifest, "ids")) requestedIds.add((String) id);
+        StateTileService.StateAccumulator accumulator = new StateTileService.StateAccumulator(requestedIds.size(), 1536L * 1024 * 1024);
+        long[] assembledBits = new long[requestedIds.size() * StateTileDecoder.STRIDE];
+        boolean[] assembledExact = new boolean[requestedIds.size()];
+        int accumulatedExact = 0;
         int exactCount = 0;
         for (Object rawDescriptor : tiles) {
             Map<String, Object> descriptor = object(rawDescriptor);
@@ -64,6 +70,7 @@ public class StateTileGoldenFixtureTest {
             assertEquals(string(descriptor, "sha256"), sha256(raw));
             assertEquals(string(descriptor, "payloadSha256"), StateTileDecoder.payloadHash(raw));
             StateTileDecoder.DecodedTile decoded = StateTileDecoder.decode(raw, planId, catalogHash, inventoryHash, sequence, tileCount);
+            accumulatedExact += accumulator.append(decoded, requestedIds, actualIds.size());
             List<?> expectedRows = list(descriptor, "expectedRows");
             assertEquals(integer(descriptor, "recordCount"), decoded.recordCount);
             assertEquals(integer(planned, "ordinalCount"), decoded.recordCount);
@@ -78,12 +85,14 @@ public class StateTileGoldenFixtureTest {
                 actualIds.add(decoded.metadata.get(row).id);
                 assertTrue("unexpected status", "exact".equals(string(expected, "status")) || "missing".equals(string(expected, "status")));
                 boolean exact = "exact".equals(string(expected, "status"));
+                assembledExact[actualIds.size() - 1] = exact;
                 if (exact) exactCount++;
                 assertEquals(exact, (decoded.exactBitmap[row / 8] & (1 << (row % 8))) != 0);
                 List<?> expectedBits = list(expected, "stateIEEE754BitsLE");
                 assertEquals(StateTileDecoder.STRIDE, expectedBits.size());
                 for (int component = 0; component < StateTileDecoder.STRIDE; component++) {
                     long expectedValue = Long.parseUnsignedLong(string(expectedBits, component), 16);
+                    assembledBits[(actualIds.size() - 1) * StateTileDecoder.STRIDE + component] = expectedValue;
                     long actualValue = Double.doubleToRawLongBits(decoded.states[row * StateTileDecoder.STRIDE + component]);
                     assertEquals("row " + row + " component " + component, expectedValue, actualValue);
                 }
@@ -94,6 +103,17 @@ public class StateTileGoldenFixtureTest {
         assertEquals(integer(plan, "exactCount"), exactCount);
         assertEquals(integer(plan, "missingCount"), actualIds.size() - exactCount);
         assertEquals(0, integer(plan, "approximateCount"));
+        StateTileService.Frame frame = accumulator.finish(((Number) manifest.get("epochJd")).doubleValue(), catalogHash, inventoryHash);
+        assertEquals(exactCount, accumulatedExact);
+        assertEquals(assembledBits.length, frame.states.length);
+        assertEquals(requestedIds.size(), frame.metadata.size());
+        for (int row = 0; row < requestedIds.size(); row++) {
+            assertEquals(requestedIds.get(row), frame.metadata.get(row).id);
+            assertEquals(assembledExact[row], frame.exact[row]);
+        }
+        for (int component = 0; component < assembledBits.length; component++) {
+            assertEquals("assembled component " + component, assembledBits[component], Double.doubleToRawLongBits(frame.states[component]));
+        }
     }
 
     private static byte[] read(Path path, int limit) throws IOException {
