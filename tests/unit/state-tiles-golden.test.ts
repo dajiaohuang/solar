@@ -29,13 +29,13 @@ describe.skipIf(!directory)('shared Go-generated state tiles', () => {
       expect(tile.ordinalStart).toBe(item.ordinalStart)
       expect(tile.recordCount).toBe(item.recordCount)
       for (const [row, expected] of item.expectedRows.entries()) {
-        expect(tile.metadata[row].id).toBe(expected.id)
+        expect(tile.metadata.idAt(row)).toBe(expected.id)
         expect(Boolean(tile.exactBitmap[row >> 3] & (1 << (row % 8)))).toBe(expected.status === 'exact')
         const view = new DataView(tile.states.buffer, tile.states.byteOffset, tile.states.byteLength)
         expect(Array.from({ length: 6 }, (_, axis) => view.getBigUint64((row * 6 + axis) * 8, true).toString(16).padStart(16, '0'))).toEqual(expected.stateIEEE754BitsLE)
       }
       decoded.push(tile)
     }
-    expect(assembleStateTiles(decoded.reverse(), plan).flatMap(tile => tile.metadata.map(row => row.id))).toEqual(golden.ids)
+    expect(assembleStateTiles(decoded.reverse(), plan).flatMap(tile => Array.from({ length: tile.recordCount }, (_, row) => tile.metadata.idAt(row)))).toEqual(golden.ids)
   })
 })

@@ -26,6 +26,58 @@ async function replaceMetadata(buffer: ArrayBuffer, text: string) {
 function response(buffer: ArrayBuffer, ok = true, extraHeaders: Record<string, string> = {}): Response { const bytes = new Uint8Array(buffer); const payloadHash = [...bytes.slice(168, 200)].map(value => value.toString(16).padStart(2, '0')).join(''); return { ok, status: ok ? 200 : 503, headers: new Headers({ 'content-type': 'application/vnd.solar.state-tile+binary', 'content-length': String(bytes.byteLength), etag: `"${payloadHash}"`, ...extraHeaders }), arrayBuffer: async () => buffer } as Response }
 
 describe('state tile binary protocol', () => {
+  it('retains a maximum synthetic tile as columns and interns repeated provenance without materializing ID reads', async () => {
+    const count = 32_768
+    const records = Array.from({ length: count }, (_, index) => metadata(`synthetic:${index}`))
+    const states = new Float64Array(count * 6)
+    for (let index = 0; index < states.length; index++) states[index] = index % 2 ? -index / 7 : index / 11
+    states[0] = -0
+    const buffer = await encodeStateTile({ sequence: 0, tileCount: 1, ordinalStart: 0, epochJd: plan.epochJd,
+      metadata: records, states, planHash, catalogManifestSha256 })
+    const decoded = await decodeStateTile(buffer, { planHash, catalogManifestSha256 })
+    expect(Array.isArray(decoded.metadata)).toBe(false)
+    expect(decoded.metadata.length).toBe(count)
+    expect(decoded.metadata.numericByteLength).toBe(count * (10 * 4 + 4 * 8 + 1))
+    expect(decoded.metadata.internedStringCount).toBe(count + 8)
+    const readRow = vi.spyOn(decoded.metadata, 'rowAt')
+    for (let index = 0; index < count; index++) expect(decoded.metadata.idAt(index)).toBe(`synthetic:${index}`)
+    expect(readRow).not.toHaveBeenCalled()
+    const page = Array.from({ length: 20 }, (_, index) => decoded.metadata.rowAt(100 + index))
+    expect(readRow).toHaveBeenCalledTimes(20)
+    expect(page.map(row => row.id)).toEqual(records.slice(100, 120).map(row => row.id))
+    readRow.mockRestore()
+    expect(new Uint8Array(decoded.states.buffer)).toEqual(new Uint8Array(states.buffer))
+    // Input bytes and materialized evidence are not retained mutable aliases.
+    new Uint8Array(buffer).fill(0)
+    records[100].source = 'mutated input'
+    page[0].source = 'mutated row'
+    expect(decoded.metadata.rowAt(100).source).toBe('fixture')
+    expect(decoded.metadata.idAt(count - 1)).toBe(`synthetic:${count - 1}`)
+  })
+
+  it('preserves every evidence flag, window, original Unicode ID and rejects invalid accessor ordinals', async () => {
+    const rows = Array.from({ length: 8 }, (_, flags) => ({ ...metadata(`来源:彗星:${flags}`),
+      validityPresent: Boolean(flags & 1), evidenceWindowPresent: Boolean(flags & 2), sourceRecord: Boolean(flags & 4),
+      validityStartEt: -0, validityEndEt: 1e12, evidenceWindowStartEt: -1e12, evidenceWindowEndEt: 0.125,
+      missingReason: 'unresolved-source-identity', identityStatus: 'unmapped', backendId: 'must-not-rename' }))
+    const buffer = await encodeStateTile({ sequence: 0, tileCount: 1, ordinalStart: 0, epochJd: plan.epochJd,
+      metadata: rows, exact: [], states: new Float64Array(48), planHash, catalogManifestSha256 })
+    const decoded = await decodeStateTile(buffer, { planHash, catalogManifestSha256 })
+    for (let index = 0; index < rows.length; index++) {
+      const expected = Object.fromEntries(Object.entries(rows[index]).filter(([key]) => !['availability', 'precision', 'backendId'].includes(key)))
+      const actual = decoded.metadata.rowAt(index)
+      expect(actual).toEqual({ ...expected, validityStartEt: 0 })
+      expect(Object.is(actual.validityStartEt, -0)).toBe(false) // JSON encodes -0 as 0.
+      expect(actual).not.toHaveProperty('backendId')
+      expect(actual).not.toHaveProperty('availability')
+      expect(actual).not.toHaveProperty('precision')
+    }
+    for (const ordinal of [-1, 8, 1.5, NaN, Infinity]) {
+      expect(() => decoded.metadata.idAt(ordinal)).toThrow(RangeError)
+      expect(() => decoded.metadata.rowAt(ordinal)).toThrow(RangeError)
+    }
+  })
+
   it('rejects assembled exact/missing totals that disagree with the validated plan', async () => {
     const mixedPlan = validateStateTilePlan({ ...plan, precision: 'exact', distanceUnit: 'km', velocityUnit: 'km/s',
       fieldMask: ['position', 'velocity'], bodyCount: 2, exactCount: 1, approximateCount: 0, missingCount: 1,
@@ -88,7 +140,7 @@ describe('state tile binary protocol', () => {
     expect([...bytes.slice(0, 8)]).toEqual([...STATE_TILE_MAGIC])
     expect(bytes.slice(0, 8)).toEqual(Uint8Array.from([0x53, 0x4c, 0x52, 0x54, 0x49, 0x4c, 0x45, 0x00]))
     const view = new DataView(buffer); expect(view.getUint16(8, true)).toBe(1); expect(view.getUint16(10, true)).toBe(STATE_TILE_HEADER_BYTES); expect(view.getUint32(12, true)).toBe(0); expect(view.getUint16(28, true)).toBe(6); expect(view.getUint16(30, true)).toBe(3); expect(view.getFloat64(32, true)).toBe(2461287.5)
-    const decoded = await decodeStateTile(buffer, { planHash, catalogManifestSha256, sequence: 0, tileCount: 2 }); expect(decoded.states).toBeInstanceOf(Float64Array); expect([...decoded.states.slice(0, 3)]).toEqual([1, 2, 3]); expect(decoded.metadata[0].id).toBe('earth')
+    const decoded = await decodeStateTile(buffer, { planHash, catalogManifestSha256, sequence: 0, tileCount: 2 }); expect(decoded.states).toBeInstanceOf(Float64Array); expect([...decoded.states.slice(0, 3)]).toEqual([1, 2, 3]); expect(decoded.metadata.idAt(0)).toBe('earth')
   })
 
   it('rejects a checksum or bitmap mutation', async () => {
@@ -139,7 +191,7 @@ describe('state tile binary protocol', () => {
 
   it('assembles out of order tiles, is idempotent for duplicates, and rejects conflicts', async () => {
     const first = await decodeStateTile(await tile(0, 'earth', 1), { planHash, catalogManifestSha256 }); const second = await decodeStateTile(await tile(1, 'mars', 4), { planHash, catalogManifestSha256 });
-    expect(assembleStateTiles([second, first, first], plan).map(item => item.metadata[0].id)).toEqual(['earth', 'mars'])
+    expect(assembleStateTiles([second, first, first], plan).map(item => item.metadata.idAt(0))).toEqual(['earth', 'mars'])
     const reordered = await decodeStateTile(await tile(0, 'mars', 1), { planHash, catalogManifestSha256 }); expect(() => assembleStateTiles([reordered, second], plan)).toThrow(/ordinal/i)
     const conflicting = await decodeStateTile(await tile(1, 'mars', 8), { planHash, catalogManifestSha256 }); expect(() => assembleStateTiles([first, second, conflicting], plan)).toThrow(/conflicting/i)
   })
@@ -147,7 +199,7 @@ describe('state tile binary protocol', () => {
   it('retries one failed tile and never exceeds two in flight', async () => {
     let active = 0; let maximum = 0; let attempts = 0; const buffers = [await tile(0, 'earth', 1), await tile(1, 'mars', 4)]
     const fetcher = vi.fn(async (_url: string, init?: RequestInit) => { active += 1; maximum = Math.max(maximum, active); await new Promise(resolve => setTimeout(resolve, 1)); active -= 1; const sequence = JSON.parse(String(init?.body)).sequence as number; if (sequence === 1 && attempts++ === 0) return response(buffers[1], false); return response(buffers[sequence]) }) as typeof fetch
-    const result = await fetchStateTiles({ base: 'https://fixture', plan, signal: new AbortController().signal, fetcher }); expect(result.map(item => item.metadata[0].id)).toEqual(['earth', 'mars']); expect(attempts).toBe(2); expect(maximum).toBeLessThanOrEqual(2)
+    const result = await fetchStateTiles({ base: 'https://fixture', plan, signal: new AbortController().signal, fetcher }); expect(result.map(item => item.metadata.idAt(0))).toEqual(['earth', 'mars']); expect(attempts).toBe(2); expect(maximum).toBeLessThanOrEqual(2)
   })
 
   it('aborts sibling transfers immediately when a tile fails without aborting the caller', async () => {
@@ -201,6 +253,6 @@ describe('state tile binary protocol', () => {
   })
 
   it('preserves unknown metadata ids and ordinal order', async () => {
-    const unknown = await decodeStateTile(await tile(0, 'unknown:42', 1), { planHash, catalogManifestSha256 }); expect(unknown.metadata.map(row => row.id)).toEqual(['unknown:42']); expect(unknown.ordinalStart).toBe(0)
+    const unknown = await decodeStateTile(await tile(0, 'unknown:42', 1), { planHash, catalogManifestSha256 }); expect(unknown.metadata.idAt(0)).toBe('unknown:42'); expect(unknown.metadata.length).toBe(1); expect(unknown.ordinalStart).toBe(0)
   })
 })

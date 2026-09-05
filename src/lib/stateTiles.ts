@@ -38,6 +38,64 @@ export type StateTileMetadata = {
   sourceRecord?: boolean
 }
 
+const EVIDENCE_STRINGS = ['id', 'source', 'datasetVersion', 'datasetSha256', 'kernelSha256', 'model', 'centerId', 'stateEvidence', 'missingReason', 'identityStatus'] as const
+const EVIDENCE_NUMBERS = ['validityStartEt', 'validityEndEt', 'evidenceWindowStartEt', 'evidenceWindowEndEt'] as const
+
+/** Immutable, column-packed evidence for a verified tile. Decoding validates
+ * each wire row before packing; no parsed row objects survive here.
+ * Only an explicitly requested row is materialized, without an object cache. */
+class StateTileEvidence {
+  readonly length: number
+  readonly #strings: string[] = []
+  readonly #stringIndexes: Uint32Array
+  readonly #numbers: Float64Array
+  readonly #flags: Uint8Array
+
+  constructor(length: number, readValidatedRow: (index: number) => StateTileMetadata) {
+    this.length = length
+    this.#stringIndexes = new Uint32Array(length * EVIDENCE_STRINGS.length)
+    this.#numbers = new Float64Array(length * EVIDENCE_NUMBERS.length)
+    this.#flags = new Uint8Array(length)
+    // The interning Map is construction-only; frames retain just the table.
+    const dictionary = new Map<string, number>()
+    for (let index = 0; index < length; index++) {
+      const row = readValidatedRow(index)
+      for (let column = 0; column < EVIDENCE_STRINGS.length; column++) {
+        const value = row[EVIDENCE_STRINGS[column]]!
+        let ordinal = dictionary.get(value)
+        if (ordinal === undefined) { ordinal = this.#strings.length; this.#strings.push(value); dictionary.set(value, ordinal) }
+        this.#stringIndexes[column * length + index] = ordinal
+      }
+      for (let column = 0; column < EVIDENCE_NUMBERS.length; column++) this.#numbers[column * length + index] = row[EVIDENCE_NUMBERS[column]]!
+      this.#flags[index] = Number(row.validityPresent) | (Number(row.evidenceWindowPresent) << 1) | (Number(row.sourceRecord) << 2)
+    }
+  }
+
+  /** Typed-column bytes only, not a JavaScript heap/RSS estimate. */
+  get numericByteLength() { return this.#stringIndexes.byteLength + this.#numbers.byteLength + this.#flags.byteLength }
+  get internedStringCount() { return this.#strings.length }
+
+  #check(index: number) {
+    if (!Number.isInteger(index) || index < 0 || index >= this.length) throw new RangeError('State tile evidence ordinal is out of range')
+  }
+
+  idAt(index: number): string {
+    this.#check(index)
+    return this.#strings[this.#stringIndexes[index]]
+  }
+
+  rowAt(index: number): StateTileMetadata {
+    this.#check(index)
+    const row: Record<string, string | number | boolean> = {}
+    for (let column = 0; column < EVIDENCE_STRINGS.length; column++) row[EVIDENCE_STRINGS[column]] = this.#strings[this.#stringIndexes[column * this.length + index]]
+    for (let column = 0; column < EVIDENCE_NUMBERS.length; column++) row[EVIDENCE_NUMBERS[column]] = this.#numbers[column * this.length + index]
+    row.validityPresent = Boolean(this.#flags[index] & 1)
+    row.evidenceWindowPresent = Boolean(this.#flags[index] & 2)
+    row.sourceRecord = Boolean(this.#flags[index] & 4)
+    return row as StateTileMetadata
+  }
+}
+
 export type StateTile = {
   sequence: number
   tileCount: number
@@ -46,7 +104,7 @@ export type StateTile = {
   stride: number
   fieldMask: number
   epochJd: number
-  metadata: StateTileMetadata[]
+  metadata: StateTileEvidence
   exactBitmap: Uint8Array
   approximateBitmap: Uint8Array
   missingBitmap: Uint8Array
@@ -264,19 +322,6 @@ export async function decodeStateTile(input: ArrayBuffer | Uint8Array, expected:
   const metadataEnd = metadataOffset + metadataLength
   if (bytes[metadataEnd - 1] !== 10) fail('metadata is not canonical NDJSON')
   const textDecoder = new TextDecoder('utf-8', { fatal: true })
-  const metadata: StateTileMetadata[] = []
-  let cursor = metadataOffset
-  for (let row = 0; row < recordCount; row += 1) {
-    const end = bytes.indexOf(10, cursor)
-    if (end <= cursor || end >= metadataEnd) fail('metadata row count is invalid')
-    // Bound parsing by the declared count, without a full metadata String,
-    // split array, or object allocation for undeclared rows.
-    const item = JSON.parse(textDecoder.decode(bytes.subarray(cursor, end))) as StateTileMetadata
-    if (!item || typeof item.id !== 'string' || !item.id) fail('metadata id is invalid')
-    metadata.push(item)
-    cursor = end + 1
-  }
-  if (cursor !== metadataEnd) fail('metadata row count is invalid')
   const exactBitmap = bytes.slice(exactBitmapOffset, exactBitmapOffset + bitmapLength); const approximateBitmap = bytes.slice(approximateBitmapOffset, approximateBitmapOffset + bitmapLength); const missingBitmap = bytes.slice(missingBitmapOffset, missingBitmapOffset + bitmapLength)
   const usedBits = recordCount & 7
   if (usedBits !== 0) {
@@ -285,11 +330,17 @@ export async function decodeStateTile(input: ArrayBuffer | Uint8Array, expected:
   }
   if (approximateBitmap.some(Boolean)) fail('approximate state is not allowed')
   const epochEt = (epochJd - 2_451_545) * 86_400
-  for (let index = 0; index < recordCount; index += 1) {
+  let cursor = metadataOffset
+  const metadata = new StateTileEvidence(recordCount, index => {
+    const end = bytes.indexOf(10, cursor)
+    if (end <= cursor || end >= metadataEnd) fail('metadata row count is invalid')
+    // Parse, validate and pack one declared row at a time. Neither a complete
+    // metadata String nor an array of parsed row objects is retained.
+    const row = JSON.parse(textDecoder.decode(bytes.subarray(cursor, end))) as StateTileMetadata
+    if (!row || typeof row.id !== 'string' || !row.id) fail('metadata id is invalid')
     const exact = hasBit(exactBitmap, index); const approximate = hasBit(approximateBitmap, index); const missing = hasBit(missingBitmap, index)
     if (Number(exact) + Number(approximate) + Number(missing) !== 1) fail('bitmap has non-exclusive state status')
     if (approximate) fail('approximate state is not allowed')
-    const row = metadata[index]
     if (typeof row.source !== 'string' || typeof row.datasetVersion !== 'string' || typeof row.datasetSha256 !== 'string' || typeof row.kernelSha256 !== 'string' || typeof row.model !== 'string' || typeof row.centerId !== 'string' || typeof row.validityStartEt !== 'number' || !Number.isFinite(row.validityStartEt) || typeof row.validityEndEt !== 'number' || !Number.isFinite(row.validityEndEt) || typeof row.validityPresent !== 'boolean' || typeof row.stateEvidence !== 'string' || typeof row.evidenceWindowStartEt !== 'number' || !Number.isFinite(row.evidenceWindowStartEt) || typeof row.evidenceWindowEndEt !== 'number' || !Number.isFinite(row.evidenceWindowEndEt) || typeof row.evidenceWindowPresent !== 'boolean' || typeof row.missingReason !== 'string' || typeof row.identityStatus !== 'string' || typeof row.sourceRecord !== 'boolean') fail('metadata fields are incomplete')
     if (exact) {
       const expectedDatasetHash = row.sourceRecord ? expected.inventoryManifestSha256 : expected.catalogManifestSha256
@@ -300,7 +351,10 @@ export async function decodeStateTile(input: ArrayBuffer | Uint8Array, expected:
       if (row.validityPresent && (row.validityStartEt > row.validityEndEt || !Number.isFinite(epochEt) || epochEt < row.validityStartEt - 0.0001 || epochEt > row.validityEndEt + 0.0001)) fail('state outside validity')
       if (row.evidenceWindowPresent && (row.evidenceWindowStartEt > row.evidenceWindowEndEt || !Number.isFinite(epochEt) || epochEt < row.evidenceWindowStartEt - 0.0001 || epochEt > row.evidenceWindowEndEt + 0.0001)) fail('state outside evidence window')
     } else if (!isNonEmptyString(row.missingReason)) fail('missing metadata is missing a reason')
-  }
+    cursor = end + 1
+    return row
+  })
+  if (cursor !== metadataEnd) fail('metadata row count is invalid')
   if (statesOffset + statesLength > bytes.byteLength) fail('state section is out of range')
   const states = new Float64Array(recordCount * stride)
   for (let index = 0; index < states.length; index += 1) {
@@ -337,7 +391,7 @@ export function assembleStateTiles(tiles: readonly StateTile[], plan: StateTileP
     // Count each verified row once, after duplicate tiles have been reconciled.
     // Plan totals are scientific coverage claims, not optional display hints.
     for (let row = 0; row < tile.recordCount; row += 1) {
-      if (tile.metadata[row]?.id !== plan.requestIds[tile.ordinalStart + row]) fail('tile metadata ordinal mismatch')
+      if (tile.metadata.idAt(row) !== plan.requestIds[tile.ordinalStart + row]) fail('tile metadata ordinal mismatch')
       const byte = row >> 3, bit = 1 << (row % 8)
       if (tile.exactBitmap[byte] & bit) exactCount++
       if (tile.approximateBitmap[byte] & bit) approximateCount++
@@ -424,7 +478,8 @@ type ResolvedState = { backendId: string; position?: Vector3; audit: StateTileAu
 
 export function collectResolvedStateTiles(tiles: readonly StateTile[]): Map<string, ResolvedState> {
   const states = new Map<string, ResolvedState>()
-  for (const tile of tiles) tile.metadata.forEach((metadata, index) => {
+  for (const tile of tiles) for (let index = 0; index < tile.recordCount; index++) {
+    const metadata = tile.metadata.rowAt(index)
     const exact = hasBit(tile.exactBitmap, index)
     const approximate = hasBit(tile.approximateBitmap, index)
     // Assembly binds id to the requested ordinal; extension fields cannot
@@ -451,7 +506,7 @@ export function collectResolvedStateTiles(tiles: readonly StateTile[]): Map<stri
       },
       ...(exact ? { position: { x: tile.states[index * 6] / AU_IN_KM, y: tile.states[index * 6 + 1] / AU_IN_KM, z: tile.states[index * 6 + 2] / AU_IN_KM } } : {}),
     })
-  })
+  }
   return states
 }
 

@@ -63,11 +63,13 @@ export function SourceIdentityBrowser() {
       <p>{t('sourceIdentityVerified')}: {result.plan.exactCount} · {t('sourceIdentityMissing')}: {result.plan.missingCount}</p>
       <p>TDB JD {result.plan.epochJd} · ECLIPJ2000 · naif:0 · km · km/s</p>
       <p className="checksum">{result.plan.catalogManifestSha256}<br />{result.plan.inventoryManifestSha256}</p>
-      {result.tiles.flatMap(tile => tile.metadata.map((row, index) => {
+      {result.tiles.flatMap(tile => Array.from({ length: tile.recordCount }, (_, index) => {
+        // Source-directory inspection is bounded to one 50-row page.
+        const row = tile.metadata.rowAt(index)
         const exact = Boolean(tile.exactBitmap[index >> 3] & (1 << (index & 7)))
         return <details key={row.id}><summary>{row.id}: {t(exact ? 'sourceIdentityVerified' : 'sourceIdentityMissing')}</summary>
           <p>{row.source} · {row.datasetVersion} · {row.model}</p><p>{row.missingReason}</p>
-          <p>{row.centerId} · {row.stateEvidence} · {row.availability}</p>
+          <p>{row.centerId} · {row.stateEvidence}</p>
           {exact && <p className="checksum">{Array.from(tile.states.subarray(index * 6, index * 6 + 6)).join(', ')}</p>}
           <p className="checksum">{row.datasetSha256}<br />{row.kernelSha256}<br />{tile.payloadSha256}</p>
           <p>{t('sourceIdentityValidity')}: {row.validityPresent ? `${row.validityStartEt} … ${row.validityEndEt}` : t('sourceIdentityMissing')}</p>

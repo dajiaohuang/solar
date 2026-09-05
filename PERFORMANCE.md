@@ -148,6 +148,28 @@ The local timing is diagnostic, not a cross-machine performance guarantee. Stabl
 
 Production uses `npm run build:deploy`. The builder excludes stale releases, copies only the audited active version, keeps binary numeric artifacts byte-identical, and deterministically gzip-compresses large search, lookup, metadata, legacy chunk, and sample JSON. The generated capacity report separates application shell, total dataset, cold-load, and typical Catalog-session bytes; it fails closed above the Pages budget.
 
+## Web state-tile evidence storage
+
+Verified Web tile metadata now retains an interned string table, ten Uint32
+string-index columns, four Float64 evidence-window columns and one flag byte
+per record. Decoding parses, validates and packs one row at a time rather than
+retaining a parsed metadata array. ID/ordinal reads do not materialize evidence objects; `rowAt`
+materializes only a requested row and does not cache it. Unknown original IDs
+and all validated provenance/window flags remain intact. Availability and
+precision come from the verified bitmaps, never optional metadata extensions.
+The bounded source-directory inspection reads at most one 50-row evidence page.
+
+The maximum-size synthetic tile regression checks 32,768 rows, 73 typed-column
+bytes per row plus interned strings, a 20-row materialization, mutation isolation
+and byte-identical Float64 six-vectors. These are structural storage checks,
+not total JavaScript heap/RSS, device FPS or astronomical-coverage measurements.
+The binary wire format, hash/ordinal checks and scientific values are unchanged.
+
+This is not yet packed delivery end to end: the resolved-state Maps,
+reference-frame audit/current-position objects and historical trajectory
+unpacking remain to be replaced. Bulk render consumers must ultimately read
+typed buffers directly; a full-size object adapter is not the migration target.
+
 ## Shared backend tile encoding
 
 Exact-state tiles retain a 64 MiB byte-bounded response cache and two concurrent

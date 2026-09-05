@@ -39,19 +39,20 @@ describe.skipIf(!base)('live Go → Web state-tile integration', () => {
     } while (pageToken)
     expect(ids.length).toBeGreaterThan(510)
     const { tiles } = await load([...ids, 'test:unknown-identity'])
-    expect(tiles.flatMap(tile => tile.metadata.map(row => row.id))).toEqual([...ids, 'test:unknown-identity'])
+    expect(tiles.flatMap(tile => Array.from({ length: tile.recordCount }, (_, row) => tile.metadata.idAt(row)))).toEqual([...ids, 'test:unknown-identity'])
     const tile = tiles[0]
-    expect(tile.metadata.at(-1)?.missingReason).toBe('unknown-identity')
+    expect(tile.metadata.rowAt(tile.recordCount - 1).missingReason).toBe('unknown-identity')
     for (let row = 0; row < ids.length; row++) expect(tile.exactBitmap[row >> 3] & (1 << (row % 8))).not.toBe(0)
     const selected = ['sun', 'naif:10', 'earth', 'naif:399', 'naif:301', 'naif:599', 'naif:501']
     const trajectory = await json('trajectory', { bodyIds: selected, startJd: epochJd, endJd: epochJd + 0.01, samples: 2, frame: 'ECLIPJ2000', precision: 'exact' }) as { bodies: { id: string; states: number[]; availability: string }[] }
     for (const body of trajectory.bodies) {
-      const row = tile.metadata.findIndex(item => item.id === body.id)
+      const row = ids.indexOf(body.id)
       expect(row).toBeGreaterThanOrEqual(0)
       expect(body.availability).toBe('operational')
       expect(tile.exactBitmap[row >> 3] & (1 << (row % 8))).not.toBe(0)
-      expect(tile.metadata[row].datasetSha256).toBe(tile.catalogManifestSha256)
-      expect(tile.metadata[row].kernelSha256).toMatch(/^[a-f0-9]{64}$/)
+      expect(tile.metadata.idAt(row)).toBe(body.id)
+      expect(tile.metadata.rowAt(row).datasetSha256).toBe(tile.catalogManifestSha256)
+      expect(tile.metadata.rowAt(row).kernelSha256).toMatch(/^[a-f0-9]{64}$/)
       for (let axis = 0; axis < 6; axis++) expect(bits(tile.states[row * 6 + axis])).toBe(bits(body.states[axis]))
     }
   }, 90_000)
@@ -62,11 +63,11 @@ describe.skipIf(!base)('live Go → Web state-tile integration', () => {
     expect(manifest.inventoryManifestSha256).toMatch(/^[a-f0-9]{64}$/)
     const tile = tiles[0]
     expect(tile.exactBitmap[0]).toBe(3)
-    expect(tile.metadata[0].sourceRecord).toBe(true)
-    expect(tile.metadata[0].datasetSha256).toBe(manifest.inventoryManifestSha256)
-    expect(tile.metadata[1].sourceRecord).toBe(false)
-    expect(tile.metadata[1].datasetSha256).toBe(manifest.catalogManifestSha256)
-    expect(tile.metadata[0].kernelSha256).toBe(tile.metadata[1].kernelSha256)
+    expect(tile.metadata.rowAt(0).sourceRecord).toBe(true)
+    expect(tile.metadata.rowAt(0).datasetSha256).toBe(manifest.inventoryManifestSha256)
+    expect(tile.metadata.rowAt(1).sourceRecord).toBe(false)
+    expect(tile.metadata.rowAt(1).datasetSha256).toBe(manifest.catalogManifestSha256)
+    expect(tile.metadata.rowAt(0).kernelSha256).toBe(tile.metadata.rowAt(1).kernelSha256)
     for (let axis = 0; axis < 6; axis++) expect(bits(tile.states[axis])).toBe(bits(tile.states[6 + axis]))
   }, 90_000)
 
@@ -74,7 +75,7 @@ describe.skipIf(!base)('live Go → Web state-tile integration', () => {
     const ids = ['naif:10', 'naif:399', ...Array.from({ length: 32766 }, (_, i) => `test:missing:${i}`)]
     const { plan, tiles } = await load(ids)
     expect(tiles.map(tile => tile.recordCount)).toEqual([16384, 16384])
-    expect(tiles.flatMap(tile => tile.metadata.map(row => row.id))).toEqual(ids)
+    expect(tiles.flatMap(tile => Array.from({ length: tile.recordCount }, (_, row) => tile.metadata.idAt(row)))).toEqual(ids)
     expect(tiles[0].exactBitmap[0]).toBe(3)
     expect(tiles[1].exactBitmap.every(byte => byte === 0)).toBe(true)
     const repeated = assembleStateTiles(await fetchStateTiles({ base: base!, plan, signal: signal() }), plan)

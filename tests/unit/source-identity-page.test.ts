@@ -76,6 +76,6 @@ it.skipIf(!liveBase)('browses real full-source pages and checks their exact/miss
   expect(result.plan.requestIds).toEqual(first.items.map(row => row.id))
   expect(result.plan.exactCount + result.plan.missingCount).toBe(50)
   expect(result.plan.approximateCount).toBe(0)
-  expect(result.tiles.flatMap(tile => tile.metadata.map(row => row.id))).toEqual(result.plan.requestIds)
+  expect(result.tiles.flatMap(tile => Array.from({ length: tile.recordCount }, (_, row) => tile.metadata.idAt(row)))).toEqual(result.plan.requestIds)
   console.log(JSON.stringify({ sourceRecords: first.totalRecords, page: 50, exact: result.plan.exactCount, missing: result.plan.missingCount, inventoryHash: first.manifest.inventoryManifestSha256 }))
 }, 100_000)
