@@ -27,7 +27,7 @@ export function BackendCoverageLedger({ coverage, frame, referenceIds }: {
       <p>TDB JD {frame.epochTdbJd.toFixed(9)} · ECLIPJ2000</p>
       <p className="checksum">{t('coverageCatalogHash')}: {frame.catalogManifestSha256}</p>
       {frame.inventoryManifestSha256 && <p className="checksum">{t('coverageInventoryHash')}: {frame.inventoryManifestSha256}</p>}
-      <p>{t('referenceFrame')}: {referenceIds.map(id => `${id}: ${frame.absolutePositions.has(id) ? t('coverageExact') : t('coverageMissing')}`).join(', ')}</p>
+      <p>{t('referenceFrame')}: {referenceIds.map(id => `${id}: ${frame.evidence.hasPosition(id) ? t('coverageExact') : t('coverageMissing')}`).join(', ')}</p>
     </>}
     {coverage.missingReasons.map(([reason, count]) => <p key={reason}>{t('coverageMissing')}: {reason} ({count})</p>)}
     {page.rows.length > 0 && <details className="coverage-rows">

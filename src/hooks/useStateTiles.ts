@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { utcJulianDayToTdb } from '../engine/ephemeris/timeScales'
 import { PRODUCT_PROFILE } from '../lib/productAvailability'
 import { backendBodyId } from '../lib/currentStateIdentity'
-import { assembleStateTiles, buildBackendFrameFromResolved, chunkStatePlanIds, collectResolvedStateTiles, digestStateTileRequestIds, fetchStateTiles, readStateTileJson, validateStateTileManifest, validateStateTilePlan, type StateTileManifest, type StateTilePlan } from '../lib/stateTiles'
+import { assembleStateTiles, buildBackendFrame, chunkStatePlanIds, StateTileSnapshot, digestStateTileRequestIds, fetchStateTiles, readStateTileJson, validateStateTileManifest, validateStateTilePlan, type StateTile, type StateTileManifest, type StateTilePlan } from '../lib/stateTiles'
 import type { BackendFrame } from '../lib/backendFrames'
 import type { BodyId, CelestialBody } from '../types'
 
@@ -33,17 +33,17 @@ export async function loadStateTileFrames(params: { base: string; bodyIds: strin
   const fetcher = params.fetcher ?? fetch
   const manifestResponse = await fetcher(`${params.base}/v1/catalog/manifest`, { signal: params.signal }); const manifest = validateStateTileManifest(await readStateTileJson(manifestResponse, 'State catalog manifest'))
   const plans: StateTilePlan[] = []
-  const states = new Map<string, import('../lib/stateTiles').ResolvedState>()
+  const tiles: StateTile[] = []
   for (const bodyIds of chunkStatePlanIds(params.bodyIds)) {
     const { plan } = await fetchStateTilePlan({ ...params, bodyIds, manifest })
     if (plan.catalogManifestSha256 !== manifest.catalogManifestSha256) throw new Error('State tile manifest mismatch')
     plans.push(plan)
     const planTiles = assembleStateTiles(await fetchStateTiles({ base: params.base, plan, signal: params.signal, fetcher: params.fetcher }), plan)
-    for (const [backendId, state] of collectResolvedStateTiles(planTiles)) states.set(backendId, state)
+    for (const tile of planTiles) tiles.push(tile)
   }
   const frames = new Map<BodyId, BackendFrame>()
-  const epochJd = plans[0]?.epochJd ?? NaN
-  for (const referenceId of params.referenceIds) frames.set(referenceId, buildBackendFrameFromResolved({ bodies: params.bodies, referenceId, requestedIds: params.requestedIds, states, catalogManifestSha256: manifest.catalogManifestSha256, inventoryManifestSha256: manifest.inventoryManifestSha256, epochJd }))
+  const evidence = new StateTileSnapshot(tiles, params.requestedIds)
+  for (const referenceId of params.referenceIds) frames.set(referenceId, buildBackendFrame({ bodies: params.bodies, referenceId, evidence }))
   return { manifest, plans, frames, epochUtcJd: params.epochUtcJd ?? NaN }
 }
 

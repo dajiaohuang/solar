@@ -355,9 +355,10 @@ export function ExplorerWorkspace() {
   // backend frame.
   const resolveCurrentPosition = useMemo(() => {
     if (currentStates.configured) {
-      const absolute = new Map<BodyId, { x: number; y: number; z: number }>()
-      for (const frame of currentStates.frames.values()) for (const [id, position] of frame.absolutePositions) absolute.set(id, position)
-      return createBackendPositionResolver(absolute, renderedJulianDay)
+      // Reference views share one absolute scientific snapshot. Resolve only
+      // the requested body, without copying a full position Map per frame.
+      const evidence = currentStates.frames.values().next().value?.evidence
+      return createBackendPositionResolver(bodyId => evidence?.positionAu(bodyId), renderedJulianDay)
     }
     if (PRODUCT_PROFILE === 'preview') return createBodyPositionResolver(bodiesById, renderedJulianDay)
     return (bodyId: BodyId) => { throw new MissingBodyStateError(bodyId, renderedJulianDay) }

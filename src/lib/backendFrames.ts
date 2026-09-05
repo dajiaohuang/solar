@@ -10,8 +10,20 @@ export type BackendFrame = {
   inventoryManifestSha256?: string
   epochJd: number
   epochTdbJd: number
-  audit: StateTileAudit[]
-  absolutePositions: Map<BodyId, Vector3>
+  evidence: BackendStateEvidence
+}
+
+/** A shared scientific snapshot. Scalar/ID reads do not create audit rows;
+ * evidence pages and explicitly requested positions are materialized on demand. */
+export type BackendStateEvidence = {
+  readonly length: number
+  bodyIdAt(index: number): BodyId
+  backendIdAt(index: number): string
+  statusAt(index: number): 'exact' | 'approximate' | 'missing'
+  missingReasonAt(index: number): string
+  rowAt(index: number): StateTileAudit
+  hasPosition(bodyId: BodyId): boolean
+  positionAu(bodyId: BodyId): Vector3 | undefined
 }
 
 export type StateTileAudit = {
@@ -37,9 +49,9 @@ export type StateTileAudit = {
   missingReason: string
 }
 
-export function createBackendPositionResolver(absolutePositions: ReadonlyMap<BodyId, Vector3>, epochJd = NaN) {
+export function createBackendPositionResolver(readPosition: (bodyId: BodyId) => Vector3 | undefined, epochJd = NaN) {
   return (bodyId: BodyId): Vector3 => {
-    const position = absolutePositions.get(bodyId)
+    const position = readPosition(bodyId)
     if (!position) throw new MissingBodyStateError(bodyId, epochJd)
     return position
   }

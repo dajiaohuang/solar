@@ -7,7 +7,11 @@ function audit(bodyId: string, backendId = bodyId, missingReason = ''): StateTil
     source: 'fixture', datasetVersion: 'fixture', model: 'spk-original', centerId: 'naif:0', stateEvidence: 'fixture', missingReason }
 }
 function frame(rows: StateTileAudit[]): BackendFrame {
-  return { audit: rows, currentPositions: [], missingBodyIds: [], maxDistance: 0, absolutePositions: new Map(),
+  const evidence = { length: rows.length, bodyIdAt: (index: number) => rows[index].bodyId,
+    backendIdAt: (index: number) => rows[index].backendId, rowAt: (index: number) => rows[index],
+    statusAt: (index: number): 'exact' | 'approximate' | 'missing' => rows[index].availability === 'operational' ? 'exact' : rows[index].availability === 'missing' ? 'missing' : 'approximate',
+    missingReasonAt: (index: number) => rows[index].missingReason, hasPosition: () => false, positionAu: () => undefined }
+  return { evidence, currentPositions: [], missingBodyIds: [], maxDistance: 0,
     catalogManifestSha256: 'a'.repeat(64), epochJd: 2451545, epochTdbJd: 2451545 }
 }
 
@@ -18,7 +22,7 @@ describe('backend coverage populations', () => {
     ]))
     expect(result).toMatchObject({ selectedCount: 4, receivedCount: 3, uniqueRequestIdentities: 2, exactCount: 2, missingCount: 1, pendingCount: 1, projectedCount: 0,
       missingReasons: [['kernel-coverage-gap', 1]] })
-    expect(result.rows.map(row => row.bodyId)).toEqual(['earth', 'alias', 'moon'])
+    expect(coveragePage(result.rows, 0).rows.map(row => row.bodyId)).toEqual(['earth', 'alias', 'moon'])
   })
   it('does not call pending or failed responses explicit missing states', () => {
     expect(summarizeBackendCoverage(['moon'], null)).toMatchObject({ receivedCount: 0, exactCount: 0, missingCount: 0, pendingCount: 1 })
@@ -31,9 +35,9 @@ describe('backend coverage populations', () => {
     expect(summarizeBackendCoverage(['asteroid'], frame([row]))).toMatchObject({ receivedCount: 1, exactCount: 0, missingCount: 0 })
   })
   it('bounds evidence pages and clamps a retained page after selection shrinks', () => {
-    const rows = Array.from({ length: 10001 }, (_, n) => n)
-    expect(coveragePage(rows, 10).rows).toEqual(rows.slice(200, 220))
-    expect(coveragePage([1, 2], 10)).toEqual({ page: 0, pages: 1, rows: [1, 2] })
-    expect(coveragePage(rows, Infinity).rows).toEqual(rows.slice(0, 20))
+    const rows = { length: 10001, rowAt: (index: number) => index }
+    expect(coveragePage(rows, 10).rows).toEqual(Array.from({ length: 20 }, (_, index) => index + 200))
+    expect(coveragePage({ length: 2, rowAt: (index: number) => index + 1 }, 10)).toEqual({ page: 0, pages: 1, rows: [1, 2] })
+    expect(coveragePage(rows, Infinity).rows).toEqual(Array.from({ length: 20 }, (_, index) => index))
   })
 })

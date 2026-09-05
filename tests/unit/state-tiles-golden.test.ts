@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { assembleStateTiles, decodeStateTile, digestStateTileRequestIds, validateStateTileManifest, validateStateTilePlan } from '../../src/lib/stateTiles'
+import { assembleStateTiles, decodeStateTile, digestStateTileRequestIds, StateTileSnapshot, validateStateTileManifest, validateStateTilePlan } from '../../src/lib/stateTiles'
 
 const directory = process.env.SOLAR_STATE_TILE_FIXTURE_DIR
 type Golden = {
@@ -36,6 +36,17 @@ describe.skipIf(!directory)('shared Go-generated state tiles', () => {
       }
       decoded.push(tile)
     }
-    expect(assembleStateTiles(decoded.reverse(), plan).flatMap(tile => Array.from({ length: tile.recordCount }, (_, row) => tile.metadata.idAt(row)))).toEqual(golden.ids)
+    const assembled = assembleStateTiles(decoded.reverse(), plan)
+    expect(assembled.flatMap(tile => Array.from({ length: tile.recordCount }, (_, row) => tile.metadata.idAt(row)))).toEqual(golden.ids)
+    const snapshot = new StateTileSnapshot(assembled, new Map(golden.ids.map(id => [id, id])))
+    for (const item of golden.tiles) for (const [row, expected] of item.expectedRows.entries()) {
+      const index = item.ordinalStart + row
+      expect(snapshot.backendIdAt(index)).toBe(expected.id)
+      expect(snapshot.statusAt(index)).toBe(expected.status)
+      const values = new Float64Array(6)
+      for (let axis = 0; axis < 6; axis++) values[axis] = snapshot.stateValueAt(index, axis)
+      const view = new DataView(values.buffer)
+      expect(Array.from({ length: 6 }, (_, axis) => view.getBigUint64(axis * 8, true).toString(16).padStart(16, '0'))).toEqual(expected.stateIEEE754BitsLE)
+    }
   })
 })

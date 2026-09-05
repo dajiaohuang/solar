@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { assembleStateTiles, chunkStatePlanIds, collectResolvedStateTiles, decodeStateTile, digestStateTileRequestIds, encodeStateTile, fetchStateTiles, STATE_TILE_HEADER_BYTES, STATE_TILE_MAGIC, validateStateTileManifest, validateStateTilePlan } from '../../src/lib/stateTiles'
+import { Buffer } from 'node:buffer'
+import { assembleStateTiles, chunkStatePlanIds, StateTileSnapshot, decodeStateTile, digestStateTileRequestIds, encodeStateTile, fetchStateTiles, STATE_TILE_HEADER_BYTES, STATE_TILE_MAGIC, validateStateTileManifest, validateStateTilePlan } from '../../src/lib/stateTiles'
 
 const catalogManifestSha256 = 'a'.repeat(64)
 const planHash = 'b'.repeat(64)
@@ -40,13 +41,22 @@ describe('state tile binary protocol', () => {
     expect(decoded.metadata.numericByteLength).toBe(count * (10 * 4 + 4 * 8 + 1))
     expect(decoded.metadata.internedStringCount).toBe(count + 8)
     const readRow = vi.spyOn(decoded.metadata, 'rowAt')
-    for (let index = 0; index < count; index++) expect(decoded.metadata.idAt(index)).toBe(`synthetic:${index}`)
+    // Check every ordinal, without constructing tens of thousands of matcher
+    // objects or deep-comparing a 1.5 MiB typed array as JavaScript properties.
+    const mismatchedId = records.findIndex((record, index) => decoded.metadata.idAt(index) !== record.id)
+    expect(mismatchedId, 'First mismatched original ID ordinal').toBe(-1)
     expect(readRow).not.toHaveBeenCalled()
     const page = Array.from({ length: 20 }, (_, index) => decoded.metadata.rowAt(100 + index))
     expect(readRow).toHaveBeenCalledTimes(20)
     expect(page.map(row => row.id)).toEqual(records.slice(100, 120).map(row => row.id))
     readRow.mockRestore()
-    expect(new Uint8Array(decoded.states.buffer)).toEqual(new Uint8Array(states.buffer))
+    const actualBytes = Buffer.from(decoded.states.buffer, decoded.states.byteOffset, decoded.states.byteLength)
+    const expectedBytes = Buffer.from(states.buffer, states.byteOffset, states.byteLength)
+    expect(actualBytes.equals(expectedBytes), 'Every Float64 state byte, including signed zero').toBe(true)
+    // Prove comparison sensitivity at the last byte; no sampling or rounding.
+    actualBytes[actualBytes.length - 1] ^= 1
+    expect(actualBytes.equals(expectedBytes)).toBe(false)
+    actualBytes[actualBytes.length - 1] ^= 1
     // Input bytes and materialized evidence are not retained mutable aliases.
     new Uint8Array(buffer).fill(0)
     records[100].source = 'mutated input'
@@ -105,10 +115,12 @@ describe('state tile binary protocol', () => {
   it('preserves scientific evidence and binds resolved identity/status to the validated wire fields', async () => {
     const buffer = await encodeStateTile({ sequence: 0, tileCount: 1, ordinalStart: 0, epochJd: plan.epochJd, metadata: [{ ...metadata('earth'), backendId: 'mars', precision: 'invented', availability: 'invented' }], states: new Float64Array([1, 2, 3, 0, 0, 0]), planHash, catalogManifestSha256 })
     const decoded = await decodeStateTile(buffer, { planHash, catalogManifestSha256 })
-    const resolved = collectResolvedStateTiles([decoded])
-    expect([...resolved.keys()]).toEqual(['earth'])
-    expect(resolved.get('earth')?.audit).toMatchObject({ backendId: 'earth', precision: 'exact', availability: 'operational', datasetSha256: catalogManifestSha256, kernelSha256: 'c'.repeat(64), validityPresent: true, sourceRecord: false, evidenceWindowPresent: false })
-    expect(() => collectResolvedStateTiles([decoded, decoded])).toThrow(/duplicate.*identity/i)
+    const requested = new Map([['earth', 'earth']])
+    const resolved = new StateTileSnapshot([decoded], requested)
+    expect(resolved.length).toBe(1)
+    expect(resolved.backendIdAt(0)).toBe('earth')
+    expect(resolved.rowAt(0)).toMatchObject({ bodyId: 'earth', backendId: 'earth', precision: 'exact', availability: 'operational', datasetSha256: catalogManifestSha256, kernelSha256: 'c'.repeat(64), validityPresent: true, sourceRecord: false, evidenceWindowPresent: false })
+    expect(() => new StateTileSnapshot([decoded, decoded], requested)).toThrow(/duplicate.*identity/i)
   })
 
   it('rejects blank NDJSON rows and stops parsing at the declared row count', async () => {

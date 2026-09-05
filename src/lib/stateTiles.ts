@@ -1,5 +1,5 @@
 import { AU_IN_KM } from '../engine/units'
-import type { BackendFrame, StateTileAudit } from './backendFrames'
+import type { BackendFrame, BackendStateEvidence, StateTileAudit } from './backendFrames'
 import type { BodyId, CelestialBody, RenderedBodyPosition, Vector3 } from '../types'
 
 export const STATE_TILE_MAGIC = Uint8Array.from([0x53, 0x4c, 0x52, 0x54, 0x49, 0x4c, 0x45, 0x00])
@@ -82,6 +82,11 @@ class StateTileEvidence {
   idAt(index: number): string {
     this.#check(index)
     return this.#strings[this.#stringIndexes[index]]
+  }
+
+  missingReasonAt(index: number): string {
+    this.#check(index)
+    return this.#strings[this.#stringIndexes[8 * this.length + index]]
   }
 
   rowAt(index: number): StateTileMetadata {
@@ -474,56 +479,107 @@ export async function fetchStateTiles(params: { base: string; plan: StateTilePla
 
 function subtract(a: Vector3, b: Vector3): Vector3 { return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z } }
 
-type ResolvedState = { backendId: string; position?: Vector3; audit: StateTileAudit }
+/** All reference views share the verified tile buffers and compact evidence.
+ * Only identity-to-ordinal bindings survive assembly, not resolved-state,
+ * absolute-position or audit objects for every received source record. */
+export class StateTileSnapshot implements BackendStateEvidence {
+  readonly #tiles: readonly StateTile[]
+  readonly #bodyIds: string[] = []
+  readonly #byBody = new Map<BodyId, number>()
+  readonly #tileIndexes: Uint32Array
+  readonly #rowIndexes: Uint32Array
+  readonly catalogManifestSha256: string
+  readonly inventoryManifestSha256?: string
+  readonly epochJd: number
 
-export function collectResolvedStateTiles(tiles: readonly StateTile[]): Map<string, ResolvedState> {
-  const states = new Map<string, ResolvedState>()
-  for (const tile of tiles) for (let index = 0; index < tile.recordCount; index++) {
-    const metadata = tile.metadata.rowAt(index)
-    const exact = hasBit(tile.exactBitmap, index)
-    const approximate = hasBit(tile.approximateBitmap, index)
-    // Assembly binds id to the requested ordinal; extension fields cannot
-    // rename a state or override the validated availability bitmaps.
-    const backendId = metadata.id
-    if (states.has(backendId)) fail('duplicate resolved identity')
-    states.set(backendId, {
-      backendId,
-      audit: {
-        bodyId: '', backendId,
-        availability: exact ? 'operational' : approximate ? 'approximate' : 'missing',
-        precision: exact ? 'exact' : approximate ? 'approximate' : 'unavailable',
-        source: metadata.source, datasetVersion: metadata.datasetVersion,
-        datasetSha256: metadata.datasetSha256, kernelSha256: metadata.kernelSha256,
-        model: metadata.model, centerId: metadata.centerId,
-        validityStartEt: metadata.validityStartEt, validityEndEt: metadata.validityEndEt,
-        validityPresent: metadata.validityPresent,
-        evidenceWindowStartEt: metadata.evidenceWindowStartEt,
-        evidenceWindowEndEt: metadata.evidenceWindowEndEt,
-        evidenceWindowPresent: metadata.evidenceWindowPresent,
-        identityStatus: metadata.identityStatus, sourceRecord: metadata.sourceRecord,
-        stateEvidence: metadata.stateEvidence || '',
-        missingReason: metadata.missingReason || (approximate ? 'approximate-state-not-allowed' : ''),
-      },
-      ...(exact ? { position: { x: tile.states[index * 6] / AU_IN_KM, y: tile.states[index * 6 + 1] / AU_IN_KM, z: tile.states[index * 6 + 2] / AU_IN_KM } } : {}),
-    })
+  constructor(tiles: readonly StateTile[], requestedIds: ReadonlyMap<BodyId, string>) {
+    this.#tiles = [...tiles]
+    this.catalogManifestSha256 = tiles[0]?.catalogManifestSha256 ?? ''
+    this.inventoryManifestSha256 = tiles[0]?.inventoryManifestSha256
+    this.epochJd = tiles[0]?.epochJd ?? NaN
+    // A single construction-only identity index binds aliases without
+    // duplicating their six-vectors. Tile/row columns refer to source storage.
+    const sourceOrdinals = new Map<string, number>()
+    let count = 0
+    for (const tile of tiles) {
+      if (tile.catalogManifestSha256 !== this.catalogManifestSha256 || tile.inventoryManifestSha256 !== this.inventoryManifestSha256 || tile.epochJd !== this.epochJd) fail('snapshot identity or epoch mismatch')
+      for (let row = 0; row < tile.recordCount; row++) {
+        const id = tile.metadata.idAt(row)
+        if (sourceOrdinals.has(id)) fail('duplicate resolved identity')
+        sourceOrdinals.set(id, count++)
+      }
+    }
+    const tileForSource = new Uint32Array(count), rowForSource = new Uint32Array(count)
+    let offset = 0
+    for (let tileIndex = 0; tileIndex < tiles.length; tileIndex++) {
+      for (let row = 0; row < tiles[tileIndex].recordCount; row++, offset++) {
+        tileForSource[offset] = tileIndex; rowForSource[offset] = row
+      }
+    }
+    let received = 0
+    for (const backendId of requestedIds.values()) if (sourceOrdinals.has(backendId)) received++
+    this.#tileIndexes = new Uint32Array(received)
+    this.#rowIndexes = new Uint32Array(received)
+    for (const [bodyId, backendId] of requestedIds) {
+      const ordinal = sourceOrdinals.get(backendId)
+      if (ordinal === undefined) continue
+      const index = this.#bodyIds.length
+      this.#bodyIds.push(bodyId); this.#byBody.set(bodyId, index)
+      this.#tileIndexes[index] = tileForSource[ordinal]
+      this.#rowIndexes[index] = rowForSource[ordinal]
+    }
   }
-  return states
+
+  get length() { return this.#bodyIds.length }
+  get bindingByteLength() { return this.#tileIndexes.byteLength + this.#rowIndexes.byteLength }
+  #check(index: number) { if (!Number.isInteger(index) || index < 0 || index >= this.length) throw new RangeError('Snapshot evidence ordinal is out of range') }
+  bodyIdAt(index: number) { this.#check(index); return this.#bodyIds[index] }
+  backendIdAt(index: number) { this.#check(index); return this.#tiles[this.#tileIndexes[index]].metadata.idAt(this.#rowIndexes[index]) }
+  statusAt(index: number): 'exact' | 'approximate' | 'missing' {
+    this.#check(index)
+    const tile = this.#tiles[this.#tileIndexes[index]], row = this.#rowIndexes[index]
+    return hasBit(tile.exactBitmap, row) ? 'exact' : hasBit(tile.approximateBitmap, row) ? 'approximate' : 'missing'
+  }
+  missingReasonAt(index: number) {
+    this.#check(index)
+    return this.#tiles[this.#tileIndexes[index]].metadata.missingReasonAt(this.#rowIndexes[index])
+  }
+  stateValueAt(index: number, component: number): number {
+    this.#check(index)
+    if (!Number.isInteger(component) || component < 0 || component >= STATE_TILE_STRIDE) throw new RangeError('Snapshot state component is out of range')
+    return this.#tiles[this.#tileIndexes[index]].states[this.#rowIndexes[index] * STATE_TILE_STRIDE + component]
+  }
+  rowAt(index: number): StateTileAudit {
+    this.#check(index)
+    const metadata = this.#tiles[this.#tileIndexes[index]].metadata.rowAt(this.#rowIndexes[index])
+    const status = this.statusAt(index)
+    return { ...metadata, bodyId: this.#bodyIds[index], backendId: metadata.id,
+      availability: status === 'exact' ? 'operational' : status,
+      precision: status === 'missing' ? 'unavailable' : status,
+      stateEvidence: metadata.stateEvidence || '',
+      missingReason: metadata.missingReason || (status === 'approximate' ? 'approximate-state-not-allowed' : '') }
+  }
+  hasPosition(bodyId: BodyId) { const index = this.#byBody.get(bodyId); return index !== undefined && this.statusAt(index) === 'exact' }
+  positionAu(bodyId: BodyId): Vector3 | undefined {
+    const index = this.#byBody.get(bodyId)
+    if (index === undefined || this.statusAt(index) !== 'exact') return undefined
+    const tile = this.#tiles[this.#tileIndexes[index]], row = this.#rowIndexes[index]
+    return { x: tile.states[row * 6] / AU_IN_KM, y: tile.states[row * 6 + 1] / AU_IN_KM, z: tile.states[row * 6 + 2] / AU_IN_KM }
+  }
 }
 
-function buildBackendFrameFromResolved(params: { bodies: CelestialBody[]; referenceId: BodyId; requestedIds: Map<BodyId, string>; states: ReadonlyMap<string, ResolvedState>; catalogManifestSha256: string; inventoryManifestSha256?: string; epochJd: number }): BackendFrame {
-  const absolute = new Map<string, Vector3>(); const audit = new Map<string, StateTileAudit>()
-  for (const [bodyId, backendId] of params.requestedIds) { const state = params.states.get(backendId); if (!state) continue; audit.set(bodyId, { ...state.audit, bodyId }); if (state.position) absolute.set(backendId, state.position) }
-  const bodyAbsolute = new Map<BodyId, Vector3>(); for (const [bodyId, backendId] of params.requestedIds) { const position = absolute.get(backendId); if (position) bodyAbsolute.set(bodyId, position) }
-  const reference = absolute.get(params.requestedIds.get(params.referenceId) ?? ''); const currentPositions: RenderedBodyPosition[] = []; const missingBodyIds: BodyId[] = []
-  for (const body of params.bodies) { const position = absolute.get(params.requestedIds.get(body.id) ?? ''); if (!position || !reference) { missingBodyIds.push(body.id); continue } const relative = subtract(position, reference); currentPositions.push({ body, planarPosition: { x: relative.x, y: relative.y }, position3D: relative, distance: Math.hypot(relative.x, relative.y, relative.z) }) }
-  return { currentPositions, missingBodyIds, maxDistance: currentPositions.reduce((max, item) => Math.max(max, item.distance), 0), catalogManifestSha256: params.catalogManifestSha256, inventoryManifestSha256: params.inventoryManifestSha256, epochJd: params.epochJd, epochTdbJd: params.epochJd, audit: [...audit.values()], absolutePositions: bodyAbsolute }
+export function buildBackendFrame(params: { bodies: CelestialBody[]; referenceId: BodyId; evidence: StateTileSnapshot }): BackendFrame {
+  const { evidence } = params
+  const reference = evidence.positionAu(params.referenceId)
+  const currentPositions: RenderedBodyPosition[] = [], missingBodyIds: BodyId[] = []
+  let maxDistance = 0
+  for (const body of params.bodies) {
+    const position = reference ? evidence.positionAu(body.id) : undefined
+    if (!position || !reference) { missingBodyIds.push(body.id); continue }
+    const relative = subtract(position, reference), distance = Math.hypot(relative.x, relative.y, relative.z)
+    currentPositions.push({ body, planarPosition: { x: relative.x, y: relative.y }, position3D: relative, distance })
+    maxDistance = Math.max(maxDistance, distance)
+  }
+  return { currentPositions, missingBodyIds, maxDistance, evidence, catalogManifestSha256: evidence.catalogManifestSha256,
+    inventoryManifestSha256: evidence.inventoryManifestSha256, epochJd: evidence.epochJd, epochTdbJd: evidence.epochJd }
 }
-
-export function buildBackendFrameFromStateTiles(params: { bodies: CelestialBody[]; referenceId: BodyId; requestedIds: Map<BodyId, string>; tiles: readonly StateTile[] }): BackendFrame {
-  const states = collectResolvedStateTiles(params.tiles)
-  const first = params.tiles[0]
-  return buildBackendFrameFromResolved({ ...params, states, catalogManifestSha256: first?.catalogManifestSha256 ?? '', inventoryManifestSha256: first?.inventoryManifestSha256, epochJd: first?.epochJd ?? NaN })
-}
-
-export type { ResolvedState }
-export { buildBackendFrameFromResolved }

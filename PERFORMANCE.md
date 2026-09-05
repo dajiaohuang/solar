@@ -165,10 +165,23 @@ and byte-identical Float64 six-vectors. These are structural storage checks,
 not total JavaScript heap/RSS, device FPS or astronomical-coverage measurements.
 The binary wire format, hash/ordinal checks and scientific values are unchanged.
 
-This is not yet packed delivery end to end: the resolved-state Maps,
-reference-frame audit/current-position objects and historical trajectory
-unpacking remain to be replaced. Bulk render consumers must ultimately read
-typed buffers directly; a full-size object adapter is not the migration target.
+All reference views now share one `StateTileSnapshot`: original verified tile
+Float64 buffers and metadata columns plus eight typed binding bytes per received
+UI identity. Aliases bind to the same source row. Identity indexes during
+assembly contain only scalar ordinals; no full resolved-state, absolute-position
+or audit objects are retained. The absolute resolver reads one requested body.
+Coverage summaries retain selected Uint32 ordinals and counts; only the requested
+20-row page materializes audit objects. They distinguish pending responses,
+explicit source gaps, aliases and a missing reference that prevents projection.
+The synthetic 32,768+1-row regression covers mixed states, aliases, absent
+responses, two references sharing one snapshot, all six-vector bytes and bounded
+evidence reads. Retained Go golden tests check the snapshot's scalar reads too.
+
+This is not yet packed delivery end to end: reference-relative current-position
+objects and historical trajectory unpacking remain to be replaced. Bulk render
+consumers must ultimately read typed buffers directly; a full-size object adapter
+is not the migration target. None of these structural tests measures total heap,
+cross-device smoothness or complete astronomical coverage.
 
 ## Shared backend tile encoding
 
