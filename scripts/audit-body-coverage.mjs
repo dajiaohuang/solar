@@ -19,7 +19,7 @@ export async function auditBodyCoverage({ inventory, sources, output, root = ROO
     // The input can have audited a different delivery profile. Never inherit its
     // previous NAIF/state claims when an explicit current mapping is absent.
     const fresh = { ...record }
-    delete fresh.naifId; delete fresh.kernelEvidence; delete fresh.ephemerisStatus
+    delete fresh.naifId; delete fresh.kernelEvidence; delete fresh.ephemerisStatus; delete fresh.identityMappingEvidence
     identities.add(kernels.attach(fresh), ordinal)
   } })
   const identity = identities.finish()

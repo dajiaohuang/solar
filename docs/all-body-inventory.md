@@ -145,16 +145,32 @@ midpoint sampling, extrapolation or min/max envelope can hide a gap. Kernel,
 segment and boundary limits fail closed instead of emitting a partial success.
 
 The 2026-09-05 full-source run accounted for all **1,567,193** input rows:
-**496** explicit NAIF target groups had states at the audit epoch; **1,566,697**
-rows remained unresolved for this mapping (1,566,230 without an explicit NAIF
-mapping and 467 unresolved components). Of those 496 mapped targets, **486**
+**507** mapped source rows represent **502** explicit NAIF target groups with
+states at the audit epoch; **1,566,686** rows remain unresolved for this mapping.
+Of those 502 mapped targets, **486**
 had descriptor/center dependency availability throughout the requested window;
-**10** had explicit end-of-source gaps. These counts cover the inventory's
+**16** had explicit gaps. These counts cover the inventory's
 mapped groups, not every bundled kernel target or every known physical body.
-Two full-source offline replays produced byte-identical 2,408,328-byte reports
-with SHA-256 `44d0d0cd7b64de01200e179be029d349c4c58c27b2911d13133e3aaa1f2b3f9e`.
+Two full-source offline replays against the reconciled inventory manifest
+`bef21e3bc5820db0b70c24ad464262cb67df279f8d0a3e2b8731ca5ca9c39583`
+produced byte-identical 2,454,580-byte reports with SHA-256
+`3727d40c161bf2c4aab17a36e7c4ac54b7e1bfac7a8803fc5500c79ee0ab6ba8`.
 This is deterministic replay evidence for the pinned code/data, not an
 independent astronomical accuracy oracle.
+
+The reconciliation adds Weywot, Vanth, Actaea, Hiʻiaka, Namaka and Dysnomia
+through confirmed JPL small-body satellite names and numbered primary IDs
+matched to the pinned, explicit SPK aliases. Each join retains the source
+record, IAU name/number, primary, target and satellite-catalog hash. Five Pluto
+satellite source rows join the existing planetary-source targets; they add no
+unique targets. Unnamed components, candidates, conflicting primary IDs and
+uncorroborated names are not guessed from display names or SPK-ID arithmetic.
+
+The reconciled addressable inventory was also rebuilt twice from the retained
+source snapshot. Both complete source/block validations passed: 314 shards,
+12,538 independently compressed blocks, 97,111,820 compressed bytes and equal
+manifest SHA-256 `bef21e3bc5820db0b70c24ad464262cb67df279f8d0a3e2b8731ca5ca9c39583`.
+Its 507 available states are source rows at one epoch, not 507 unique bodies.
 
 **Dependency coverage is not continuous numerical-accuracy certification.**
 `numericallyCertifiedWholeWindowTargets` is `null`, not zero or 486. Whole-window
@@ -162,7 +178,8 @@ coefficient/oracle validation, further identity reconciliation, new authoritativ
 solutions and integration of this ledger into user-facing clients remain work.
 No raw source or audit output is automatically included in Pages or native apps.
 
-On 2026-09-05, the addressable v2 generator replayed the retained 2026-09-04
+Before this named-moon reconciliation, on 2026-09-05 the addressable v2
+generator replayed the retained 2026-09-04
 source snapshot against the current audited Pages kernel profile. Both outputs
 passed the complete block/shard validator against the source snapshot:
 

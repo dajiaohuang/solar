@@ -31,7 +31,8 @@ export function createIdentityLedger() {
         groups.set(record.naifId, group)
       }
       if (group.parentId !== (record.parentId ?? null) || group.stateAtAuditEpoch !== record.ephemerisStatus || JSON.stringify(group.evaluatedState) !== JSON.stringify(evaluatedState)) throw new Error('Conflicting explicit target identity or state')
-      group.sourceRecords.push({ ordinal, id: record.id, source: record.source, sourceRow: record.sourceRow })
+      group.sourceRecords.push({ ordinal, id: record.id, source: record.source, sourceRow: record.sourceRow,
+        ...(record.identityMappingEvidence ? { mappingEvidence: record.identityMappingEvidence } : {}) })
       mapped++
     },
     finish() {

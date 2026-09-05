@@ -49,6 +49,9 @@ async function kernelFixtureRoot(directory: string) {
     for (const file of manifest.files) if (selected.has(file.id)) for (const dependency of file.solutionKernelIds ?? []) if (!selected.has(dependency)) { selected.add(dependency); changed = true }
   }
   const files = manifest.files.filter((file: { id: string }) => selected.has(file.id))
+  expect(files.length).toBeLessThan(manifest.files.length)
+  expect(files.reduce((bytes: number, file: { bytes: number }) => bytes + file.bytes, 0)).toBeLessThan(32 * 1024 * 1024)
+  for (const id of selected) expect(files.some((file: { id: string }) => file.id === id)).toBe(true)
   await mkdir(join(root, 'src/data'), { recursive: true }); await mkdir(join(root, 'public/data/ephemerides'), { recursive: true })
   await Promise.all(files.map((file: { path: string }) => copyFile(join(source, 'public/data/ephemerides', file.path), join(root, 'public/data/ephemerides', file.path))))
   await Promise.all(['ephemerisBodies.json', 'satelliteCatalog.json'].map(file => copyFile(join(source, 'src/data', file), join(root, 'src/data', file))))
@@ -80,6 +83,9 @@ it('replays every source row into deterministic addressable blocks with separate
   const options = { inventory: first, sources, root, profile: 'full', auditEt: 841752000, startEt: 841752000, endEt: 841838400 }
   const coverage = await auditBodyCoverage({ ...options, output: join(directory, 'coverage-a') })
   expect(coverage.identity.counts).toMatchObject({ sourceRecords: 16, explicitNaifTargets: 13, unresolvedSourceRecords: 3 })
+  const earth = coverage.identity.explicitTargetGroups.find(group => group.target === 399)
+  expect(earth?.stateAtAuditEpoch).toBe('state-available-at-audit-epoch')
+  expect(Number.isFinite(earth?.evaluatedState?.position.x)).toBe(true)
   expect(coverage.windowCounts.numericallyCertifiedWholeWindowTargets).toBeNull()
   expect(coverage.windows).toHaveLength(13)
   expect(coverage.kernels.profile).toBe('full')

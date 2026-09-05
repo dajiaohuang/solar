@@ -82,8 +82,25 @@ export async function inventoryKernels(root, et, requestedProfile = 'pages') {
     byTarget.get(segment.target).push({ kernelId: id, startEt: segment.startEt, endEt: segment.endEt, center: segment.center, frame: segment.frame, type: segment.type })
   }
   function attach(record) {
-    let target
-    if (/^naif:\d+$/.test(record.id)) {
+    let target, identityMappingEvidence
+    if (record.category === 'small-body-moon') {
+      const source = record.sourceRef
+      // Join two explicit source identities, never a display name or numeric
+      // SPK-ID formula. Incomplete/unnamed API components stay unresolved even
+      // when their parent currently has only one bundled companion.
+      if (record.confirmation === 'confirmed' && record.identityStatus === 'source-designation' &&
+          source?.confirmed === 'Y' && source.kind === 'an' && /^[1-9]\d*$/.test(String(source.pdes ?? '')) &&
+          /^[1-9]\d*$/.test(String(source.iau_num ?? '')) && typeof source.iau_name === 'string' && source.iau_name.trim()) {
+        const parent = `sb:asteroid:${source.pdes}`
+        if (record.parentId === parent && record.id === `sat:${parent}:iau:${source.iau_num}`) {
+          target = moonIds.get(aliasKey(parent, source.iau_name))
+          if (target !== undefined) identityMappingEvidence = { method: 'jpl-iau-name-and-primary-to-audited-spk-alias',
+            sourceRecordId: record.id, primaryId: parent, iauNumber: String(source.iau_num), iauName: source.iau_name,
+            target, satelliteCatalogSha256: digest(satelliteCatalogBytes) }
+        }
+      }
+    }
+    else if (/^naif:\d+$/.test(record.id)) {
       const candidate = Number(record.id.slice(5))
       if (record.category !== 'moon' || !moonParents.has(candidate) || moonParents.get(candidate) === record.parentId) target = candidate
     }
@@ -97,7 +114,7 @@ export async function inventoryKernels(root, et, requestedProfile = 'pages') {
     }
     if (target === undefined) return { ...record, ephemerisStatus: 'not-mapped-to-bundled-kernel' }
     const state = resolver.barycentric(target)
-    return { ...record, naifId: target, ephemerisStatus: state ? 'state-available-at-audit-epoch' : 'no-state-at-audit-epoch',
+    return { ...record, ...(identityMappingEvidence ? { identityMappingEvidence } : {}), naifId: target, ephemerisStatus: state ? 'state-available-at-audit-epoch' : 'no-state-at-audit-epoch',
       kernelEvidence: { target, auditEt: et, segments: byTarget.get(target) ?? [], stateAtAuditEpoch: state } }
   }
   const descriptors = kernels.map(({ id, solutionKernelIds, dependencyOnly, kernel }) => ({ id, solutionKernelIds, dependencyOnly,
