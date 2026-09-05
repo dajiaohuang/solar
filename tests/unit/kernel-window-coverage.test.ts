@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { analyzeKernelWindow } from '../../scripts/lib/kernel-window-coverage.mjs'
 
-const seg = (target: number, center = 0, startEt = 0, endEt = 10, extra = {}) => ({ target, center, frame: 1, type: 2, startEt, endEt, ...extra })
-const run = (kernels: any[], target = 5, startEt = 0, endEt = 10) => analyzeKernelWindow({ kernels, target, startEt, endEt })
+type Kernel = { id: string; dependencyOnly?: boolean; solutionKernelIds?: string[]; segments: ReturnType<typeof seg>[] }
+const seg = (target: number, center = 0, startEt = 0, endEt = 10, extra: Record<string, number> = {}) => ({ target, center, frame: 1, type: 2, startEt, endEt, ...extra })
+const run = (kernels: Kernel[], target = 5, startEt = 0, endEt = 10) => analyzeKernelWindow({ kernels, target, startEt, endEt })
 
 describe('kernel window descriptor coverage', () => {
   it('covers target 0 as the fixed zero origin, including a point window', () => {
@@ -13,13 +14,13 @@ describe('kernel window descriptor coverage', () => {
 
   it('splits adjacent segments without hiding the boundary or gap', () => {
     const result = run([{ id: 'k', segments: [seg(5, 0, 0, 5), seg(5, 0, 5, 10)] }])
-    expect(result.descriptorCoverage.intervals.map((x: any) => [x.startEt, x.endEt, x.state])).toEqual([[0, 5, 'covered'], [5, 10, 'covered']])
-    expect(result.descriptorCoverage.points.find((x: any) => x.et === 5).state).toBe('covered')
+    expect(result.descriptorCoverage.intervals.map(x => [x.startEt, x.endEt, x.state])).toEqual([[0, 5, 'covered'], [5, 10, 'covered']])
+    expect(result.descriptorCoverage.points.find(x => x.et === 5)?.state).toBe('covered')
   })
 
   it('reports an internal gap instead of using min/max', () => {
     const result = run([{ id: 'k', segments: [seg(5, 0, 0, 3), seg(5, 0, 7, 10)] }])
-    expect(result.gaps.some((x: any) => x.kind === 'interval' && x.startEt === 3 && x.endEt === 7)).toBe(true)
+    expect(result.gaps.some(x => x.kind === 'interval' && x.startEt === 3 && x.endEt === 7)).toBe(true)
   })
 
   it('applies reverse kernel and segment precedence, with unsupported winner masking fallback', () => {
@@ -35,7 +36,7 @@ describe('kernel window descriptor coverage', () => {
       { id: 'other', segments: [seg(7, 0)] },
     ])
     expect(result.descriptorCoverage.intervals[0]).toMatchObject({ state: 'covered' })
-    expect(result.descriptorCoverage.intervals[0].chain.map((x: any) => x.kernelId)).toEqual(['root', 'dependency'])
+    expect(result.descriptorCoverage.intervals[0].chain.map(x => x.kernelId ?? x.origin)).toEqual(['root', 'dependency', 'naif:0'])
   })
 
   it('fails closed for missing explicit pools and missing centers', () => {
@@ -45,10 +46,10 @@ describe('kernel window descriptor coverage', () => {
 
   it('reports cycles and excessive center depth', () => {
     const cycle = run([{ id: 'k', segments: [seg(5, 6), seg(6, 5)] }])
-    expect(cycle.gaps.some((x: any) => x.reason === 'center-chain-cycle')).toBe(true)
+    expect(cycle.gaps.some(x => x.reason === 'center-chain-cycle')).toBe(true)
     const deep = Array.from({ length: 34 }, (_, i) => ({ id: `k${i}`, segments: [seg(i + 1, i + 2)] }))
     deep.push({ id: 'k34', segments: [seg(35, 0)] })
-    expect(run(deep, 1).gaps.some((x: any) => x.reason === 'center-chain-depth-exceeded')).toBe(true)
+    expect(run(deep, 1).gaps.some(x => x.reason === 'center-chain-depth-exceeded')).toBe(true)
   })
 
   it('rejects nonfinite and reversed numeric windows', () => {
