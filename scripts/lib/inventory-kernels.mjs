@@ -100,7 +100,9 @@ export async function inventoryKernels(root, et, requestedProfile = 'pages') {
     return { ...record, naifId: target, ephemerisStatus: state ? 'state-available-at-audit-epoch' : 'no-state-at-audit-epoch',
       kernelEvidence: { target, auditEt: et, segments: byTarget.get(target) ?? [], stateAtAuditEpoch: state } }
   }
-  return { attach, evidence: { manifestId: manifest.id, profile, manifestSha256: digest(manifestBytes), auditEt: et,
+  const descriptors = kernels.map(({ id, solutionKernelIds, dependencyOnly, kernel }) => ({ id, solutionKernelIds, dependencyOnly,
+    segments: kernel.segments.map(({ target, center, frame, type, startEt, endEt }) => ({ target, center, frame, type, startEt, endEt })) }))
+  return { attach, descriptors, evidence: { manifestId: manifest.id, profile, manifestSha256: digest(manifestBytes), auditEt: et,
     identityMappingSha256: digest(JSON.stringify({ asteroidIds: [...asteroidIds], moonIds: [...moonIds], discoveryIds: [...discoveryIds], moonParents: [...moonParents] })),
     satelliteCatalogSha256: digest(satelliteCatalogBytes),
     timeScale: 'TDB seconds past J2000', frame: 'ECLIPJ2000', positionUnit: 'km', velocityUnit: 'km/s',

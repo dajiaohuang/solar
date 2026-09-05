@@ -3,6 +3,7 @@ import { inventoryKernels, snapshotKernelAtEpoch } from '../../scripts/lib/inven
 import { readFileSync } from 'node:fs'
 import { SpkKernel } from '../../src/engine/ephemeris/spk'
 import { createKernelResolver } from '../../src/engine/ephemeris/kernelPool'
+import { analyzeKernelWindow } from '../../scripts/lib/kernel-window-coverage.mjs'
 
 describe('inventory does not confuse source membership with SPK coverage', () => {
   it('retains original one-epoch states and center metadata without retaining coefficient buffers', () => {
@@ -32,6 +33,12 @@ describe('inventory does not confuse source membership with SPK coverage', () =>
     const full = await inventoryKernels(process.cwd(), et, 'full')
     expect(full.evidence.profile).toBe('full')
     expect(full.attach(record).ephemerisStatus).toBe('state-available-at-audit-epoch')
+    for (const kernels of [pages, full]) {
+      for (const target of [10, 301, 399, 706, 920136199, 120136199, 999999]) {
+        const window = analyzeKernelWindow({ kernels: kernels.descriptors, target, startEt: et, endEt: et })
+        expect(window.gaps.length === 0).toBe(kernels.attach({ id: `naif:${target}`, category: 'fixture' }).ephemerisStatus === 'state-available-at-audit-epoch')
+      }
+    }
     await expect(inventoryKernels(process.cwd(), et, 'unknown')).rejects.toThrow('Unknown')
   })
   it('resolves only explicit identities, including the correct satellite parent', async () => {

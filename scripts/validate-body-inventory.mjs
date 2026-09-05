@@ -19,8 +19,9 @@ const requireDigest = (value, label) => {
   if (typeof value !== 'string' || !SHA256.test(value)) throw new Error(`Invalid ${label} digest`)
 }
 
-export async function validateInventory(directory, sourceDirectory) {
-  const manifest = JSON.parse(await readFile(join(directory, 'manifest.json'), 'utf8'))
+export async function validateInventory(directory, sourceDirectory, { onRecord } = {}) {
+  const manifestBytes = await readFile(join(directory, 'manifest.json'))
+  const manifest = JSON.parse(manifestBytes)
   if (manifest.schemaVersion !== INVENTORY_SCHEMA_VERSION || manifest.purpose !== 'source-inventory-addressable-v2' || (manifest.format !== undefined && manifest.format !== INVENTORY_FORMAT) || (manifest.blockRows !== undefined && manifest.blockRows !== INVENTORY_BLOCK_ROWS) || !Array.isArray(manifest.shards) || !manifest.shards.length || manifest.shards.length > MAX_SHARDS) throw new Error('Invalid inventory manifest')
   if (!isInteger(manifest.totalRecords) || !manifest.counts || typeof manifest.counts !== 'object' || !manifest.expectedCounts || typeof manifest.expectedCounts !== 'object' || !Array.isArray(manifest.missingParents)) throw new Error('Invalid inventory manifest')
   if (sourceDirectory) {
@@ -70,6 +71,12 @@ export async function validateInventory(directory, sourceDirectory) {
         for (const part of ['position', 'velocity']) for (const axis of ['x', 'y', 'z']) if (!Number.isFinite(evidence.stateAtAuditEpoch?.[part]?.[axis])) throw new Error('Nonfinite kernel state')
       }
       if (record.identityStatus === 'unresolved-component' && !record.id.includes(':record:')) throw new Error('Unresolved component masquerades as resolved identity')
+      // A synchronous observer can build bounded secondary indexes in this same
+      // verified pass. It must not publish results until full validation returns.
+      if (onRecord) {
+        const result = onRecord(record, total - 1)
+        if (result?.then) throw new Error('Inventory observer must be synchronous')
+      }
       }
       rowStart += block.count
       offset += block.bytes
@@ -83,7 +90,8 @@ export async function validateInventory(directory, sourceDirectory) {
   for (const [source, expected] of Object.entries(manifest.expectedCounts)) if (counts.sources[source] !== expected) throw new Error(`Unaccounted source rows: ${source}`)
   const missingParents = [...parents].filter((id) => !ids.has(id)).sort()
   if (JSON.stringify(missingParents) !== JSON.stringify(manifest.missingParents)) throw new Error('Missing-parent ledger mismatch')
-  return { recordsVerified: total, shardsVerified: files.size, counts, missingParents }
+  return { recordsVerified: total, shardsVerified: files.size, counts, missingParents,
+    manifestSha256: digest(manifestBytes), snapshotSha256: manifest.snapshot ? digest(JSON.stringify(manifest.snapshot)) : null }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

@@ -1,11 +1,12 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { gzipSync } from 'node:zlib'
 import { downloadSnapshot, SOURCE_URLS } from '../../scripts/lib/inventory-snapshot.mjs'
 import { buildInventory } from '../../scripts/build-body-inventory.mjs'
 import { validateInventory } from '../../scripts/validate-body-inventory.mjs'
+import { auditBodyCoverage } from '../../scripts/audit-body-coverage.mjs'
 
 const directories: string[] = []
 afterEach(async () => { vi.unstubAllGlobals(); for (const dir of directories.splice(0)) await rm(dir, { recursive: true, force: true }) })
@@ -48,6 +49,20 @@ it('replays every source row into deterministic addressable blocks with separate
   expect(await buildInventory({ sources, output: second, shardSize: 2 })).toEqual(manifest)
   for (const shard of manifest.shards) expect(await readFile(join(second, shard.file))).toEqual(await readFile(join(first, shard.file)))
   await expect(buildInventory({ sources, output: first })).rejects.toThrow()
+  const options = { inventory: first, sources, profile: 'pages', auditEt: 841752000, startEt: 841752000, endEt: 841838400 }
+  const coverage = await auditBodyCoverage({ ...options, output: join(directory, 'coverage-a') })
+  expect(coverage.identity.counts).toMatchObject({ sourceRecords: 16, explicitNaifTargets: 13, unresolvedSourceRecords: 3 })
+  expect(coverage.windowCounts.numericallyCertifiedWholeWindowTargets).toBeNull()
+  expect(coverage.windows).toHaveLength(13)
+  expect(coverage.kernels.profile).toBe('pages')
+  expect(coverage.sourceBytesVerified).toBe(true)
+  expect(await auditBodyCoverage({ ...options, output: join(directory, 'coverage-b') })).toEqual(coverage)
+  expect(await readFile(join(directory, 'coverage-a/report.json'))).toEqual(await readFile(join(directory, 'coverage-b/report.json')))
+  await expect(auditBodyCoverage({ ...options, output: first })).rejects.toThrow('separate new output')
+  await writeFile(join(first, 'manifest.json'), JSON.stringify({ ...manifest, totalRecords: 17 }))
+  const rejectedOutput = join(directory, 'coverage-rejected')
+  await expect(auditBodyCoverage({ ...options, output: rejectedOutput })).rejects.toThrow('Inventory total mismatch')
+  await expect(readFile(join(rejectedOutput, 'report.json'))).rejects.toThrow()
 })
 
 it('never publishes a successful manifest when source rows do not match metadata', async () => {

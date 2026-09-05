@@ -2,8 +2,8 @@ const TYPES = new Set([2, 3, 17, 21])
 const FRAMES = new Set([1, 17])
 const MAX_DEPTH = 32
 const MAX_KERNELS = 4096
-const MAX_SEGMENTS = 1_000_000
-const MAX_BOUNDARIES = 2_000_000
+const MAX_SEGMENTS = 100_000
+const MAX_BOUNDARIES = 4096
 
 const fail = message => { throw new Error(`Invalid kernel window request: ${message}`) }
 
@@ -21,20 +21,24 @@ function validate(kernels, target, startEt, endEt) {
     if (typeof kernel.dependencyOnly !== 'undefined' && typeof kernel.dependencyOnly !== 'boolean') fail(`invalid dependency flag for ${kernel.id}`)
     if (kernel.solutionKernelIds !== undefined && (!Array.isArray(kernel.solutionKernelIds) || kernel.solutionKernelIds.some(id => typeof id !== 'string') || new Set(kernel.solutionKernelIds).size !== kernel.solutionKernelIds.length || kernel.solutionKernelIds.includes(kernel.id))) fail(`invalid solution pool for ${kernel.id}`)
     for (const segment of kernel.segments) {
-      totalSegments++
+      if (++totalSegments > MAX_SEGMENTS) fail('too many segments')
       if (!Number.isSafeInteger(segment.target) || !Number.isSafeInteger(segment.center) || !Number.isSafeInteger(segment.type) || !Number.isSafeInteger(segment.frame) || !Number.isFinite(segment.startEt) || !Number.isFinite(segment.endEt) || segment.startEt > segment.endEt) fail(`invalid segment in ${kernel.id}`)
     }
   }
-  if (totalSegments > MAX_SEGMENTS) fail('too many segments')
-  return ids
 }
 
 function potentialTargets(kernels, target) {
+  const centers = new Map()
+  for (const kernel of kernels) for (const segment of kernel.segments) {
+    if (!centers.has(segment.target)) centers.set(segment.target, new Set())
+    centers.get(segment.target).add(segment.center)
+  }
   const targets = new Set([target]), queue = [target]
   for (let index = 0; index < queue.length; index++) {
     const current = queue[index]
-    for (const kernel of kernels) for (const segment of kernel.segments) {
-      if (segment.target === current && !targets.has(segment.center)) { targets.add(segment.center); queue.push(segment.center) }
+    if (current === 0) continue // The resolver never evaluates a segment for SSB.
+    for (const center of centers.get(current) ?? []) {
+      if (!targets.has(center)) { targets.add(center); queue.push(center) }
     }
   }
   return targets
@@ -44,9 +48,9 @@ function boundaries(kernels, target, startEt, endEt) {
   const targets = potentialTargets(kernels, target)
   const values = new Set([startEt, endEt])
   for (const kernel of kernels) for (const segment of kernel.segments) {
-    if (targets.has(segment.target) && segment.endEt >= startEt && segment.startEt <= endEt) { values.add(Math.max(startEt, segment.startEt)); values.add(Math.min(endEt, segment.endEt)) }
+    if (segment.target !== 0 && targets.has(segment.target) && segment.endEt >= startEt && segment.startEt <= endEt) { values.add(Math.max(startEt, segment.startEt)); values.add(Math.min(endEt, segment.endEt)) }
+    if (values.size > MAX_BOUNDARIES) fail('too many boundaries')
   }
-  if (values.size > MAX_BOUNDARIES) fail('too many boundaries')
   return [...values].sort((a, b) => a - b)
 }
 
@@ -97,6 +101,6 @@ export function analyzeKernelWindow({ kernels, target, startEt, endEt }) {
     intervals.push({ startEt: from, endEt: to, openness: '(start,end)', ...cell(kernels, target, from, to) })
   }
   const gaps = [...points.filter(p => p.state === 'gap').map(p => ({ kind: 'point', et: p.et, reason: p.reason, chain: p.chain })), ...intervals.filter(p => p.state === 'gap').map(p => ({ kind: 'interval', startEt: p.startEt, endEt: p.endEt, reason: p.reason, chain: p.chain }))]
-  return { target, requested: { startEt, endEt }, descriptorCoverage: { points, intervals }, dependencyCoverage: { points, intervals }, gaps,
+  return { target, requested: { startEt, endEt }, dependencyCoverage: { points, intervals }, gaps,
     meaning: 'Descriptor and dependency availability only; does not prove coefficient values, numerical accuracy, or physical exactness throughout the window.' }
 }

@@ -111,6 +111,57 @@ public observations cannot be filled by invented data.
 
 ## Dated full-source validation
 
+### Explicit identity and dependency-window ledger
+
+`scripts/audit-body-coverage.mjs` now produces a separate developer audit from
+the validated addressable inventory. It defaults to the **full** SPK profile;
+the inventory generator's older Pages audit is not reused as full-profile
+evidence. Supply a requested TDB window explicitly:
+
+```bash
+node --experimental-strip-types scripts/audit-body-coverage.mjs --inventory .cache/body-inventory-1 --sources .cache/body-sources-1 --output .cache/body-coverage-1 --profile full --start-et 631108800 --end-et 978264000
+```
+
+The example requests 2020-01-01 through 2031-01-01 TDB. The independent audit
+epoch defaults to 841752000 TDB seconds past J2000 (`--audit-et` overrides it).
+Output must be a new directory; `report.json` is published last. Source bytes
+are revalidated when `--sources` is supplied; otherwise the report explicitly
+sets `sourceBytesVerified=false` and pins the inventory's source-snapshot
+metadata without claiming to have re-read the original downloads.
+
+The audit verifies every compressed inventory block in one streaming pass,
+reattaches only current explicit identities and retains source ordinals for
+each mapped NAIF group. Previous input state/mapping claims are discarded.
+Unmapped, unresolved-component and unconfirmed rows remain individually
+addressable in the pinned input; their counts are not promoted to physical-body
+counts. The report pins the input manifest, snapshot metadata, generator code,
+kernel profile and identity mapping, and retains each evaluated six-vector.
+
+Window evaluation preserves reverse kernel/segment priority and each root's
+fixed solution pool. It follows all possible center dependencies and partitions
+the window into closed boundary points and open intervals. Unsupported winning
+segments, missing centers and internal or endpoint gaps remain visible. No
+midpoint sampling, extrapolation or min/max envelope can hide a gap. Kernel,
+segment and boundary limits fail closed instead of emitting a partial success.
+
+The 2026-09-05 full-source run accounted for all **1,567,193** input rows:
+**496** explicit NAIF target groups had states at the audit epoch; **1,566,697**
+rows remained unresolved for this mapping (1,566,230 without an explicit NAIF
+mapping and 467 unresolved components). Of those 496 mapped targets, **486**
+had descriptor/center dependency availability throughout the requested window;
+**10** had explicit end-of-source gaps. These counts cover the inventory's
+mapped groups, not every bundled kernel target or every known physical body.
+Two full-source offline replays produced byte-identical 2,408,328-byte reports
+with SHA-256 `44d0d0cd7b64de01200e179be029d349c4c58c27b2911d13133e3aaa1f2b3f9e`.
+This is deterministic replay evidence for the pinned code/data, not an
+independent astronomical accuracy oracle.
+
+**Dependency coverage is not continuous numerical-accuracy certification.**
+`numericallyCertifiedWholeWindowTargets` is `null`, not zero or 486. Whole-window
+coefficient/oracle validation, further identity reconciliation, new authoritative
+solutions and integration of this ledger into user-facing clients remain work.
+No raw source or audit output is automatically included in Pages or native apps.
+
 On 2026-09-05, the addressable v2 generator replayed the retained 2026-09-04
 source snapshot against the current audited Pages kernel profile. Both outputs
 passed the complete block/shard validator against the source snapshot:
