@@ -596,6 +596,11 @@ func (s *Server) resolvePlanRows(ctx context.Context, rows []statePlanRow, epoch
 					if segment.Center != 0 {
 						row.metadata.CenterID = "naif:" + strconv.Itoa(segment.Center)
 					}
+					// A snapshot is valid only at its declared audit epoch;
+					// retain the wider kernel segment separately as evidence.
+					row.metadata.ValidityStartET = row.record.KernelEvidence.AuditET
+					row.metadata.ValidityEndET = row.record.KernelEvidence.AuditET
+					row.metadata.ValidityPresent = finite(row.record.KernelEvidence.AuditET)
 				}
 				stateCopy := *result.State
 				row.state, row.exact = &stateCopy, true
@@ -604,7 +609,6 @@ func (s *Server) resolvePlanRows(ctx context.Context, rows []statePlanRow, epoch
 					row.metadata.EvidenceWindowStartET = result.EvidenceWindow["startEt"]
 					row.metadata.EvidenceWindowEndET = result.EvidenceWindow["endEt"]
 					row.metadata.EvidenceWindowPresent = true
-					row.metadata.ValidityStartET, row.metadata.ValidityEndET, row.metadata.ValidityPresent = row.metadata.EvidenceWindowStartET, row.metadata.EvidenceWindowEndET, true
 				}
 				exact++
 				continue

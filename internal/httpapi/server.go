@@ -374,7 +374,12 @@ func (s *Server) resolveInventoryStateWithOperational(ctx context.Context, recor
 				return sourceStateResult{}, err
 			}
 			if found && finiteState(state) {
-				window := map[string]float64{"startEt": body.ValidityStartET, "endEt": body.ValidityEndET}
+				var window map[string]float64
+				if provenance, provenanceOK, provenanceErr := s.catalog.OperationalProvenance(catalogID, jd); provenanceErr != nil {
+					return sourceStateResult{}, provenanceErr
+				} else if provenanceOK && provenance.ValidityPresent {
+					window = map[string]float64{"startEt": provenance.ValidityStartET, "endEt": provenance.ValidityEndET}
+				}
 				return sourceStateResult{Availability: catalog.AvailableOperational, Model: "spk-original", State: &state, Evidence: "catalog-kernel", EvidenceWindow: window}, nil
 			}
 		}

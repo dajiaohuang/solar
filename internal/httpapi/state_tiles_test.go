@@ -126,7 +126,7 @@ func TestStateTileInventoryOperationalMetadataUsesSelectedKernelProvenance(t *te
 	}
 	sum := sha256.Sum256(fixture)
 	wantHash := hex.EncodeToString(sum[:])
-	manifest := fmt.Sprintf(`{"id":"spk-test","files":[{"id":"synthetic","path":"synthetic.bsp","targets":[-210001],"startEt":0,"endEt":1000,"solutionKernelIds":["synthetic"],"bytes":%d,"sha256":"%s"}]}`, len(fixture), wantHash)
+	manifest := fmt.Sprintf(`{"id":"spk-test","files":[{"id":"synthetic","path":"synthetic.bsp","targets":[-210001],"startEt":-100,"endEt":2000,"solutionKernelIds":["synthetic"],"bytes":%d,"sha256":"%s"}]}`, len(fixture), wantHash)
 	if err := os.WriteFile(filepath.Join(d, "ephemeris-manifest.json"), []byte(manifest), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -164,6 +164,31 @@ func TestStateTileInventoryOperationalMetadataUsesSelectedKernelProvenance(t *te
 	}
 	if metadata.Model != "spk-original" || metadata.Source != "synthetic" || metadata.KernelSHA256 != wantHash || metadata.DatasetSHA256 != inv.ManifestHash() || metadata.CenterID != "naif:0" || !metadata.ValidityPresent || metadata.ValidityStartET != 0 || metadata.ValidityEndET != 1000 {
 		t.Fatalf("inventory operational provenance=%+v want kernel=%s dataset=%s", metadata, wantHash, inv.ManifestHash())
+	}
+	stateRecorder := httptest.NewRecorder()
+	s.ServeHTTP(stateRecorder, httptest.NewRequest(http.MethodGet, "/v1/identities/sb:operational/state?epochJd=2451545", nil))
+	var stateResponse struct {
+		Availability   catalog.Availability `json:"availability"`
+		EvidenceWindow map[string]float64   `json:"evidenceWindowEt"`
+	}
+	if stateRecorder.Code != http.StatusOK || json.Unmarshal(stateRecorder.Body.Bytes(), &stateResponse) != nil {
+		t.Fatalf("source state status=%d body=%s", stateRecorder.Code, stateRecorder.Body.String())
+	}
+	if stateResponse.Availability != catalog.AvailableOperational || stateResponse.EvidenceWindow["startEt"] != 0 || stateResponse.EvidenceWindow["endEt"] != 1000 {
+		t.Fatalf("source state used catalog-wide validity: %+v", stateResponse)
+	}
+	outsideRecorder := httptest.NewRecorder()
+	outsideJD := 2451545.0 + 1500.0/86400
+	s.ServeHTTP(outsideRecorder, httptest.NewRequest(http.MethodGet, "/v1/identities/sb:operational/state?epochJd="+fmt.Sprintf("%.17g", outsideJD), nil))
+	var outsideResponse struct {
+		Availability catalog.Availability `json:"availability"`
+		State        *catalog.State       `json:"state"`
+	}
+	if outsideRecorder.Code != http.StatusOK || json.Unmarshal(outsideRecorder.Body.Bytes(), &outsideResponse) != nil {
+		t.Fatalf("outside state status=%d body=%s", outsideRecorder.Code, outsideRecorder.Body.String())
+	}
+	if outsideResponse.Availability != catalog.Missing || outsideResponse.State != nil {
+		t.Fatalf("catalog-wide window incorrectly made outside state available: %+v", outsideResponse)
 	}
 }
 
@@ -216,8 +241,34 @@ func TestStateTileInventorySnapshotMetadataUsesEvidenceKernelProvenance(t *testi
 	if err := json.Unmarshal(bytes.TrimSpace(tileRecorder.Body.Bytes()[h.MetadataOffset:h.MetadataOffset+h.MetadataLength]), &metadata); err != nil {
 		t.Fatal(err)
 	}
-	if metadata.Model != "source-kernel-state-at-audit-epoch" || metadata.Source != "synthetic" || metadata.KernelSHA256 != wantHash || metadata.DatasetSHA256 != inv.ManifestHash() || metadata.CenterID != "naif:399" || !metadata.EvidenceWindowPresent || metadata.EvidenceWindowStartET != 0 || metadata.EvidenceWindowEndET != 1000 {
+	if metadata.Model != "source-kernel-state-at-audit-epoch" || metadata.Source != "synthetic" || metadata.KernelSHA256 != wantHash || metadata.DatasetSHA256 != inv.ManifestHash() || metadata.CenterID != "naif:399" || !metadata.ValidityPresent || metadata.ValidityStartET != 500 || metadata.ValidityEndET != 500 || !metadata.EvidenceWindowPresent || metadata.EvidenceWindowStartET != 0 || metadata.EvidenceWindowEndET != 1000 {
 		t.Fatalf("inventory snapshot provenance=%+v want kernel=%s dataset=%s", metadata, wantHash, inv.ManifestHash())
+	}
+	auditRecorder := httptest.NewRecorder()
+	s.ServeHTTP(auditRecorder, httptest.NewRequest(http.MethodGet, "/v1/identities/sb:snapshot/state?epochJd="+fmt.Sprintf("%.17g", epoch), nil))
+	var auditResponse struct {
+		Availability   catalog.Availability `json:"availability"`
+		State          *catalog.State       `json:"state"`
+		EvidenceWindow map[string]float64   `json:"evidenceWindowEt"`
+	}
+	if auditRecorder.Code != http.StatusOK || json.Unmarshal(auditRecorder.Body.Bytes(), &auditResponse) != nil {
+		t.Fatalf("snapshot audit state status=%d body=%s", auditRecorder.Code, auditRecorder.Body.String())
+	}
+	if auditResponse.Availability != catalog.AvailableSnapshot || auditResponse.State == nil || auditResponse.EvidenceWindow["startEt"] != 0 || auditResponse.EvidenceWindow["endEt"] != 1000 {
+		t.Fatalf("snapshot audit evidence mismatch: %+v", auditResponse)
+	}
+	adjacentJD := epoch + 2e-9
+	adjacentRecorder := httptest.NewRecorder()
+	s.ServeHTTP(adjacentRecorder, httptest.NewRequest(http.MethodGet, "/v1/identities/sb:snapshot/state?epochJd="+fmt.Sprintf("%.17g", adjacentJD), nil))
+	var adjacentResponse struct {
+		Availability catalog.Availability `json:"availability"`
+		State        *catalog.State       `json:"state"`
+	}
+	if adjacentRecorder.Code != http.StatusOK || json.Unmarshal(adjacentRecorder.Body.Bytes(), &adjacentResponse) != nil {
+		t.Fatalf("snapshot adjacent state status=%d body=%s", adjacentRecorder.Code, adjacentRecorder.Body.String())
+	}
+	if adjacentResponse.Availability != catalog.Missing || adjacentResponse.State != nil {
+		t.Fatalf("snapshot state escaped audit epoch: %+v", adjacentResponse)
 	}
 }
 
