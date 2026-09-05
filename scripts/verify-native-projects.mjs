@@ -13,7 +13,16 @@ const scene = await read('ios/App/App/SceneDelegate.swift')
 const android = await read('android/app/build.gradle')
 const activity = await read('android/app/src/main/java/io/github/dajiaohuang/solaratlas/MainActivity.java')
 if (/CapApp-SPM|public in Resources|capacitor\.config|Main\.storyboard/.test(project)) throw new Error('iOS still packages the Web shell')
-if (!scene.includes('UIHostingController(rootView: ObservationDeckView())')) throw new Error('iOS native Observation Deck is not the scene root')
+if (!scene.includes('UIHostingController(rootView: NativeSceneRoot(lifecycle: lifecycle))') ||
+    !scene.includes('ObservationDeckView().environment(\\.scenePhase, lifecycle.phase)')) {
+  throw new Error('iOS native Observation Deck must receive its UIKit scene lifecycle')
+}
+for (const [callback, phase] of [['sceneDidBecomeActive', 'active'], ['sceneWillResignActive', 'inactive'],
+  ['sceneWillEnterForeground', 'inactive'], ['sceneDidEnterBackground', 'background'], ['sceneDidDisconnect', 'background']]) {
+  if (!scene.includes(`func ${callback}(_ scene: UIScene) { lifecycle.phase = .${phase} }`)) {
+    throw new Error(`iOS scene lifecycle bridge is missing ${callback}`)
+  }
+}
 if (/BridgeActivity|WebView/.test(activity) || /implementation project\(':capacitor/.test(android)) throw new Error('Android still embeds the Web shell')
 for (const source of ['NativeObservationDeck.swift', 'StateTileDecoder.swift', 'StateTileCache.swift', 'StateTileService.swift', 'NativeStateProjection.swift', 'NativeCoverageReport.swift', 'NativePointGeometry.swift']) {
   if (!project.includes(`${source} in Sources`)) throw new Error(`iOS source is not in its build target: ${source}`)
