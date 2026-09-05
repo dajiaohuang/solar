@@ -74,11 +74,13 @@ function toThree(position: { x: number; y: number; z: number }) {
   return new THREE.Vector3(position.x, position.z, position.y)
 }
 
-function updateCameraData(container: HTMLDivElement, resources: SceneResources) {
+function updateCameraData(container: HTMLDivElement, resources: SceneResources, appliedZoom: number, fitGeneration: number) {
   container.dataset.cameraDistance = resources.camera.position.distanceTo(resources.controls.target).toPrecision(12)
   container.dataset.cameraPosition = resources.camera.position.toArray().map((value) => value.toPrecision(12)).join(',')
   container.dataset.sceneRadius = String(resources.contentRadius)
   container.dataset.markerScale = String(resources.bodyScale)
+  container.dataset.appliedZoom = String(appliedZoom)
+  container.dataset.fitGeneration = String(fitGeneration)
 }
 
 function applySceneFraming(resources: SceneResources) {
@@ -165,6 +167,7 @@ export function TrajectoryCanvas3D({
   const touchGestureRef = useRef<{ pointerId: number; startX: number; startY: number; moved: boolean } | null>(null)
   const activeTouchPointersRef = useRef(new Set<number>())
   const fitKeyRef = useRef('')
+  const fitGenerationRef = useRef(0)
   const appliedZoomRef = useRef(clamp3dZoom(zoomLevel))
   const appliedResetKeyRef = useRef(resetViewKey)
   const onUnavailableRef = useRef(onUnavailable)
@@ -276,7 +279,7 @@ export function TrajectoryCanvas3D({
     }
     resourcesRef.current = resources
     const render = () => {
-      updateCameraData(container, resources)
+      updateCameraData(container, resources, appliedZoomRef.current, fitGenerationRef.current)
       renderer.render(scene, camera)
     }
     controls.addEventListener('change', render)
@@ -489,6 +492,7 @@ export function TrajectoryCanvas3D({
     const fitKey = `${referenceBody.id}|${[...bodyPositions.keys()].sort().join(',')}|${trajectories.map((item) => `${item.body.id}:${item.points3D?.length ?? 0}`).sort().join(',')}|${catalogReady ? catalogFitKey : ''}|${resetViewKey}`
     if (fitKeyRef.current !== fitKey) {
       fitKeyRef.current = fitKey
+      fitGenerationRef.current += 1
       let radius = 0
       let nearest = Infinity
       for (const item of bodyPositions.values()) {
@@ -549,7 +553,7 @@ export function TrajectoryCanvas3D({
       }
     }
     const container = containerRef.current
-    if (container) updateCameraData(container, resources)
+    if (container) updateCameraData(container, resources, appliedZoomRef.current, fitGenerationRef.current)
     resources.renderer.render(resources.scene, resources.camera)
   }, [catalogDrawCount, catalogFitKey, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z, catalogPositions3D, catalogRecords.length, currentPositions, detailBodyIds, lagrangePoints, referenceBody, resetViewKey, showEcliptic, showGlow, showSaturnRings, trajectories, zoomLevel])
 
@@ -566,7 +570,7 @@ export function TrajectoryCanvas3D({
     resources.camera.position.copy(resources.controls.target).add(cameraOffset)
     appliedZoomRef.current = nextZoom
     resources.controls.update()
-    updateCameraData(container, resources)
+    updateCameraData(container, resources, appliedZoomRef.current, fitGenerationRef.current)
     resources.renderer.render(resources.scene, resources.camera)
   }, [zoomLevel])
 
@@ -577,7 +581,7 @@ export function TrajectoryCanvas3D({
     appliedResetKeyRef.current = resetViewKey
     appliedZoomRef.current = clamp3dZoom(zoomLevel)
     resetCameraToFit(resources, zoomLevel)
-    updateCameraData(container, resources)
+    updateCameraData(container, resources, appliedZoomRef.current, fitGenerationRef.current)
     resources.renderer.render(resources.scene, resources.camera)
   }, [resetViewKey, zoomLevel])
 

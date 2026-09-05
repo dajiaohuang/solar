@@ -23,6 +23,7 @@ function fixtureState(id: string) {
 }
 
 async function installCurrentStatesBackend(page: Page) {
+  let slowCurrentStates = false
   await page.route('**/solar-test-api/v1/capabilities', route => route.fulfill({
     json: {
       apiVersion: 'solar.api/v1', catalogVersion: datasetVersion, manifestSha256: catalogHash,
@@ -41,12 +42,18 @@ async function installCurrentStatesBackend(page: Page) {
     const body = JSON.parse(request.postData() ?? '{}') as { ids?: string[]; epochJd?: number; frame?: string; precision?: string }
     const ids = body.ids ?? []
     if (ids.length < 1 || ids.length > 510 || new Set(ids).size !== ids.length || body.frame !== 'ECLIPJ2000' || body.precision !== 'exact') return route.fulfill({ status: 400, json: { error: 'strict current-states fixture contract' } })
+    // The app canonicalizes its URL after boot and may remove test-only query
+    // parameters. Capture the opt-in on the first request so every later
+    // response in this page keeps the intended slow-backend behavior.
+    slowCurrentStates ||= page.url().includes('slow-current-states=1')
+    if (slowCurrentStates) await new Promise(resolve => setTimeout(resolve, 1_200))
     const unavailableByEpoch = typeof body.epochJd === 'number' && Math.abs(body.epochJd - 2466154.5) < 0.01
       ? new Set(['naif:506'])
       : typeof body.epochJd === 'number' && Math.abs(body.epochJd - 2460000.5) < 0.01 ? new Set(['naif:920050000', 'naif:120050000']) : new Set<string>()
     const present = ids.map(id => knownBackendIds.has(id) && !unavailableByEpoch.has(id))
     const coverageGap = ids.map(id => knownBackendIds.has(id) && unavailableByEpoch.has(id))
     await route.fulfill({
+      headers: { 'x-solar-fixture-current-state': 'complete' },
       json: {
         apiVersion: 'solar.api/v1', catalogVersion: datasetVersion, catalogManifestSha256: catalogHash,
         epochJd: body.epochJd, timeScale: 'TDB', frame: 'ECLIPJ2000', distanceUnit: 'km', velocityUnit: 'km/s',

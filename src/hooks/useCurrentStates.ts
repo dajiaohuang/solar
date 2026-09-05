@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { utcJulianDayToTdb } from '../engine/ephemeris/timeScales'
 import { PRODUCT_PROFILE } from '../lib/productAvailability'
 import type { BodyId, CelestialBody } from '../types'
@@ -39,6 +39,15 @@ export function currentStateRequestToken(params: { isPlaying: boolean; sample: n
   return params.isPlaying
     ? `playing:${params.sample}:seek:${params.seekRevision}`
     : `paused:${params.epochUtcJd}:seek:${params.seekRevision}`
+}
+
+/**
+ * Decide whether a completed request should release the newest wall-clock
+ * sample to React. While a request is active samples are kept in a ref, so
+ * this pure rule prevents a slow large request from being aborted every 500ms.
+ */
+export function shouldStartCurrentStateSample(params: { isPlaying: boolean; requestActive: boolean; latestSample: number; requestedSample: number }) {
+  return params.isPlaying && !params.requestActive && params.latestSample > params.requestedSample
 }
 
 function apiBase() {
@@ -208,13 +217,21 @@ export function useCurrentStates(params: { bodies: CelestialBody[]; resolutionBo
   const [loading, setLoading] = useState(false)
   const [playingSample, setPlayingSample] = useState(0)
   const latestEpochRef = useRef(params.epochUtcJd)
+  // This effect is intentionally declared before the request effect below, so
+  // a clock publication updates the boundary ref before a request starts.
   useEffect(() => {
     latestEpochRef.current = params.epochUtcJd
   }, [params.epochUtcJd])
   const gate = useRef<ReturnType<typeof createLatestOnlyGate> | null>(null)
   if (gate.current == null) gate.current = createLatestOnlyGate()
+  const activeRequestRef = useRef<LatestOnlyRequest | null>(null)
+  const playingSampleRef = useRef(playingSample)
+  const latestRequestParamsRef = useRef<{ bodies: CelestialBody[]; referenceIds: BodyId[]; requested: Map<BodyId, string> }>({ bodies: params.bodies, referenceIds: params.referenceIds, requested: new Map() })
   const base = apiBase()
-  const requested = useMemo(() => {
+  // Constructing this small map is deliberate. The effect below is keyed by
+  // its content signature, not by any caller-owned array identity, because
+  // Explorer selectors can return fresh arrays while React renders.
+  const requested = (() => {
     const bodyById = new Map(params.resolutionBodies.map(body => [body.id, body]))
     const required = new Map<BodyId, string>()
     const add = (id: BodyId) => {
@@ -224,30 +241,59 @@ export function useCurrentStates(params: { bodies: CelestialBody[]; resolutionBo
     params.bodies.forEach(body => add(body.id))
     params.referenceIds.forEach(add)
     return required
-  }, [params.bodies, params.referenceIds, params.resolutionBodies])
+  })()
+  useEffect(() => {
+    // Keep request inputs current without putting caller-owned array identity
+    // in the async effect's dependency list.
+    latestRequestParamsRef.current = { bodies: params.bodies, referenceIds: params.referenceIds, requested }
+  }, [params.bodies, params.referenceIds, params.resolutionBodies, requested])
+  useEffect(() => {
+    playingSampleRef.current = playingSample
+  }, [playingSample])
   const isPlaying = params.isPlaying === true
   // Use wall-clock cadence, never a JD bucket: at high simulation rates a JD
   // bucket would create requests faster than this bound. A pause or explicit
   // seek changes the request token immediately.
   useEffect(() => {
     if (!isPlaying) return undefined
-    const timer = window.setInterval(() => setPlayingSample(value => value + 1), CURRENT_STATE_PLAYING_SAMPLE_MS)
+    const timer = window.setInterval(() => {
+      // A full Web request can legitimately take longer than one wall-clock
+      // cadence interval. Record the newest sample without changing the
+      // effect key while one request is active; completion below schedules
+      // exactly one follow-up for the newest sample. This preserves cadence
+      // without repeatedly aborting a large (294-body) request.
+      if (activeRequestRef.current) {
+        playingSampleRef.current += 1
+        return
+      }
+      setPlayingSample(value => {
+        const next = value + 1
+        playingSampleRef.current = next
+        return next
+      })
+    }, CURRENT_STATE_PLAYING_SAMPLE_MS)
     return () => window.clearInterval(timer)
   }, [isPlaying])
   const requestToken = currentStateRequestToken({ isPlaying, sample: playingSample, epochUtcJd: params.epochUtcJd, seekRevision: params.seekRevision ?? 0 })
-  const requestKey = `${base ?? 'none'}|${requestToken}|${[...requested].map(([id, backend]) => `${id}:${backend}`).join(',')}`
+  const requestKey = `${base ?? 'none'}|${requestToken}|refs:${params.referenceIds.join(',')}|bodies:${[...requested].map(([id, backend]) => `${id}:${backend}`).join(',')}`
 
   useEffect(() => {
     const request = gate.current!.begin()
     const controller = request.controller
-    if (PRODUCT_PROFILE === 'preview' || !base || requested.size === 0) {
+    activeRequestRef.current = request
+    const latestParams = latestRequestParamsRef.current
+    if (PRODUCT_PROFILE === 'preview' || !base || latestParams.requested.size === 0) {
       queueMicrotask(() => {
         if (!gate.current!.isCurrent(request)) return
         setSnapshot({ frames: new Map(), publishedEpochUtcJd: NaN })
         setError(null)
         setLoading(false)
+        activeRequestRef.current = null
       })
-      return () => gate.current!.cancel(request)
+      return () => {
+        if (activeRequestRef.current === request) activeRequestRef.current = null
+        gate.current!.cancel(request)
+      }
     }
     queueMicrotask(() => {
       if (!gate.current!.isCurrent(request)) return
@@ -258,19 +304,32 @@ export function useCurrentStates(params: { bodies: CelestialBody[]; resolutionBo
     // carries this exact shared epoch and no body-level conversion occurs.
     const requestEpochUtcJd = sampleCurrentStateEpoch(latestEpochRef.current, isPlaying)
     const epochTdbJd = utcJulianDayToTdb(requestEpochUtcJd)
-    const ids = [...requested.values()]
-    void loadAndPublishCurrentStateFrames({ base, ids, epochTdbJd, epochUtcJd: requestEpochUtcJd, bodies: params.bodies, requestedIds: requested, referenceIds: params.referenceIds, signal: controller.signal, publish: next => {
+    const requestSample = playingSampleRef.current
+    const ids = [...latestParams.requested.values()]
+    void loadAndPublishCurrentStateFrames({ base, ids, epochTdbJd, epochUtcJd: requestEpochUtcJd, bodies: latestParams.bodies, requestedIds: latestParams.requested, referenceIds: latestParams.referenceIds, signal: controller.signal, publish: next => {
       if (!gate.current!.isCurrent(request)) return
       setSnapshot(next)
       setLoading(false)
+      activeRequestRef.current = null
+      if (shouldStartCurrentStateSample({ isPlaying, requestActive: false, latestSample: playingSampleRef.current, requestedSample: requestSample })) {
+        setPlayingSample(value => {
+          const nextSample = Math.max(value, playingSampleRef.current)
+          playingSampleRef.current = nextSample
+          return nextSample
+        })
+      }
     }}).catch((reason: unknown) => {
       if (!gate.current!.isCurrent(request)) return
+      activeRequestRef.current = null
       setSnapshot({ frames: new Map(), publishedEpochUtcJd: NaN })
       setError(reason instanceof Error ? reason.message : String(reason))
       setLoading(false)
     })
-    return () => gate.current!.cancel(request)
-  }, [base, requestKey, params.bodies, params.referenceIds, requested, isPlaying, params.seekRevision])
+    return () => {
+      if (activeRequestRef.current === request) activeRequestRef.current = null
+      gate.current!.cancel(request)
+    }
+  }, [base, requestKey, isPlaying, params.seekRevision])
 
   return { configured: PRODUCT_PROFILE === 'full' && base !== null, frames: snapshot.frames, error, loading, publishedEpochUtcJd: Number.isFinite(snapshot.publishedEpochUtcJd) ? snapshot.publishedEpochUtcJd : null }
 }
