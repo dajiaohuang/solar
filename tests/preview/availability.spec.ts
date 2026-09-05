@@ -1,5 +1,15 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
+test('preview evidence never requests full-backend coverage', async ({ page }) => {
+  const requests: string[] = []
+  page.on('request', request => { if (/\/v1\/(coverage|catalog\/manifest)/.test(request.url())) requests.push(request.url()) })
+  await page.goto('?v=4&page=about&lang=en&view=3d')
+  const panel = page.getByTestId('source-coverage-report')
+  await expect(panel).toContainText('This preview does not request the full-backend audit')
+  await expect(panel.getByRole('button')).toHaveCount(0)
+  expect(requests).toEqual([])
+})
+
 test.beforeEach(async ({ request }) => {
   const response = await request.get('build-info.json')
   expect(response.ok(), 'Preview tests require a completed production artifact').toBe(true)

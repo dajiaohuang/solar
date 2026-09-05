@@ -1,5 +1,13 @@
 # Exact state-tile Web performance contract
 
+The separate Evidence coverage-summary action is on demand, not part of the
+frame loop. It fetches a fresh catalog manifest and a maximum 64 KiB summary,
+binds both catalog and inventory hashes, validates count partitions and finite
+TDB/window metadata, and rejects whole-window certification other than null.
+Leaving the workspace aborts the request; a 30-second deadline bounds a stalled
+load, and retry clears prior totals. Preview refuses before issuing any request.
+This source audit cannot be used as a rendered-body or throughput measurement.
+
 The Web client creates an exact plan and downloads fixed-header binary tiles.
 One plan accepts at most 32,768 unique IDs, defaults to 16,384 rows per tile,
 uses at most two concurrent tile requests, retries each tile once, and publishes

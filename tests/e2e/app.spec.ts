@@ -2,6 +2,61 @@ import { expect, test } from './fixtures'
 import type { Page } from '@playwright/test'
 import datasetPin from '../../.github/asteroid-dataset.json' with { type: 'json' }
 import satelliteCatalog from '../../src/data/satelliteCatalog.json' with { type: 'json' }
+import { coverageSummaryFixture } from '../fixtures/coverageReport'
+
+test('all-source audit loads on demand and rejects stale totals on retry', async ({ page }, info) => {
+  const errors: string[] = []; const requests: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  const fixture = coverageSummaryFixture()
+  let mismatched = false
+  await page.route('**/solar-test-api/v1/catalog/manifest', async route => {
+    requests.push('manifest')
+    const body = JSON.stringify(fixture)
+    await route.fulfill({ body, contentType: 'application/json', headers: { 'content-length': String(Buffer.byteLength(body)) } })
+  })
+  await page.route('**/solar-test-api/v1/coverage', async route => {
+    requests.push('coverage')
+    const body = JSON.stringify({ ...fixture, inventoryManifestSha256: mismatched ? '0'.repeat(64) : fixture.inventoryManifestSha256 })
+    await route.fulfill({ body, contentType: 'application/json', headers: { 'content-length': String(Buffer.byteLength(body)) } })
+  })
+  await page.goto('?v=4&page=about&lang=en&view=3d')
+  const panel = page.getByTestId('source-coverage-report')
+  await expect(panel.getByRole('heading', { name: 'All-source coverage audit' })).toBeVisible()
+  expect(requests).toEqual([])
+  await panel.getByRole('button', { name: 'Load coverage summary' }).click()
+  await expect(panel.locator(':scope > dl dd')).toHaveText(['10', '3', '7', '2', '2', '1', '1'])
+  expect(requests).toEqual(['manifest', 'coverage'])
+  await expect(panel).toContainText('Whole-window numerical certification has not been established')
+  await panel.getByText('Report identity and provenance', { exact: true }).click()
+  await expect(panel).toContainText(fixture.inventoryManifestSha256)
+  await panel.screenshot({ path: info.outputPath('coverage-summary-en.png') })
+  mismatched = true
+  await panel.getByRole('button', { name: 'Load coverage summary' }).click()
+  await expect(panel.getByRole('status')).toContainText('could not be verified')
+  await expect(panel.locator('dl')).toHaveCount(0)
+  mismatched = false
+  await page.goto('?v=4&page=about&lang=zh&view=3d')
+  await panel.getByRole('button', { name: '加载覆盖摘要' }).click()
+  await expect(panel.locator(':scope > dl dd')).toHaveText(['10', '3', '7', '2', '2', '1', '1'])
+  await expect(panel).toContainText('目前尚未建立整窗数值精度认证')
+  await panel.screenshot({ path: info.outputPath('coverage-summary-zh.png') })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
+  expect(errors).toEqual([])
+})
+
+test('all-source audit treats absent reports as unavailable, not zero coverage', async ({ page }) => {
+  const fixture = coverageSummaryFixture()
+  await page.route('**/solar-test-api/v1/catalog/manifest', async route => {
+    const body = JSON.stringify(fixture)
+    await route.fulfill({ body, contentType: 'application/json', headers: { 'content-length': String(Buffer.byteLength(body)) } })
+  })
+  await page.route('**/solar-test-api/v1/coverage', route => route.fulfill({ status: 404, body: '{}' }))
+  await page.goto('?v=4&page=about&lang=en&view=3d')
+  const panel = page.getByTestId('source-coverage-report')
+  await panel.getByRole('button', { name: 'Load coverage summary' }).click()
+  await expect(panel.getByRole('status')).toContainText('no coverage report configured')
+  await expect(panel.locator('dl')).toHaveCount(0)
+})
 
 test('complete Saturn current positions remain independent of 3D trail budgets', async ({ page }) => {
   test.setTimeout(120_000)

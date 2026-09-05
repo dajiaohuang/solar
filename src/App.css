@@ -617,3 +617,7 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
   .glass-panel { background: #091016; }
   button:focus-visible, input:focus-visible, select:focus-visible { outline-width: 3px; }
 }
+.source-coverage-counts { margin: 1rem 0; }
+.source-coverage-counts dt { margin-top: .6rem; }
+.source-coverage-counts dd { margin: .15rem 0 0; font-variant-numeric: tabular-nums; }
+.source-coverage-report { overflow-wrap: anywhere; }
