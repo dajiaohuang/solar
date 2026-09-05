@@ -131,6 +131,19 @@ describe('repository contract', () => {
     }
   })
 
+  it('activates the cached macOS Go toolchain before generating native fixtures', () => {
+    const mobile = parse(readFileSync(new URL('../../.github/workflows/mobile.yml', import.meta.url), 'utf8'))
+    const steps: { name?: string; run?: string }[] = mobile.jobs.ios.steps
+    const activate = steps.findIndex(step => step.name === 'Activate runner-cached Go')
+    const generate = steps.findIndex(step => step.run?.includes('go run ./cmd/state-tile-fixture'))
+    expect(activate).toBeGreaterThan(-1)
+    expect(activate).toBeLessThan(generate)
+    expect(steps[activate].run).toContain('"$RUNNER_TOOL_CACHE"/go/*/"$go_arch"/bin')
+    expect(steps[activate].run).toContain('"$GITHUB_PATH"')
+    expect(steps[activate].run).toContain('"$go_bin/go" version')
+    expect(steps[activate].run).toContain('exit 1')
+  })
+
   it('passes the stable summary only for successful required work', () => {
     expect(pullRequestQualityPasses('success', 'success', 'success')).toBe(true)
     expect(pullRequestQualityPasses('success', 'skipped', 'skipped')).toBe(true)
