@@ -31,8 +31,8 @@ import { VIEW_CAPABILITIES } from '../../lib/viewCapabilities'
 import { selectDetailBodies } from '../../lib/focusLayers'
 import { PagedBodyList } from '../../components/PagedBodyList'
 import { PRODUCT_PROFILE } from '../../lib/productAvailability'
-import { createBackendPositionResolver, MAX_CURRENT_STATE_BATCH, type BackendFrame } from '../../lib/currentStates'
-import { useCurrentStates } from '../../hooks/useCurrentStates'
+import { createBackendPositionResolver, type BackendFrame } from '../../lib/backendFrames'
+import { useStateTiles } from '../../hooks/useStateTiles'
 
 const TrajectoryCanvas3D = lazy(async () => {
   const module = await import('../../components/TrajectoryCanvas3D')
@@ -290,16 +290,16 @@ export function ExplorerWorkspace() {
     return [...required.values()]
   }, [allBodies])
   const requestedJulianDay = clock.julianDay
-  // One lazy, bounded-by-registry absolute-state cache for both frames at this
-  // exact displayed epoch. The registry changes on every kernel revision.
+  // One exact state plan serves both frames at this displayed epoch. The
+  // renderer's adaptive draw/trail budgets remain independent from protocol
+  // coverage, so selected identities are not silently dropped at 510 rows.
   const currentStateReferenceIds = useMemo(() => [simulation.referenceId, ...(simulation.comparisonEnabled ? [simulation.comparisonReferenceId] : [])], [simulation.comparisonEnabled, simulation.comparisonReferenceId, simulation.referenceId])
-  const currentStates = useCurrentStates({
-    // A catalog selection can represent 1.5M identities. Current-state work
-    // is intentionally bounded to the interactive detail budget; the cloud
-    // remains sampled and no selection action turns into a full fetch.
+  const currentStates = useStateTiles({
+    // Protocol-sized plans are created as needed. Renderer budgets do not
+    // silently truncate the exact-state identity set.
     bodies: useMemo(() => {
       const priority = new Set([simulation.referenceId, ...(simulation.comparisonEnabled ? [simulation.comparisonReferenceId] : []), selection.focusedId].filter((id): id is string => Boolean(id)))
-      return [...selectedBodies.filter(body => priority.has(body.id)), ...selectedBodies.filter(body => !priority.has(body.id))].slice(0, MAX_CURRENT_STATE_BATCH)
+      return [...selectedBodies.filter(body => priority.has(body.id)), ...selectedBodies.filter(body => !priority.has(body.id))]
     }, [selectedBodies, selection.focusedId, simulation.comparisonEnabled, simulation.comparisonReferenceId, simulation.referenceId]),
     resolutionBodies,
     referenceIds: currentStateReferenceIds,

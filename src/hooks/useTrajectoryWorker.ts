@@ -10,7 +10,7 @@ import type {
   TrajectoryWorkerResponse,
   Vector3,
 } from '../types'
-import type { BackendFrame } from '../lib/currentStates'
+import type { BackendFrame } from '../lib/backendFrames'
 
 type Params = {
   bodies: CelestialBody[]

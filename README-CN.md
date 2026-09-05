@@ -1,12 +1,12 @@
 # Solar Atlas / 太阳系图谱
 
-> **开发定位：** Web、Android、iOS 三个独立前端项目，共用统一后端。GitHub Pages 使用相同 Web 前端，开放精选核心功能；完整版内容保留可见入口，但不可选中，并提示使用完整版。当前版本仍是纯前端 Web 与 Capacitor 应用壳，迁移尚未完成。详见[产品定位与验收标准](./docs/product-direction.md)。
+> **开发定位：** Web、Android、iOS 三个独立前端项目，共用统一后端。GitHub Pages 是精选 Web 预览。原生目前仍是精确当前位置状态瓦片的第一竖切原型：Android 已使用 GLES 点渲染器并通过模拟器空场景冒烟，iOS 源码尚未在 macOS 编译，不宣称原生客户端已发布。详见[产品定位与验收标准](./docs/product-direction.md)。
 
-独立的 [Go 后端实现](./backend/README.md)已有可本地运行的源码。完整版 Web 只有在部署方提供 `VITE_SOLAR_API_BASE_URL` 时才通过经过审计的 `POST /v1/current-states` 接入；未提供时 Pages 继续使用精选静态内容。目前没有官方公开的完整版 Web 后端地址。
+独立的 [Go 后端实现](./backend/README.md)已有可本地运行的源码。完整版 Web 只有在部署方提供 `VITE_SOLAR_API_BASE_URL` 时，才接入经过审计的“清单 → 计划 → 二进制状态瓦片”链路；单个计划当前最多覆盖 32,768 个身份，不再沿用 Web 端 510 行截断。未提供后端时 Pages 继续使用精选静态内容。目前没有官方公开的完整版 Web 后端地址。
 
 **浏览器原生的太阳系动力学与小天体图谱：场景可复现、数据可追溯、模型边界明确。**
 
-[![生产部署](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml) [![Android 与 iOS](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml/badge.svg?branch=main)](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml)
+[![生产部署](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml)
 
 [打开 Solar Atlas](https://dajiaohuang.github.io/solar/) · [English](./README.md) · [移动端构建](./MOBILE-CN.md) · [隐私说明](./PRIVACY-CN.md) · [科学模型与边界](#科学模型与边界) · [参与贡献](#参与贡献)
 
@@ -26,7 +26,7 @@ Solar Atlas 把空间工作台、轨道元素空间、事件分析、任务几�
 | 学习操作 | 打开同一网址，选择“**进入教程**”；四步教程之后可从预设面板再次打开 |
 | 体验可复现课程 | [解释火星逆行](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=retrograde-mars&step=2&view=3d&lang=zh)，或在[可复现场景](#可复现场景)中选择其他入口 |
 | 本地运行 Web 应用 | 依次运行 `npm ci` 与 `npm run dev`；内置核心不要求下载小行星数据集 |
-| 查看原生验证 | 打开 [Android/iOS 工作流](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml)，或按 [MOBILE-CN.md](./MOBILE-CN.md) 中的平台命令操作 |
+| 查看原生验证 | 按 [MOBILE-CN.md](./MOBILE-CN.md) 中的平台命令操作；本文不声称原生构建已通过 |
 
 根网址会直接进入**综合观测台**，访客无需先经过宣传首页。
 
@@ -81,7 +81,7 @@ Solar Atlas 当前提供三十个一键预设，包括围绕十六个母天体�
 
 场景 URL **v4** 会记录回放工作区所需的科学与交互状态：路由、不可变数据集版本、数据模式、历元、主/对比参考系、聚焦集合、筛选器、轨迹采样、视图模式、目录点云开关、3D 性能档位、元素图、引导课程步骤、任务端点/日期、语言和视图参数。
 
-目录工作区和数据集驱动预设会把 `catalogSample=mobile|desktop` 与 manifest 声明的 `catalogSampleCount` 成对固定。字段不完整、版本不可用、档位不支持或数量不匹配时，样本加载会失败关闭。当前实现尚能读取 v2/v3 链接，但维护旧格式兼容已不再是开发要求。场景还可保存在本地，并以携带科学数据身份的 JSON 场景库导入或导出。
+目录工作区和数据集驱动预设会把 `catalogSample=mobile|desktop` 与 manifest 声明的 `catalogSampleCount` 成对固定。字段不完整、版本不可用、档位不支持或数量不匹配时，样本加载会失败关闭。场景还可保存在本地，并以携带科学数据身份的 JSON 场景库导入或导出。
 
 | 可复现保证 | 明确不保证 |
 | --- | --- |
@@ -108,16 +108,16 @@ Solar Atlas 把三个回答不同问题的上限分开处理：
 2. **可见目录点预算**：在综合观测台显式开启“目录点云”后，本机实际绘制的确定性前缀长度。
 3. **轨迹／详细模型预算**：3D 最多请求 160 条历史轨迹，2D 为 320 条。该预算不再截断当前位置：全部已选且状态有效的天体仍可绘制和交互。额外的 3D 位置采用固定像素的共享 GPU 点缓冲，不为每个对象创建独立网格；对象列表分页但不丢弃选择。这些位置保留各自的 SPK／近似回退／缺失状态分类，不等同于近似目录点云。
 
-初始设备类别由视口宽度决定；横屏且使用粗指针的设备在宽度不超过 1,180 px 时仍采用移动端策略。浏览器可选提供的内存与并发数提示只能让自适应首帧更保守，不能把设备提升到更高类别；启动后以真实帧时间为准，两个渲染器都会限制设备像素比。分屏参考系对比在同一个总点预算内让两侧使用相同的确定性前缀。
+初始设备类别由视口宽度决定；横屏且使用粗指针的设备在宽度不超过 1,180 px 时仍采用移动端策略。≤4 GB 内存提示会选保守移动档；桌面端在内存提示至少 24 GB 或逻辑处理器至少 16 个时选 32 GB 目标包络，其余桌面端使用 16 GB 目标档。浏览器可能截断或不提供这些提示，因此启动后仍以真实帧时间为准，两个渲染器都会限制设备像素比。分屏参考系对比在同一个总点预算内让两侧使用相同的确定性前缀。
 
 | 视图与档位 | 移动端可见点 | 桌面端可见点 | 运行时行为 |
 | --- | ---: | ---: | --- |
-| 2D，任意档位 | 8,000 | 30,000 | 固定；WebGL 批量点绘制 |
-| 3D 自动 | 标称初始 4,000；范围 2,000–6,000 | 标称初始 12,000；范围 6,000–20,000 | 连续慢帧后降低，只有持续留有余量才提高 |
-| 3D 均衡 | 4,000 | 12,000 | 固定且保守的预算 |
-| 3D 最高 | 标称初始 6,000；范围 2,000–8,000 | 标称初始 20,000；范围 8,000–30,000 | 更高的自适应目标，仍可为保持响应速度而降低 |
+| 2D，任意档位 | 500,000（≤4 GB 提示时为 8,000） | 16 GB 目标档 1,250,000；32 GB 目标档 1,567,193 | 固定容量包络；WebGL 批量点绘制 |
+| 3D 自动 | 标称 100,000；范围 25,000–250,000 | 16/32 GB 目标档标称 250,000/500,000；范围 50,000–750,000 / 100,000–1,567,193 | 连续慢帧后降低，只有持续留有余量才提高 |
+| 3D 均衡 | 75,000 | 250,000 / 500,000 | 固定、确定性预算 |
+| 3D 最高 | 标称 150,000；范围 25,000–250,000 | 标称 500,000 / 1,000,000；范围 50,000–750,000 / 100,000–1,567,193 | 更高的自适应目标，仍可为保持响应速度而降低 |
 
-自适应控制会在 3D 目录点云处于动画状态时，以 500 点为步长并使用滞回与冷却调整。画面标签会显示当前“可见数 / 样本数”。关闭目录点云后，综合观测台会释放这部分目录工作负载。
+自适应控制会在 3D 目录点云处于动画状态时，以 5,000 点为步长并使用滞回与冷却调整。画面标签会显示当前“可见数 / 样本数”。关闭目录点云后，综合观测台会释放这部分目录工作负载。现有不可变展示样本仍只有移动端 8,000／桌面端 30,000 行，因此新上限是面向后续完整流式数据的容量包络，不代表当前已交付对应点数。
 
 这些是有界策略，不是按系统内存作出的性能承诺。即使设备有 12、16 或 32 GB 内存，浏览器限制、GPU、散热、屏幕分辨率、扩展和后台负载仍可能带来显著差异。字节、请求、产物和浏览器预算见 [PERFORMANCE.md](./PERFORMANCE.md)。
 
@@ -151,9 +151,9 @@ JPL SBDB 数据严格读取官方 `orbit.elements[]` 记录中的 `name`、`valu
 
 ### 物理星历覆盖与观测边界
 
-按需加载、SHA-256 固定的 SPK 包现有两种配置，各含 510 个文件：Pages 为 **258.4 MiB**（270,908,416 字节），完整／原生包为 **1094.7 MiB**（1,147,897,856 字节）。在 UTC JD 2461287.5，测试确认 **508 个可选天体中心**有 SPK 状态。完整包新增行星卫星覆盖 2020–2031 TDB；Pages 将较大的卫星文件缩短为 2026–2027。八组新增小天体双星完整窗口为 2020-01-01 至 2030-01-01，Pages 为 2026-07-01 至 2027-01-01，保留相同目标身份。原始 type 2/3/17/21 记录明确绑定各自的来源中心依赖；Daphnis 保留历史 SAT393／内嵌 DE431 组合，九颗新增土星卫星使用现代 NAIF SAT415／内嵌 DE437。独立 CSPICE 对照检查了 444 组新增来源组合、1,380 组位置／速度样本；数值一致不等于物理不确定度已评估。
+SHA-256 固定、按需加载的 Web/后端 **来源配置**有两种，各含 510 个文件：Pages 配置为 **258.4 MiB**（270,908,416 字节），完整版 Web/后端为 **1094.7 MiB**（1,147,897,856 字节）。当前线上 Pages 预览是另一份精选闭包，仅包含 36 个 SPK 文件、90,800,128 字节；线上容量报告总计 93.2 MiB，不能与 510 文件的 Pages 来源配置混淆。在 UTC JD 2461287.5，来源集成测试确认 **508 个可选天体中心**有 SPK 状态；这不代表原生覆盖或完整离线星历。完整行星卫星新增覆盖 2020–2031 TDB；Pages 将大型卫星文件缩短为 2026–2027。八组新增小天体双星在完整配置覆盖 2020-01-01 至 2030-01-01，在 Pages 覆盖 2026-07-01 至 2027-01-01，并保留相同目标身份。原始 type 2/3/17/21 记录明确绑定各自的来源中心依赖；独立 CSPICE 检查 444 组新增来源池和 1,380 组位置/速度样本；数值一致不等于物理不确定度已评估。
 
-这仍不是全部覆盖：S/2009 S1 在本包中没有可验证的 SPK 目标或状态；Daphnis 虽已有原始轨道记录，但属于历史模型，并非最新全球联合解。Makemake 的 Horizons 轨道解不等于已确认主星中心，故保留近似回退；Eris／Haumea 使用原发布主星偏移，止于 2030-01-02 TDB。缺少状态不会编造轨道。普通构建不下载内核：网页默认 Pages，原生默认完整包；`SOLAR_ATLAS_EPHEMERIS_PROFILE=full` 可选择完整网页发行。原生 SPK 离线可用，目录与实时 SBDB 查询保持联网边界。旧 `data:ephemerides` 命令不是完整卫星刷新流程，详见[配置与再生成契约](./docs/physical-ephemerides.md)和[卫星证据流程](./scripts/reference/SATELLITE-SURVEY.md)。
+这仍不是全部覆盖：S/2009 S1 在来源包中没有可验证的 SPK 目标或状态；Daphnis 使用历史 SAT393 记录，Makemake 因 Horizons 未建立已解析主星中心而保留近似回退；Eris/Haumea 主星中心及其卫星止于 2030-01-02 TDB。缺少状态不会编造轨道。原生客户端不打包这些 SPK 配置，而是通过 manifest/plan/二进制状态瓦片获取精确当前位置；manifest 与 plan 仍需在线，已验证瓦片可从原生缓存复用。详见[配置与再生成契约](./docs/physical-ephemerides.md)和[卫星证据流程](./scripts/reference/SATELLITE-SURVEY.md)。
 
 SPK 输出是声明参考系中的几何天体中心状态，并沿中心链解析；它不是客户端 N 体积分器，应用不会再次叠加通用广义相对论或 J2 修正。焦点轨迹可使用 SPK，而 GPU 目录点云仍使用开普勒模型。几何、接收光时与恒星光行差读数彼此分开；不提供引力偏折、大气、地表观测者模型或协方差。
 
@@ -219,7 +219,7 @@ npm run check:capacity
 
 `npm run build:preview` 使用**相同 Web 前端**构建精选产品配置；本地需先安装 `.github/asteroid-dataset.json` 固定的已审计数据集。它保留 3D 综合看板、精选预设与课程、来源证据和 8,000 条展示样本。完整版入口保持可见并提供无障碍说明，受限场景链接保留原始意图。这不代表全目录或全部天体状态覆盖。
 
-Pages 流程先验证完整 Web，再构建、测试并仅发布精选预览。**不要求旧客户端兼容：** 不为旧 App 保留完整目录，切换后其在线目录访问将停止；完整版客户端与后端接入仍在开发。原生构建拒绝预览产品配置。详见[预览交付与验证](./docs/preview-delivery.md)。开发优先级现为联合优化所有前端、Go 后端及存储，尽量同时精确计算并展示更多天体，以实测性能和明确精度边界验收。
+Pages 流程先验证完整 Web，再构建、测试并仅发布精选预览。完整版 Web 部署需要运营方提供后端地址；目前没有官方公开的完整版 Web 端点。当前线上构建提交为 `2d2b99ca17b9a287024cb661a658c5922127e9fc`，报告 `productProfile=preview`、`ephemerisProfile=pages`、36 个 SPK 文件/90,800,128 字节 SPK，以及 93.2 MiB 总容量。原生源码项目是使用状态瓦片协议的独立第一竖切原型，不是另一套 Web 产品配置；Android 已使用 GLES 点渲染器并通过模拟器空场景冒烟，iOS 尚未在 macOS 编译。详见[预览交付与验证](./docs/preview-delivery.md)。开发优先级现为联合优化所有前端、Go 后端及存储，尽量同时精确计算并展示更多天体，以实测性能和明确精度边界验收。
 
 常用管线变量：
 
@@ -240,16 +240,8 @@ Pages 流程先验证完整 Web，再构建、测试并仅发布精选预览。*
 
 ## Android 与 iOS
 
-仓库已包含 Android 与 iOS 的 Capacitor 8 本地应用壳工程，应用 ID 为 `io.github.dajiaohuang.solaratlas`。Android 最低支持 API 24、目标 API 36；iOS 需要 16.4 或以上。两端都把内置核心体验安装在本地，并按需通过 HTTPS 加载目录数据。
+Android 与 iOS 是独立原生项目，不是 Web 壳。当前源码是从用户选择的 HTTPS 后端加载精确当前位置二进制瓦片的第一竖切原型：Android 已使用 GLES 点渲染器并通过模拟器空场景冒烟，iOS 源码尚未在 macOS 编译。计划中的 iOS 第一竖切支持 TDB 儒略日、预设或自定义 ID、参考 ID，默认原生 3D 并可切换原生 2D，拥有有界 256 MiB 已验证瓦片缓存。Manifest 与 plan 仍需在线，尚未实现完整离线 plan 恢复。不声称完整功能、真机、签名、商店或构建已通过。详见 [MOBILE-CN.md](./MOBILE-CN.md) 与 [PRIVACY-CN.md](./PRIVACY-CN.md)。
 
-v0.11.0 的参考验证已在 2026-08-29 针对[提交 `e9e7897`](https://github.com/dajiaohuang/solar/commit/e9e789705711bf2946f6b432cd53e9b820a554ec) 通过 [工作流运行 33269424582](https://github.com/dajiaohuang/solar/actions/runs/33269424582) 的两个原生任务：
-
-| 目标 | 已验证 CI 输出 | 边界 |
-| --- | --- | --- |
-| Android | API 契约、lint、单元测试与 `assembleDebug`；产物名 `solar-atlas-android-debug` | 使用 debug key 签名的验证 APK，不是发布 APK 或 AAB |
-| iOS | 使用 Xcode 为 `iphonesimulator` 构建同步后的应用壳；产物名 `solar-atlas-ios-simulator` | 无签名模拟器 `.app`，不是设备归档或 IPA |
-
-产物保留 14 天；下载过期后，工作流结果仍是持久验证证据。这些工程提供源码与非发布验证路径，不是已经发布的商店产品。工具链齐备时 Windows 可以构建 Android，但 iOS 必须使用 macOS 与 Xcode。当前不宣称已经完成发布签名、提交商店、进入 TestFlight/Play 测试轨道或真机验证。前置条件、命令、原生行为和验收清单见 [MOBILE-CN.md](./MOBILE-CN.md)，当前源码级隐私说明见 [PRIVACY-CN.md](./PRIVACY-CN.md)。
 
 ## 架构
 
@@ -291,13 +283,13 @@ npm run benchmark:catalog
 npm run check:capacity
 ```
 
-`npm run ci` 合并 lint、单元、科学与构建检查。单元测试覆盖儒略日、开普勒传播、参考系、渲染预算滞回、霍曼/Lambert 数学、月相、Hill/SOI 定义、卫星证据、v2/v3 兼容、v4 场景往返、MPCORB 解析、缓存隔离与百万行有界扫描。Playwright 覆盖首次使用体验、默认 3D 与 2D 回退、显式目录点云加载、桌面/移动样本、URL 恢复、浏览器历史、故事、任务、离线应用壳、WebGL/Worker 失败和严重/致命自动化可访问性问题。
+`npm run ci` 合并 lint、单元、科学与构建检查。单元测试覆盖儒略日、开普勒传播、参考系、渲染预算滞回、霍曼/Lambert 数学、月相、Hill/SOI 定义、卫星证据、当前场景往返、状态瓦片协议校验、MPCORB 解析、缓存隔离与百万行有界扫描。Playwright 覆盖首次使用体验、默认 3D 与 2D 回退、显式目录点云加载、桌面/移动样本、URL 恢复、浏览器历史、故事、任务、Web 离线应用壳、WebGL/Worker 失败和严重/致命自动化可访问性问题。
 
 `.github/workflows/pull-request-quality.yml` 是合并前门禁。所有 PR 都会运行只读的仓库解析器、本地链接和身份一致性检查；代码、配置、工作流与生产资产变更还会运行 lint、单元/科学验证、生产构建/容量、Chromium 交互/可访问性与 Lighthouse 检查。纯文档变更只跳过昂贵的浏览器任务，不会跳过仓库契约。分支保护要求每次合并（包括管理员合并）都必须取得 GitHub Actions 提供的稳定汇总检查 `Pull request quality gate`；仅当仓库契约与所有适用的完整质量任务都成功时，它才会通过。
 
 `.github/workflows/deploy.yml` 仍是合并后的唯一生产门禁：校验数据 pin、构建压缩交付产物、执行 Pages/浏览器预算、测试与 Lighthouse、归档证据、部署并运行生产冒烟。`.github/workflows/data-refresh.yml` 按月或手动发布不可变数据集。`.github/workflows/rollback.yml` 可从保留期内的成功运行恢复准确测试过的 Pages 产物。
 
-[健康端点](https://dajiaohuang.github.io/solar/health.json) 会报告当前线上提交、构建时间、数据集、交付 manifest 与科学验证状态。顶部工作流徽章表示当前 `main` 的部署与原生构建状态；上方带日期的原生运行是 v0.11.0 参考记录，不表示短期产物会永久可下载。
+[健康端点](https://dajiaohuang.github.io/solar/health.json) 会报告当前线上提交、构建时间、数据集、交付 manifest 与科学验证状态。原生验证另见移动契约，本文不把原生构建表示为已通过。
 
 ## 可安装应用与离线边界
 
@@ -305,7 +297,7 @@ Solar Atlas 提供 Web App Manifest、可安装应用壳、更新提示、sitema
 
 至少成功联网打开一次后，Service Worker 可在离线状态重新打开已缓存的应用壳。这不表示完整 MPCORB 发布、未缓存样本/详情分片、尚未访问的路由资源或实时 JPL SBDB 请求一定离线可用。数据版本错误会保持可见，不会静默替换为另一份数据。
 
-Android 与 iOS 工程使用独立的 Capacitor 本地应用壳构建，不注册 Service Worker。内置核心随应用安装，目录分片与实时 JPL 请求仍保持同样的在线边界。移动构建状态与发布限制见 [MOBILE-CN.md](./MOBILE-CN.md)，隐私行为见 [PRIVACY-CN.md](./PRIVACY-CN.md)。
+Android 与 iOS 工程拥有各自的原生生命周期和存储。状态瓦片缓存独立于 Web Service Worker：只有在线 manifest/plan 识别后才复用缓存瓦片。原生构建命令与发布边界见 [MOBILE-CN.md](./MOBILE-CN.md)，隐私行为见 [PRIVACY-CN.md](./PRIVACY-CN.md)。
 
 ## 参与贡献
 
@@ -315,7 +307,7 @@ Android 与 iOS 工程使用独立的 Capacitor 本地应用壳构建，不注�
 
 - 从 `npm ci` 开始，并运行上方相关检查；
 - 科学改动应附主要来源、模型/有效期说明与确定性回归 fixture；
-- 验证当前场景协议，不要求兼容旧格式；
+- 验证当前场景协议及其明确的不支持状态；
 - 同步维护中英文文案；
 - UI 改动应检查键盘、桌面/移动端、减少动态效果偏好及 2D/WebGL 回退；
 - 不要把二体或示意输出描述成业务星历、N 体结果、风险评估或导航产品。

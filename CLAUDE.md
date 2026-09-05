@@ -1,6 +1,6 @@
 # Solar Atlas contributor guide
 
-Solar Atlas is a React 19 + TypeScript 6 + Vite 8 scientific visualization application. It is a client-side, route-level code-split app with no server runtime.
+Solar Atlas has a React 19 + TypeScript 6 + Vite 8 Web frontend, a Go scientific/data backend, and independent Android/iOS native prototypes. Pages remains a static, route-level code-split Web preview; full Web can use the Go backend for current states. Historical Web trajectories and analyses are not yet fully migrated to Go.
 
 ## Commands
 
@@ -48,6 +48,15 @@ Useful pipeline environment variables are `MPCORB_SOURCE_FILE`, `MPCORB_SOURCE_U
 - Heavy analyses are explicit, cancellable worker jobs. UI parameter changes must not silently rerun them.
 - Results and exports must state their model, epoch/window, units, and approximation limits.
 - Validate the current scene contract in `src/lib/urlState.ts`. Old-client/API/scene compatibility is not required (owner direction, 2026-09-05); retain scientific source identities and explicit unsupported-state errors, not compatibility-only layers.
+
+## Native first vertical slice
+
+- Android and iOS are independent platform-native clients. Do not add a Web shell, Capacitor bridge, or native SPK packaging.
+- The current native source scope is a `manifest → plan → binary state tile` first-slice prototype for exact current states. Android now uses a GLES point renderer validated in an empty-scene emulator smoke test, and iOS has not yet been compiled on macOS; do not describe either as a delivered client. Keep provenance, epoch, units, reference frame, validity and missing-state semantics explicit; state values remain typed `Float64`.
+- Native 3D is the default and native 2D is a separate view/fallback with independent budgets. Do not make native 3D shrink or fade current states solely with distance.
+- The iOS slice accepts a user HTTPS backend, TDB Julian date, preset/custom body IDs and a reference ID. Its verified-tile cache is bounded at 256 MiB.
+- Manifest and plan loading is online. Verified tiles may be reused only after an online plan identifies their identity and hashes; complete offline plan recovery is not implemented.
+- Native build instructions are documentation only until command output is captured. Do not claim full feature parity, real-device validation, signed artifacts, store status or successful builds without evidence.
 
 ## Verification
 

@@ -1,12 +1,12 @@
 # Solar Atlas
 
-> **Development direction:** three independent Web, Android and iOS frontend projects sharing one backend. GitHub Pages will use the same Web frontend with curated core features enabled; full-only entries remain visible with an explanation and an invitation to use the full version. The current release is still client-side Web plus Capacitor shells; this migration is not complete. See [product direction and acceptance criteria](./docs/product-direction.md).
+> **Development direction:** three independent Web, Android and iOS frontend projects sharing one backend. GitHub Pages is the curated Web preview. Native work is still a first vertical-slice prototype: Android now uses a GLES point renderer validated in an empty-scene emulator smoke test, and the iOS source has not yet been compiled on macOS. No native client release is claimed. See [product direction and acceptance criteria](./docs/product-direction.md).
 
-The independent [Go backend implementation](./backend/README.md) is available for local execution. Full Web current positions use its audited `POST /v1/current-states` adapter only when the deployer supplies `VITE_SOLAR_API_BASE_URL`; Pages remains curated and static when that variable is absent. There is currently no official public full-Web backend URL.
+The independent [Go backend implementation](./backend/README.md) is available for local execution. Full Web exact positions use its audited manifest → plan → binary state-tile transport only when the deployer supplies `VITE_SOLAR_API_BASE_URL`; Pages remains curated and static when that variable is absent. One plan currently covers up to 32,768 identities without the former 510-row Web truncation. There is currently no official public full-Web backend URL.
 
 **A browser-native Solar System dynamics and small-body atlas with reproducible scenes, traceable data, and explicit model boundaries.**
 
-[![Production deployment](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml) [![Android and iOS](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml/badge.svg?branch=main)](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml)
+[![Production deployment](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/dajiaohuang/solar/actions/workflows/deploy.yml)
 
 [Open Solar Atlas](https://dajiaohuang.github.io/solar/) · [中文文档](./README-CN.md) · [Mobile builds](./MOBILE.md) · [Privacy](./PRIVACY.md) · [Scientific contract](#scientific-contract) · [Contributing](#contributing)
 
@@ -26,7 +26,7 @@ Solar Atlas connects a spatial workbench, orbital-element space, event analysis,
 | Learn the controls | Open the same URL and choose **Start tutorial**; the four-tip guide can be reopened from the preset panel |
 | Try a reproducible lesson | [Explain Mars retrograde motion](https://dajiaohuang.github.io/solar/?v=4&page=stories&story=retrograde-mars&step=2&view=3d&lang=en) or choose another link under [Reproducible scenes](#reproducible-scenes) |
 | Run the web app locally | Use `npm ci`, then `npm run dev`; no asteroid dataset is required for the curated core |
-| Inspect native validation | Open the [Android/iOS workflow](https://github.com/dajiaohuang/solar/actions/workflows/mobile.yml) or follow the platform commands in [MOBILE.md](./MOBILE.md) |
+| Inspect native validation | Follow the platform commands in [MOBILE.md](./MOBILE.md); no native build result is claimed here |
 
 The root URL opens directly into the **Observation Deck**. There is no marketing page between the visitor and the visualization.
 
@@ -81,7 +81,7 @@ Global object/story/term search is available with `Ctrl/⌘ K` or `/`. Browser B
 
 Scene URL schema **v4** carries the scientific and interaction state needed to replay a workspace: route, immutable dataset version, dataset mode, epoch, reference and comparison frames, focus set, filters, trajectory sampling, view mode, catalog-cloud choice, 3D quality profile, plot, guided-story step, mission endpoints/dates, language, and view settings.
 
-Catalog workspaces and dataset-backed presets pin `catalogSample=mobile|desktop` together with the manifest-declared `catalogSampleCount`. Incomplete, unavailable, unsupported, or count-mismatched tuples fail closed where the sample is loaded. The current implementation can read v2/v3 links, but maintaining old-schema compatibility is no longer a development requirement. Scenes can also be saved locally and exported or imported as JSON libraries carrying their scientific data identity.
+Catalog workspaces and dataset-backed presets pin `catalogSample=mobile|desktop` together with the manifest-declared `catalogSampleCount`. Incomplete, unavailable, unsupported, or count-mismatched tuples fail closed where the sample is loaded. Scenes can also be saved locally and exported or imported as JSON libraries carrying their scientific data identity.
 
 | Reproducibility guarantee | Explicit non-guarantee |
 | --- | --- |
@@ -108,16 +108,16 @@ Solar Atlas separates three limits that answer different questions:
 2. **Visible catalog-point budget** — the prefix drawn in the Observation Deck when Catalog point cloud is explicitly enabled.
 3. **Trail/detail budget** — at most 160 requested historical trails in 3D or 320 in 2D. This does not truncate current positions: all selected resolvable bodies remain drawn and interactive. Extra 3D positions share fixed-pixel GPU points instead of individual meshes; object lists paginate without dropping selection. These points retain their actual SPK/fallback/missing-state classification and are not the approximate catalog cloud.
 
-The initial device class comes from viewport width, while coarse-pointer landscape devices up to 1,180 px remain on the mobile policy. Optional browser memory and concurrency hints can only make an adaptive first frame more conservative; they never promote a device beyond its class. Runtime frame measurements are authoritative after startup, and both renderers cap device pixel ratio. Split-frame comparison gives both frames the same deterministic prefix within one shared total budget.
+The initial device class comes from viewport width, while coarse-pointer landscape devices up to 1,180 px remain mobile. A ≤4 GB memory hint selects the conservative mobile policy; desktop hints of at least 24 GB or 16 logical processors select the 32 GB target envelope, with other desktops on the 16 GB target. Browser hints may be clamped or absent, so runtime frame measurements remain authoritative and both renderers cap device pixel ratio. Split-frame comparison gives both frames the same deterministic prefix within one shared total budget.
 
 | View and profile | Mobile visible points | Desktop visible points | Runtime behavior |
 | --- | ---: | ---: | --- |
-| 2D, any profile | 8,000 | 30,000 | Fixed; batched WebGL points |
-| 3D Auto | nominal start 4,000; range 2,000–6,000 | nominal start 12,000; range 6,000–20,000 | Reduces after repeated slow frame windows and increases only after sustained headroom |
-| 3D Balanced | 4,000 | 12,000 | Fixed, conservative budget |
-| 3D Maximum | nominal start 6,000; range 2,000–8,000 | nominal start 20,000; range 8,000–30,000 | Higher adaptive target; still allowed to protect responsiveness |
+| 2D, any profile | 500,000 (8,000 on ≤4 GB hint) | 1,250,000 on the 16 GB target; 1,567,193 on the 32 GB target | Fixed capacity envelope; batched WebGL points |
+| 3D Auto | nominal 100,000; range 25,000–250,000 | nominal 250,000 / 500,000; range 50,000–750,000 / 100,000–1,567,193 for 16 GB / 32 GB targets | Reduces after repeated slow frame windows and increases only after sustained headroom |
+| 3D Balanced | 75,000 | 250,000 / 500,000 | Fixed deterministic budget |
+| 3D Maximum | nominal 150,000; range 25,000–250,000 | nominal 500,000 / 1,000,000; range 50,000–750,000 / 100,000–1,567,193 | Higher adaptive target; still allowed to protect responsiveness |
 
-Adaptive changes occur in 500-point steps with hysteresis and cooldown while the 3D catalog cloud is actively animating. The current `visible / sample` count is shown in the frame label. Turning the cloud off releases the catalog workload from the deck.
+Adaptive changes occur in 5,000-point steps with hysteresis and cooldown while the 3D catalog cloud is actively animating. The current `visible / sample` count is shown in the frame label. Turning the cloud off releases the catalog workload from the deck. Current immutable display samples still contain only 8,000 mobile or 30,000 desktop rows, so the new ceilings are forward capacity rather than a claim that those points are already delivered.
 
 These are bounded policies, not RAM-based performance promises. A device with 12, 16, or 32 GB of system memory can still differ substantially in browser limits, GPU, thermal state, display resolution, extensions, and background load. See [PERFORMANCE.md](./PERFORMANCE.md) for measured byte, request, artifact, and browser budgets.
 
@@ -151,9 +151,9 @@ Primary sources:
 
 ### Physical ephemeris coverage and observation boundary
 
-The SHA-256-pinned, on-demand SPK pack has two profiles, each with 510 files: Pages is **258.4 MiB** (270,908,416 bytes); full/native is **1094.7 MiB** (1,147,897,856 bytes). At UTC JD 2461287.5, tests resolve **508 selectable body centers**. Full planetary-satellite additions cover 2020–2031 TDB; Pages narrows large satellite files to 2026–2027. Eight new small-body binary systems span 2020-01-01/2030-01-01 in full and 2026-07-01/2027-01-01 in Pages, retaining the same target identities. Original type 2/3/17/21 records retain explicit source-specific center dependencies. Independent CSPICE tests check 444 added source pools with 1,380 position/velocity sample pairs; numerical agreement is not physical uncertainty.
+The SHA-256-pinned, on-demand Web/backend **source profiles** have two variants, each with 510 files: the Pages profile is **258.4 MiB** (270,908,416 bytes), while full Web/backend is **1094.7 MiB** (1,147,897,856 bytes). The currently published Pages preview is a separate curated closure of 36 SPK files totaling 90,800,128 bytes; its online capacity report is 93.2 MiB overall, so it must not be confused with the 510-file Pages source profile. At UTC JD 2461287.5, the source integration tests resolve **508 selectable body centers**; this is not a promise of native coverage or a complete offline ephemeris. Full planetary-satellite additions cover 2020–2031 TDB; Pages narrows large satellite files to 2026–2027. Eight new small-body binary systems span 2020-01-01/2030-01-01 in full and 2026-07-01/2027-01-01 in Pages, retaining the same target identities. Original type 2/3/17/21 records retain explicit source-specific center dependencies. Independent CSPICE tests check 444 added source pools with 1,380 position/velocity sample pairs; numerical agreement is not physical uncertainty.
 
-This is not universal coverage: S/2009 S1 has no corroborated SPK target or state in this pack. Daphnis uses original historical SAT393 records with that publication's embedded DE431 center chain, not a current globally fitted solution. Makemake retains an approximate fallback because its Horizons solution does not establish a resolved primary center. Eris/Haumea use published primary offsets through 2030-01-02 TDB. Missing states never receive invented orbits. Ordinary builds do not fetch kernels: Web defaults to Pages, native to full; `SOLAR_ATLAS_EPHEMERIS_PROFILE=full` selects a full Web distribution. Native SPK files work offline; catalogs and live SBDB queries retain their online boundary. The legacy `data:ephemerides` command is not a full satellite refresh; see the [profile and regeneration contract](./docs/physical-ephemerides.md) and [satellite evidence workflow](./scripts/reference/SATELLITE-SURVEY.md).
+This is not universal coverage: S/2009 S1 has no corroborated SPK target or state in the source pack. Daphnis uses original historical SAT393 records, and Makemake retains an approximate fallback because its Horizons solution does not establish a resolved primary center. Eris/Haumea primary centers and their moons end at 2030-01-02 TDB. Missing states never receive invented orbits. Native clients do not package these SPK profiles; they receive exact current states through the manifest/plan/binary-tile protocol. Manifest and plan loading remains online, while already verified tiles may be reused from the native cache. See the [profile and regeneration contract](./docs/physical-ephemerides.md) and [satellite evidence workflow](./scripts/reference/SATELLITE-SURVEY.md).
 
 SPK output is geometric, center-resolved state in its declared frame. It is not an N-body client, and the app does not add a second general-relativistic or J2 correction. Focus trajectories may use SPK states while the GPU catalog cloud remains Keplerian. Geometric, reception light-time, and stellar-aberration readouts are separate; no gravitational light deflection, atmosphere, surface-observer model, or covariance is provided.
 
@@ -217,11 +217,11 @@ npm run check:capacity
 
 ### Curated preview build
 
-Full-Web current positions consume the audited backend only when the deployer supplies `VITE_SOLAR_API_BASE_URL`; Pages remains curated and static without it. There is currently no official public full-Web backend URL.
+Full-Web current positions consume the audited backend only when the deployer supplies `VITE_SOLAR_API_BASE_URL`; Pages remains curated and static without it. The currently published Pages build at commit `2d2b99ca17b9a287024cb661a658c5922127e9fc` reports `productProfile=preview`, `ephemerisProfile=pages`, 36 SPK files / 90,800,128 SPK bytes and 93.2 MiB total capacity. There is currently no official public full-Web backend URL.
 
 `npm run build:preview` builds the **same Web frontend** with a curated product profile; it requires the audited dataset pinned in `.github/asteroid-dataset.json` to be installed locally. It retains the 3D Observation Deck, selected presets and lessons, source evidence and an 8,000-record display sample. Full-only entries remain visible with accessible explanations, and denied scene links retain their original intent. This is not full catalog/state coverage.
 
-The Pages workflow validates full Web, then builds, tests and publishes only the curated preview. **Old-client compatibility is not required:** no full catalog is retained for older installed apps, whose online catalog access will stop after this switch. Full-Web deployments require an operator-managed backend URL; no public full-Web endpoint is claimed. Native builds reject the preview product profile. See [preview delivery and verification](./docs/preview-delivery.md). Development now prioritizes maximum simultaneous scientifically valid computation/display across all frontends, the Go backend and storage, with measured performance and explicit precision boundaries.
+The Pages workflow validates full Web, then builds, tests and publishes only the curated preview. Full-Web deployments require an operator-managed backend URL; no public full-Web endpoint is claimed. Native source projects are independent first-slice prototypes using the state-tile protocol, not another Web product profile; Android now uses a GLES point renderer validated in an empty-scene emulator smoke test and iOS has not yet been compiled on macOS. See [preview delivery and verification](./docs/preview-delivery.md). Development now prioritizes maximum simultaneous scientifically valid computation/display across all frontends, the Go backend and storage, with measured performance and explicit precision boundaries.
 
 Useful pipeline variables:
 
@@ -242,16 +242,7 @@ The all-known-body goal is broader than the built-in registry and the elliptic M
 
 ## Android and iOS
 
-The repository contains Capacitor 8 local-shell projects for Android and iOS under the application ID `io.github.dajiaohuang.solaratlas`. Android supports API 24 and targets API 36; iOS requires 16.4 or later. Both use the installed local shell for the curated core experience while loading catalog data on demand over HTTPS.
-
-The v0.11.0 reference validation for [commit `e9e7897`](https://github.com/dajiaohuang/solar/commit/e9e789705711bf2946f6b432cd53e9b820a554ec) passed both native jobs on 2026-08-29 in [workflow run 33269424582](https://github.com/dajiaohuang/solar/actions/runs/33269424582):
-
-| Target | Verified CI output | Boundary |
-| --- | --- | --- |
-| Android | API contract, lint, unit tests, and `assembleDebug`; artifact `solar-atlas-android-debug` | Debug-key-signed APK for validation, not a release APK or AAB |
-| iOS | Xcode build of the synced shell for `iphonesimulator`; artifact `solar-atlas-ios-simulator` | Unsigned Simulator `.app`, not a device archive or IPA |
-
-Artifacts are retained for 14 days; the workflow result remains the durable evidence after downloads expire. These projects are source and non-release validation paths, not published store products. Windows can build Android when its toolchain is installed, but iOS builds require macOS and Xcode. No release signing, store submission, TestFlight/Play track, or real-device validation is claimed. See [MOBILE.md](./MOBILE.md) for prerequisites, commands, native behavior, and the acceptance checklist, and [PRIVACY.md](./PRIVACY.md) for the current source-level privacy notice.
+Android and iOS are independent native projects, not a Web shell. Their source currently represents a first-slice prototype for exact current-state binary tiles from a user-selected HTTPS backend: Android now uses a GLES point renderer validated in an empty-scene emulator smoke test, and the iOS source has not yet been compiled on macOS. The intended iOS slice supports a TDB Julian date, presets or custom IDs, a reference ID, native 3D by default and native 2D, with a bounded 256 MiB verified-tile cache. Manifest and plan loading remains online; complete offline plan recovery is not implemented. No full-feature, device, signed-binary, store or successful-build claim is made. See [MOBILE.md](./MOBILE.md) and [PRIVACY.md](./PRIVACY.md).
 
 ## Architecture
 
@@ -293,13 +284,13 @@ npm run benchmark:catalog
 npm run check:capacity
 ```
 
-`npm run ci` combines lint, unit, scientific, and build checks. Unit coverage includes Julian dates, Kepler propagation, reference frames, render-budget hysteresis, Hohmann/Lambert math, Moon phase, Hill/SOI definitions, satellite evidence, v2/v3 compatibility, v4 scene round trips, MPCORB parsing, cache isolation, and bounded million-row scans. Playwright covers first-run UX, default 3D and 2D fallback, explicit catalog-cloud loading, desktop/mobile samples, URL recovery, browser history, stories, missions, offline shell behavior, WebGL/Worker failures, and serious/critical automated accessibility findings.
+`npm run ci` combines lint, unit, scientific, and build checks. Unit coverage includes Julian dates, Kepler propagation, reference frames, render-budget hysteresis, Hohmann/Lambert math, Moon phase, Hill/SOI definitions, satellite evidence, current scene round trips, state-tile protocol validation, MPCORB parsing, cache isolation, and bounded million-row scans. Playwright covers first-run UX, default 3D and 2D fallback, explicit catalog-cloud loading, desktop/mobile samples, URL recovery, browser history, stories, missions, Web offline shell behavior, WebGL/Worker failures, and serious/critical automated accessibility findings.
 
 `.github/workflows/pull-request-quality.yml` is the pre-merge gate. Every pull request receives a read-only repository parser/link/identity check; code, configuration, workflow, and production-asset changes also receive lint, unit/scientific, production build/capacity, Chromium interaction/accessibility, and Lighthouse checks. Documentation-only changes skip the expensive browser job, not the repository contract. Branch protection requires the stable `Pull request quality gate` summary from GitHub Actions for every merge, including administrator merges; it succeeds only when the repository contract and every applicable full-quality job succeed.
 
 `.github/workflows/deploy.yml` remains the single production gate after merge: it validates the pin, builds compressed delivery assets, enforces Pages/browser budgets, runs tests and Lighthouse, archives evidence, deploys, and executes a production smoke test. `.github/workflows/data-refresh.yml` publishes monthly/manual immutable datasets. `.github/workflows/rollback.yml` restores the exact tested Pages artifact from a successful retained run.
 
-The [health endpoint](https://dajiaohuang.github.io/solar/health.json) reports the currently deployed commit, build time, dataset, delivery manifest, and scientific-validation status. The workflow badges at the top report the current `main` deployment and native-build state; the dated native run above is the v0.11.0 reference record rather than a claim that short-lived artifacts remain downloadable forever.
+The [health endpoint](https://dajiaohuang.github.io/solar/health.json) reports the currently deployed commit, build time, dataset, delivery manifest, and scientific-validation status. Native validation is documented separately and is not represented as a passed build by this README.
 
 ## Installable app and offline boundary
 
@@ -307,7 +298,7 @@ Solar Atlas provides a Web App Manifest, installable application shell, update-r
 
 After one successful online load, the service worker can reopen the cached application shell offline. This is not a promise that the complete MPCORB release, an uncached sample/detail shard, a newly visited route asset, or a live JPL SBDB request is available offline. Dataset/version errors remain visible instead of silently substituting different data.
 
-The Android and iOS projects use a separate Capacitor local-shell build without Service Worker registration. Their curated core is installed locally, while catalog shards and live JPL requests retain the same online boundary. Mobile build status and release limits are documented in [MOBILE.md](./MOBILE.md); privacy behavior is documented in [PRIVACY.md](./PRIVACY.md).
+The Android and iOS projects have their own native lifecycle and storage. Their state-tile cache is distinct from the Web service worker: cached tiles can be reused only after an online manifest/plan identifies them. Native build commands and release boundaries are documented in [MOBILE.md](./MOBILE.md); privacy behavior is documented in [PRIVACY.md](./PRIVACY.md).
 
 ## Contributing
 
@@ -317,7 +308,7 @@ Before a pull request:
 
 - start from `npm ci` and run the relevant checks above;
 - accompany scientific changes with a primary source, model/validity statement, and deterministic regression fixture;
-- validate the current scene contract; old-schema compatibility is not required;
+- validate the current scene contract and its explicit unsupported-state errors;
 - keep English and Chinese copy in sync;
 - verify keyboard access, desktop/mobile behavior, reduced motion, and the 2D/WebGL fallback for UI changes; and
 - do not label two-body or schematic output as an operational ephemeris, N-body result, risk assessment, or navigation product.

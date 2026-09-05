@@ -16,9 +16,13 @@ on:
       - 'src/**'
       - 'scripts/**'
       - 'public/**'
+      - 'cmd/**'
+      - 'internal/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'tests/**'
       - 'index.html'
       - 'tsconfig*.json'
-      - 'capacitor.config.ts'
       - 'package.json'
       - 'package-lock.json'
       - 'vite.config.ts'
@@ -50,8 +54,14 @@ jobs:
           java-version: 21
           cache: gradle
       - run: npm ci
-      - name: Build and sync the native web shell
-        run: npm run mobile:sync:android
+      - name: Verify independent native projects
+        run: npm run native:check
+      - name: Generate Go handler tiles and verify Web numeric parity
+        env:
+          SOLAR_STATE_TILE_FIXTURE_DIR: ${{ runner.temp }}/solar-state-tile-fixture
+        run: |
+          go run ./cmd/state-tile-fixture -out "$SOLAR_STATE_TILE_FIXTURE_DIR" -tile-size 1
+          npx vitest run tests/unit/state-tiles-golden.test.ts
       - name: Verify Android API contract
         run: |
           grep -q "compileSdkVersion = 36" android/variables.gradle
@@ -59,6 +69,8 @@ jobs:
           grep -q "minSdkVersion = 24" android/variables.gradle
       - name: Build debug-key-signed Android application
         working-directory: android
+        env:
+          SOLAR_STATE_TILE_FIXTURE_DIR: ${{ runner.temp }}/solar-state-tile-fixture
         run: |
           chmod +x gradlew
           ./gradlew lint testDebugUnitTest assembleDebug
@@ -82,9 +94,23 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Verify Xcode toolchain
-        run: xcodebuild -version
-      - name: Build and sync the native web shell
-        run: npm run mobile:sync:ios
+        run: |
+          xcodebuild -version
+          xcodebuild -list -project ios/App/App.xcodeproj
+      - name: Verify independent native projects
+        run: npm run native:check
+      - name: Generate Go handler tiles and verify Web numeric parity
+        env:
+          SOLAR_STATE_TILE_FIXTURE_DIR: ${{ runner.temp }}/solar-state-tile-fixture
+        run: |
+          go run ./cmd/state-tile-fixture -out "$SOLAR_STATE_TILE_FIXTURE_DIR" -tile-size 1
+          npx vitest run tests/unit/state-tiles-golden.test.ts
+      - name: Validate native state protocol and cache
+        env:
+          SOLAR_STATE_TILE_FIXTURE_DIR: ${{ runner.temp }}/solar-state-tile-fixture
+        run: |
+          swiftc ios/App/App/StateTileDecoder.swift ios/App/App/StateTileCache.swift ios/App/App/NativeStateProjection.swift ios/ProtocolTests/ProtocolTests.swift -o "$RUNNER_TEMP/solar-ios-protocol-tests"
+          "$RUNNER_TEMP/solar-ios-protocol-tests"
       - name: Build unsigned iOS simulator application
         run: >-
           xcodebuild

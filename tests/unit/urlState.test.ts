@@ -38,16 +38,10 @@ describe('reproducible scene URLs', () => {
     expect(decoded.arrivalDate).toBe('2027-08-01')
   })
 
-  it('keeps legacy v2 and v3 scene links readable without reading v4 catalog fields', () => {
+  it('does not reinterpret retired v2/v3 scenes as the current contract', () => {
     for (const version of [2, 3]) {
       const decoded = decodeUrlState(`?v=${version}&ref=earth&view=2d&catalogSample=mobile&catalogSampleCount=8000&catalogCloud=1&quality=max`)
-      expect(decoded.version).toBe(version)
-      expect(decoded.ref).toBe('earth')
-      expect(decoded.view).toBe('2d')
-      expect(decoded.catalogSample).toBeUndefined()
-      expect(decoded.catalogSampleCount).toBeUndefined()
-      expect(decoded.catalogCloud).toBeUndefined()
-      expect(decoded.quality).toBeUndefined()
+      expect(decoded).toEqual({})
     }
   })
 
@@ -83,8 +77,8 @@ describe('reproducible scene URLs', () => {
     expect(encodeUrlState({ route: 'explorer', view: '2d' })).toContain('view=2d')
     expect(encodeUrlState({ route: 'explorer', view: '3d' })).toContain('view=3d')
     expect(decodeUrlState('').view).toBe('3d')
-    expect(decodeUrlState('?v=3&page=explorer&bodies=earth,mars').view).toBe('3d')
-    expect(decodeUrlState('?v=3&page=home&lang=en').view).toBe('3d')
+    expect(decodeUrlState('?v=4&page=explorer&bodies=earth,mars').view).toBe('3d')
+    expect(decodeUrlState('?v=4&page=home&lang=en').view).toBe('3d')
     expect(decodeUrlState('?v=4&page=stories&story=retrograde-mars&lang=en').view).toBe('3d')
     expect(decodeUrlState('?v=4&page=catalog&search=ceres&lang=en').view).toBe('3d')
     expect(decodeUrlState('?v=4&page=mission&from=earth&to=mars&view=2d').view).toBe('2d')
@@ -95,7 +89,7 @@ describe('reproducible scene URLs', () => {
   })
 
   it('ignores impossible mission dates while preserving valid calendar dates', () => {
-    const decoded = decodeUrlState('?v=3&depart=2026-99-99&arrive=2028-02-29')
+    const decoded = decodeUrlState('?v=4&depart=2026-99-99&arrive=2028-02-29')
     expect(decoded.departureDate).toBeUndefined()
     expect(decoded.arrivalDate).toBe('2028-02-29')
   })

@@ -20,7 +20,7 @@ export function snapshotKernelAtEpoch(kernel, et) {
 
 /** Only explicit existing identity mappings; never guess an ID from a name. */
 export async function inventoryKernels(root, et, requestedProfile = 'pages') {
-  const profile = ephemerisProfile(undefined, requestedProfile)
+  const profile = ephemerisProfile(requestedProfile)
   const manifestBytes = await readFile(join(root, `src/data/ephemeris-manifest${profile === 'full' ? '-full' : ''}.json`))
   const manifest = JSON.parse(manifestBytes)
   const generated = JSON.parse(await readFile(join(root, 'src/data/ephemerisBodies.json'), 'utf8'))

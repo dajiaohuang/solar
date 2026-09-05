@@ -4,12 +4,18 @@ The roadmap records intent, not a promise of dates. Scientific correctness, repr
 
 ## Active product direction — three clients and one backend
 
-- Build independent Web, Android and iOS frontend projects with platform-appropriate interaction and independent build/test/release paths, backed by one Go scientific/data backend developed in its own workstream. Optimize backend performance with reproducible benchmarks without reducing scientific correctness. Existing Capacitor shells are a migration baseline, not the final native experience.
+- Build independent Web, Android and iOS frontend projects with platform-appropriate interaction and independent build/test/release paths, backed by one Go scientific/data backend developed in its own workstream. Optimize backend performance with reproducible benchmarks without reducing scientific correctness. The native source projects currently cover only a first exact-current-state tile vertical slice prototype; do not add a Web shell or package native SPK files.
 - Keep GitHub Pages as a curated availability profile of the same Web frontend: immediate 3D Observation Deck, preset list, optional tutorial, representative systems and the strongest guided lessons. Keep full-only entries visible but unselectable, with accessible explanations and verified full-version destinations; do not silently execute unavailable actions through a direct URL.
 - Preserve the all-known-Solar-System-body goal in the full backend/clients; preview package limits do not constrain it. Share identities, source versions, time/frame contracts and validated scientific results, not a compulsory shared UI.
-- Deliver versioned API contracts and bounded backend data access, independent native clients, and a separately verified preview profile. Preserve scene compatibility, offline/cache boundaries and rollback during migration.
+- Deliver versioned API contracts and bounded backend data access, independent native clients, and a separately verified preview profile. Preserve the current scene schema, explicit offline/cache boundaries and rollback; old scene/API compatibility is not a requirement.
 
 See the bilingual [product direction and acceptance criteria](./docs/product-direction.md). This is the accepted development target, not a claim that a backend or independent native interfaces already ship.
+
+## Current status (2026-09-05)
+
+- **Live:** GitHub Pages publishes the curated Web preview. Its health/capacity evidence reports commit `2d2b99ca17b9a287024cb661a658c5922127e9fc`, 36 SPK files / 90,800,128 SPK bytes and 93.2 MiB total capacity.
+- **In development:** the Go backend, full-Web state-tile path and source-profile delivery are locally runnable and contract-tested, but there is no public full-Web backend endpoint. The native projects are first-slice prototypes; Android now uses a GLES point renderer validated in an empty-scene emulator smoke test and iOS has not yet been compiled on macOS.
+- **Planned:** measured backend/full-client throughput, multi-plan memory/render limits, broader all-body runtime delivery, and native build/device/release evidence. None of these is implied by the Pages publication.
 
 ## 0.11.0 — geocentrism as the core guide
 
@@ -33,7 +39,7 @@ See the bilingual [product direction and acceptance criteria](./docs/product-dir
 
 ## Completed foundations
 
-- Visitor home, mobile navigation, bilingual titles, browser history, URL schema v3, and legacy v2 replay.
+- Visitor home, native/mobile navigation, bilingual titles, browser history, and the current URL scene schema.
 - Immutable MPCORB releases, compressed bounded delivery, build identity, Pages capacity evidence, smoke incidents, rollback, offline shell, and scheduled Chromium/Firefox/WebKit accessibility checks.
 - Eight observation-first stories with primary sources and explicit limits for geocentrism, two-body propagation, coordinate frames, resonance, Trojans, NEOs, Pluto, and spacecraft claims.
 

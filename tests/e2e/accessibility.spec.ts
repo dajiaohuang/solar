@@ -40,7 +40,7 @@ test('first-run deck, story, and evidence surfaces have no serious automated acc
   await expectSingleApplicationLandmarks(page)
   await expectNoSeriousViolations(page)
 
-  await page.goto('./?v=3&page=home')
+  await page.goto('./?v=4&page=home')
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
   await expectSingleApplicationLandmarks(page)
   await expectNoSeriousViolations(page)
@@ -62,13 +62,13 @@ test('first-run deck, story, and evidence surfaces have no serious automated acc
   expect(chineseRangeNames.every((name) => name && /最小值|最大值/.test(name))).toBe(true)
   await expectNoSeriousViolations(page)
 
-  await page.goto('./?v=3&page=elements')
+  await page.goto('./?v=4&page=elements')
   await expect(page.getByRole('heading', { name: /Element Space|轨道元素空间/ })).toBeVisible()
   await expectSingleApplicationLandmarks(page)
   if ((page.viewportSize()?.width ?? 1280) <= 980) await expectMinimumTargetSize(page, '.section-heading button')
   await expectNoSeriousViolations(page)
 
-  await page.goto('./?v=3&page=stories')
+  await page.goto('./?v=4&page=stories')
   await expect(page.getByRole('heading', { name: /Stories|引导故事/ })).toBeVisible()
   await expectSingleApplicationLandmarks(page)
   await expectMinimumTargetSize(page, '.story-pagination button')
@@ -77,7 +77,7 @@ test('first-run deck, story, and evidence surfaces have no serious automated acc
   await expect(page.getByRole('dialog', { name: /From geocentrism to the geocentric frame|从地心说到地心参考系/ })).toBeVisible()
   await expectNoSeriousViolations(page)
 
-  await page.goto('./?v=3&page=about')
+  await page.goto('./?v=4&page=about')
   await expect(page.getByRole('heading', { name: /Evidence|证据与数据/ })).toBeVisible()
   await expectSingleApplicationLandmarks(page)
   await expectNoSeriousViolations(page)

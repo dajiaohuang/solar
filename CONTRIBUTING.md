@@ -33,28 +33,31 @@ Scientific changes should add a unit fixture or a reproducible scene, cite a pri
 
 Renderer changes must keep the focus layer and catalog cloud separate. Named focus bodies may carry trajectories, labels, picking, and analysis; bulk catalog objects belong in shared typed arrays and a bounded GPU point buffer. Preserve the default zero-sample-request Observation Deck, the 3D-to-2D fallback, and both mobile and desktop Playwright coverage. Treat memory and CPU APIs as conservative hints only; require measured real-device evidence before claiming that a hardware tier is guaranteed smooth.
 
-## Mobile applications
+## Native applications
 
-The Android and iOS projects are Capacitor 8 local shells with application ID `io.github.dajiaohuang.solaratlas`. Use Node.js 22+. Android has minimum API 24 and compile/target API 36; iOS requires 16.4 or later. The native core is installed locally, while catalog data remains an on-demand HTTPS dependency.
+Android and iOS are independent platform-native projects. The current scope is the first vertical slice for exact current-state binary tiles (`manifest → plan → tile`), not a full-feature app. There is no Capacitor Web shell or native SPK packaging. Native 3D is the default, native 2D is independent, and the iOS slice accepts an HTTPS backend, TDB Julian date, preset/custom IDs and a reference ID. iOS keeps a bounded 256 MiB verified-tile cache; manifest and plan loading remains online, so complete offline plan recovery is not implemented.
 
-Run the relevant native preparation commands after web checks:
-
-```bash
-npm run build:native
-npm run mobile:sync:android
-```
-
-On macOS with Xcode, iOS contributors can run:
+Run the static project check after ordinary Web checks:
 
 ```bash
-npm run mobile:sync:ios
+npm run native:check
 ```
 
-Android may be built on Windows, macOS, or Linux with Android SDK API 36 and JDK 21. iOS builds require macOS and Xcode and cannot be produced on Windows. From `android/`, validate Android changes with `gradlew lint testDebugUnitTest assembleDebug` using the host-appropriate wrapper. On macOS, validate iOS changes with an unsigned Simulator build before requesting review.
+Android validation runs directly from the native project with Android SDK API 36 and JDK 21:
 
-Native changes must preserve relative local assets, the no-Service-Worker native build, the core-offline/catalog-online boundary, canonical HTTPS scene sharing, safe-area and touch behavior, lifecycle and Android Back handling, and the minimal permission set. Keep [MOBILE.md](./MOBILE.md), [MOBILE-CN.md](./MOBILE-CN.md), [PRIVACY.md](./PRIVACY.md), and [PRIVACY-CN.md](./PRIVACY-CN.md) synchronized with observable behavior.
+```text
+android/gradlew -p android lint testDebugUnitTest assembleDebug
+```
 
-Do not commit credentials or claim a store or device milestone without evidence. Signing, release keys, certificates, provisioning profiles, TestFlight or Play tracks, store submissions, and publication require explicit owner authorization. The repository currently documents unsigned validation builds only and does not claim completed physical-device validation.
+On Windows use `android/gradlew.bat -p android`. iOS validation requires macOS and Xcode:
+
+```text
+xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
+swiftc ios/App/App/StateTileDecoder.swift ios/App/App/StateTileCache.swift ios/App/App/NativeStateProjection.swift ios/ProtocolTests/ProtocolTests.swift -o <temporary-output>
+<temporary-output>
+```
+
+These commands are validation instructions, not evidence that a build or test has passed. Do not claim full feature coverage, real-device validation, signed binaries, store milestones or release readiness without explicit evidence. Keep [MOBILE.md](./MOBILE.md), [MOBILE-CN.md](./MOBILE-CN.md), [PRIVACY.md](./PRIVACY.md), and [PRIVACY-CN.md](./PRIVACY-CN.md) synchronized with observable native behavior.
 
 ## Data and release boundaries
 

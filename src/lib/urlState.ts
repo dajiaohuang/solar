@@ -2,8 +2,7 @@ import type { AppRoute, ElementPlotMode } from '../state/ui-store'
 import type { BodyId, DatasetMode, MagnitudeStatus, RenderQuality } from '../types'
 
 export const SCENE_URL_VERSION = 4 as const
-export const LEGACY_SCENE_URL_VERSIONS = [2, 3] as const
-type SceneUrlVersion = typeof SCENE_URL_VERSION | typeof LEGACY_SCENE_URL_VERSIONS[number]
+type SceneUrlVersion = typeof SCENE_URL_VERSION
 export type ScientificLayer = 'ecliptic' | 'orbits' | 'lagrange' | 'hill' | 'soi' | 'spacecraft'
 
 export type AppUrlState = {
@@ -131,11 +130,9 @@ export function encodeUrlState(state: AppUrlState) {
 export function decodeUrlState(search = typeof window === 'undefined' ? '' : window.location.search): AppUrlState {
   const params = new URLSearchParams(search)
   const encodedVersion = params.get('v')
-  const supportedVersionStrings = [...LEGACY_SCENE_URL_VERSIONS, SCENE_URL_VERSION].map(String)
   const versionPresent = params.has('v')
-  if (versionPresent && !supportedVersionStrings.includes(encodedVersion ?? '')) return {}
-  const version = versionPresent ? Number(encodedVersion) as SceneUrlVersion : SCENE_URL_VERSION
-  const state: AppUrlState = { version, view: '3d' }
+  if (versionPresent && encodedVersion !== String(SCENE_URL_VERSION)) return {}
+  const state: AppUrlState = { version: SCENE_URL_VERSION, view: '3d' }
   const routes: AppRoute[] = ['home', 'explorer', 'catalog', 'elements', 'events', 'mission', 'stories', 'about']
   const route = params.get('page') as AppRoute | null
   if (route && routes.includes(route)) state.route = route
@@ -145,7 +142,7 @@ export function decodeUrlState(search = typeof window === 'undefined' ? '' : win
   if (mode === 'lite' || mode === 'full') state.mode = mode
   const catalogSamplePresent = params.has('catalogSample')
   const catalogSampleCountPresent = params.has('catalogSampleCount')
-  if (version === SCENE_URL_VERSION && (catalogSamplePresent || catalogSampleCountPresent)) {
+  if (catalogSamplePresent || catalogSampleCountPresent) {
     const catalogSample = params.get('catalogSample') ?? ''
     const catalogSampleCountText = params.get('catalogSampleCount') ?? ''
     const catalogSampleCount = Number(catalogSampleCountText)
@@ -172,11 +169,9 @@ export function decodeUrlState(search = typeof window === 'undefined' ? '' : win
   if (samples !== undefined && samples >= 32 && samples <= 480) state.samples = Math.floor(samples)
   const view = params.get('view')
   if (view === '2d' || view === '3d') state.view = view
-  if (version === SCENE_URL_VERSION) {
-    state.catalogCloud = params.get('catalogCloud') === '1'
-    const quality = params.get('quality')
-    if (quality === 'auto' || quality === 'balanced' || quality === 'max') state.quality = quality
-  }
+  state.catalogCloud = params.get('catalogCloud') === '1'
+  const quality = params.get('quality')
+  if (quality === 'auto' || quality === 'balanced' || quality === 'max') state.quality = quality
   const filter = params.get('filter')
   if (filter) state.filter = filter
   const searchText = params.get('search')

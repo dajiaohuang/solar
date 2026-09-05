@@ -30,13 +30,20 @@ async function fixture(numberedCount = 1) {
   return { directory, sources }
 }
 
-it('replays every source row into deterministic shards with separate SPK evidence', async () => {
+it('replays every source row into deterministic addressable blocks with separate SPK evidence', async () => {
   const { directory, sources } = await fixture()
   const first = join(directory, 'first'), second = join(directory, 'second')
   const manifest = await buildInventory({ sources, output: first, shardSize: 2 })
   expect(manifest.totalRecords).toBe(16)
+  expect(manifest.schemaVersion).toBe(2)
+  expect(manifest.purpose).toBe('source-inventory-addressable-v2')
   expect(manifest.counts.confirmations.candidate).toBe(1)
   expect(manifest.missingParents).toEqual([])
+  for (const shard of manifest.shards) {
+    expect(shard.file).toMatch(/^records-\d{5}\.jsonl\.bgz$/)
+    expect(shard.blocks).toHaveLength(1)
+    expect(shard.blocks[0]).toMatchObject({ rowStart: 0, count: shard.count, offset: 0 })
+  }
   expect((await validateInventory(first, sources)).recordsVerified).toBe(16)
   expect(await buildInventory({ sources, output: second, shardSize: 2 })).toEqual(manifest)
   for (const shard of manifest.shards) expect(await readFile(join(second, shard.file))).toEqual(await readFile(join(first, shard.file)))

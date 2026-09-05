@@ -1,113 +1,79 @@
-# Solar Atlas 移动应用
+# Solar Atlas 原生应用
 
-> **不兼容的预览切换（2026-09-05）：** 不再要求旧客户端兼容。Pages 发布精选预览后，这些基线应用壳将无法通过旧 Pages 地址访问在线完整目录；已内置核心资源仍在本地。替代原生客户端与统一后端接入仍在开发，应用壳构建成功不表示旧目录端点仍可用。
+> Android 与 iOS 是独立的平台原生项目。当前原生范围只是“精确当前位置状态瓦片”的第一竖切，不是完整功能或商店发布里程碑。没有 Capacitor Web 壳，原生构建也不打包 SPK 文件。
 
-> **目标架构：** Android 与 iOS 将成为独立的平台原生前端项目，与完整 Web 共用统一后端。下文的 Capacitor 实现是迁移起点，不是最终产品形态。GitHub Pages 定位为精选预览版，不再作为完整版必需的数据托管中心。详见[产品定位](./docs/product-direction.md)；此处不宣称原生重构或后端上线已经完成。
-
-Solar Atlas 已包含 Android 与 iOS 的 **Capacitor 8 本地应用壳工程**。它们是可构建的源码工程，不是已经发布的商店产品。CI 可以生成由标准一次性 debug key 签名的 Android debug APK，但本仓库不宣称已有发布签名的 APK、AAB 或 IPA，不宣称已上架 Play Store / App Store、已进入 TestFlight，也不宣称已经完成真机验证。
-
-[English](./MOBILE.md) · [隐私说明](./PRIVACY-CN.md) · [中文 README](./README-CN.md)
+[English](./MOBILE.md) · [隐私说明](./PRIVACY-CN.md) · [主 README](./README-CN.md)
 
 ## 当前契约
 
-| 项目 | 当前实现 |
+| 项目 | 当前契约 |
 | --- | --- |
-| 运行时 | Capacitor 8，封装本地构建的 Web 应用 |
-| 应用 ID | `io.github.dajiaohuang.solaratlas` |
-| Node.js | 22+；npm 10+ |
-| Android | 最低 API 24；编译与目标 API 36 |
-| iOS | 16.4 及以上 |
-| 核心体验 | 安装后，内置天体、预设、故事、Evidence 与本地应用壳可离线使用 |
-| 目录数据 | 启动时检查版本/来源元数据；样本、索引和分片按需通过 HTTPS 从 `https://dajiaohuang.github.io/solar/data/asteroids` 加载 |
-| 物理星历 | 原生默认完整配置：510 个 SHA 固定的 SPK 文件（1094.7 MiB），离线可用、按需加载。网页和原生共享 type 2/3/17/21 求值与显式来源中心组合。完整包新增卫星覆盖 2020–2031 TDB；Pages 不删目标身份，但将较大卫星文件缩短为 2026–2027。测试在 UTC JD 2461287.5 解析 508 个可选中心，并非所有星体。Eris/Haumea 主星中心及其卫星止于 2030-01-02 TDB，Makemake 保留近似回退。UTC→TT→TDB 从 1972 年起可用；未来闰秒不确定。 |
-| 发布状态 | 仅提供源码和非发布验证路径；未授权、未包含发布签名与商店发布 |
+| 运行时 | 独立 Android/iOS 原生前端，共用版本化后端协议 |
+| 原生竖切 | `manifest → plan → 二进制状态瓦片`，精确当前位置，状态值保持 typed `Float64` |
+| 视图 | 原生 3D 默认，原生 2D 为独立视图/回退；2D/3D 预算分开 |
+| iOS 输入 | 用户填写 HTTPS 后端、TDB 儒略日、预设、自定义天体 ID 与参考 ID |
+| iOS 缓存 | 已验证状态瓦片使用有界 256 MiB 缓存；只有瓦片身份与哈希匹配时才复用 |
+| 在线边界 | 首次加载 manifest 与 plan 必须访问 HTTPS 后端；已验证瓦片可复用，但尚未实现完整离线 plan 恢复 |
+| Pages | 仅为精选 Web 预览，不是原生完整版状态后端 |
+| 验证 / 发布状态 | Android 于 2026-09-05 本地通过 debug 构建、单元测试/lint 和 GLES 模拟器空场景冒烟；iOS 编译、真机性能和商店发布仍未验证 |
 
-Quaoar/Weywot、Orcus/Vanth、Salacia/Actaea、1998 WW31/Sat1、2001 QW322/Sat1、
-Kagara/Haunu、1999 OJ4/Sat1、2003 UN284/Sat1
-八组系统在原生完整配置中保留十年原始记录（2020-01-01 至 2030-01-01 TDB）；
-Pages 的对应窗口为 2026-07-01 至 2027-01-01。新增主星和伴星均不编造回退轨道。
+原生竖切保留科学来源、历元、单位、参考系、有效区间和缺失状态语义。缺少精确状态时保持明确不可用，不用近似位置替代。当前不声称全天体覆盖、导航精度、完整星历访问或完整 Web 功能对等。
 
-原生构建使用相对路径本地资源，并且不会注册 Web 端 Service Worker。原生离线能力来自已安装的本地应用壳，而不是 PWA 缓存。完整 MPCORB 目录有意不打包进应用：目录样本、详情分片与实时 JPL SBDB 查询需要网络；WebView 可能保留已经取回的响应，但这不构成完整离线保证。
+## 前置条件与检查
 
-如果内核资源实际随包提供，SPK 焦点星历及几何/光时/恒星光行差观测读数会遵循相同 manifest。它们不会使应用成为覆盖所有天体的高精度或导航产品；不包含引力偏折、大气、地表观测者或协方差模型，GPU 目录点云仍使用开普勒模型。
+仓库检查使用 Node.js 22+ 与 npm 10+。`npm run native:check` 是原生项目静态检查，不构建或签名应用。
 
-[全天体来源清单](./docs/all-body-inventory.md)是显式开发审计产物，不是已经安装的移动目录。原生同步不会下载或复制这些生成分片，当前离线与在线边界不变；清单覆盖和移动端可用星历覆盖必须分别报告。
+Android 在原生项目中直接使用 Android SDK API 36 与 JDK 21：
 
-## 前置条件
-
-共享 Web 应用壳包含卫星尺度的 3D 取景、竖屏尺寸变化处理及千米/小时轨道读数。修改这些共享功能后，运行 `npm run mobile:sync` 刷新两个平台的资源，并验证 Android/iOS CI。浏览器视口测试不能替代真机触控、旋转与性能测试。
-
-安装 Node.js 22+、npm 10+ 与对应平台工具链：
-
-- Android：Android Studio、Android SDK API 36 与 JDK 21。工具链齐备时可在 Windows、macOS 或 Linux 构建 Android。
-- iOS：必须使用 macOS 与 Xcode。Windows 无法构建、运行、签名或归档 iOS 应用。
-
-签名密钥、证书、描述文件、商店凭证或发布账号都不应进入仓库。
-
-生成的 iOS 包依赖图将 Capacitor 固定为 8.5.0，并将 `ion-ios-filesystem` 固定为已经通过 Xcode 验证的 1.1.2。每次 Capacitor 同步后，规范化脚本都会重新应用路径与版本固定，确保全新检出解析到相同的原生依赖版本。
-
-## 构建与同步
-
-先构建原生本地应用壳：
-
-```bash
-npm ci
-npm run build:native
+```text
+android/gradlew -p android lint testDebugUnitTest assembleDebug
 ```
 
-Android：
+Windows 使用 `android/gradlew.bat -p android` 执行相同任务。iOS 需要 macOS 与 Xcode：
 
-```bash
-npm run mobile:sync:android
-npm run mobile:open:android
+```text
+xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
+swiftc ios/App/App/StateTileDecoder.swift ios/App/App/StateTileCache.swift ios/App/App/NativeStateProjection.swift ios/ProtocolTests/ProtocolTests.swift -o <temporary-output>
+<temporary-output>
 ```
 
-也可在 `android/` 目录运行本地验证任务：
+这些是贡献者命令，不是本检出已通过的证据。仓库不保存签名密钥、证书、配置文件、商店凭据或发布账户。真机行为、可访问性、内存压力和商店资料需要单独证据，当前不声称已完成。
 
-```powershell
-.\gradlew.bat lint testDebugUnitTest assembleDebug
+## 原生行为与边界
+
+### 跨运行时数值验证
+
+移动端 CI 通过实际 Go 目录与 HTTP handler 生成二进制瓦片，再分别使用生产
+Web 解码器和对应的 Java 或 Swift 解码器读取同一批文件，比较六个 Float64
+分量的位模式、瓦片哈希、行顺序、清单身份及 exact/missing 数量。CI 使用的
+SPK 明确为合成测试数据：它证明协议互通，不证明天文精度或原生实时网络链路。
+
+本地复现时，将 `SOLAR_STATE_TILE_FIXTURE_DIR` 设置为仓库外新的或空的绝对目录
+（PowerShell 使用 `$env:SOLAR_STATE_TILE_FIXTURE_DIR`，POSIX shell 使用
+`export SOLAR_STATE_TILE_FIXTURE_DIR=...`），然后运行：
+
+```text
+go run ./cmd/state-tile-fixture -out <fixture-directory> -tile-size 1
+npx vitest run tests/unit/state-tiles-golden.test.ts
 ```
 
-在 macOS 上构建 iOS：
+执行上面的 Gradle 或 Swift 测试命令时保留该环境变量。配置了不存在的目录会
+报错；未配置时跳过可选跨运行时测试。Gradle 将该目录计入测试输入，从合成数据
+切换到真实数据时会重新测试。生成器还支持 `-data-dir`、`-inventory-dir`、
+`-ids` 和 `-epoch-jd`，可读取本地保留且已校验哈希的科学数据配置。不得提交
+生成的测试数据，也不能将序列化一致性当作独立科学基准。
 
-```bash
-npm run mobile:sync:ios
-npm run mobile:open:ios
-```
+### 交互与数据边界
 
-`npm run mobile:sync` 会同步两个平台，因此应在同时具备两套工具链的 macOS 环境使用。这些命令只会生成或刷新本地平台构建，不会生成已签名的商店发布包。
+- 第一屏是当前位置 Observation Deck：选定 ID、精确状态、来源证据和明确缺口。
+- iOS 默认原生 3D，可切换原生 2D。2D/3D 预算独立；原生 3D 不因距离单独缩小或淡出状态。
+- 请求绑定 manifest/plan 身份与有序 ID；瓦片有大小上限并校验哈希，只有完整 plan 验证后才原子发布。
+- 取消与 latest-only 防止旧 plan 覆盖新选择。新 plan 在线确认瓦片身份后，可从 iOS 缓存复用已验证瓦片。
+- 原生不注册或依赖 Web Service Worker、Capacitor bridge 或打包的 SPK 配置。SPK 源文件仍是科学/后端交付内容，不是原生离线下载。
+- 即使瓦片已缓存，manifest 和 plan 仍需在线；尚无完整离线 plan/目录恢复路径。
 
-移动端工作流配置为生成**由 Gradle 标准一次性 debug key 签名的 Android debug APK**和**无签名 iOS 模拟器应用**，作为短期验证产物；两者都不是发布产物。仅仅存在工作流配置不代表某个提交已经通过；仍须检查实际运行结果和产物。
+## 隐私与分发
 
-## 原生行为
+原生客户端没有项目账户、广告、分析、行为跟踪或遥测。iOS 状态瓦片服务只向用户选择的 HTTPS 地址发送后端地址、TDB 历元、自定义/预设 ID 和协议请求元数据。有界瓦片缓存是本地应用数据。详见[隐私说明](./PRIVACY-CN.md)与 [PRIVACY.md](./PRIVACY.md)。
 
-- 应用分享的场景链接使用公开的规范 HTTPS 地址，离开原生应用壳后仍可打开。
-- 自定义 `solaratlas://scene?...` URL scheme 可在已安装应用内打开场景。目前不宣称已配置或验证 Android App Links 与 iOS Universal Links。
-- 用户主动分享场景或导出时使用系统分享面板。导出文件先写入应用缓存，分享后会尝试删除。
-- 普通外部 HTTPS 链接在系统浏览器中打开。
-- 应用进入后台时暂停正在运行的模拟；只有先前正在播放时，回到前台才恢复。
-- Android 返回键先关闭教程或当前应用内浮层，再返回应用/浏览历史，最后最小化应用。
-- 界面支持横竖屏、安全区、触控、自适应 3D 渲染，以及 WebGL 创建或上下文恢复失败时自动回退 2D。
-
-## 权限与隐私
-
-Android 仅声明通过 `INTERNET` 访问网络，并关闭明文流量和应用备份。iOS 工程没有相机、麦克风、位置、通讯录、照片、跟踪或通知权限请求；其隐私清单声明不收集数据，并为本地导出路径使用的文件时间戳 API 记录了 required-reason 声明。
-
-当前源码级隐私说明见 [PRIVACY-CN.md](./PRIVACY-CN.md)。发布前必须针对最终签名包、实际依赖和商店配置重新核对商店隐私标签。
-
-## 验收清单
-
-在把移动版本称为完成发布前，应在有代表性的真机及模拟器上验证：
-
-- 首次教程选择、直接进入综合观测台、安全区、状态栏对比度、旋转、键盘/辅助功能服务与减少动态效果；
-- 触控相机、选择、抽屉、四项导航、3D/2D 切换、WebGL 上下文丢失及内存压力恢复；
-- 安装后的核心离线启动，以及目录/JPL 请求不可用时真实明确的失败与重试状态；
-- 自定义 scheme 场景导入、规范 HTTPS 分享、JSON/CSV/图片导出、外部浏览器跳转、生命周期暂停/恢复与 Android 返回键；
-- Android API 24 与 36，以及 iOS 16.4 和当前 iOS 版本；
-- 最终二进制对应的隐私清单、权限、签名身份、图标、截图、商店元数据、无障碍声明、数据安全与隐私问卷。
-
-目前没有证据表明以上真机清单已经完成。在证据和商店记录存在前，不得把移动应用描述为已经上架或通过真机验证。
-
-## 发布边界
-
-签名、公证、TestFlight、Play 测试轨道、商店提交、付费开发者账号、生产证书、发布密钥与正式上架都属于外部状态变更，需要仓库所有者明确授权，并使用受控凭证。当前实现止步于这些操作之前。
+Android 与 iOS 当前不是已发布、已签名、商店批准或真机验证的应用。签名、TestFlight、Play 测试轨道、商店提交和发布都需要单独授权与证据。

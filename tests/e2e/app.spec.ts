@@ -7,9 +7,11 @@ test('complete Saturn current positions remain independent of 3D trail budgets',
   test.setTimeout(120_000)
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   const ids = ['saturn', ...satelliteCatalog.bodies.filter(body => body.parentId === 'saturn').map(body => body.naifId === 606 ? 'titan' : body.id)]
-  const currentStateRequests: Array<{ ids: string[]; precision?: string }> = []
+  const legacyCurrentStateRequests: string[] = []
+  const stateTileRequests: Array<{ url: string; body: Record<string, unknown> }> = []
   page.on('request', request => {
-    if (request.url().endsWith('/solar-test-api/v1/current-states')) currentStateRequests.push(JSON.parse(request.postData() ?? '{}') as { ids: string[]; precision?: string })
+    if (request.url().endsWith('/solar-test-api/v1/current-states')) legacyCurrentStateRequests.push(request.url())
+    if (request.url().endsWith('/solar-test-api/v1/state/plan') || request.url().endsWith('/solar-test-api/v1/state/tiles')) stateTileRequests.push({ url: request.url(), body: JSON.parse(request.postData() ?? '{}') as Record<string, unknown> })
   })
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
@@ -17,14 +19,17 @@ test('complete Saturn current positions remain independent of 3D trail budgets',
   await page.goto(`?${query}`)
   const canvas = page.getByTestId('trajectory-canvas-3d')
   await expect(canvas).toHaveAttribute('data-position-count', '293', { timeout: 90_000 })
-  await expect.poll(() => currentStateRequests.length).toBeGreaterThan(0)
-  expect(currentStateRequests.every(request => request.ids.length <= 510 && request.precision === 'exact')).toBe(true)
+  await expect.poll(() => stateTileRequests.length).toBeGreaterThan(0)
+  expect(legacyCurrentStateRequests).toHaveLength(0)
+  expect(stateTileRequests.some(request => request.url.endsWith('/state/plan'))).toBe(true)
+  expect(stateTileRequests.some(request => request.url.endsWith('/state/tiles'))).toBe(true)
+  expect(stateTileRequests.filter(request => request.url.endsWith('/state/plan')).every(request => Array.isArray(request.body.ids) && request.body.ids.length <= 32768 && request.body.precision === 'exact')).toBe(true)
   await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('293/294', { timeout: 90_000 })
   // The paused clock should settle after one exact request even though the
   // parent rebuilds selection arrays while the scene workers publish.
-  await expect.poll(() => currentStateRequests.length).toBe(1)
+  await expect.poll(() => stateTileRequests.filter(request => request.url.endsWith('/state/tiles')).length).toBe(1)
   await page.waitForTimeout(750)
-  expect(currentStateRequests).toHaveLength(1)
+  expect(legacyCurrentStateRequests).toHaveLength(0)
   await expect(page.getByTestId('focus-layer-budget')).toContainText('160/294')
   expect(new URL(page.url()).searchParams.get('bodies')?.split(',')).toEqual(ids)
   expect(Number(await canvas.getAttribute('data-detail-count'))).toBeLessThanOrEqual(160)
@@ -234,13 +239,13 @@ test('loads the same pinned catalog sample on desktop and mobile', async ({ page
   await expect(page).toHaveURL(/[?&]catalogSampleCount=1(?:&|$)/)
 })
 
-test('upgrades a legacy catalog URL to the viewport-selected pinned sample', async ({ page }, testInfo) => {
+test('adds the viewport-selected pinned sample to a current catalog URL', async ({ page }, testInfo) => {
   const sampleRequests: string[] = []
   page.on('request', (request) => {
     if (/catalog-sample-(desktop|mobile)\.(json|bin)$/.test(request.url())) sampleRequests.push(request.url())
   })
   await installMockCatalog(page, { precomputed: true, profileSamples: { desktop: [0, 2], mobile: [1] } })
-  await page.goto('./?v=3&page=catalog&dataset=mock-content-lite&lang=en')
+  await page.goto('./?v=4&page=catalog&dataset=mock-content-lite&lang=en')
 
   const expectedProfile = testInfo.project.name.startsWith('mobile') ? 'mobile' : 'desktop'
   const expectedCount = expectedProfile === 'mobile' ? 1 : 2
@@ -278,7 +283,7 @@ test('loads the deployable catalog through gzip JSON delivery', async ({ page })
   page.on('response', (response) => {
     if (response.ok() && response.url().endsWith('.json.gz')) gzipResponses.push(response.url())
   })
-  await page.goto('./?v=3&page=catalog&lang=en')
+  await page.goto('./?v=4&page=catalog&lang=en')
   await expect(page.getByRole('heading', { name: 'Catalog' })).toBeVisible()
   await expect(page.locator('.catalog-table > li > button').first()).toBeVisible({ timeout: 30_000 })
   await expect.poll(() => gzipResponses.some((url) => /catalog-sample-(desktop|mobile)\.json\.gz$/.test(url))).toBe(true)
@@ -288,7 +293,7 @@ test('loads the deployable catalog through gzip JSON delivery', async ({ page })
 
 test('hydrates an exact compact-index match that is absent from the precomputed sample', async ({ page }) => {
   await installMockCatalog(page, { precomputed: true, sampleCount: 2 })
-  await page.goto('./?v=3&page=catalog')
+  await page.goto('./?v=4&page=catalog')
   await page.getByLabel(/Orbit class|轨道分类/).selectOption('TNO')
   await expect(page.locator('.catalog-table')).not.toContainText('Gamma')
   await page.getByRole('button', { name: /Scan full catalog|扫描完整目录/ }).click()
@@ -333,7 +338,7 @@ test('degrades cleanly when service worker registration is unavailable', async (
 
 test('applies a reproducible story scene with the requested frame and view', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  await page.goto('./?v=3&page=stories&story=retrograde-mars')
+  await page.goto('./?v=4&page=stories&story=retrograde-mars')
   await expect(page.getByRole('heading', { name: /Stories|引导故事/ })).toBeVisible()
   await page.getByRole('button', { name: /Next|下一步/ }).click()
   await page.getByRole('button', { name: /Next|下一步/ }).click()
@@ -383,7 +388,7 @@ test('loads resolved TNO primary centers lazily and keeps Makemake coverage expl
 
 test('offers a complete reproducible observation deck on desktop and mobile', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  await page.goto('./?v=3&page=explorer&lang=en')
+  await page.goto('./?v=4&page=explorer&lang=en')
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
 
   const presets = page.locator('.preset-list')
@@ -591,9 +596,9 @@ test('loads and replays both pinned main-belt presets on desktop and mobile', as
   await expect(page).not.toHaveURL(/[?&]filter=MBA(?:&|$)/)
 })
 
-test('routes legacy home URLs to the deck and lets visitors reopen the tutorial', async ({ page }) => {
+test('routes the home entry to the deck and lets visitors reopen the tutorial', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  await page.goto('./?v=3&page=home&lang=en')
+  await page.goto('./?v=4&page=home&lang=en')
   await expect(page.locator('.trajectory-canvas, [data-testid="trajectory-canvas-3d"]')).toBeVisible({ timeout: 15_000 })
   await page.getByRole('button', { name: 'Start tutorial' }).click()
   await expect(page.getByRole('dialog', { name: 'How would you like to begin?' })).toBeFocused()
@@ -606,7 +611,7 @@ test('offers a first-run choice and finishes the tutorial on the deck', async ({
     if (request.url().includes('TrajectoryCanvas3D-')) rendererRequests.push(request.url())
     if (request.url().endsWith('.bsp')) kernelRequests.push(request.url())
   })
-  await page.goto('./?v=3&lang=en')
+  await page.goto('./?v=4&lang=en')
   const choice = page.getByRole('dialog', { name: 'How would you like to begin?' })
   await expect(choice).toBeVisible()
   await expect(choice).toBeFocused()
@@ -631,7 +636,7 @@ test('offers a first-run choice and finishes the tutorial on the deck', async ({
 })
 
 test('starts the 3D renderer after choosing independent exploration', async ({ page }) => {
-  await page.goto('./?v=3&lang=en')
+  await page.goto('./?v=4&lang=en')
   const choice = page.getByRole('dialog', { name: 'How would you like to begin?' })
   await expect(page.locator('.trajectory-3d-placeholder')).toBeVisible()
   await expect(page.getByTestId('trajectory-canvas-3d')).toHaveCount(0)
@@ -648,7 +653,7 @@ test('keeps renderer activation while the explorer workspace is still loading', 
     await route.continue()
   })
 
-  await page.goto('./?v=3&lang=en', { waitUntil: 'domcontentloaded' })
+  await page.goto('./?v=4&lang=en', { waitUntil: 'domcontentloaded' })
   const choice = page.getByRole('dialog', { name: 'How would you like to begin?' })
   await expect(choice).toBeVisible()
   await choice.getByRole('button', { name: 'Start tutorial' }).click()
@@ -660,7 +665,7 @@ test('keeps renderer activation while the explorer workspace is still loading', 
 test('computes the Earth-to-Mars transfer and worker porkchop map', async ({ page }) => {
   const errors: string[] = []
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })
-  await page.goto('./?v=3&page=mission')
+  await page.goto('./?v=4&page=mission')
   await page.getByRole('button', { name: /Compute transfer|计算转移/ }).click()
   await expect(page.getByText('5.594')).toBeVisible()
   await expect(page.getByText('C3')).toBeVisible()
@@ -675,7 +680,7 @@ test('computes the Earth-to-Mars transfer and worker porkchop map', async ({ pag
 })
 
 test('falls back safely when a shared mission URL has invalid parameters', async ({ page }) => {
-  await page.goto('./?v=3&page=mission&from=bogus&to=mars&depart=2026-99-99&arrive=2027-02-30')
+  await page.goto('./?v=4&page=mission&from=bogus&to=mars&depart=2026-99-99&arrive=2027-02-30')
   await expect(page.getByRole('heading', { name: /Mission Lab|任务实验室/ })).toBeVisible()
   await expect(page.getByLabel(/Departure body|出发天体/)).toHaveValue('earth')
   await expect(page.getByLabel(/Arrival body|到达天体/)).toHaveValue('mars')
@@ -685,18 +690,18 @@ test('falls back safely when a shared mission URL has invalid parameters', async
 })
 
 test('discloses the derived Earth geocenter and out-of-range mission extrapolation bilingually', async ({ page }) => {
-  await page.goto('./?v=3&page=mission&from=earth&to=mars&depart=2050-06-01&arrive=2050-12-01&lang=en')
+  await page.goto('./?v=4&page=mission&from=earth&to=mars&depart=2050-06-01&arrive=2050-12-01&lang=en')
   await expect(page.getByText(/year 2051 is outside the 1800–2050 validity interval/)).toBeVisible()
 
-  await page.goto('./?v=3&page=mission&from=earth&to=mars&depart=2051-01-01&arrive=2051-09-01&lang=en')
+  await page.goto('./?v=4&page=mission&from=earth&to=mars&depart=2051-01-01&arrive=2051-09-01&lang=en')
   await expect(page.getByText('Mission endpoint model boundary')).toBeVisible()
   await expect(page.getByText(/geocenter derived from the JPL Table 1 EMB seed/)).toBeVisible()
   await expect(page.getByText(/year 2052 is outside the 1800–2050 validity interval/)).toBeVisible()
 
-  await page.goto('./?v=3&page=mission&from=ceres&to=pluto&depart=2051-01-01&arrive=2051-09-01&lang=en')
+  await page.goto('./?v=4&page=mission&from=ceres&to=pluto&depart=2051-01-01&arrive=2051-09-01&lang=en')
   await expect(page.locator('.mission-model-boundary')).toHaveCount(0)
 
-  await page.goto('./?v=3&page=mission&from=earth&to=mars&depart=2051-01-01&arrive=2051-09-01&lang=zh')
+  await page.goto('./?v=4&page=mission&from=earth&to=mars&depart=2051-01-01&arrive=2051-09-01&lang=zh')
   await expect(page.getByText('任务端点模型边界')).toBeVisible()
   await expect(page.getByText(/由 JPL 表 1 地月质心种子.*推导的地心/)).toBeVisible()
   await expect(page.getByText(/2052 超出 JPL 行星近似根数的 1800–2050 有效区间/)).toBeVisible()
@@ -706,7 +711,7 @@ test('publishes the exact planetary model provenance in Evidence and the Earth p
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   // This regression exercises the explicitly retained fallback provenance.
   await page.route('**/data/ephemerides/**', (route) => route.abort())
-  await page.goto('./?v=3&page=about&lang=en')
+  await page.goto('./?v=4&page=about&lang=en')
   await expect(page.getByText('jpl-approx-table-1')).toBeVisible()
   await expect(page.getByText('Fitted Keplerian elements with secular rates', { exact: true })).toBeVisible()
   await expect(page.getByText('Mean ecliptic and equinox of J2000', { exact: true })).toBeVisible()
@@ -714,7 +719,7 @@ test('publishes the exact planetary model provenance in Evidence and the Earth p
   await expect(page.getByText('Earth geocenter derived from the EMB seed', { exact: true })).toBeVisible()
   await expect(page.getByText('de440-earth-moon-gm-partition-v1')).toBeVisible()
 
-  await page.goto('./?v=3&page=explorer&focused=earth&lang=en')
+  await page.goto('./?v=4&page=explorer&focused=earth&lang=en')
   await page.getByRole('button', { name: 'Show body details' }).click()
   await page.getByRole('tab', { name: 'Context' }).click()
   await expect(page.getByText('Rendered point')).toBeVisible()
@@ -743,7 +748,7 @@ test('does not present the build-time dataset pin as loaded when the catalog is 
 
 test('discloses sourced satellite frames, phases, and fixed-ellipse limits', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  await page.goto('./?v=3&page=explorer&focused=moon&bodies=earth%2Cmoon&lang=en')
+  await page.goto('./?v=4&page=explorer&focused=moon&bodies=earth%2Cmoon&lang=en')
   await page.getByRole('button', { name: 'Show body details' }).click()
   await page.getByRole('tab', { name: 'Context' }).click()
   await expect(page.getByText('JPL planet-centered ecliptic', { exact: true })).toBeVisible()
@@ -756,7 +761,7 @@ test('discloses sourced satellite frames, phases, and fixed-ellipse limits', asy
   await expect(page.getByRole('link', { name: /NAIF\/JPL DE440 GM/ })).toBeVisible()
   await expect(page.getByRole('link', { name: /JPL approximate positions/ })).toHaveCount(0)
 
-  await page.goto('./?v=3&page=explorer&focused=io&bodies=jupiter%2Cio&lang=zh')
+  await page.goto('./?v=4&page=explorer&focused=io&bodies=jupiter%2Cio&lang=zh')
   await page.getByRole('button', { name: '查看天体详情' }).click()
   await page.getByRole('tab', { name: '背景' }).click()
   await expect(page.getByText('JPL 行星中心黄道平面', { exact: true })).toBeVisible()
@@ -767,7 +772,7 @@ test('discloses sourced satellite frames, phases, and fixed-ellipse limits', asy
   await expect(page.getByRole('link', { name: /JPL 卫星轨道根数/ })).toBeVisible()
   await expect(page.getByRole('link', { name: /复现这条 Horizons 历元查询/ })).toHaveAttribute('href', /COMMAND=%27501%27/)
 
-  await page.goto('./?v=3&page=about&lang=zh')
+  await page.goto('./?v=4&page=about&lang=zh')
   await expect(page.getByText('satellite-two-body-contract-v2')).toBeVisible()
   await expect(page.getByText('de440-earth-moon-gm-partition-v1')).toBeVisible()
   await expect(page.getByRole('definition').filter({ hasText: /不是连续星历/ }).first()).toBeVisible()
@@ -778,7 +783,7 @@ test('discloses sourced satellite frames, phases, and fixed-ellipse limits', asy
 })
 
 test('shows Hill and Laplace influence definitions independently', async ({ page }) => {
-  await page.goto('./?v=2&view=2d')
+  await page.goto('./?v=4&view=2d')
   await page.locator('.advanced-controls > summary').click()
   await page.getByLabel(/Hill sphere|希尔球/, { exact: true }).check()
   await page.getByLabel(/Laplace SOI|拉普拉斯影响球/, { exact: true }).check()
@@ -788,7 +793,7 @@ test('shows Hill and Laplace influence definitions independently', async ({ page
 
 test('loads and selects the complete filtered catalog separately from focus mode', async ({ page }) => {
   await installMockCatalog(page)
-  await page.goto('./?v=3&page=catalog')
+  await page.goto('./?v=4&page=catalog')
   await expect(page.getByRole('img', { name: /GPU catalog view of small bodies|小天体 GPU 目录视图/ })).toBeVisible()
   await page.getByRole('button', { name: /Scan full catalog|扫描完整目录/ }).click()
   await page.getByRole('button', { name: /Select complete filtered catalog|全选完整筛选目录/ }).click()
@@ -832,7 +837,7 @@ test('reflows Evidence and exposes independent body and catalog actions', async 
 
 test('separates known and unknown absolute-magnitude records', async ({ page }) => {
   await installMockCatalog(page)
-  await page.goto('./?v=3&page=catalog')
+  await page.goto('./?v=4&page=catalog')
   const magnitudeStatus = page.getByLabel(/H status|H 状态/)
   await magnitudeStatus.selectOption('known')
   await expect(page.locator('.catalog-results .section-heading span')).toContainText('2')
@@ -864,21 +869,21 @@ test('restores discrete workspace history and updates the page title', async ({ 
 })
 
 test('gives every story step and mission setup a reproducible URL', async ({ page }) => {
-  await page.goto('./?v=3&page=stories&story=retrograde-mars')
+  await page.goto('./?v=4&page=stories&story=retrograde-mars')
   await page.getByRole('button', { name: /Next|下一步/ }).click()
   await expect(page).toHaveURL(/story=retrograde-mars/)
   await expect(page).toHaveURL(/[?&]step=1(?:&|$)/)
   await page.goBack()
   await expect(page.locator('.story-copy .eyebrow')).toContainText('1/6')
 
-  await page.goto('./?v=3&page=mission')
+  await page.goto('./?v=4&page=mission')
   await page.getByLabel(/Arrival body|到达天体/).selectOption('jupiter')
   await expect(page).toHaveURL(/[?&]to=jupiter(?:&|$)/)
   await expect(page).toHaveTitle(/Earth.*Jupiter|地球.*木星/)
 })
 
 test('keeps a guided story active across workspaces and advances its reproducible scene', async ({ page }) => {
-  await page.goto('./?v=3&page=stories&story=retrograde-mars&step=0&lang=en')
+  await page.goto('./?v=4&page=stories&story=retrograde-mars&step=0&lang=en')
   await page.getByRole('button', { name: 'Open this scene' }).click()
   const guide = page.getByRole('dialog', { name: 'Why Mars moves backward' })
   await expect(guide).toBeVisible()
@@ -900,7 +905,7 @@ test('keeps a guided story active across workspaces and advances its reproducibl
 
 test('searches workspaces, objects, stories, and terms from the keyboard palette', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  await page.goto('./?v=3&page=home&lang=en')
+  await page.goto('./?v=4&page=home&lang=en')
   await expect(page.locator('.trajectory-canvas, [data-testid="trajectory-canvas-3d"]')).toBeVisible({ timeout: 15_000 })
   if ((page.viewportSize()?.width ?? 1280) > 980) await page.keyboard.press('Control+K')
   else await page.getByRole('button', { name: 'Search Solar Atlas' }).click()
@@ -924,7 +929,7 @@ test('searches workspaces, objects, stories, and terms from the keyboard palette
 
 test('persists a named reproducible scene in the local scene library', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  await page.goto('./?v=3&page=explorer&view=2d&lang=en')
+  await page.goto('./?v=4&page=explorer&view=2d&lang=en')
   await page.locator('.advanced-controls > summary').click()
   await page.getByPlaceholder('Scene title').fill('Mars lesson')
   await page.getByRole('button', { name: 'Save scene', exact: true }).click()
@@ -936,7 +941,7 @@ test('persists a named reproducible scene in the local scene library', async ({ 
 
 test('falls back to the 2D explorer when the WebGL context is lost', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  await page.goto('./?v=3&page=explorer&view=3d&lang=en')
+  await page.goto('./?v=4&page=explorer&view=3d&lang=en')
   const threeDimensional = page.getByTestId('trajectory-canvas-3d')
   await expect(threeDimensional).toBeVisible({ timeout: 15_000 })
   await threeDimensional.locator('canvas').evaluate((canvas) => canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true })))
@@ -946,7 +951,7 @@ test('falls back to the 2D explorer when the WebGL context is lost', async ({ pa
 
 test('shows recovery actions when a shared dataset version is unavailable', async ({ page }) => {
   await page.route('**/data/asteroids/releases/missing-version/manifest.json', (route) => route.fulfill({ status: 404 }))
-  await page.goto('./?v=2&page=catalog&dataset=missing-version')
+  await page.goto('./?v=4&page=catalog&dataset=missing-version')
   await expect(page.getByText(/requested immutable dataset version is not available|请求的不可变数据集版本当前不可用/)).toBeVisible()
   await expect(page.getByRole('button', { name: /Open current dataset|打开当前数据集/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /Retry|重试/ })).toBeVisible()

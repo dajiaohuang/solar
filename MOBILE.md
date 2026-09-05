@@ -1,114 +1,83 @@
-# Solar Atlas mobile applications
+# Solar Atlas native applications
 
-> **Breaking preview transition (2026-09-05):** old-client compatibility is no longer required. Once Pages publishes the curated preview, these baseline shells lose online full-catalog access at the old Pages URL; bundled core assets remain local. Replacement native clients and unified-backend access are still under development. Do not interpret a successful shell build as proof that its old catalog endpoint is available.
-
-> **Target architecture:** Android and iOS will become independent platform-native frontend projects consuming the same backend as full Web. The Capacitor implementation documented below is the migration baseline, not the final product shape. GitHub Pages becomes a curated preview, not the required full-product data host. See [product direction](./docs/product-direction.md); no native rewrite or backend rollout is claimed complete here.
-
-Solar Atlas includes **Capacitor 8 local-shell projects** for Android and iOS. They are buildable source projects, not published store products. CI may produce an Android debug APK signed with the standard disposable debug key, but the repository does not claim a release-signed APK, AAB, or IPA, a Play Store or App Store listing, TestFlight distribution, or completed real-device validation.
+> Android and iOS are independent platform-native projects. The current native scope is the first vertical slice for verified current-state tiles; it is not a full-feature or store release milestone. There is no Capacitor Web shell and native builds do not package SPK files.
 
 [中文说明](./MOBILE-CN.md) · [Privacy](./PRIVACY.md) · [Main README](./README.md)
 
 ## Current contract
 
-| Item | Current implementation |
+| Item | Current contract |
 | --- | --- |
-| Runtime | Capacitor 8 wrapping the locally built web application |
-| Application ID | `io.github.dajiaohuang.solaratlas` |
-| Node.js | 22+; npm 10+ |
-| Android | Minimum API 24; compile and target API 36 |
-| iOS | 16.4 or later |
-| Core experience | Curated bodies, presets, stories, Evidence, and the local application shell remain available offline after installation |
-| Catalog data | Version/provenance metadata is checked at startup; samples, indexes, and shards load on demand over HTTPS from `https://dajiaohuang.github.io/solar/data/asteroids` |
-| Physical ephemerides | Native defaults to the full profile: 510 SHA-pinned SPK files (1094.7 MiB), offline and loaded on demand. Web and native share type 2/3/17/21 evaluation and explicit source-specific center pools. Full satellite additions span 2020–2031 TDB; Pages shortens large satellite files to 2026–2027 without dropping target identities. Tests resolve 508 selectable centers at UTC JD 2461287.5, not all bodies. Eris/Haumea primary centers and their moons end at 2030-01-02 TDB; Makemake retains an approximate fallback. UTC→TT→TDB is supported from 1972; future leap seconds are uncertain. |
-| Release status | Source and non-release validation paths only; release signing and store publication are not authorized or included |
+| Runtime | Independent native Android and iOS fronts sharing the versioned backend protocol |
+| Native slice | `manifest → plan → binary state tile` loading for exact current states, with typed `Float64` state values |
+| View | Native 3D is the default; native 2D is an independent fallback/view, with separate rendering budgets |
+| iOS controls | User-supplied HTTPS backend, TDB Julian date, built-in presets, custom body IDs, and reference ID |
+| iOS cache | Verified state tiles use a bounded 256 MiB cache; cache reuse requires matching tile identity and hashes |
+| Online boundary | Initial manifest and plan loading require the HTTPS backend. Previously verified tiles may be reused; complete offline plan recovery is not implemented |
+| Pages | A curated Web preview only; it is not the native full-state backend |
+| Validation / release status | Android debug build, unit/lint and empty-scene GLES emulator smoke passed locally on 2026-09-05. iOS compilation, real-device performance and store release remain unverified |
 
-Quaoar/Weywot, Orcus/Vanth, Salacia/Actaea, 1998 WW31/Sat1, 2001 QW322/Sat1,
-Kagara/Haunu, 1999 OJ4/Sat1 and 2003 UN284/Sat1
-retain ten-year original system files (2020-01-01/2030-01-01 TDB) in the native
-full profile. Pages uses 2026-07-01/2027-01-01 for these eight systems. Neither
-profile invents a fallback for these new primaries or companions.
+The native slice preserves scientific provenance, epoch, units, reference frame, validity and missing-state semantics. Missing precise states remain visibly unavailable; they are not replaced by approximate positions. The native slice does not claim all-body coverage, navigation accuracy, complete ephemeris access, or full Web feature parity.
 
-The native build uses relative local assets and does not register the web Service Worker. Offline native operation therefore comes from the installed local shell, not from the PWA cache. The full MPCORB catalog is intentionally not bundled: catalog samples, detail shards, and live JPL SBDB lookups require a network connection unless a previously fetched response remains in the WebView cache.
+## Prerequisites and checks
 
-SPK focus ephemerides and the geometric/light-time/stellar-aberration observation readouts follow the bundled manifest when those kernel assets are present. They do not turn the app into an all-body precision or navigation product; no gravity deflection, atmosphere, surface observer, or covariance model is included. The GPU catalog cloud remains Keplerian.
+Use Node.js 22+ and npm 10+ for repository checks. `npm run native:check` is the static native-project check; it does not build or sign an application.
 
-The [all-body source inventory](./docs/all-body-inventory.md) is an explicit developer audit, not an installed mobile catalog. Native sync neither downloads nor copies those generated shards; the current offline/online boundary is unchanged. Inventory coverage and usable mobile ephemeris coverage must be reported separately.
+Android validation is run directly from the native project with Android SDK API 36 and JDK 21:
 
-## Prerequisites
-
-The shared web shell includes satellite-scale 3D framing, portrait-resize handling and km/hour orbital readouts. After changing these shared features, run `npm run mobile:sync` to refresh both native asset bundles and validate Android/iOS CI. Browser viewport tests are not a substitute for real-device touch, rotation or performance testing.
-
-Install Node.js 22+, npm 10+, and the platform toolchain:
-
-- Android: Android Studio, Android SDK API 36, and JDK 21. Android builds can run on Windows, macOS, or Linux when that toolchain is installed.
-- iOS: macOS and Xcode are required. Windows cannot build, run, sign, or archive the iOS application.
-
-No signing key, certificate, provisioning profile, store credential, or release account belongs in the repository.
-
-The generated iOS package graph pins Capacitor to 8.5.0 and `ion-ios-filesystem` to the Xcode-verified 1.1.2 release. The post-sync normalizer reapplies those paths and pins after every Capacitor sync so a fresh checkout resolves the same native dependency versions.
-
-## Build and sync
-
-Build the local native shell first:
-
-```bash
-npm ci
-npm run build:native
+```text
+android/gradlew -p android lint testDebugUnitTest assembleDebug
 ```
 
-For Android:
+On Windows use `android/gradlew.bat -p android` with the same tasks. iOS validation requires macOS and Xcode:
 
-```bash
-npm run mobile:sync:android
-npm run mobile:open:android
+```text
+xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
+swiftc ios/App/App/StateTileDecoder.swift ios/App/App/StateTileCache.swift ios/App/App/NativeStateProjection.swift ios/ProtocolTests/ProtocolTests.swift -o <temporary-output>
+<temporary-output>
 ```
 
-The Android project can also run its local validation tasks from `android/`:
+These are contributor commands, not evidence that this checkout has passed them. No signing key, certificate, provisioning profile, store credential, or release account belongs in the repository. Real-device behavior, accessibility, memory pressure and store metadata require separate evidence and are not claimed here.
 
-```powershell
-.\gradlew.bat lint testDebugUnitTest assembleDebug
+## Native behavior and boundaries
+
+### Cross-runtime numerical verification
+
+The mobile CI jobs generate binary tiles using the actual Go catalog and HTTP
+handlers, then run the production Web decoder and the corresponding Java or
+Swift decoder against those files. They compare all six Float64 bit patterns,
+tile hashes, row ordering, manifest identities and exact/missing counts. The CI
+SPK is explicitly synthetic: this proves wire interoperability, not astronomical
+accuracy or live native networking.
+
+To repeat this locally, set `SOLAR_STATE_TILE_FIXTURE_DIR` to an absolute new or
+empty directory outside the repository (`$env:SOLAR_STATE_TILE_FIXTURE_DIR` in
+PowerShell; `export SOLAR_STATE_TILE_FIXTURE_DIR=...` in a POSIX shell), then run:
+
+```text
+go run ./cmd/state-tile-fixture -out <fixture-directory> -tile-size 1
+npx vitest run tests/unit/state-tiles-golden.test.ts
 ```
 
-On macOS, for iOS:
+Keep that environment variable set when running the Gradle or Swift test commands
+above. A configured but absent fixture is an error; without the variable the
+optional cross-runtime fixture check is skipped. Gradle tracks the directory as
+a test input so changing from synthetic to real fixtures reruns the tests.
+The generator also accepts `-data-dir`, `-inventory-dir`, `-ids` and `-epoch-jd`
+for locally retained, hash-verified scientific profiles. Do not commit generated
+fixtures or interpret matching serialization as an independent science oracle.
 
-```bash
-npm run mobile:sync:ios
-npm run mobile:open:ios
-```
+### Interaction and data boundaries
 
-`npm run mobile:sync` synchronizes both platforms and is therefore intended for a macOS environment with both toolchains. These commands create or refresh local platform builds; they do not create a signed store release.
+- The first native screen is an Observation Deck for current-state evidence: selected body IDs, exact values, provenance and explicit gaps.
+- iOS starts in native 3D and can switch to native 2D. The 3D and 2D budgets are independent; native 3D does not shrink or fade states solely because of distance.
+- A request is bound to its manifest/plan identity and ordered IDs. Tiles are bounded, checksum-verified and published atomically only after the complete plan validates.
+- Cancellation and latest-only loading prevent stale plans from replacing a newer selection. Verified tiles can be reused from the iOS cache after a new online plan identifies them.
+- Native does not register or depend on a Web service worker, Capacitor bridge, or packaged SPK profile. SPK source files remain a scientific/backend delivery concern; they are not a native offline download.
+- Manifest and plan access remains online even when individual tiles are cached. There is no complete offline plan/catalog restoration path yet.
 
-The mobile workflow is configured to build an **Android debug APK signed with Gradle's standard disposable debug key** and an **unsigned iOS Simulator app** as short-lived validation artifacts. Neither is a release artifact. A configured workflow is not evidence that a particular commit has passed until its run and artifacts have been inspected.
+## Privacy and distribution
 
-## Native behavior
+Native clients have no project account, advertising, analytics, behavioral tracking or telemetry. The iOS state-tile service sends only the user-selected HTTPS endpoint, TDB epoch, preset/custom IDs and protocol request metadata to that endpoint. The bounded tile cache is local application data. See [PRIVACY.md](./PRIVACY.md) and [PRIVACY-CN.md](./PRIVACY-CN.md).
 
-- Scene links shared from the app use the canonical public HTTPS URL so they remain usable outside the native shell.
-- The custom `solaratlas://scene?...` URL scheme can open a scene in the installed app. Verified Android App Links and iOS Universal Links are not currently claimed.
-- User-initiated scene sharing and exports use the platform share sheet. Export files are written to the application cache and deletion is attempted after sharing.
-- Ordinary external HTTPS links open in the platform browser.
-- Backgrounding pauses a running simulation and foregrounding resumes it only when it was previously playing.
-- Android Back first dismisses the tutorial or an active in-app layer, then follows application/browser history, and finally minimizes the app.
-- The interface supports portrait and landscape layouts, safe-area insets, touch input, the adaptive 3D renderer, and automatic 2D fallback when WebGL creation or context recovery fails.
-
-## Permissions and privacy
-
-Android declares only network access through `INTERNET`; cleartext traffic and application backup are disabled. The iOS project has no camera, microphone, location, contacts, photos, tracking, or notification usage request. Its privacy manifest declares no collected data and records the required-reason file-timestamp API used by the local export path.
-
-See [PRIVACY.md](./PRIVACY.md) for the current source-level privacy notice. Store privacy labels must be reviewed again against the exact signed release, bundled dependencies, and store configuration before publication.
-
-## Acceptance checklist
-
-Before calling a mobile release complete, verify on representative physical devices as well as emulators/simulators:
-
-- first-run tutorial choice, direct Observation Deck entry, safe areas, status-bar contrast, rotation, keyboard/accessibility services, and reduced motion;
-- touch camera controls, selection, drawers, four-item navigation, 3D/2D switching, WebGL context loss, and memory-pressure recovery;
-- core offline launch after installation, with honest unavailable/retry states for catalog and JPL requests;
-- custom-scheme scene import, canonical HTTPS sharing, JSON/CSV/image export, external-browser handoff, lifecycle pause/resume, and Android Back behavior;
-- Android API 24 and 36 behavior, and iOS 16.4 plus a current iOS version;
-- privacy manifests, permissions, signing identities, icons, screenshots, store metadata, accessibility declarations, and data-safety/privacy answers for the exact release binary.
-
-This checklist has not yet been represented as completed real-device evidence. Do not describe the mobile applications as published or device-validated until that evidence and the relevant store records exist.
-
-## Distribution boundary
-
-Signing, notarization, TestFlight, Play testing tracks, store submissions, paid developer accounts, production certificates, release keys, and publication are external state changes. They require explicit repository-owner authorization and controlled credentials. The current implementation stops before those steps.
+The Android and iOS projects are not represented as published, signed, store-approved or real-device-validated applications. Signing, TestFlight, Play testing tracks, store submissions and publication require separate authorization and evidence.

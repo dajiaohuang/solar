@@ -2,6 +2,7 @@ import type { RenderQuality } from '../types'
 
 export type RenderViewMode = '2d' | '3d'
 export type RenderDeviceClass = 'mobile' | 'desktop'
+export type RenderCapacityTier = 'mobile-conservative' | 'mobile12' | 'desktop16' | 'desktop32'
 
 export type RenderDeviceHints = {
   deviceMemoryGb?: number
@@ -36,28 +37,47 @@ export type SplitRenderBudget = {
   secondary: number
 }
 
-export const RENDER_BUDGET_QUANTUM = 500
+export const RENDER_BUDGET_QUANTUM = 5_000
 export const RENDER_BUDGET_COOLDOWN_MS = 5_000
+export const MAX_SOURCE_INVENTORY_ROWS = 1_567_193
 
 export function classifyRenderDevice(viewportWidth: number, coarsePointer: boolean): RenderDeviceClass {
   return viewportWidth <= 800 || (coarsePointer && viewportWidth <= 1_180) ? 'mobile' : 'desktop'
 }
 
-const TWO_DIMENSIONAL_BUDGETS: Record<RenderDeviceClass, RenderBudgetPolicy> = {
-  mobile: { minimum: 8_000, initial: 8_000, maximum: 8_000, adaptive: false },
-  desktop: { minimum: 30_000, initial: 30_000, maximum: 30_000, adaptive: false },
+export function classifyRenderCapacity(deviceClass: RenderDeviceClass, hints: RenderDeviceHints = {}): RenderCapacityTier {
+  if (deviceClass === 'mobile') return hints.deviceMemoryGb !== undefined && hints.deviceMemoryGb <= 4 ? 'mobile-conservative' : 'mobile12'
+  if ((hints.deviceMemoryGb !== undefined && hints.deviceMemoryGb >= 24) || (hints.hardwareConcurrency !== undefined && hints.hardwareConcurrency >= 16)) return 'desktop32'
+  return 'desktop16'
 }
 
-const THREE_DIMENSIONAL_BUDGETS: Record<RenderDeviceClass, Record<RenderQuality, RenderBudgetPolicy>> = {
-  mobile: {
-    auto: { minimum: 2_000, initial: 4_000, maximum: 6_000, adaptive: true },
+const TWO_DIMENSIONAL_BUDGETS: Record<RenderCapacityTier, RenderBudgetPolicy> = {
+  'mobile-conservative': { minimum: 8_000, initial: 8_000, maximum: 8_000, adaptive: false },
+  mobile12: { minimum: 500_000, initial: 500_000, maximum: 500_000, adaptive: false },
+  desktop16: { minimum: 1_250_000, initial: 1_250_000, maximum: 1_250_000, adaptive: false },
+  desktop32: { minimum: MAX_SOURCE_INVENTORY_ROWS, initial: MAX_SOURCE_INVENTORY_ROWS, maximum: MAX_SOURCE_INVENTORY_ROWS, adaptive: false },
+}
+
+const THREE_DIMENSIONAL_BUDGETS: Record<RenderCapacityTier, Record<RenderQuality, RenderBudgetPolicy>> = {
+  'mobile-conservative': {
+    auto: { minimum: 2_000, initial: 4_000, maximum: 8_000, adaptive: true },
     balanced: { minimum: 4_000, initial: 4_000, maximum: 4_000, adaptive: false },
-    max: { minimum: 2_000, initial: 6_000, maximum: 8_000, adaptive: true },
+    max: { minimum: 2_000, initial: 6_000, maximum: 10_000, adaptive: true },
   },
-  desktop: {
-    auto: { minimum: 6_000, initial: 12_000, maximum: 20_000, adaptive: true },
-    balanced: { minimum: 12_000, initial: 12_000, maximum: 12_000, adaptive: false },
-    max: { minimum: 8_000, initial: 20_000, maximum: 30_000, adaptive: true },
+  mobile12: {
+    auto: { minimum: 25_000, initial: 100_000, maximum: 250_000, adaptive: true },
+    balanced: { minimum: 75_000, initial: 75_000, maximum: 75_000, adaptive: false },
+    max: { minimum: 25_000, initial: 150_000, maximum: 250_000, adaptive: true },
+  },
+  desktop16: {
+    auto: { minimum: 50_000, initial: 250_000, maximum: 750_000, adaptive: true },
+    balanced: { minimum: 250_000, initial: 250_000, maximum: 250_000, adaptive: false },
+    max: { minimum: 50_000, initial: 500_000, maximum: 750_000, adaptive: true },
+  },
+  desktop32: {
+    auto: { minimum: 100_000, initial: 500_000, maximum: MAX_SOURCE_INVENTORY_ROWS, adaptive: true },
+    balanced: { minimum: 500_000, initial: 500_000, maximum: 500_000, adaptive: false },
+    max: { minimum: 100_000, initial: 1_000_000, maximum: MAX_SOURCE_INVENTORY_ROWS, adaptive: true },
   },
 }
 
@@ -77,10 +97,12 @@ export function resolveRenderBudgetPolicy(
   deviceClass: RenderDeviceClass,
   viewMode: RenderViewMode,
   quality: RenderQuality,
+  hints: RenderDeviceHints = {},
 ): RenderBudgetPolicy {
+  const tier = classifyRenderCapacity(deviceClass, hints)
   const policy = viewMode === '2d'
-    ? TWO_DIMENSIONAL_BUDGETS[deviceClass]
-    : THREE_DIMENSIONAL_BUDGETS[deviceClass][quality]
+    ? TWO_DIMENSIONAL_BUDGETS[tier]
+    : THREE_DIMENSIONAL_BUDGETS[tier][quality]
   return { ...policy }
 }
 

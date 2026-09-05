@@ -23,6 +23,11 @@ func main() {
 	if err != nil {
 		log.Printf("catalog warning: %v", err)
 	}
+	defer func() {
+		if closeErr := cat.Close(); closeErr != nil {
+			log.Printf("catalog close warning: %v", closeErr)
+		}
+	}()
 	var inv *inventory.Inventory
 	if *inventoryDir != "" {
 		var inventoryErr error

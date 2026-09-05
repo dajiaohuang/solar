@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { SpkKernel } from '../../src/engine/ephemeris/spk'
 import { createKernelResolver, toEcliptic, type LoadedKernel } from '../../src/engine/ephemeris/kernelPool'
-import { ephemerisProfile } from '../../src/data/ephemerisProfile'
 import type { KernelFile } from '../../src/engine/ephemeris/kernelStore'
 import fixture from '../fixtures/satellite-pools-cspice.json'
 import { SMALL_BODY_PRIMARIES, SATELLITE_IDENTITIES } from '../../src/data/satelliteIdentities'
@@ -182,14 +181,6 @@ describe('integrated satellite source pools and delivery profiles', () => {
     expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(270908416)
   })
 
-  it('defaults native to full without imposing the Pages policy on explicit full Web builds', () => {
-    expect(ephemerisProfile('native')).toBe('full')
-    expect(ephemerisProfile()).toBe('pages')
-    expect(ephemerisProfile('web', 'full')).toBe('full')
-    expect(ephemerisProfile('native', 'pages')).toBe('pages')
-    expect(() => ephemerisProfile('web', 'unknown')).toThrow('Unknown')
-  })
-
   it('keeps English and Chinese delivery documentation aligned with both manifests', () => {
     const fullBytes = full.files.reduce((total, file) => total + file.bytes, 0)
     const pagesBytes = pages.files.reduce((total, file) => total + file.bytes, 0)
@@ -200,10 +191,7 @@ describe('integrated satellite source pools and delivery profiles', () => {
         expect(document, path).toContain(`${(bytes / 1024 / 1024).toFixed(1)} MiB`)
       }
     }
-    for (const path of ['MOBILE.md', 'MOBILE-CN.md']) {
-      const document = readFileSync(path, 'utf8')
-      expect(document, path).toContain(`${(fullBytes / 1024 / 1024).toFixed(1)} MiB`)
-      expect(document, path).toContain(String(full.files.length))
-    }
+    // Native applications consume verified backend tiles. Their packaging is
+    // checked by native:check and must not require an offline SPK profile.
   })
 })

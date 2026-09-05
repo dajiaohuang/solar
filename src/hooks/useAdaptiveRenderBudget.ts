@@ -42,11 +42,11 @@ export function useAdaptiveRenderBudget(options: Options) {
       coarseLandscape.removeEventListener('change', updateDevice)
     }
   }, [])
-  const policy = useMemo(
-    () => resolveRenderBudgetPolicy(device, options.viewMode, options.quality),
-    [device, options.quality, options.viewMode],
-  )
   const hints = useMemo(() => deviceHints(), [])
+  const policy = useMemo(
+    () => resolveRenderBudgetPolicy(device, options.viewMode, options.quality, hints),
+    [device, hints, options.quality, options.viewMode],
+  )
   const policyKey = `${device}:${options.viewMode}:${options.quality}`
   const [budget, setBudget] = useState(() => ({
     policyKey,

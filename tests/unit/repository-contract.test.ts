@@ -61,6 +61,9 @@ describe('repository contract', () => {
   it('runs native validation only for the existing mobile impact paths', () => {
     expect(requiresNativeQuality(['README.md', 'docs/screenshots/deck.png'])).toBe(false)
     expect(requiresNativeQuality(['src/App.tsx'])).toBe(true)
+    for (const path of ['cmd/state-tile-fixture/main.go', 'internal/statewire/tile.go', 'go.mod', 'go.sum', 'tests/fixtures/spk21-synthetic.bsp', 'tests/unit/state-tiles-golden.test.ts']) {
+      expect(requiresNativeQuality([path])).toBe(true)
+    }
     expect(requiresNativeQuality(['android/app/build.gradle'])).toBe(true)
     expect(requiresNativeQuality(['ios/App/App.xcodeproj/project.pbxproj'])).toBe(true)
     expect(requiresNativeQuality(['tsconfig.app.json'])).toBe(true)
@@ -107,6 +110,24 @@ describe('repository contract', () => {
       expect(requiresFullWebQuality(paths)).toBe(true)
     } finally {
       rmSync(repository, { recursive: true, force: true })
+    }
+  })
+
+  it('runs native consumers on Go-generated files without silently skipping golden checks', () => {
+    const mobile = parse(readFileSync(new URL('../../.github/workflows/mobile.yml', import.meta.url), 'utf8'))
+    for (const path of ['cmd/**', 'internal/**', 'go.mod', 'go.sum', 'tests/**']) {
+      expect(mobile.on.push.paths).toContain(path)
+    }
+    for (const [job, consumer] of [['android', './gradlew lint'], ['ios', 'swiftc ios/']]) {
+      const steps: { run?: string; env?: Record<string, string> }[] = mobile.jobs[job].steps
+      const generated = steps.findIndex(step => step.run?.includes('go run ./cmd/state-tile-fixture'))
+      const consumed = steps.findIndex(step => step.run?.includes(consumer))
+      expect(generated).toBeGreaterThan(-1)
+      expect(consumed).toBeGreaterThan(generated)
+      expect(steps[generated].run).toContain('-tile-size 1')
+      expect(steps[generated].run).toContain('npx vitest run tests/unit/state-tiles-golden.test.ts')
+      expect(steps[generated].env?.SOLAR_STATE_TILE_FIXTURE_DIR).toBe('${{ runner.temp }}/solar-state-tile-fixture')
+      expect(steps[consumed].env?.SOLAR_STATE_TILE_FIXTURE_DIR).toBe(steps[generated].env?.SOLAR_STATE_TILE_FIXTURE_DIR)
     }
   })
 

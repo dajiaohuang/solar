@@ -20,9 +20,13 @@ export function requiresNativeQuality(paths) {
     path.startsWith('src/') ||
     path.startsWith('scripts/') ||
     path.startsWith('public/') ||
+    path.startsWith('cmd/') ||
+    path.startsWith('internal/') ||
+    path.startsWith('tests/') ||
+    path === 'go.mod' ||
+    path === 'go.sum' ||
     path === 'index.html' ||
     /^tsconfig[^/]*\.json$/.test(path) ||
-    path === 'capacitor.config.ts' ||
     path === 'package.json' ||
     path === 'package-lock.json' ||
     path === 'vite.config.ts' ||

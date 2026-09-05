@@ -30,7 +30,7 @@ timestamp. Kernel availability is evaluated at that epoch only, with full
 position/velocity center-chain resolution. Segment intervals are also retained;
 this does not certify accuracy throughout a time window.
 
-Ordinary builds, tests and native synchronization do not run the download
+Ordinary builds, tests and native project checks do not run the download
 command. No new runtime service or dependency is required. Raw snapshots and
 generated inventory shards are not committed to Git or shipped in Pages,
 Android or iOS by this command. Store source snapshots outside disposable build
@@ -86,26 +86,58 @@ command and no runtime N-body, extrapolation or extra GR/J2 correction is added.
 ## Artifacts and reproducibility
 
 `snapshot.json` is the source completion marker. Inventory records are written
-as gzip JSONL shards of at most 5000 records (internal maximum 10000); the output
-`manifest.json` is written only after parsing and source-count reconciliation.
-On failure, keep the incomplete directory for diagnosis or remove that exact
-generated directory after inspection; do not mistake it for a successful pack.
+as deterministic gzip JSONL blocks, concatenated into addressable
+`records-00000.jsonl.bgz` shards of at most 5000 records (internal maximum
+10000). Each block contains at most 128 rows and is independently addressable;
+manifest v2 records its `rowStart`, `count`, `offset`, compressed `bytes`,
+`uncompressedBytes` and SHA-256. Each shard also records its complete-file byte
+count and SHA-256. The output `manifest.json` is written only after parsing and
+source-count reconciliation. v2 is intentionally incompatible with the old
+single-stream v1 artifact format.
 
-The verifier decompresses every shard with a bounded output size, recomputes
-hashes, counts and record identity uniqueness, validates finite claimed kernel
-states and reconciles the missing-parent ledger. Passing it demonstrates source
-record accounting, not all-body scientific accuracy. With identical source
-bytes, application/kernel inputs and audit epoch, offline replay produces
-identical shards and manifest; no current timestamp is injected into replayed
-inventory artifacts.
+The verifier decompresses and hashes every block with a bounded output size,
+requires contiguous row and byte coverage, then recomputes counts and record
+identity uniqueness, validates finite claimed kernel states and reconciles the
+missing-parent ledger. Passing it demonstrates source record accounting, not
+all-body scientific accuracy. With identical source bytes, application/kernel
+inputs and audit epoch, offline replay produces identical blocks, shards and
+manifest; no current timestamp is injected into replayed inventory artifacts.
 
-Remaining work includes runtime catalog integration, general SPK type 21,
+Remaining work includes complete runtime catalog discovery, expanded
 non-elliptic trajectories, additional satellite kernels, alias reconciliation
 and full-source delivery. Pages may use a declared subset without reducing the
 complete web/native coverage goal. Unknown or undiscovered objects and missing
 public observations cannot be filled by invented data.
 
 ## Dated full-source validation
+
+On 2026-09-05, the addressable v2 generator replayed the retained 2026-09-04
+source snapshot against the current audited Pages kernel profile. Both outputs
+passed the complete block/shard validator against the source snapshot:
+
+| v2 artifact field | Verified value |
+| --- | --- |
+| Source records | 1,567,193 |
+| Shards / independently compressed blocks | 314 / 12,538 |
+| Compressed shard bytes | 97,110,144 |
+| Manifest SHA-256 (both replays) | `2c0aca1e6412c6e7785acd901bb987ce0f57c5353e2a8ff87aed032b291377b7` |
+| Kernel manifest SHA-256 | `5c390d7bb8e02a28ebe45d32979c2f5db12983f8ec6044e4206750c5c89c29e0` |
+| Identity mapping SHA-256 | `6d36c44543bc7f28e2f1696ec8c7e18c7a5ddedc58b51aec25826ad08395188e` |
+| TDB audit seconds past J2000 | 841752000 |
+| States available at that audit epoch | 496 |
+| Records not mapped to a bundled kernel | 1,566,697 |
+| Missing parents | 0 |
+
+Equal manifest hashes include equal ordered shard and block digests; both
+complete outputs were independently rehashed and decompressed. The 496 states
+are source-record coverage at one epoch, not an all-epoch unique-body count.
+The separate full backend SPK profile has a different manifest and remains
+distinct from this inventory's Pages-based audit evidence.
+
+The following numbers are historical evidence for the pre-v2 single-stream
+artifact and are retained to document the source snapshot; they are not v2
+shard byte/hash claims. Regenerate the inventory to obtain the v2 block and
+complete-file digests.
 
 On 2026-09-04, the table metadata dated 2026-09-03 and the separately fetched
 satellite responses produced 1,567,193 source records in 314 gzip shards

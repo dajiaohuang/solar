@@ -4,7 +4,7 @@ import type { Story, StoryHighlight } from '../../content/stories/types'
 import { useI18n } from '../../i18n/context'
 import { exportAnnotatedScenePng } from '../../lib/sceneExport'
 import { encodeCurrentScene } from '../../lib/shareScene'
-import { IS_NATIVE_APP, shareSceneUrl } from '../../lib/platform'
+import { shareSceneUrl } from '../../lib/platform'
 import { applyStoryScene } from '../../lib/storyScene'
 import { uiActions, uiStore } from '../../state/ui-store'
 import { StoryCheckpoint } from './StoryCheckpoint'
@@ -56,8 +56,8 @@ export function GuidedStoryOverlay() {
 
   async function copyLink() {
     try {
-      const outcome = await shareSceneUrl(encodeCurrentScene(), story.title[language])
-      if (outcome !== 'cancelled') uiActions.toast(t(outcome === 'shared' ? 'storyShared' : 'storyLinkCopied'))
+      await shareSceneUrl(encodeCurrentScene(), story.title[language])
+      uiActions.toast(t('storyLinkCopied'))
     } catch (error) {
       uiActions.toast(error instanceof Error ? error.message : String(error))
     }
@@ -80,6 +80,6 @@ export function GuidedStoryOverlay() {
     </div>
     {stepIndex === story.steps.length - 1 && story.checkpoint && <StoryCheckpoint key={story.id} checkpoint={story.checkpoint} compact />}
     <details className="story-guide-evidence"><summary>{t('storyEvidenceAndTerms')}</summary><p><strong>{t('storyBoundary')}:</strong> {story.boundary[language]}</p>{story.glossary?.map((item) => <p key={item.term.en}><strong>{item.term[language]}</strong> — {item.definition[language]}</p>)}{story.sources.map((source) => <a href={source.url} target="_blank" rel="noreferrer" key={source.url}>{source.label} ↗</a>)}</details>
-    <footer><button onClick={() => void copyLink()}>↗ {t(IS_NATIVE_APP ? 'shareStoryNative' : 'copyStoryLink')}</button><button onClick={() => void exportAnnotatedScenePng(language).catch((error: unknown) => uiActions.toast(error instanceof Error ? error.message : String(error)))}>▣ {t('exportPng')}</button><button onClick={() => { uiActions.stopStory(); uiActions.navigate('stories') }}>{t('finishStory')}</button></footer>
+    <footer><button onClick={() => void copyLink()}>↗ {t('copyStoryLink')}</button><button onClick={() => void exportAnnotatedScenePng(language).catch((error: unknown) => uiActions.toast(error instanceof Error ? error.message : String(error)))}>▣ {t('exportPng')}</button><button onClick={() => { uiActions.stopStory(); uiActions.navigate('stories') }}>{t('finishStory')}</button></footer>
   </aside>
 }

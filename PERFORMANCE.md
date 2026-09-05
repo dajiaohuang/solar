@@ -13,12 +13,16 @@ These are point counts, not focus-body or dataset-size limits. A split compariso
 
 | Device profile | 2D | 3D Auto | 3D Balanced | 3D Maximum |
 | --- | ---: | ---: | ---: | ---: |
-| Mobile | fixed 8,000 | 4,000 initial; 2,000–6,000 | fixed 4,000 | 6,000 initial; 2,000–8,000 |
-| Desktop | fixed 30,000 | 12,000 initial; 6,000–20,000 | fixed 12,000 | 20,000 initial; 8,000–30,000 |
+| Conservative mobile (≤4 GB hint) | fixed 8,000 | 4,000 initial; 2,000–8,000 | fixed 4,000 | 6,000 initial; 2,000–10,000 |
+| Mobile 12 GB target tier | fixed 500,000 | 100,000 initial; 25,000–250,000 | fixed 75,000 | 150,000 initial; 25,000–250,000 |
+| Desktop 16 GB target tier | fixed 1,250,000 | 250,000 initial; 50,000–750,000 | fixed 250,000 | 500,000 initial; 50,000–750,000 |
+| Desktop 32 GB target tier | fixed 1,567,193 | 500,000 initial; 100,000–1,567,193 | fixed 500,000 | 1,000,000 initial; 100,000–1,567,193 |
 
-Viewport width selects the mobile or desktop policy; a coarse-pointer landscape device up to 1,180 px remains mobile. `deviceMemory` and CPU-concurrency hints may lower the initial 3D count, but never raise it. Both renderers cap device pixel ratio. These are incomplete browser hints—not a promise that a particular RAM capacity will sustain a particular frame rate.
+Viewport width selects mobile or desktop first; a coarse-pointer landscape device up to 1,180 px remains mobile. A ≤4 GB browser memory hint selects the conservative mobile tier. Desktop hints of at least 24 GB or 16 logical processors select the 32 GB target tier; other desktops use the 16 GB target. Browsers may clamp or omit these hints, so this is a target classification rather than a detected physical-RAM claim. Both renderers cap device pixel ratio.
 
-Auto and Maximum evaluate two-second frame windows after a two-second warm-up. Two consecutive slow windows (p90 above 28 ms or more than 15% long frames) reduce the count by 25%; four consecutive fast windows (p90 below 18.5 ms and fewer than 5% long frames) raise it by 12.5%. Adjustments use 500-point quanta and a five-second cooldown. Hidden tabs, paused simulations, and warm-up periods do not influence the controller. Balanced is a deterministic fixed-count option.
+Auto and Maximum evaluate two-second frame windows after a two-second warm-up. Two consecutive slow windows (p90 above 28 ms or more than 15% long frames) reduce the count by 25%; four consecutive fast windows (p90 below 18.5 ms and fewer than 5% long frames) raise it by 12.5%. Adjustments use 5,000-point quanta and a five-second cooldown. Hidden tabs, paused simulations, and warm-up periods do not influence the controller. Balanced is a deterministic fixed-count option.
+
+The raised ceilings are capacity envelopes for the single-buffer renderer, not proof that the current 8,000/30,000 display samples contain that many points or that every target device is smooth. The active count remains capped by loaded data, and real-device p90 frame time, dropped frames, memory, thermal state and context-loss evidence are required before making a hardware smoothness claim.
 
 The scene URL records the immutable catalog sample, whether the cloud is enabled, and the requested quality profile. It intentionally does not record the locally effective adaptive point count. A comparison gives both frames the same deterministic prefix and discards any unshared remainder. This preserves scientific replay while allowing each browser to protect interactivity.
 

@@ -4,9 +4,13 @@
 package spk
 
 import (
+	"container/list"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"math"
+	"os"
+	"sync"
 )
 
 type Vec3 struct{ X, Y, Z float64 }
@@ -26,21 +30,207 @@ type type21Meta struct{ Dimension, RecordSize, Records, Epochs int }
 
 const recordBytes = 1024
 
+const (
+	DefaultPageSize      = 64 << 10
+	DefaultCacheBytes    = 4 << 20
+	minimumPageSize      = 1024
+	minimumCachePageSize = 1
+)
+
+type ReadStats struct {
+	PageSize    int
+	MaxBytes    int64
+	CachedBytes int64
+	LoadedBytes int64
+	PageLoads   uint64
+	CacheHits   uint64
+	CacheMisses uint64
+}
+
+type pageSource struct {
+	reader io.ReaderAt
+	size   int64
+	close  io.Closer
+	page   int64
+	max    int64
+	mu     sync.Mutex
+	items  map[int64]*list.Element
+	order  *list.List
+	bytes  int64
+	stats  ReadStats
+}
+
+type pageEntry struct {
+	index int64
+	data  []byte
+}
+
+func newPageSource(reader io.ReaderAt, size int64, closer io.Closer, pageSize int, maxBytes int64) *pageSource {
+	if pageSize < minimumPageSize {
+		pageSize = minimumPageSize
+	}
+	if maxBytes < int64(pageSize*minimumCachePageSize) {
+		maxBytes = int64(pageSize * minimumCachePageSize)
+	}
+	return &pageSource{reader: reader, size: size, close: closer, page: int64(pageSize), max: maxBytes, items: make(map[int64]*list.Element), order: list.New(), stats: ReadStats{PageSize: pageSize, MaxBytes: maxBytes}}
+}
+
+func (p *pageSource) ReadAt(dst []byte, off int64) (int, error) {
+	if off < 0 || off >= p.size && len(dst) > 0 {
+		return 0, io.EOF
+	}
+	read := 0
+	for read < len(dst) {
+		pos := off + int64(read)
+		index := pos / p.page
+		within := int(pos % p.page)
+		data, err := p.pageData(index)
+		if err != nil {
+			return read, err
+		}
+		if within >= len(data) {
+			return read, io.EOF
+		}
+		count := len(data) - within
+		if count > len(dst)-read {
+			count = len(dst) - read
+		}
+		copy(dst[read:read+count], data[within:within+count])
+		read += count
+	}
+	if read != len(dst) {
+		return read, io.EOF
+	}
+	return read, nil
+}
+
+func (p *pageSource) pageData(index int64) ([]byte, error) {
+	p.mu.Lock()
+	if element := p.items[index]; element != nil {
+		p.order.MoveToFront(element)
+		p.stats.CacheHits++
+		data := element.Value.(*pageEntry).data
+		p.mu.Unlock()
+		return data, nil
+	}
+	p.stats.CacheMisses++
+	p.mu.Unlock()
+	start := index * p.page
+	length := p.page
+	if remaining := p.size - start; remaining < length {
+		length = remaining
+	}
+	if length <= 0 {
+		return nil, io.EOF
+	}
+	data := make([]byte, int(length))
+	n, err := p.reader.ReadAt(data, start)
+	if err != nil && err != io.EOF {
+		return nil, err
+	}
+	data = data[:n]
+	p.mu.Lock()
+	// Another reader may have populated this page while the file read was in
+	// progress; retaining the existing page keeps accounting deterministic.
+	if element := p.items[index]; element != nil {
+		p.order.MoveToFront(element)
+		p.mu.Unlock()
+		return element.Value.(*pageEntry).data, nil
+	}
+	element := p.order.PushFront(&pageEntry{index: index, data: data})
+	p.items[index] = element
+	p.bytes += int64(len(data))
+	p.stats.CachedBytes = p.bytes
+	p.stats.LoadedBytes += int64(len(data))
+	p.stats.PageLoads++
+	for p.bytes > p.max && p.order.Len() > 1 {
+		old := p.order.Back()
+		entry := old.Value.(*pageEntry)
+		p.bytes -= int64(len(entry.data))
+		delete(p.items, entry.index)
+		p.order.Remove(old)
+	}
+	p.stats.CachedBytes = p.bytes
+	p.mu.Unlock()
+	return data, nil
+}
+
+func (p *pageSource) Stats() ReadStats {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	stats := p.stats
+	stats.CachedBytes = p.bytes
+	return stats
+}
+
+func (p *pageSource) Close() error {
+	if p.close != nil {
+		return p.close.Close()
+	}
+	return nil
+}
+
 type Kernel struct {
 	data     []byte
+	source   *pageSource
+	size     int64
 	little   bool
 	Segments []Segment
 }
 
+type pathReaderAt string
+
+func (path pathReaderAt) ReadAt(dst []byte, offset int64) (int, error) {
+	file, err := os.Open(string(path))
+	if err != nil {
+		return 0, err
+	}
+	n, readErr := file.ReadAt(dst, offset)
+	closeErr := file.Close()
+	if readErr != nil {
+		return n, readErr
+	}
+	return n, closeErr
+}
+
 func New(data []byte) (*Kernel, error) {
-	if len(data) < recordBytes*3 || len(data)%recordBytes != 0 {
+	k := &Kernel{data: data, size: int64(len(data))}
+	return k.parse()
+}
+
+// Open opens an SPK without reading it into a long-lived byte slice. Metadata
+// parsing and subsequent Evaluate calls use the bounded page cache.
+func Open(path string) (*Kernel, error) {
+	return OpenWithCache(path, DefaultPageSize, DefaultCacheBytes)
+}
+
+func OpenWithCache(path string, pageSize int, maxCacheBytes int64) (*Kernel, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	// No descriptor is retained per manifest entry. A page miss opens the file
+	// only for its bounded ReadAt, while hot coefficient pages stay in memory.
+	k := &Kernel{source: newPageSource(pathReaderAt(path), info.Size(), nil, pageSize, maxCacheBytes), size: info.Size()}
+	if _, err := k.parse(); err != nil {
+		_ = k.Close()
+		return nil, err
+	}
+	return k, nil
+}
+
+func (k *Kernel) parse() (*Kernel, error) {
+	if k.size < recordBytes*3 || k.size%recordBytes != 0 {
 		return nil, fmt.Errorf("invalid SPK: file length is not whole 1024-byte records")
 	}
-	k := &Kernel{data: data}
-	if string(data[:7]) != "DAF/SPK" {
+	identifier, err := k.readString(0, 7)
+	if err != nil || identifier != "DAF/SPK" {
 		return nil, fmt.Errorf("invalid SPK: missing DAF/SPK identifier")
 	}
-	endian := string(data[88:96])
+	endian, err := k.readString(88, 8)
+	if err != nil {
+		return nil, fmt.Errorf("invalid SPK: truncated binary format")
+	}
 	if endian == "LTL-IEEE" {
 		k.little = true
 	} else if endian != "BIG-IEEE" {
@@ -50,7 +240,7 @@ func New(data []byte) (*Kernel, error) {
 		return nil, fmt.Errorf("invalid SPK: expected ND=2 NI=6")
 	}
 	first, last := k.i32(76), k.i32(80)
-	max := len(data) / recordBytes
+	max := int(k.size / recordBytes)
 	if first < 2 || last < first || last > max {
 		return nil, fmt.Errorf("invalid SPK: summary bounds")
 	}
@@ -92,6 +282,28 @@ func New(data []byte) (*Kernel, error) {
 		k.Segments = append(k.Segments, seg)
 	}
 	return k, nil
+}
+
+func (k *Kernel) readString(off, length int) (string, error) {
+	data := make([]byte, length)
+	if _, err := k.readAt(data, int64(off)); err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func (k *Kernel) ReadStats() ReadStats {
+	if k.source == nil {
+		return ReadStats{CachedBytes: int64(len(k.data)), LoadedBytes: int64(len(k.data)), MaxBytes: int64(len(k.data))}
+	}
+	return k.source.Stats()
+}
+
+func (k *Kernel) Close() error {
+	if k.source != nil {
+		return k.source.Close()
+	}
+	return nil
 }
 
 func (k *Kernel) Evaluate(target int, et float64) (State, bool, error) {
@@ -148,6 +360,9 @@ func (k *Kernel) eval21Correct(s Segment, et float64) ([6]float64, error) {
 		return out, fmt.Errorf("SPK type 21 epoch outside coverage")
 	}
 	off, delta := s.Start+lo*m.RecordSize, et-k.addr(s.Start+lo*m.RecordSize)
+	if err := k.validateType21Record(off, m); err != nil {
+		return out, err
+	}
 	max := int(k.addr(off + 4*m.Dimension + 7))
 	fc, wc, w := make([]float64, m.Dimension), make([]float64, m.Dimension), make([]float64, m.Dimension+2)
 	fc[0] = 1
@@ -197,26 +412,41 @@ func (k *Kernel) eval21Correct(s Segment, et float64) ([6]float64, error) {
 	return out, nil
 }
 
+func (k *Kernel) validateType21Record(off int, m type21Meta) error {
+	for j := 0; j < m.RecordSize; j++ {
+		if !finite(k.addr(off + j)) {
+			return fmt.Errorf("invalid SPK type 21 record")
+		}
+	}
+	max := k.addr(off + 4*m.Dimension + 7)
+	if max != math.Trunc(max) || max < 3 || max > float64(m.Dimension+1) {
+		return fmt.Errorf("invalid SPK type 21 order")
+	}
+	for axis := 0; axis < 3; axis++ {
+		order := k.addr(off + 4*m.Dimension + 8 + axis)
+		if order != math.Trunc(order) || order < 0 || order >= max || order > float64(m.Dimension) {
+			return fmt.Errorf("invalid SPK type 21 component order")
+		}
+	}
+	for j := 0; j < int(max)-2; j++ {
+		if k.addr(off+1+j) == 0 {
+			return fmt.Errorf("invalid SPK type 21 zero step")
+		}
+	}
+	return nil
+}
+
 func (k *Kernel) parseSegment(d, i []float64) (Segment, error) {
 	if len(d) != 2 || len(i) != 6 {
 		return Segment{}, fmt.Errorf("invalid SPK descriptor")
 	}
 	s := Segment{StartET: d[0], EndET: d[1], Target: int(i[0]), Center: int(i[1]), Frame: int(i[2]), Type: int(i[3]), Start: int(i[4]), End: int(i[5])}
-	if !finite(s.StartET) || !finite(s.EndET) || s.StartET > s.EndET || s.Start < 1 || s.End < s.Start || s.End > len(k.data)/8 {
+	if !finite(s.StartET) || !finite(s.EndET) || s.StartET > s.EndET || s.Start < 1 || s.End < s.Start || int64(s.End) > k.size/8 {
 		return Segment{}, fmt.Errorf("invalid SPK segment descriptor")
 	}
 	if s.Type == 17 {
 		if s.End-s.Start+1 != 12 {
 			return Segment{}, fmt.Errorf("invalid SPK type 17 record size")
-		}
-		for a := s.Start; a <= s.End; a++ {
-			if !finite(k.addr(a)) {
-				return Segment{}, fmt.Errorf("invalid SPK type 17 nonfinite element")
-			}
-		}
-		e := math.Hypot(k.addr(s.Start+2), k.addr(s.Start+3))
-		if k.addr(s.Start+1) <= 0 || e > .9 || k.addr(s.Start+8) == 0 {
-			return Segment{}, fmt.Errorf("invalid SPK type 17 elements")
 		}
 		s.Records, s.RecordSize = 1, 12
 		s.type17 = true
@@ -246,17 +476,6 @@ func (k *Kernel) parseSegment(d, i []float64) (Segment, error) {
 	s.Coefficients = (s.RecordSize - 2) / 3
 	if s.Type == 3 {
 		s.Coefficients = (s.RecordSize - 2) / 6
-	}
-	for n := 0; n < s.Records; n++ {
-		off := s.Start + n*s.RecordSize
-		if k.addr(off+1) <= 0 || !finite(k.addr(off)) {
-			return Segment{}, fmt.Errorf("invalid SPK record midpoint/radius")
-		}
-		for j := 0; j < 3*s.Coefficients*(1+boolInt(s.Type == 3)); j++ {
-			if !finite(k.addr(off + 3 + j)) {
-				return Segment{}, fmt.Errorf("invalid SPK coefficient")
-			}
-		}
 	}
 	return s, nil
 }
@@ -290,6 +509,11 @@ func (k *Kernel) evalCheb(s Segment, et float64) ([6]float64, error) {
 			out[axis+3] = k.cheb(off+2+3*c+axis*c, c, x)[0]
 		}
 	}
+	for _, value := range out {
+		if !finite(value) {
+			return out, fmt.Errorf("invalid SPK record coefficient")
+		}
+	}
 	return out, nil
 }
 func (k *Kernel) cheb(off, c int, x float64) [2]float64 {
@@ -309,8 +533,16 @@ func (k *Kernel) eval17(s Segment, et float64) ([6]float64, error) {
 	for j := range v {
 		v[j] = k.addr(s.Start + j)
 	}
+	for _, value := range v {
+		if !finite(value) {
+			return o, fmt.Errorf("invalid SPK type 17 nonfinite element")
+		}
+	}
 	epoch, a, h, kx, longitude, p, q, periRate, meanRate, nodeRate, rapol, decpol := v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11]
 	e := math.Hypot(h, kx)
+	if a <= 0 || e > .9 || meanRate == 0 {
+		return o, fmt.Errorf("invalid SPK type 17 elements")
+	}
 	dt := et - epoch
 	dlp := periRate * dt
 	hh, kk := h*math.Cos(dlp)+kx*math.Sin(dlp), kx*math.Cos(dlp)-h*math.Sin(dlp)
@@ -376,43 +608,6 @@ func (k *Kernel) inspect21(s Segment) (type21Meta, error) {
 		return type21Meta{}, fmt.Errorf("invalid SPK type 21 layout")
 	}
 	epochs := s.Start + int(n)*rs
-	prev := -math.MaxFloat64
-	for i := 0; i < int(n); i++ {
-		ep := k.addr(epochs + i)
-		if !finite(ep) || ep <= prev {
-			return type21Meta{}, fmt.Errorf("invalid SPK type 21 epochs")
-		}
-		prev = ep
-		off := s.Start + i*rs
-		for j := 0; j < rs; j++ {
-			if !finite(k.addr(off + j)) {
-				return type21Meta{}, fmt.Errorf("invalid SPK type 21 record")
-			}
-		}
-		max := k.addr(off + 4*int(dim) + 7)
-		if max != math.Trunc(max) || max < 3 || max > dim+1 {
-			return type21Meta{}, fmt.Errorf("invalid SPK type 21 order")
-		}
-		for ax := 0; ax < 3; ax++ {
-			ord := k.addr(off + 4*int(dim) + 8 + ax)
-			if ord != math.Trunc(ord) || ord < 0 || ord >= max || ord > dim {
-				return type21Meta{}, fmt.Errorf("invalid SPK type 21 component order")
-			}
-		}
-		for j := 0; j < int(max)-2; j++ {
-			if k.addr(off+1+j) == 0 {
-				return type21Meta{}, fmt.Errorf("invalid SPK type 21 zero step")
-			}
-		}
-	}
-	if prev < s.EndET {
-		return type21Meta{}, fmt.Errorf("invalid SPK type 21 coverage")
-	}
-	for i := 0; i < dc; i++ {
-		if k.addr(epochs+int(n)+i) != k.addr(epochs+(i+1)*100-1) {
-			return type21Meta{}, fmt.Errorf("invalid SPK type 21 directory")
-		}
-	}
 	return type21Meta{int(dim), rs, int(n), epochs}, nil
 }
 func (k *Kernel) eval21(s Segment, et float64) ([6]float64, error) {
@@ -482,22 +677,30 @@ func (k *Kernel) eval21(s Segment, et float64) ([6]float64, error) {
 }
 
 func (k *Kernel) f64(off int) float64 {
-	if off < 0 || off+8 > len(k.data) {
+	if off < 0 || int64(off)+8 > k.length() {
+		return math.NaN()
+	}
+	var raw [8]byte
+	if _, err := k.readAt(raw[:], int64(off)); err != nil {
 		return math.NaN()
 	}
 	if k.little {
-		return math.Float64frombits(binary.LittleEndian.Uint64(k.data[off:]))
+		return math.Float64frombits(binary.LittleEndian.Uint64(raw[:]))
 	}
-	return math.Float64frombits(binary.BigEndian.Uint64(k.data[off:]))
+	return math.Float64frombits(binary.BigEndian.Uint64(raw[:]))
 }
 func (k *Kernel) i32(off int) int {
-	if off < 0 || off+4 > len(k.data) {
+	if off < 0 || int64(off)+4 > k.length() {
+		return -1
+	}
+	var raw [4]byte
+	if _, err := k.readAt(raw[:], int64(off)); err != nil {
 		return -1
 	}
 	if k.little {
-		return int(int32(binary.LittleEndian.Uint32(k.data[off:])))
+		return int(int32(binary.LittleEndian.Uint32(raw[:])))
 	}
-	return int(int32(binary.BigEndian.Uint32(k.data[off:])))
+	return int(int32(binary.BigEndian.Uint32(raw[:])))
 }
 func (k *Kernel) control(off int) int {
 	v := k.f64(off)
@@ -507,10 +710,31 @@ func (k *Kernel) control(off int) int {
 	return int(v)
 }
 func (k *Kernel) addr(a int) float64 {
-	if a < 1 || a > len(k.data)/8 {
+	if a < 1 || int64(a) > k.length()/8 {
 		return math.NaN()
 	}
 	return k.f64((a - 1) * 8)
+}
+
+func (k *Kernel) length() int64 {
+	if k.size > 0 {
+		return k.size
+	}
+	return int64(len(k.data))
+}
+
+func (k *Kernel) readAt(dst []byte, off int64) (int, error) {
+	if k.source != nil {
+		return k.source.ReadAt(dst, off)
+	}
+	if off < 0 || off >= int64(len(k.data)) && len(dst) > 0 {
+		return 0, io.EOF
+	}
+	n := copy(dst, k.data[off:])
+	if n != len(dst) {
+		return n, io.EOF
+	}
+	return n, nil
 }
 func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
 func boolInt(v bool) int {

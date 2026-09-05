@@ -18,7 +18,7 @@ const PUBLIC = join(ROOT, 'public')
 const SITE_BASE = 'https://dajiaohuang.github.io/solar/'
 const MAX_ARTIFACT_BYTES = 700 * 1024 * 1024
 const WARN_ARTIFACT_BYTES = 600 * 1024 * 1024
-const DELIVERY = productDelivery(process.env.SOLAR_ATLAS_BUILD_TARGET, process.env.SOLAR_ATLAS_PRODUCT_PROFILE, process.env.SOLAR_ATLAS_EPHEMERIS_PROFILE)
+const DELIVERY = productDelivery(process.env.SOLAR_ATLAS_PRODUCT_PROFILE, process.env.SOLAR_ATLAS_EPHEMERIS_PROFILE)
 const EPHEMERIS_PROFILE = DELIVERY.scientificProfile
 
 function readJson(path) {
@@ -490,7 +490,7 @@ async function writeManifestsAndCapacity(buildInfo, dataset) {
     ephemerisProfile: EPHEMERIS_PROFILE,
     productProfile: DELIVERY.product,
     productAvailabilitySha256: DELIVERY.availabilitySha256,
-    // Full/native coverage does not inherit a hosting platform's Pages cap.
+    // Full Web coverage does not inherit the Pages hosting cap.
     withinBudget: EPHEMERIS_PROFILE === 'full' || totalBytes <= MAX_ARTIFACT_BYTES,
     warning: EPHEMERIS_PROFILE === 'pages' && totalBytes > WARN_ARTIFACT_BYTES,
     distTotalBytes: totalBytes,

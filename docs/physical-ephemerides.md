@@ -1,6 +1,6 @@
 # Physical ephemeris contract
 
-Solar Atlas uses immutable SPK files for focus-body geometry. They load on demand after the explorer's first-visit choice (or directly on analysis routes). Both delivery profiles contain 510 SHA-256-pinned files: Pages totals 270,908,416 bytes (258.4 MiB); full/native totals 1,147,897,856 bytes (1094.7 MiB). Requesting a body may load its file outside its interval; calculation still uses only covered epochs. A documented existing approximation may be used outside coverage; bodies without one remain unavailable.
+Solar Atlas uses immutable SPK files for Web/backend focus-body geometry. The two source profiles each contain 510 SHA-256-pinned files: the short-window `pages` source profile totals 270,908,416 bytes (258.4 MiB), and the full Web/backend source profile totals 1,147,897,856 bytes (1094.7 MiB). These source-profile totals are not deployed preview totals: the current curated Pages product selects a dependency closure of 36 files / 90,800,128 SPK bytes, as described in [preview delivery](./preview-delivery.md). Static Web files load on demand after the explorer's first-visit choice (or directly on analysis routes); native clients do not package SPK files, and the full-Web backend current-state path requests binary state tiles instead. Requesting a static body may load its file outside its interval, while calculation still uses only covered epochs. A documented existing static-Web approximation may be used outside coverage; bodies without one remain unavailable. Exact backend state requests never substitute an approximate fallback.
 
 ## Coverage
 
@@ -97,15 +97,15 @@ The generator reuses published files only after byte/hash, target, source and in
 
 ## Delivery and offline behavior
 
-Ordinary `npm run build` selects Pages and does not download kernels. `npm run build:native` selects full; `SOLAR_ATLAS_EPHEMERIS_PROFILE=full` also selects full for a non-Pages Web distribution. The build identity records the selected profile. Pages has a 700 MiB deployment budget; full does not inherit that hosting cap, while every runtime kernel retains a 128 MiB file limit. The package byte total is not its initial download or resident-memory requirement.
+The Web build and Pages preview publish their selected, validated SPK assets according to the delivery profile. Native source prototypes do not package an SPK profile: their planned first vertical slice requests exact current states through the versioned `manifest → plan → binary state tile` protocol. Native manifest and plan loading requires the user-selected HTTPS backend; a previously verified tile may be reused only when a new online plan identifies the same tile and hashes. This cache is not a complete offline ephemeris or plan/catalog restoration mechanism. Missing or invalid data stays visibly unavailable or approximate, never disguised as a physical ephemeris.
 
-Native kernel assets work offline when included in the installed package. Catalog samples, detail shards and live SBDB queries retain their separate online boundary. The first-visit gate and body-specific loading remain shared across Web and native. Missing or invalid data stays visibly approximate or unavailable, never disguised as physical ephemerides.
-
-The expanded Pages build with the pinned 1,561,171-object asteroid dataset
-measures approximately 698.2 MiB (433.5 MiB catalog data, 258.4 MiB SPK assets and about
-6.4 MiB application shell). It passes the 700 MiB budget but exceeds the
-600 MiB warning threshold. Further source additions require a fresh deployment
-measurement; the full/native profile must not silently inherit Pages reductions.
+An earlier expanded Pages candidate with the pinned 1,561,171-object asteroid dataset
+measured approximately 698.2 MiB (433.5 MiB catalog data, 258.4 MiB SPK assets and about
+6.4 MiB application shell). That is historical candidate evidence, not the current
+published preview. The live Pages build at commit `2d2b99ca17b9a287024cb661a658c5922127e9fc`
+reports a curated closure of 36 SPK files totaling 90,800,128 bytes and 93.2 MiB total
+capacity. Further source additions require a fresh deployment measurement; Web delivery
+profiles must not silently change their validated source selection.
 
 ## Primary sources
 

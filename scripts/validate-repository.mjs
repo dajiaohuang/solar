@@ -272,10 +272,9 @@ function validateIdentity() {
   assertDocumentedVersion(read('README.md'), pkg.version, 'en')
   assertDocumentedVersion(read('README-CN.md'), pkg.version, 'zh')
 
-  const capacitorId = matchOne(read('capacitor.config.ts'), /appId:\s*['"]([^'"]+)['"]/, 'Capacitor app ID')
   const androidId = matchOne(read('android/app/build.gradle'), /applicationId\s+['"]([^'"]+)['"]/, 'Android application ID')
   const iosIds = [...read('ios/App/App.xcodeproj/project.pbxproj').matchAll(/PRODUCT_BUNDLE_IDENTIFIER\s*=\s*([^;]+);/g)].map(match => match[1].trim())
-  if (!iosIds.length || androidId !== capacitorId || iosIds.some(id => id !== capacitorId)) fail('Native application IDs do not match capacitor.config.ts')
+  if (!iosIds.length || iosIds.some(id => id !== androidId)) fail('Android and iOS application IDs do not match')
 
   const androidVersion = matchOne(read('android/app/build.gradle'), /versionName\s+['"]([^'"]+)['"]/, 'Android version')
   const iosVersions = [...read('ios/App/App.xcodeproj/project.pbxproj').matchAll(/MARKETING_VERSION\s*=\s*([^;]+);/g)].map(match => match[1].trim())
@@ -283,7 +282,7 @@ function validateIdentity() {
     fail('Native application versions do not match package.json')
   }
 
-  return { name: pkg.name, version: pkg.version, appId: capacitorId }
+  return { name: pkg.name, version: pkg.version, appId: androidId }
 }
 
 export function validateRepository() {

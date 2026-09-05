@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   RENDER_BUDGET_COOLDOWN_MS,
   advanceAdaptiveRenderBudget,
+  classifyRenderCapacity,
   classifyRenderDevice,
   createAdaptiveRenderBudgetState,
   resolveRenderBudgetPolicy,
@@ -40,36 +41,40 @@ describe('render budget policies', () => {
     expect(classifyRenderDevice(1_024, false)).toBe('desktop')
   })
 
-  it('uses separate fixed 2D ceilings for mobile and desktop', () => {
+  it('uses larger fixed 2D ceilings for 12 GB mobile and 16 GB desktop tiers', () => {
     expect(resolveRenderBudgetPolicy('mobile', '2d', 'auto')).toEqual({
-      minimum: 8_000, initial: 8_000, maximum: 8_000, adaptive: false,
+      minimum: 500_000, initial: 500_000, maximum: 500_000, adaptive: false,
     })
     expect(resolveRenderBudgetPolicy('desktop', '2d', 'max')).toEqual({
-      minimum: 30_000, initial: 30_000, maximum: 30_000, adaptive: false,
+      minimum: 1_250_000, initial: 1_250_000, maximum: 1_250_000, adaptive: false,
     })
   })
 
-  it('declares the requested mobile, desktop, and maximum 3D ranges', () => {
+  it('declares separate adaptive mobile, desktop 16 GB, and maximum 3D ranges', () => {
     expect(resolveRenderBudgetPolicy('mobile', '3d', 'auto')).toEqual({
-      minimum: 2_000, initial: 4_000, maximum: 6_000, adaptive: true,
+      minimum: 25_000, initial: 100_000, maximum: 250_000, adaptive: true,
     })
     expect(resolveRenderBudgetPolicy('desktop', '3d', 'auto')).toEqual({
-      minimum: 6_000, initial: 12_000, maximum: 20_000, adaptive: true,
+      minimum: 50_000, initial: 250_000, maximum: 750_000, adaptive: true,
     })
-    expect(resolveRenderBudgetPolicy('desktop', '3d', 'max')).toEqual({
-      minimum: 8_000, initial: 20_000, maximum: 30_000, adaptive: true,
+    expect(resolveRenderBudgetPolicy('desktop', '3d', 'max', { deviceMemoryGb: 32 })).toEqual({
+      minimum: 100_000, initial: 1_000_000, maximum: 1_567_193, adaptive: true,
     })
   })
 
-  it('uses capability hints only to choose a more conservative initial count', () => {
+  it('selects capacity tiers conservatively and never promotes a low-memory phone', () => {
+    expect(classifyRenderCapacity('mobile', { deviceMemoryGb: 4 })).toBe('mobile-conservative')
+    expect(classifyRenderCapacity('mobile', { deviceMemoryGb: 12 })).toBe('mobile12')
+    expect(classifyRenderCapacity('desktop', { deviceMemoryGb: 16, hardwareConcurrency: 8 })).toBe('desktop16')
+    expect(classifyRenderCapacity('desktop', { deviceMemoryGb: 32 })).toBe('desktop32')
     const policy = resolveRenderBudgetPolicy('desktop', '3d', 'auto')
-    expect(selectInitialRenderBudget(policy, { deviceMemoryGb: 32, hardwareConcurrency: 24 })).toBe(12_000)
-    expect(selectInitialRenderBudget(policy, { deviceMemoryGb: 4 })).toBe(9_000)
-    expect(selectInitialRenderBudget(policy, { hardwareConcurrency: 4 })).toBe(9_000)
-    expect(selectInitialRenderBudget(resolveRenderBudgetPolicy('desktop', '2d', 'auto'), {
+    expect(selectInitialRenderBudget(policy, { deviceMemoryGb: 16, hardwareConcurrency: 8 })).toBe(250_000)
+    expect(selectInitialRenderBudget(policy, { deviceMemoryGb: 4 })).toBe(185_000)
+    expect(selectInitialRenderBudget(policy, { hardwareConcurrency: 4 })).toBe(185_000)
+    expect(selectInitialRenderBudget(resolveRenderBudgetPolicy('mobile', '2d', 'auto', { deviceMemoryGb: 4 }), {
       deviceMemoryGb: 2,
       hardwareConcurrency: 2,
-    })).toBe(30_000)
+    })).toBe(8_000)
   })
 })
 
@@ -79,10 +84,10 @@ describe('adaptive render budget', () => {
   it('reduces by 25 percent after two consecutive slow windows', () => {
     let state = createAdaptiveRenderBudgetState(policy)
     state = advance(state, policy, { nowMs: 2_000, p90FrameTimeMs: 29 })
-    expect(state.count).toBe(12_000)
+    expect(state.count).toBe(250_000)
     expect(state.consecutiveSlowWindows).toBe(1)
     state = advance(state, policy, { nowMs: 4_000, p90FrameTimeMs: 29 })
-    expect(state.count).toBe(9_000)
+    expect(state.count).toBe(185_000)
     expect(state.lastAdjustmentAtMs).toBe(4_000)
   })
 
@@ -90,7 +95,7 @@ describe('adaptive render budget', () => {
     let state = createAdaptiveRenderBudgetState(policy)
     state = advance(state, policy, { nowMs: 2_000, p90FrameTimeMs: 20, longFrameRatio: 0.16 })
     state = advance(state, policy, { nowMs: 4_000, p90FrameTimeMs: 20, longFrameRatio: 0.16 })
-    expect(state.count).toBe(9_000)
+    expect(state.count).toBe(185_000)
   })
 
   it('increases by 12.5 percent after four consecutive fast windows', () => {
@@ -102,7 +107,7 @@ describe('adaptive render budget', () => {
         longFrameRatio: 0.04,
       })
     }
-    expect(state.count).toBe(13_500)
+    expect(state.count).toBe(285_000)
     expect(state.lastAdjustmentAtMs).toBe(8_000)
   })
 
@@ -113,12 +118,12 @@ describe('adaptive render budget', () => {
     state = advance(state, policy, { nowMs: 4_000, p90FrameTimeMs: 29 })
     state = advance(state, policy, { nowMs: 6_000, p90FrameTimeMs: 20 })
     expect(state.consecutiveSlowWindows).toBe(0)
-    expect(state.count).toBe(12_000)
+    expect(state.count).toBe(250_000)
 
     for (let index = 0; index < 4; index += 1) {
       state = advance(state, policy, { nowMs: 8_000 + index * 2_000, p90FrameTimeMs: 18.5, longFrameRatio: 0.05 })
     }
-    expect(state.count).toBe(12_000)
+    expect(state.count).toBe(250_000)
   })
 
   it('observes the five-second cooldown after an adjustment', () => {
@@ -145,23 +150,23 @@ describe('adaptive render budget', () => {
 
   it('keeps all adjustments quantized and inside policy bounds', () => {
     let lowState: AdaptiveRenderBudgetState = {
-      count: 6_500,
+      count: 55_000,
       consecutiveSlowWindows: 1,
       consecutiveFastWindows: 0,
       lastAdjustmentAtMs: null,
     }
     lowState = advance(lowState, policy, { p90FrameTimeMs: 40 })
-    expect(lowState.count).toBe(6_000)
+    expect(lowState.count).toBe(50_000)
 
     const maxPolicy = resolveRenderBudgetPolicy('desktop', '3d', 'max')
     let highState: AdaptiveRenderBudgetState = {
-      count: 29_000,
+      count: 745_000,
       consecutiveSlowWindows: 0,
       consecutiveFastWindows: 3,
       lastAdjustmentAtMs: null,
     }
     highState = advance(highState, maxPolicy, { p90FrameTimeMs: 10 })
-    expect(highState.count).toBe(30_000)
+    expect(highState.count).toBe(750_000)
   })
 
   it('does not adapt a balanced fixed policy', () => {
@@ -173,16 +178,16 @@ describe('adaptive render budget', () => {
 
 describe('comparison render budgets', () => {
   it('keeps the full budget for one frame and shares it across two frames', () => {
-    expect(splitRenderBudget(12_000, false)).toEqual({ primary: 12_000, secondary: 0 })
-    expect(splitRenderBudget(12_000, true)).toEqual({ primary: 6_000, secondary: 6_000 })
-    expect(splitRenderBudget(13_500, true)).toEqual({ primary: 6_500, secondary: 6_500 })
+    expect(splitRenderBudget(250_000, false)).toEqual({ primary: 250_000, secondary: 0 })
+    expect(splitRenderBudget(250_000, true)).toEqual({ primary: 125_000, secondary: 125_000 })
+    expect(splitRenderBudget(255_000, true)).toEqual({ primary: 125_000, secondary: 125_000 })
   })
 
-  it('normalizes arbitrary totals to the shared 500-object quantum', () => {
-    expect(splitRenderBudget(12_499, false)).toEqual({ primary: 12_000, secondary: 0 })
-    const split = splitRenderBudget(12_499, true)
-    expect(split).toEqual({ primary: 6_000, secondary: 6_000 })
-    expect(split.primary + split.secondary).toBeLessThanOrEqual(12_499)
+  it('normalizes arbitrary totals to the shared 5000-object quantum', () => {
+    expect(splitRenderBudget(252_499, false)).toEqual({ primary: 250_000, secondary: 0 })
+    const split = splitRenderBudget(252_499, true)
+    expect(split).toEqual({ primary: 125_000, secondary: 125_000 })
+    expect(split.primary + split.secondary).toBeLessThanOrEqual(252_499)
   })
 
   it('shows the same non-empty prefix in both frames for a small sample', () => {

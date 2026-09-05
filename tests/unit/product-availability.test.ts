@@ -6,12 +6,10 @@ import { buildScenePresetUrlState } from '../../src/lib/scenePreset'
 import { majorBodies } from '../../src/data/majorBodies'
 
 describe('product availability is not scientific coverage', () => {
-  it('keeps full and native unrestricted and rejects unknown configurations', () => {
+  it('keeps full unrestricted and rejects unknown configurations', () => {
     expect(productProfile()).toBe('full')
-    expect(productProfile('native')).toBe('full')
-    expect(productProfile(undefined, 'preview')).toBe('preview')
-    expect(() => productProfile('native', 'preview')).toThrow(/Native/)
-    expect(() => productProfile(undefined, 'typo')).toThrow(/Unknown/)
+    expect(productProfile('preview')).toBe('preview')
+    expect(() => productProfile('typo')).toThrow(/Unknown/)
     expect(sceneAvailability({ bodies: ['unknown'], route: 'mission', history: 1e9 }, 'full').available).toBe(true)
   })
 

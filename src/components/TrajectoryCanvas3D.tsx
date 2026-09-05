@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { PREPARE_CANVAS_CAPTURE_EVENT } from '../lib/canvasCapture'
 import { cameraDistanceForFit, cameraRangeForFit, clamp3dZoom, sceneFramingForRadius } from '../lib/camera3d'
 import type { LagrangePoint } from '../lib/lagrange'
-import { createTrajectoryScene } from '../lib/trajectoryScene3d'
+import { createCatalogPointMaterial, createTrajectoryScene } from '../lib/trajectoryScene3d'
 import { updatePointGeometry } from '../lib/pointGeometry3d'
 import type { AsteroidRecord, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector3 } from '../types'
 
@@ -242,7 +242,7 @@ export function TrajectoryCanvas3D({
     scene.add(glow)
     const catalogPoints = new THREE.Points(
       new THREE.BufferGeometry(),
-      new THREE.PointsMaterial({ size: 0.018, sizeAttenuation: true, vertexColors: true, transparent: true, opacity: 0.72 }),
+      createCatalogPointMaterial(),
     )
     catalogPoints.frustumCulled = false
     scene.add(catalogPoints)

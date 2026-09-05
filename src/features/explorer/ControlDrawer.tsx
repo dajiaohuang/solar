@@ -13,7 +13,7 @@ import { requestOnboarding } from '../../lib/onboarding'
 import { exportAnnotatedScenePng } from '../../lib/sceneExport'
 import { loadSavedScenes, localizeSavedSceneUrl, mergeSceneLibrary, parseSceneLibrary, removeSavedScene, saveCurrentScene, sceneLibraryDocument } from '../../lib/sceneLibrary'
 import { encodeCurrentScene } from '../../lib/shareScene'
-import { IS_NATIVE_APP, saveTextExport, shareSceneUrl } from '../../lib/platform'
+import { saveTextExport, shareSceneUrl } from '../../lib/platform'
 import { encodeUrlState } from '../../lib/urlState'
 import { VIEW_CAPABILITIES } from '../../lib/viewCapabilities'
 import { catalogActions, DEFAULT_CATALOG_FILTERS } from '../../state/catalog-store'
@@ -338,12 +338,12 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
       <div className="drawer-export-actions">
         <button className="share-button" onClick={() => void (async () => {
           try {
-            const outcome = await shareSceneUrl(encodeCurrentScene())
-            if (outcome !== 'cancelled') uiActions.toast(t(outcome === 'shared' ? 'sceneShared' : 'linkCopied'))
+            await shareSceneUrl(encodeCurrentScene())
+            uiActions.toast(t('linkCopied'))
           } catch (error) {
             uiActions.toast(error instanceof Error ? error.message : String(error))
           }
-        })()}>↗ {t(IS_NATIVE_APP ? 'shareNative' : 'share')}</button>
+        })()}>↗ {t('share')}</button>
         <button className="share-button" onClick={() => void exportAnnotatedScenePng(language).catch((error: unknown) => uiActions.toast(error instanceof Error ? error.message : String(error)))}>▣ {t('exportPng')}</button>
       </div>
         </div>
