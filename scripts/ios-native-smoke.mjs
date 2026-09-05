@@ -32,6 +32,26 @@ export function testArguments(device, resultPath) {
     'CODE_SIGNING_ALLOWED=NO', 'test']
 }
 
+export async function bootOwnedSimulator(device, artifact, report, run = command) {
+  if (!uuidPattern.test(device)) throw new Error('Invalid owned simulator ID')
+  // Fresh CI devices migrate system data before applications can launch. Keep
+  // this infrastructure budget separate from the unchanged XCTest deadline.
+  const started = Date.now()
+  report.boot = { status: 'running', timeoutMs: 600_000 }
+  try {
+    await run('xcrun', ['simctl', 'boot', device])
+    await run('xcrun', ['simctl', 'bootstatus', device, '-b'],
+      { timeout: report.boot.timeoutMs, log: join(artifact, 'simulator-boot.log') })
+    report.boot.status = 'passed'
+  } catch (error) {
+    report.boot.status = 'failed'
+    report.boot.error = error.message
+    throw error
+  } finally {
+    report.boot.elapsedMs = Date.now() - started
+  }
+}
+
 export function verifyTraffic(traffic) {
   const count = path => traffic.filter(row => row.path === path && row.status === 200).length
   if (traffic.some(row => row.status !== 200)) throw new Error('Native HTTPS request failed')
@@ -138,8 +158,7 @@ export async function nativeSmoke() {
     if (!uuidPattern.test(created)) throw new Error('simctl did not return an owned simulator UUID')
     device = created
     report.simulator.udid = device
-    await command('xcrun', ['simctl', 'boot', device])
-    await command('xcrun', ['simctl', 'bootstatus', device, '-b'], { timeout: 240_000 })
+    await bootOwnedSimulator(device, artifact, report)
     await command('xcrun', ['simctl', 'keychain', device, 'add-root-cert', join(temporary, 'root.crt')])
 
     await assertFreePort(18790)

@@ -1,13 +1,39 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { access, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { removeOwnedTemporary, selectSimulatorTemplate, testArguments, verifyTraffic } from '../../scripts/ios-native-smoke.mjs'
+import { bootOwnedSimulator, removeOwnedTemporary, selectSimulatorTemplate, testArguments, verifyTraffic } from '../../scripts/ios-native-smoke.mjs'
 
 const iphone = { isAvailable: true, name: 'iPhone 17', deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17' }
 
 describe('isolated native iOS runtime validation', () => {
+  it('waits for the same owned cold device with a bounded budget and retained boot evidence', async () => {
+    const device = '12345678-1234-1234-1234-123456789abc'
+    const run = vi.fn().mockResolvedValue('ready')
+    const report = {} as { boot: { status: string; timeoutMs: number; elapsedMs: number } }
+    await bootOwnedSimulator(device, 'artifacts', report, run)
+    expect(run.mock.calls).toEqual([
+      ['xcrun', ['simctl', 'boot', device]],
+      ['xcrun', ['simctl', 'bootstatus', device, '-b'],
+        { timeout: 600_000, log: join('artifacts', 'simulator-boot.log') }],
+    ])
+    expect(report.boot).toMatchObject({ status: 'passed', timeoutMs: 600_000 })
+    expect(report.boot.elapsedMs).toBeGreaterThanOrEqual(0)
+  })
+
+  it('fails closed on boot timeout without retrying or creating another simulator', async () => {
+    const failure = new Error('xcrun timed out during data migration')
+    const run = vi.fn().mockResolvedValueOnce('').mockRejectedValueOnce(failure)
+    const report = {}
+    await expect(bootOwnedSimulator('12345678-1234-1234-1234-123456789abc', 'artifacts', report, run)).rejects.toBe(failure)
+    expect(run).toHaveBeenCalledTimes(2)
+    expect(report).toMatchObject({ boot: { status: 'failed', error: failure.message } })
+    run.mockClear()
+    await expect(bootOwnedSimulator('booted', 'artifacts', {}, run)).rejects.toThrow('Invalid owned')
+    expect(run).not.toHaveBeenCalled()
+  })
+
   it('cleans only a validated task-owned temporary directory, never the temp root', async () => {
     await expect(removeOwnedTemporary(tmpdir())).rejects.toThrow('Refusing cleanup')
     const directory = await mkdtemp(join(tmpdir(), 'solar-ios-smoke-'))
