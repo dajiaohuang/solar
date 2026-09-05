@@ -73,6 +73,7 @@ type report struct {
 	BatchMs                 float64             `json:"batchMs"`
 	StateTiles              []stateTileEvidence `json:"stateTileBatches,omitempty"`
 	StateTilesSource        []stateTileEvidence `json:"stateTileSourceBatches,omitempty"`
+	TileMemory              *tileMemoryEvidence `json:"tileMemory,omitempty"`
 	LongSamples             int                 `json:"longSamples"`
 	StateEpochJD            float64             `json:"stateEpochJd"`
 	LongMs                  float64             `json:"longTrajectoryMs"`
@@ -101,9 +102,13 @@ func main() {
 	longSamples := flag.Int("long-samples", 10000, "samples in the long-trajectory workload")
 	stateEpochJD := flag.Float64("epoch-jd", 2461287.5, "TDB epoch for state-plan/tile workloads (default is the reproducible audit epoch)")
 	startupOnly := flag.Bool("startup-only", false, "report catalog/inventory cold-process startup without running request workloads")
+	tileMemoryOnly := flag.Bool("tile-memory-only", false, "measure one cold 32768-row tile per distinct plan; requires inventory and concurrency 1..4")
 	flag.Parse()
 	if *n < 1 || *workers < 1 || *longSamples < 2 || math.IsNaN(*stateEpochJD) || math.IsInf(*stateEpochJD, 0) {
 		panic("requests, concurrency and long-samples must be positive")
+	}
+	if *tileMemoryOnly && (*startupOnly || *inventoryDir == "" || *workers > 4) {
+		panic("tile-memory-only requires an inventory, concurrency 1..4 and no startup-only flag")
 	}
 
 	peak := newPeak()
@@ -153,6 +158,27 @@ func main() {
 	server := httptest.NewServer(service)
 	defer server.Close()
 	client := server.Client()
+	if *tileMemoryOnly {
+		ids := benchmarkInventoryStateTileIDs(c, inv)
+		if len(ids) != 32768 {
+			panic("tile-memory-only requires 32768 source IDs; no synthetic padding is permitted")
+		}
+		evidence, err := runTileMemoryProbe(service, client, server.URL, ids, *stateEpochJD, *workers)
+		if err != nil {
+			panic(err)
+		}
+		reads := c.ReadStats()
+		out := report{Mode: "tile-memory-only", Startup: startup, Goos: runtime.GOOS, Goarch: runtime.GOARCH,
+			Catalog: c.Len(), CatalogPackagedFiles: c.Stats()["packagedFiles"], CatalogManifestSHA256: c.ManifestHash(),
+			InventoryManifestSHA256: inventoryManifestHash(inv), InventoryRecords: inventoryRecords(inv),
+			InventoryShards: inventoryShards(inv), InventoryBytes: inventoryBytes(inv), InventoryLoadMs: inventoryLoadMs,
+			CatalogLoadMs: loadMs, CatalogIntegrity: c.IntegrityStats(), CatalogSPKRead: map[string]uint64{"cachedBytes": uint64(reads.CachedBytes), "loadedBytes": uint64(reads.LoadedBytes), "pageLoads": reads.PageLoads, "cacheHits": reads.CacheHits, "cacheMisses": reads.CacheMisses},
+			Concurrency: *workers, StateEpochJD: *stateEpochJD, TileMemory: &evidence, Scheduler: service.SchedulerStats()}
+		if err := json.NewEncoder(os.Stdout).Encode(out); err != nil {
+			panic(err)
+		}
+		return
+	}
 	ids := benchmarkBodyIDs(c)
 	// Trajectory throughput is an explicitly approximate workload; state-tile
 	// workloads below report exact and missing rows separately.

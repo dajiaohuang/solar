@@ -78,6 +78,9 @@ waiters and do not raise the resident cache budget.
 
 `TileCacheStats` reports `coalesced` joins and `activeEncodings` alongside resident
 bytes/hits/misses to the local benchmark harness, not as a public metrics API.
+`activeEncodings` counts outstanding flights; `encoderSlotsActive` and
+`encoderSlotsLimit` separately report actual encoder admission. `PlanCacheStats`
+reports retained plan items and estimated resident bytes for the memory probe.
 This avoids duplicate encoding, not duplicate plan computation, and is not
 evidence of real-device throughput. Run the
 deterministic cancellation/concurrency and loopback HTTP regressions with
@@ -116,6 +119,63 @@ zero rejections is not proof that admission limits were exercised.
 Run deterministic fairness, boundedness, timeout, cancellation/grant race and
 loopback HTTP checks with
 `go test ./internal/httpapi -run 'TestRequestScheduler|TestHTTPScheduler|TestOverload'`.
+
+## Isolated single-tile memory probe
+
+Use a fresh process for each case:
+
+```text
+go run ./cmd/bench -tile-memory-only -concurrency 1 -data-dir <full-data-dir> -inventory-dir <inventory-dir>
+go run ./cmd/bench -tile-memory-only -concurrency 4 -data-dir <full-data-dir> -inventory-dir <inventory-dir>
+```
+
+This mode requires 32,768 real source IDs, without synthetic padding. Every plan
+must contain **one 32,768-row tile**, unlike the ordinary mixed benchmark's
+32,768-row plans containing two 16,384-row tiles. Distinct rotations of the same
+IDs at the same epoch produce distinct plan hashes, so concurrent requests
+cannot all coalesce into one encoding. The report keeps exact/missing counts
+separate; source-record count is not exact-body coverage.
+
+Plans are prepared before the measured phase and must all remain resident. GC
+runs before the RSS/heap baseline; the tile cache must be empty. The phase
+includes encoding, cache retention, loopback HTTP client buffers, checksum and
+header/status verification, and any bounded retries. Four clients start
+together, but the server still permits only two concurrent encoders. HTTP 429
+retries honor `Retry-After`, with at most four attempts and a 90-second overall
+probe deadline. `sampledPeakEncoderSlots` is observed occupancy, not inferred
+from client count; a value below two does not prove two encoders overlapped.
+
+RSS/heap are sampled every 2 ms and can miss short peaks. On Windows, the OS
+lifetime working-set peak minus the pre-phase working set is reported separately
+as `rssIncrementUpperBoundBytes`: a conservative phase-increment upper bound
+which can overestimate because it includes earlier startup/plan peaks. Platforms
+without that OS metric report the bound unavailable, not zero-cost success.
+Heap allocation excludes non-Go memory and is not interchangeable with RSS.
+The measurement includes the same-process client and sampler; it does not
+isolate server-only allocation, first-use kernel costs, offline loading or
+native rendering. In `tile-memory-only` mode other workload fields left at zero
+mean **not run**. Raw per-plan counts, byte sizes and payload hashes accompany
+the memory report. These are engineering measurements, not universal hardware
+guarantees.
+
+Reference probe (Windows amd64, 2026-09-05; one frozen executable, sequential
+fresh processes, full 1,567,193-source-record inventory):
+
+| Clients / distinct plans | Rows per single tile | Observed encoder slots | Conservative RSS increment upper bound | Phase including retries |
+| --- | ---: | ---: | ---: | ---: |
+| 1 / 1 | 32,768 | 1 | 93.87 MiB | 90.0 ms |
+| 4 / 4 | 32,768 | 2 | 197.48 MiB | 1,096.5 ms |
+
+Each tile was 19,500,200 bytes and contained 16 exact source records plus 32,752
+explicit missing rows. The four-client case had two 429 responses; both succeeded
+after one Retry-After wait. All four distinct tiles were verified. Its final
+tile cache retained three entries / 58,500,798 bytes, below 64 MiB, with no active
+encoders or flights. For these measured warm-plan/cold-tile cases only, the
+conservative bounds are below 256 MiB (single) and 1 GiB (four clients). This is not
+four simultaneous encoders, an all-exact 32K workload, a physical 16 GB device result
+or a guarantee for other metadata/datasets. The executable SHA-256 and raw
+reports are retained locally; the catalog/inventory hashes match the startup
+reference below. No source data or benchmark executable is committed.
 
 ## Backend cold-process startup
 

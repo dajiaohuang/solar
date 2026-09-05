@@ -66,7 +66,16 @@ func (s *Server) TileCacheStats() map[string]uint64 {
 	if s.tiles == nil {
 		return map[string]uint64{}
 	}
-	return s.tiles.stats()
+	stats := s.tiles.stats()
+	stats["encoderSlotsActive"] = uint64(len(s.tileSlots))
+	stats["encoderSlotsLimit"] = uint64(cap(s.tileSlots))
+	return stats
+}
+
+// PlanCacheStats describes retained preflight work for local memory probes.
+func (s *Server) PlanCacheStats() map[string]uint64 {
+	items, bytes, maxBytes := s.plans.stats()
+	return map[string]uint64{"items": uint64(items), "residentBytes": uint64(bytes), "maxResidentBytes": uint64(maxBytes)}
 }
 
 // CancelledRequests reports requests whose server handler observed a canceled
