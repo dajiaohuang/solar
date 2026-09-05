@@ -40,16 +40,19 @@ export function buildSpacecraftFrame(
     const historicalKernels = body.trajectoryPoints.length
       ? kernelsForWindow(body.trajectoryPoints[0].jd, body.trajectoryPoints[body.trajectoryPoints.length - 1].jd)
       : []
-    const points3D = body.trajectoryPoints.map((point) => {
+    const coordinates = new Float64Array(body.trajectoryPoints.length * 3)
+    for (let index = 0; index < body.trajectoryPoints.length; index++) {
+      const point = body.trajectoryPoints[index]
       const historicalReference = bodyPositionOrNull(createBodyPositionResolver(bodiesById, point.jd, historicalKernels), referenceId)
-      return historicalReference ? subtractVector3(point, historicalReference) : null
-    })
-    if (points3D.some((point): point is null => point === null)) {
-      trajectoryUnavailableBodyIds.push(body.id)
-      return []
+      if (!historicalReference) {
+        trajectoryUnavailableBodyIds.push(body.id)
+        return []
+      }
+      coordinates[index * 3] = point.x - historicalReference.x
+      coordinates[index * 3 + 1] = point.y - historicalReference.y
+      coordinates[index * 3 + 2] = point.z - historicalReference.z
     }
-    const completePoints = points3D as Vector3[]
-    return [{ body, points3D: completePoints, points: completePoints.map((point) => ({ x: point.x, y: point.y })) }]
+    return [{ body, coordinates }]
   })
   return { currentPositions, trajectories, trajectoryUnavailableBodyIds }
 }

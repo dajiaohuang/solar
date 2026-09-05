@@ -2,7 +2,7 @@ import { createBodyPositionResolver } from './ephemeris'
 import { kernelsForWindow, loadedKernelIds } from '../engine/ephemeris/kernelStore'
 import { getRelativePositions } from './referenceFrame'
 import { packedCurrentPositions } from './currentPositions'
-import { createTrajectoryAccumulator } from './trajectorySamples'
+import { createTrajectoryAccumulator, trajectoryViews } from './trajectorySamples'
 import type { BodyId, CelestialBody, TrajectoryFrameData, TrajectorySample, Vector3 } from '../types'
 
 const trajectoryCache = new Map<string, TrajectorySample[]>()
@@ -59,7 +59,7 @@ export function buildTrajectories(params: {
     return cached
   }
 
-  const accumulator = createTrajectoryAccumulator(bodies)
+  const accumulator = createTrajectoryAccumulator(bodies, sampleCount)
 
   // One resolver per sample shares the same parent-body and reference-frame cache
   // across every focused body at that instant.
@@ -72,7 +72,7 @@ export function buildTrajectories(params: {
     accumulator.append(positions)
   }
 
-  const trajectories = accumulator.complete(sampleCount)
+  const trajectories = trajectoryViews(accumulator.finish(), bodiesById)
   trajectoryCache.set(cacheKey, trajectories)
 
   if (trajectoryCache.size > 40) {

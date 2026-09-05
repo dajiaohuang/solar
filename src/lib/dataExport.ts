@@ -16,8 +16,10 @@ export async function exportAsJSON(frame: TrajectoryFrameData) {
     trajectories: frame.trajectories.map((trajectory) => ({
       bodyId: trajectory.body.id,
       bodyName: trajectory.body.name,
-      sampleCount: trajectory.points.length,
-      points: trajectory.points.map((point) => ({ x: point.x, y: point.y })),
+      sampleCount: trajectory.coordinates.length / 3,
+      points: Array.from({ length: trajectory.coordinates.length / 3 }, (_, index) => ({
+        x: trajectory.coordinates[index * 3], y: trajectory.coordinates[index * 3 + 1],
+      })),
     })),
   }
 
@@ -28,9 +30,9 @@ export async function exportAsCSV(frame: TrajectoryFrameData) {
   const rows: string[] = ['bodyId,bodyName,sampleIndex,x,au,y,au']
 
   for (const trajectory of frame.trajectories) {
-    trajectory.points.forEach((point, index) => {
-      rows.push(`${trajectory.body.id},${trajectory.body.name},${index},${point.x},${point.y}`)
-    })
+    for (let index = 0; index < trajectory.coordinates.length / 3; index++) {
+      rows.push(`${trajectory.body.id},${trajectory.body.name},${index},${trajectory.coordinates[index * 3]},${trajectory.coordinates[index * 3 + 1]}`)
+    }
   }
 
   await saveTextExport(rows.join('\n'), 'solar-trajectories.csv', 'text/csv')

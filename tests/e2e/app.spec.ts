@@ -58,6 +58,25 @@ test('all-source audit treats absent reports as unavailable, not zero coverage',
   await expect(panel.locator('dl')).toHaveCount(0)
 })
 
+test('packed historical trails survive switching the active renderer without a second canvas', async ({ page }, info) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('?v=4&lang=en&view=3d&bodies=earth%2Cmars&ref=sun&jd=2461287.5&history=365&samples=180&speed=0')
+  const spatial = page.getByTestId('trajectory-canvas-3d'), planar = page.locator('canvas.trajectory-canvas')
+  await expect(spatial).toHaveAttribute('data-trail-count', '2', { timeout: 30_000 })
+  await expect(planar).toHaveCount(0)
+  await spatial.screenshot({ path: info.outputPath('packed-trails-3d.png') })
+  await page.getByRole('button', { name: '2D', exact: true }).click()
+  await expect(planar).toHaveAttribute('data-trail-count', '2', { timeout: 30_000 })
+  await expect(spatial).toHaveCount(0)
+  await planar.screenshot({ path: info.outputPath('packed-trails-2d.png') })
+  await page.getByRole('button', { name: '3D', exact: true }).click()
+  await expect(spatial).toHaveAttribute('data-trail-count', '2', { timeout: 30_000 })
+  await expect(planar).toHaveCount(0)
+  expect(errors).toEqual([])
+})
+
 test('complete Saturn current positions remain independent of 3D trail budgets', async ({ page }) => {
   test.setTimeout(120_000)
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))

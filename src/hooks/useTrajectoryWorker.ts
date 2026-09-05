@@ -4,7 +4,6 @@ import { getEphemerisSnapshot, loadedKernelIds } from '../engine/ephemeris/kerne
 import type {
   BodyId,
   CelestialBody,
-  PackedTrajectoryData,
   TrajectorySample,
   TrajectoryWorkerRequest,
   TrajectoryWorkerResponse,
@@ -12,6 +11,7 @@ import type {
 } from '../types'
 import type { BackendFrame } from '../lib/backendFrames'
 import { EMPTY_CURRENT_POSITIONS } from '../lib/currentPositions'
+import { trajectoryViews } from '../lib/trajectorySamples'
 
 type Params = {
   bodies: CelestialBody[]
@@ -24,28 +24,6 @@ type Params = {
   historyDays: number
   sampleCount: number
   currentFrame?: Pick<BackendFrame, 'currentPositions' | 'missingBodyIds' | 'maxDistance'> | null
-}
-
-function unpackTrajectories(packed: PackedTrajectoryData, bodiesById: Map<BodyId, CelestialBody>) {
-  const trajectories: TrajectorySample[] = []
-  for (let index = 0; index < packed.bodyIds.length; index += 1) {
-    const body = bodiesById.get(packed.bodyIds[index])
-    if (!body) continue
-    const start = packed.offsets[index]
-    const end = packed.offsets[index + 1]
-    const points = []
-    const points3D = []
-    for (let cursor = start; cursor < end; cursor += 1) {
-      points.push({ x: packed.points2D[cursor * 2], y: packed.points2D[cursor * 2 + 1] })
-      points3D.push({
-        x: packed.points3D[cursor * 3],
-        y: packed.points3D[cursor * 3 + 1],
-        z: packed.points3D[cursor * 3 + 2],
-      })
-    }
-    trajectories.push({ body, points, points3D })
-  }
-  return trajectories
 }
 
 export function useTrajectoryWorker(params: Params) {
@@ -119,7 +97,7 @@ export function useTrajectoryWorker(params: Params) {
       if (response.type === 'progress') {
         setProgress(response.progress ?? 0)
       } else if (response.type === 'result' && response.packed) {
-        setTrajectories(unpackTrajectories(response.packed, bodiesById))
+        setTrajectories(trajectoryViews(response.packed, bodiesById))
         setTrajectoryUnavailableBodyIds(response.packed.trajectoryUnavailableBodyIds ?? [])
         setCompletedRequestKey(requestKey)
         setProgress(1)

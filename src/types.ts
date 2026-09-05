@@ -137,8 +137,8 @@ export type RenderedBodyPosition = {
 
 export type TrajectorySample = {
   body: CelestialBody
-  points: Vector2[]
-  points3D?: Vector3[]
+  /** One interleaved AU xyz source; 2D reads xy without a second buffer. */
+  coordinates: Float64Array
 }
 
 export type TrajectoryFrameData = {
@@ -170,8 +170,7 @@ export type PackedTrajectoryData = {
   bodyIds: BodyId[]
   trajectoryUnavailableBodyIds: BodyId[]
   offsets: Uint32Array
-  points2D: Float64Array
-  points3D: Float64Array
+  coordinates: Float64Array
 }
 
 export type TrajectoryWorkerResponse = {

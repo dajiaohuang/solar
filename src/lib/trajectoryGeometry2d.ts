@@ -78,28 +78,6 @@ function toClipSpace(point: { x: number; y: number }, projection: Projection) {
   }
 }
 
-function pushVertex(
-  positions: number[],
-  colors: number[],
-  x: number,
-  y: number,
-  rgba: number[],
-) {
-  positions.push(x, y)
-  colors.push(rgba[0], rgba[1], rgba[2], rgba[3])
-}
-
-function pushLineSegment(
-  positions: number[],
-  colors: number[],
-  start: { x: number; y: number },
-  end: { x: number; y: number },
-  rgba: number[],
-) {
-  pushVertex(positions, colors, start.x, start.y, rgba)
-  pushVertex(positions, colors, end.x, end.y, rgba)
-}
-
 export function buildGeometry(
   projection: Projection,
   referenceBody: CelestialBody,
@@ -116,8 +94,23 @@ export function buildGeometry(
   catalogDrawCount: number,
   catalogOrigin: Vector2,
 ): Geometry {
-  const linePositions: number[] = []
-  const lineColors: number[] = []
+  const haloSegments = 48
+  const lineCount = haloSegments + (showEcliptic ? GRID_LEVELS.length * RING_SEGMENTS + 2 : 0) +
+    trajectories.reduce((count, trail) => count + Math.max(0, trail.coordinates.length / 3 - 1), 0) +
+    (showOrbits ? orbitEllipses.reduce((count, ellipse) => count + Math.max(0, ellipse.points.length - 1), 0) : 0)
+  const linePositions = new Float32Array(lineCount * 4)
+  const lineColors = new Float32Array(lineCount * 8)
+  let lineCursor = 0
+  const writeLine = (x1: number, y1: number, x2: number, y2: number, rgba: number[]) => {
+    const offset = lineCursor * 4
+    linePositions[offset] = x1; linePositions[offset + 1] = y1
+    linePositions[offset + 2] = x2; linePositions[offset + 3] = y2
+    lineColors.set(rgba, lineCursor * 8); lineColors.set(rgba, lineCursor * 8 + 4)
+    lineCursor++
+  }
+  const pushLineSegment = (start: Vector2, end: Vector2, rgba: number[]) => {
+    writeLine(start.x, start.y, end.x, end.y, rgba)
+  }
   const cloudCount = Math.min(catalogDrawCount, catalogRecords.length, Math.floor(catalogPositions.length / 2))
   const pointCount = cloudCount + 1 + currentPositions.length
   const pointPositions = new Float32Array(pointCount * 2)
@@ -142,8 +135,6 @@ export function buildGeometry(
         const radius = projection.drawableRadius * ratio
 
         pushLineSegment(
-          linePositions,
-          lineColors,
           toClipSpace(
             {
               x: projection.centerX + Math.cos(startAngle) * radius,
@@ -163,30 +154,23 @@ export function buildGeometry(
       }
     }
     pushLineSegment(
-      linePositions,
-      lineColors,
       toClipSpace({ x: projection.padding, y: projection.centerY }, projection),
       toClipSpace({ x: projection.width - projection.padding, y: projection.centerY }, projection),
       gridColor,
     )
     pushLineSegment(
-      linePositions,
-      lineColors,
       toClipSpace({ x: projection.centerX, y: projection.padding }, projection),
       toClipSpace({ x: projection.centerX, y: projection.height - projection.padding }, projection),
       gridColor,
     )
   }
 
-  const haloSegments = 48
   for (let index = 0; index < haloSegments; index += 1) {
     const startAngle = (index / haloSegments) * Math.PI * 2
     const endAngle = ((index + 1) / haloSegments) * Math.PI * 2
     const radius = 16
 
     pushLineSegment(
-      linePositions,
-      lineColors,
       toClipSpace(
         {
           x: projectedReferencePoint.x + Math.cos(startAngle) * radius,
@@ -213,7 +197,8 @@ export function buildGeometry(
   const isEarthReference = referenceBody.id === 'earth'
 
   for (const trajectory of trajectories) {
-    if (trajectory.points.length < 2) {
+    const coordinates = trajectory.coordinates
+    if (coordinates.length < 6) {
       continue
     }
 
@@ -230,10 +215,10 @@ export function buildGeometry(
               (trajectory.body.kind === 'planet' || trajectory.body.kind === 'dwarfPlanet' ? planetOpacity : trajectory.body.kind === 'moon' ? moonOpacity : asteroidOpacity),
           )
 
-    for (let index = 1; index < trajectory.points.length; index += 1) {
-      const previous = toClipSpace(projectPoint(trajectory.points[index - 1], projection), projection)
-      const current = toClipSpace(projectPoint(trajectory.points[index], projection), projection)
-      pushLineSegment(linePositions, lineColors, previous, current, color)
+    const clipX = (value: number) => ((projection.centerX + (value - projection.offsetXAU) * projection.scale) / projection.width) * 2 - 1
+    const clipY = (value: number) => 1 - ((projection.centerY - (value - projection.offsetYAU) * projection.scale) / projection.height) * 2
+    for (let offset = 3; offset < coordinates.length; offset += 3) {
+      writeLine(clipX(coordinates[offset - 3]), clipY(coordinates[offset - 2]), clipX(coordinates[offset]), clipY(coordinates[offset + 1]), color)
     }
   }
 
@@ -248,7 +233,7 @@ export function buildGeometry(
       for (let index = 1; index < ellipse.points.length; index += 1) {
         const previous = toClipSpace(projectPoint(ellipse.points[index - 1], projection), projection)
         const current = toClipSpace(projectPoint(ellipse.points[index], projection), projection)
-        pushLineSegment(linePositions, lineColors, previous, current, color)
+        pushLineSegment(previous, current, color)
       }
     }
   }
@@ -277,8 +262,8 @@ export function buildGeometry(
   }
 
   return {
-    linePositions: new Float32Array(linePositions),
-    lineColors: new Float32Array(lineColors),
+    linePositions,
+    lineColors,
     pointPositions,
     pointColors,
     pointSizes,

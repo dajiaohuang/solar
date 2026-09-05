@@ -201,9 +201,27 @@ all relative-coordinate Float64 bytes, the actual 2D point packing arithmetic,
 row reads in the bulk paths. Desktop/mobile browser checks cover full Saturn
 counts, late bulk-to-focus selection and reference/mode changes. These are
 structural/behavior checks, not total heap, real-device FPS or new astronomical
-coverage evidence. Historical trajectory per-point generation/unpacking and
-the approximate catalog worker's simultaneous 2D/3D buffers still require
-migration; packed delivery is not yet end to end.
+coverage evidence.
+
+Historical detail sampling now writes directly into one interleaved Float64
+xyz allocation (at most 320 bodies x 600 samples x 3 x 8 = 4,608,000 bytes).
+Resolver objects are transient for one epoch; no per-point object history or
+parallel planar coordinate buffer is retained. Any missing or nonfinite sample
+excludes that body's entire trail, retaining its source identity in the gap
+list. Gap rows are compacted once before transfer; complete jobs transfer the
+original allocation. The main thread attaches bounded body metadata and typed
+subarray views without unpacking samples. Only the active renderer derives its
+Float32 geometry: 2D writes final clip-space line buffers directly, while 3D
+reuses its XZY line buffer when sample counts match. Schematic spacecraft trails
+use the same storage shape without changing their model classification.
+
+Regressions compare every retained source byte (including signed zero), both
+renderer mappings, missing first/middle/last rows, actual worker transfer and
+cancellation at the final yield. The maximum-detail allocation test is synthetic,
+not a heap or real-device FPS measurement. Historical science still uses the
+existing browser resolver and kernels, not the Go trajectory service. The
+approximate catalog worker's simultaneous 2D/3D buffers also remain to migrate;
+the overall Go/packed migration is not yet complete.
 
 ## Shared backend tile encoding
 

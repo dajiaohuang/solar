@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { PREPARE_CANVAS_CAPTURE_EVENT } from '../lib/canvasCapture'
 import { cameraDistanceForFit, cameraRangeForFit, clamp3dZoom, sceneFramingForRadius } from '../lib/camera3d'
 import type { LagrangePoint } from '../lib/lagrange'
-import { createCatalogPointMaterial, createTrajectoryScene } from '../lib/trajectoryScene3d'
+import { createCatalogPointMaterial, createTrajectoryScene, updateTrajectoryLineGeometry } from '../lib/trajectoryScene3d'
 import { updateCurrentPointGeometry, updatePointGeometry } from '../lib/pointGeometry3d'
 import type { AsteroidRecord, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector3 } from '../types'
 import type { CurrentPositions } from '../lib/currentPositions'
@@ -400,19 +400,12 @@ export function TrajectoryCanvas3D({
 
     const activeLineIds = new Set<string>()
     for (const trajectory of trajectories) {
-      const source = trajectory.points3D
-      if (!source || source.length < 2) continue
+      const source = trajectory.coordinates
+      if (source.length < 6) continue
       activeLineIds.add(trajectory.body.id)
-      const values = new Float32Array(source.length * 3)
-      for (let index = 0; index < source.length; index += 1) {
-        values[index * 3] = source[index].x
-        values[index * 3 + 1] = source[index].z
-        values[index * 3 + 2] = source[index].y
-      }
       let line = resources.trajectoryLines.get(trajectory.body.id)
       if (!line) {
-        const geometry = new THREE.BufferGeometry()
-        geometry.setAttribute('position', new THREE.BufferAttribute(values, 3))
+        const geometry = updateTrajectoryLineGeometry(new THREE.BufferGeometry(), source)
         line = new THREE.Line(geometry, new THREE.LineBasicMaterial({
           color: trajectory.body.color,
           transparent: true,
@@ -421,16 +414,7 @@ export function TrajectoryCanvas3D({
         resources.trajectoryLines.set(trajectory.body.id, line)
         resources.scene.add(line)
       } else {
-        const attribute = line.geometry.getAttribute('position') as THREE.BufferAttribute
-        if (attribute.array.length === values.length) {
-          ;(attribute.array as Float32Array).set(values)
-          attribute.needsUpdate = true
-          line.geometry.computeBoundingSphere()
-        } else {
-          line.geometry.dispose()
-          line.geometry = new THREE.BufferGeometry()
-          line.geometry.setAttribute('position', new THREE.BufferAttribute(values, 3))
-        }
+        line.geometry = updateTrajectoryLineGeometry(line.geometry, source)
       }
     }
     for (const [id, line] of resources.trajectoryLines) {
@@ -491,7 +475,7 @@ export function TrajectoryCanvas3D({
     // user camera moves during clock playback while keeping story/catalog
     // scenes (including outbound spacecraft paths) discoverable.
     const catalogReady = catalogDrawCount > 0 && catalogPositions3D.length >= 3
-    const fitKey = `${referenceBody.id}|${stateFitKey ?? Array.from({ length: currentPositions.length }, (_, index) => currentPositions.bodyAt(index).id).sort().join(',')}|${trajectories.map((item) => `${item.body.id}:${item.points3D?.length ?? 0}`).sort().join(',')}|${catalogReady ? catalogFitKey : ''}|${resetViewKey}`
+    const fitKey = `${referenceBody.id}|${stateFitKey ?? Array.from({ length: currentPositions.length }, (_, index) => currentPositions.bodyAt(index).id).sort().join(',')}|${trajectories.map((item) => `${item.body.id}:${item.coordinates.length / 3}`).sort().join(',')}|${catalogReady ? catalogFitKey : ''}|${resetViewKey}`
     if (fitKeyRef.current !== fitKey) {
       fitKeyRef.current = fitKey
       fitGenerationRef.current += 1
@@ -504,7 +488,8 @@ export function TrajectoryCanvas3D({
       }
       for (const trajectory of trajectories) {
         if (trajectory.body.kind === 'spacecraft') continue
-        for (const point of trajectory.points3D ?? []) radius = Math.max(radius, Math.hypot(point.x, point.y, point.z))
+        const coordinates = trajectory.coordinates
+        for (let offset = 0; offset < coordinates.length; offset += 3) radius = Math.max(radius, Math.hypot(coordinates[offset], coordinates[offset + 1], coordinates[offset + 2]))
       }
       // Fit the complete ready sample once so later adaptive draw-range growth
       // cannot introduce points outside the user's initial catalog framing.
