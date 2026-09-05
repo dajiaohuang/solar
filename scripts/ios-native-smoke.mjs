@@ -30,7 +30,45 @@ export function testArguments(device, resultPath) {
     '-destination', `platform=iOS Simulator,id=${device}`, '-destination-timeout', '120',
     '-derivedDataPath', 'build/ios-derived-data', '-resultBundlePath', resultPath,
     '-parallel-testing-enabled', 'NO', '-maximum-concurrent-test-simulator-destinations', '1',
+    '-only-testing:ObservationUITests/ObservationUITests',
+    '-only-testing:ObservationUITests/NativePointGeometryTests',
     'CODE_SIGNING_ALLOWED=NO', 'test']
+}
+
+export function verifyPointPixelEvidence(log) {
+  const matches = [...log.matchAll(/SOLAR_POINT_PIXELS (\[[^\r\n]+\])/g)]
+  if (matches.length !== 1) throw new Error('Expected one completed synthetic point pixel measurement')
+  const rows = JSON.parse(matches[0][1])
+  if (!Array.isArray(rows) || rows.length !== 11) throw new Error('Incomplete point pixel measurements')
+  for (const row of rows) {
+    for (const field of ['viewport', 'distance', 'width', 'height', 'brightCount', 'peak', 'totalLight']) {
+      if (!Number.isSafeInteger(row[field]) || row[field] < 0) throw new Error('Invalid point pixel measurement')
+    }
+    if (row.peak > 255 || row.width > row.viewport || row.height > row.viewport ||
+        row.brightCount > row.width * row.height || row.totalLight > row.viewport ** 2 * 255) {
+      throw new Error('Inconsistent point pixel measurement')
+    }
+  }
+  for (const [index, viewport] of [256, 512, 768].entries()) {
+    const group = rows.slice(index * 3, index * 3 + 3), near = group[0]
+    for (const [offset, row] of group.entries()) {
+      if (row.viewport !== viewport || row.distance !== [16, 160, 1600][offset] ||
+          row.width < 3 || row.width > 16 || row.height < 3 || row.height > 16 || row.peak < 240 ||
+          row.brightCount === 0 || row.totalLight === 0 ||
+          Math.abs(row.width - near.width) > 1 || Math.abs(row.height - near.height) > 1 ||
+          Math.abs(row.brightCount - near.brightCount) > Math.max(2, Math.floor(near.brightCount / 5)) ||
+          Math.abs(row.peak - near.peak) > 5 ||
+          Math.abs(row.totalLight - near.totalLight) > Math.max(255, Math.floor(near.totalLight / 5))) {
+        throw new Error('Fixed point shrank, faded or used unexpected distances/viewports')
+      }
+    }
+  }
+  const [near, far] = rows.slice(9)
+  if (near.viewport !== 256 || far.viewport !== 256 || near.distance !== 16 || far.distance !== 1600 || near.width <= far.width + 4) {
+    throw new Error('Perspective negative control did not shrink')
+  }
+  return { scope: 'synthetic SceneKit geometry pixels; not SPK, real-device performance or UIKit backing-scale validation',
+    status: 'passed', measurements: rows }
 }
 
 export async function bootOwnedSimulator(device, artifact, report, run = command) {
@@ -85,10 +123,16 @@ export function command(file, args, { env = process.env, log, timeout = 120_000,
     const timer = setTimeout(() => { expired = true; child.kill('SIGKILL') }, timeout)
     child.on('error', error => { clearTimeout(timer); stream?.end(); reject(error) })
     child.on('close', code => {
-      clearTimeout(timer); stream?.end()
-      if (overflow) reject(new Error(`${file} exceeded its bounded capture limit`))
-      else if (code !== 0 || expired) reject(new Error(`${file} ${expired ? 'timed out' : `exited ${code}`}\n${output}`))
-      else resolvePromise(output.trim())
+      clearTimeout(timer)
+      const complete = () => {
+        if (overflow) reject(new Error(`${file} exceeded its bounded capture limit`))
+        else if (code !== 0 || expired) reject(new Error(`${file} ${expired ? 'timed out' : `exited ${code}`}\n${output}`))
+        else resolvePromise(output.trim())
+      }
+      // Memory retains only a tail; consumers of the full file must wait for
+      // buffered writes to finish before reading measurement markers.
+      if (stream) stream.end(complete)
+      else complete()
     })
   })
 }
@@ -195,6 +239,7 @@ export async function nativeSmoke() {
     await new Promise((resolvePromise, reject) => { proxy.once('error', reject); proxy.listen(18791, '127.0.0.1', resolvePromise) })
     await command('xcodebuild', testArguments(device, join(artifact, 'Observation.xcresult')),
       { log: join(artifact, 'xcode-test.log'), timeout: 12 * 60_000 })
+    report.pointGeometry = verifyPointPixelEvidence(await readFile(join(artifact, 'xcode-test.log'), 'utf8'))
     verifyTraffic(traffic.filter(row => !row.path.startsWith('/coverage-fixture/')))
     report.coverageUi = verifyNativeCoverageTraffic(traffic)
     report.status = 'passed'

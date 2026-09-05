@@ -160,13 +160,28 @@ The native runtime harnesses keep the real-SPK state flow separate from
 404, and inconsistent counts. Their traffic is verified separately and marked
 synthetic in `report.json`; those counts do not represent astronomical coverage.
 Android's local coverage UI sequence passed on 2026-09-05; the new iOS coverage
-UI sequence requires its own macOS CI result, not an earlier state-only pass.
+UI sequence passed in [CI 33965123890](https://github.com/dajiaohuang/solar/actions/runs/33965123890)
+at `ef19141` with the real-SPK state flow and Linux Go race checks.
 For optional real Go summary validation in Java/Swift, set
 `SOLAR_COVERAGE_NATIVE_FIXTURE_DIR` to a retained directory containing matching
 `manifest.json` and `summary.json`. A configured missing/invalid fixture fails.
 Gradle tracks this directory as a test input. Keep source data outside Git.
 
 ### Observation behavior
+
+The iOS point geometry uses equal screen-space clamps of 4 (previously 2),
+with an opaque constant-white material. A separate `NativePointGeometryTests`
+class compiles the production geometry source into the simulator test runner.
+It measures pixel bounds, bright-pixel count, peak and integrated brightness at
+camera distances 16/160/1600 in 256/512/768-pixel square snapshots. An unclamped
+perspective negative control must visibly shrink. The harness requires the
+measurement record as well as a successful test exit, and retains snapshots in
+`Observation.xcresult` and metrics in `report.json` under `pointGeometry`.
+These are synthetic renderer tests, not additional exact bodies or validation
+of UIKit backing scales, interactive camera clipping, FPS, thermal behavior or
+physical devices. The newly added pixel test requires its own macOS CI result;
+the earlier `ef19141` run did not contain it. See Apple's
+[screen-space clamp documentation](https://developer.apple.com/documentation/scenekit/scngeometryelement/minimumpointscreenspaceradius).
 
 - The first native screen is an Observation Deck for current-state evidence: selected body IDs, exact values, provenance and explicit gaps.
 - iOS starts in native 3D and can switch to native 2D. The 3D and 2D budgets are independent; native 3D does not shrink or fade states solely because of distance.

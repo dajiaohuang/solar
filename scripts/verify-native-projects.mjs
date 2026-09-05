@@ -15,7 +15,7 @@ const activity = await read('android/app/src/main/java/io/github/dajiaohuang/sol
 if (/CapApp-SPM|public in Resources|capacitor\.config|Main\.storyboard/.test(project)) throw new Error('iOS still packages the Web shell')
 if (!scene.includes('UIHostingController(rootView: ObservationDeckView())')) throw new Error('iOS native Observation Deck is not the scene root')
 if (/BridgeActivity|WebView/.test(activity) || /implementation project\(':capacitor/.test(android)) throw new Error('Android still embeds the Web shell')
-for (const source of ['NativeObservationDeck.swift', 'StateTileDecoder.swift', 'StateTileCache.swift', 'StateTileService.swift', 'NativeStateProjection.swift', 'NativeCoverageReport.swift']) {
+for (const source of ['NativeObservationDeck.swift', 'StateTileDecoder.swift', 'StateTileCache.swift', 'StateTileService.swift', 'NativeStateProjection.swift', 'NativeCoverageReport.swift', 'NativePointGeometry.swift']) {
   if (!project.includes(`${source} in Sources`)) throw new Error(`iOS source is not in its build target: ${source}`)
   await read(`ios/App/App/${source}`)
 }
@@ -25,6 +25,10 @@ if (!project.includes('productType = "com.apple.product-type.bundle.ui-testing"'
   throw new Error('Native iOS UI tests must remain wired into the App scheme')
 }
 await read('ios/App/ObservationUITests/ObservationUITests.swift')
+await read('ios/App/ObservationUITests/NativePointGeometryTests.swift')
+if (!project.includes('NativePointGeometry.swift in Test Sources') || !project.includes('NativePointGeometryTests.swift in Sources')) {
+  throw new Error('Pixel regression must compile the production point geometry into the test target')
+}
 const definitions = new Set([...project.matchAll(/^\s*([A-F0-9]{24})\s+(?:\/\*.*?\*\/\s*)?=\s*\{/gm)].map(match => match[1]))
 for (const match of project.matchAll(/\b[A-F0-9]{24}\b/g)) {
   if (!definitions.has(match[0])) throw new Error(`Dangling Xcode project reference: ${match[0]}`)

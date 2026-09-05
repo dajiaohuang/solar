@@ -396,16 +396,7 @@ private struct NativePointScene: UIViewRepresentable {
         guard context.coordinator.identity != projection.identity else { return }
         context.coordinator.identity = projection.identity
         let points = projection.points.map { SCNVector3($0.x, $0.y, $0.z) }
-        let source = SCNGeometrySource(vertices: points)
-        let indices = Array(0..<UInt32(points.count))
-        let indexData = indices.withUnsafeBytes { Data($0) }
-        let element = SCNGeometryElement(data: indexData, primitiveType: .point, primitiveCount: points.count, bytesPerIndex: MemoryLayout<UInt32>.size)
-        element.pointSize = 4; element.minimumPointScreenSpaceRadius = 2; element.maximumPointScreenSpaceRadius = 2
-        let geometry = SCNGeometry(sources: [source], elements: [element])
-        let material = SCNMaterial(); material.lightingModel = .constant; material.diffuse.contents = UIColor.white
-        material.isDoubleSided = true; material.writesToDepthBuffer = false
-        geometry.materials = [material]
-        view.scene?.rootNode.childNode(withName: "verified-states", recursively: false)?.geometry = geometry
+        view.scene?.rootNode.childNode(withName: "verified-states", recursively: false)?.geometry = NativePointGeometry.make(points: points)
     }
     static func dismantleUIView(_ view: SCNView, coordinator: Coordinator) {
         view.isPlaying = false; view.scene = nil; view.pointOfView = nil

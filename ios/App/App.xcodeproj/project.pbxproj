@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B11100010000000000000001 /* NativePointGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11100020000000000000001 /* NativePointGeometry.swift */; };
+		B11100010000000000000002 /* NativePointGeometry.swift in Test Sources */ = {isa = PBXBuildFile; fileRef = B11100020000000000000001 /* NativePointGeometry.swift */; };
+		B11100010000000000000003 /* NativePointGeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11100020000000000000002 /* NativePointGeometryTests.swift */; };
 		B11000010000000000000001 /* ObservationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11000020000000000000001 /* ObservationUITests.swift */; };
 		B10900010000000000000005 /* NativeStateProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10900020000000000000005 /* NativeStateProjection.swift */; };
 		B10900010000000000000001 /* NativeObservationDeck.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10900020000000000000001 /* NativeObservationDeck.swift */; };
@@ -22,6 +25,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		B11100020000000000000001 /* NativePointGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePointGeometry.swift; sourceTree = "<group>"; };
+		B11100020000000000000002 /* NativePointGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePointGeometryTests.swift; sourceTree = "<group>"; };
 		B11000020000000000000001 /* ObservationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObservationUITests.swift; sourceTree = "<group>"; };
 		B11000020000000000000002 /* ObservationUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ObservationUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10900020000000000000005 /* NativeStateProjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeStateProjection.swift; sourceTree = "<group>"; };
@@ -78,6 +83,7 @@
 				B10900020000000000000004 /* StateTileService.swift */,
 				B10900020000000000000007 /* NativeCoverageReport.swift */,
 				B10900020000000000000005 /* NativeStateProjection.swift */,
+				B11100020000000000000001 /* NativePointGeometry.swift */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -89,7 +95,7 @@
 		};
 		B11000030000000000000001 /* ObservationUITests */ = {
 			isa = PBXGroup;
-			children = (B11000020000000000000001 /* ObservationUITests.swift */);
+			children = (B11000020000000000000001 /* ObservationUITests.swift */, B11100020000000000000002 /* NativePointGeometryTests.swift */);
 			path = ObservationUITests;
 			sourceTree = "<group>";
 		};
@@ -189,7 +195,11 @@
 		B11000070000000000000001 = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (B11000010000000000000001 /* ObservationUITests.swift in Sources */);
+			files = (
+				B11000010000000000000001 /* ObservationUITests.swift in Sources */,
+				B11100010000000000000002 /* NativePointGeometry.swift in Test Sources */,
+				B11100010000000000000003 /* NativePointGeometryTests.swift in Sources */,
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		504EC3001FED79650016851F /* Sources */ = {
@@ -204,6 +214,7 @@
 				B10900010000000000000004 /* StateTileService.swift in Sources */,
 				B10900010000000000000007 /* NativeCoverageReport.swift in Sources */,
 				B10900010000000000000005 /* NativeStateProjection.swift in Sources */,
+				B11100010000000000000001 /* NativePointGeometry.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

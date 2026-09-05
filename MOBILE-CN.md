@@ -133,13 +133,24 @@ Go→Web/Java Float64 基准，再通过 HTTPS 操作实际 Android 界面。202
 原生运行测试将真实 SPK 状态流程与 `/coverage-fixture/` 合成界面用例分开：
 显式加载、新请求重载返回 404，以及不一致计数。两类请求分别验证，并在
 `report.json` 中明确标记合成测试，不将其数量当作真实天体覆盖。Android 本地
-覆盖界面流程已于 2026-09-05 通过；新增 iOS 覆盖界面仍需自己的 macOS CI 结果，
-不能借用此前仅验证状态的通过记录。Java/Swift 可选真实 Go 摘要校验使用
+覆盖界面流程已于 2026-09-05 通过；iOS 覆盖界面已在 `ef19141` 的
+[CI 33965123890](https://github.com/dajiaohuang/solar/actions/runs/33965123890)
+通过，同轮真实 SPK 状态流程及 Linux Go race 检查也已通过。Java/Swift 可选真实 Go 摘要校验使用
 `SOLAR_COVERAGE_NATIVE_FIXTURE_DIR`，指向含配对 `manifest.json` 和 `summary.json`
 的保留目录。配置后文件缺失或内容非法会报错；Gradle 将其作为测试输入跟踪。
 来源数据保持在 Git 之外。
 
 ### 观测行为
+
+iOS 点几何使用相等的屏幕空间上下限 4（此前为 2），材质为不透明恒定白色。
+独立的 `NativePointGeometryTests` 类将生产几何源码编译进模拟器测试进程，
+在 256/512/768 像素方形截图中，分别测量相机距离 16/160/1600 时的像素边界、
+亮点数量、峰值及总亮度；移除固定上下限的透视反例必须实际缩小。
+运行脚本同时要求测试成功和完整测量记录；截图保留于 `Observation.xcresult`，
+指标保留于 `report.json` 的 `pointGeometry`。
+这是合成渲染测试，不增加精确天体数量，也不验证 UIKit 屏幕缩放、交互相机裁剪、
+帧率、温控或真机。新增像素测试仍需自己的 macOS CI 结果，此前 `ef19141` 不含此测试。
+参见 Apple 的[屏幕空间上下限说明](https://developer.apple.com/documentation/scenekit/scngeometryelement/minimumpointscreenspaceradius)。
 
 - 第一屏是当前位置 Observation Deck：选定 ID、精确状态、来源证据和明确缺口。
 - iOS 默认原生 3D，可切换原生 2D。2D/3D 预算独立；原生 3D 不因距离单独缩小或淡出状态。
