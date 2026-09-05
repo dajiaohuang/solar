@@ -222,6 +222,14 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 .ephemeris-status summary { cursor: pointer; }
 .ephemeris-status p { overflow-wrap: anywhere; line-height: 1.5; }
 .ephemeris-status button { margin-right: 10px; }
+.backend-coverage-ledger dl { margin: 8px 0; }
+.backend-coverage-ledger dl > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; padding: 3px 0; }
+.backend-coverage-ledger dd { margin: 0; overflow-wrap: anywhere; }
+.backend-coverage-ledger dt { color: var(--muted); }
+.backend-coverage-ledger ul { list-style: none; padding: 0; }
+.backend-coverage-ledger li { border-top: 1px solid var(--line); padding: 6px 0; overflow-wrap: anywhere; }
+.backend-coverage-ledger nav { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.backend-coverage-ledger nav button { min-height: 36px; }
 .frame-layer-budget { padding: 6px 10px; font-size: 11px; overflow-wrap: anywhere; }
 .explorer-stage::before { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2; background: radial-gradient(circle at center, transparent 44%, rgba(0,0,0,.28)); }
 .catalog-cloud-error { position: absolute; z-index: 14; top: 72px; left: 50%; width: min(520px, calc(100% - 32px)); transform: translateX(-50%); }

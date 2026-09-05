@@ -20,6 +20,12 @@ Solar Atlas connects a spatial workbench, orbital-element space, event analysis,
 
 ## Start in seconds
 
+The full-Web deck reports coverage from its verified backend frame, separately
+from local trajectory kernels. Expand its status to inspect selected/received
+entries, distinct request IDs, exact/missing/pending states, reference-relative
+positions, TDB epoch and source hashes. Per-entry evidence is paginated; these
+counts are neither whole-catalog coverage nor proof of visible pixels or FPS.
+
 | Goal | Fastest path |
 | --- | --- |
 | Explore immediately | [Open the Observation Deck](https://dajiaohuang.github.io/solar/) and choose **Explore independently** |

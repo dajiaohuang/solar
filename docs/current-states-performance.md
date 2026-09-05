@@ -8,6 +8,18 @@ bitmap, provenance and numeric validation. Playback coalesces work while a
 request is active; seeking cancels stale work and only the latest generation
 may publish.
 
+The deck coverage summary uses the last verified backend frame, never the
+browser's local SPK registry. The expanded ledger counts selected entries,
+received rows, distinct received request identities, exact/missing states,
+pending responses and reference-relative positions separately. Reference-only
+responses are excluded from selected totals; an unavailable reference can
+prevent projection without changing the exact target-state count. Pending
+responses are not classified as explicit missing states. The ledger preserves
+the published TDB epoch and catalog/inventory hashes, with per-entry provenance
+and distinct snapshot validity/evidence intervals in 20-row pages. It does not
+claim a global unique-body count, visible pixels, or measured FPS. Local kernel
+coverage remains separately inspectable for historical trajectories.
+
 Run the focused measurement with:
 
 ```text

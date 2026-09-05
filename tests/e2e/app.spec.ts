@@ -24,7 +24,7 @@ test('complete Saturn current positions remain independent of 3D trail budgets',
   expect(stateTileRequests.some(request => request.url.endsWith('/state/plan'))).toBe(true)
   expect(stateTileRequests.some(request => request.url.endsWith('/state/tiles'))).toBe(true)
   expect(stateTileRequests.filter(request => request.url.endsWith('/state/plan')).every(request => Array.isArray(request.body.ids) && request.body.ids.length <= 32768 && request.body.precision === 'exact')).toBe(true)
-  await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('293/294', { timeout: 90_000 })
+  await expect(page.getByTestId('ephemeris-status').locator(':scope > summary')).toContainText('293/294', { timeout: 90_000 })
   // The paused clock should settle after one exact request even though the
   // parent rebuilds selection arrays while the scene workers publish.
   await expect.poll(() => stateTileRequests.filter(request => request.url.endsWith('/state/tiles')).length).toBe(1)
@@ -372,8 +372,8 @@ test('loads resolved TNO primary centers lazily and keeps Makemake coverage expl
   await page.goto('./?v=4&page=explorer&bodies=eris,haumea,makemake&ref=sun&jd=2461222.5&zoom=0.15&lang=en')
   await page.waitForLoadState('networkidle')
   const status = page.getByTestId('ephemeris-status')
-  await expect(status.locator('summary')).toContainText('2/3', { timeout: 30_000 })
-  await status.locator('summary').click()
+  await expect(status.locator(':scope > summary')).toContainText('2/3', { timeout: 30_000 })
+  await status.locator(':scope > summary').click()
   await expect(status).toContainText('makemake')
   await expect(status.getByRole('alert')).toHaveCount(0)
   // The main resolver and trajectory worker each load the same pinned assets.
@@ -475,7 +475,7 @@ test('replays 3D zoom and labels unsupported 2D-only controls truthfully', async
     // ephemeris and trajectory workers to finish before asserting the applied
     // zoom/distance, so this tests readiness rather than a transient fit.
     const status = page.getByTestId('ephemeris-status')
-    await expect(status.locator('summary')).not.toContainText('Loading', { timeout: 15_000 })
+    await expect(status.locator(':scope > summary')).not.toContainText('Loading', { timeout: 15_000 })
     await expect(page.locator('.compute-progress')).toHaveCount(0, { timeout: 15_000 })
     await expect(canvas).toHaveAttribute('data-fit-generation', /[1-9]\d*/, { timeout: 15_000 })
     await expect(canvas).toHaveAttribute('data-applied-zoom', String(zoom), { timeout: 15_000 })

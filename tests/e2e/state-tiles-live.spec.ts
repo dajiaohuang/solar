@@ -21,7 +21,7 @@ test('renders a real Go exact-state response in both Web views', async ({ page }
   const viewport = page.getByTestId('trajectory-canvas-3d')
   await expect(viewport).toHaveAttribute('data-position-count', '3', { timeout: 30_000 })
   await expect.poll(() => requests.filter(url => url.endsWith('/v1/state/tiles')).length).toBeGreaterThan(0)
-  await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('3/3')
+  await expect(page.getByTestId('ephemeris-status').locator(':scope > summary')).toContainText('3/3')
   await page.getByRole('button', { name: '2D', exact: true }).click()
   await expect(page.locator('canvas.trajectory-canvas')).toHaveAttribute('data-position-count', '3')
   expect(requests.filter(url => url.endsWith('/v1/current-states'))).toEqual([])

@@ -29,7 +29,7 @@ function unavailableIdsAt(epochJd: number) {
     : Math.abs(epochJd - 2460000.5) < 0.01 ? new Set(['naif:920050000', 'naif:120050000']) : new Set<string>()
 }
 
-async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: boolean) {
+async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: boolean, missingStateTileIds: string[]) {
   let slowStateTiles = false
   const plans = new Map<string, { bodyIds: string[]; epochJd: number }>()
   await page.route('**/solar-test-api/v1/catalog/manifest', route => route.fulfill({
@@ -45,7 +45,7 @@ async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: b
     if (!Number.isFinite(epochJd)) return route.fulfill({ status: 400, json: { error: 'invalid epoch' } })
     const planId = `${Math.abs(Math.round(epochJd * 1000)).toString(16)}${ids.length.toString(16)}`.padEnd(64, 'b').slice(0, 64)
     plans.set(planId, { bodyIds: ids, epochJd })
-    const unavailable = unavailableIdsAt(epochJd)
+    const unavailable = new Set([...unavailableIdsAt(epochJd), ...missingStateTileIds])
     const exactCount = ids.filter(id => knownBackendIds.has(id) && !unavailable.has(id)).length
     // Keep the plan internally well formed but deliberately disagree with the
     // valid tile bits in the explicit protocol-rejection scenario only.
@@ -63,7 +63,7 @@ async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: b
     // response in this page keeps the intended slow-backend behavior.
     slowStateTiles ||= page.url().includes('slow-state-tiles=1')
     if (slowStateTiles) await new Promise(resolve => setTimeout(resolve, 1_200))
-    const unavailableByEpoch = unavailableIdsAt(plan.epochJd)
+    const unavailableByEpoch = new Set([...unavailableIdsAt(plan.epochJd), ...missingStateTileIds])
     const present = plan.bodyIds.map(id => knownBackendIds.has(id) && !unavailableByEpoch.has(id))
     const metadata: StateTileMetadata[] = plan.bodyIds.map((id, index) => ({ id, availability: present[index] ? 'operational' : 'missing', precision: 'exact', source: knownBackendIds.has(id) ? source : '', datasetVersion: knownBackendIds.has(id) ? datasetVersion : '', datasetSha256: catalogHash, kernelSha256: 'b'.repeat(64), model: present[index] || unavailableByEpoch.has(id) ? 'spk-original' : '', centerId: knownBackendIds.has(id) ? 'naif:0' : '', validityStartEt: -1e12, validityEndEt: 1e12, validityPresent: true, stateEvidence: present[index] ? 'fixture-kernel' : '', evidenceWindowStartEt: -1e12, evidenceWindowEndEt: 1e12, evidenceWindowPresent: false, missingReason: present[index] ? '' : unavailableByEpoch.has(id) ? 'kernel-coverage-gap' : 'unknown-identity', identityStatus: '', sourceRecord: false }))
     const states = new Float64Array(plan.bodyIds.length * 6); plan.bodyIds.forEach((id, index) => { if (present[index]) states.set(fixtureState(id), index * 6) })
@@ -73,10 +73,11 @@ async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: b
   })
 }
 
-export const test = base.extend<{ stateTilesBackend: void; mismatchedStateTileCounts: boolean }>({
+export const test = base.extend<{ stateTilesBackend: void; mismatchedStateTileCounts: boolean; missingStateTileIds: string[] }>({
   mismatchedStateTileCounts: [false, { option: true }],
-  stateTilesBackend: [async ({ page, mismatchedStateTileCounts }, use) => {
-    await installStateTilesBackend(page, mismatchedStateTileCounts)
+  missingStateTileIds: [[], { option: true }],
+  stateTilesBackend: [async ({ page, mismatchedStateTileCounts, missingStateTileIds }, use) => {
+    await installStateTilesBackend(page, mismatchedStateTileCounts, missingStateTileIds)
     await use()
   }, { auto: true }],
 })

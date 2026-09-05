@@ -69,7 +69,7 @@ type FrameViewProps = {
   isPlaying: boolean
   render3DReady: boolean
   cameraResetKey: number
-  backendFrame?: Pick<BackendFrame, 'currentPositions' | 'missingBodyIds' | 'maxDistance'> | null
+  backendFrame?: BackendFrame | null
   backendStatus: { configured: boolean; loading: boolean; error: string | null; publishedEpochUtcJd?: number | null; requestedEpochUtcJd?: number }
 }
 
@@ -194,7 +194,7 @@ function FrameView({
     }}>
       <div className="frame-overlays" onWheel={event => event.stopPropagation()}>
       <div className="frame-label"><span>{bodyDisplayName(referenceBody, language)}</span><small>{simulation.viewMode.toUpperCase()}{simulation.showCatalogCloud ? ` · ${t('catalogCloudRendered')} ${catalogDrawCount.toLocaleString()} / ${catalogSampleTotal.toLocaleString()} · ${qualityLabel} · JD ${julianDay.toFixed(3)}` : ''}</small></div>
-      <EphemerisStatus bodies={selectedBodies} references={[referenceBody]} julianDay={julianDay} historyDays={simulation.historyDays} backendStatus={backendStatus} />
+      <EphemerisStatus bodies={selectedBodies} references={[referenceBody]} julianDay={julianDay} historyDays={simulation.historyDays} backendStatus={backendStatus} backendFrame={backendFrame} />
       {selectedBodies.length > trajectoryBodies.length && <div className="frame-layer-budget glass-panel" data-testid="focus-layer-budget">{t('currentPositionCount')}: {baseFrame.currentPositions.length}/{selectedBodies.length} · {t('trailBudgetCount')}: {trajectoryBodies.length}/{selectedBodies.length}</div>}
       {error && <div className="canvas-error">{error}</div>}
       {catalogOrigin && baseFrame.missingBodyIds.length > 0 && <details className="canvas-error" data-testid="missing-position-notice"><summary>{t('bodyStateUnavailable')} ({baseFrame.missingBodyIds.length})</summary><p>{baseFrame.missingBodyIds.map(id => bodyDisplayName(bodiesById.get(id)!, language)).join(', ')}</p></details>}
