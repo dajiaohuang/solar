@@ -1,6 +1,6 @@
 # Solar Atlas contributor guide
 
-Solar Atlas is a React 19 + TypeScript 6 + Vite 8 scientific visualization application. It is a client-side, route-level code-split app with no server runtime.
+Solar Atlas has a React 19 + TypeScript 6 + Vite 8 Web frontend, a Go scientific/data backend, and independent Android/iOS native prototypes. Pages remains a static, route-level code-split Web preview; full Web uses verified Go state tiles for current states and sampled historical trails. Heavy analyses are not yet fully migrated to Go. Historical connecting lines are display interpolation, not certified continuous ephemerides; preserve the actual completed window, source audit and whole-trail gap semantics.
 
 ## Commands
 
@@ -42,12 +42,21 @@ Useful pipeline environment variables are `MPCORB_SOURCE_FILE`, `MPCORB_SOURCE_U
 - MPCORB and SBDB production paths accept bound elliptic solutions only (`0 <= e < 1`, `a > 0`). Unsupported conics must fail visibly.
 - Position resolution is heliocentric first, including parent-body chaining, then transformed into the chosen reference frame. Do not mix frame-relative and absolute coordinates.
 - The simulation clock lives outside React and publishes throttled snapshots. Do not drive orbital recomputation with a component-level `requestAnimationFrame` loop.
-- Keep current-state coverage independent from historical trail/detail budgets (160 in 3D, 320 in 2D). All selected resolvable positions remain visible; extra 3D positions share a fixed-pixel point buffer, while catalog points stay a separately identified approximate layer. Labels and individual meshes must stay bounded. The default Explorer must not fetch a catalog sample until the cloud is explicitly enabled.
+- Keep current-state coverage independent from historical trail/detail budgets (160 in 3D, 320 in 2D) and adaptive display limits. Retain all selected verified source states and coverage counts; display limits select an explicit deterministic prefix with unshown counts, never truncate exact requests or relabel unshown states as missing. Extra 3D positions share a fixed-pixel point buffer, while catalog points stay a separately identified approximate layer. Labels and individual meshes must stay bounded. The default Explorer must not fetch a catalog sample until the cloud is explicitly enabled.
 - Browser memory and CPU values may only lower an initial adaptive budget. Frame timing is authoritative, and hardware-specific smoothness claims require measured evidence.
 - Preserve the first-visit renderer gate: the untouched onboarding choice uses the lightweight spatial preview, while tutorial/explore/dismiss actions and completed onboarding activate the real 3D renderer.
 - Heavy analyses are explicit, cancellable worker jobs. UI parameter changes must not silently rerun them.
 - Results and exports must state their model, epoch/window, units, and approximation limits.
 - Validate the current scene contract in `src/lib/urlState.ts`. Old-client/API/scene compatibility is not required (owner direction, 2026-09-05); retain scientific source identities and explicit unsupported-state errors, not compatibility-only layers.
+
+## Native first vertical slice
+
+- Android and iOS are independent platform-native clients. Do not add a Web shell, Capacitor bridge, or native SPK packaging.
+- The current native source scope is a `manifest → plan → binary state tile` first-slice prototype for exact current states. Android has local real-SPK HTTPS emulator UI/cache evidence for its GLES point renderer (see MOBILE.md), and iOS has passed macOS CI protocol/build checks and real-SPK HTTPS simulator smoke tests (physical-device and full-feature validation remain pending; see MOBILE.md); do not describe either as a delivered client. Keep provenance, epoch, units, reference frame, validity and missing-state semantics explicit; state values remain typed `Float64`.
+- Native 3D is the default and native 2D is a separate view/fallback with independent budgets. Do not make native 3D shrink or fade current states solely with distance.
+- The iOS slice accepts a user HTTPS backend, TDB Julian date, preset/custom body IDs and a reference ID. Its verified-tile cache is bounded at 256 MiB.
+- Manifest and plan loading is online. Verified tiles may be reused only after an online plan identifies their identity and hashes; complete offline plan recovery is not implemented.
+- Native build instructions are documentation only until command output is captured. Do not claim full feature parity, real-device validation, signed artifacts, store status or successful builds without evidence.
 
 ## Verification
 

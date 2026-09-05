@@ -16,9 +16,13 @@ on:
       - 'src/**'
       - 'scripts/**'
       - 'public/**'
+      - 'cmd/**'
+      - 'internal/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'tests/**'
       - 'index.html'
       - 'tsconfig*.json'
-      - 'capacitor.config.ts'
       - 'package.json'
       - 'package-lock.json'
       - 'vite.config.ts'
@@ -50,8 +54,18 @@ jobs:
           java-version: 21
           cache: gradle
       - run: npm ci
-      - name: Build and sync the native web shell
-        run: npm run mobile:sync:android
+      - name: Verify independent native projects
+        run: npm run native:check
+      - name: Verify shared Go backend and concurrent cancellation
+        run: |
+          go vet ./cmd/... ./internal/...
+          go test -race ./cmd/... ./internal/...
+      - name: Generate Go handler tiles and verify Web numeric parity
+        env:
+          SOLAR_STATE_TILE_FIXTURE_DIR: ${{ runner.temp }}/solar-state-tile-fixture
+        run: |
+          go run ./cmd/state-tile-fixture -out "$SOLAR_STATE_TILE_FIXTURE_DIR" -tile-size 1
+          npx vitest run tests/unit/state-tiles-golden.test.ts
       - name: Verify Android API contract
         run: |
           grep -q "compileSdkVersion = 36" android/variables.gradle
@@ -59,6 +73,8 @@ jobs:
           grep -q "minSdkVersion = 24" android/variables.gradle
       - name: Build debug-key-signed Android application
         working-directory: android
+        env:
+          SOLAR_STATE_TILE_FIXTURE_DIR: ${{ runner.temp }}/solar-state-tile-fixture
         run: |
           chmod +x gradlew
           ./gradlew lint testDebugUnitTest assembleDebug
@@ -67,6 +83,22 @@ jobs:
           name: solar-atlas-android-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Prepare isolated Android runtime
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "emulator" "system-images;android-36;default;x86_64"
+          # Grant only this ephemeral runner user access to the existing KVM device.
+          sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+      - name: Run native Android UI against real SPK over HTTPS
+        run: node scripts/android-native-smoke.mjs
+      - name: Retain Android runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: solar-atlas-android-native-smoke
+          path: build/android-native-smoke/
+          if-no-files-found: warn
           retention-days: 14
 
   ios:
@@ -81,10 +113,42 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Activate runner-cached Go
+        run: |
+          if command -v go >/dev/null 2>&1; then
+            go version
+            exit 0
+          fi
+          # macOS ARM64 images cache Go without adding it to PATH.
+          # Reuse that existing toolchain; never skip the golden generator.
+          go_arch="$(printf '%s' "$RUNNER_ARCH" | tr '[:upper:]' '[:lower:]')"
+          for go_bin in "$RUNNER_TOOL_CACHE"/go/*/"$go_arch"/bin; do
+            if [ -x "$go_bin/go" ]; then
+              "$go_bin/go" version
+              printf '%s\n' "$go_bin" >> "$GITHUB_PATH"
+              exit 0
+            fi
+          done
+          echo "::error::Go is required but no executable runner-cached toolchain was found."
+          exit 1
       - name: Verify Xcode toolchain
-        run: xcodebuild -version
-      - name: Build and sync the native web shell
-        run: npm run mobile:sync:ios
+        run: |
+          xcodebuild -version
+          xcodebuild -list -project ios/App/App.xcodeproj
+      - name: Verify independent native projects
+        run: npm run native:check
+      - name: Generate Go handler tiles and verify Web numeric parity
+        env:
+          SOLAR_STATE_TILE_FIXTURE_DIR: ${{ runner.temp }}/solar-state-tile-fixture
+        run: |
+          go run ./cmd/state-tile-fixture -out "$SOLAR_STATE_TILE_FIXTURE_DIR" -tile-size 1
+          npx vitest run tests/unit/state-tiles-golden.test.ts
+      - name: Validate native state protocol and cache
+        env:
+          SOLAR_STATE_TILE_FIXTURE_DIR: ${{ runner.temp }}/solar-state-tile-fixture
+        run: |
+          swiftc ios/App/App/StateTileDecoder.swift ios/App/App/StateTileCache.swift ios/App/App/NativeStateProjection.swift ios/App/App/NativeCoverageReport.swift ios/App/App/NativeSourceIdentityPage.swift ios/ProtocolTests/ProtocolTests.swift -o "$RUNNER_TEMP/solar-ios-protocol-tests"
+          "$RUNNER_TEMP/solar-ios-protocol-tests"
       - name: Build unsigned iOS simulator application
         run: >-
           xcodebuild
@@ -95,6 +159,17 @@ jobs:
           -derivedDataPath build/ios-derived-data
           CODE_SIGNING_ALLOWED=NO
           build
+      - name: Run native iOS UI against real SPK over HTTPS
+        run: node scripts/ios-native-smoke.mjs
+      - name: Retain native runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: solar-atlas-ios-native-smoke
+          path: build/ios-native-smoke/
+          if-no-files-found: warn
+          retention-days: 14
+
       - uses: actions/upload-artifact@v6
         with:
           name: solar-atlas-ios-simulator

@@ -20,7 +20,7 @@ export function snapshotKernelAtEpoch(kernel, et) {
 
 /** Only explicit existing identity mappings; never guess an ID from a name. */
 export async function inventoryKernels(root, et, requestedProfile = 'pages') {
-  const profile = ephemerisProfile(undefined, requestedProfile)
+  const profile = ephemerisProfile(requestedProfile)
   const manifestBytes = await readFile(join(root, `src/data/ephemeris-manifest${profile === 'full' ? '-full' : ''}.json`))
   const manifest = JSON.parse(manifestBytes)
   const generated = JSON.parse(await readFile(join(root, 'src/data/ephemerisBodies.json'), 'utf8'))
@@ -82,8 +82,25 @@ export async function inventoryKernels(root, et, requestedProfile = 'pages') {
     byTarget.get(segment.target).push({ kernelId: id, startEt: segment.startEt, endEt: segment.endEt, center: segment.center, frame: segment.frame, type: segment.type })
   }
   function attach(record) {
-    let target
-    if (/^naif:\d+$/.test(record.id)) {
+    let target, identityMappingEvidence
+    if (record.category === 'small-body-moon') {
+      const source = record.sourceRef
+      // Join two explicit source identities, never a display name or numeric
+      // SPK-ID formula. Incomplete/unnamed API components stay unresolved even
+      // when their parent currently has only one bundled companion.
+      if (record.confirmation === 'confirmed' && record.identityStatus === 'source-designation' &&
+          source?.confirmed === 'Y' && source.kind === 'an' && /^[1-9]\d*$/.test(String(source.pdes ?? '')) &&
+          /^[1-9]\d*$/.test(String(source.iau_num ?? '')) && typeof source.iau_name === 'string' && source.iau_name.trim()) {
+        const parent = `sb:asteroid:${source.pdes}`
+        if (record.parentId === parent && record.id === `sat:${parent}:iau:${source.iau_num}`) {
+          target = moonIds.get(aliasKey(parent, source.iau_name))
+          if (target !== undefined) identityMappingEvidence = { method: 'jpl-iau-name-and-primary-to-audited-spk-alias',
+            sourceRecordId: record.id, primaryId: parent, iauNumber: String(source.iau_num), iauName: source.iau_name,
+            target, satelliteCatalogSha256: digest(satelliteCatalogBytes) }
+        }
+      }
+    }
+    else if (/^naif:\d+$/.test(record.id)) {
       const candidate = Number(record.id.slice(5))
       if (record.category !== 'moon' || !moonParents.has(candidate) || moonParents.get(candidate) === record.parentId) target = candidate
     }
@@ -97,10 +114,12 @@ export async function inventoryKernels(root, et, requestedProfile = 'pages') {
     }
     if (target === undefined) return { ...record, ephemerisStatus: 'not-mapped-to-bundled-kernel' }
     const state = resolver.barycentric(target)
-    return { ...record, naifId: target, ephemerisStatus: state ? 'state-available-at-audit-epoch' : 'no-state-at-audit-epoch',
+    return { ...record, ...(identityMappingEvidence ? { identityMappingEvidence } : {}), naifId: target, ephemerisStatus: state ? 'state-available-at-audit-epoch' : 'no-state-at-audit-epoch',
       kernelEvidence: { target, auditEt: et, segments: byTarget.get(target) ?? [], stateAtAuditEpoch: state } }
   }
-  return { attach, evidence: { manifestId: manifest.id, profile, manifestSha256: digest(manifestBytes), auditEt: et,
+  const descriptors = kernels.map(({ id, solutionKernelIds, dependencyOnly, kernel }) => ({ id, solutionKernelIds, dependencyOnly,
+    segments: kernel.segments.map(({ target, center, frame, type, startEt, endEt }) => ({ target, center, frame, type, startEt, endEt })) }))
+  return { attach, descriptors, evidence: { manifestId: manifest.id, profile, manifestSha256: digest(manifestBytes), auditEt: et,
     identityMappingSha256: digest(JSON.stringify({ asteroidIds: [...asteroidIds], moonIds: [...moonIds], discoveryIds: [...discoveryIds], moonParents: [...moonParents] })),
     satelliteCatalogSha256: digest(satelliteCatalogBytes),
     timeScale: 'TDB seconds past J2000', frame: 'ECLIPJ2000', positionUnit: 'km', velocityUnit: 'km/s',

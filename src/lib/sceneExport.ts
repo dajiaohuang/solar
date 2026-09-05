@@ -7,12 +7,13 @@ import { prepareCanvasCapture } from './canvasCapture'
 import { encodeCurrentScene } from './shareScene'
 import { createSceneExportModelEvidenceLines } from './sceneExportEvidence'
 import { saveExport } from './platform'
+import type { BackendTrajectoryAudit } from './backendTrajectories'
 
 function canvasBlob(canvas: HTMLCanvasElement) {
   return new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('PNG encoding failed')), 'image/png'))
 }
 
-export async function exportAnnotatedScenePng(language: 'en' | 'zh') {
+export async function exportAnnotatedScenePng(language: 'en' | 'zh', trajectoryAudit?: BackendTrajectoryAudit | null) {
   const source = document.querySelector<HTMLCanvasElement>('.frames-grid .frame-view canvas')
   if (!source) throw new Error(language === 'zh' ? '当前工作区没有可导出的场景画布。' : 'The current workspace has no scene canvas to export.')
   const simulation = simulationStore.getState()
@@ -26,6 +27,7 @@ export async function exportAnnotatedScenePng(language: 'en' | 'zh') {
     simulation.referenceId,
     julianDay - simulation.historyDays,
     julianDay,
+    trajectoryAudit,
   )
   const width = 1600
   const headerHeight = 112

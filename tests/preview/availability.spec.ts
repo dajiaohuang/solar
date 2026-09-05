@@ -1,5 +1,30 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
+test('preview rejects the full catalog route before requesting identities or states', async ({ page }) => {
+  const requests: string[] = []
+  page.on('request', request => { if (/\/v1\/(identities|state\/|catalog\/manifest)/.test(request.url())) requests.push(request.url()) })
+  await page.goto('?v=4&page=catalog&lang=en&view=3d')
+  const dialog = page.locator('dialog.preview-availability')
+  await expect(dialog).toBeVisible()
+  await expect(dialog).toContainText('This workspace is available in the full version')
+  await expect(dialog.locator('textarea')).toHaveValue(page.url())
+  await expect(page.getByTestId('source-identity-browser')).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Dismiss', exact: true }).click()
+  await page.waitForLoadState('networkidle')
+  await expect(page.getByTestId('source-identity-browser')).toHaveCount(0)
+  expect(requests).toEqual([])
+})
+
+test('preview evidence never requests full-backend coverage', async ({ page }) => {
+  const requests: string[] = []
+  page.on('request', request => { if (/\/v1\/(coverage|catalog\/manifest)/.test(request.url())) requests.push(request.url()) })
+  await page.goto('?v=4&page=about&lang=en&view=3d')
+  const panel = page.getByTestId('source-coverage-report')
+  await expect(panel).toContainText('This preview does not request the full-backend audit')
+  await expect(panel.getByRole('button')).toHaveCount(0)
+  expect(requests).toEqual([])
+})
+
 test.beforeEach(async ({ request }) => {
   const response = await request.get('build-info.json')
   expect(response.ok(), 'Preview tests require a completed production artifact').toBe(true)
@@ -137,7 +162,7 @@ test('real preview artifacts support curated 3D and the pinned belt sample witho
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('?v=4&lang=en', { waitUntil: 'domcontentloaded' })
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
-  await expect(page.locator('.ephemeris-status summary')).toContainText('7/7', { timeout: 25_000 })
+  await expect(page.locator('.ephemeris-status > summary')).toContainText('7/7', { timeout: 25_000 })
   expect(requests.filter(url => /catalog-sample-/.test(url))).toEqual([])
   await page.getByTestId('preset-mars-main-belt-jupiter').click()
   await expect(page.locator('.element-scatter')).toBeVisible()

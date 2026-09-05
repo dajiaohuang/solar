@@ -1,6 +1,5 @@
 /// <reference types="vite/client" />
 
-declare const __SOLAR_NATIVE__: boolean
 declare const __SOLAR_PRODUCT_PROFILE__: 'full' | 'preview'
 declare const __SOLAR_EPHEMERIS_MANIFEST__: typeof import('./data/ephemeris-manifest.json')
 declare const __SOLAR_EPHEMERIS_PROFILE__: 'pages' | 'full'

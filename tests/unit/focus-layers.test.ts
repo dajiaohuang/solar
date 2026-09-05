@@ -29,10 +29,10 @@ describe('independent current positions and detail budgets', () => {
     const a = buildCurrentPositions({ bodies, bodiesById, referenceId: 'sun', julianDay: 2451545, resolveBodyPosition })
     const b = buildCurrentPositions({ bodies, bodiesById, referenceId: 'body-0', julianDay: 2451545, resolveBodyPosition })
     expect(resolveBodyPosition('body-292')).toBe(original)
-    expect(a.currentPositions.map(item => item.body.id)).toEqual(b.currentPositions.map(item => item.body.id))
+    expect(Array.from({ length: a.currentPositions.length }, (_, i) => a.currentPositions.bodyAt(i).id)).toEqual(Array.from({ length: b.currentPositions.length }, (_, i) => b.currentPositions.bodyAt(i).id))
     const origin = resolveBodyPosition('body-0')
     for (let i = 0; i < bodies.length; i++) {
-      expect(b.currentPositions[i].position3D!.x).toBeCloseTo(a.currentPositions[i].position3D!.x - origin.x, 12)
+      expect(b.currentPositions.coordinateAt(i, 0)).toBeCloseTo(a.currentPositions.coordinateAt(i, 0) - origin.x, 12)
     }
     expect(createBodyPositionResolver(bodiesById, 2451546, [])('body-292')).not.toEqual(original)
   })

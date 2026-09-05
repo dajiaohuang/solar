@@ -2,7 +2,6 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
-import { IS_NATIVE_APP } from './lib/platform'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -10,12 +9,7 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
-if (IS_NATIVE_APP) {
-  document.documentElement.classList.add('native-app')
-  void import('./lib/nativeRuntime').then(({ initializeNativeRuntime }) => initializeNativeRuntime())
-}
-
-if (!IS_NATIVE_APP && 'serviceWorker' in navigator && import.meta.env.PROD) {
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { updateViaCache: 'none' }).then((registration) => {
       if (!registration) return

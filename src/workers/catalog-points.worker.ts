@@ -6,11 +6,11 @@ import { propagateCatalogElementPositions } from '../engine/ephemeris/catalogPoi
 const workerScope = self as DedicatedWorkerGlobalScope
 let elements: Float64Array<ArrayBufferLike> = new Float64Array()
 function compute(request: Extract<CatalogPointWorkerRequest, { type: 'compute' }>) {
-  const { julianDay, requestId } = request
-  const { positions, positions3D } = propagateCatalogElementPositions(elements, julianDay, (progress) =>
+  const { julianDay, requestId, mode } = request
+  const positions = propagateCatalogElementPositions(elements, julianDay, mode, (progress) =>
     workerScope.postMessage({ type: 'progress', requestId, progress } satisfies CatalogPointWorkerResponse))
-  const response: CatalogPointWorkerResponse = { type: 'result', requestId, progress: 1, julianDay, positions, positions3D }
-  workerScope.postMessage(response, [positions.buffer, positions3D.buffer])
+  const response: CatalogPointWorkerResponse = { type: 'result', requestId, progress: 1, julianDay, mode, positions }
+  workerScope.postMessage(response, [positions.buffer])
 }
 
 workerScope.onmessage = (event: MessageEvent<CatalogPointWorkerRequest>) => {

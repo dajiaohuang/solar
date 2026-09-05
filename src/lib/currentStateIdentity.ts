@@ -3,7 +3,7 @@ import type { CelestialBody } from '../types'
 
 const BACKEND_BUILTIN_ALIASES = new Set(['sun', 'mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto'])
 
-/** Convert the registry identity to the exact ID accepted by current-states. */
+/** Convert the registry identity to the exact ID accepted by state plans. */
 export function backendBodyId(body: Pick<CelestialBody, 'id' | 'naifId'>): string {
   const target = bodyNaifId(body)
   // Only the Go catalog's stable builtin aliases stay named. Every other

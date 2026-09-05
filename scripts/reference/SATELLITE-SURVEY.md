@@ -255,7 +255,7 @@ six-vector pairs, including each root's endpoints and midpoint. Tests verify
 every source hash, dependency order and numerical agreement. They do not measure
 observational uncertainty, certify all dates, or turn different source families
 into one globally fitted solution. The build profile is included in build
-identity and exported manifest links; full/native does not inherit Pages' cap.
+identity and exported manifest links; the backend full profile does not inherit Pages' cap.
 
 ## 中文边界
 

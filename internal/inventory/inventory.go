@@ -4,8 +4,9 @@
 package inventory
 
 import (
-	"bufio"
+	"bytes"
 	"compress/gzip"
+	"container/list"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
@@ -13,7 +14,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"hash"
 	"io"
 	"math"
 	"os"
@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 const (
@@ -32,14 +33,28 @@ const (
 	MaxIndexPostings  = 12_000_000
 	MaxShardBytes     = 64 << 20
 	MaxShards         = 10_000
+	MaxBlockRows      = 512
+	MaxBlockBytes     = 8 << 20
+	MaxBlockRawBytes  = 16 << 20
+	BlockCacheBytes   = 64 << 20
 	idPostingBit      = uint32(1 << 31)
 )
 
+type block struct {
+	RowStart          int    `json:"rowStart"`
+	Count             int    `json:"count"`
+	Offset            int64  `json:"offset"`
+	Bytes             int    `json:"bytes"`
+	UncompressedBytes int    `json:"uncompressedBytes"`
+	SHA256            string `json:"sha256"`
+}
+
 type shard struct {
-	File   string `json:"file"`
-	Count  int    `json:"count"`
-	Bytes  int    `json:"bytes"`
-	SHA256 string `json:"sha256"`
+	File   string  `json:"file"`
+	Count  int     `json:"count"`
+	Bytes  int     `json:"bytes"`
+	SHA256 string  `json:"sha256"`
+	Blocks []block `json:"blocks"`
 }
 
 type manifest struct {
@@ -51,6 +66,7 @@ type manifest struct {
 
 type recordRef struct {
 	Shard   uint32
+	Block   uint16
 	Row     uint32
 	Ordinal uint32
 }
@@ -145,6 +161,94 @@ type Inventory struct {
 	idx     *sourceIndex
 	sources map[string]struct{}
 	models  map[string]map[string]struct{}
+	blocks  *blockCache
+}
+
+type decodedBlock struct {
+	data   []byte
+	starts []uint32
+}
+
+type blockCacheEntry struct {
+	key   uint64
+	block *decodedBlock
+	bytes int64
+}
+
+type blockCache struct {
+	mu          sync.Mutex
+	maxBytes    int64
+	bytes       int64
+	hits        uint64
+	misses      uint64
+	loads       uint64
+	loadedBytes uint64
+	items       map[uint64]*list.Element
+	order       *list.List
+}
+
+func newBlockCache(maxBytes int64) *blockCache {
+	return &blockCache{maxBytes: maxBytes, items: make(map[uint64]*list.Element), order: list.New()}
+}
+
+func (c *blockCache) get(key uint64) (*decodedBlock, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e := c.items[key]
+	if e == nil {
+		c.misses++
+		return nil, false
+	}
+	c.hits++
+	c.order.MoveToFront(e)
+	return e.Value.(*blockCacheEntry).block, true
+}
+
+func (c *blockCache) put(key uint64, value *decodedBlock) {
+	weight := int64(len(value.data) + len(value.starts)*4)
+	if weight > c.maxBytes {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.loads++
+	c.loadedBytes += uint64(len(value.data))
+	if e := c.items[key]; e != nil {
+		entry := e.Value.(*blockCacheEntry)
+		c.bytes -= entry.bytes
+		entry.block, entry.bytes = value, weight
+		c.bytes += weight
+		c.order.MoveToFront(e)
+	} else {
+		e := c.order.PushFront(&blockCacheEntry{key: key, block: value, bytes: weight})
+		c.items[key] = e
+		c.bytes += weight
+	}
+	for c.bytes > c.maxBytes {
+		e := c.order.Back()
+		entry := e.Value.(*blockCacheEntry)
+		delete(c.items, entry.key)
+		c.bytes -= entry.bytes
+		c.order.Remove(e)
+	}
+}
+
+func (c *blockCache) clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.bytes = 0
+	c.hits = 0
+	c.misses = 0
+	c.loads = 0
+	c.loadedBytes = 0
+	c.items = make(map[uint64]*list.Element)
+	c.order.Init()
+}
+
+func (c *blockCache) stats() map[string]int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return map[string]int64{"entries": int64(len(c.items)), "residentBytes": c.bytes, "maxResidentBytes": c.maxBytes, "hits": int64(c.hits), "misses": int64(c.misses), "loads": int64(c.loads), "loadedBytes": int64(c.loadedBytes)}
 }
 
 func Load(dir string) (*Inventory, error) {
@@ -163,7 +267,7 @@ func Load(dir string) (*Inventory, error) {
 	if err := json.Unmarshal(raw, &m); err != nil {
 		return nil, fmt.Errorf("parse inventory manifest: %w", err)
 	}
-	if m.SchemaVersion != 1 || m.Purpose != "source-inventory-not-runtime-catalog" || m.TotalRecords < 0 || len(m.Shards) == 0 || len(m.Shards) > MaxShards {
+	if m.SchemaVersion != 2 || m.Purpose != "source-inventory-addressable-v2" || m.TotalRecords < 0 || len(m.Shards) == 0 || len(m.Shards) > MaxShards {
 		return nil, fmt.Errorf("invalid source inventory manifest")
 	}
 	if m.TotalRecords > MaxIndexedRecords {
@@ -174,15 +278,27 @@ func Load(dir string) (*Inventory, error) {
 		if s.File == "" || filepath.IsAbs(s.File) || clean != s.File || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
 			return nil, fmt.Errorf("invalid inventory shard path")
 		}
-		if s.Count < 0 || s.Count > 10000 || s.Bytes < 0 {
+		if s.Count < 1 || s.Count > 10000 || s.Bytes < 1 || s.Bytes > MaxShardBytes || !validSHA256(s.SHA256) || len(s.Blocks) < 1 || len(s.Blocks) > 65535 {
 			return nil, fmt.Errorf("invalid inventory shard metadata")
+		}
+		rowStart, offset := 0, int64(0)
+		for _, b := range s.Blocks {
+			if b.RowStart != rowStart || b.Offset != offset || b.Count < 1 || b.Count > MaxBlockRows || b.Bytes < 1 || b.Bytes > MaxBlockBytes || b.UncompressedBytes < 1 || b.UncompressedBytes > MaxBlockRawBytes || !validSHA256(b.SHA256) {
+				return nil, fmt.Errorf("invalid inventory block metadata")
+			}
+			rowStart += b.Count
+			offset += int64(b.Bytes)
+		}
+		if rowStart != s.Count || offset != int64(s.Bytes) {
+			return nil, fmt.Errorf("inventory block coverage mismatch")
 		}
 	}
 	sum := sha256.Sum256(raw)
-	i := &Inventory{dir: abs, m: m, hash: hex.EncodeToString(sum[:]), sources: make(map[string]struct{}), models: make(map[string]map[string]struct{})}
+	i := &Inventory{dir: abs, m: m, hash: hex.EncodeToString(sum[:]), sources: make(map[string]struct{}), models: make(map[string]map[string]struct{}), blocks: newBlockCache(BlockCacheBytes)}
 	if err := i.buildIndex(); err != nil {
 		return nil, err
 	}
+	i.blocks.clear()
 	return i, nil
 }
 
@@ -196,6 +312,8 @@ func (i *Inventory) TotalBytes() int64 {
 	}
 	return total
 }
+
+func (i *Inventory) BlockCacheStats() map[string]int64 { return i.blocks.stats() }
 
 // IndexStats exposes bounded startup-index evidence without exposing mutable
 // internal maps to callers.
@@ -284,6 +402,18 @@ func (i *Inventory) Get(ctx context.Context, id string) (json.RawMessage, bool, 
 // The returned map contains only IDs that were found and preserves the source
 // row bytes for callers that need untouched evidence.
 func (i *Inventory) GetMany(ctx context.Context, ids []string) (map[string]json.RawMessage, error) {
+	return i.getMany(ctx, ids, nil)
+}
+
+// GetManyWithOrdinals binds evidence references to the actual indexed row,
+// using the same grouped reads as GetMany rather than scanning the inventory.
+func (i *Inventory) GetManyWithOrdinals(ctx context.Context, ids []string) (map[string]json.RawMessage, map[string]int, error) {
+	ordinals := make(map[string]int, len(ids))
+	rows, err := i.getMany(ctx, ids, ordinals)
+	return rows, ordinals, err
+}
+
+func (i *Inventory) getMany(ctx context.Context, ids []string, ordinals map[string]int) (map[string]json.RawMessage, error) {
 	out := make(map[string]json.RawMessage, len(ids))
 	if i == nil || i.idx == nil || len(ids) == 0 {
 		return out, nil
@@ -337,6 +467,9 @@ func (i *Inventory) GetMany(ctx context.Context, ids []string) (map[string]json.
 		for _, id := range wanted[refKey(ref)] {
 			if fields.ID == id {
 				out[id] = append(json.RawMessage(nil), rows[n]...)
+				if ordinals != nil {
+					ordinals[id] = int(ref.Ordinal)
+				}
 			}
 		}
 	}
@@ -441,7 +574,7 @@ func (i *Inventory) buildIndex() error {
 	for si, s := range i.m.Shards {
 		idx.shardStarts[si] = ordinal
 		rowCount := 0
-		err := i.walkShard(si, true, func(row int, raw []byte) error {
+		err := i.walkShard(si, true, func(blockIndex, row int, raw []byte) error {
 			var fields indexFields
 			if err := json.Unmarshal(raw, &fields); err != nil {
 				return fmt.Errorf("parse inventory row %d/%d: %w", si, row, err)
@@ -464,7 +597,7 @@ func (i *Inventory) buildIndex() error {
 					models["source-kernel-state-at-audit-epoch"] = struct{}{}
 				}
 			}
-			ref := recordRef{Shard: uint32(si), Row: uint32(row), Ordinal: ordinal}
+			ref := recordRef{Shard: uint32(si), Block: uint16(blockIndex), Row: uint32(row), Ordinal: ordinal}
 			idx.records = append(idx.records, ref)
 			var seen [24]uint64
 			seenCount := 0
@@ -556,84 +689,56 @@ func (i *Inventory) readRefs(ctx context.Context, refs []recordRef) ([]json.RawM
 	}
 	out := make([]json.RawMessage, len(refs))
 	positions := make(map[uint64][]int, len(refs))
-	shards := make([]int, 0, len(refs))
-	seenShards := make(map[int]struct{})
+	blockRefs := make(map[uint64][]recordRef)
 	for pos, ref := range refs {
 		key := refKey(ref)
 		positions[key] = append(positions[key], pos)
-		if _, ok := seenShards[int(ref.Shard)]; !ok {
-			seenShards[int(ref.Shard)] = struct{}{}
-			shards = append(shards, int(ref.Shard))
-		}
+		key = blockKey(int(ref.Shard), int(ref.Block))
+		blockRefs[key] = append(blockRefs[key], ref)
 	}
-	sort.Ints(shards)
-	for _, si := range shards {
-		remaining := 0
-		for key := range positions {
-			if uint32(key>>32) == uint32(si) {
-				remaining++
-			}
-		}
-		err := i.walkShard(si, false, func(row int, raw []byte) error {
-			if row%128 == 0 {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				default:
-				}
-			}
-			key := refKey(recordRef{Shard: uint32(si), Row: uint32(row)})
-			positionsForRow := positions[key]
-			for _, pos := range positionsForRow {
-				out[pos] = append(json.RawMessage(nil), raw...)
-			}
-			if len(positionsForRow) > 0 {
-				delete(positions, key)
-				remaining--
-				if remaining == 0 {
-					return io.EOF
-				}
-			}
-			return nil
-		})
-		if err != nil && err != io.EOF {
+	keys := make([]uint64, 0, len(blockRefs))
+	for key := range blockRefs {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(a, b int) bool { return keys[a] < keys[b] })
+	for _, key := range keys {
+		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
+		si, bi := int(key>>32), int(uint32(key))
+		decoded, err := i.readBlock(ctx, si, bi)
+		if err != nil {
+			return nil, err
+		}
+		for _, ref := range blockRefs[key] {
+			raw, ok := blockRow(decoded, i.m.Shards[si].Blocks[bi], int(ref.Row))
+			if !ok {
+				return nil, fmt.Errorf("inventory row %d/%d not found", ref.Shard, ref.Row)
+			}
+			for _, pos := range positions[refKey(ref)] {
+				out[pos] = append(json.RawMessage(nil), raw...)
+			}
 		}
 	}
 	return out, nil
 }
 
 func (i *Inventory) readRef(ctx context.Context, ref recordRef) (json.RawMessage, error) {
-	var out json.RawMessage
-	err := i.walkShard(int(ref.Shard), false, func(row int, raw []byte) error {
-		if row%128 == 0 {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-			}
-		}
-		if uint32(row) == ref.Row {
-			out = append(json.RawMessage(nil), raw...)
-			return io.EOF
-		}
-		return nil
-	})
-	if err != nil && err != io.EOF {
+	if int(ref.Shard) >= len(i.m.Shards) || int(ref.Block) >= len(i.m.Shards[ref.Shard].Blocks) {
+		return nil, fmt.Errorf("inventory reference out of range")
+	}
+	decoded, err := i.readBlock(ctx, int(ref.Shard), int(ref.Block))
+	if err != nil {
 		return nil, err
 	}
-	if out == nil {
+	raw, ok := blockRow(decoded, i.m.Shards[ref.Shard].Blocks[ref.Block], int(ref.Row))
+	if !ok {
 		return nil, fmt.Errorf("inventory row %d/%d not found", ref.Shard, ref.Row)
 	}
-	return out, nil
+	return append(json.RawMessage(nil), raw...), nil
 }
 
-func (i *Inventory) walkShard(si int, verify bool, fn func(row int, raw []byte) error) error {
+func (i *Inventory) walkShard(si int, verify bool, fn func(blockIndex, row int, raw []byte) error) error {
 	if si < 0 || si >= len(i.m.Shards) {
 		return fmt.Errorf("inventory shard out of range")
 	}
@@ -643,60 +748,82 @@ func (i *Inventory) walkShard(si int, verify bool, fn func(row int, raw []byte) 
 	if err != nil {
 		return fmt.Errorf("stat inventory shard: %w", err)
 	}
-	if info.Size() > MaxShardBytes {
-		return fmt.Errorf("inventory shard %s exceeds %d-byte limit", s.File, MaxShardBytes)
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("open inventory shard: %w", err)
-	}
-	defer file.Close()
-	var reader io.Reader = file
-	var counted *countingReader
-	var digest hash.Hash
 	if verify {
-		counted = &countingReader{Reader: file}
-		digest = sha256.New()
-		reader = io.TeeReader(counted, digest)
-	}
-	gz, err := gzip.NewReader(reader)
-	if err != nil {
-		return fmt.Errorf("open inventory gzip: %w", err)
-	}
-	scan := bufio.NewScanner(gz)
-	scan.Buffer(make([]byte, 64*1024), 4*1024*1024)
-	for row := 0; scan.Scan(); row++ {
-		if err := fn(row, scan.Bytes()); err != nil {
-			return err
-		}
-	}
-	if err := scan.Err(); err != nil {
-		_ = gz.Close()
-		return fmt.Errorf("scan inventory shard: %w", err)
-	}
-	if err := gz.Close(); err != nil {
-		return fmt.Errorf("close inventory gzip: %w", err)
-	}
-	if verify {
-		if counted.n != info.Size() || (s.Bytes > 0 && counted.n != int64(s.Bytes)) {
+		if info.Size() != int64(s.Bytes) {
 			return fmt.Errorf("inventory shard %s byte count mismatch", s.File)
 		}
-		if s.SHA256 != "" && hex.EncodeToString(digest.Sum(nil)) != s.SHA256 {
+		file, openErr := os.Open(path)
+		if openErr != nil {
+			return fmt.Errorf("open inventory shard: %w", openErr)
+		}
+		digest := sha256.New()
+		_, copyErr := io.Copy(digest, io.LimitReader(file, MaxShardBytes+1))
+		closeErr := file.Close()
+		if copyErr != nil || closeErr != nil || hex.EncodeToString(digest.Sum(nil)) != s.SHA256 {
 			return fmt.Errorf("inventory shard %s hash mismatch", s.File)
+		}
+	}
+	for bi, b := range s.Blocks {
+		decoded, err := i.readBlock(context.Background(), si, bi)
+		if err != nil {
+			return err
+		}
+		for row := 0; row < b.Count; row++ {
+			if err := fn(bi, b.RowStart+row, decoded.data[decoded.starts[row]:decoded.starts[row+1]-1]); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
-type countingReader struct {
-	io.Reader
-	n int64
-}
-
-func (r *countingReader) Read(p []byte) (int, error) {
-	n, err := r.Reader.Read(p)
-	r.n += int64(n)
-	return n, err
+func (i *Inventory) readBlock(ctx context.Context, si, bi int) (*decodedBlock, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if si < 0 || si >= len(i.m.Shards) || bi < 0 || bi >= len(i.m.Shards[si].Blocks) {
+		return nil, fmt.Errorf("inventory block out of range")
+	}
+	key := blockKey(si, bi)
+	if cached, ok := i.blocks.get(key); ok {
+		return cached, nil
+	}
+	b := i.m.Shards[si].Blocks[bi]
+	file, err := os.Open(filepath.Join(i.dir, i.m.Shards[si].File))
+	if err != nil {
+		return nil, fmt.Errorf("open inventory shard: %w", err)
+	}
+	compressed := make([]byte, b.Bytes)
+	_, readErr := file.ReadAt(compressed, b.Offset)
+	closeErr := file.Close()
+	if readErr != nil || closeErr != nil {
+		return nil, fmt.Errorf("read inventory block: %v", readErr)
+	}
+	sum := sha256.Sum256(compressed)
+	if hex.EncodeToString(sum[:]) != b.SHA256 {
+		return nil, fmt.Errorf("inventory block hash mismatch")
+	}
+	gz, err := gzip.NewReader(bytes.NewReader(compressed))
+	if err != nil {
+		return nil, fmt.Errorf("open inventory block gzip: %w", err)
+	}
+	data, readErr := io.ReadAll(io.LimitReader(gz, int64(MaxBlockRawBytes)+1))
+	closeErr = gz.Close()
+	if readErr != nil || closeErr != nil || len(data) != b.UncompressedBytes || len(data) > MaxBlockRawBytes || len(data) == 0 || data[len(data)-1] != '\n' {
+		return nil, fmt.Errorf("invalid inventory block payload")
+	}
+	starts := make([]uint32, 1, b.Count+1)
+	for n, value := range data {
+		if value == '\n' {
+			starts = append(starts, uint32(n+1))
+		}
+	}
+	if len(starts) != b.Count+1 {
+		return nil, fmt.Errorf("inventory block row count mismatch")
+	}
+	decoded := &decodedBlock{data: data, starts: starts}
+	i.blocks.put(key, decoded)
+	return decoded, nil
 }
 
 func normalize(value string) string {
@@ -716,7 +843,26 @@ func hashText(value string) uint64 {
 	return h
 }
 
-func refKey(ref recordRef) uint64 { return uint64(ref.Shard)<<32 | uint64(ref.Row) }
+func refKey(ref recordRef) uint64      { return uint64(ref.Shard)<<32 | uint64(ref.Row) }
+func blockKey(shard, block int) uint64 { return uint64(uint32(shard))<<32 | uint64(uint32(block)) }
+func blockRow(decoded *decodedBlock, meta block, globalRow int) ([]byte, bool) {
+	local := globalRow - meta.RowStart
+	if decoded == nil || local < 0 || local >= meta.Count || local+1 >= len(decoded.starts) {
+		return nil, false
+	}
+	start, end := decoded.starts[local], decoded.starts[local+1]
+	if end <= start || decoded.data[end-1] != '\n' {
+		return nil, false
+	}
+	return decoded.data[start : end-1], true
+}
+func validSHA256(value string) bool {
+	if len(value) != sha256.Size*2 || value != strings.ToLower(value) {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
+}
 func minInt(a, b int) int {
 	if a < b {
 		return a

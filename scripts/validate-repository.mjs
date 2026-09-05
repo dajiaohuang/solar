@@ -258,6 +258,37 @@ export function assertDocumentedVersion(markdown, expected, language) {
   }
 }
 
+export function iosApplicationIdentity(project) {
+  // Follow the application target's configuration references. UI-test bundles
+  // intentionally have a different ID and are not released application targets.
+  const objects = new Map()
+  const definitions = /^\s*([A-F0-9]{24})\s*(?:\/\*[^\n]*?\*\/\s*)?=\s*\{/gm
+  for (const match of project.matchAll(definitions)) {
+    let depth = 1, quoted = false, escaped = false, end = match.index + match[0].length
+    for (; end < project.length && depth; end++) {
+      const char = project[end]
+      if (escaped) { escaped = false; continue }
+      if (quoted && char === '\\') { escaped = true; continue }
+      if (char === '"') { quoted = !quoted; continue }
+      if (!quoted) { if (char === '{') depth++; else if (char === '}') depth-- }
+    }
+    if (depth) fail('Unterminated Xcode object')
+    const body = project.slice(match.index + match[0].length, end - 1)
+    if (/^\s*isa\s*=/.test(body)) objects.set(match[1], body)
+  }
+  const apps = [...objects.values()].filter(body => /isa\s*=\s*PBXNativeTarget;/.test(body) && /productType\s*=\s*"com.apple.product-type.application";/.test(body))
+  if (apps.length !== 1) fail('Expected one native iOS application target')
+  const listId = matchOne(apps[0], /buildConfigurationList\s*=\s*([A-F0-9]{24})/, 'application configuration list')
+  const list = objects.get(listId) ?? ''
+  const configurationIds = matchOne(list, /buildConfigurations\s*=\s*\(([\s\S]*?)\)/, 'application configurations').match(/[A-F0-9]{24}/g) ?? []
+  if (!configurationIds.length) fail('Native iOS application has no configurations')
+  const unquote = value => value.trim().replace(/^"(.*)"$/, '$1')
+  return {
+    ids: configurationIds.map(id => unquote(matchOne(objects.get(id) ?? '', /PRODUCT_BUNDLE_IDENTIFIER\s*=\s*([^;]+);/, 'iOS application ID'))),
+    versions: configurationIds.map(id => unquote(matchOne(objects.get(id) ?? '', /MARKETING_VERSION\s*=\s*([^;]+);/, 'iOS application version'))),
+  }
+}
+
 function validateIdentity() {
   const pkg = json('package.json')
   const lock = json('package-lock.json')
@@ -272,18 +303,16 @@ function validateIdentity() {
   assertDocumentedVersion(read('README.md'), pkg.version, 'en')
   assertDocumentedVersion(read('README-CN.md'), pkg.version, 'zh')
 
-  const capacitorId = matchOne(read('capacitor.config.ts'), /appId:\s*['"]([^'"]+)['"]/, 'Capacitor app ID')
   const androidId = matchOne(read('android/app/build.gradle'), /applicationId\s+['"]([^'"]+)['"]/, 'Android application ID')
-  const iosIds = [...read('ios/App/App.xcodeproj/project.pbxproj').matchAll(/PRODUCT_BUNDLE_IDENTIFIER\s*=\s*([^;]+);/g)].map(match => match[1].trim())
-  if (!iosIds.length || androidId !== capacitorId || iosIds.some(id => id !== capacitorId)) fail('Native application IDs do not match capacitor.config.ts')
+  const { ids: iosIds, versions: iosVersions } = iosApplicationIdentity(read('ios/App/App.xcodeproj/project.pbxproj'))
+  if (!iosIds.length || iosIds.some(id => id !== androidId)) fail('Android and iOS application IDs do not match')
 
   const androidVersion = matchOne(read('android/app/build.gradle'), /versionName\s+['"]([^'"]+)['"]/, 'Android version')
-  const iosVersions = [...read('ios/App/App.xcodeproj/project.pbxproj').matchAll(/MARKETING_VERSION\s*=\s*([^;]+);/g)].map(match => match[1].trim())
   if (androidVersion !== pkg.version || !iosVersions.length || iosVersions.some(version => version !== pkg.version)) {
     fail('Native application versions do not match package.json')
   }
 
-  return { name: pkg.name, version: pkg.version, appId: capacitorId }
+  return { name: pkg.name, version: pkg.version, appId: androidId }
 }
 
 export function validateRepository() {

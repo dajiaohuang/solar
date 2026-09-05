@@ -11,8 +11,6 @@ import { GuidedStoryOverlay } from '../features/stories/GuidedStoryOverlay'
 import { useBodyRegistry } from './bodyRegistry'
 import { AppRouteView } from './routes'
 import { CommandPalette } from './CommandPalette'
-import { IS_NATIVE_APP } from '../lib/platform'
-import { onNativeBack } from '../lib/nativeBack'
 import { PRODUCT_PROFILE, routeAvailability } from '../lib/productAvailability'
 import { availabilityActions } from '../state/availability-store'
 import { PreviewAvailability } from './PreviewAvailability'
@@ -80,30 +78,10 @@ export function AppShell() {
   }, [ui.route])
 
   useEffect(() => {
-    if (!IS_NATIVE_APP) return
-    return onNativeBack((event) => {
-      if (commandOpen) {
-        event.preventDefault()
-        setCommandOpen(false)
-      } else if (mobileMoreOpen) {
-        event.preventDefault()
-        setMobileMoreOpen(false)
-      } else if (ui.storyGuideOpen) {
-        event.preventDefault()
-        uiActions.stopStory()
-      } else if (ui.route !== 'explorer' && !event.detail.canGoBack) {
-        event.preventDefault()
-        uiActions.navigate('explorer')
-      }
-    })
-  }, [commandOpen, mobileMoreOpen, ui.route, ui.storyGuideOpen])
-
-  useEffect(() => {
     const onUpdate = (event: Event) => {
       const registration = (event as CustomEvent<ServiceWorkerRegistration>).detail
       if (registration?.waiting) setWaitingWorker(registration.waiting)
     }
-    if (IS_NATIVE_APP) return
     window.addEventListener('solar-atlas-update', onUpdate)
     void navigator.serviceWorker?.getRegistration().then((registration) => {
       if (registration?.waiting) setWaitingWorker(registration.waiting)

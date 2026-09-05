@@ -6,9 +6,9 @@ test('frames close moons at their own scale and preserves zoom, reset and portra
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=4&lang=en&speed=0')
   await page.getByTestId('preset-mars-spk-moons').click()
-  await page.waitForLoadState('networkidle')
   const canvas = page.getByTestId('trajectory-canvas-3d')
-  await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('3/3')
+  await expect(canvas).toHaveAttribute('data-position-count', '3')
+  await expect(page.getByTestId('local-ephemeris-evidence').locator(':scope > summary')).toContainText('3/3')
   await page.screenshot({ path: test.info().outputPath('mars-moons.png'), fullPage: true })
   await expect.poll(async () => Number(await canvas.getAttribute('data-camera-distance'))).toBeLessThan(.01)
   await expect(page).toHaveURL(/[?&]view=3d(?:&|$)/)
@@ -33,7 +33,7 @@ test('frames close moons at their own scale and preserves zoom, reset and portra
 test('uses useful moon orbital units and distinguishes the active Earth center', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=4&lang=en&view=3d&ref=mars&bodies=mars,naif:401,naif:402&focused=naif:401&jd=2461287.5&speed=0&history=1')
-  await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('3/3')
+  await expect(page.getByTestId('local-ephemeris-evidence').locator(':scope > summary')).toContainText('3/3')
   await page.locator('.inspector-toggle').click()
   await page.getByRole('tab', { name: 'Orbit', exact: true }).click()
   const inspector = page.locator('.inspector-panel')
@@ -44,13 +44,13 @@ test('uses useful moon orbital units and distinguishes the active Earth center',
   await expect(inspector).toContainText('J2000 ecliptic')
   await expect(inspector).toContainText('not physical sizes')
   await page.goto('./?v=4&lang=en&focused=earth&ref=earth&bodies=earth,moon&jd=2461287.5&speed=0')
-  await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('2/2')
+  await expect(page.getByTestId('local-ephemeris-evidence').locator(':scope > summary')).toContainText('2/2')
   await page.locator('.inspector-toggle').click()
   await page.getByRole('tab', { name: 'Context', exact: true }).click()
   await expect(inspector).toContainText('Earth geocenter from the active ephemeris')
   await expect(inspector).not.toContainText('Earth geocenter derived from the EMB seed')
   await page.goto('./?v=4&lang=zh&view=3d&ref=mars&bodies=mars,naif:401,naif:402&focused=naif:401&jd=2461287.5&speed=0&history=1')
-  await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('3/3')
+  await expect(page.getByTestId('local-ephemeris-evidence').locator(':scope > summary')).toContainText('3/3')
   await page.locator('.inspector-toggle').click()
   await page.getByRole('tab', { name: '轨道', exact: true }).click()
   await expect(inspector).toContainText('近拱点')
@@ -80,7 +80,7 @@ for (const id of satellitePresetIds) {
     // Preserve the original large-pool transition that exposed the CI failure.
     if (id === 'saturn-spk-moons') {
       await page.getByTestId('preset-jupiter-spk-moons').click()
-      await expect(page.getByTestId('ephemeris-status').locator('summary')).not.toContainText('Loading', { timeout: 60_000 })
+      await expect(page.getByTestId('local-ephemeris-evidence').locator(':scope > summary')).not.toContainText('Loading', { timeout: 60_000 })
     }
     const preset = page.getByTestId(`preset-${id}`)
     const selectedCount = Number((await preset.locator('em').innerText()).split(' · ').at(-1))
@@ -89,8 +89,8 @@ for (const id of satellitePresetIds) {
     // A first selection now loads an entire system's split original records.
     // Background worker requests are not scene readiness. Require the new
     // selection, its loader and then trajectory completion within the deadlines.
-    await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText(new RegExp(`/${selectedCount}(?:\\D|$)`))
-    await expect(page.getByTestId('ephemeris-status').locator('summary')).not.toContainText('Loading', { timeout: 60_000 })
+    await expect(page.getByTestId('local-ephemeris-evidence').locator(':scope > summary')).toContainText(new RegExp(`/${selectedCount}(?:\\D|$)`))
+    await expect(page.getByTestId('local-ephemeris-evidence').locator(':scope > summary')).not.toContainText('Loading', { timeout: 60_000 })
     await expect(page.locator('.compute-progress')).toHaveCount(0, { timeout: 60_000 })
     const canvas = page.getByTestId('trajectory-canvas-3d')
     await expect(canvas).toBeVisible()

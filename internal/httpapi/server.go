@@ -16,35 +16,84 @@ import (
 	"sync/atomic"
 
 	"github.com/dajiaohuang/solar/backend/internal/catalog"
+	"github.com/dajiaohuang/solar/backend/internal/coverage"
 	"github.com/dajiaohuang/solar/backend/internal/inventory"
 	"github.com/dajiaohuang/solar/backend/internal/science"
 )
 
 const maxBodyBytes = 1 << 20
-const maxCurrentStateIDs = 512
-const maxCurrentStateResponseBytes = 8 << 20
 
 type Server struct {
-	catalog   *catalog.Catalog
-	inventory *inventory.Inventory
-	slots     chan struct{}
-	inFlight  atomic.Int64
+	catalog             *catalog.Catalog
+	inventory           *inventory.Inventory
+	scheduler           *requestScheduler
+	tileSlots           chan struct{}
+	plans               *statePlanCache
+	tiles               *stateTileCache
+	stateTileByteBudget int64
+	coverage            *coverage.Ledger
+	inFlight            atomic.Int64
+	cancelled           atomic.Uint64
 }
 
 func New(c *catalog.Catalog, maxConcurrent int, inventories ...*inventory.Inventory) *Server {
-	if maxConcurrent < 1 {
-		maxConcurrent = 1
-	}
 	var inv *inventory.Inventory
 	if len(inventories) > 0 {
 		inv = inventories[0]
 	}
-	return &Server{catalog: c, inventory: inv, slots: make(chan struct{}, maxConcurrent)}
+	return newServer(c, maxConcurrent, inv, nil)
 }
+
+// NewWithCoverage installs an already validated, immutable coverage ledger.
+// A nil ledger deliberately leaves the optional coverage endpoints unavailable.
+func NewWithCoverage(c *catalog.Catalog, maxConcurrent int, inv *inventory.Inventory, ledger *coverage.Ledger) *Server {
+	return newServer(c, maxConcurrent, inv, ledger)
+}
+
+func newServer(c *catalog.Catalog, maxConcurrent int, inv *inventory.Inventory, ledger *coverage.Ledger) *Server {
+	if maxConcurrent < 1 {
+		maxConcurrent = 1
+	}
+	return &Server{catalog: c, inventory: inv, coverage: ledger, scheduler: newRequestScheduler(maxConcurrent, requestQueueCapacity, requestQueueTimeout), tileSlots: make(chan struct{}, 2), plans: newStatePlanCache(statePlanCacheItems), tiles: newStateTileCache(stateTileCacheBytes), stateTileByteBudget: maxStateTileBytes}
+}
+
+// SchedulerStats is local benchmark evidence, not a public metrics endpoint.
+func (s *Server) SchedulerStats() map[string]uint64 { return s.scheduler.stats() }
+
+// TileCacheStats exposes bounded runtime evidence to the local benchmark
+// harness without adding diagnostic state to the wire protocol.
+func (s *Server) TileCacheStats() map[string]uint64 {
+	if s.tiles == nil {
+		return map[string]uint64{}
+	}
+	stats := s.tiles.stats()
+	stats["encoderSlotsActive"] = uint64(len(s.tileSlots))
+	stats["encoderSlotsLimit"] = uint64(cap(s.tileSlots))
+	return stats
+}
+
+// PlanCacheStats describes retained preflight work for local memory probes.
+func (s *Server) PlanCacheStats() map[string]uint64 {
+	items, bytes, maxBytes := s.plans.stats()
+	return map[string]uint64{"items": uint64(items), "residentBytes": uint64(bytes), "maxResidentBytes": uint64(maxBytes)}
+}
+
+// CancelledRequests reports requests whose server handler observed a canceled
+// context before returning. It is benchmark evidence, not a wire metric.
+func (s *Server) CancelledRequests() uint64 {
+	return s.cancelled.Load()
+}
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if r.Context().Err() != nil {
+			s.cancelled.Add(1)
+		}
+	}()
 	w.Header().Set("X-Solar-API-Version", catalog.APIVersion)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Expose-Headers", "Content-Length, ETag, X-Solar-API-Version")
 	if r.Method == "OPTIONS" {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
@@ -55,21 +104,23 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.error(w, http.StatusNotFound, "not_found", "unknown endpoint")
 		return
 	}
-	// Scientific work is deliberately fail-fast when the bounded worker pool is
-	// full. An unbounded wait queue would let a burst consume memory before
-	// request cancellation can be observed by the handler.
+	// Admission precedes JSON decoding and scientific work. Waiting is bounded
+	// separately per class, so directory scans cannot consume every queue slot.
 	if err := r.Context().Err(); err != nil {
 		s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
 		return
 	}
-	select {
-	case s.slots <- struct{}{}:
-		defer func() { <-s.slots }()
-	default:
+	release, err := s.scheduler.acquire(r.Context(), classifyRequest(r))
+	if err != nil {
+		if r.Context().Err() != nil {
+			s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
+			return
+		}
 		w.Header().Set("Retry-After", "1")
-		s.error(w, http.StatusTooManyRequests, "overloaded", "scientific worker limit reached; retry later")
+		s.error(w, http.StatusTooManyRequests, "overloaded", "scientific queue is full or its wait expired; retry later")
 		return
 	}
+	defer release()
 	s.inFlight.Add(1)
 	defer s.inFlight.Add(-1)
 	path := strings.TrimPrefix(r.URL.Path, "/v1/")
@@ -90,8 +141,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.body(w, r, strings.TrimPrefix(path, "bodies/"))
 	case r.Method == "POST" && path == "trajectory":
 		s.trajectory(w, r)
-	case r.Method == "POST" && path == "current-states":
-		s.currentStates(w, r)
+	case r.Method == "GET" && path == "catalog/manifest":
+		s.catalogManifest(w, r)
+	case r.Method == "GET" && path == "coverage":
+		s.coverageSummary(w, r)
+	case r.Method == "GET" && path == "coverage/targets":
+		s.coverageTargets(w, r)
+	case r.Method == "POST" && path == "state/plan":
+		s.statePlan(w, r)
+	case r.Method == "POST" && path == "state/tiles":
+		s.stateTiles(w, r)
 	case r.Method == "GET" && path == "preview/manifest":
 		s.preview(w, r)
 	default:
@@ -135,7 +194,7 @@ func (s *Server) capabilities(w http.ResponseWriter, _ *http.Request) {
 		}
 		identities = unique
 	}
-	s.json(w, http.StatusOK, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "manifestSha256": s.catalog.ManifestHash(), "coverage": coverage, "contract": map[string]any{"timeScale": "TDB", "epoch": "Julian date", "frame": "ECLIPJ2000", "distanceUnit": "km", "velocityUnit": "km/s", "precisionModes": []string{"exact", "approximate-opt-in"}, "currentStates": map[string]any{"precision": "exact-only", "stateOriginId": "naif:0"}, "modelBoundary": "Current states accept exact only; trajectory and identity endpoints may expose explicit approximate opt-in", "nBody": false, "auditIdentities": identities}, "limits": map[string]int{"catalogPageMax": 500, "trajectoryBodiesMax": 64, "trajectorySamplesMax": 10000, "currentStateIDsMax": maxCurrentStateIDs, "currentStateBodyBytes": maxBodyBytes, "currentStateResponseBytes": maxCurrentStateResponseBytes, "inventoryPageMax": 500, "inventoryMaxIndexedRecords": inventory.MaxIndexedRecords, "inventoryMaxIndexPostings": inventory.MaxIndexPostings, "inventoryMaxShards": inventory.MaxShards, "inventoryMaxShardBytes": inventory.MaxShardBytes}, "profiles": map[string]any{"full": map[string]any{"catalog": true, "identities": s.inventory != nil, "trajectory": true, "currentStates": true}, "preview": map[string]any{"catalog": "curated", "fullOnlyVisible": true, "restrictedActions": "blocked"}}})
+	s.json(w, http.StatusOK, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "manifestSha256": s.catalog.ManifestHash(), "coverage": coverage, "contract": map[string]any{"timeScale": "TDB", "epoch": "Julian date", "frame": "ECLIPJ2000", "distanceUnit": "km", "velocityUnit": "km/s", "precisionModes": []string{"exact", "approximate-opt-in"}, "stateTiles": map[string]any{"precision": "exact-only", "stateOriginId": "naif:0", "fieldMask": []string{"position", "velocity"}}, "modelBoundary": "State tiles accept exact only; trajectory and identity endpoints may expose explicit approximate opt-in", "nBody": false, "auditIdentities": identities}, "limits": map[string]int{"catalogPageMax": 500, "trajectoryBodiesMax": 64, "trajectorySamplesMax": 10000, "statePlanIDsMax": maxStatePlanIDs, "stateTileBodiesMax": maxStateTileBodies, "stateTileBytesMax": maxStateTileBytes, "statePlanCacheItemsMax": statePlanCacheItems, "statePlanCacheBytesMax": statePlanCacheBytes, "inventoryPageMax": 500, "inventoryMaxIndexedRecords": inventory.MaxIndexedRecords, "inventoryMaxIndexPostings": inventory.MaxIndexPostings, "inventoryMaxShards": inventory.MaxShards, "inventoryMaxShardBytes": inventory.MaxShardBytes, "inventoryBlockRowsMax": inventory.MaxBlockRows, "inventoryBlockBytesMax": inventory.MaxBlockBytes, "inventoryBlockCacheBytesMax": inventory.BlockCacheBytes}, "profiles": map[string]any{"full": map[string]any{"catalog": true, "identities": s.inventory != nil, "trajectory": true, "stateTiles": true}, "preview": map[string]any{"catalog": "curated", "fullOnlyVisible": true, "restrictedActions": "blocked"}}})
 }
 
 func (s *Server) catalogPage(w http.ResponseWriter, r *http.Request) {
@@ -345,7 +404,12 @@ func (s *Server) resolveInventoryStateWithOperational(ctx context.Context, recor
 				return sourceStateResult{}, err
 			}
 			if found && finiteState(state) {
-				window := map[string]float64{"startEt": body.ValidityStartET, "endEt": body.ValidityEndET}
+				var window map[string]float64
+				if provenance, provenanceOK, provenanceErr := s.catalog.OperationalProvenance(catalogID, jd); provenanceErr != nil {
+					return sourceStateResult{}, provenanceErr
+				} else if provenanceOK && provenance.ValidityPresent {
+					window = map[string]float64{"startEt": provenance.ValidityStartET, "endEt": provenance.ValidityEndET}
+				}
 				return sourceStateResult{Availability: catalog.AvailableOperational, Model: "spk-original", State: &state, Evidence: "catalog-kernel", EvidenceWindow: window}, nil
 			}
 		}
@@ -540,321 +604,6 @@ type sourceStateResult struct {
 	EvidenceWindow map[string]float64
 }
 
-type currentStatesRequest struct {
-	IDs       []string `json:"ids"`
-	EpochJD   float64  `json:"epochJd"`
-	Frame     string   `json:"frame"`
-	Precision string   `json:"precision"`
-}
-
-// currentStatesResponse is deliberately columnar: IDs and every metadata
-// field have the same row order, while stateValues is a flat six-component
-// array that maps directly to a Float64Array. statePresent disambiguates the
-// zero-filled slots for missing states without emitting JSON NaN/null values.
-type currentStatesResponse struct {
-	APIVersion              string                 `json:"apiVersion"`
-	CatalogVersion          string                 `json:"catalogVersion"`
-	CatalogManifestSHA256   string                 `json:"catalogManifestSha256"`
-	InventoryManifestSHA256 string                 `json:"inventoryManifestSha256,omitempty"`
-	EpochJD                 float64                `json:"epochJd"`
-	TimeScale               string                 `json:"timeScale"`
-	Frame                   string                 `json:"frame"`
-	DistanceUnit            string                 `json:"distanceUnit"`
-	VelocityUnit            string                 `json:"velocityUnit"`
-	StateLayout             string                 `json:"stateLayout"`
-	StateStride             int                    `json:"stateStride"`
-	StateOriginID           string                 `json:"stateOriginId"`
-	IDs                     []string               `json:"ids"`
-	Availability            []catalog.Availability `json:"availability"`
-	Precision               []string               `json:"precision"`
-	Source                  []string               `json:"source"`
-	DatasetVersion          []string               `json:"datasetVersion"`
-	Model                   []string               `json:"model"`
-	CenterIDs               []string               `json:"centerIds"`
-	ValidityStartET         []float64              `json:"validityStartEt"`
-	ValidityEndET           []float64              `json:"validityEndEt"`
-	ValidityPresent         []bool                 `json:"validityPresent"`
-	StateEvidence           []string               `json:"stateEvidence"`
-	EvidenceWindowStartET   []float64              `json:"evidenceWindowStartEt"`
-	EvidenceWindowEndET     []float64              `json:"evidenceWindowEndEt"`
-	EvidenceWindowPresent   []bool                 `json:"evidenceWindowPresent"`
-	MissingReason           []string               `json:"missingReason"`
-	IdentityStatus          []string               `json:"identityStatus"`
-	SourceRecord            []bool                 `json:"sourceRecord"`
-	StatePresent            []bool                 `json:"statePresent"`
-	StateValues             []float64              `json:"stateValues"`
-}
-
-type currentStateRow struct {
-	ID                    string
-	Availability          catalog.Availability
-	Precision             string
-	Source                string
-	DatasetVersion        string
-	Model                 string
-	CenterID              string
-	ValidityStartET       float64
-	ValidityEndET         float64
-	ValidityPresent       bool
-	StateEvidence         string
-	EvidenceWindowStartET float64
-	EvidenceWindowEndET   float64
-	EvidenceWindowPresent bool
-	MissingReason         string
-	IdentityStatus        string
-	SourceRecord          bool
-	State                 *catalog.State
-}
-
-func (s *Server) currentStates(w http.ResponseWriter, r *http.Request) {
-	var req currentStatesRequest
-	dec := json.NewDecoder(io.LimitReader(r.Body, maxBodyBytes))
-	if err := dec.Decode(&req); err != nil {
-		s.error(w, http.StatusBadRequest, "invalid_json", "request body is not valid JSON")
-		return
-	}
-	var extra any
-	if err := dec.Decode(&extra); err != io.EOF {
-		s.error(w, http.StatusBadRequest, "invalid_json", "request body must contain one JSON object")
-		return
-	}
-	if len(req.IDs) < 1 || len(req.IDs) > maxCurrentStateIDs {
-		s.error(w, http.StatusBadRequest, "invalid_id_count", fmt.Sprintf("ids must contain 1..%d entries", maxCurrentStateIDs))
-		return
-	}
-	ids := make([]string, len(req.IDs))
-	seen := make(map[string]struct{}, len(req.IDs))
-	for n, rawID := range req.IDs {
-		id := strings.TrimSpace(rawID)
-		if id == "" {
-			s.error(w, http.StatusBadRequest, "invalid_identity_id", "ids must not contain empty entries")
-			return
-		}
-		if _, ok := seen[id]; ok {
-			s.error(w, http.StatusBadRequest, "duplicate_identity_id", "ids must be unique")
-			return
-		}
-		seen[id] = struct{}{}
-		ids[n] = id
-	}
-	if !finite(req.EpochJD) {
-		s.error(w, http.StatusBadRequest, "invalid_epoch", "epochJd must be a finite Julian TDB date")
-		return
-	}
-	if req.Frame == "" {
-		req.Frame = "ECLIPJ2000"
-	}
-	if req.Frame != "ECLIPJ2000" {
-		s.error(w, http.StatusBadRequest, "unsupported_frame", "only ECLIPJ2000 is supported")
-		return
-	}
-	if req.Precision != "" && req.Precision != "exact" {
-		s.error(w, http.StatusBadRequest, "unsupported_precision", "current-states accepts exact precision only")
-		return
-	}
-	requestedPrecision := "exact"
-	allowApproximate := false
-
-	catalogBodies := make(map[string]catalog.Body, len(ids))
-	unknownIDs := make([]string, 0, len(ids))
-	for _, id := range ids {
-		if body, ok := s.catalog.Get(id); ok {
-			catalogBodies[id] = body
-		} else {
-			unknownIDs = append(unknownIDs, id)
-		}
-	}
-	inventoryRows := make(map[string]json.RawMessage)
-	if len(unknownIDs) > 0 && s.inventory != nil {
-		var err error
-		inventoryRows, err = s.inventory.GetMany(r.Context(), unknownIDs)
-		if err != nil {
-			if r.Context().Err() != nil {
-				s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
-			} else {
-				s.error(w, http.StatusUnprocessableEntity, "inventory_unavailable", err.Error())
-			}
-			return
-		}
-	}
-	records := make(map[string]inventory.Record, len(inventoryRows))
-	operationalIDs := make([]string, 0, len(ids))
-	operationalSeen := make(map[string]struct{}, len(ids))
-	addOperational := func(id string) {
-		if _, ok := operationalSeen[id]; !ok {
-			operationalSeen[id] = struct{}{}
-			operationalIDs = append(operationalIDs, id)
-		}
-	}
-	for _, id := range ids {
-		if body, ok := catalogBodies[id]; ok {
-			if body.Availability == catalog.AvailableOperational {
-				addOperational(id)
-			}
-			continue
-		}
-		raw, ok := inventoryRows[id]
-		if !ok {
-			continue
-		}
-		record, decodeErr := inventory.Decode(raw)
-		if decodeErr != nil {
-			s.error(w, http.StatusUnprocessableEntity, "invalid_source_record", decodeErr.Error())
-			return
-		}
-		records[id] = record
-		if record.NAIFID != 0 {
-			catalogID := "naif:" + strconv.Itoa(record.NAIFID)
-			if body, ok := s.catalog.Get(catalogID); ok && body.Availability == catalog.AvailableOperational {
-				addOperational(catalogID)
-			}
-		}
-	}
-	operationalStates, operationalFound, err := s.catalog.OperationalStates(operationalIDs, req.EpochJD)
-	if err != nil {
-		s.error(w, http.StatusUnprocessableEntity, "state_unavailable", err.Error())
-		return
-	}
-	response := currentStatesResponse{
-		APIVersion:            catalog.APIVersion,
-		CatalogVersion:        s.catalog.Version(),
-		CatalogManifestSHA256: s.catalog.ManifestHash(),
-		EpochJD:               req.EpochJD,
-		TimeScale:             "TDB",
-		Frame:                 req.Frame,
-		DistanceUnit:          "km",
-		VelocityUnit:          "km/s",
-		StateLayout:           "row-major-[x,y,z,vx,vy,vz]",
-		StateStride:           6,
-		StateOriginID:         "naif:0",
-		IDs:                   make([]string, 0, len(ids)),
-		Availability:          make([]catalog.Availability, 0, len(ids)),
-		Precision:             make([]string, 0, len(ids)),
-		Source:                make([]string, 0, len(ids)),
-		DatasetVersion:        make([]string, 0, len(ids)),
-		Model:                 make([]string, 0, len(ids)),
-		CenterIDs:             make([]string, 0, len(ids)),
-		ValidityStartET:       make([]float64, 0, len(ids)),
-		ValidityEndET:         make([]float64, 0, len(ids)),
-		ValidityPresent:       make([]bool, 0, len(ids)),
-		StateEvidence:         make([]string, 0, len(ids)),
-		EvidenceWindowStartET: make([]float64, 0, len(ids)),
-		EvidenceWindowEndET:   make([]float64, 0, len(ids)),
-		EvidenceWindowPresent: make([]bool, 0, len(ids)),
-		MissingReason:         make([]string, 0, len(ids)),
-		IdentityStatus:        make([]string, 0, len(ids)),
-		SourceRecord:          make([]bool, 0, len(ids)),
-		StatePresent:          make([]bool, 0, len(ids)),
-		StateValues:           make([]float64, 0, len(ids)*6),
-	}
-	if s.inventory != nil {
-		response.InventoryManifestSHA256 = s.inventory.ManifestHash()
-	}
-	for _, id := range ids {
-		if err := r.Context().Err(); err != nil {
-			s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
-			return
-		}
-		row := currentStateRow{ID: id, Availability: catalog.Missing, Precision: requestedPrecision, MissingReason: "unknown-identity"}
-		if body, ok := catalogBodies[id]; ok {
-			row.Source, row.DatasetVersion, row.Model, row.CenterID = body.Source, body.DatasetVersion, body.Model, body.ParentID
-			if body.Availability == catalog.Missing && row.Source != "" && row.DatasetVersion != "" {
-				// A manifest-declared target without a packaged kernel has a
-				// stable exact-endpoint identity; approximate catalog model names
-				// must never leak into current-states missing rows.
-				row.Model = "unavailable-no-kernel"
-			} else if body.Availability == catalog.AvailableFallback {
-				row.Model = "exact-only"
-			}
-			if finite(body.ValidityStartET) && finite(body.ValidityEndET) && body.ValidityEndET >= body.ValidityStartET {
-				row.ValidityStartET, row.ValidityEndET, row.ValidityPresent = body.ValidityStartET, body.ValidityEndET, true
-			}
-			switch body.Availability {
-			case catalog.AvailableOperational:
-				if state, found := operationalStates[id]; operationalFound[id] && found {
-					row.Availability, row.Precision, row.State, row.StateEvidence = catalog.AvailableOperational, "exact", &state, "catalog-kernel"
-					row.EvidenceWindowStartET, row.EvidenceWindowEndET, row.EvidenceWindowPresent = body.ValidityStartET, body.ValidityEndET, row.ValidityPresent
-				} else {
-					row.MissingReason = "kernel-coverage-gap"
-				}
-			case catalog.AvailableFallback:
-				if body.Elements == nil {
-					row.MissingReason = "no-supported-state-model"
-				} else if allowApproximate {
-					state, propagateErr := science.PropagateBoundElliptic(r.Context(), science.Elements{SemiMajorAxisAU: body.Elements.SemiMajorAxisAU, Eccentricity: body.Elements.Eccentricity, InclinationDeg: body.Elements.InclinationDeg, AscendingNodeDeg: body.Elements.AscendingNodeDeg, ArgPeriapsisDeg: body.Elements.ArgPeriapsisDeg, MeanAnomalyDeg: body.Elements.MeanAnomalyDeg, MeanMotionDegPerDay: body.Elements.MeanMotionDegPerDay}, body.EpochJD, req.EpochJD)
-					if propagateErr != nil {
-						s.error(w, http.StatusUnprocessableEntity, "state_unavailable", propagateErr.Error())
-						return
-					}
-					row.Availability, row.Precision, row.State, row.StateEvidence = catalog.AvailableFallback, "approximate", &catalog.State{Position: catalog.Vec3{X: state.Position.X, Y: state.Position.Y, Z: state.Position.Z}, Velocity: catalog.Vec3{X: state.Velocity.X, Y: state.Velocity.Y, Z: state.Velocity.Z}}, "source-elements-approximation"
-				} else {
-					row.MissingReason = "approximate-model-requires-explicit-opt-in"
-				}
-			case catalog.Missing:
-				if body.MissingReason != "" {
-					row.MissingReason = body.MissingReason
-				} else {
-					row.MissingReason = "no-supported-state-model"
-				}
-			}
-		} else if record, ok := records[id]; ok {
-			row.SourceRecord, row.Source, row.DatasetVersion, row.IdentityStatus, row.CenterID = true, record.Source, "inventory:"+s.inventory.ManifestHash(), record.IdentityStatus, record.ParentID
-			if record.Orbit != nil {
-				row.CenterID = record.Orbit.Center
-			}
-			result, resolveErr := s.resolveInventoryStateWithOperational(r.Context(), record, req.EpochJD, allowApproximate, operationalStates, operationalFound)
-			if resolveErr != nil {
-				s.error(w, http.StatusUnprocessableEntity, "state_unavailable", resolveErr.Error())
-				return
-			}
-			row.Availability, row.Model, row.MissingReason, row.State, row.StateEvidence = result.Availability, result.Model, result.MissingReason, result.State, result.Evidence
-			if result.Model == "spk-original" && record.NAIFID != 0 {
-				// The state is resolved from the catalog's barycentric SPK. Bind
-				// the row to that actual kernel tuple instead of inferring an
-				// inventory-source SPK identity from a bare NAIF number.
-				if body, found := s.catalog.Get("naif:" + strconv.Itoa(record.NAIFID)); found {
-					row.Source, row.DatasetVersion = body.Source, body.DatasetVersion
-				}
-			}
-			if result.State != nil {
-				row.Precision = map[bool]string{true: "approximate", false: "exact"}[allowApproximate]
-				if result.Availability != catalog.AvailableFallback {
-					row.Precision = "exact"
-				}
-			}
-			if result.EvidenceWindow != nil {
-				row.EvidenceWindowStartET, row.EvidenceWindowEndET, row.EvidenceWindowPresent = result.EvidenceWindow["startEt"], result.EvidenceWindow["endEt"], true
-				row.ValidityStartET, row.ValidityEndET, row.ValidityPresent = row.EvidenceWindowStartET, row.EvidenceWindowEndET, true
-			}
-		}
-		response.IDs = append(response.IDs, row.ID)
-		response.Availability = append(response.Availability, row.Availability)
-		response.Precision = append(response.Precision, row.Precision)
-		response.Source = append(response.Source, row.Source)
-		response.DatasetVersion = append(response.DatasetVersion, row.DatasetVersion)
-		response.Model = append(response.Model, row.Model)
-		response.CenterIDs = append(response.CenterIDs, row.CenterID)
-		response.ValidityStartET = append(response.ValidityStartET, row.ValidityStartET)
-		response.ValidityEndET = append(response.ValidityEndET, row.ValidityEndET)
-		response.ValidityPresent = append(response.ValidityPresent, row.ValidityPresent)
-		response.StateEvidence = append(response.StateEvidence, row.StateEvidence)
-		response.EvidenceWindowStartET = append(response.EvidenceWindowStartET, row.EvidenceWindowStartET)
-		response.EvidenceWindowEndET = append(response.EvidenceWindowEndET, row.EvidenceWindowEndET)
-		response.EvidenceWindowPresent = append(response.EvidenceWindowPresent, row.EvidenceWindowPresent)
-		response.MissingReason = append(response.MissingReason, row.MissingReason)
-		response.IdentityStatus = append(response.IdentityStatus, row.IdentityStatus)
-		response.SourceRecord = append(response.SourceRecord, row.SourceRecord)
-		if row.State != nil && finiteState(*row.State) {
-			response.StatePresent = append(response.StatePresent, true)
-			response.StateValues = appendFlatState(response.StateValues, *row.State)
-		} else {
-			response.StatePresent = append(response.StatePresent, false)
-			response.StateValues = append(response.StateValues, 0, 0, 0, 0, 0, 0)
-		}
-	}
-	s.jsonLimited(w, http.StatusOK, response, maxCurrentStateResponseBytes)
-}
-
 func (s *Server) trajectory(w http.ResponseWriter, r *http.Request) {
 	var req trajectoryRequest
 	dec := json.NewDecoder(io.LimitReader(r.Body, maxBodyBytes))
@@ -975,7 +724,10 @@ func (s *Server) trajectory(w http.ResponseWriter, r *http.Request) {
 					tb.States = nil
 					tb.StateStride = 0
 					tb.Availability = catalog.Missing
-					tb.MissingReason = "kernel-coverage-gap"
+					tb.MissingReason = s.catalog.KernelMissingReason(id)
+					if tb.MissingReason == "" {
+						tb.MissingReason = "kernel-coverage-gap"
+					}
 					break
 				}
 				tb.States = appendFlatState(tb.States, st)
@@ -1044,9 +796,16 @@ func (s *Server) error(w http.ResponseWriter, status int, code, msg string) {
 	s.json(w, status, map[string]any{"apiVersion": catalog.APIVersion, "error": map[string]string{"code": code, "message": msg}})
 }
 func (s *Server) json(w http.ResponseWriter, status int, v any) {
+	raw, err := json.Marshal(v)
+	if err != nil {
+		s.error(w, http.StatusInternalServerError, "encode_response", "response could not be encoded")
+		return
+	}
+	raw = append(raw, '\n')
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", strconv.Itoa(len(raw)))
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	_, _ = w.Write(raw)
 }
 
 func (s *Server) jsonLimited(w http.ResponseWriter, status int, v any, limit int) {
@@ -1061,6 +820,7 @@ func (s *Server) jsonLimited(w http.ResponseWriter, status int, v any, limit int
 	}
 	raw = append(raw, '\n')
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", strconv.Itoa(len(raw)))
 	w.WriteHeader(status)
 	_, _ = w.Write(raw)
 }

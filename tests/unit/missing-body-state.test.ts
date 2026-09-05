@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { bodyPositionOrNull, createBodyPositionResolver, createBodyVelocityResolver, MissingBodyStateError } from '../../src/lib/ephemeris'
 import { getRelativePositions } from '../../src/lib/referenceFrame'
 import { buildCurrentPositions, buildTrajectories, buildTrajectoryFrame } from '../../src/lib/trajectory'
-import { createTrajectoryAccumulator } from '../../src/lib/trajectorySamples'
+import { createTrajectoryAccumulator, trajectoryViews } from '../../src/lib/trajectorySamples'
 import { kernelCoverage } from '../../src/engine/ephemeris/kernelStore'
 import { computeOrbitEllipses } from '../../src/lib/orbitEllipse'
 import { buildSpacecraftFrame } from '../../src/engine/ephemeris/spacecraft'
@@ -31,10 +31,10 @@ describe('unavailable body states', () => {
   })
   it('does not move later body positions into a missing earlier body slot', () => {
     const current = buildCurrentPositions({ ...params, julianDay: 2451545 })
-    expect(current.currentPositions.map(item => item.body.id)).toEqual(['sun', 'moving'])
-    expect(current.currentPositions[1].position3D).toEqual({ x: 1, y: 0, z: 0 })
+    expect(Array.from({ length: current.currentPositions.length }, (_, i) => current.currentPositions.bodyAt(i).id)).toEqual(['sun', 'moving'])
+    expect(current.currentPositions.rowAt(1).position3D).toEqual({ x: 1, y: 0, z: 0 })
     expect(current.missingBodyIds).toEqual(['no-state', 'dependent'])
-    expect(buildTrajectories(params).map(sample => [sample.body.id, sample.points.length])).toEqual([['sun', 3], ['moving', 3]])
+    expect(buildTrajectories(params).map(sample => [sample.body.id, sample.coordinates.length / 3])).toEqual([['sun', 3], ['moving', 3]])
     expect(buildTrajectoryFrame(params).trajectoryUnavailableBodyIds).toEqual(['no-state', 'dependent'])
   })
   it('hides the entire frame and trails when the reference is unavailable', () => {
@@ -43,13 +43,15 @@ describe('unavailable body states', () => {
     expect(computeOrbitEllipses([moving], bodiesById, missing.id, 2451545)).toEqual([])
   })
   it('drops an incomplete trail instead of joining points across a gap, on both shared sampling paths', () => {
-    const samples = createTrajectoryAccumulator([missing, moving])
+    const samples = createTrajectoryAccumulator([missing, moving], 3)
     const position = { x: 1, y: 2, z: 3 }
     samples.append([{ body: missing, position }, { body: moving, position }])
     samples.append([{ body: moving, position }])
     samples.append([{ body: moving, position }, { body: missing, position }])
-    expect(samples.complete(3).map(sample => sample.body.id)).toEqual(['moving'])
-    expect(samples.complete(3)[0].points3D).toEqual([position, position, position])
+    const packed = samples.finish()
+    expect(packed.bodyIds).toEqual(['moving'])
+    expect(packed.trajectoryUnavailableBodyIds).toEqual([missing.id])
+    expect(trajectoryViews(packed, bodiesById)[0].coordinates).toEqual(new Float64Array([1, 2, 3, 1, 2, 3, 1, 2, 3]))
   })
   it('reports spacecraft trails whose historical reference state is unavailable', () => {
     const spacecraft = [{
@@ -57,7 +59,7 @@ describe('unavailable body states', () => {
       trajectoryPoints: [{ jd: 2451544, x: 1, y: 0, z: 0 }, { jd: 2451545, x: 2, y: 0, z: 0 }],
     }]
     const frame = buildSpacecraftFrame(spacecraft, missing.id, bodiesById, 2451545)
-    expect(frame.currentPositions).toEqual([])
+    expect(frame.currentPositions.length).toBe(0)
     expect(frame.trajectories).toEqual([])
     expect(frame.trajectoryUnavailableBodyIds).toEqual(['probe'])
   })

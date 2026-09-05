@@ -13,7 +13,7 @@ import { requestOnboarding } from '../../lib/onboarding'
 import { exportAnnotatedScenePng } from '../../lib/sceneExport'
 import { loadSavedScenes, localizeSavedSceneUrl, mergeSceneLibrary, parseSceneLibrary, removeSavedScene, saveCurrentScene, sceneLibraryDocument } from '../../lib/sceneLibrary'
 import { encodeCurrentScene } from '../../lib/shareScene'
-import { IS_NATIVE_APP, saveTextExport, shareSceneUrl } from '../../lib/platform'
+import { saveTextExport, shareSceneUrl } from '../../lib/platform'
 import { encodeUrlState } from '../../lib/urlState'
 import { VIEW_CAPABILITIES } from '../../lib/viewCapabilities'
 import { catalogActions, DEFAULT_CATALOG_FILTERS } from '../../state/catalog-store'
@@ -21,11 +21,13 @@ import { selectionActions, selectionStore } from '../../state/selection-store'
 import { simulationActions, simulationStore } from '../../state/simulation-store'
 import { uiActions } from '../../state/ui-store'
 import type { CelestialBody, RenderQuality } from '../../types'
+import type { BackendTrajectoryAudit } from '../../lib/backendTrajectories'
 
 type Props = {
   bodies: CelestialBody[]
   referenceOptions: CelestialBody[]
   onResetView: () => void
+  trajectoryAudit?: BackendTrajectoryAudit | null
 }
 
 const HISTORY_OPTIONS = [90, 365, 1825, 4383, 7300, 12053, 43830, 90580]
@@ -43,7 +45,7 @@ const BODY_KIND_TRANSLATION = {
   spacecraft: 'bodyKindSpacecraft',
 } as const
 
-export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) {
+export function ControlDrawer({ bodies, referenceOptions, onResetView, trajectoryAudit }: Props) {
   const simulation = simulationStore.useStore()
   const clock = useSimulationClock()
   const selection = selectionStore.useStore()
@@ -338,13 +340,13 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView }: Props) 
       <div className="drawer-export-actions">
         <button className="share-button" onClick={() => void (async () => {
           try {
-            const outcome = await shareSceneUrl(encodeCurrentScene())
-            if (outcome !== 'cancelled') uiActions.toast(t(outcome === 'shared' ? 'sceneShared' : 'linkCopied'))
+            await shareSceneUrl(encodeCurrentScene())
+            uiActions.toast(t('linkCopied'))
           } catch (error) {
             uiActions.toast(error instanceof Error ? error.message : String(error))
           }
-        })()}>↗ {t(IS_NATIVE_APP ? 'shareNative' : 'share')}</button>
-        <button className="share-button" onClick={() => void exportAnnotatedScenePng(language).catch((error: unknown) => uiActions.toast(error instanceof Error ? error.message : String(error)))}>▣ {t('exportPng')}</button>
+        })()}>↗ {t('share')}</button>
+        <button className="share-button" onClick={() => void exportAnnotatedScenePng(language, trajectoryAudit).catch((error: unknown) => uiActions.toast(error instanceof Error ? error.message : String(error)))}>▣ {t('exportPng')}</button>
       </div>
         </div>
       </details>

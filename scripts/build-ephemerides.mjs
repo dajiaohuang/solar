@@ -6,7 +6,7 @@ import { SpkKernel } from '../src/engine/ephemeris/spk.ts'
 import { kernelsCoveringInterval } from '../src/engine/ephemeris/kernelPool.ts'
 
 // Explicit opt-in data-generation command; normal builds never contact NAIF.
-// Override bounds for local/native distributions without changing app code.
+// Override bounds for local/profile distributions without changing app code.
 const from = process.env.SOLAR_EPHEMERIS_FROM ?? '2020-01-01'
 const to = process.env.SOLAR_EPHEMERIS_TO ?? '2031-01-01'
 const toEt = (date) => (Date.parse(`${date}T00:00:00Z`) / 86400000 + 2440587.5 - 2451545) * 86400

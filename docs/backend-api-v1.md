@@ -1,9 +1,8 @@
 # Solar Atlas current backend contract
 
 The current wire prefix is `/v1/`; responses include
-`apiVersion: "solar.api/v1"`. This batch intentionally has no legacy-client
-compatibility promise: clients consume the current contract and its explicit
-precision/status fields.
+`apiVersion: "solar.api/v1"`. Clients consume the current contract and its
+explicit precision/status fields.
 
 ## Scientific contract
 
@@ -14,7 +13,12 @@ precision/status fields.
   `naifId` is the source identity and is never used to infer a different body.
 * `datasetVersion`, `source`, validity bounds and `availability` are part of
   the scientific result, not UI decoration.
-* `operational` means a packaged, validated source kernel; `snapshot` means a
+* Catalog `operational` identifies a packaged kernel candidate admitted from
+  the manifest, not a verified state or an operational-navigation guarantee.
+  Full-file integrity verification and SPK parsing are lazy; manifest counts
+  expose verified, pending and invalid kernel files separately. Only the
+  evaluated plan/tile status establishes exact availability at a requested
+  epoch after verification and center-chain resolution. `snapshot` means a
   validated source state at one declared audit epoch; `fallback` means an
   explicitly requested source-element fixed two-body approximation; `missing`
   means no exact state is available for the requested result. Missing states
@@ -31,6 +35,44 @@ loaded catalog and indexed inventory; clients must reject row metadata outside
 these tuples. The preview profile is a
 product availability policy: full-only entries may be visible but restricted
 actions are blocked.
+
+The optional `-coverage-report` backend configuration enables two read-only
+audit endpoints. Without a validated report they return `404` with
+`coverage_unavailable`; a configured report that does not match the loaded
+full-profile catalog or inventory fails backend startup.
+
+`GET /v1/coverage` returns the small audit summary. It includes the report,
+catalog and inventory SHA-256 identities, the pinned source-snapshot and
+identity-mapping evidence hashes, `auditEt`, fixed TDB/ECLIPJ2000 units, the
+requested dependency window, source identity counts and unresolved reasons.
+`windowCounts.numericallyCertifiedWholeWindowTargets` remains `null` in this
+report. The counts describe source records and dependency availability at the
+declared audit epoch; they are not current display counts, live state
+availability, unique-body counts or whole-window numerical-accuracy claims.
+
+`GET /v1/coverage/targets?ids=earth,naif:399` returns at most 64 distinct
+catalog IDs or explicitly audited canonical NAIF IDs. Catalog aliases are canonicalized to their NAIF target.
+Each row is either `audited`, with its audit-epoch state label, source-record
+references and dependency window points/intervals/gaps, or `not_audited`.
+`not_audited` never implies missing state. The response repeats the report and
+runtime manifest identities and contains no request epoch. Both endpoints
+load the report once at startup; requests use bounded in-memory indexes and do
+not scan the report or inventory shards.
+
+The loader checks actual indexed source ordinals as well as IDs, source rows
+and mapped targets. Available audit states require six explicit finite numbers;
+`no-state-at-audit-epoch` requires an explicit null state and is not counted as
+available. A single-epoch dependency window is valid. Missing numeric fields
+cannot silently become zero, and numerical whole-window certification must be
+explicit null. The HTTP summary is capped at 64 KiB including its envelope;
+report loading is capped at 8 MiB, 2,048 target groups and 8,192 source references.
+Exceeding these bounds fails startup rather than truncating scientific coverage.
+
+Run hermetic coverage checks with `go test ./internal/coverage ./internal/httpapi`.
+Optional real-report tests require all of `SOLAR_COVERAGE_REPORT`,
+`SOLAR_COVERAGE_INVENTORY_DIR` and `SOLAR_COVERAGE_DATA_DIR`; without them those
+external-data cases explicitly skip. Source snapshot/mapping hashes remain audit
+provenance, not independently reread source bytes at server startup.
 
 `GET /v1/catalog?q=&limit=&pageToken=` returns a lexicographically stable,
 paginated list. `limit` is 1–500 and page tokens are opaque to clients.
@@ -65,26 +107,29 @@ is an explicit opt-in for a bounded two-body source-element model; it is never
 reported as exact. A known identity without an exact state returns HTTP 200 with
 `availability: "missing"` and a machine-readable reason.
 
-`POST /v1/current-states` is an exact-only endpoint: it resolves one shared TDB
-Julian epoch for 1–512 unique catalog or source IDs and rejects approximate
-precision. Its capabilities contract declares `currentStates.precision:
-"exact-only"` and `stateOriginId: "naif:0"`; trajectory and identity endpoints
-retain their separate explicit approximate opt-in. The request is bounded by
-the JSON body limit and response is capped at 8 MiB; a saturated scientific
-worker pool fails fast with
-`429 overloaded`. The response is compact columnar JSON: `ids` and each
-parallel metadata array use the same order, while `stateValues` is a flat
-row-major `[x,y,z,vx,vy,vz]` numeric array with `stateOriginId: "naif:0"` marking
-that every present state is SSB/barycentric and `statePresent` marking rows that
-contain a state (missing rows are zero-filled). Per-ID arrays retain
-`availability`, `precision`, `source`, `datasetVersion`, `model`, `centerIds`,
-validity/evidence windows, `missingReason`, and source identity status. The
-envelope includes catalog and inventory manifest SHA-256 values, TDB,
-ECLIPJ2000, km and km/s. Exact rows use the same SPK/snapshot resolver as the
-single-state endpoint; source-element fallback is represented as exact
-`missing` and is never labelled exact. Unknown IDs remain in order as `missing`
-with
-`missingReason: "unknown-identity"` so mixed selections are not shifted.
+`GET /v1/catalog/manifest` publishes the exact-state dataset identity and state
+tile limits. `POST /v1/state/plan` accepts 1–32,768 unique catalog or source IDs
+at one TDB Julian epoch. It permits only `ECLIPJ2000`, `precision: "exact"` and
+`fieldMask: ["position","velocity"]`. Planning resolves the actual states,
+freezes their metadata and values in a bounded two-minute LRU cache, and reports
+exact/missing counts that match the eventual tile bitmaps. Approximate count is
+always zero. Unknown or uncovered IDs retain their requested ordinal as an
+explicit missing row.
+
+`POST /v1/state/tiles` accepts a plan ID and tile sequence. It returns
+`application/vnd.solar.state-tile+binary` with a fixed 200-byte little-endian
+header, NDJSON provenance rows, exclusive exact/approximate/missing bitmaps and
+row-major Float64 `[x,y,z,vx,vy,vz]` states. Every exact state is SSB/barycentric
+(`stateOriginId: "naif:0"`), TDB, ECLIPJ2000, km and km/s. The payload, plan,
+catalog manifest and optional inventory manifest hashes are embedded in the
+header. Missing rows are zero-filled; approximate bitmap bits are forbidden by
+the exact-only contract. A repeated tile request for a live plan is byte-stable
+and does not repeat state evaluation. The default tile size is 16,384 rows;
+the declared maximum is 32,768 rows and 64 MiB per tile. See
+[the complete binary wire contract](./state-tiles-v1.md).
+
+Trajectory and identity endpoints keep their separate, explicit approximate
+opt-in.
 
 `GET /v1/bodies/{id}` returns one catalog record. Unknown IDs are a 404; a
 known source target without local data is a 200 catalog record with
@@ -114,10 +159,30 @@ native endpoint has been deployed.
 ## Full Web boundary
 
 The full Web client reads `VITE_SOLAR_API_BASE_URL` from its deployment
-configuration and uses the current-states adapter only when that value is
-present. Pages builds intentionally omit a real backend configuration and keep
+configuration and uses the manifest/plan/binary-tile transport only when that
+value is present. Pages builds intentionally omit a real backend configuration and keep
 the curated static preview; they do not request the full catalog or claim full
 coverage. The project currently has no official public full-Web backend URL.
+
+Full-Web historical trails use the same exact binary transport once per sampled
+TDB epoch, not the JSON `/v1/trajectory` endpoint above. Their plan/tile POSTs
+append `?workload=trajectory` to enter the existing lower-priority trajectory
+queue; this hint cannot promote bulk requests. Current-state requests stay
+interactive. Each history job requests at most 320 trails plus its reference,
+2–600 samples and a 1,000-year window, with a 120-second deadline. It validates
+each tile and the current frame's source manifest identity, retaining one epoch's
+six-vectors while appending packed Float64 AU relative positions. Missing any
+sample or the reference removes the whole trail; no browser-kernel fallback is
+used. Transport/integrity failures clear the historical result without removing
+independently verified current states.
+
+The UI and PNG evidence state the actual completed UTC window. The audit download
+retains TDB epochs, backend identities, source metadata, source ordinals, tile
+and plan hashes, and the first missing sample per body. Only explicit export
+expands typed audit arrays to JSON. Connected samples are display interpolation,
+not certified continuous ephemerides. See [performance boundaries](../PERFORMANCE.md)
+for queue coalescing, cancellation and per-job memory limits. Heavy analyses and
+full native historical-feature parity are not completed by this Web path.
 
 ## Errors
 
@@ -125,6 +190,15 @@ Errors are JSON objects with `apiVersion` and `error.code`/`error.message`.
 Relevant codes include `invalid_limit`, `invalid_page_token`,
 `body_not_found`, `identity_not_found`, `invalid_precision`, `invalid_epoch`,
 `unsupported_frame`, `state_unavailable`, `cancelled`, and `overloaded`. A
-`429 overloaded` response includes `Retry-After: 1`; the backend rejects work
-when its configured scientific worker pool is full rather than accumulating an
-unbounded queue.
+`429 overloaded` response includes `Retry-After: 1`. The backend queues at most
+32 waiting requests in each server-selected class before body decoding: current
+state plans/tiles, manifests and details are interactive; trajectories have their
+own class; catalog/inventory/identity list scans are bulk. FIFO within each class
+and weighted round robin (4 interactive, 2 trajectory, 1 bulk) prevent an occupied
+class from consuming all waiting capacity. Running requests remain bounded by
+the configured worker count. A full class queue or five-second queue wait expiry
+returns 429. Observed context cancellation removes the waiter and returns 408;
+HTTP/1 disconnect notification may be delayed while a POST body is unread, in
+which case queue expiry remains the limit. Running work is not preempted and
+these are not end-to-end latency guarantees. Tile encoding retains its separate
+two-slot limit and may also return 429 when both encoders are occupied.

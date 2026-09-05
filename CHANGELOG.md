@@ -4,28 +4,32 @@ All notable changes to Solar Atlas are documented here. The project follows sema
 
 ## Unreleased
 
+- Replace the removed 510-row current-state JSON adapter with exact-only,
+  hash-bound binary state tiles: plans cover up to 32,768 identities, resolve
+  real exact/missing counts before publication, and make retries byte-stable.
+
 - Read and crop original SPK type 21 modified-difference records with independent CSPICE position/velocity fixtures, strict malformed-record checks and preserved segment precedence.
-- Add source-consistent Eris/Haumea primary centers through 2030-01-02 TDB, with lazy web/native files and explicit system/primary identity mapping. Keep Makemake's unresolved primary-center coverage gap visible; do not equate generic type 21 support with all-body coverage.
+- Add source-consistent Eris/Haumea primary centers through 2030-01-02 TDB, with lazy Web/backend files and explicit system/primary identity mapping. Keep Makemake's unresolved primary-center coverage gap visible; do not equate generic type 21 support with all-body coverage.
 
 - Fix near-satellite 3D camera/marker/clipping scales and portrait refitting without changing physical coordinates or restoring distance fog.
 - Shorten expanded moon-preset histories to resolve fast revolutions at default sampling; keep partial arcs and manual sampling limits explicit.
 - Use km/hour readouts for close distances and fast periods, parent-relative apsis terminology, and active-SPK versus fallback Earth-center labels in the shared web/native UI.
 
-- Publish the current v4 scene schema from generated knowledge/privacy pages and PWA shortcuts while retaining v2/v3 reader compatibility.
+- Publish the current v4 scene schema from generated knowledge/privacy pages and PWA shortcuts.
 
 ### Added
 
 - Opt-in, reproducible JPL all-body source inventory with asteroid/comet and satellite records, explicit unresolved identities and missing geometry, bounded compressed shards, source-count/integrity validation, and separately evaluated bundled-kernel availability. This developer inventory does not imply runtime all-body coverage or increase normal web/native startup downloads.
 - Authoritative, checksum-pinned JPL SPK geometric position/velocity evaluation without a runtime N-body integrator; 63 covered selectable body centers, including 31 newly selectable moons and 15 additional large asteroids.
 - UTC/TAI/TT/TDB conversion with explicit future leap-second uncertainty, parent-relative osculating diagnostics, and separate reception light-time / stellar-aberration readouts.
-- Seven new 3D presets, a lazy 65.6 MiB SPK pack shared with native apps, reproducible range extraction, and independent Horizons/center-chain/coverage regression tests.
+- Seven new 3D presets, a lazy Web/backend SPK pack, reproducible range extraction, and independent Horizons/center-chain/coverage regression tests.
 - Whole-window kernel selection for trails, events and porkchop maps to avoid artificial extrema at model boundaries; uncovered objects and dates retain labelled approximate fallback.
 - An optional worker-propagated asteroid catalog cloud in the Observation Deck, rendered as one GPU point buffer instead of one mesh or trajectory per catalog object.
 - Auto, Balanced, and Maximum 3D performance profiles with separate mobile/desktop budgets, conservative capability hints, frame-time adaptation, and deterministic unit coverage.
 - Reproducible v4 scene fields for catalog-cloud intent and quality profile, plus browser coverage for the default no-download path and 2D/3D replay.
-- Capacitor 8 Android and iOS local-shell source projects using application ID `io.github.dajiaohuang.solaratlas`, with Android API 24–36 and iOS 16.4+ platform contracts.
-- Native lifecycle, Android Back, custom-scheme scene import, canonical scene sharing, external-browser handoff, and user-initiated file export integrations.
-- A deterministic native-shell verifier and mobile workflow configuration for an unsigned Android debug APK and unsigned iOS Simulator app. These are validation paths, not signed or published releases.
+- Independent Android and iOS native source projects with a first exact-current-state tile vertical slice; no Web shell or native SPK package is claimed.
+- Native lifecycle and local-cache behavior remain platform-specific and limited to the current first slice.
+- Native static project checks and platform validation commands are documented; no signed or published release is claimed.
 
 ### Changed
 
@@ -35,7 +39,7 @@ All notable changes to Solar Atlas are documented here. The project follows sema
 - Paused 3D scenes render on demand. Continuous animation is limited to a playing simulation with the catalog cloud enabled, and the renderer no longer preserves its drawing buffer.
 - The untouched first-visit choice uses a lightweight spatial preview and defers downloading and initializing the interactive Three.js renderer until the visitor starts the tutorial or chooses independent exploration; returning visitors still enter 3D directly.
 - The Moon remains derived from JPL mean elements and DE440 Earth–Moon mass partitioning; Io, Europa, Ganymede, Callisto, and Titan now use reproducible parent-centered JPL Horizons osculating-element queries at JD 2451545.0 TDB with explicit fixed-ellipse limitations.
-- Native builds now use relative local assets without Service Worker registration. The curated core remains installed and offline-capable, while catalog data is loaded on demand over HTTPS and live JPL requests remain online-only.
+- Native projects now use independent platform-native first-slice clients without a Web shell or packaged SPK files. Exact current-state tiles use the manifest/plan protocol; manifest and plan loading remains online while verified tiles may be reused from the bounded native cache.
 
 ### Fixed
 

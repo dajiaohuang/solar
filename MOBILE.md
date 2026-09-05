@@ -1,114 +1,330 @@
-# Solar Atlas mobile applications
+# Solar Atlas native applications
 
-> **Breaking preview transition (2026-09-05):** old-client compatibility is no longer required. Once Pages publishes the curated preview, these baseline shells lose online full-catalog access at the old Pages URL; bundled core assets remain local. Replacement native clients and unified-backend access are still under development. Do not interpret a successful shell build as proof that its old catalog endpoint is available.
-
-> **Target architecture:** Android and iOS will become independent platform-native frontend projects consuming the same backend as full Web. The Capacitor implementation documented below is the migration baseline, not the final product shape. GitHub Pages becomes a curated preview, not the required full-product data host. See [product direction](./docs/product-direction.md); no native rewrite or backend rollout is claimed complete here.
-
-Solar Atlas includes **Capacitor 8 local-shell projects** for Android and iOS. They are buildable source projects, not published store products. CI may produce an Android debug APK signed with the standard disposable debug key, but the repository does not claim a release-signed APK, AAB, or IPA, a Play Store or App Store listing, TestFlight distribution, or completed real-device validation.
+> Android and iOS are independent platform-native projects. The current native scope is the first vertical slice for verified current-state tiles; it is not a full-feature or store release milestone. There is no Capacitor Web shell and native builds do not package SPK files.
 
 [中文说明](./MOBILE-CN.md) · [Privacy](./PRIVACY.md) · [Main README](./README.md)
 
 ## Current contract
 
-| Item | Current implementation |
+| Item | Current contract |
 | --- | --- |
-| Runtime | Capacitor 8 wrapping the locally built web application |
-| Application ID | `io.github.dajiaohuang.solaratlas` |
-| Node.js | 22+; npm 10+ |
-| Android | Minimum API 24; compile and target API 36 |
-| iOS | 16.4 or later |
-| Core experience | Curated bodies, presets, stories, Evidence, and the local application shell remain available offline after installation |
-| Catalog data | Version/provenance metadata is checked at startup; samples, indexes, and shards load on demand over HTTPS from `https://dajiaohuang.github.io/solar/data/asteroids` |
-| Physical ephemerides | Native defaults to the full profile: 510 SHA-pinned SPK files (1094.7 MiB), offline and loaded on demand. Web and native share type 2/3/17/21 evaluation and explicit source-specific center pools. Full satellite additions span 2020–2031 TDB; Pages shortens large satellite files to 2026–2027 without dropping target identities. Tests resolve 508 selectable centers at UTC JD 2461287.5, not all bodies. Eris/Haumea primary centers and their moons end at 2030-01-02 TDB; Makemake retains an approximate fallback. UTC→TT→TDB is supported from 1972; future leap seconds are uncertain. |
-| Release status | Source and non-release validation paths only; release signing and store publication are not authorized or included |
+| Runtime | Independent native Android and iOS fronts sharing the versioned backend protocol |
+| Native slice | `manifest → plan → binary state tile` loading for exact current states, with typed `Float64` state values |
+| View | Native 3D is the default; native 2D is an independent fallback/view, with separate rendering budgets |
+| iOS controls | User-supplied HTTPS backend, TDB Julian date, built-in presets, custom body IDs, and reference ID |
+| iOS cache | Verified state tiles use a bounded 256 MiB cache; cache reuse requires matching tile identity and hashes |
+| Online boundary | Initial manifest and plan loading require the HTTPS backend. Previously verified tiles may be reused; complete offline plan recovery is not implemented |
+| Pages | A curated Web preview only; it is not the native full-state backend |
+| Validation / release status | Android has local real-SPK HTTPS emulator UI/cache evidence on 2026-09-05. Android/iOS CI builds and cross-runtime protocol checks passed; iOS also passed the real-SPK HTTPS simulator tests linked below. The new Android runtime CI gate requires its own successful run; real-device performance and store release remain unverified |
 
-Quaoar/Weywot, Orcus/Vanth, Salacia/Actaea, 1998 WW31/Sat1, 2001 QW322/Sat1,
-Kagara/Haunu, 1999 OJ4/Sat1 and 2003 UN284/Sat1
-retain ten-year original system files (2020-01-01/2030-01-01 TDB) in the native
-full profile. Pages uses 2026-07-01/2027-01-01 for these eight systems. Neither
-profile invents a fallback for these new primaries or companions.
+The native slice preserves scientific provenance, epoch, units, reference frame, validity and missing-state semantics. Missing precise states remain visibly unavailable; they are not replaced by approximate positions. The native slice does not claim all-body coverage, navigation accuracy, complete ephemeris access, or full Web feature parity.
 
-The native build uses relative local assets and does not register the web Service Worker. Offline native operation therefore comes from the installed local shell, not from the PWA cache. The full MPCORB catalog is intentionally not bundled: catalog samples, detail shards, and live JPL SBDB lookups require a network connection unless a previously fetched response remains in the WebView cache.
+Android assembles current states directly into one final `double[]` and one
+`boolean[]`, without per-component `Double` boxing or a final numeric-buffer
+copy. Capacity is checked before allocation; tile identities, order, missing
+flags and cancellation are checked before publishing the complete frame. The
+1.5 GiB assembly estimate includes the primitive buffers, metadata references
+and estimated string/object storage. It is not a process RSS cap: HTTP parsing,
+cache, renderer and runtime allocations need additional headroom. The two-million
+row input ceiling is not a promise of simultaneous availability or smoothness.
+The Go golden test verifies every final assembled Float64 bit as well as each
+decoded tile.
 
-SPK focus ephemerides and the geometric/light-time/stellar-aberration observation readouts follow the bundled manifest when those kernel assets are present. They do not turn the app into an all-body precision or navigation product; no gravity deflection, atmosphere, surface observer, or covariance model is included. The GPU catalog cloud remains Keplerian.
+## Prerequisites and checks
 
-The [all-body source inventory](./docs/all-body-inventory.md) is an explicit developer audit, not an installed mobile catalog. Native sync neither downloads nor copies those generated shards; the current offline/online boundary is unchanged. Inventory coverage and usable mobile ephemeris coverage must be reported separately.
+Verified on 2026-09-05 at commit `9461362762a9f0366abea6b665554c6dc6c9bf47`: [macOS iOS job](https://github.com/dajiaohuang/solar/actions/runs/33943036884/job/101244140251) passed the Go-to-Swift golden check, malformed-payload/cache/cancellation/projection tests, and an unsigned arm64/x86_64 simulator build with Xcode 26.6. The [Android job](https://github.com/dajiaohuang/solar/actions/runs/33943036884/job/101244140351) passed its build and Java golden checks. These are historical job results for that commit, not a claim that later checkouts or the entire PR are green. Neither job launched a simulator or verified live native HTTPS rendering.
 
-## Prerequisites
+At commit `d4f622495be549e8a29ba228d230fcd92d46086d`, the [real-SPK iOS runtime job](https://github.com/dajiaohuang/solar/actions/runs/33945353295/job/101250378243) passed two XCTest cases with zero failures (50.448 seconds). The retained report records three verified Earth/Moon/Sun states, an explicit missing-ID golden, mode switching, cache reuse and background recovery. Its HTTPS ledger contains two manifests, two plans and one tile, all HTTP 200; the reload reused the verified tile. This proves the tested simulator slice, not physical-device performance, all-body coverage or complete offline operation.
 
-The shared web shell includes satellite-scale 3D framing, portrait-resize handling and km/hour orbital readouts. After changing these shared features, run `npm run mobile:sync` to refresh both native asset bundles and validate Android/iOS CI. Browser viewport tests are not a substitute for real-device touch, rotation or performance testing.
+Use Node.js 22+ and npm 10+ for repository checks. `npm run native:check` is the static native-project check; it does not build or sign an application.
 
-Install Node.js 22+, npm 10+, and the platform toolchain:
+Android validation is run directly from the native project with Android SDK API 36 and JDK 21:
 
-- Android: Android Studio, Android SDK API 36, and JDK 21. Android builds can run on Windows, macOS, or Linux when that toolchain is installed.
-- iOS: macOS and Xcode are required. Windows cannot build, run, sign, or archive the iOS application.
-
-No signing key, certificate, provisioning profile, store credential, or release account belongs in the repository.
-
-The generated iOS package graph pins Capacitor to 8.5.0 and `ion-ios-filesystem` to the Xcode-verified 1.1.2 release. The post-sync normalizer reapplies those paths and pins after every Capacitor sync so a fresh checkout resolves the same native dependency versions.
-
-## Build and sync
-
-Build the local native shell first:
-
-```bash
-npm ci
-npm run build:native
+```text
+android/gradlew -p android lint testDebugUnitTest assembleDebug
 ```
 
-For Android:
+On Windows use `android/gradlew.bat -p android` with the same tasks. iOS validation requires macOS and Xcode:
 
-```bash
-npm run mobile:sync:android
-npm run mobile:open:android
+```text
+xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
+swiftc ios/App/App/StateTileDecoder.swift ios/App/App/StateTileCache.swift ios/App/App/NativeStateProjection.swift ios/App/App/NativeCoverageReport.swift ios/App/App/NativeSourceIdentityPage.swift ios/ProtocolTests/ProtocolTests.swift -o <temporary-output>
+<temporary-output>
 ```
 
-The Android project can also run its local validation tasks from `android/`:
+These are contributor commands, not evidence that this checkout has passed them. No signing key, certificate, provisioning profile, store credential, or release account belongs in the repository. Real-device behavior, accessibility, memory pressure and store metadata require separate evidence and are not claimed here.
 
-```powershell
-.\gradlew.bat lint testDebugUnitTest assembleDebug
+## Native behavior and boundaries
+
+### Cross-runtime numerical verification
+
+The mobile CI jobs generate binary tiles using the actual Go catalog and HTTP
+handlers, then run the production Web decoder and the corresponding Java or
+Swift decoder against those files. They compare all six Float64 bit patterns,
+tile hashes, row ordering, manifest identities and exact/missing counts. The CI
+SPK in that first check is explicitly synthetic: this proves wire interoperability, not astronomical
+accuracy or live native networking.
+
+The default synthetic fixture covers four request paths: an operational catalog
+target, an operational inventory alias, an inventory audit-epoch snapshot and
+an unknown ID. The first two must retain the selected SPK segment window even
+when catalog summary validity is `[0,0]`; the snapshot is valid only at audit
+ET 500, not throughout its wider evidence interval. The generator rejects
+out-of-window exact rows, approximate or inconsistent status bits, nonfinite
+states and nonzero missing-state values before publishing a golden fixture.
+These cases run through the existing shared decoder checks; they do not add
+real celestial coverage or establish physical accuracy.
+
+The iOS workflow also runs `node scripts/ios-native-smoke.mjs` on macOS. This
+runtime gate stages and hashes the real full SPK profile, checks an
+Earth/Moon/Sun plus missing-ID golden in Go, Web and Swift, and launches the
+native app through XCTest against a loopback HTTPS Go backend. It checks preset
+loading, 3D/2D projection counts, online reload with verified tile-cache reuse,
+background/foreground recovery, the tutorial and an unconfigured backend. It
+creates a dedicated simulator and trusts a temporary CA only inside that device;
+production TLS validation stays enabled. The owned device is removed afterward,
+and private keys are excluded from artifacts. The owned temporary data directory
+is removed after its resolved path is checked. Run from the repository
+root with Node, Go, OpenSSL, Xcode and an installed iPhone simulator runtime.
+
+Results, HTTPS request counts, logs and screenshot-bearing XCTest results are
+retained under `build/ios-native-smoke/` and in the matching CI artifact. Existing
+results are not overwritten. The gate passed at the exact runtime commit linked
+above; later commits require their own successful run. It is not a real-device
+FPS, complete offline, or full native feature-parity test. Historical evidence
+remains tied to its original commit.
+
+To repeat this locally, set `SOLAR_STATE_TILE_FIXTURE_DIR` to an absolute new or
+empty directory outside the repository (`$env:SOLAR_STATE_TILE_FIXTURE_DIR` in
+PowerShell; `export SOLAR_STATE_TILE_FIXTURE_DIR=...` in a POSIX shell), then run:
+
+```text
+go run ./cmd/state-tile-fixture -out <fixture-directory> -tile-size 1
+npx vitest run tests/unit/state-tiles-golden.test.ts
 ```
 
-On macOS, for iOS:
+Keep that environment variable set when running the Gradle or Swift test commands
+above. A configured but absent fixture is an error; without the variable the
+optional cross-runtime fixture check is skipped. Gradle tracks the directory as
+a test input so changing from synthetic to real fixtures reruns the tests.
+The generator also accepts `-data-dir`, `-inventory-dir`, `-ids` and `-epoch-jd`
+for locally retained, hash-verified scientific profiles. Do not commit generated
+fixtures or interpret matching serialization as an independent science oracle.
 
-```bash
-npm run mobile:sync:ios
-npm run mobile:open:ios
-```
+### Android real-data runtime verification
 
-`npm run mobile:sync` synchronizes both platforms and is therefore intended for a macOS environment with both toolchains. These commands create or refresh local platform builds; they do not create a signed store release.
+`node scripts/android-native-smoke.mjs` stages the real full SPK profile and
+runs Go-to-Web/Java Float64 goldens before exercising the actual Android UI over
+HTTPS. The local API 36 x86_64 run on 2026-09-05 passed Earth-reference states
+for Earth/Moon/Sun plus an explicit missing ID, 3D/2D counts, visible point
+pixels, tutorial and system-navigation bounds, and background/reload cache reuse.
+Two manifests, two plans and one tile (all HTTP 200) prove the cached reload.
+Pixel assertions prove rendering, not distinct pixels for overlapping bodies,
+fixed size at every camera distance, physical-device performance or full parity.
 
-The mobile workflow is configured to build an **Android debug APK signed with Gradle's standard disposable debug key** and an **unsigned iOS Simulator app** as short-lived validation artifacts. Neither is a release artifact. A configured workflow is not evidence that a particular commit has passed until its run and artifacts have been inspected.
+Set `ANDROID_HOME` to an SDK with command-line tools, emulator and
+`system-images;android-36;default;x86_64`, and `JAVA_HOME` to JDK 21. Go, Node
+and OpenSSL must be available (`SOLAR_OPENSSL` may specify an executable path).
+The script creates only its own temporary AVD and uses loopback port forwarding.
+Only the instrumentation process trusts its temporary CA; production TLS and
+hostname checks stay enabled, with no host/device-wide root certificate added.
+Animations are disabled only on the disposable test device, so this is not a
+frame-rate benchmark. Cleanup validates ownership before removing temporary data.
 
-## Native behavior
+Artifacts default to `build/android-native-smoke/`; set
+`SOLAR_ANDROID_SMOKE_OUTPUT` to a new directory for another local run. Existing
+evidence is not overwritten. `report.json` records source commit/file hashes,
+scientific manifest/golden identity, HTTPS traffic and cleanup errors; screenshots
+and logs are retained without private keys. Local success does not establish
+hosted CI success for later commits; require the exact Android runtime job.
 
-- Scene links shared from the app use the canonical public HTTPS URL so they remain usable outside the native shell.
-- The custom `solaratlas://scene?...` URL scheme can open a scene in the installed app. Verified Android App Links and iOS Universal Links are not currently claimed.
-- User-initiated scene sharing and exports use the platform share sheet. Export files are written to the application cache and deletion is attempted after sharing.
-- Ordinary external HTTPS links open in the platform browser.
-- Backgrounding pauses a running simulation and foregrounding resumes it only when it was previously playing.
-- Android Back first dismisses the tutorial or an active in-app layer, then follows application/browser history, and finally minimizes the app.
-- The interface supports portrait and landscape layouts, safe-area insets, touch input, the adaptive 3D renderer, and automatic 2D fallback when WebGL creation or context recovery fails.
+### Android all-source directory
 
-## Permissions and privacy
+Android has a separate, initially collapsed source browser backed by the full
+backend's `/v1/identities`. Each explicit request reads at most 50 records and
+256 KiB of page JSON; source totals are not deduplicated bodies or exact-state
+counts. Original IDs, source rows and assertions are shown without inferring
+NAIF mappings. Cursors remain bound to the backend, query and manifest hashes.
 
-Android declares only network access through `INTERNET`; cleartext traffic and application backup are disabled. The iOS project has no camera, microphone, location, contacts, photos, tracking, or notification usage request. Its privacy manifest declares no collected data and records the required-reason file-timestamp API used by the local export path.
+Using a page replaces the custom ID selection but does not load or render it.
+Check the reference and TDB epoch, then load; the reference is included when
+absent from the selection. The next online manifest must still match the
+selected page before any state plan is requested. Input edits invalidate old
+observations; query/backend edits, collapse, timeout and backgrounding cancel
+directory work and clear its displayed results. This does not provide offline
+catalog recovery or establish that every source record has precise states.
+The native harness separates `/identity-fixture/` synthetic pagination and
+stale-selection cases from real SPK state verification. Full native/Web product
+parity remains incomplete; the iOS source-browser implementation is described below.
 
-See [PRIVACY.md](./PRIVACY.md) for the current source-level privacy notice. Store privacy labels must be reviewed again against the exact signed release, bundled dependencies, and store configuration before publication.
+The 2026-09-06 local API 36 emulator run passed the two synthetic 50-row pages,
+explicit page selection and rejection of a changed inventory before any state
+plan. Its five directory requests are isolated from the real-SPK state/cache
+smoke. All 24 recorded implementation/test source hashes match the tested
+files; the source-panel screenshot was inspected. This synthetic run is not a
+Chinese runtime UI check or a physical-device performance result.
 
-## Acceptance checklist
+A separate local run selected the first 50 original source IDs from the pinned
+1,567,193-record inventory into the native deck. At TDB JD 2461287.5, adding the
+Sun reference produced 51 requests: 10 verified states and 41 explicit gaps.
+Both native 2D and 3D displayed the 10 states. Five real HTTPS requests verified
+the page, unchanged selected IDs, manifest, plan and tile; no synthetic responder
+served these paths. The 23,565-byte source page and 31,480-byte state tile were
+bounded; 25 recorded source hashes matched. The same 51-ID Go golden passed Web
+and Java Float64-bit checks. This proves this page's integration, not all-source
+exact coverage, an independent astronomy oracle, Swift parity or device FPS.
 
-Before calling a mobile release complete, verify on representative physical devices as well as emulators/simulators:
+To reproduce the optional real-directory case, set `SOLAR_ANDROID_INVENTORY_DIR`
+to an existing audited addressable inventory and `SOLAR_ANDROID_INVENTORY_SHA256`
+to the SHA-256 of its `manifest.json`, then run `node scripts/android-native-smoke.mjs`
+with the SDK/JDK/HTTPS toolchain described above and a new output directory.
+The retained run used inventory hash
+`bef21e3bc5820db0b70c24ad464262cb67df279f8d0a3e2b8731ca5ca9c39583` and
+full catalog hash `7e7fa1df8080b505abba52cc8ca9a4d8bd6d1c10d47d3e421953e7c1b8494257`.
+No source archive is fetched from the internet, rewritten or packaged into the app. Without both inventory
+inputs, the report explicitly marks this additional case `not-configured`;
+ordinary hosted native smoke alone does not prove real-directory selection.
 
-- first-run tutorial choice, direct Observation Deck entry, safe areas, status-bar contrast, rotation, keyboard/accessibility services, and reduced motion;
-- touch camera controls, selection, drawers, four-item navigation, 3D/2D switching, WebGL context loss, and memory-pressure recovery;
-- core offline launch after installation, with honest unavailable/retry states for catalog and JPL requests;
-- custom-scheme scene import, canonical HTTPS sharing, JSON/CSV/image export, external-browser handoff, lifecycle pause/resume, and Android Back behavior;
-- Android API 24 and 36 behavior, and iOS 16.4 plus a current iOS version;
-- privacy manifests, permissions, signing identities, icons, screenshots, store metadata, accessibility declarations, and data-safety/privacy answers for the exact release binary.
+### iOS all-source directory
 
-This checklist has not yet been represented as completed real-device evidence. Do not describe the mobile applications as published or device-validated until that evidence and the relevant store records exist.
+iOS now includes its own initially collapsed native source list. Opening it
+does not make requests. Load first page or Next page fetches a fresh HTTPS
+manifest (at most 8 MiB) and at most 50 source rows (256 KiB); only one page is
+retained. Queries are limited to 256 UTF-8 bytes. Original source IDs, row
+numbers, identity assertions and ephemeris status remain visible, with explicit
+warnings that source records are not unique bodies or verified states.
 
-## Distribution boundary
+Selecting a page replaces the custom IDs and closes the list without computing
+states. Load observation includes the reference ID and checks the selected
+page's backend/catalog/inventory identities against a fresh manifest before
+requesting a state plan. Changed identities reject the load. Editing custom
+IDs releases that selection pin; epoch/reference edits retain it but invalidate
+the old observation. Backend edits also clear the pin and directory results.
+Query edits, collapsing and backgrounding cancel directory requests and clear
+the displayed page; late responses cannot republish it. Each HTTP transfer is
+bounded, rejects redirects, and uses a 30-second request/120-second resource
+timeout; these are not a hard deadline for the entire two-request operation.
 
-Signing, notarization, TestFlight, Play testing tracks, store submissions, paid developer accounts, production certificates, release keys, and publication are external state changes. They require explicit repository-owner authorization and controlled credentials. The current implementation stops before those steps.
+Hermetic Swift checks cover malformed fields, semantic flags, sizes, numeric
+bounds, duplicate IDs and identity drift. The macOS native smoke includes a
+separate synthetic two-page test: preserve all 50 original selected IDs and
+reject a changed inventory before any state plan. Its five HTTPS GETs are
+checked independently of the existing real-SPK state/cache tests. These new
+Swift protocol and simulator-build checks passed in
+[CI 33985751898](https://github.com/dajiaohuang/solar/actions/runs/33985751898)
+at `8e911ca`, but the new UI test failed to reveal the selected-ID editor.
+Advanced now uses independently accessible List rows and an explicit expanded
+state; the regression also checks that closing/reopening preserves all IDs.
+In [CI 33986754016](https://github.com/dajiaohuang/solar/actions/runs/33986754016)
+at `77c2a8a`, both 50-ID assertions and closing/reopening passed, but the final
+load did not reach the server: the captured button frame was behind the
+navigation bar despite XCTest reporting it hittable. The scroll helper now
+requires the target to be fully inside the content area and captures the
+pre-tap screen. In
+[CI 33987782740](https://github.com/dajiaohuang/solar/actions/runs/33987782740)
+at `157121d`, iOS protocol/build and all five simulator tests passed. The
+directory test retained all 50 selected IDs, restored them after reopening,
+and rejected inventory drift before planning. Its five-GET ledger and inspected
+pre-tap/rejection screenshots agree. This is a synthetic directory fixture;
+the separate Earth/Moon state and verified-cache checks use real SPK. The run's
+Web job failed on a 32K unit-test timeout, so this is not an overall green-CI
+claim. Real-inventory iOS
+selection, Chinese runtime UI, device FPS and full product parity are not yet
+verified. No source directory or SPK is bundled into the app.
+
+### On-demand source coverage audit
+
+Both native sources include a collapsed source-coverage disclosure, separate
+from the observation and presets. Opening it does not fetch data. Explicit
+Load/Reload requests a fresh HTTPS catalog manifest and `/v1/coverage` summary
+(maximum 64 KiB), bound to the catalog and inventory identities. It reports
+source/mapped/unresolved records, distinct explicit targets, audit-epoch
+availability, dependency-window counts, TDB audit/window ET, reasons and six
+provenance hashes. Source aliases do not inflate the distinct target count;
+dependency availability is not whole-window numerical accuracy certification.
+These totals are not current displayed-state counts.
+
+Reload, address edits, collapse and lifecycle cancellation clear stale totals.
+An unconfigured report (404) is unavailable, not zero; malformed or mismatched
+evidence is rejected. New coverage copy is English/Chinese; this does not claim
+that all pre-existing native UI has been localized.
+
+The native runtime harnesses keep the real-SPK state flow separate from
+`/coverage-fixture/` synthetic UI cases: explicit load, fresh reload returning
+404, and inconsistent counts. Their traffic is verified separately and marked
+synthetic in `report.json`; those counts do not represent astronomical coverage.
+Android's local coverage UI sequence passed on 2026-09-05; the new iOS coverage
+UI sequence passed in [CI 33965123890](https://github.com/dajiaohuang/solar/actions/runs/33965123890)
+at `ef19141` with the real-SPK state flow and Linux Go race checks.
+For optional real Go summary validation in Java/Swift, set
+`SOLAR_COVERAGE_NATIVE_FIXTURE_DIR` to a retained directory containing matching
+`manifest.json` and `summary.json`. A configured missing/invalid fixture fails.
+Gradle tracks this directory as a test input. Keep source data outside Git.
+
+### Observation behavior
+
+The iOS point geometry uses equal screen-space clamps of 4 (previously 2),
+with an opaque constant-white material. A separate `NativePointGeometryTests`
+class compiles the production geometry source into the simulator test runner.
+It measures pixel bounds, bright-pixel count, peak and integrated brightness at
+camera distances 16/160/1600 in 256/512/768-pixel square snapshots. An unclamped
+perspective negative control must visibly shrink. The harness requires the
+measurement record as well as a successful test exit, and retains snapshots in
+`Observation.xcresult` and metrics in `report.json` under `pointGeometry`.
+These are synthetic renderer tests, not additional exact bodies or validation
+of UIKit backing scales, interactive camera clipping, FPS, thermal behavior or
+physical devices. [CI 33966101514](https://github.com/dajiaohuang/solar/actions/runs/33966101514)
+passed at `13a51bf`: all nine fixed-point snapshots measured 4×4 pixel bounds,
+12 bright pixels, peak 255 and integrated brightness 3060, unchanged with
+distance. The perspective control changed from 110×110 to 2×2 pixels.
+The earlier `ef19141` run did not contain this test. See Apple's
+[screen-space clamp documentation](https://developer.apple.com/documentation/scenekit/scngeometryelement/minimumpointscreenspaceradius).
+
+Android current-state rendering now has independent adaptive display policies:
+3D starts at 100,000 with a 250,000 candidate ceiling; 2D starts at 250,000 with
+a 500,000 ceiling. Both can decrease to 25,000. Only an active touch gesture
+enables continuous GLES drawing; idle/hidden/paused views remain on-demand.
+The bounded sampler discards two warm-up intervals, then measures p50/p95 and
+estimated missed 60 Hz slots over at least 12 samples and roughly one second
+(120-sample maximum). These are GL callback intervals, not GPU timer queries or
+compositor-presented frames. Two slow windows reduce the limit by 25%; severe
+slowness reduces after one. Four fast windows can grow by about 12.5% in 5,000
+point steps, only if available exact rows exercise the current limit. Ordinary
+adjustments have a five-second cooldown. API 29+ severe thermal status or native
+memory warnings lower the limit to 25,000; recovery needs fresh headroom evidence.
+Only the current mode's buffer is rebuilt. Float64 states, provenance and gap
+counts remain intact; selection is deterministic: reference first, then source
+order. The UI exposes the limit, unshown verified count and budget reason.
+Repeated memory warnings at the minimum reset the cooldown and growth evidence.
+The seven policy/sampler tests and buffer tests are synthetic; the Android HTTPS
+smoke additionally exercises real GL callbacks on three real states, gesture
+render-mode transitions and an injected memory callback through the normal
+lifecycle API. None establishes 12 GB device smoothness, physical thermal
+behavior, total native/GPU memory or 60-second target-load acceptance. Native
+iOS now has a pressure-only display policy: 3D starts at 100K, 2D at 250K;
+fair thermal state caps them at 75K/100K, and serious/critical thermal state or
+a memory warning caps both at 25K. Cooling, reload and mode switches do not
+restore high limits. Only the render-coordinate prefix is reduced, preserving
+the full-source scale, camera and Float64 scientific frame. A missing reference
+keeps exact target counts but displays zero points. Backgrounding cancels the
+projection task and releases display coordinates; returning reprojects the
+retained scientific frame under the current limits. This does not bound total
+native/GPU memory or guarantee that a late OS warning can prevent termination.
+Swift protocol regressions cover the policy and immutable prefix; the hosted
+macOS job must compile/run them and the real-SPK UI tests for each changed head.
+iOS actual-draw interval sampling and automatic growth remain unfinished.
+Web has its own display-only controller; see [PERFORMANCE.md](./PERFORMANCE.md).
+None claims full memory/thermal/latency feedback or physical-device SLO acceptance.
+
+- The first native screen is an Observation Deck for current-state evidence: selected body IDs, exact values, provenance and explicit gaps.
+- iOS starts in native 3D and can switch to native 2D. The 3D and 2D budgets are independent; native 3D does not shrink or fade states solely because of distance.
+- A request is bound to its manifest/plan identity and ordered IDs. Tiles are bounded, checksum-verified and published atomically only after the complete plan validates.
+- Cancellation and latest-only loading prevent stale plans from replacing a newer selection. Verified tiles can be reused from the iOS cache after a new online plan identifies them.
+- Native does not register or depend on a Web service worker, Capacitor bridge, or packaged SPK profile. SPK source files remain a scientific/backend delivery concern; they are not a native offline download.
+- Manifest and plan access remains online even when individual tiles are cached. There is no complete offline plan/catalog restoration path yet.
+
+## Privacy and distribution
+
+Native clients have no project account, advertising, analytics, behavioral tracking or telemetry. The iOS state-tile service sends only the user-selected HTTPS endpoint, TDB epoch, preset/custom IDs and protocol request metadata to that endpoint. The bounded tile cache is local application data. See [PRIVACY.md](./PRIVACY.md) and [PRIVACY-CN.md](./PRIVACY-CN.md).
+
+The Android and iOS projects are not represented as published, signed, store-approved or real-device-validated applications. Signing, TestFlight, Play testing tracks, store submissions and publication require separate authorization and evidence.

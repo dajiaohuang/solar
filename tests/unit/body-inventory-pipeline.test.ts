@@ -1,11 +1,12 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { gzipSync } from 'node:zlib'
 import { downloadSnapshot, SOURCE_URLS } from '../../scripts/lib/inventory-snapshot.mjs'
 import { buildInventory } from '../../scripts/build-body-inventory.mjs'
 import { validateInventory } from '../../scripts/validate-body-inventory.mjs'
+import { auditBodyCoverage } from '../../scripts/audit-body-coverage.mjs'
 
 const directories: string[] = []
 afterEach(async () => { vi.unstubAllGlobals(); for (const dir of directories.splice(0)) await rm(dir, { recursive: true, force: true }) })
@@ -30,17 +31,72 @@ async function fixture(numberedCount = 1) {
   return { directory, sources }
 }
 
-it('replays every source row into deterministic shards with separate SPK evidence', async () => {
+async function kernelFixtureRoot(directory: string) {
+  const root = join(directory, 'kernel-root')
+  const source = process.cwd(), manifest = JSON.parse(await readFile(join(source, 'src/data/ephemeris-manifest-full.json'), 'utf8'))
+  const targets = new Set([10, 199, 299, 399, 301, 499, 599, 699, 799, 899, 999, 2000001, 401])
+  const selected = new Set<string>()
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const file of manifest.files) if (selected.has(file.id)) for (const target of file.targets) targets.add(target)
+    for (const file of manifest.files) {
+      if (selected.has(file.id) || !file.targets.some((target: number) => targets.has(target))) continue
+      selected.add(file.id); changed = true
+      for (const target of file.targets) targets.add(target)
+      for (const dependency of file.solutionKernelIds ?? []) if (!selected.has(dependency)) { selected.add(dependency); changed = true }
+    }
+    for (const file of manifest.files) if (selected.has(file.id)) for (const dependency of file.solutionKernelIds ?? []) if (!selected.has(dependency)) { selected.add(dependency); changed = true }
+  }
+  const files = manifest.files.filter((file: { id: string }) => selected.has(file.id))
+  expect(files.length).toBeLessThan(manifest.files.length)
+  expect(files.reduce((bytes: number, file: { bytes: number }) => bytes + file.bytes, 0)).toBeLessThan(32 * 1024 * 1024)
+  for (const id of selected) expect(files.some((file: { id: string }) => file.id === id)).toBe(true)
+  await mkdir(join(root, 'src/data'), { recursive: true }); await mkdir(join(root, 'public/data/ephemerides'), { recursive: true })
+  await Promise.all(files.map((file: { path: string }) => copyFile(join(source, 'public/data/ephemerides', file.path), join(root, 'public/data/ephemerides', file.path))))
+  await Promise.all(['ephemerisBodies.json', 'satelliteCatalog.json'].map(file => copyFile(join(source, 'src/data', file), join(root, 'src/data', file))))
+  const reducedManifest = JSON.stringify({ ...manifest, files }) + '\n'
+  await writeFile(join(root, 'src/data/ephemeris-manifest-full.json'), reducedManifest, { flag: 'wx' })
+  await writeFile(join(root, 'src/data/ephemeris-manifest.json'), reducedManifest, { flag: 'wx' })
+  return root
+}
+
+it('replays every source row into deterministic addressable blocks with separate SPK evidence', async () => {
   const { directory, sources } = await fixture()
+  const root = await kernelFixtureRoot(directory)
   const first = join(directory, 'first'), second = join(directory, 'second')
-  const manifest = await buildInventory({ sources, output: first, shardSize: 2 })
+  const manifest = await buildInventory({ sources, output: first, root, shardSize: 2 })
   expect(manifest.totalRecords).toBe(16)
+  expect(manifest.schemaVersion).toBe(2)
+  expect(manifest.purpose).toBe('source-inventory-addressable-v2')
   expect(manifest.counts.confirmations.candidate).toBe(1)
   expect(manifest.missingParents).toEqual([])
+  for (const shard of manifest.shards) {
+    expect(shard.file).toMatch(/^records-\d{5}\.jsonl\.bgz$/)
+    expect(shard.blocks).toHaveLength(1)
+    expect(shard.blocks[0]).toMatchObject({ rowStart: 0, count: shard.count, offset: 0 })
+  }
   expect((await validateInventory(first, sources)).recordsVerified).toBe(16)
-  expect(await buildInventory({ sources, output: second, shardSize: 2 })).toEqual(manifest)
+  expect(await buildInventory({ sources, output: second, root, shardSize: 2 })).toEqual(manifest)
   for (const shard of manifest.shards) expect(await readFile(join(second, shard.file))).toEqual(await readFile(join(first, shard.file)))
-  await expect(buildInventory({ sources, output: first })).rejects.toThrow()
+  await expect(buildInventory({ sources, output: first, root })).rejects.toThrow()
+  const options = { inventory: first, sources, root, profile: 'full', auditEt: 841752000, startEt: 841752000, endEt: 841838400 }
+  const coverage = await auditBodyCoverage({ ...options, output: join(directory, 'coverage-a') })
+  expect(coverage.identity.counts).toMatchObject({ sourceRecords: 16, explicitNaifTargets: 13, unresolvedSourceRecords: 3 })
+  const earth = coverage.identity.explicitTargetGroups.find(group => group.target === 399)
+  expect(earth?.stateAtAuditEpoch).toBe('state-available-at-audit-epoch')
+  expect(Number.isFinite(earth?.evaluatedState?.position.x)).toBe(true)
+  expect(coverage.windowCounts.numericallyCertifiedWholeWindowTargets).toBeNull()
+  expect(coverage.windows).toHaveLength(13)
+  expect(coverage.kernels.profile).toBe('full')
+  expect(coverage.sourceBytesVerified).toBe(true)
+  expect(await auditBodyCoverage({ ...options, output: join(directory, 'coverage-b') })).toEqual(coverage)
+  expect(await readFile(join(directory, 'coverage-a/report.json'))).toEqual(await readFile(join(directory, 'coverage-b/report.json')))
+  await expect(auditBodyCoverage({ ...options, output: first })).rejects.toThrow('separate new output')
+  await writeFile(join(first, 'manifest.json'), JSON.stringify({ ...manifest, totalRecords: 17 }))
+  const rejectedOutput = join(directory, 'coverage-rejected')
+  await expect(auditBodyCoverage({ ...options, output: rejectedOutput })).rejects.toThrow('Inventory total mismatch')
+  await expect(readFile(join(rejectedOutput, 'report.json'))).rejects.toThrow()
 })
 
 it('never publishes a successful manifest when source rows do not match metadata', async () => {

@@ -1,9 +1,18 @@
 package catalog
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/dajiaohuang/solar/backend/internal/spk"
 )
 
 func TestLoadManifestRetainsSourceOnlyTargets(t *testing.T) {
@@ -18,6 +27,177 @@ func TestLoadManifestRetainsSourceOnlyTargets(t *testing.T) {
 	b, ok := c.Get("naif:12345")
 	if !ok || b.Availability != Missing || b.MissingReason != "kernel-not-packaged" {
 		t.Fatalf("unexpected source-only body: %+v", b)
+	}
+}
+
+func TestLazyVerificationRejectsPackagedKernelWithManifestIdentityMismatch(t *testing.T) {
+	d := t.TempDir()
+	if err := os.WriteFile(filepath.Join(d, "bad.bsp"), []byte("not-a-kernel"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `{"id":"test-v1","files":[{"id":"bad","path":"bad.bsp","targets":[12345],"bytes":12,"sha256":"0000000000000000000000000000000000000000000000000000000000000000"}]}`
+	if err := os.WriteFile(filepath.Join(d, "ephemeris-manifest.json"), []byte(manifest), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, ok := c.Get("naif:12345")
+	if !ok || b.Availability != AvailableOperational {
+		t.Fatalf("unexpected lazy packaged body: %+v", b)
+	}
+	if stats := c.Stats(); stats["kernelFilesPending"] != 1 || stats["kernelFilesInvalid"] != 0 {
+		t.Fatalf("unexpected pre-request kernel stats: %+v", stats)
+	}
+	if _, found, err := c.OperationalState("naif:12345", 2451545); err != nil || found {
+		t.Fatalf("invalid kernel state found=%v err=%v", found, err)
+	}
+	if reason := c.KernelMissingReason("bad"); reason != "kernel-invalid" {
+		t.Fatalf("unexpected invalid kernel reason: %q", reason)
+	}
+	if stats := c.Stats(); stats["kernelFilesPending"] != 0 || stats["kernelFilesInvalid"] != 1 {
+		t.Fatalf("unexpected post-request kernel stats: %+v", stats)
+	}
+}
+
+func TestCatalogCloseWaitsForLazyKernelLoad(t *testing.T) {
+	d := t.TempDir()
+	fixture, err := os.ReadFile(filepath.Join("..", "..", "tests", "fixtures", "spk21-synthetic.bsp"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(d, "synthetic.bsp"), fixture, 0600); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(fixture)
+	manifest := fmt.Sprintf(`{"id":"spk-test","files":[{"id":"synthetic","path":"synthetic.bsp","targets":[-210001],"bytes":%d,"sha256":"%s"}]}`, len(fixture), hex.EncodeToString(sum[:]))
+	if err := os.WriteFile(filepath.Join(d, "ephemeris-manifest.json"), []byte(manifest), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	binding := c.kernels["synthetic"]
+	if binding == nil {
+		t.Fatal("lazy kernel binding was not retained")
+	}
+	previousOpen := openKernelWithCache
+	defer func() { openKernelWithCache = previousOpen }()
+	openStarted := make(chan struct{})
+	releaseOpen := make(chan struct{})
+	released := false
+	defer func() {
+		if !released {
+			close(releaseOpen)
+		}
+	}()
+	var opened *spk.Kernel
+	openKernelWithCache = func(path string, pageSize int, maxBytes int64) (*spk.Kernel, error) {
+		kernel, openErr := previousOpen(path, pageSize, maxBytes)
+		opened = kernel
+		close(openStarted)
+		<-releaseOpen
+		return kernel, openErr
+	}
+	loadDone := make(chan error, 1)
+	go func() {
+		_, loadErr := binding.kernelFor(context.Background(), spk.DefaultCacheBytes)
+		loadDone <- loadErr
+	}()
+	select {
+	case <-openStarted:
+	case <-time.After(time.Second):
+		t.Fatal("lazy kernel loader did not reach the open barrier")
+	}
+	closeDone := make(chan error, 1)
+	go func() { closeDone <- c.Close() }()
+	deadline := time.NewTimer(time.Second)
+	ticker := time.NewTicker(time.Millisecond)
+	defer deadline.Stop()
+	defer ticker.Stop()
+	closed := false
+	for !closed {
+		binding.mu.Lock()
+		closed = binding.closed
+		binding.mu.Unlock()
+		if closed {
+			break
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline.C:
+			t.Fatal("Catalog.Close did not mark binding closed")
+		}
+	}
+	close(releaseOpen)
+	released = true
+	if loadErr := <-loadDone; !errors.Is(loadErr, errCatalogClosed) {
+		t.Fatalf("lazy loader result after close=%v, want catalog closed", loadErr)
+	}
+	if closeErr := <-closeDone; closeErr != nil {
+		t.Fatalf("Catalog.Close: %v", closeErr)
+	}
+	if opened == nil {
+		t.Fatal("open barrier did not receive a kernel")
+	}
+	binding.mu.Lock()
+	remainingKernel, stillLoading := binding.kernel, binding.loading
+	binding.mu.Unlock()
+	if remainingKernel != nil || stillLoading {
+		t.Fatalf("closed binding retained a kernel or loader: kernel=%v loading=%v", remainingKernel != nil, stillLoading)
+	}
+	if _, loadErr := binding.kernelFor(context.Background(), spk.DefaultCacheBytes); !errors.Is(loadErr, errCatalogClosed) {
+		t.Fatalf("post-close lazy load result=%v, want catalog closed", loadErr)
+	}
+}
+
+func TestLoadRejectsPackagedKernelWithoutManifestIdentity(t *testing.T) {
+	d := t.TempDir()
+	fixture, err := os.ReadFile(filepath.Join("..", "..", "tests", "fixtures", "spk21-synthetic.bsp"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(d, "synthetic.bsp"), fixture, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(d, "ephemeris-manifest.json"), []byte(`{"id":"test-v1","files":[{"id":"synthetic","path":"synthetic.bsp","targets":[-210001]}]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, ok := c.Get("naif:-210001")
+	if !ok || b.Availability != Missing || b.MissingReason != "kernel-unverified" {
+		t.Fatalf("unexpected unverified packaged body: %+v", b)
+	}
+}
+
+func TestLoadNeverReadsKernelOutsideDataDirectory(t *testing.T) {
+	d := t.TempDir()
+	outsideDir := t.TempDir()
+	outside := filepath.Join(outsideDir, "outside-kernel.bsp")
+	if err := os.WriteFile(outside, []byte("not-a-kernel"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	relative, err := filepath.Rel(d, outside)
+	if err != nil || !strings.HasPrefix(relative, "..") {
+		t.Fatalf("fixture is not outside data directory: %q %v", relative, err)
+	}
+	manifest := fmt.Sprintf(`{"id":"test-v1","files":[{"id":"escape","path":%q,"targets":[12345],"bytes":12,"sha256":"0000000000000000000000000000000000000000000000000000000000000000"}]}`, filepath.ToSlash(relative))
+	if err := os.WriteFile(filepath.Join(d, "ephemeris-manifest.json"), []byte(manifest), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, ok := c.Get("naif:12345")
+	if !ok || b.Availability != Missing || b.MissingReason != "kernel-not-packaged" {
+		t.Fatalf("escaped kernel became available: %+v", b)
 	}
 }
 
@@ -44,7 +224,9 @@ func TestOperationalStateUsesPackagedSPKAndCenterPool(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(d, "synthetic.bsp"), fixture, 0600); err != nil {
 		t.Fatal(err)
 	}
-	manifest := `{"id":"spk-test","profile":"full","contract":"Original SPK types 2/3/17/21","files":[{"id":"synthetic","path":"synthetic.bsp","targets":[-210001],"startEt":0,"endEt":1000,"solutionKernelIds":["synthetic"]}]}`
+	sum := sha256.Sum256(fixture)
+	wantHash := hex.EncodeToString(sum[:])
+	manifest := fmt.Sprintf(`{"id":"spk-test","profile":"full","contract":"Original SPK types 2/3/17/21","files":[{"id":"synthetic","path":"synthetic.bsp","targets":[-210001],"startEt":0,"endEt":1000,"solutionKernelIds":["synthetic"],"bytes":%d,"sha256":"%s"}]}`, len(fixture), hex.EncodeToString(sum[:]))
 	if err := os.WriteFile(filepath.Join(d, "ephemeris-manifest.json"), []byte(manifest), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -52,6 +234,7 @@ func TestOperationalStateUsesPackagedSPKAndCenterPool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer c.Close()
 	b, ok := c.Get("naif:-210001")
 	if !ok || b.Availability != AvailableOperational {
 		t.Fatalf("expected operational body: %+v", b)
@@ -69,5 +252,12 @@ func TestOperationalStateUsesPackagedSPKAndCenterPool(t *testing.T) {
 	}
 	if batch["naif:-210001"] != state {
 		t.Fatalf("single/batch mismatch: single=%+v batch=%+v", state, batch["naif:-210001"])
+	}
+	provenance, provenanceFound, err := c.OperationalProvenance("naif:-210001", 2451545)
+	if err != nil || !provenanceFound {
+		t.Fatalf("operational provenance found=%v err=%v", provenanceFound, err)
+	}
+	if provenance.Source != "synthetic" || provenance.KernelSHA256 != wantHash || provenance.CenterID != "naif:0" || !provenance.ValidityPresent || provenance.ValidityStartET != 0 || provenance.ValidityEndET != 1000 {
+		t.Fatalf("unexpected operational provenance: %+v", provenance)
 	}
 }

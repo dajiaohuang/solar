@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="identity_title">All-source directory</string>
+    <string name="identity_close">Close source directory</string>
+    <string name="identity_intro">Browse 50 source records at a time. Records may be aliases, not unique bodies. Source assertions do not prove exact states. Selecting a page replaces the custom IDs; the reference is added when loading. Browsing does not calculate or render states.</string>
+    <string name="identity_query">Source ID, designation or name (empty for sequential browsing)</string>
+    <string name="identity_load">Browse from first page</string>
+    <string name="identity_next">Next source page</string>
+    <string name="identity_select">Use this page in the Observation Deck</string>
+    <string name="identity_selected">Source IDs selected. Check the reference and TDB epoch above, then press Load observation. No new states have been calculated.</string>
+    <string name="identity_idle">No source page loaded.</string>
+    <string name="identity_loading">Loading one source page…</string>
+    <string name="identity_failed">Source page could not be verified. Results cleared; check the HTTPS backend and restart from the first page.</string>
+    <string name="identity_counts">Records on this page: %1$d\nSource records: %2$d (not a unique-body or exact-state count)</string>
+    <string name="identity_hash">Inventory SHA-256: %1$s</string>
+    <string name="identity_inputs_changed">Observation inputs changed. Load again to verify current states.</string>
+</resources>

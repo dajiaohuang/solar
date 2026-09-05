@@ -1,0 +1,446 @@
+import Foundation
+
+@main
+struct ProtocolTests {
+    static let hashA = String(repeating: "a", count: 64)
+    static let hashB = String(repeating: "b", count: 64)
+    static let ids = ["naif:10", "missing:fixture"]
+    static let values: [Double] = [Double(1).nextUp, -0.0, 149_597_870.7, -29.78, Double.leastNormalMagnitude, 0]
+    static var expected: TileExpectation {
+        TileExpectation(planHash: hashA, catalogHash: hashB, inventoryHash: nil, sequence: 0, tileCount: 1, ordinalStart: 0, epochJd: 2_451_545, ids: ids)
+    }
+
+    static func put(_ data: inout Data, at offset: Int, value: UInt64, width: Int) {
+        for byte in 0..<width { data[offset + byte] = UInt8(truncatingIfNeeded: value >> (byte * 8)) }
+    }
+
+    static func fixture() throws -> Data {
+        let common: [String: Any] = ["source": "protocol-test-fixture", "datasetVersion": "fixture", "datasetSha256": hashB, "kernelSha256": hashA, "model": "spk-original", "centerId": "naif:0", "validityStartEt": 0, "validityEndEt": 0, "validityPresent": true, "stateEvidence": "fixture-only", "evidenceWindowStartEt": 0, "evidenceWindowEndEt": 0, "evidenceWindowPresent": false]
+        var metadata = Data()
+        for (index, id) in ids.enumerated() {
+            var row = common; row["id"] = id; row["missingReason"] = index == 0 ? "" : "no-kernel"
+            row["sourceRecord"] = false; row["identityStatus"] = ""
+            metadata.append(try JSONSerialization.data(withJSONObject: row, options: [.sortedKeys])); metadata.append(10)
+        }
+        let exact = 200 + metadata.count, approximate = exact + 1, missing = approximate + 1
+        let states = (missing + 1 + 7) / 8 * 8
+        var data = Data(count: states + 96)
+        data.replaceSubrange(0..<8, with: [83, 76, 82, 84, 73, 76, 69, 0])
+        for (offset, value, width) in [(8, 1, 2), (10, 200, 2), (16, 1, 4), (24, 2, 4), (28, 6, 2), (30, 3, 2), (40, 200, 4), (44, metadata.count, 4), (48, exact, 4), (52, 1, 4), (56, approximate, 4), (60, missing, 4), (64, states, 4), (68, 96, 4)] {
+            put(&data, at: offset, value: UInt64(value), width: width)
+        }
+        put(&data, at: 32, value: Double(2_451_545).bitPattern, width: 8)
+        data.replaceSubrange(72..<104, with: repeatElement(UInt8(0xaa), count: 32))
+        data.replaceSubrange(104..<136, with: repeatElement(UInt8(0xbb), count: 32))
+        data.replaceSubrange(200..<exact, with: metadata)
+        data[exact] = 1; data[missing] = 2
+        for (index, value) in values.enumerated() { put(&data, at: states + index * 8, value: value.bitPattern, width: 8) }
+        checksum(&data)
+        return data
+    }
+
+    static func checksum(_ data: inout Data) {
+        let hash = StateTileDecoder.sha256(data.subdata(in: 200..<data.count))
+        let bytes = stride(from: 0, to: hash.count, by: 2).map { index -> UInt8 in
+            let start = hash.index(hash.startIndex, offsetBy: index)
+            return UInt8(hash[start..<hash.index(start, offsetBy: 2)], radix: 16)!
+        }
+        data.replaceSubrange(168..<200, with: bytes)
+    }
+
+    static func coverageFixture() throws -> Data {
+        let hash = String(repeating: "a", count: 64)
+        let object: [String: Any] = [
+            "apiVersion": "solar.api/v1", "purpose": "source-identity-and-dependency-window-audit",
+            "reportSha256": hash, "catalogVersion": "fixture", "catalogManifestSha256": hash,
+            "inventoryManifestSha256": hash, "sourceSnapshotSha256": hash, "identityMappingSha256": hash,
+            "satelliteCatalogSha256": hash, "sourceBytesVerified": true, "profile": "full",
+            "auditEt": 500, "timeScale": "TDB seconds past J2000", "frame": "ECLIPJ2000",
+            "requestedWindow": ["startEt": 0, "endEt": 1000, "timeScale": "TDB seconds past J2000"],
+            "counts": ["sourceRecords": 10, "mappedSourceRecords": 3, "unresolvedSourceRecords": 7, "explicitNaifTargets": 2, "availableTargetsAtAuditEpoch": 2],
+            "windowCounts": ["dependencyCoveredTargets": 1, "targetsWithDependencyGaps": 1, "numericallyCertifiedWholeWindowTargets": NSNull()],
+            "unresolvedReasons": ["no-explicit-naif-mapping": 6, "unresolved-component": 1]
+        ]
+        return try JSONSerialization.data(withJSONObject: object)
+    }
+
+    static func coverageRejects(_ data: Data, manifest: Data, mutate: (inout [String: Any]) -> Void) throws {
+        var value = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        mutate(&value)
+        try rejectsCoverage(try JSONSerialization.data(withJSONObject: value), manifest: manifest)
+    }
+
+    static func rejectsCoverage(_ data: Data, manifest: Data) throws {
+        do { _ = try NativeCoverageReport(validating: data, catalogManifest: manifest) }
+        catch { return }
+        throw StateTileFailure.invalid("Malformed coverage report was accepted")
+    }
+
+    static func rejects(_ data: Data, expected: TileExpectation = ProtocolTests.expected) throws {
+        do {
+            _ = try StateTileDecoder.decode(data, expected: expected)
+        } catch { return }
+        throw StateTileFailure.invalid("Malformed fixture was accepted")
+    }
+
+    final class CancellationProbe: @unchecked Sendable {
+        private let lock = NSLock()
+        private var remaining: Int
+        init(after checks: Int) { remaining = checks }
+        func check() throws {
+            lock.lock()
+            remaining -= 1
+            let cancelled = remaining == 0
+            lock.unlock()
+            if cancelled { throw CancellationError() }
+        }
+    }
+
+    static func sourceIdentityChecks() throws {
+        let base = URL(string: "https://example.test/full/")!
+        let manifestObject: [String: Any] = ["apiVersion": "solar.api/v1", "catalogVersion": "fixture", "catalogManifestSha256": hashA, "inventoryManifestSha256": hashB]
+        let manifest = try JSONSerialization.data(withJSONObject: manifestObject)
+        let rows: [[String: Any]] = (0..<50).map { index in
+            ["id": "unknown:source:\(index)", "name": "来源 \(index)", "category": "comet", "source": "synthetic-only",
+             "sourceRow": index, "identityStatus": "source-designation", "ephemerisStatus": "unmapped"]
+        }
+        let object: [String: Any] = ["apiVersion": "solar.api/v1", "catalogVersion": "fixture", "inventoryManifestSha256": hashB,
+            "sourceRecords": true, "identityAssertions": true, "uniqueBodySemantics": "not-deduplicated",
+            "totalRecords": NativeSourceIdentityPage.maxSafeInteger, "limit": 50, "items": rows, "nextPageToken": "next"]
+        let data = try JSONSerialization.data(withJSONObject: object)
+        let page = try NativeSourceIdentityPage(validating: data, catalogManifest: manifest, base: base, query: "火星+moon")
+        precondition(page.rows.map(\.id) == (0..<50).map { "unknown:source:\($0)" })
+        precondition(page.rows[49].name == "来源 49" && page.rows[49].sourceRow == 49)
+        precondition(page.totalRecords == NativeSourceIdentityPage.maxSafeInteger && page.next == "next")
+        precondition(page.query == "火星+moon" && page.inventoryHash == hashB && page.catalogHash == hashA)
+        try page.requireManifest(manifest, base: URL(string: "https://example.test/full")!)
+
+        func reject(_ operation: () throws -> Void) throws {
+            do { try operation() } catch { return }
+            throw StateTileFailure.invalid("Invalid source identity contract accepted")
+        }
+        func rejectPage(_ mutate: (inout [String: Any]) -> Void) throws {
+            var changed = object; mutate(&changed)
+            let altered = try JSONSerialization.data(withJSONObject: changed)
+            try reject { _ = try NativeSourceIdentityPage(validating: altered, catalogManifest: manifest, base: base, query: "") }
+        }
+        for (key, value) in [("apiVersion", "other"), ("catalogVersion", "other"), ("inventoryManifestSha256", hashA), ("uniqueBodySemantics", "deduplicated")] {
+            try rejectPage { $0[key] = value }
+        }
+        for key in ["sourceRecords", "identityAssertions"] {
+            try rejectPage { $0[key] = false }
+            try rejectPage { $0[key] = 1 }
+            try rejectPage { $0.removeValue(forKey: key) }
+        }
+        for value in [-1, 1.5, true, NativeSourceIdentityPage.maxSafeInteger + 1, "100"] as [Any] {
+            try rejectPage { $0["totalRecords"] = value }
+        }
+        try rejectPage { $0["totalRecords"] = 49 }
+        try rejectPage { $0["limit"] = 51 }
+        try rejectPage { $0["items"] = rows + [rows[0]] }
+        try rejectPage { $0["items"] = [rows[0], rows[0]] }
+        try rejectPage { $0["items"] = []; $0["nextPageToken"] = "next" }
+        try rejectPage { $0["nextPageToken"] = String(repeating: "x", count: 4097) }
+        for value in ["", "id,split", "id split", "id\n", String(repeating: "x", count: 513)] as [Any] {
+            try rejectPage { var row = rows[0]; row["id"] = value; $0["items"] = [row] }
+        }
+        for value in [-1, 0.5, true, NativeSourceIdentityPage.maxSafeInteger + 1] as [Any] {
+            try rejectPage { var row = rows[0]; row["sourceRow"] = value; $0["items"] = [row] }
+        }
+        for key in ["source", "category", "identityStatus", "ephemerisStatus"] {
+            try rejectPage { var row = rows[0]; row[key] = "\u{7f}"; $0["items"] = [row] }
+        }
+        var empty = object; empty["items"] = []; empty["totalRecords"] = 0; empty["nextPageToken"] = NSNull()
+        let emptyPage = try NativeSourceIdentityPage(validating: JSONSerialization.data(withJSONObject: empty), catalogManifest: manifest, base: base, query: "")
+        precondition(emptyPage.rows.isEmpty && emptyPage.next.isEmpty && emptyPage.totalRecords == 0)
+        for key in ["apiVersion", "catalogVersion", "catalogManifestSha256", "inventoryManifestSha256"] {
+            var changed = manifestObject; changed[key] = key.hasSuffix("Sha256") ? String(repeating: "c", count: 64) : "changed"
+            let altered = try JSONSerialization.data(withJSONObject: changed)
+            try reject { try page.requireManifest(altered, base: base) }
+        }
+        try reject { try page.requireManifest(manifest, base: URL(string: "https://other.test/full")!) }
+        for value in ["http://example.test", "https://user@example.test", "https://example.test/?q=x", "https://example.test/#x"] {
+            try reject { _ = try NativeSourceIdentityPage.validatedBase(URL(string: value)!) }
+        }
+        try NativeSourceIdentityPage.validateQuery(String(repeating: "x", count: 256))
+        try reject { try NativeSourceIdentityPage.validateQuery(String(repeating: "火", count: 86)) }
+        try reject { try NativeSourceIdentityPage.validateQuery("bad\nquery") }
+        try reject { _ = try NativeSourceIdentityPage(validating: Data(repeating: 32, count: NativeSourceIdentityPage.maxBytes + 1), catalogManifest: manifest, base: base, query: "") }
+        try reject { try page.requireManifest(Data(repeating: 32, count: NativeSourceIdentityPage.maxManifestBytes + 1), base: base) }
+        print("Source identity protocol checks passed (synthetic, not a scientific oracle)")
+    }
+
+    static func main() async throws {
+        try sourceIdentityChecks()
+        let coverage = try coverageFixture()
+        let coverageManifest = try JSONSerialization.data(withJSONObject: ["apiVersion": "solar.api/v1", "catalogVersion": "fixture", "catalogManifestSha256": String(repeating: "a", count: 64), "inventoryManifestSha256": String(repeating: "a", count: 64)])
+        _ = try NativeCoverageReport(validating: coverage, catalogManifest: coverageManifest)
+        if let directory = ProcessInfo.processInfo.environment["SOLAR_COVERAGE_NATIVE_FIXTURE_DIR"] {
+            let root = URL(fileURLWithPath: directory, isDirectory: true)
+            let summary = try Data(contentsOf: root.appendingPathComponent("summary.json"))
+            let manifest = try Data(contentsOf: root.appendingPathComponent("manifest.json"))
+            precondition(summary.count <= NativeCoverageReport.maxBytes && manifest.count <= 8 * 1024 * 1024)
+            _ = try NativeCoverageReport(validating: summary, catalogManifest: manifest)
+        }
+        var boundary = try JSONSerialization.jsonObject(with: coverage) as! [String: Any]
+        boundary["auditEt"] = -Double.greatestFiniteMagnitude
+        boundary["requestedWindow"] = ["startEt": -1.5, "endEt": 1.5, "timeScale": "TDB seconds past J2000"]
+        boundary["counts"] = ["sourceRecords": 0, "mappedSourceRecords": 0, "unresolvedSourceRecords": 0, "explicitNaifTargets": 0, "availableTargetsAtAuditEpoch": 0]
+        boundary["windowCounts"] = ["dependencyCoveredTargets": 0, "targetsWithDependencyGaps": 0, "numericallyCertifiedWholeWindowTargets": NSNull()]
+        boundary["unresolvedReasons"] = [String: UInt64]()
+        _ = try NativeCoverageReport(validating: JSONSerialization.data(withJSONObject: boundary), catalogManifest: coverageManifest)
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["sourceBytesVerified"] = false }
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["windowCounts"] = ["dependencyCoveredTargets": 1, "targetsWithDependencyGaps": 1] }
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["counts"] = ["sourceRecords": 10, "mappedSourceRecords": 3, "unresolvedSourceRecords": 8, "explicitNaifTargets": 2, "availableTargetsAtAuditEpoch": 2] }
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["unresolvedReasons"] = ["Bad reason": 7] }
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["reportSha256"] = "not-a-hash" }
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["catalogVersion"] = " fixture " }
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["catalogVersion"] = " " }
+        try rejectsCoverage(Data(repeating: 32, count: NativeCoverageReport.maxBytes + 1), manifest: coverageManifest)
+        try rejectsCoverage(coverage, manifest: Data(repeating: 32, count: 8 * 1024 * 1024 + 1))
+        try rejectsCoverage(Data(), manifest: coverageManifest)
+        try rejectsCoverage(coverage, manifest: Data())
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["reportSha256"] = String(repeating: "a", count: 64) + "\n" }
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["unresolvedReasons"] = ["bad\nreason": 7] }
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["windowCounts"] = ["dependencyCoveredTargets": 1, "targetsWithDependencyGaps": 1, "numericallyCertifiedWholeWindowTargets": 0] }
+        var reasons128: [String: Int] = [:]
+        for index in 0..<128 { reasons128[String(format: "r%03d", index)] = index == 0 ? 7 : 0 }
+        var valid128 = try JSONSerialization.jsonObject(with: coverage) as! [String: Any]; valid128["unresolvedReasons"] = reasons128
+        _ = try NativeCoverageReport(validating: JSONSerialization.data(withJSONObject: valid128), catalogManifest: coverageManifest)
+        reasons128["r128"] = 0
+        var invalid129 = valid128; invalid129["unresolvedReasons"] = reasons128
+        try rejectsCoverage(try JSONSerialization.data(withJSONObject: invalid129), manifest: coverageManifest)
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["counts"] = ["sourceRecords": 10, "mappedSourceRecords": 3, "unresolvedSourceRecords": 7, "explicitNaifTargets": 3, "availableTargetsAtAuditEpoch": 2] }
+        var requests = NativeObservationRequestGate()
+        let oldRequest = requests.begin(reference: "naif:10")
+        let presetRequest = requests.begin(reference: "naif:399")
+        // SwiftUI reports the reference change after the preset action has
+        // already started its matching load; it must remain current.
+        precondition(!requests.shouldCancel(reference: "naif:399"))
+        precondition(requests.isCurrent(presetRequest) && !requests.isCurrent(oldRequest))
+        precondition(requests.shouldCancel(reference: "naif:499"))
+        requests.cancel()
+        precondition(!requests.isCurrent(presetRequest))
+        let nextRequest = requests.begin(reference: "naif:399")
+        precondition(requests.isCurrent(nextRequest) && !requests.isCurrent(presetRequest))
+        if let directory = ProcessInfo.processInfo.environment["SOLAR_STATE_TILE_FIXTURE_DIR"] {
+            try golden(directory: directory)
+        }
+        let data = try fixture()
+        let tile = try StateTileDecoder.decode(data, expected: expected)
+        precondition(tile.exact == [true, false])
+        for index in values.indices { precondition(tile.states[index].bitPattern == values[index].bitPattern) }
+        var frame = NativeStateFrame(epochJd: expected.epochJd, catalogHash: hashB, inventoryHash: nil,
+            metadata: Array(tile.metadata.reversed()), states: Array(repeating: 0, count: 12), exact: [true, true])
+        // Large absolute origin and small displacement must be subtracted as
+        // Float64 before any Float32 conversion. Reference is last in the list.
+        frame.states[0] = 1_000_000_001; frame.states[6] = 1_000_000_000
+        let sourceBits = frame.states.map(\.bitPattern)
+        let projected = try NativeProjection.make(frame: frame, reference: ids[0], limit: 2)
+        precondition(projected.points == [SIMD3<Float>.zero, SIMD3<Float>(5, 0, 0)] && projected.candidates == 2)
+        let capped = try NativeProjection.make(frame: frame, reference: ids[0], limit: 1)
+        precondition(capped.points == [.zero] && capped.candidates == 2)
+        let reduced = try projected.limited(to: 1)
+        precondition(reduced.points == capped.points && reduced.candidates == 2)
+        precondition(reduced.identity != projected.identity)
+        let unchanged = try projected.limited(to: 10)
+        precondition(unchanged.identity == projected.identity)
+        let fullExtent = NativeProjection(points: [.zero, SIMD3<Float>(1, 2, 3), SIMD3<Float>(5, 5, 5)], candidates: 3)
+        let smallerExtent = try fullExtent.limited(to: 2)
+        precondition(smallerExtent.points == [.zero, SIMD3<Float>(1, 2, 3)] && smallerExtent.candidates == 3)
+        precondition(frame.states.map(\.bitPattern) == sourceBits)
+        var invalidLimitRejected = false
+        do { _ = try projected.limited(to: 0) } catch { invalidLimitRejected = true }
+        precondition(invalidLimitRejected)
+        let unknownReference = try NativeProjection.make(frame: frame, reference: "unknown-reference", limit: 1)
+        precondition(unknownReference.points.isEmpty && unknownReference.candidates == 2)
+
+        var pressure = NativeDisplayPressure()
+        precondition(pressure.limit(mode3D: true) == 100_000 && pressure.limit(mode3D: false) == 250_000)
+        pressure.thermalChanged(.nominal, now: 1)
+        precondition(pressure.revision == 0 && pressure.reason == .initial)
+        pressure.thermalChanged(.fair, now: 2)
+        precondition(pressure.spatialLimit == 75_000 && pressure.planarLimit == 100_000 && pressure.reason == .thermal)
+        pressure.thermalChanged(.nominal, now: 3)
+        precondition(pressure.spatialLimit == 75_000 && pressure.planarLimit == 100_000 && pressure.lastPressureTime == 2)
+        pressure.thermalChanged(.serious, now: 4)
+        precondition(pressure.spatialLimit == 25_000 && pressure.planarLimit == 25_000)
+        pressure.thermalChanged(.fair, now: 5)
+        precondition(pressure.spatialLimit == 25_000 && pressure.planarLimit == 25_000)
+        pressure.memoryWarning(now: 6)
+        let revision = pressure.revision
+        pressure.memoryWarning(now: 7)
+        precondition(pressure.revision == revision + 1 && pressure.lastPressureTime == 7 && pressure.reason == .memory)
+        pressure.thermalChanged(.critical, now: 8)
+        precondition(pressure.reason == .memory && pressure.spatialLimit == 25_000 && pressure.planarLimit == 25_000)
+        pressure.memoryWarning(now: .nan)
+        precondition(pressure.lastPressureTime == 8)
+        pressure.memoryWarning(now: 0)
+        precondition(pressure.lastPressureTime == 8)
+        precondition(frame.states.map(\.bitPattern) == sourceBits)
+        print("iOS display pressure: independent mode limits, thermal/memory reductions, repeated warnings, no automatic restoration, immutable prefix and missing-reference exact counts passed")
+        frame.exact[1] = false
+        let absent = try NativeProjection.make(frame: frame, reference: ids[0], limit: 2)
+        precondition(absent.points.isEmpty && absent.candidates == 1)
+        frame.exact[1] = true
+        frame.states[0] = Double.greatestFiniteMagnitude; frame.states[6] = -Double.greatestFiniteMagnitude
+        var overflowRejected = false
+        do { _ = try NativeProjection.make(frame: frame, reference: ids[0], limit: 2) } catch { overflowRejected = true }
+        precondition(overflowRejected)
+        try rejects(Data(data.prefix(199)))
+        var prefixed = Data([0]); prefixed.append(data)
+        let sliced = try StateTileDecoder.decode(prefixed.dropFirst(), expected: expected)
+        precondition(sliced.payloadHash == tile.payloadHash)
+        var bad = data; bad[200] ^= 1; try rejects(bad)
+        bad = data; bad[201] = 0xff; checksum(&bad); try rejects(bad)
+        bad = data; bad[200] = 10; checksum(&bad); try rejects(bad)
+        // A second metadata line must not be accepted for a declared one-row
+        // tile; the decoder scans only declared rows, never an unbounded split.
+        bad = data
+        put(&bad, at: 24, value: 1, width: 4)
+        put(&bad, at: 68, value: 48, width: 4)
+        let missingOffset = (0..<4).reduce(0) { $0 | (Int(data[60 + $1]) << ($1 * 8)) }
+        bad[missingOffset] = 0
+        bad.removeLast(48); checksum(&bad)
+        let oneRow = TileExpectation(planHash: hashA, catalogHash: hashB, inventoryHash: nil, sequence: 0, tileCount: 1, ordinalStart: 0, epochJd: 2_451_545, ids: [ids[0]])
+        try rejects(bad, expected: oneRow)
+        var decodeCancelled = false
+        do {
+            _ = try StateTileDecoder.decode(data, expected: expected, checkCancellation: CancellationProbe(after: 4).check)
+        } catch is CancellationError { decodeCancelled = true }
+        precondition(decodeCancelled)
+        bad = data; bad.append(0); checksum(&bad); try rejects(bad)
+        bad = data; put(&bad, at: 24, value: 32_769, width: 4); try rejects(bad)
+        bad = data; put(&bad, at: 32, value: Double(2_451_546).bitPattern, width: 8); try rejects(bad)
+        bad = data; bad[72] ^= 1; try rejects(bad)
+        bad = data; put(&bad, at: 52, value: 2, width: 4); try rejects(bad)
+        let wrong = TileExpectation(planHash: hashA, catalogHash: hashB, inventoryHash: nil, sequence: 0, tileCount: 1, ordinalStart: 0, epochJd: 2_451_545, ids: Array(ids.reversed()))
+        try rejects(data, expected: wrong)
+        // Independently known SHA-256 of an empty ordered request.
+        precondition(StateTileDecoder.requestHash([]) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+        precondition(StateTileDecoder.requestHash(["a", "bc"]) != StateTileDecoder.requestHash(["ab", "c"]))
+        precondition(StateTileDecoder.requestHash(ids) != StateTileDecoder.requestHash(Array(ids.reversed())))
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("solar-protocol-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = try StateTileCache(directory: directory, byteLimit: data.count)
+        let stored = try await cache.decodeAndStore(data, key: hashA, expected: expected, etag: "\"\(tile.payloadHash)\"")
+        precondition(stored.payloadHash == tile.payloadHash)
+        let cached = try await cache.read(key: hashA, expected: expected)
+        precondition(cached?.payloadHash == tile.payloadHash)
+        var cacheCancelled = false
+        do {
+            _ = try await cache.read(key: hashA, expected: expected, checkCancellation: CancellationProbe(after: 5).check)
+        } catch is CancellationError { cacheCancelled = true }
+        precondition(cacheCancelled)
+        let retained = try await cache.read(key: hashA, expected: expected)
+        precondition(retained?.payloadHash == tile.payloadHash)
+        var badETagRejected = false
+        do {
+            _ = try await cache.decodeAndStore(data, key: hashB, expected: expected, etag: "\"wrong\"")
+        } catch { badETagRejected = true }
+        precondition(badETagRejected)
+        precondition(!FileManager.default.fileExists(atPath: directory.appendingPathComponent(hashB + ".tile").path))
+        try await cache.decodeAndStore(data, key: hashB, expected: expected)
+        let evicted = try await cache.read(key: hashA, expected: expected)
+        precondition(evicted == nil)
+        try Data([0]).write(to: directory.appendingPathComponent(hashB + ".tile"))
+        let corrupted = try await cache.read(key: hashB, expected: expected)
+        precondition(corrupted == nil)
+        // Failed persistence is best-effort, but the verified live result survives.
+        let unavailableDirectory = directory.appendingPathComponent("unavailable")
+        let unavailable = try StateTileCache(directory: unavailableDirectory)
+        try FileManager.default.removeItem(at: unavailableDirectory)
+        try Data([0]).write(to: unavailableDirectory)
+        let live = try await unavailable.decodeAndStore(data, key: hashA, expected: expected)
+        precondition(live.payloadHash == tile.payloadHash)
+        print("iOS state protocol: Float64 identity, malformed payloads, request identity, cache corruption/quota/cancellation, single-decode storage, ETag, reference precision and display caps passed")
+    }
+
+    struct GoldenManifest: Decodable {
+        struct Tile: Decodable {
+            struct Row: Decodable {
+                let id: String
+                let status: String
+                let stateIEEE754BitsLE: [String]
+            }
+            let sequence: Int
+            let file: String
+            let bytes: Int
+            let sha256: String
+            let payloadSha256: String
+            let ordinalStart: Int
+            let recordCount: Int
+            let expectedRows: [Row]
+        }
+        let format: String
+        let ids: [String]
+        let epochJd: Double
+        let tiles: [Tile]
+    }
+
+    // Consume actual HTTP handler output, not a second hand-written Swift wire
+    // fixture. This checks serialization parity, not physical model accuracy.
+    static func golden(directory: String) throws {
+        let root = URL(fileURLWithPath: directory, isDirectory: true)
+        func read(_ name: String, limit: Int) throws -> Data {
+            let file = root.appendingPathComponent(name)
+            let size = try file.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+            guard size > 0 && size <= limit else { throw StateTileFailure.invalid("Golden file size: \(name)") }
+            return try Data(contentsOf: file)
+        }
+        func object(_ name: String) throws -> [String: Any] {
+            guard let value = try JSONSerialization.jsonObject(with: read(name, limit: 8 * 1024 * 1024)) as? [String: Any] else {
+                throw StateTileFailure.invalid("Golden JSON object: \(name)")
+            }
+            return value
+        }
+        let manifest = try JSONDecoder().decode(GoldenManifest.self, from: read("manifest.json", limit: 8 * 1024 * 1024))
+        let catalog = try object("catalog-manifest.json"), plan = try object("plan.json")
+        guard manifest.format == "solar.state-tile-fixture/v1",
+              let catalogHash = catalog["catalogManifestSha256"] as? String,
+              let planHash = plan["planId"] as? String,
+              let descriptors = plan["tiles"] as? [[String: Any]] else {
+            throw StateTileFailure.invalid("Golden manifest contract")
+        }
+        let inventoryHash = catalog["inventoryManifestSha256"] as? String
+        precondition(plan["catalogManifestSha256"] as? String == catalogHash)
+        precondition(plan["inventoryManifestSha256"] as? String == inventoryHash)
+        precondition(plan["requestIdsSha256"] as? String == StateTileDecoder.requestHash(manifest.ids))
+        precondition(plan["epochJd"] as? Double == manifest.epochJd)
+        precondition(plan["bodyCount"] as? Int == manifest.ids.count)
+        precondition(plan["tileCount"] as? Int == manifest.tiles.count && descriptors.count == manifest.tiles.count)
+        precondition(plan["timeScale"] as? String == "TDB" && plan["frame"] as? String == "ECLIPJ2000")
+        precondition(plan["distanceUnit"] as? String == "km" && plan["velocityUnit"] as? String == "km/s")
+        precondition(plan["stateOriginId"] as? String == "naif:0" && plan["precision"] as? String == "exact")
+        var ids = [String](), exactCount = 0
+        for (sequence, item) in manifest.tiles.enumerated() {
+            precondition(item.sequence == sequence && item.file == "tile-\(sequence).bin")
+            precondition(item.ordinalStart == ids.count && item.recordCount == item.expectedRows.count)
+            precondition(descriptors[sequence]["sequence"] as? Int == sequence)
+            precondition(descriptors[sequence]["ordinalStart"] as? Int == item.ordinalStart)
+            precondition(descriptors[sequence]["ordinalCount"] as? Int == item.recordCount)
+            let expectedIDs = item.expectedRows.map(\.id)
+            let bytes = try read(item.file, limit: StateTileDecoder.maxBytes)
+            precondition(bytes.count == item.bytes && StateTileDecoder.sha256(bytes) == item.sha256)
+            let expected = TileExpectation(planHash: planHash, catalogHash: catalogHash, inventoryHash: inventoryHash,
+                sequence: sequence, tileCount: manifest.tiles.count, ordinalStart: item.ordinalStart,
+                epochJd: manifest.epochJd, ids: expectedIDs)
+            let decoded = try StateTileDecoder.decode(bytes, expected: expected)
+            precondition(decoded.payloadHash == item.payloadSha256)
+            for (row, item) in item.expectedRows.enumerated() {
+                precondition(item.status == "exact" || item.status == "missing")
+                precondition(decoded.exact[row] == (item.status == "exact"))
+                precondition(item.stateIEEE754BitsLE.count == 6)
+                for axis in 0..<6 {
+                    precondition(UInt64(item.stateIEEE754BitsLE[axis], radix: 16) == decoded.states[row * 6 + axis].bitPattern)
+                }
+                if decoded.exact[row] { exactCount += 1 }
+            }
+            ids.append(contentsOf: expectedIDs)
+        }
+        precondition(ids == manifest.ids)
+        precondition(plan["exactCount"] as? Int == exactCount)
+        precondition(plan["missingCount"] as? Int == ids.count - exactCount && plan["approximateCount"] as? Int == 0)
+        print("Go → Swift golden: \(ids.count) rows / \(manifest.tiles.count) tiles, exact Float64 bits matched")
+    }
+}

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
-import { assertDocumentedVersion, markdownAnchors, markdownLinks, validateRepository } from '../../scripts/validate-repository.mjs'
+import { assertDocumentedVersion, iosApplicationIdentity, markdownAnchors, markdownLinks, validateRepository } from '../../scripts/validate-repository.mjs'
 import { changedPaths, pullRequestQualityPasses, requiresFullWebQuality, requiresNativeQuality } from '../../scripts/pr-quality-contract.mjs'
 
 describe('repository contract', () => {
@@ -61,6 +61,9 @@ describe('repository contract', () => {
   it('runs native validation only for the existing mobile impact paths', () => {
     expect(requiresNativeQuality(['README.md', 'docs/screenshots/deck.png'])).toBe(false)
     expect(requiresNativeQuality(['src/App.tsx'])).toBe(true)
+    for (const path of ['cmd/state-tile-fixture/main.go', 'internal/statewire/tile.go', 'go.mod', 'go.sum', 'tests/fixtures/spk21-synthetic.bsp', 'tests/unit/state-tiles-golden.test.ts']) {
+      expect(requiresNativeQuality([path])).toBe(true)
+    }
     expect(requiresNativeQuality(['android/app/build.gradle'])).toBe(true)
     expect(requiresNativeQuality(['ios/App/App.xcodeproj/project.pbxproj'])).toBe(true)
     expect(requiresNativeQuality(['tsconfig.app.json'])).toBe(true)
@@ -108,6 +111,47 @@ describe('repository contract', () => {
     } finally {
       rmSync(repository, { recursive: true, force: true })
     }
+  })
+
+  it('checks every application configuration without confusing the UI-test bundle with the app', () => {
+    const project = readFileSync('ios/App/App.xcodeproj/project.pbxproj', 'utf8')
+    expect(iosApplicationIdentity(project)).toEqual({ ids: ['io.github.dajiaohuang.solaratlas', 'io.github.dajiaohuang.solaratlas'], versions: ['0.11.0', '0.11.0'] })
+    const changedApp = project.replace('PRODUCT_BUNDLE_IDENTIFIER = io.github.dajiaohuang.solaratlas;', 'PRODUCT_BUNDLE_IDENTIFIER = wrong.app;')
+    expect(iosApplicationIdentity(changedApp).ids).toContain('wrong.app')
+    const changedTest = project.replaceAll('io.github.dajiaohuang.solaratlas.ObservationUITests', 'different.test.bundle')
+    expect(iosApplicationIdentity(changedTest)).toEqual(iosApplicationIdentity(project))
+    expect(() => iosApplicationIdentity(project.replace('productType = "com.apple.product-type.application";', 'productType = "invalid";'))).toThrow('one native iOS application')
+  })
+
+  it('runs native consumers on Go-generated files without silently skipping golden checks', () => {
+    const mobile = parse(readFileSync(new URL('../../.github/workflows/mobile.yml', import.meta.url), 'utf8'))
+    for (const path of ['cmd/**', 'internal/**', 'go.mod', 'go.sum', 'tests/**']) {
+      expect(mobile.on.push.paths).toContain(path)
+    }
+    for (const [job, consumer] of [['android', './gradlew lint'], ['ios', 'swiftc ios/']]) {
+      const steps: { run?: string; env?: Record<string, string> }[] = mobile.jobs[job].steps
+      const generated = steps.findIndex(step => step.run?.includes('go run ./cmd/state-tile-fixture'))
+      const consumed = steps.findIndex(step => step.run?.includes(consumer))
+      expect(generated).toBeGreaterThan(-1)
+      expect(consumed).toBeGreaterThan(generated)
+      expect(steps[generated].run).toContain('-tile-size 1')
+      expect(steps[generated].run).toContain('npx vitest run tests/unit/state-tiles-golden.test.ts')
+      expect(steps[generated].env?.SOLAR_STATE_TILE_FIXTURE_DIR).toBe('${{ runner.temp }}/solar-state-tile-fixture')
+      expect(steps[consumed].env?.SOLAR_STATE_TILE_FIXTURE_DIR).toBe(steps[generated].env?.SOLAR_STATE_TILE_FIXTURE_DIR)
+    }
+  })
+
+  it('activates the cached macOS Go toolchain before generating native fixtures', () => {
+    const mobile = parse(readFileSync(new URL('../../.github/workflows/mobile.yml', import.meta.url), 'utf8'))
+    const steps: { name?: string; run?: string }[] = mobile.jobs.ios.steps
+    const activate = steps.findIndex(step => step.name === 'Activate runner-cached Go')
+    const generate = steps.findIndex(step => step.run?.includes('go run ./cmd/state-tile-fixture'))
+    expect(activate).toBeGreaterThan(-1)
+    expect(activate).toBeLessThan(generate)
+    expect(steps[activate].run).toContain('"$RUNNER_TOOL_CACHE"/go/*/"$go_arch"/bin')
+    expect(steps[activate].run).toContain('"$GITHUB_PATH"')
+    expect(steps[activate].run).toContain('"$go_bin/go" version')
+    expect(steps[activate].run).toContain('exit 1')
   })
 
   it('passes the stable summary only for successful required work', () => {

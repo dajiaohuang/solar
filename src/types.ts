@@ -137,16 +137,17 @@ export type RenderedBodyPosition = {
 
 export type TrajectorySample = {
   body: CelestialBody
-  points: Vector2[]
-  points3D?: Vector3[]
+  /** One interleaved AU xyz source; 2D reads xy without a second buffer. */
+  coordinates: Float64Array
 }
 
 export type TrajectoryFrameData = {
-  currentPositions: RenderedBodyPosition[]
+  currentPositions: import('./lib/currentPositions').CurrentPositions
   trajectories: TrajectorySample[]
   /** Bodies omitted because at least one historical sample had no state. */
   trajectoryUnavailableBodyIds: BodyId[]
   maxDistance: number
+  trajectoryAudit?: import('./lib/backendTrajectories').BackendTrajectoryAudit
 }
 
 export type TrajectoryWorkerRequest = {
@@ -170,8 +171,7 @@ export type PackedTrajectoryData = {
   bodyIds: BodyId[]
   trajectoryUnavailableBodyIds: BodyId[]
   offsets: Uint32Array
-  points2D: Float64Array
-  points3D: Float64Array
+  coordinates: Float64Array
 }
 
 export type TrajectoryWorkerResponse = {
@@ -179,22 +179,6 @@ export type TrajectoryWorkerResponse = {
   requestId: number
   packed?: PackedTrajectoryData
   progress?: number
-  error?: string
-}
-
-export type CatalogPointWorkerRequest = {
-  type: 'compute'
-  requestId: number
-  julianDay: number
-  elements: Float64Array
-}
-
-export type CatalogPointWorkerResponse = {
-  type: 'progress' | 'result' | 'error'
-  requestId: number
-  progress?: number
-  positions?: Float32Array
-  positions3D?: Float32Array
   error?: string
 }
 
