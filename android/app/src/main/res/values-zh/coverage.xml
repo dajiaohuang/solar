@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="coverage_title">来源覆盖审计</string>
+    <string name="coverage_close">收起来源覆盖审计</string>
+    <string name="coverage_intro">审计后端的来源数据总体，不代表当前画面的状态数量。展开本区域不会下载数据。</string>
+    <string name="coverage_load">加载覆盖报告</string>
+    <string name="coverage_reload">重新加载覆盖报告</string>
+    <string name="coverage_cancel">取消加载覆盖报告</string>
+    <string name="coverage_idle">尚未加载覆盖报告。</string>
+    <string name="coverage_loading">正在加载最新目录清单与身份匹配的覆盖报告…</string>
+    <string name="coverage_unavailable">覆盖报告不可用。请配置提供覆盖报告的完整 HTTPS 后端；不可用不代表覆盖数量为零。</string>
+    <string name="coverage_failed">无法验证覆盖报告。请检查后端后重试，旧统计已清除。</string>
+    <string name="coverage_cancelled">覆盖报告加载已取消，未保留旧统计。</string>
+    <string name="coverage_timeout">覆盖报告请求超时，请检查后端后重试。</string>
+    <string name="coverage_counts">来源记录：%1$d\n已映射来源记录：%2$d\n未解析来源记录：%3$d\n明确 NAIF 目标去重数：%4$d\n审计历元可用目标：%5$d\n依赖覆盖完整目标：%6$d\n存在依赖缺口目标：%7$d</string>
+    <string name="coverage_epoch">审计 ET：%1$s\n请求区间 ET：%2$s 至 %3$s\nJ2000 起算 TDB 秒 · ECLIPJ2000</string>
+    <string name="coverage_limits">不同来源记录可能是同一天体的别名。依赖可用不等于数值精度认证，尚未完成全区间数值认证。这些统计不代表当前画面的渲染数量。</string>
+    <string name="coverage_details">缺口原因与来源身份</string>
+    <string name="coverage_hide_details">收起来源身份</string>
+    <string name="coverage_identities">目录：%1$s\n目录 SHA-256：%2$s\n库存 SHA-256：%3$s\n报告 SHA-256：%4$s\n来源快照 SHA-256：%5$s\n身份映射 SHA-256：%6$s\n卫星目录 SHA-256：%7$s</string>
+    <string name="coverage_reasons">未解析原因（来源代码）</string>
+</resources>

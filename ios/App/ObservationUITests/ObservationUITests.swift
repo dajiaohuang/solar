@@ -1,7 +1,8 @@
 import XCTest
 
 /// Runs the actual application against the local HTTPS Go backend started by
-/// scripts/ios-native-smoke.mjs. No URLProtocol mocks or bundled state fixtures.
+/// scripts/ios-native-smoke.mjs. State tests use real SPK; coverage UI tests
+/// use a separately identified synthetic HTTPS route, never a science oracle.
 @MainActor
 final class ObservationUITests: XCTestCase {
     private func waitForLabel(_ element: XCUIElement, _ value: String, timeout: TimeInterval = 30) {
@@ -28,6 +29,12 @@ final class ObservationUITests: XCTestCase {
         attachment.name = name
         attachment.lifetime = .keepAlways
         add(attachment)
+    }
+
+    private func reveal(_ app: XCUIApplication, _ element: XCUIElement) {
+        for _ in 0..<10 { if element.exists && element.isHittable { return }; app.swipeUp() }
+        for _ in 0..<10 { if element.exists && element.isHittable { return }; app.swipeDown() }
+        XCTAssertTrue(element.exists && element.isHittable, "Element could not be revealed: \(element)")
     }
 
     func testRealEarthMoonStatesAndNativeModes() {
@@ -94,27 +101,45 @@ final class ObservationUITests: XCTestCase {
                                "-native.onboarding.complete", "YES", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
         let disclosure = app.buttons["coverage.disclosure"]
-        XCTAssertTrue(disclosure.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["observation.mode"].waitForExistence(timeout: 15))
+        reveal(app, disclosure)
         XCTAssertFalse(app.buttons["coverage.load"].exists)
         disclosure.tap()
         let load = app.buttons["coverage.load"]
-        XCTAssertTrue(load.waitForExistence(timeout: 10))
+        reveal(app, load)
+        waitForLabel(app.staticTexts["coverage.status"], "Load source coverage when you need an audit summary.")
         load.tap()
-        XCTAssertTrue(app.staticTexts["coverage.counts"].waitForExistence(timeout: 20))
+        waitForLabel(app.staticTexts["coverage.status"], "Source coverage loaded.")
+        reveal(app, app.staticTexts["coverage.counts"])
+        XCTAssertEqual(app.staticTexts["coverage.counts"].label, "Source records: 10 · mapped: 3 · unresolved: 7")
+        XCTAssertEqual(app.staticTexts["coverage.targets"].label, "Explicit targets: 2 · available at audit: 2")
+        reveal(app, app.staticTexts["coverage.audit"])
         XCTAssertTrue(app.staticTexts["coverage.audit"].label.contains("500.125"))
-        XCTAssertTrue(app.staticTexts["coverage.windowCounts"].label.contains("1"))
+        XCTAssertTrue(app.staticTexts["coverage.audit"].label.contains("-20.5–1000.25"))
+        XCTAssertTrue(app.staticTexts["coverage.audit"].label.contains("ECLIPJ2000"))
+        XCTAssertEqual(app.staticTexts["coverage.windowCounts"].label, "Dependency window: 1 covered · 1 gaps")
         XCTAssertTrue(app.staticTexts["coverage.caveat"].exists)
+        screenshot(app, "coverage-synthetic-summary")
         let details = app.buttons["coverage.details"]
-        XCTAssertTrue(details.waitForExistence(timeout: 10))
+        reveal(app, details)
         details.tap()
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Report SHA-256'")).firstMatch.exists)
-        disclosure.tap()
-        XCTAssertFalse(app.staticTexts["coverage.counts"].exists)
-        disclosure.tap()
-        XCTAssertTrue(load.waitForExistence(timeout: 10))
+        for (label, character) in [("Report", "a"), ("Catalog", "b"), ("Inventory", "c"), ("Source snapshot", "d"), ("Identity mapping", "e"), ("Satellite catalog", "f")] {
+            let value = app.staticTexts["\(label) SHA-256: \(String(repeating: character, count: 64))"]
+            reveal(app, value)
+            XCTAssertTrue(value.exists)
+        }
+        reveal(app, load)
+        XCTAssertEqual(load.label, "Reload coverage")
         load.tap()
-        XCTAssertTrue(app.staticTexts["coverage.status"].waitForExistence(timeout: 20))
+        waitForLabel(app.staticTexts["coverage.status"], "Source coverage is unavailable; no report was published. Unavailable does not mean zero coverage.")
         XCTAssertFalse(app.staticTexts["coverage.counts"].exists)
+        XCTAssertFalse(app.buttons["coverage.details"].exists)
+        screenshot(app, "coverage-unavailable-clears-counts")
+        reveal(app, disclosure)
+        disclosure.tap()
+        XCTAssertFalse(load.exists)
+        disclosure.tap()
+        waitForLabel(app.staticTexts["coverage.status"], "Load source coverage when you need an audit summary.")
         app.terminate()
 
         let invalid = XCUIApplication()
@@ -122,10 +147,12 @@ final class ObservationUITests: XCTestCase {
                                    "-native.onboarding.complete", "YES", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         invalid.launch()
         let invalidDisclosure = invalid.buttons["coverage.disclosure"]
-        XCTAssertTrue(invalidDisclosure.waitForExistence(timeout: 15))
+        XCTAssertTrue(invalid.buttons["observation.mode"].waitForExistence(timeout: 15))
+        reveal(invalid, invalidDisclosure)
         invalidDisclosure.tap()
+        reveal(invalid, invalid.buttons["coverage.load"])
         invalid.buttons["coverage.load"].tap()
-        XCTAssertTrue(invalid.staticTexts["coverage.status"].waitForExistence(timeout: 20))
+        waitForLabel(invalid.staticTexts["coverage.status"], "Coverage could not be loaded. Check the HTTPS backend and try again.")
         XCTAssertFalse(invalid.staticTexts["coverage.counts"].exists)
         invalid.terminate()
     }

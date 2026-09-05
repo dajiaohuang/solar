@@ -99,7 +99,7 @@ private enum CoverageCopy {
     static var badAddress: String { zh ? "输入 HTTPS 后端地址以加载来源覆盖。" : "Enter an HTTPS backend address to load source coverage." }
     static var loading: String { zh ? "正在加载来源覆盖…" : "Loading source coverage…" }
     static var loaded: String { zh ? "来源覆盖已加载。" : "Source coverage loaded." }
-    static var unavailable: String { zh ? "来源覆盖不可用；后端未发布报告。" : "Source coverage is unavailable; no report was published." }
+    static var unavailable: String { zh ? "来源覆盖不可用；后端未发布报告。不可用不代表覆盖数量为零。" : "Source coverage is unavailable; no report was published. Unavailable does not mean zero coverage." }
     static var failure: String { zh ? "无法加载覆盖，请检查 HTTPS 后端后重试。" : "Coverage could not be loaded. Check the HTTPS backend and try again." }
     static var title: String { zh ? "来源覆盖" : "Source coverage" }
     static var audit: String { zh ? "来源身份与依赖窗口审计" : "Source identity and dependency-window audit" }
@@ -111,7 +111,7 @@ private enum CoverageCopy {
     static var targets: (UInt64, UInt64) -> String { { a, b in zh ? "显式目标：\(a) · 审计时可用：\(b)" : "Explicit targets: \(a) · available at audit: \(b)" } }
     static var dependency: (UInt64, UInt64) -> String { { a, b in zh ? "依赖窗口：\(a) 个完整 · \(b) 个有缺口" : "Dependency window: \(a) covered · \(b) gaps" } }
     static var auditWindow: (Double, Double, Double, String) -> String { { a, s, e, scale in zh ? "审计 ET：\(a) · 窗口：\(s)–\(e)（\(scale)）" : "Audit ET: \(a) · Window: \(s)–\(e) (\(scale))" } }
-    static var caveat: String { zh ? "没有全窗口数值认证。来源记录和别名不是显示帧；依赖可用性不等于当前帧覆盖。" : "No whole-window numerical certification. Source records and aliases are not displayed frames; dependency availability is not current-frame coverage." }
+    static var caveat: String { zh ? "尚未建立全窗口数值认证。同一天体可能有多条来源记录或别名。依赖可用性不代表数值精度认证；这些统计不是当前显示的天体数量。" : "No whole-window numerical certification. Several source records or aliases can identify the same body. Dependency availability does not certify numerical accuracy; these are not current displayed-body counts." }
     static var version: (String) -> String { { zh ? "版本：\($0)" : "Version: \($0)" } }
     static var hash: (String, String) -> String { { label, value in "\(label): \(value)" } }
 }
@@ -216,7 +216,7 @@ struct ObservationDeckView: View {
                             Text(CoverageCopy.counts(report.counts.sourceRecords, report.counts.mappedSourceRecords, report.counts.unresolvedSourceRecords)).accessibilityIdentifier("coverage.counts")
                             Text(CoverageCopy.targets(report.counts.explicitNaifTargets, report.counts.availableTargetsAtAuditEpoch)).accessibilityIdentifier("coverage.targets")
                             Text(CoverageCopy.dependency(report.windowCounts.dependencyCoveredTargets, report.windowCounts.targetsWithDependencyGaps)).accessibilityIdentifier("coverage.windowCounts")
-                            Text(CoverageCopy.auditWindow(report.auditEt, report.requestedWindow.startEt, report.requestedWindow.endEt, report.timeScale)).accessibilityIdentifier("coverage.audit")
+                            Text(CoverageCopy.auditWindow(report.auditEt, report.requestedWindow.startEt, report.requestedWindow.endEt, report.timeScale) + " · ECLIPJ2000").accessibilityIdentifier("coverage.audit")
                             Text(CoverageCopy.caveat).accessibilityIdentifier("coverage.caveat")
                             DisclosureGroup(CoverageCopy.reasons) {
                                 ForEach(report.unresolvedReasons.keys.sorted(), id: \.self) { reason in Text("\(reason): \(report.unresolvedReasons[reason] ?? 0)") }

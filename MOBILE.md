@@ -48,7 +48,7 @@ On Windows use `android/gradlew.bat -p android` with the same tasks. iOS validat
 
 ```text
 xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
-swiftc ios/App/App/StateTileDecoder.swift ios/App/App/StateTileCache.swift ios/App/App/NativeStateProjection.swift ios/ProtocolTests/ProtocolTests.swift -o <temporary-output>
+swiftc ios/App/App/StateTileDecoder.swift ios/App/App/StateTileCache.swift ios/App/App/NativeStateProjection.swift ios/App/App/NativeCoverageReport.swift ios/ProtocolTests/ProtocolTests.swift -o <temporary-output>
 <temporary-output>
 ```
 
@@ -138,7 +138,35 @@ scientific manifest/golden identity, HTTPS traffic and cleanup errors; screensho
 and logs are retained without private keys. Local success does not establish
 hosted CI success for later commits; require the exact Android runtime job.
 
-### Interaction and data boundaries
+### On-demand source coverage audit
+
+Both native sources include a collapsed source-coverage disclosure, separate
+from the observation and presets. Opening it does not fetch data. Explicit
+Load/Reload requests a fresh HTTPS catalog manifest and `/v1/coverage` summary
+(maximum 64 KiB), bound to the catalog and inventory identities. It reports
+source/mapped/unresolved records, distinct explicit targets, audit-epoch
+availability, dependency-window counts, TDB audit/window ET, reasons and six
+provenance hashes. Source aliases do not inflate the distinct target count;
+dependency availability is not whole-window numerical accuracy certification.
+These totals are not current displayed-state counts.
+
+Reload, address edits, collapse and lifecycle cancellation clear stale totals.
+An unconfigured report (404) is unavailable, not zero; malformed or mismatched
+evidence is rejected. New coverage copy is English/Chinese; this does not claim
+that all pre-existing native UI has been localized.
+
+The native runtime harnesses keep the real-SPK state flow separate from
+`/coverage-fixture/` synthetic UI cases: explicit load, fresh reload returning
+404, and inconsistent counts. Their traffic is verified separately and marked
+synthetic in `report.json`; those counts do not represent astronomical coverage.
+Android's local coverage UI sequence passed on 2026-09-05; the new iOS coverage
+UI sequence requires its own macOS CI result, not an earlier state-only pass.
+For optional real Go summary validation in Java/Swift, set
+`SOLAR_COVERAGE_NATIVE_FIXTURE_DIR` to a retained directory containing matching
+`manifest.json` and `summary.json`. A configured missing/invalid fixture fails.
+Gradle tracks this directory as a test input. Keep source data outside Git.
+
+### Observation behavior
 
 - The first native screen is an Observation Deck for current-state evidence: selected body IDs, exact values, provenance and explicit gaps.
 - iOS starts in native 3D and can switch to native 2D. The 3D and 2D budgets are independent; native 3D does not shrink or fade states solely because of distance.

@@ -243,24 +243,33 @@ private final class NativeHTTPTransfer: NSObject, URLSessionDataDelegate, @unche
     }
 }
 
-struct NativeHTTPStatusFailure: Error { let statusCode: Int }
+struct NativeHTTPStatusFailure: LocalizedError {
+    let statusCode: Int
+    var errorDescription: String? { "Backend HTTP \(statusCode)" }
+}
 
 actor NativeCoverageService {
     private let base: URL
     init(base: URL) throws {
-        guard base.scheme == "https", base.host != nil, base.user == nil, base.password == nil,
+        guard base.scheme == "https", !(base.host ?? "").isEmpty, base.user == nil, base.password == nil,
               base.query == nil, base.fragment == nil else { throw StateTileFailure.invalid("Enter an HTTPS backend address without credentials, query or fragment.") }
         self.base = base
     }
 
     func load() async throws -> NativeCoverageReport {
-        let (manifestData, _) = try await NativeHTTPTransfer(contentType: "application/json", limit: 8 * 1024 * 1024).receive(URLRequest(url: base.appendingPathComponent("v1/catalog/manifest")))
+        try Task.checkCancellation()
+        var manifestRequest = URLRequest(url: base.appendingPathComponent("v1/catalog/manifest"))
+        manifestRequest.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        let (manifestData, _) = try await NativeHTTPTransfer(contentType: "application/json", limit: 8 * 1024 * 1024).receive(manifestRequest)
         let manifest = try JSONDecoder().decode(NativeCoverageManifest.self, from: manifestData)
-        guard manifest.apiVersion == "solar.api/v1", !manifest.catalogVersion.isEmpty,
+        guard manifest.apiVersion == "solar.api/v1", !manifest.catalogVersion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               NativeCoverageReport.isHash(manifest.catalogManifestSha256), NativeCoverageReport.isHash(manifest.inventoryManifestSha256) else { throw StateTileFailure.invalid("Unsupported catalog manifest.") }
-        let request = URLRequest(url: base.appendingPathComponent("v1/coverage"))
+        try Task.checkCancellation()
+        var request = URLRequest(url: base.appendingPathComponent("v1/coverage"))
+        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         do {
             let (data, _) = try await NativeHTTPTransfer(contentType: "application/json", limit: NativeCoverageReport.maxBytes).receive(request)
+            try Task.checkCancellation()
             return try NativeCoverageReport(validating: data, catalogManifest: manifestData)
         } catch let error as NativeHTTPStatusFailure where error.statusCode == 404 {
             throw NativeCoverageUnavailable()

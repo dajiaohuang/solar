@@ -10,6 +10,7 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { certificates, command, verifyTraffic } from './ios-native-smoke.mjs'
 import { stageBackendProfile } from './stage-backend-profile.mjs'
+import { createNativeCoverageResponder, verifyNativeCoverageTraffic } from './native-coverage-fixture.mjs'
 
 const appId = 'io.github.dajiaohuang.solaratlas'
 const windows = process.platform === 'win32'
@@ -84,12 +85,16 @@ export async function androidNativeSmoke() {
   const assertOwned = async () => validateEmulatorIdentity(serial, await deviceCommand(['emu', 'avd', 'name']), name)
   try {
     report.source = { commit: await command('git', ['rev-parse', 'HEAD']), files: {} }
-    for (const file of ['scripts/android-native-smoke.mjs', 'scripts/ios-native-smoke.mjs',
+    for (const file of ['scripts/android-native-smoke.mjs', 'scripts/ios-native-smoke.mjs', 'scripts/native-coverage-fixture.mjs',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/MainActivity.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/StateTileService.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/StateTileDecoder.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/StateTileClient.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/StateTileCache.java',
+      'android/app/src/main/java/io/github/dajiaohuang/solaratlas/CoverageReport.java',
+      'android/app/src/main/java/io/github/dajiaohuang/solaratlas/CoverageService.java',
+      'android/app/src/main/java/io/github/dajiaohuang/solaratlas/CoveragePanel.java',
+      'android/app/src/main/res/values/coverage.xml', 'android/app/src/main/res/values-zh/coverage.xml',
       'android/app/src/androidTest/java/io/github/dajiaohuang/solaratlas/ObservationUITest.java']) {
       report.source.files[file] = createHash('sha256').update(await readFile(file)).digest('hex')
     }
@@ -141,7 +146,15 @@ export async function androidNativeSmoke() {
       await new Promise(done => setTimeout(done, 100))
     }
     if (!ready) throw new Error('Owned Go backend did not serve the staged manifest')
+    const coverageReply = createNativeCoverageResponder()
     proxy = https.createServer({ key: await readFile(join(temporary, 'server.key')), cert: await readFile(join(temporary, 'server.crt')) }, (request, response) => {
+      const fixtureReply = coverageReply(request.method, request.url)
+      if (fixtureReply) {
+        const body = Buffer.from(JSON.stringify(fixtureReply.body))
+        traffic.push({ method: request.method, path: request.url, status: fixtureReply.status, bytes: body.length })
+        response.writeHead(fixtureReply.status, { 'Content-Type': 'application/json', 'Content-Length': body.length, 'Cache-Control': 'no-store' })
+        response.end(body); return
+      }
       const upstream = http.request({ hostname: '127.0.0.1', port: 18790, path: request.url, method: request.method, headers: request.headers }, incoming => {
         const row = { method: request.method, path: request.url, status: incoming.statusCode, bytes: 0 }; traffic.push(row)
         response.writeHead(incoming.statusCode, incoming.headers)
@@ -158,7 +171,8 @@ export async function androidNativeSmoke() {
       '-e', 'class', `${appId}.ObservationUITest`, '-e', 'solarBackend', 'https://127.0.0.1:18791',
       '-e', 'solarCaBase64', (await readFile(join(temporary, 'root.crt'))).toString('base64'), `${appId}.test/androidx.test.runner.AndroidJUnitRunner`],
     { env, log: join(artifact, 'instrumentation.log'), timeout: 240_000 })
-    verifyInstrumentation(output); verifyTraffic(traffic)
+    verifyInstrumentation(output); verifyTraffic(traffic.filter(row => !row.path.startsWith('/coverage-fixture/')))
+    report.coverageUi = verifyNativeCoverageTraffic(traffic)
     report.status = 'passed'
   } catch (error) {
     report.status = 'failed'; report.error = error.message

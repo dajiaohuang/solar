@@ -53,7 +53,7 @@ On Windows use `android/gradlew.bat -p android`. iOS validation requires macOS a
 
 ```text
 xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
-swiftc ios/App/App/StateTileDecoder.swift ios/App/App/StateTileCache.swift ios/App/App/NativeStateProjection.swift ios/ProtocolTests/ProtocolTests.swift -o <temporary-output>
+swiftc ios/App/App/StateTileDecoder.swift ios/App/App/StateTileCache.swift ios/App/App/NativeStateProjection.swift ios/App/App/NativeCoverageReport.swift ios/ProtocolTests/ProtocolTests.swift -o <temporary-output>
 <temporary-output>
 ```
 

@@ -15,7 +15,7 @@ const activity = await read('android/app/src/main/java/io/github/dajiaohuang/sol
 if (/CapApp-SPM|public in Resources|capacitor\.config|Main\.storyboard/.test(project)) throw new Error('iOS still packages the Web shell')
 if (!scene.includes('UIHostingController(rootView: ObservationDeckView())')) throw new Error('iOS native Observation Deck is not the scene root')
 if (/BridgeActivity|WebView/.test(activity) || /implementation project\(':capacitor/.test(android)) throw new Error('Android still embeds the Web shell')
-for (const source of ['NativeObservationDeck.swift', 'StateTileDecoder.swift', 'StateTileCache.swift', 'StateTileService.swift', 'NativeStateProjection.swift']) {
+for (const source of ['NativeObservationDeck.swift', 'StateTileDecoder.swift', 'StateTileCache.swift', 'StateTileService.swift', 'NativeStateProjection.swift', 'NativeCoverageReport.swift']) {
   if (!project.includes(`${source} in Sources`)) throw new Error(`iOS source is not in its build target: ${source}`)
   await read(`ios/App/App/${source}`)
 }

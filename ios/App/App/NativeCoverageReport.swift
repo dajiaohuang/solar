@@ -55,7 +55,7 @@ struct NativeCoverageReport: Decodable, Equatable {
     private static let hashPattern = "\\A[0-9a-f]{64}\\z"
 
     init(validating data: Data, catalogManifest: Data) throws {
-        guard data.count <= Self.maxBytes, catalogManifest.count <= 8 * 1024 * 1024 else { throw StateTileFailure.invalid("Coverage response exceeds its size bound.") }
+        guard !data.isEmpty, data.count <= Self.maxBytes, !catalogManifest.isEmpty, catalogManifest.count <= 8 * 1024 * 1024 else { throw StateTileFailure.invalid("Coverage response exceeds its size bound.") }
         let decoder = JSONDecoder()
         let report = try decoder.decode(Self.self, from: data)
         let manifest = try decoder.decode(NativeCoverageManifest.self, from: catalogManifest)
@@ -71,7 +71,7 @@ struct NativeCoverageReport: Decodable, Equatable {
               manifest.apiVersion == "solar.api/v1",
               !catalogVersion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !manifest.catalogVersion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              catalogVersion.trimmingCharacters(in: .whitespacesAndNewlines) == manifest.catalogVersion.trimmingCharacters(in: .whitespacesAndNewlines),
+              catalogVersion == manifest.catalogVersion,
               catalogManifestSha256 == manifest.catalogManifestSha256,
               inventoryManifestSha256 == manifest.inventoryManifestSha256,
               Self.isHash(reportSha256), Self.isHash(catalogManifestSha256),

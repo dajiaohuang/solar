@@ -112,13 +112,19 @@ struct ProtocolTests {
         boundary["requestedWindow"] = ["startEt": -1.5, "endEt": 1.5, "timeScale": "TDB seconds past J2000"]
         boundary["counts"] = ["sourceRecords": 0, "mappedSourceRecords": 0, "unresolvedSourceRecords": 0, "explicitNaifTargets": 0, "availableTargetsAtAuditEpoch": 0]
         boundary["windowCounts"] = ["dependencyCoveredTargets": 0, "targetsWithDependencyGaps": 0, "numericallyCertifiedWholeWindowTargets": NSNull()]
-        boundary["unresolvedReasons"] = [:]
+        boundary["unresolvedReasons"] = [String: UInt64]()
         _ = try NativeCoverageReport(validating: JSONSerialization.data(withJSONObject: boundary), catalogManifest: coverageManifest)
         try coverageRejects(coverage, manifest: coverageManifest) { $0["sourceBytesVerified"] = false }
         try coverageRejects(coverage, manifest: coverageManifest) { $0["windowCounts"] = ["dependencyCoveredTargets": 1, "targetsWithDependencyGaps": 1] }
         try coverageRejects(coverage, manifest: coverageManifest) { $0["counts"] = ["sourceRecords": 10, "mappedSourceRecords": 3, "unresolvedSourceRecords": 8, "explicitNaifTargets": 2, "availableTargetsAtAuditEpoch": 2] }
         try coverageRejects(coverage, manifest: coverageManifest) { $0["unresolvedReasons"] = ["Bad reason": 7] }
         try coverageRejects(coverage, manifest: coverageManifest) { $0["reportSha256"] = "not-a-hash" }
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["catalogVersion"] = " fixture " }
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["catalogVersion"] = " " }
+        try rejectsCoverage(Data(repeating: 32, count: NativeCoverageReport.maxBytes + 1), manifest: coverageManifest)
+        try rejectsCoverage(coverage, manifest: Data(repeating: 32, count: 8 * 1024 * 1024 + 1))
+        try rejectsCoverage(Data(), manifest: coverageManifest)
+        try rejectsCoverage(coverage, manifest: Data())
         try coverageRejects(coverage, manifest: coverageManifest) { $0["reportSha256"] = String(repeating: "a", count: 64) + "\n" }
         try coverageRejects(coverage, manifest: coverageManifest) { $0["unresolvedReasons"] = ["bad\nreason": 7] }
         try coverageRejects(coverage, manifest: coverageManifest) { $0["windowCounts"] = ["dependencyCoveredTargets": 1, "targetsWithDependencyGaps": 1, "numericallyCertifiedWholeWindowTargets": 0] }

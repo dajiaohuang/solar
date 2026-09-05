@@ -45,7 +45,7 @@ Windows 使用 `android/gradlew.bat -p android` 执行相同任务。iOS 需要 
 
 ```text
 xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
-swiftc ios/App/App/StateTileDecoder.swift ios/App/App/StateTileCache.swift ios/App/App/NativeStateProjection.swift ios/ProtocolTests/ProtocolTests.swift -o <temporary-output>
+swiftc ios/App/App/StateTileDecoder.swift ios/App/App/StateTileCache.swift ios/App/App/NativeStateProjection.swift ios/App/App/NativeCoverageReport.swift ios/ProtocolTests/ProtocolTests.swift -o <temporary-output>
 <temporary-output>
 ```
 
@@ -117,7 +117,29 @@ Go→Web/Java Float64 基准，再通过 HTTPS 操作实际 Android 界面。202
 源码提交/文件哈希、科学清单/基准身份、HTTPS 请求及清理错误；保留截图与日志，
 不保存私钥。本地通过不代表后续提交的托管 CI 已通过，必须核对对应 Android 运行作业。
 
-### 交互与数据边界
+### 按需来源覆盖审计
+
+两端原生源码都包含默认收起的来源覆盖区域，与观测及预设分开；展开不下载数据。
+点击加载/重载后，获取新的 HTTPS 目录 manifest 和 `/v1/coverage` 摘要（上限
+64 KiB），严格绑定目录与 inventory 身份。展示来源/已映射/未解析记录、去重后的
+显式目标、审计历元可用数量、依赖窗口数量、TDB 审计/窗口 ET、缺失原因和六项
+来源哈希。同一天体的多个来源别名不增加去重目标数；依赖可用性不等于全窗口
+数值精度认证。这些统计也不是当前显示的状态数量。
+
+重载、修改地址、收起和生命周期取消都会清除旧统计。未配置报告（404）表示
+不可用，不表示零覆盖；错误格式或身份不匹配的证据会被拒绝。新增覆盖文案支持
+中英文，但不代表原生旧界面已全部本地化。
+
+原生运行测试将真实 SPK 状态流程与 `/coverage-fixture/` 合成界面用例分开：
+显式加载、新请求重载返回 404，以及不一致计数。两类请求分别验证，并在
+`report.json` 中明确标记合成测试，不将其数量当作真实天体覆盖。Android 本地
+覆盖界面流程已于 2026-09-05 通过；新增 iOS 覆盖界面仍需自己的 macOS CI 结果，
+不能借用此前仅验证状态的通过记录。Java/Swift 可选真实 Go 摘要校验使用
+`SOLAR_COVERAGE_NATIVE_FIXTURE_DIR`，指向含配对 `manifest.json` 和 `summary.json`
+的保留目录。配置后文件缺失或内容非法会报错；Gradle 将其作为测试输入跟踪。
+来源数据保持在 Git 之外。
+
+### 观测行为
 
 - 第一屏是当前位置 Observation Deck：选定 ID、精确状态、来源证据和明确缺口。
 - iOS 默认原生 3D，可切换原生 2D。2D/3D 预算独立；原生 3D 不因距离单独缩小或淡出状态。

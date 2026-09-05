@@ -38,6 +38,7 @@ public final class MainActivity extends Activity {
     private Button evidencePrevious, evidenceNext;
     private EditText backend, epoch, reference, bodyIds;
     private NativeObservationDeck viewport;
+    private CoveragePanel coveragePanel;
     private StateTileCache tileCache;
     private Thread loadThread;
     private Thread renderThread;
@@ -96,6 +97,7 @@ public final class MainActivity extends Activity {
         evidenceNext = new Button(this); evidenceNext.setText("Next"); evidenceNext.setOnClickListener(v -> changeEvidencePage(1));
         pager.addView(evidencePrevious, new LinearLayout.LayoutParams(0, -2, 1)); pager.addView(evidencePage, new LinearLayout.LayoutParams(0, -2, 1)); pager.addView(evidenceNext, new LinearLayout.LayoutParams(0, -2, 1)); content.addView(pager);
         updateEvidencePageControls(0, 0);
+        coveragePanel = new CoveragePanel(this, backend); content.addView(coveragePanel);
         ScrollView scroll = new ScrollView(this);
         scroll.addView(content);
         FrameLayout safeContent = new FrameLayout(this);
@@ -211,6 +213,7 @@ public final class MainActivity extends Activity {
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private void showTutorial() { new android.app.AlertDialog.Builder(this).setTitle("First observation").setMessage("1. Enter an HTTPS backend address and a finite TDB Julian date. 2. Choose a preset or enter custom IDs. 3. Loading verifies manifest, plan and every binary tile; cancellation publishes nothing. 4. Only verified exact rows render. Missing references never become an invented origin.").setPositiveButton("Done", null).show(); }
     @Override protected void onPause() {
+        coveragePanel.cancelAndClear(R.string.coverage_idle);
         cancelLoad(); showEvidence(null, "");
         status.setText("Observation released while inactive. Load again to resume verified states.");
         viewport.onPause(); super.onPause();

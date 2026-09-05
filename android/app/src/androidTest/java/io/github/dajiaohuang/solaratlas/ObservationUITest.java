@@ -12,6 +12,11 @@ import static androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
+import static androidx.test.espresso.matcher.ViewMatchers.withTagValue;
+import static androidx.test.espresso.matcher.ViewMatchers.withEffectiveVisibility;
+import static androidx.test.espresso.matcher.ViewMatchers.Visibility.GONE;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.junit.Assert.fail;
 import static org.junit.Assert.assertTrue;
@@ -69,6 +74,7 @@ public final class ObservationUITest {
 
             // Exercise the unconfigured first screen before entering network data.
             waitForText(containsString("No observation loaded"));
+            onView(withTagValue(is((Object) "coverage-summary"))).check(matches(withEffectiveVisibility(GONE)));
             onView(withText("Tutorial")).perform(scrollTo()).check((view, error) -> {
                 if (error != null) throw error;
                 WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(view);
@@ -105,6 +111,37 @@ public final class ObservationUITest {
             waitForText(containsString("2D GPU points 3/3 (limit 500000)"));
             waitForEvidence("naif:399 - VERIFIED", "naif:301 - VERIFIED", "naif:10 - VERIFIED", "unknown:fixture - MISSING");
             viewportScreenshot(scenario, "observation-resumed.png");
+            // Separate, deliberately synthetic coverage cases. Real SPK state
+            // routes above are untouched and verified independently by the harness.
+            fill(BACKEND_HINT, backend + "/coverage-fixture/valid");
+            onView(withTagValue(is((Object) "coverage-toggle"))).perform(scrollTo(), click());
+            waitForText(containsString("No coverage report loaded."));
+            onView(withTagValue(is((Object) "coverage-load"))).perform(scrollTo(), click());
+            waitForText(containsString("Source records: 10"));
+            onView(withTagValue(is((Object) "coverage-summary")))
+                    .check(matches(withText(containsString("Distinct explicit NAIF targets: 2"))))
+                    .check(matches(withText(containsString("Unresolved source records: 7"))))
+                    .check(matches(withText(containsString("Audit ET: 500.125"))))
+                    .check(matches(withText(containsString("Dependency-covered targets: 1"))))
+                    .check(matches(withText(containsString("Whole-window numerical certification has not been established"))));
+            coverageScreenshot(scenario, "coverage-synthetic-summary.png");
+            onView(withTagValue(is((Object) "coverage-details"))).check(matches(withEffectiveVisibility(GONE)));
+            onView(withTagValue(is((Object) "coverage-details-toggle"))).perform(scrollTo(), click());
+            onView(withTagValue(is((Object) "coverage-details")))
+                    .check(matches(withText(containsString("Catalog: coverage-fixture"))))
+                    .check(matches(withText(containsString("no-explicit-naif-mapping: 6"))))
+                    .check(matches(withText(containsString("Satellite catalog SHA-256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"))));
+            onView(withTagValue(is((Object) "coverage-load"))).perform(scrollTo(), click());
+            waitForText(containsString("Coverage report unavailable."));
+            onView(withTagValue(is((Object) "coverage-summary"))).check(matches(not(withText(containsString("Source records: 10")))));
+            onView(withTagValue(is((Object) "coverage-details"))).check(matches(withEffectiveVisibility(GONE))).check(matches(withText("")));
+            coverageScreenshot(scenario, "coverage-unavailable.png");
+            fill(BACKEND_HINT, backend + "/coverage-fixture/invalid");
+            waitForText(containsString("No coverage report loaded."));
+            onView(withTagValue(is((Object) "coverage-load"))).perform(scrollTo(), click());
+            waitForText(containsString("Coverage could not be verified."));
+            onView(withTagValue(is((Object) "coverage-toggle"))).perform(scrollTo(), click());
+            onView(withTagValue(is((Object) "coverage-summary"))).check(matches(withEffectiveVisibility(GONE)));
             passed = true;
         } finally {
             try {
@@ -213,6 +250,21 @@ public final class ObservationUITest {
             SystemClock.sleep(100);
         } while (SystemClock.uptimeMillis() < deadline);
         fail("No verified-state point pixels in fully visible GPU viewport: " + name);
+    }
+
+    private static void coverageScreenshot(ActivityScenario<MainActivity> scenario, String name) throws Exception {
+        scenario.onActivity(activity -> {
+            View focus = activity.getCurrentFocus();
+            if (focus != null) focus.clearFocus();
+            View root = activity.findViewById(android.R.id.content);
+            root.setFocusableInTouchMode(true); root.requestFocus();
+        });
+        onView(withTagValue(is((Object) "coverage-summary"))).perform(scrollTo()).check(matches(isCompletelyDisplayed()));
+        CountDownLatch presented = new CountDownLatch(1);
+        scenario.onActivity(activity -> activity.getWindow().getDecorView().postOnAnimation(() ->
+                activity.getWindow().getDecorView().postOnAnimation(presented::countDown)));
+        assertTrue("Coverage frame was not presented", presented.await(5, TimeUnit.SECONDS));
+        screenshot(name);
     }
 
     private static void saveScreenshot(Bitmap image, String name) throws Exception {

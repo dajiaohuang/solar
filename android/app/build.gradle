@@ -41,6 +41,11 @@ tasks.withType(Test).configureEach {
         inputs.dir(fixtureDirectory)
         environment 'SOLAR_STATE_TILE_FIXTURE_DIR', fixtureDirectory
     }
+    def coverageFixtureDirectory = System.getenv('SOLAR_COVERAGE_NATIVE_FIXTURE_DIR')
+    if (coverageFixtureDirectory) {
+        inputs.dir(coverageFixtureDirectory)
+        environment 'SOLAR_COVERAGE_NATIVE_FIXTURE_DIR', coverageFixtureDirectory
+    }
 }
 
 try {

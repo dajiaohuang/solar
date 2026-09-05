@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="coverage_title">Source coverage</string>
+    <string name="coverage_close">Hide source coverage</string>
+    <string name="coverage_intro">Audit the backend’s source population, not the currently displayed observation. Opening this section does not download data.</string>
+    <string name="coverage_load">Load coverage</string>
+    <string name="coverage_reload">Reload coverage</string>
+    <string name="coverage_cancel">Cancel coverage</string>
+    <string name="coverage_idle">No coverage report loaded.</string>
+    <string name="coverage_loading">Loading a fresh manifest and matching coverage report…</string>
+    <string name="coverage_unavailable">Coverage report unavailable. Configure a full HTTPS backend with a coverage report; unavailable does not mean zero coverage.</string>
+    <string name="coverage_failed">Coverage could not be verified. Check the backend and retry. Previous totals were cleared.</string>
+    <string name="coverage_cancelled">Coverage loading cancelled. No previous totals retained.</string>
+    <string name="coverage_timeout">Coverage request timed out. Check the backend and retry.</string>
+    <string name="coverage_counts">Source records: %1$d\nMapped source records: %2$d\nUnresolved source records: %3$d\nDistinct explicit NAIF targets: %4$d\nAvailable targets at audit epoch: %5$d\nDependency-covered targets: %6$d\nTargets with dependency gaps: %7$d</string>
+    <string name="coverage_epoch">Audit ET: %1$s\nRequested window ET: %2$s to %3$s\nTDB seconds past J2000 · ECLIPJ2000</string>
+    <string name="coverage_limits">Source records can be aliases of the same body. Dependency availability is not numerical accuracy certification. Whole-window numerical certification has not been established. These are not current rendered-state counts.</string>
+    <string name="coverage_details">Reasons and source identities</string>
+    <string name="coverage_hide_details">Hide source identities</string>
+    <string name="coverage_identities">Catalog: %1$s\nCatalog SHA-256: %2$s\nInventory SHA-256: %3$s\nReport SHA-256: %4$s\nSource snapshot SHA-256: %5$s\nIdentity mapping SHA-256: %6$s\nSatellite catalog SHA-256: %7$s</string>
+    <string name="coverage_reasons">Unresolved reasons (source codes)</string>
+</resources>
