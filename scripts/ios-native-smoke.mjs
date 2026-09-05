@@ -48,9 +48,9 @@ export async function removeOwnedTemporary(directory) {
   await rm(resolved, { recursive: true, force: true })
 }
 
-function command(file, args, { env = process.env, log, timeout = 120_000 } = {}) {
+export function command(file, args, { env = process.env, log, timeout = 120_000, windowsVerbatimArguments = false } = {}) {
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(file, args, { env, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(file, args, { env, windowsHide: true, windowsVerbatimArguments, stdio: ['ignore', 'pipe', 'pipe'] })
     let output = '', expired = false, overflow = false
     const stream = log ? createWriteStream(log, { flags: 'wx' }) : undefined
     stream?.on('error', reject)
@@ -97,15 +97,15 @@ async function waitForBackend(child, expectedHash) {
   throw new Error('Owned Go backend did not become ready with the staged manifest')
 }
 
-async function certificates(directory) {
+export async function certificates(directory, openssl = 'openssl') {
   const rootConfig = join(directory, 'root.cnf'), leafConfig = join(directory, 'server.cnf')
   await writeFile(rootConfig, '[req]\nprompt=no\ndistinguished_name=dn\nx509_extensions=ca\n[dn]\nCN=Solar isolated simulator test CA\n[ca]\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\n', { flag: 'wx' })
   await writeFile(leafConfig, '[req]\nprompt=no\ndistinguished_name=dn\n[dn]\nCN=localhost\n[v3_req]\nbasicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nsubjectAltName=DNS:localhost,IP:127.0.0.1\n', { flag: 'wx' })
-  await command('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-sha256', '-days', '2',
+  await command(openssl, ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-sha256', '-days', '2',
     '-config', rootConfig, '-keyout', join(directory, 'root.key'), '-out', join(directory, 'root.crt')])
-  await command('openssl', ['req', '-new', '-newkey', 'rsa:2048', '-nodes', '-sha256', '-config', leafConfig,
+  await command(openssl, ['req', '-new', '-newkey', 'rsa:2048', '-nodes', '-sha256', '-config', leafConfig,
     '-keyout', join(directory, 'server.key'), '-out', join(directory, 'server.csr')])
-  await command('openssl', ['x509', '-req', '-in', join(directory, 'server.csr'), '-CA', join(directory, 'root.crt'),
+  await command(openssl, ['x509', '-req', '-in', join(directory, 'server.csr'), '-CA', join(directory, 'root.crt'),
     '-CAkey', join(directory, 'root.key'), '-CAcreateserial', '-days', '2', '-sha256',
     '-extfile', leafConfig, '-extensions', 'v3_req', '-out', join(directory, 'server.crt')])
 }

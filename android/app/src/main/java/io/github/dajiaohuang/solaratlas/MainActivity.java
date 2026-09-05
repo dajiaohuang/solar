@@ -7,9 +7,14 @@ import android.text.InputType;
 import android.view.Gravity;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -91,7 +96,21 @@ public final class MainActivity extends Activity {
         evidenceNext = new Button(this); evidenceNext.setText("Next"); evidenceNext.setOnClickListener(v -> changeEvidencePage(1));
         pager.addView(evidencePrevious, new LinearLayout.LayoutParams(0, -2, 1)); pager.addView(evidencePage, new LinearLayout.LayoutParams(0, -2, 1)); pager.addView(evidenceNext, new LinearLayout.LayoutParams(0, -2, 1)); content.addView(pager);
         updateEvidencePageControls(0, 0);
-        ScrollView scroll = new ScrollView(this); scroll.addView(content); setContentView(scroll);
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(content);
+        FrameLayout safeContent = new FrameLayout(this);
+        safeContent.setBackgroundColor(Color.rgb(4, 10, 20));
+        safeContent.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+        // API 35+ edge-to-edge must not place actions under system navigation
+        // or the keyboard. Reapply absolute insets, never accumulate padding.
+        ViewCompat.setOnApplyWindowInsetsListener(safeContent, (view, windowInsets) -> {
+            Insets safe = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars()
+                    | WindowInsetsCompat.Type.displayCutout() | WindowInsetsCompat.Type.ime());
+            view.setPadding(safe.left, safe.top, safe.right, safe.bottom);
+            return windowInsets;
+        });
+        setContentView(safeContent);
+        ViewCompat.requestApplyInsets(safeContent);
         try { tileCache = new StateTileCache(new File(getCacheDir(), "state-tiles-v1")); }
         catch (Exception error) { tileCache = null; status.setText("Tile cache is unavailable; no observation can be loaded."); }
     }

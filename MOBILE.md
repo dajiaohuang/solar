@@ -15,7 +15,7 @@
 | iOS cache | Verified state tiles use a bounded 256 MiB cache; cache reuse requires matching tile identity and hashes |
 | Online boundary | Initial manifest and plan loading require the HTTPS backend. Previously verified tiles may be reused; complete offline plan recovery is not implemented |
 | Pages | A curated Web preview only; it is not the native full-state backend |
-| Validation / release status | Android debug build, unit/lint and empty-scene GLES emulator smoke passed locally on 2026-09-05. Android/iOS CI builds and cross-runtime protocol checks passed; iOS also passed the real-SPK HTTPS simulator tests linked below. Android live-data interaction, real-device performance and store release remain unverified |
+| Validation / release status | Android has local real-SPK HTTPS emulator UI/cache evidence on 2026-09-05. Android/iOS CI builds and cross-runtime protocol checks passed; iOS also passed the real-SPK HTTPS simulator tests linked below. The new Android runtime CI gate requires its own successful run; real-device performance and store release remain unverified |
 
 The native slice preserves scientific provenance, epoch, units, reference frame, validity and missing-state semantics. Missing precise states remain visibly unavailable; they are not replaced by approximate positions. The native slice does not claim all-body coverage, navigation accuracy, complete ephemeris access, or full Web feature parity.
 
@@ -89,6 +89,33 @@ a test input so changing from synthetic to real fixtures reruns the tests.
 The generator also accepts `-data-dir`, `-inventory-dir`, `-ids` and `-epoch-jd`
 for locally retained, hash-verified scientific profiles. Do not commit generated
 fixtures or interpret matching serialization as an independent science oracle.
+
+### Android real-data runtime verification
+
+`node scripts/android-native-smoke.mjs` stages the real full SPK profile and
+runs Go-to-Web/Java Float64 goldens before exercising the actual Android UI over
+HTTPS. The local API 36 x86_64 run on 2026-09-05 passed Earth-reference states
+for Earth/Moon/Sun plus an explicit missing ID, 3D/2D counts, visible point
+pixels, tutorial and system-navigation bounds, and background/reload cache reuse.
+Two manifests, two plans and one tile (all HTTP 200) prove the cached reload.
+Pixel assertions prove rendering, not distinct pixels for overlapping bodies,
+fixed size at every camera distance, physical-device performance or full parity.
+
+Set `ANDROID_HOME` to an SDK with command-line tools, emulator and
+`system-images;android-36;default;x86_64`, and `JAVA_HOME` to JDK 21. Go, Node
+and OpenSSL must be available (`SOLAR_OPENSSL` may specify an executable path).
+The script creates only its own temporary AVD and uses loopback port forwarding.
+Only the instrumentation process trusts its temporary CA; production TLS and
+hostname checks stay enabled, with no host/device-wide root certificate added.
+Animations are disabled only on the disposable test device, so this is not a
+frame-rate benchmark. Cleanup validates ownership before removing temporary data.
+
+Artifacts default to `build/android-native-smoke/`; set
+`SOLAR_ANDROID_SMOKE_OUTPUT` to a new directory for another local run. Existing
+evidence is not overwritten. `report.json` records source commit/file hashes,
+scientific manifest/golden identity, HTTPS traffic and cleanup errors; screenshots
+and logs are retained without private keys. Local success does not establish
+hosted CI success for later commits; require the exact Android runtime job.
 
 ### Interaction and data boundaries
 

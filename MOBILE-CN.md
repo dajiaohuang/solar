@@ -15,7 +15,7 @@
 | iOS 缓存 | 已验证状态瓦片使用有界 256 MiB 缓存；只有瓦片身份与哈希匹配时才复用 |
 | 在线边界 | 首次加载 manifest 与 plan 必须访问 HTTPS 后端；已验证瓦片可复用，但尚未实现完整离线 plan 恢复 |
 | Pages | 仅为精选 Web 预览，不是原生完整版状态后端 |
-| 验证 / 发布状态 | Android 于 2026-09-05 本地通过 debug 构建、单元测试/lint 和 GLES 模拟器空场景冒烟；Android/iOS CI 构建及跨运行时协议检查通过，iOS 还通过下方真实 SPK HTTPS 模拟器测试。Android 实时数据交互、真机性能和商店发布仍未验证 |
+| 验证 / 发布状态 | Android 于 2026-09-05 取得本地真实 SPK HTTPS 模拟器交互/缓存证据；Android/iOS CI 构建及跨运行时协议检查通过，iOS 还通过下方真实 SPK HTTPS 模拟器测试。新增 Android 运行 CI 门禁仍需其对应成功记录；真机性能和商店发布仍未验证 |
 
 原生竖切保留科学来源、历元、单位、参考系、有效区间和缺失状态语义。缺少精确状态时保持明确不可用，不用近似位置替代。当前不声称全天体覆盖、导航精度、完整星历访问或完整 Web 功能对等。
 
@@ -80,6 +80,27 @@ npx vitest run tests/unit/state-tiles-golden.test.ts
 切换到真实数据时会重新测试。生成器还支持 `-data-dir`、`-inventory-dir`、
 `-ids` 和 `-epoch-jd`，可读取本地保留且已校验哈希的科学数据配置。不得提交
 生成的测试数据，也不能将序列化一致性当作独立科学基准。
+
+### Android 真实数据运行验证
+
+`node scripts/android-native-smoke.mjs` 校验并暂存真实完整版 SPK，先执行
+Go→Web/Java Float64 基准，再通过 HTTPS 操作实际 Android 界面。2026-09-05
+本地 API 36 x86_64 测试通过地球参考系下的地球/月球/太阳与明确缺失 ID、
+3D/2D 数量、可见天体像素、教程及系统导航安全边界、后台恢复与缓存重载。
+两次 manifest、两次 plan、一次 tile 均为 HTTP 200，证明重载复用了缓存。
+像素检查不代表重叠天体各占独立像素、所有相机距离下尺寸不变、真机性能或全功能对等。
+
+将 `ANDROID_HOME` 指向含命令行工具、模拟器及
+`system-images;android-36;default;x86_64` 的 SDK，`JAVA_HOME` 指向 JDK 21。
+需要 Go、Node 和 OpenSSL（可用 `SOLAR_OPENSSL` 指定可执行文件路径）。脚本
+只创建独立临时 AVD，通过回环端口转发连接后端。只有 instrumentation 测试进程
+信任临时 CA，生产 TLS 与主机名校验保持开启，不向主机或设备全局加入根证书。
+只在一次性测试设备禁用动画，因此这不是帧率基准。清理前验证临时资源归属。
+
+默认产物目录是 `build/android-native-smoke/`，再次本地运行可用
+`SOLAR_ANDROID_SMOKE_OUTPUT` 指定新目录，不覆盖旧证据。`report.json` 记录
+源码提交/文件哈希、科学清单/基准身份、HTTPS 请求及清理错误；保留截图与日志，
+不保存私钥。本地通过不代表后续提交的托管 CI 已通过，必须核对对应 Android 运行作业。
 
 ### 交互与数据边界
 

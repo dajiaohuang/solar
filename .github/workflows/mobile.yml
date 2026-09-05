@@ -81,6 +81,22 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Prepare isolated Android runtime
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "emulator" "system-images;android-36;default;x86_64"
+          # Grant only this ephemeral runner user access to the existing KVM device.
+          sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+      - name: Run native Android UI against real SPK over HTTPS
+        run: node scripts/android-native-smoke.mjs
+      - name: Retain Android runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: solar-atlas-android-native-smoke
+          path: build/android-native-smoke/
+          if-no-files-found: warn
+          retention-days: 14
+
   ios:
     runs-on: macos-26
     timeout-minutes: 35
@@ -149,6 +165,7 @@ jobs:
           path: build/ios-native-smoke/
           if-no-files-found: warn
           retention-days: 14
+
       - uses: actions/upload-artifact@v6
         with:
           name: solar-atlas-ios-simulator

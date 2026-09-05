@@ -8,18 +8,25 @@ import static androidx.test.espresso.action.ViewActions.replaceText;
 import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
 import static androidx.test.espresso.matcher.ViewMatchers.withHint;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.junit.Assert.fail;
+import static org.junit.Assert.assertTrue;
 
 import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.os.SystemClock;
+import android.view.View;
 
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -32,6 +39,8 @@ import java.security.KeyStore;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
 import java.util.Base64;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
@@ -60,7 +69,15 @@ public final class ObservationUITest {
 
             // Exercise the unconfigured first screen before entering network data.
             waitForText(containsString("No observation loaded"));
-            onView(withText("Tutorial")).perform(scrollTo(), click());
+            onView(withText("Tutorial")).perform(scrollTo()).check((view, error) -> {
+                if (error != null) throw error;
+                WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(view);
+                if (insets == null) throw new AssertionError("Window insets unavailable");
+                Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+                int[] location = new int[2]; view.getLocationOnScreen(location);
+                assertTrue("Tutorial must be above system navigation", location[1] + view.getHeight() <= view.getRootView().getHeight() - bars.bottom);
+                assertTrue("Tutorial must be below status/cutout area", location[1] >= bars.top);
+            }).perform(click());
             waitForText(containsString("First observation"));
             onView(withText("Done")).perform(click());
             onView(withText("Load observation")).perform(scrollTo(), click());
@@ -74,11 +91,11 @@ public final class ObservationUITest {
             waitForText(containsString("3 verified states - 1 data gaps"));
             waitForText(containsString("3D GPU points 3/3 (limit 250000)"));
             waitForEvidence("naif:399 - VERIFIED", "naif:301 - VERIFIED", "naif:10 - VERIFIED", "unknown:fixture - MISSING");
-            screenshot("observation-3d.png");
+            viewportScreenshot(scenario, "observation-3d.png");
 
             onView(withText("Switch to 2D")).perform(scrollTo(), click());
             waitForText(containsString("2D GPU points 3/3 (limit 500000)"));
-            screenshot("observation-2d.png");
+            viewportScreenshot(scenario, "observation-2d.png");
 
             scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);
             scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);
@@ -87,7 +104,7 @@ public final class ObservationUITest {
             waitForText(containsString("3 verified states - 1 data gaps"));
             waitForText(containsString("2D GPU points 3/3 (limit 500000)"));
             waitForEvidence("naif:399 - VERIFIED", "naif:301 - VERIFIED", "naif:10 - VERIFIED", "unknown:fixture - MISSING");
-            screenshot("observation-resumed.png");
+            viewportScreenshot(scenario, "observation-resumed.png");
             passed = true;
         } finally {
             try {
@@ -135,7 +152,12 @@ public final class ObservationUITest {
         AssertionError last = null;
         while (SystemClock.uptimeMillis() < deadline) {
             try {
-                onView(withText(matcher)).perform(scrollTo()).check(matches(isDisplayed()));
+                try {
+                    // Dialog titles are not ScrollView descendants.
+                    onView(withText(matcher)).check(matches(isDisplayed()));
+                } catch (AssertionError notVisible) {
+                    onView(withText(matcher)).perform(scrollTo()).check(matches(isDisplayed()));
+                }
                 return;
             } catch (AssertionError | androidx.test.espresso.NoMatchingViewException error) {
                 if (error instanceof AssertionError) last = (AssertionError) error;
@@ -146,15 +168,65 @@ public final class ObservationUITest {
         fail("Timed out waiting for UI text");
     }
 
+    private static void viewportScreenshot(ActivityScenario<MainActivity> scenario, String name) throws Exception {
+        // Release the text field's focus before scrolling; otherwise keyboard/
+        // focus restoration can scroll the viewport back out of the screenshot.
+        scenario.onActivity(activity -> {
+            View focus = activity.getCurrentFocus();
+            if (focus != null) focus.clearFocus();
+            View root = activity.findViewById(android.R.id.content);
+            root.setFocusableInTouchMode(true); root.requestFocus();
+        });
+        int[] bounds = new int[4];
+        onView(withContentDescription("Verified state GPU point observation viewport"))
+                .perform(scrollTo()).check(matches(isCompletelyDisplayed()));
+        // Espresso observes the UI hierarchy before SurfaceFlinger necessarily
+        // presents its scroll. Fence two display frames before matching pixels.
+        CountDownLatch presented = new CountDownLatch(1);
+        scenario.onActivity(activity -> activity.getWindow().getDecorView().postOnAnimation(() ->
+                activity.getWindow().getDecorView().postOnAnimation(presented::countDown)));
+        assertTrue("Viewport frame was not presented", presented.await(5, TimeUnit.SECONDS));
+        onView(withContentDescription("Verified state GPU point observation viewport"))
+                .check(matches(isCompletelyDisplayed())).check((view, error) -> {
+                    if (error != null) throw error;
+                    int[] location = new int[2]; view.getLocationOnScreen(location);
+                    bounds[0] = location[0]; bounds[1] = location[1]; bounds[2] = view.getWidth(); bounds[3] = view.getHeight();
+                });
+        long deadline = SystemClock.uptimeMillis() + 10_000;
+        do {
+            Bitmap image = InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
+            try {
+                int points = 0;
+                for (int y = bounds[1]; y < bounds[1] + bounds[3]; y++) {
+                    for (int x = bounds[0]; x < bounds[0] + bounds[2]; x++) {
+                        int color = image.getPixel(x, y);
+                        int r = (color >> 16) & 255, g = (color >> 8) & 255, b = color & 255;
+                        if (r >= 95 && r <= 101 && g >= 204 && g <= 211 && b >= 176 && b <= 185) points++;
+                    }
+                }
+                // Sources may overlap in projection; this proves pixels were
+                // drawn, not three spatially distinct clusters or a FPS target.
+                // Three 6x6 points can cover at most108 pixels. An old screenshot
+                // containing teal status text in this rectangle must not pass.
+                if (points >= 30 && points <= 108) { saveScreenshot(image, name); return; }
+            } finally { image.recycle(); }
+            SystemClock.sleep(100);
+        } while (SystemClock.uptimeMillis() < deadline);
+        fail("No verified-state point pixels in fully visible GPU viewport: " + name);
+    }
+
+    private static void saveScreenshot(Bitmap image, String name) throws Exception {
+        File root = InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir("solar-native-smoke");
+        if (root == null || (!root.exists() && !root.mkdirs())) throw new IllegalStateException("Cannot create screenshot directory");
+        try (FileOutputStream stream = new FileOutputStream(new File(root, name), false)) {
+            if (!image.compress(Bitmap.CompressFormat.PNG, 100, stream)) throw new IllegalStateException("Screenshot encoding failed");
+        }
+    }
+
     private static void screenshot(String name) {
         try {
             Bitmap image = InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
-            File root = InstrumentationRegistry.getInstrumentation().getTargetContext().getExternalFilesDir("solar-native-smoke");
-            if (root == null || (!root.exists() && !root.mkdirs())) throw new IllegalStateException("Cannot create screenshot directory");
-            File output = new File(root, name);
-            try (FileOutputStream stream = new FileOutputStream(output, false)) {
-                if (!image.compress(Bitmap.CompressFormat.PNG, 100, stream)) throw new IllegalStateException("Screenshot encoding failed");
-            }
+            try { saveScreenshot(image, name); } finally { image.recycle(); }
         } catch (Exception error) {
             // Preserve the original UI assertion when a failure screenshot is unavailable.
             if (!name.contains("failure")) throw new AssertionError("Screenshot failed: " + error.getMessage(), error);
