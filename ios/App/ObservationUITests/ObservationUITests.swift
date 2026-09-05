@@ -113,6 +113,7 @@ final class ObservationUITests: XCTestCase {
         let disclosure = app.buttons["coverage.disclosure"]
         XCTAssertTrue(app.buttons["observation.mode"].waitForExistence(timeout: 15))
         reveal(app, disclosure)
+        XCTAssertEqual(disclosure.value as? String, "Collapsed")
         XCTAssertFalse(app.buttons["coverage.load"].exists)
         setExpanded(app, disclosure, true)
         let load = app.buttons["coverage.load"]
@@ -122,12 +123,15 @@ final class ObservationUITests: XCTestCase {
         waitForLabel(app.staticTexts["coverage.status"], "Source coverage loaded.")
         reveal(app, app.staticTexts["coverage.counts"])
         XCTAssertEqual(app.staticTexts["coverage.counts"].label, "Source records: 10 · mapped: 3 · unresolved: 7")
+        reveal(app, app.staticTexts["coverage.targets"])
         XCTAssertEqual(app.staticTexts["coverage.targets"].label, "Explicit targets: 2 · available at audit: 2")
+        reveal(app, app.staticTexts["coverage.windowCounts"])
+        XCTAssertEqual(app.staticTexts["coverage.windowCounts"].label, "Dependency window: 1 covered · 1 gaps")
         reveal(app, app.staticTexts["coverage.audit"])
         XCTAssertTrue(app.staticTexts["coverage.audit"].label.contains("500.125"))
         XCTAssertTrue(app.staticTexts["coverage.audit"].label.contains("-20.5–1000.25"))
         XCTAssertTrue(app.staticTexts["coverage.audit"].label.contains("ECLIPJ2000"))
-        XCTAssertEqual(app.staticTexts["coverage.windowCounts"].label, "Dependency window: 1 covered · 1 gaps")
+        reveal(app, app.staticTexts["coverage.caveat"])
         XCTAssertTrue(app.staticTexts["coverage.caveat"].exists)
         screenshot(app, "coverage-synthetic-summary")
         let details = app.buttons["coverage.details"]
