@@ -41,6 +41,8 @@ type Props = {
   catalogDrawCount?: number
   catalogOrigin?: Vector2
   pixelRatioLimit?: number
+  continuous?: boolean
+  onFrameDuration?: (durationMs: number) => void
 }
 
 type Geometry = {
@@ -496,7 +498,7 @@ function buildGeometry(
   }
 }
 
-function drawLines(resources: GlResources, geometry: Geometry) {
+function drawLines(resources: GlResources, geometry: Geometry, upload = true) {
   const { gl, lineProgram, linePositionBuffer, lineColorBuffer } = resources
   if (!geometry.linePositions.length) {
     return
@@ -509,19 +511,19 @@ function drawLines(resources: GlResources, geometry: Geometry) {
   const colorLocation = gl.getAttribLocation(lineProgram, 'aColor')
 
   gl.bindBuffer(gl.ARRAY_BUFFER, linePositionBuffer)
-  gl.bufferData(gl.ARRAY_BUFFER, geometry.linePositions, gl.DYNAMIC_DRAW)
+  if (upload) gl.bufferData(gl.ARRAY_BUFFER, geometry.linePositions, gl.DYNAMIC_DRAW)
   gl.enableVertexAttribArray(positionLocation)
   gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0)
 
   gl.bindBuffer(gl.ARRAY_BUFFER, lineColorBuffer)
-  gl.bufferData(gl.ARRAY_BUFFER, geometry.lineColors, gl.DYNAMIC_DRAW)
+  if (upload) gl.bufferData(gl.ARRAY_BUFFER, geometry.lineColors, gl.DYNAMIC_DRAW)
   gl.enableVertexAttribArray(colorLocation)
   gl.vertexAttribPointer(colorLocation, 4, gl.FLOAT, false, 0, 0)
 
   gl.drawArrays(gl.LINES, 0, geometry.linePositions.length / 2)
 }
 
-function drawPoints(resources: GlResources, geometry: Geometry, pixelRatio: number) {
+function drawPoints(resources: GlResources, geometry: Geometry, pixelRatio: number, upload = true) {
   const { gl, pointProgram, pointPositionBuffer, pointColorBuffer, pointSizeBuffer } = resources
   if (!geometry.pointPositions.length) {
     return
@@ -538,17 +540,17 @@ function drawPoints(resources: GlResources, geometry: Geometry, pixelRatio: numb
   gl.uniform1f(pixelRatioLocation, pixelRatio)
 
   gl.bindBuffer(gl.ARRAY_BUFFER, pointPositionBuffer)
-  gl.bufferData(gl.ARRAY_BUFFER, geometry.pointPositions, gl.DYNAMIC_DRAW)
+  if (upload) gl.bufferData(gl.ARRAY_BUFFER, geometry.pointPositions, gl.DYNAMIC_DRAW)
   gl.enableVertexAttribArray(positionLocation)
   gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0)
 
   gl.bindBuffer(gl.ARRAY_BUFFER, pointColorBuffer)
-  gl.bufferData(gl.ARRAY_BUFFER, geometry.pointColors, gl.DYNAMIC_DRAW)
+  if (upload) gl.bufferData(gl.ARRAY_BUFFER, geometry.pointColors, gl.DYNAMIC_DRAW)
   gl.enableVertexAttribArray(colorLocation)
   gl.vertexAttribPointer(colorLocation, 4, gl.FLOAT, false, 0, 0)
 
   gl.bindBuffer(gl.ARRAY_BUFFER, pointSizeBuffer)
-  gl.bufferData(gl.ARRAY_BUFFER, geometry.pointSizes, gl.DYNAMIC_DRAW)
+  if (upload) gl.bufferData(gl.ARRAY_BUFFER, geometry.pointSizes, gl.DYNAMIC_DRAW)
   gl.enableVertexAttribArray(sizeLocation)
   gl.vertexAttribPointer(sizeLocation, 1, gl.FLOAT, false, 0, 0)
 
@@ -581,9 +583,12 @@ export function TrajectoryCanvas({
   catalogDrawCount = 0,
   catalogOrigin = HELIOCENTRIC_ORIGIN,
   pixelRatioLimit = 1.75,
+  continuous = false,
+  onFrameDuration,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const resourcesRef = useRef<GlResources | null>(null)
+  const drawRef = useRef<(() => void) | null>(null)
   const lastTouchTapRef = useRef<{ bodyId: string; timestamp: number } | null>(null)
   const touchGestureRef = useRef<{ pointerId: number; startX: number; startY: number; moved: boolean } | null>(null)
   const activeTouchPointersRef = useRef(new Set<number>())
@@ -666,7 +671,7 @@ export function TrajectoryCanvas({
       resourcesRef.current = resources
     }
 
-    const drawFrame = () => {
+    const drawFrame = (upload = false) => {
       const { gl } = resources
       gl.viewport(0, 0, canvas.width, canvas.height)
       gl.clearColor(0, 0, 0, 0)
@@ -674,13 +679,31 @@ export function TrajectoryCanvas({
       gl.enable(gl.BLEND)
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 
-      drawLines(resources, geometry)
-      drawPoints(resources, geometry, pixelRatio)
+      drawLines(resources, geometry, upload)
+      drawPoints(resources, geometry, pixelRatio, upload)
     }
-    canvas.addEventListener(PREPARE_CANVAS_CAPTURE_EVENT, drawFrame)
-    drawFrame()
-    return () => canvas.removeEventListener(PREPARE_CANVAS_CAPTURE_EVENT, drawFrame)
+    const redraw = () => drawFrame()
+    canvas.addEventListener(PREPARE_CANVAS_CAPTURE_EVENT, redraw)
+    drawFrame(true)
+    drawRef.current = redraw
+    return () => { drawRef.current = null; canvas.removeEventListener(PREPARE_CANVAS_CAPTURE_EVENT, redraw) }
   }, [geometry, pixelRatioLimit, size.height, size.width, webglUnavailable])
+
+  useEffect(() => {
+    if (!continuous || webglUnavailable) return
+    let handle = 0, previous: number | null = null
+    const frame = (timestamp: number) => {
+      if (document.hidden || !drawRef.current || resourcesRef.current?.gl.isContextLost()) previous = null
+      else {
+        drawRef.current()
+        if (previous !== null) onFrameDuration?.(timestamp - previous)
+        previous = timestamp
+      }
+      handle = window.requestAnimationFrame(frame)
+    }
+    handle = window.requestAnimationFrame(frame)
+    return () => window.cancelAnimationFrame(handle)
+  }, [continuous, onFrameDuration, webglUnavailable])
 
   useEffect(() => {
     return () => {

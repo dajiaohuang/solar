@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { TrajectoryCanvas } from '../../components/TrajectoryCanvas'
 import { SPACECRAFT } from '../../data/spacecraft'
 import { BODY_PHYSICAL } from '../../data/physical'
@@ -33,11 +33,15 @@ import { PagedBodyList } from '../../components/PagedBodyList'
 import { PRODUCT_PROFILE } from '../../lib/productAvailability'
 import { createBackendPositionResolver, type BackendFrame } from '../../lib/backendFrames'
 import { useStateTiles } from '../../hooks/useStateTiles'
+import { useStateDisplayBudget } from '../../hooks/useStateDisplayBudget'
+import { selectStateDisplayPositions } from '../../lib/stateDisplayBudget'
+import { summarizeBackendCoverage } from '../../lib/backendCoverage'
 
 const TrajectoryCanvas3D = lazy(async () => {
   const module = await import('../../components/TrajectoryCanvas3D')
   return { default: module.TrajectoryCanvas3D }
 })
+const ignoreFrameDuration = () => {}
 
 function SpatialPreview() {
   return (
@@ -66,6 +70,9 @@ type FrameViewProps = {
   catalogFitKey: string
   pixelRatioLimit: number
   onFrameDuration: (durationMs: number) => void
+  stateDisplay: ReturnType<typeof useStateDisplayBudget>
+  statePriorityIds: string[]
+  samplingActive: boolean
   isPlaying: boolean
   render3DReady: boolean
   cameraResetKey: number
@@ -92,6 +99,9 @@ function FrameView({
   catalogFitKey,
   pixelRatioLimit,
   onFrameDuration,
+  stateDisplay,
+  statePriorityIds,
+  samplingActive,
   isPlaying,
   render3DReady,
   cameraResetKey,
@@ -132,6 +142,13 @@ function FrameView({
     trajectoryUnavailableBodyIds: [...baseFrame.trajectoryUnavailableBodyIds, ...spacecraftFrame.trajectoryUnavailableBodyIds],
     maxDistance: Math.max(baseFrame.maxDistance, ...spacecraftFrame.currentPositions.map((item) => item.distance), 0),
   }), [baseFrame, spacecraftFrame])
+  const displayedStates = useMemo(() => backendFrame
+    ? selectStateDisplayPositions(baseFrame.currentPositions, stateDisplay.limitPerPane, statePriorityIds)
+    : baseFrame.currentPositions, [backendFrame, baseFrame.currentPositions, stateDisplay.limitPerPane, statePriorityIds])
+  const receivedExactCount = useMemo(() => summarizeBackendCoverage(selectedBodies.map(body => body.id), backendFrame).exactCount, [selectedBodies, backendFrame])
+  const displayPositions = useMemo(() => [...displayedStates, ...spacecraftFrame.currentPositions], [displayedStates, spacecraftFrame.currentPositions])
+  const stateFitKey = useMemo(() => backendFrame ? `${selectedBodies.map(body => body.id).join(',')}|${baseFrame.currentPositions.length}` : undefined,
+    [backendFrame, selectedBodies, baseFrame.currentPositions.length])
   useEffect(() => onFrame(frame), [frame, onFrame])
   const focusSuggested = useMemo(() => getSuggestedViewRadius(
     selectedBodies.map((body) => body.id), referenceBody.id, bodiesById, baseFrame.maxDistance,
@@ -195,6 +212,14 @@ function FrameView({
       <div className="frame-overlays" onWheel={event => event.stopPropagation()}>
       <div className="frame-label"><span>{bodyDisplayName(referenceBody, language)}</span><small>{simulation.viewMode.toUpperCase()}{simulation.showCatalogCloud ? ` · ${t('catalogCloudRendered')} ${catalogDrawCount.toLocaleString()} / ${catalogSampleTotal.toLocaleString()} · ${qualityLabel} · JD ${julianDay.toFixed(3)}` : ''}</small></div>
       <EphemerisStatus bodies={selectedBodies} references={[referenceBody]} julianDay={julianDay} historyDays={simulation.historyDays} backendStatus={backendStatus} backendFrame={backendFrame} />
+      {backendFrame && <details className="frame-layer-budget glass-panel" data-testid="exact-display-budget"
+        data-computed={receivedExactCount} data-displayed={displayedStates.length}
+        data-limit={stateDisplay.limitPerPane} data-sampling={samplingActive} data-samples={stateDisplay.metrics?.samples ?? 0}>
+        <summary>{t('exactDisplayCount')}: {displayedStates.length.toLocaleString()}/{receivedExactCount.toLocaleString()} · {t('exactDisplayUnshown')}: {(receivedExactCount - displayedStates.length).toLocaleString()}</summary>
+        <p>{t('exactDisplayPolicy')} ({stateDisplay.limitPerPane.toLocaleString()})</p>
+        <p>{t(stateDisplay.reason === 'slow' ? 'exactDisplaySlow' : stateDisplay.reason === 'headroom' ? 'exactDisplayHeadroom' : 'exactDisplayInitial')}</p>
+        <p>{stateDisplay.metrics ? `${t('exactDisplayTiming')}: p50 ${stateDisplay.metrics.p50Ms.toFixed(1)} / p95 ${stateDisplay.metrics.p95Ms.toFixed(1)} ms · ${(stateDisplay.metrics.missedRatio * 100).toFixed(1)}%` : t('exactDisplayPending')}</p>
+      </details>}
       {selectedBodies.length > trajectoryBodies.length && <div className="frame-layer-budget glass-panel" data-testid="focus-layer-budget">{t('currentPositionCount')}: {baseFrame.currentPositions.length}/{selectedBodies.length} · {t('trailBudgetCount')}: {trajectoryBodies.length}/{selectedBodies.length}</div>}
       {error && <div className="canvas-error">{error}</div>}
       {catalogOrigin && baseFrame.missingBodyIds.length > 0 && <details className="canvas-error" data-testid="missing-position-notice"><summary>{t('bodyStateUnavailable')} ({baseFrame.missingBodyIds.length})</summary><p>{baseFrame.missingBodyIds.map(id => bodyDisplayName(bodiesById.get(id)!, language)).join(', ')}</p></details>}
@@ -209,7 +234,9 @@ function FrameView({
           <TrajectoryCanvas3D
             referenceBody={referenceBody}
             trajectories={frame.trajectories}
-            currentPositions={frame.currentPositions}
+            currentPositions={displayPositions}
+            stateFitKey={stateFitKey}
+            stateFitRadius={backendFrame ? baseFrame.maxDistance : undefined}
             detailBodyIds={detailBodyIds}
             onReferenceChange={(id) => { if (bodiesById.has(id)) simulationActions.patch({ referenceId: id }) }}
             onBodySelect={selectionActions.focus}
@@ -224,7 +251,7 @@ function FrameView({
             catalogDrawCount={catalogDrawCount}
             catalogOrigin={catalogOrigin}
             catalogFitKey={catalogFitKey}
-            continuous={isPlaying && simulation.showCatalogCloud}
+            continuous={samplingActive || (isPlaying && simulation.showCatalogCloud)}
             pixelRatioLimit={pixelRatioLimit}
             onFrameDuration={onFrameDuration}
             zoomLevel={simulation.zoom}
@@ -235,7 +262,7 @@ function FrameView({
         <TrajectoryCanvas
           referenceBody={referenceBody}
           trajectories={frame.trajectories}
-          currentPositions={frame.currentPositions}
+          currentPositions={displayPositions}
           viewRadiusAU={suggested / simulation.zoom}
           viewOffsetAU={simulation.viewOffset}
           showEcliptic={simulation.showEcliptic}
@@ -255,6 +282,8 @@ function FrameView({
           catalogDrawCount={catalogDrawCount}
           catalogOrigin={catalogOrigin}
           pixelRatioLimit={pixelRatioLimit}
+          continuous={samplingActive}
+          onFrameDuration={onFrameDuration}
         />
       )}
     </div>
@@ -340,6 +369,29 @@ export function ExplorerWorkspace() {
     availableCount: catalogRecords.length,
     samplingActive: clock.isPlaying && simulation.showCatalogCloud,
   })
+  const [interacting, setInteracting] = useState(false)
+  const wheelTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    const stop = () => setInteracting(false)
+    window.addEventListener('pointerup', stop)
+    window.addEventListener('pointercancel', stop)
+    window.addEventListener('blur', stop)
+    return () => {
+      window.removeEventListener('pointerup', stop); window.removeEventListener('pointercancel', stop); window.removeEventListener('blur', stop)
+      if (wheelTimer.current !== null) clearTimeout(wheelTimer.current)
+    }
+  }, [])
+  const stateSamplingActive = currentStates.configured && (simulation.viewMode === '2d' || render3DReady) && (clock.isPlaying || interacting)
+  const stateBudget = useStateDisplayBudget({ viewMode: simulation.viewMode, quality: simulation.renderQuality,
+    comparison: simulation.comparisonEnabled, active: stateSamplingActive,
+    availablePerPane: Math.min(...currentStateReferenceIds.map(id => currentStates.frames.get(id)?.currentPositions.length ?? 0)),
+  })
+  const statePriorityIds = useMemo(() => [...currentStateReferenceIds, ...(selection.focusedId ? [selection.focusedId] : [])], [currentStateReferenceIds, selection.focusedId])
+  const catalogFrameDuration = renderBudget.onFrameDuration, stateFrameDuration = stateBudget.onFrameDuration
+  const onPrimaryFrameDuration = useCallback((duration: number) => {
+    catalogFrameDuration(duration)
+    stateFrameDuration(duration)
+  }, [catalogFrameDuration, stateFrameDuration])
   const primaryCatalogDrawCount = catalogEpochAligned ? Math.min(renderBudget.primary, catalogPointCloud.readyCount) : 0
   const secondaryCatalogDrawCount = catalogEpochAligned ? Math.min(renderBudget.secondary, catalogPointCloud.readyCount) : 0
   const catalogFitKey = simulation.showCatalogCloud
@@ -384,7 +436,9 @@ export function ExplorerWorkspace() {
           <span>{inspectorOpen ? t('hideBodyDetails') : t('showBodyDetails')}</span>
           <strong>{focusedBody ? bodyDisplayName(focusedBody, language) : t('noBody')}</strong>
         </button>
-        <div className={`frames-grid ${simulation.comparisonEnabled ? 'split' : ''}`} data-story-target="scene">
+        <div className={`frames-grid ${simulation.comparisonEnabled ? 'split' : ''}`} data-story-target="scene"
+          onPointerDownCapture={() => setInteracting(true)}
+          onWheelCapture={() => { setInteracting(true); if (wheelTimer.current !== null) clearTimeout(wheelTimer.current); wheelTimer.current = setTimeout(() => setInteracting(false), 1500) }}>
           <FrameView
             referenceId={simulation.referenceId}
             selectedBodies={selectedBodies}
@@ -403,7 +457,10 @@ export function ExplorerWorkspace() {
             catalogSampleTotal={renderBudget.sampleTotal}
             catalogFitKey={catalogFitKey}
             pixelRatioLimit={renderBudget.pixelRatioLimit}
-            onFrameDuration={renderBudget.onFrameDuration}
+            onFrameDuration={onPrimaryFrameDuration}
+            stateDisplay={stateBudget}
+            statePriorityIds={statePriorityIds}
+            samplingActive={stateSamplingActive}
             isPlaying={clock.isPlaying}
             render3DReady={render3DReady}
             cameraResetKey={cameraResetKey}
@@ -429,7 +486,10 @@ export function ExplorerWorkspace() {
               catalogSampleTotal={renderBudget.sampleTotal}
               catalogFitKey={catalogFitKey}
               pixelRatioLimit={renderBudget.pixelRatioLimit}
-              onFrameDuration={renderBudget.onFrameDuration}
+              onFrameDuration={ignoreFrameDuration}
+              stateDisplay={stateBudget}
+              statePriorityIds={statePriorityIds}
+              samplingActive={stateSamplingActive}
               isPlaying={clock.isPlaying}
               render3DReady={render3DReady}
               cameraResetKey={cameraResetKey}

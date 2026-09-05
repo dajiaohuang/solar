@@ -1,4 +1,12 @@
 export const en = {
+  exactDisplayCount: 'Verified states displayed / computed',
+  exactDisplayUnshown: 'Not displayed',
+  exactDisplayPolicy: 'Display-only candidate limit: selected references and focus first, then source order; scientific states and gaps retained. Comparison panes share the limit',
+  exactDisplayInitial: 'Initial candidate budget; not a device performance guarantee.',
+  exactDisplaySlow: 'Display budget reduced after slow renderer callbacks.',
+  exactDisplayHeadroom: 'Display budget raised after sustained measured headroom.',
+  exactDisplayTiming: 'Renderer callback intervals and estimated missed 60 Hz slots (not GPU/compositor timing)',
+  exactDisplayPending: 'Measurements pending; idle and hidden frames do not prove headroom.',
   sourceCoverageTitle: 'All-source coverage audit',
   sourceCoverageBoundary: 'An audit of a pinned source population, not the current scene. Source records may be aliases of the same target; unmapped records are not proof that no orbit exists.',
   sourceCoverageLoad: 'Load coverage summary',

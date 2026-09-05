@@ -90,6 +90,27 @@ test('complete Saturn current positions remain independent of 3D trail budgets',
   expect(Number(await canvas.getAttribute('data-detail-count'))).toBeLessThanOrEqual(160)
   expect(Number(await canvas.getAttribute('data-state-point-count'))).toBeGreaterThan(130)
   await expect(page.getByTestId('missing-position-notice')).toContainText('1')
+  const displayBudget = page.getByTestId('exact-display-budget')
+  await expect(displayBudget).toHaveAttribute('data-computed', '293')
+  await expect(displayBudget).toHaveAttribute('data-displayed', '293')
+  await expect(displayBudget).toHaveAttribute('data-sampling', 'false')
+  const verifyMeasuredInteraction = async () => {
+    const viewport = page.locator('canvas').first()
+    // Hold an actual browser pointer gesture while renderer RAF callbacks run.
+    // This small scene is lifecycle evidence, not a target-load benchmark.
+    const box = await viewport.boundingBox()
+    expect(box).not.toBeNull()
+    await page.mouse.move(box!.x + box!.width * .8, box!.y + box!.height * .8)
+    await page.mouse.down()
+    try {
+      await expect(displayBudget.first()).toHaveAttribute('data-sampling', 'true')
+      await expect.poll(async () => Number(await displayBudget.first().getAttribute('data-samples'))).toBeGreaterThanOrEqual(12)
+    } finally { await page.mouse.up() }
+    await expect(displayBudget.first()).toHaveAttribute('data-sampling', 'false')
+    await expect(displayBudget.first()).toHaveAttribute('data-computed', '293')
+    await expect(displayBudget.first()).toHaveAttribute('data-displayed', '293')
+  }
+  await verifyMeasuredInteraction()
   await page.screenshot({ path: test.info().outputPath('saturn-complete-current-positions.png') })
   const accessible = page.locator('.accessible-scene-controls')
   await accessible.locator('summary').click()
@@ -108,6 +129,10 @@ test('complete Saturn current positions remain independent of 3D trail budgets',
   await page.getByRole('button', { name: '2D', exact: true }).click()
   await expect(page.locator('canvas.trajectory-canvas')).toHaveCount(2)
   for (const frame of await page.locator('canvas.trajectory-canvas').all()) await expect(frame).toHaveAttribute('data-position-count', '293')
+  await expect(displayBudget).toHaveCount(2)
+  expect(await displayBudget.first().getAttribute('data-limit')).toBe(await displayBudget.nth(1).getAttribute('data-limit'))
+  await verifyMeasuredInteraction()
+  await page.screenshot({ path: test.info().outputPath('exact-display-budget-2d.png') })
   expect(errors).toEqual([])
 })
 

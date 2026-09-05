@@ -5,7 +5,7 @@ Solar Atlas treats the million-object catalog as a columnar filtering problem, n
 - **Focus layer:** named, selectable bodies with trajectories, labels, inspection, and analysis. The limit is 160 bodies in 3D and 320 in 2D.
 - **Catalog cloud:** an optional single-buffer point cloud generated in a worker. It is off by default, so opening the Observation Deck requests no asteroid sample. Enabling it reuses the immutable mobile or desktop sample already identified in the scene URL.
 
-The application opens in 3D and falls back to 2D if WebGL is unavailable or lost. On an untouched first visit, a lightweight spatial preview sits behind the tutorial choice and the interactive Three.js renderer chunk is downloaded and initialized only after the visitor chooses a path; returning visits initialize 3D directly. A paused 3D scene renders on demand; continuous animation runs only while the clock is playing with the catalog cloud visible. The renderer does not retain its drawing buffer.
+The application opens in 3D and falls back to 2D if WebGL is unavailable or lost. On an untouched first visit, a lightweight spatial preview sits behind the tutorial choice and the interactive Three.js renderer chunk is downloaded and initialized only after the visitor chooses a path; returning visits initialize 3D directly. An idle paused 3D scene renders on demand. Continuous drawing runs for the playing catalog cloud, or for backend exact-state playback and pointer/wheel interaction as described below. The renderer does not retain its drawing buffer.
 
 ## Runtime point budgets
 
@@ -55,6 +55,35 @@ Physical 12 GB Android, 16/32 GB desktop, 60-second frame targets, 30 FPS fallba
 decode/tile-latency feedback and full native/GPU memory measurements remain
 pending. Web exact-state and iOS adaptive control are not implemented by this
 Android controller. See [MOBILE.md](./MOBILE.md) for scope and runtime checks.
+
+## Web exact-state display controller
+
+The verified backend layer now has a separate controller from the approximate
+catalog cloud. It reuses the documented device/mode candidate envelopes, keeps
+2D and 3D counts independent across mode switches, and splits **capacity**, not
+the available sample, between comparison panes. The same selected-reference /
+focus-priority source prefix is used in both frames. All source states, audit
+rows, gaps and exact requests are retained regardless of the display limit.
+The Deck reports verified received states separately from drawn states; a
+missing reference can therefore yield zero displayed but nonzero exact states.
+Budget-only changes do not auto-reframe the 3D camera; initial framing retains
+the full source extent. Fixed-pixel point materials remain unchanged.
+
+During playback or pointer/wheel interaction, the mounted renderer draws and
+reports callback intervals. Hidden/idle rendering contributes no headroom
+evidence. The 2D loop reuses uploaded buffers, rather than re-uploading static
+geometry on each measured draw. Windows discard two warm-up intervals, retain
+12–120 samples over roughly one second, and expose p50/p95 and estimated missed
+60 Hz slots. Two slow windows (p95 > 18.5 ms or missed slots > 5%) reduce the
+limit by about 25%; severe pressure (p95 > 33.3 ms or > 20%) reduces after one.
+Four fast exercised windows (p95 <= 16.7 ms, < 2%) grow about 12.5%, with a
+five-second cooldown. Even fixed-quality selection can lower under pressure.
+
+These metrics are renderer callback intervals, not GPU queries or compositor
+presentation timestamps. JS/native/GPU memory, decode queue and tile-latency
+feedback, thermal sensing and explicit 30 FPS degraded mode remain incomplete.
+Synthetic policy tests and desktop/mobile-viewport browser lifecycle tests do
+not establish 12/16/32 GB physical-device performance or new exact-body coverage.
 
 ## Data and delivery budgets
 

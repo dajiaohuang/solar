@@ -1,6 +1,14 @@
 import type { TranslationKey } from './en'
 
 export const zh: Record<TranslationKey, string> = {
+  exactDisplayCount: '已验证状态：已显示 / 已计算',
+  exactDisplayUnshown: '未显示',
+  exactDisplayPolicy: '仅显示候选上限：已选参考天体及焦点优先，其后按来源顺序；保留科学状态和缺口。比较视图共享上限',
+  exactDisplayInitial: '初始候选预算，不代表设备性能保证。',
+  exactDisplaySlow: '渲染回调耗时偏高，已降低显示预算。',
+  exactDisplayHeadroom: '持续测得性能余量，已增加显示预算。',
+  exactDisplayTiming: '渲染回调间隔和估计错过的 60 Hz 帧槽（非 GPU/合成器计时）',
+  exactDisplayPending: '等待测量；静止及隐藏画面不能证明性能余量。',
   sourceCoverageTitle: '全来源覆盖审计',
   sourceCoverageBoundary: '统计固定来源集，不是当前画面。多条来源记录可能是同一天体的别名；未映射不代表该天体不存在轨道资料。',
   sourceCoverageLoad: '加载覆盖摘要',

@@ -35,6 +35,9 @@ test.describe('backend coverage evidence', () => {
     await expect(ledger.locator('dl > div').filter({ hasText: 'Reference-relative positions' }).locator('dd')).toHaveText('0')
     await expect(ledger.locator('dl > div').filter({ hasText: 'Exact state available' }).locator('dd')).toHaveText('2')
     await expect(page.locator('.frame-view [data-position-count]:not([data-position-count="0"])')).toHaveCount(0)
+    await expect(page.getByTestId('exact-display-budget')).toHaveAttribute('data-computed', '2')
+    await expect(page.getByTestId('exact-display-budget')).toHaveAttribute('data-displayed', '0')
+    await expect(page.getByTestId('exact-display-budget')).toContainText('Not displayed: 2')
   })
 })
 

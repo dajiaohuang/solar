@@ -207,7 +207,9 @@ smoke additionally exercises real GL callbacks on three real states, gesture
 render-mode transitions and an injected memory callback through the normal
 lifecycle API. None establishes 12 GB device smoothness, physical thermal
 behavior, total native/GPU memory or 60-second target-load acceptance. Native
-iOS and Web exact-state adaptive controllers remain separate unfinished work.
+iOS exact-state adaptive control remains unfinished. Web now has its own
+display-only controller; see [PERFORMANCE.md](./PERFORMANCE.md). Neither client
+claims full memory/thermal/latency feedback or physical-device SLO acceptance.
 
 - The first native screen is an Observation Deck for current-state evidence: selected body IDs, exact values, provenance and explicit gaps.
 - iOS starts in native 3D and can switch to native 2D. The 3D and 2D budgets are independent; native 3D does not shrink or fade states solely because of distance.

@@ -12,6 +12,8 @@ type Props = {
   referenceBody: CelestialBody
   trajectories: TrajectorySample[]
   currentPositions: RenderedBodyPosition[]
+  stateFitKey?: string
+  stateFitRadius?: number
   detailBodyIds?: string[]
   onReferenceChange?: (bodyId: string) => void
   onBodySelect?: (bodyId: string) => void
@@ -137,6 +139,8 @@ export function TrajectoryCanvas3D({
   referenceBody,
   trajectories,
   currentPositions,
+  stateFitKey,
+  stateFitRadius,
   detailBodyIds,
   onReferenceChange,
   onBodySelect,
@@ -489,11 +493,11 @@ export function TrajectoryCanvas3D({
     // user camera moves during clock playback while keeping story/catalog
     // scenes (including outbound spacecraft paths) discoverable.
     const catalogReady = catalogDrawCount > 0 && catalogPositions3D.length >= 3
-    const fitKey = `${referenceBody.id}|${[...bodyPositions.keys()].sort().join(',')}|${trajectories.map((item) => `${item.body.id}:${item.points3D?.length ?? 0}`).sort().join(',')}|${catalogReady ? catalogFitKey : ''}|${resetViewKey}`
+    const fitKey = `${referenceBody.id}|${stateFitKey ?? [...bodyPositions.keys()].sort().join(',')}|${trajectories.map((item) => `${item.body.id}:${item.points3D?.length ?? 0}`).sort().join(',')}|${catalogReady ? catalogFitKey : ''}|${resetViewKey}`
     if (fitKeyRef.current !== fitKey) {
       fitKeyRef.current = fitKey
       fitGenerationRef.current += 1
-      let radius = 0
+      let radius = stateFitRadius ?? 0
       let nearest = Infinity
       for (const item of bodyPositions.values()) {
         if (item.position3D) {
@@ -555,7 +559,7 @@ export function TrajectoryCanvas3D({
     const container = containerRef.current
     if (container) updateCameraData(container, resources, appliedZoomRef.current, fitGenerationRef.current)
     resources.renderer.render(resources.scene, resources.camera)
-  }, [catalogDrawCount, catalogFitKey, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z, catalogPositions3D, catalogRecords.length, currentPositions, detailBodyIds, lagrangePoints, referenceBody, resetViewKey, showEcliptic, showGlow, showSaturnRings, trajectories, zoomLevel])
+  }, [catalogDrawCount, catalogFitKey, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z, catalogPositions3D, catalogRecords.length, currentPositions, detailBodyIds, lagrangePoints, referenceBody, resetViewKey, showEcliptic, showGlow, showSaturnRings, stateFitKey, stateFitRadius, trajectories, zoomLevel])
 
   useEffect(() => {
     const resources = resourcesRef.current
