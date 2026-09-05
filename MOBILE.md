@@ -54,6 +54,16 @@ tile hashes, row ordering, manifest identities and exact/missing counts. The CI
 SPK in that first check is explicitly synthetic: this proves wire interoperability, not astronomical
 accuracy or live native networking.
 
+The default synthetic fixture covers four request paths: an operational catalog
+target, an operational inventory alias, an inventory audit-epoch snapshot and
+an unknown ID. The first two must retain the selected SPK segment window even
+when catalog summary validity is `[0,0]`; the snapshot is valid only at audit
+ET 500, not throughout its wider evidence interval. The generator rejects
+out-of-window exact rows, approximate or inconsistent status bits, nonfinite
+states and nonzero missing-state values before publishing a golden fixture.
+These cases run through the existing shared decoder checks; they do not add
+real celestial coverage or establish physical accuracy.
+
 The iOS workflow also runs `node scripts/ios-native-smoke.mjs` on macOS. This
 runtime gate stages and hashes the real full SPK profile, checks an
 Earth/Moon/Sun plus missing-ID golden in Go, Web and Swift, and launches the
