@@ -1,5 +1,27 @@
 import Foundation
 
+/// A preset updates the reference and starts a request in one action. Its
+/// deferred reference-change callback must not cancel that matching request.
+struct NativeObservationRequestGate {
+    struct Token: Equatable { let generation: UInt64; let reference: String }
+    private var generation: UInt64 = 0
+    private var active: Token?
+
+    mutating func begin(reference: String) -> Token {
+        generation &+= 1
+        let token = Token(generation: generation, reference: reference)
+        active = token
+        return token
+    }
+
+    mutating func cancel() { active = nil }
+    func isCurrent(_ token: Token) -> Bool { active == token }
+    func shouldCancel(reference: String) -> Bool {
+        guard let active = active else { return false }
+        return active.reference != reference
+    }
+}
+
 struct NativeStateFrame: Sendable {
     let identity = UUID()
     let epochJd: Double

@@ -47,8 +47,22 @@ swiftc ios/App/App/StateTileDecoder.swift ios/App/App/StateTileCache.swift ios/A
 
 移动端 CI 通过实际 Go 目录与 HTTP handler 生成二进制瓦片，再分别使用生产
 Web 解码器和对应的 Java 或 Swift 解码器读取同一批文件，比较六个 Float64
-分量的位模式、瓦片哈希、行顺序、清单身份及 exact/missing 数量。CI 使用的
+分量的位模式、瓦片哈希、行顺序、清单身份及 exact/missing 数量。第一项检查使用的
 SPK 明确为合成测试数据：它证明协议互通，不证明天文精度或原生实时网络链路。
+
+iOS 工作流还在 macOS 上执行 `node scripts/ios-native-smoke.mjs`。新增运行门禁
+会校验并暂存真实完整版 SPK，在 Go、Web、Swift 间验证地球/月球/太阳与一个
+缺失 ID 的基准，并通过 XCTest 启动原生 App，连接本机回环 HTTPS Go 后端。
+覆盖预设加载、3D/2D 投影数量、在线重载与已校验瓦片缓存复用、后台恢复、教程
+及未配置后端的提示。测试创建独立模拟器，只向该设备加入临时 CA，保持生产
+TLS 校验开启；结束后移除本次创建的设备，校验临时目录的真实路径后清理，私钥
+不上传为产物。从仓库
+根目录运行，需要 Node、Go、OpenSSL、Xcode 及已安装的 iPhone 模拟器运行时。
+
+结果、HTTPS 请求计数、日志与包含截图的 XCTest 结果保存在
+`build/ios-native-smoke/` 和对应 CI 产物中，不覆盖旧结果。该门禁刚加入，
+**必须等对应提交的 CI 成功后才能声明通过**；它不代表真机帧率、完整离线能力
+或原生全功能对等。上面的历史构建证据仍只对应其原提交。
 
 本地复现时，将 `SOLAR_STATE_TILE_FIXTURE_DIR` 设置为仓库外新的或空的绝对目录
 （PowerShell 使用 `$env:SOLAR_STATE_TILE_FIXTURE_DIR`，POSIX shell 使用

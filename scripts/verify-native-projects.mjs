@@ -19,6 +19,12 @@ for (const source of ['NativeObservationDeck.swift', 'StateTileDecoder.swift', '
   if (!project.includes(`${source} in Sources`)) throw new Error(`iOS source is not in its build target: ${source}`)
   await read(`ios/App/App/${source}`)
 }
+if (!project.includes('productType = "com.apple.product-type.bundle.ui-testing"') ||
+    !project.includes('ObservationUITests.swift in Sources') ||
+    !scheme.includes('BuildableName="ObservationUITests.xctest"')) {
+  throw new Error('Native iOS UI tests must remain wired into the App scheme')
+}
+await read('ios/App/ObservationUITests/ObservationUITests.swift')
 const definitions = new Set([...project.matchAll(/^\s*([A-F0-9]{24})\s+(?:\/\*.*?\*\/\s*)?=\s*\{/gm)].map(match => match[1]))
 for (const match of project.matchAll(/\b[A-F0-9]{24}\b/g)) {
   if (!definitions.has(match[0])) throw new Error(`Dangling Xcode project reference: ${match[0]}`)

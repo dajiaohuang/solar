@@ -139,6 +139,16 @@ jobs:
           -derivedDataPath build/ios-derived-data
           CODE_SIGNING_ALLOWED=NO
           build
+      - name: Run native iOS UI against real SPK over HTTPS
+        run: node scripts/ios-native-smoke.mjs
+      - name: Retain native runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: solar-atlas-ios-native-smoke
+          path: build/ios-native-smoke/
+          if-no-files-found: warn
+          retention-days: 14
       - uses: actions/upload-artifact@v6
         with:
           name: solar-atlas-ios-simulator

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B11000010000000000000001 /* ObservationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11000020000000000000001 /* ObservationUITests.swift */; };
 		B10900010000000000000005 /* NativeStateProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10900020000000000000005 /* NativeStateProjection.swift */; };
 		B10900010000000000000001 /* NativeObservationDeck.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10900020000000000000001 /* NativeObservationDeck.swift */; };
 		B10900010000000000000002 /* StateTileDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10900020000000000000002 /* StateTileDecoder.swift */; };
@@ -20,6 +21,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		B11000020000000000000001 /* ObservationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObservationUITests.swift; sourceTree = "<group>"; };
+		B11000020000000000000002 /* ObservationUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ObservationUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10900020000000000000005 /* NativeStateProjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeStateProjection.swift; sourceTree = "<group>"; };
 		B10900020000000000000001 /* NativeObservationDeck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeObservationDeck.swift; sourceTree = "<group>"; };
 		B10900020000000000000002 /* StateTileDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateTileDecoder.swift; sourceTree = "<group>"; };
@@ -49,6 +52,7 @@
 			isa = PBXGroup;
 			children = (
 				504EC3061FED79650016851F /* App */,
+				B11000030000000000000001 /* ObservationUITests */,
 				504EC3051FED79650016851F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -57,6 +61,7 @@
 			isa = PBXGroup;
 			children = (
 				504EC3041FED79650016851F /* App.app */,
+				B11000020000000000000002 /* ObservationUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -79,9 +84,34 @@
 			path = App;
 			sourceTree = "<group>";
 		};
+		B11000030000000000000001 /* ObservationUITests */ = {
+			isa = PBXGroup;
+			children = (B11000020000000000000001 /* ObservationUITests.swift */);
+			path = ObservationUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
+/* Begin PBXContainerItemProxy section */
+		B11000040000000000000001 = {isa = PBXContainerItemProxy; containerPortal = 504EC2FC1FED79650016851F; proxyType = 1; remoteGlobalIDString = 504EC3031FED79650016851F; remoteInfo = App; };
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		B11000040000000000000002 = {isa = PBXTargetDependency; target = 504EC3031FED79650016851F; targetProxy = B11000040000000000000001; };
+/* End PBXTargetDependency section */
+
 /* Begin PBXNativeTarget section */
+		B11000050000000000000001 /* ObservationUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B11000060000000000000003;
+			buildPhases = (B11000070000000000000001);
+			buildRules = ();
+			dependencies = (B11000040000000000000002);
+			name = ObservationUITests;
+			productName = ObservationUITests;
+			productReference = B11000020000000000000002;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		504EC3031FED79650016851F /* App */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 504EC3161FED79650016851F /* Build configuration list for PBXNativeTarget "App" */;
@@ -110,6 +140,7 @@
 				LastSwiftUpdateCheck = 0920;
 				LastUpgradeCheck = 0920;
 				TargetAttributes = {
+					B11000050000000000000001 = {CreatedOnToolsVersion = 26.0; TestTargetID = 504EC3031FED79650016851F; };
 					504EC3031FED79650016851F = {
 						CreatedOnToolsVersion = 9.2;
 						LastSwiftMigration = 1100;
@@ -133,6 +164,7 @@
 			projectRoot = "";
 			targets = (
 				504EC3031FED79650016851F /* App */,
+				B11000050000000000000001 /* ObservationUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -151,6 +183,12 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		B11000070000000000000001 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (B11000010000000000000001 /* ObservationUITests.swift in Sources */);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		504EC3001FED79650016851F /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -179,6 +217,32 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		B11000060000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.dajiaohuang.solaratlas.ObservationUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = App;
+			};
+			name = Debug;
+		};
+		B11000060000000000000002 /* Release */ = {
+				isa = XCBuildConfiguration;
+				buildSettings = {
+					GENERATE_INFOPLIST_FILE = YES;
+					IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+					PRODUCT_BUNDLE_IDENTIFIER = io.github.dajiaohuang.solaratlas.ObservationUITests;
+					PRODUCT_NAME = "$(TARGET_NAME)";
+					SWIFT_VERSION = 5.0;
+					TARGETED_DEVICE_FAMILY = "1,2";
+					TEST_TARGET_NAME = App;
+				};
+				name = Release;
+		};
 		504EC3141FED79650016851F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -332,6 +396,12 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		B11000060000000000000003 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (B11000060000000000000001, B11000060000000000000002);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		504EC2FF1FED79650016851F /* Build configuration list for PBXProject "App" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

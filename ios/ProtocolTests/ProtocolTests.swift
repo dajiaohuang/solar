@@ -69,6 +69,18 @@ struct ProtocolTests {
     }
 
     static func main() async throws {
+        var requests = NativeObservationRequestGate()
+        let oldRequest = requests.begin(reference: "naif:10")
+        let presetRequest = requests.begin(reference: "naif:399")
+        // SwiftUI reports the reference change after the preset action has
+        // already started its matching load; it must remain current.
+        precondition(!requests.shouldCancel(reference: "naif:399"))
+        precondition(requests.isCurrent(presetRequest) && !requests.isCurrent(oldRequest))
+        precondition(requests.shouldCancel(reference: "naif:499"))
+        requests.cancel()
+        precondition(!requests.isCurrent(presetRequest))
+        let nextRequest = requests.begin(reference: "naif:399")
+        precondition(requests.isCurrent(nextRequest) && !requests.isCurrent(presetRequest))
         if let directory = ProcessInfo.processInfo.environment["SOLAR_STATE_TILE_FIXTURE_DIR"] {
             try golden(directory: directory)
         }

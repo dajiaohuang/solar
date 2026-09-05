@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
-import { assertDocumentedVersion, markdownAnchors, markdownLinks, validateRepository } from '../../scripts/validate-repository.mjs'
+import { assertDocumentedVersion, iosApplicationIdentity, markdownAnchors, markdownLinks, validateRepository } from '../../scripts/validate-repository.mjs'
 import { changedPaths, pullRequestQualityPasses, requiresFullWebQuality, requiresNativeQuality } from '../../scripts/pr-quality-contract.mjs'
 
 describe('repository contract', () => {
@@ -111,6 +111,16 @@ describe('repository contract', () => {
     } finally {
       rmSync(repository, { recursive: true, force: true })
     }
+  })
+
+  it('checks every application configuration without confusing the UI-test bundle with the app', () => {
+    const project = readFileSync('ios/App/App.xcodeproj/project.pbxproj', 'utf8')
+    expect(iosApplicationIdentity(project)).toEqual({ ids: ['io.github.dajiaohuang.solaratlas', 'io.github.dajiaohuang.solaratlas'], versions: ['0.11.0', '0.11.0'] })
+    const changedApp = project.replace('PRODUCT_BUNDLE_IDENTIFIER = io.github.dajiaohuang.solaratlas;', 'PRODUCT_BUNDLE_IDENTIFIER = wrong.app;')
+    expect(iosApplicationIdentity(changedApp).ids).toContain('wrong.app')
+    const changedTest = project.replaceAll('io.github.dajiaohuang.solaratlas.ObservationUITests', 'different.test.bundle')
+    expect(iosApplicationIdentity(changedTest)).toEqual(iosApplicationIdentity(project))
+    expect(() => iosApplicationIdentity(project.replace('productType = "com.apple.product-type.application";', 'productType = "invalid";'))).toThrow('one native iOS application')
   })
 
   it('runs native consumers on Go-generated files without silently skipping golden checks', () => {

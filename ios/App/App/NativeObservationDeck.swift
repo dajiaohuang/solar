@@ -8,24 +8,28 @@ final class ObservationModel: ObservableObject {
     @Published var message = "Configure your full-version backend in Advanced to load verified states."
     @Published var loading = false
     private var request: Task<Void, Never>?
-    private var generation = 0
+    private var requestGate = NativeObservationRequestGate()
     private var cache: StateTileCache?
 
     func cancel() {
-        generation += 1
+        requestGate.cancel()
         request?.cancel(); request = nil
         if loading { message = "Loading cancelled. No partial observation was published." }
         loading = false
     }
 
-    func load(address: String, ids: [String], epoch: String) {
+    func referenceChanged(_ reference: String) {
+        if requestGate.shouldCancel(reference: reference) { cancel() }
+    }
+
+    func load(address: String, ids: [String], epoch: String, reference: String) {
         cancel(); frame = nil
         guard let url = URL(string: address.trimmingCharacters(in: .whitespacesAndNewlines)),
               let jd = Double(epoch), jd.isFinite else {
             message = "Enter a backend HTTPS address and a finite Julian date in TDB."
             return
         }
-        let current = generation
+        let current = requestGate.begin(reference: reference)
         loading = true; message = "Loading verified states…"
         request = Task {
             do {
@@ -34,15 +38,15 @@ final class ObservationModel: ObservableObject {
                 let service = try StateTileService(base: url, cache: cache)
                 let result = try await service.load(ids: ids, epochJd: jd)
                 try Task.checkCancellation()
-                guard current == generation else { return }
+                guard requestGate.isCurrent(current) else { return }
                 frame = result
-                let exact = result.exact.filter { $0 }.count
+                let exact = result.exact.reduce(0) { $0 + ($1 ? 1 : 0) }
                 message = "\(exact) verified states · \(result.exact.count - exact) data gaps"
             } catch {
-                guard current == generation else { return }
+                guard requestGate.isCurrent(current) else { return }
                 message = error.localizedDescription
             }
-            if current == generation { loading = false; request = nil }
+            if requestGate.isCurrent(current) { loading = false; request = nil }
         }
     }
 }
@@ -81,7 +85,7 @@ struct ObservationDeckView: View {
         let supplied = customIDs.split { $0.isWhitespace || $0 == "," }.map(String.init)
         var seen = Set<String>()
         let ids = ((supplied.isEmpty ? preset.ids : supplied) + [reference]).filter { !$0.isEmpty && seen.insert($0).inserted }
-        model.load(address: address, ids: ids, epoch: epoch)
+        model.load(address: address, ids: ids, epoch: epoch, reference: reference)
     }
 
     var body: some View {
@@ -95,11 +99,13 @@ struct ObservationDeckView: View {
                             Spacer()
                             Button("Explore directly") { onboarded = true }
                         }
+                        .buttonStyle(.borderless)
                     }
                     NativeStateViewport(frame: model.frame, reference: reference, mode3D: mode3D)
                         .frame(height: 280)
                         .accessibilityLabel(mode3D ? "Three-dimensional verified states" : "Two-dimensional verified states")
                     Text(model.message).font(.callout).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("observation.status")
                     if let frame = model.frame {
                         Text("TDB JD \(String(format: "%.9f", frame.epochJd)) · ECLIPJ2000")
                             .font(.caption).textSelection(.enabled)
@@ -110,9 +116,12 @@ struct ObservationDeckView: View {
                         } label: {
                             Label(model.loading ? "Cancel" : "Load observation", systemImage: model.loading ? "xmark.circle" : "arrow.clockwise")
                         }
+                        .accessibilityIdentifier("observation.load")
                         Spacer()
                         Button(mode3D ? "Switch to 2D" : "Switch to 3D") { mode3D.toggle() }
+                            .accessibilityIdentifier("observation.mode")
                     }
+                    .buttonStyle(.borderless)
                 }
                 Section("Preset scenes") {
                     ForEach(NativePreset.all) { item in
@@ -126,6 +135,7 @@ struct ObservationDeckView: View {
                                 if selected == item.id { Image(systemName: "checkmark").accessibilityLabel("Selected") }
                             }
                         }
+                        .accessibilityIdentifier("preset.\(item.id)")
                     }
                 }
                 DisclosureGroup("Advanced") {
@@ -137,6 +147,7 @@ struct ObservationDeckView: View {
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
                     TextField("Body IDs, separated by commas", text: $customIDs, axis: .vertical)
                         .textInputAutocapitalization(.never).autocorrectionDisabled().lineLimit(2...5)
+                        .accessibilityIdentifier("observation.ids")
                     Text("Enter audited catalog or source IDs. Requests are partitioned without dropping IDs. The reference body must have a verified state at the same epoch.")
                         .font(.caption).foregroundStyle(.secondary)
                     Button("Open tutorial") { tutorial = true }
@@ -144,6 +155,7 @@ struct ObservationDeckView: View {
                         Text("Catalog SHA-256: \(frame.catalogHash)").font(.caption).textSelection(.enabled)
                     }
                 }
+                .accessibilityIdentifier("observation.advanced")
                 if let frame = model.frame {
                     DisclosureGroup("State evidence and data gaps (\(frame.metadata.count))") {
                         ForEach(frame.metadata.indices, id: \.self) { index in
@@ -173,7 +185,7 @@ struct ObservationDeckView: View {
                 }
             }
             .onChange(of: scenePhase) { phase in if phase != .active { model.cancel() } }
-            .onChange(of: reference) { _ in model.cancel() }
+            .onChange(of: reference) { value in model.referenceChanged(value) }
             .onDisappear { model.cancel() }
         }
     }
@@ -216,6 +228,7 @@ private struct NativeStateViewport: View {
             if !positions.isEmpty {
                 Text("\(positions.count)/\(projection.candidates) displayed · \(mode3D ? "250,000" : "500,000") display limit")
                     .font(.caption2).foregroundStyle(.white).padding(8).background(.black.opacity(0.7))
+                    .accessibilityIdentifier("observation.displayed")
             }
         }.clipShape(RoundedRectangle(cornerRadius: 12))
         .task(id: key) {

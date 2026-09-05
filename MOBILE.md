@@ -49,8 +49,27 @@ The mobile CI jobs generate binary tiles using the actual Go catalog and HTTP
 handlers, then run the production Web decoder and the corresponding Java or
 Swift decoder against those files. They compare all six Float64 bit patterns,
 tile hashes, row ordering, manifest identities and exact/missing counts. The CI
-SPK is explicitly synthetic: this proves wire interoperability, not astronomical
+SPK in that first check is explicitly synthetic: this proves wire interoperability, not astronomical
 accuracy or live native networking.
+
+The iOS workflow also runs `node scripts/ios-native-smoke.mjs` on macOS. This
+new runtime gate stages and hashes the real full SPK profile, checks an
+Earth/Moon/Sun plus missing-ID golden in Go, Web and Swift, and launches the
+native app through XCTest against a loopback HTTPS Go backend. It checks preset
+loading, 3D/2D projection counts, online reload with verified tile-cache reuse,
+background/foreground recovery, the tutorial and an unconfigured backend. It
+creates a dedicated simulator and trusts a temporary CA only inside that device;
+production TLS validation stays enabled. The owned device is removed afterward,
+and private keys are excluded from artifacts. The owned temporary data directory
+is removed after its resolved path is checked. Run from the repository
+root with Node, Go, OpenSSL, Xcode and an installed iPhone simulator runtime.
+
+Results, HTTPS request counts, logs and screenshot-bearing XCTest results are
+retained under `build/ios-native-smoke/` and in the matching CI artifact. Existing
+results are not overwritten. This gate is newly added and remains **unverified
+until its exact CI run succeeds**; it is not a real-device FPS, complete offline,
+or full native feature-parity test. The build-only evidence above remains tied
+to its original commit.
 
 To repeat this locally, set `SOLAR_STATE_TILE_FIXTURE_DIR` to an absolute new or
 empty directory outside the repository (`$env:SOLAR_STATE_TILE_FIXTURE_DIR` in
