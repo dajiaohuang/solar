@@ -1,4 +1,5 @@
 import { expect, test } from './fixtures'
+import satelliteCatalog from '../../src/data/satelliteCatalog.json' with { type: 'json' }
 
 test('full-Web fixture rejects duplicate IDs and marks unknown identities missing', async ({ page }) => {
   await page.goto('./?v=4&lang=en')
@@ -56,4 +57,45 @@ test('full-Web fixture rejects duplicate IDs and marks unknown identities missin
   expect(result.noInventoryIdentityBody.missingReason).toEqual(['unknown-identity'])
   expect(result.noInventoryIdentityBody.validityPresent).toEqual([false])
   expect(result.noInventoryIdentityBody.evidenceWindowPresent).toEqual([false])
+})
+
+test('keeps a slow 294-body playing request alive and eventually publishes', async ({ page }) => {
+  test.setTimeout(30_000)
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  const ids = ['saturn', ...satelliteCatalog.bodies.filter(body => body.parentId === 'saturn').map(body => body.naifId === 606 ? 'titan' : body.id)]
+  const requests: string[] = []
+  let completedResponses = 0
+  const requestTimes: number[] = []
+  const responseTimes: number[] = []
+  page.on('request', request => {
+    if (request.url().endsWith('/solar-test-api/v1/current-states')) { requests.push(request.url()); requestTimes.push(Date.now()) }
+  })
+  page.on('response', response => {
+    if (response.url().endsWith('/solar-test-api/v1/current-states') && response.ok() && response.headers()['x-solar-fixture-current-state'] === 'complete') { completedResponses += 1; responseTimes.push(Date.now()) }
+  })
+  const query = new URLSearchParams({ v: '4', lang: 'en', speed: '30', view: '3d', ref: 'saturn', bodies: ids.join(','), jd: '2461287.5', history: '1', samples: '24', 'slow-current-states': '1' })
+  await page.goto(`?${query}`)
+  const summary = page.getByTestId('ephemeris-status').locator('summary')
+  await expect(summary).toContainText('293/294', { timeout: 15_000 })
+  await expect(summary).not.toContainText('Loading', { timeout: 5_000 })
+  const baselineRequests = requests.length
+  const baselineCompletedResponses = completedResponses
+  expect(baselineCompletedResponses).toBe(baselineRequests)
+  await page.locator('.simulation-bar .primary-button').click()
+  // The fixture holds each response for 1.2s, longer than the 500ms wall
+  // cadence. A bounded sampler must let the active request finish instead of
+  // creating an unbounded stream of aborted requests.
+  await expect.poll(() => completedResponses, { timeout: 5_000 }).toBeGreaterThan(baselineCompletedResponses)
+  const firstPlayingRequest = baselineRequests
+  const firstPlayingResponse = baselineCompletedResponses
+  expect(responseTimes[firstPlayingResponse] - requestTimes[firstPlayingRequest]).toBeGreaterThanOrEqual(1_000)
+  // The initial paused request and the first playing request have completed;
+  // completion may release exactly one newest-sample request, but no further
+  // 500ms tick may start another while that request is active.
+  await expect.poll(() => requests.length, { timeout: 3_000 }).toBe(baselineRequests + 2)
+  await expect.poll(() => completedResponses, { timeout: 5_000 }).toBeGreaterThan(baselineCompletedResponses + 1)
+  await expect.poll(() => requests.length, { timeout: 3_000 }).toBe(baselineRequests + 3)
+  expect(completedResponses).toBe(baselineCompletedResponses + 2)
+  await page.locator('.simulation-bar .primary-button').click()
+  await expect(summary).not.toContainText('Loading', { timeout: 10_000 })
 })

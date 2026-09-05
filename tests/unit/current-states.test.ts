@@ -10,7 +10,7 @@ import {
   validateCapabilities,
   validateCurrentStates,
 } from '../../src/lib/currentStates'
-import { createLatestOnlyGate, currentStateRequestToken, fetchCurrentStates, loadAndPublishCurrentStateFrames, resetCurrentStatesCaches, sampleCurrentStateEpoch } from '../../src/hooks/useCurrentStates'
+import { createLatestOnlyGate, currentStateRequestToken, fetchCurrentStates, loadAndPublishCurrentStateFrames, resetCurrentStatesCaches, sampleCurrentStateEpoch, shouldStartCurrentStateSample } from '../../src/hooks/useCurrentStates'
 import { bodyPositionOrNull } from '../../src/lib/ephemeris'
 import type { CelestialBody } from '../../src/types'
 
@@ -68,6 +68,16 @@ describe('current-state adapter', () => {
     expect(currentStateRequestToken(playing)).not.toBe(currentStateRequestToken({ ...playing, seekRevision: 3 }))
     const paused = { isPlaying: false, sample: 4, epochUtcJd: epochUtc, seekRevision: 2 }
     expect(currentStateRequestToken(paused)).not.toBe(currentStateRequestToken({ ...paused, epochUtcJd: epochUtc + 0.25 }))
+  })
+
+  it('does not restart a playing request for every 500ms sample while it is active', () => {
+    // At 30 simulation days/second a 125ms render tick changes JD many times,
+    // but the wall-clock sampler records those ticks until the large request
+    // completes. Completion releases one request for the newest sample.
+    expect(shouldStartCurrentStateSample({ isPlaying: true, requestActive: true, latestSample: 4, requestedSample: 0 })).toBe(false)
+    expect(shouldStartCurrentStateSample({ isPlaying: true, requestActive: false, latestSample: 4, requestedSample: 0 })).toBe(true)
+    expect(shouldStartCurrentStateSample({ isPlaying: true, requestActive: false, latestSample: 4, requestedSample: 4 })).toBe(false)
+    expect(shouldStartCurrentStateSample({ isPlaying: false, requestActive: false, latestSample: 5, requestedSample: 4 })).toBe(false)
   })
 
   it('fails closed on unknown API, audit, units, source and column mismatches', () => {

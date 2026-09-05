@@ -20,6 +20,11 @@ test('complete Saturn current positions remain independent of 3D trail budgets',
   await expect.poll(() => currentStateRequests.length).toBeGreaterThan(0)
   expect(currentStateRequests.every(request => request.ids.length <= 510 && request.precision === 'exact')).toBe(true)
   await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('293/294', { timeout: 90_000 })
+  // The paused clock should settle after one exact request even though the
+  // parent rebuilds selection arrays while the scene workers publish.
+  await expect.poll(() => currentStateRequests.length).toBe(1)
+  await page.waitForTimeout(750)
+  expect(currentStateRequests).toHaveLength(1)
   await expect(page.getByTestId('focus-layer-budget')).toContainText('160/294')
   expect(new URL(page.url()).searchParams.get('bodies')?.split(',')).toEqual(ids)
   expect(Number(await canvas.getAttribute('data-detail-count'))).toBeLessThanOrEqual(160)
@@ -461,6 +466,14 @@ test('replays 3D zoom and labels unsupported 2D-only controls truthfully', async
     await page.goto(`./?v=4&page=explorer&view=3d&zoom=${zoom}&layers=ecliptic,orbits,hill,soi&lang=en`)
     const canvas = page.getByTestId('trajectory-canvas-3d')
     await expect(canvas).toBeVisible({ timeout: 15_000 })
+    // Camera fit is derived from the final scene composition. Wait for the
+    // ephemeris and trajectory workers to finish before asserting the applied
+    // zoom/distance, so this tests readiness rather than a transient fit.
+    const status = page.getByTestId('ephemeris-status')
+    await expect(status.locator('summary')).not.toContainText('Loading', { timeout: 15_000 })
+    await expect(page.locator('.compute-progress')).toHaveCount(0, { timeout: 15_000 })
+    await expect(canvas).toHaveAttribute('data-fit-generation', /[1-9]\d*/, { timeout: 15_000 })
+    await expect(canvas).toHaveAttribute('data-applied-zoom', String(zoom), { timeout: 15_000 })
     await expect.poll(async () => Number(await canvas.getAttribute('data-camera-distance'))).toBeGreaterThan(0)
     distances.push(Number(await canvas.getAttribute('data-camera-distance')))
     captures.push(await canvas.screenshot())
