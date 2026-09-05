@@ -161,9 +161,29 @@ The 2026-09-06 local API 36 emulator run passed the two synthetic 50-row pages,
 explicit page selection and rejection of a changed inventory before any state
 plan. Its five directory requests are isolated from the real-SPK state/cache
 smoke. All 24 recorded implementation/test source hashes match the tested
-files; the source-panel screenshot was inspected. This is not yet an end-to-end
-test selecting real full-inventory records into the native renderer, a Chinese
-runtime UI check, or a physical-device performance result.
+files; the source-panel screenshot was inspected. This synthetic run is not a
+Chinese runtime UI check or a physical-device performance result.
+
+A separate local run selected the first 50 original source IDs from the pinned
+1,567,193-record inventory into the native deck. At TDB JD 2461287.5, adding the
+Sun reference produced 51 requests: 10 verified states and 41 explicit gaps.
+Both native 2D and 3D displayed the 10 states. Five real HTTPS requests verified
+the page, unchanged selected IDs, manifest, plan and tile; no synthetic responder
+served these paths. The 23,565-byte source page and 31,480-byte state tile were
+bounded; 25 recorded source hashes matched. The same 51-ID Go golden passed Web
+and Java Float64-bit checks. This proves this page's integration, not all-source
+exact coverage, an independent astronomy oracle, Swift parity or device FPS.
+
+To reproduce the optional real-directory case, set `SOLAR_ANDROID_INVENTORY_DIR`
+to an existing audited addressable inventory and `SOLAR_ANDROID_INVENTORY_SHA256`
+to the SHA-256 of its `manifest.json`, then run `node scripts/android-native-smoke.mjs`
+with the SDK/JDK/HTTPS toolchain described above and a new output directory.
+The retained run used inventory hash
+`bef21e3bc5820db0b70c24ad464262cb67df279f8d0a3e2b8731ca5ca9c39583` and
+full catalog hash `7e7fa1df8080b505abba52cc8ca9a4d8bd6d1c10d47d3e421953e7c1b8494257`.
+No source archive is fetched from the internet, rewritten or packaged into the app. Without both inventory
+inputs, the report explicitly marks this additional case `not-configured`;
+ordinary hosted native smoke alone does not prove real-directory selection.
 
 ### On-demand source coverage audit
 

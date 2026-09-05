@@ -178,6 +178,32 @@ public final class ObservationUITest {
             waitForText(containsString("Inventory changed; restart browsing"));
             onView(withTagValue(is((Object) "identity-toggle"))).perform(scrollTo(), click());
             onView(withTagValue(is((Object) "identity-records"))).check(matches(withText("")));
+            String realDirectory = args.getString("solarRealDirectory");
+            if (realDirectory != null) {
+                org.json.JSONObject expected = new org.json.JSONObject(new String(Base64.getDecoder().decode(realDirectory), StandardCharsets.UTF_8));
+                org.json.JSONArray sourceIds = expected.getJSONArray("sourceIds");
+                java.util.List<String> selected = new java.util.ArrayList<>();
+                for (int i = 0; i < sourceIds.length(); i++) selected.add(sourceIds.getString(i));
+                assertEquals("Real source page must contain 50 original IDs", 50, selected.size());
+                fill(BACKEND_HINT, backend + "/source-directory-real");
+                fill(EPOCH_HINT, Double.toString(expected.getDouble("epochJd")));
+                fill("Reference body ID", expected.getString("reference"));
+                onView(withTagValue(is((Object) "identity-toggle"))).perform(scrollTo(), click());
+                onView(withTagValue(is((Object) "identity-load"))).perform(scrollTo(), click());
+                waitForText(containsString("Source records: " + expected.getLong("totalRecords")));
+                onView(withTagValue(is((Object) "identity-records"))).check(matches(withText(containsString(expected.getString("inventoryHash")))));
+                panelScreenshot(scenario, "identity-summary", "source-directory-real.png");
+                onView(withTagValue(is((Object) "identity-select"))).perform(scrollTo(), click());
+                onView(withHint(IDS_HINT)).check(matches(withText(String.join(",", selected))));
+                onView(withText("Load observation")).perform(scrollTo(), click());
+                int exact = expected.getInt("exactCount"), missing = expected.getInt("missingCount");
+                waitForText(containsString(exact + " verified states - " + missing + " data gaps"));
+                waitForText(containsString("2D GPU points " + exact + "/" + exact + " (limit 25000)"));
+                viewportScreenshot(scenario, "source-directory-real-2d.png", exact);
+                onView(withText("Switch to 3D")).perform(scrollTo(), click());
+                waitForText(containsString("3D GPU points " + exact + "/" + exact + " (limit 25000)"));
+                viewportScreenshot(scenario, "source-directory-real-3d.png", exact);
+            }
             passed = true;
         } finally {
             try {
@@ -242,6 +268,10 @@ public final class ObservationUITest {
     }
 
     private static void viewportScreenshot(ActivityScenario<MainActivity> scenario, String name) throws Exception {
+        viewportScreenshot(scenario, name, 3);
+    }
+
+    private static void viewportScreenshot(ActivityScenario<MainActivity> scenario, String name, int exactPoints) throws Exception {
         // Release the text field's focus before scrolling; otherwise keyboard/
         // focus restoration can scroll the viewport back out of the screenshot.
         scenario.onActivity(activity -> {
@@ -279,9 +309,9 @@ public final class ObservationUITest {
                 }
                 // Sources may overlap in projection; this proves pixels were
                 // drawn, not three spatially distinct clusters or a FPS target.
-                // Three 6x6 points can cover at most108 pixels. An old screenshot
+                // Each 6x6 point can cover at most36 pixels. An old screenshot
                 // containing teal status text in this rectangle must not pass.
-                if (points >= 30 && points <= 108) { saveScreenshot(image, name); return; }
+                if (points >= 30 && points <= exactPoints * 36) { saveScreenshot(image, name); return; }
             } finally { image.recycle(); }
             SystemClock.sleep(100);
         } while (SystemClock.uptimeMillis() < deadline);

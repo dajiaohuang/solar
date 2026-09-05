@@ -12,6 +12,7 @@ import { certificates, command, verifyTraffic } from './ios-native-smoke.mjs'
 import { stageBackendProfile } from './stage-backend-profile.mjs'
 import { createNativeCoverageResponder, verifyNativeCoverageTraffic } from './native-coverage-fixture.mjs'
 import { createNativeIdentityResponder, verifyNativeIdentityTraffic } from './native-identity-fixture.mjs'
+import { pinnedNativeInventory, realDirectoryPrefix, realDirectoryScenario, verifyRealDirectoryTraffic } from './native-real-directory.mjs'
 
 const appId = 'io.github.dajiaohuang.solaratlas'
 const windows = process.platform === 'win32'
@@ -85,8 +86,9 @@ export async function androidNativeSmoke() {
   const deviceCommand = args => command(adb, ['-s', serial, ...args], { env })
   const assertOwned = async () => validateEmulatorIdentity(serial, await deviceCommand(['emu', 'avd', 'name']), name)
   try {
+    const inventory = await pinnedNativeInventory(process.env.SOLAR_ANDROID_INVENTORY_DIR, process.env.SOLAR_ANDROID_INVENTORY_SHA256)
     report.source = { commit: await command('git', ['rev-parse', 'HEAD']), files: {} }
-    for (const file of ['scripts/android-native-smoke.mjs', 'scripts/ios-native-smoke.mjs', 'scripts/native-coverage-fixture.mjs', 'scripts/native-identity-fixture.mjs',
+    for (const file of ['scripts/android-native-smoke.mjs', 'scripts/ios-native-smoke.mjs', 'scripts/native-coverage-fixture.mjs', 'scripts/native-identity-fixture.mjs', 'scripts/native-real-directory.mjs',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/MainActivity.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/NativeObservationDeck.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/NativeRenderBudget.java',
@@ -142,7 +144,8 @@ export async function androidNativeSmoke() {
     await deviceCommand(['shell', 'input', 'keyevent', '82'])
     await deviceCommand(['install', resolve('android/app/build/outputs/apk/debug/app-debug.apk')])
     await deviceCommand(['install', resolve('android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk')])
-    backend = ownedProcess(executable, ['-data-dir', join(temporary, 'data'), '-listen', '127.0.0.1:18790'], env, join(artifact, 'backend.log'))
+    backend = ownedProcess(executable, ['-data-dir', join(temporary, 'data'), '-listen', '127.0.0.1:18790',
+      ...(inventory ? ['-inventory-dir', inventory.directory] : [])], env, join(artifact, 'backend.log'))
     let ready = false
     for (let i = 0; i < 100; i++) {
       if (backend.spawnFailure) throw backend.spawnFailure
@@ -154,6 +157,8 @@ export async function androidNativeSmoke() {
       await new Promise(done => setTimeout(done, 100))
     }
     if (!ready) throw new Error('Owned Go backend did not serve the staged manifest')
+    const realScenario = inventory ? await realDirectoryScenario('http://127.0.0.1:18790', inventory) : null
+    report.sourceDirectory = realScenario
     const coverageReply = createNativeCoverageResponder()
     const identityReply = createNativeIdentityResponder()
     proxy = https.createServer({ key: await readFile(join(temporary, 'server.key')), cert: await readFile(join(temporary, 'server.crt')) }, (request, response) => {
@@ -164,8 +169,16 @@ export async function androidNativeSmoke() {
         response.writeHead(fixtureReply.status, { 'Content-Type': 'application/json', 'Content-Length': body.length, 'Cache-Control': 'no-store' })
         response.end(body); return
       }
-      const upstream = http.request({ hostname: '127.0.0.1', port: 18790, path: request.url, method: request.method, headers: request.headers }, incoming => {
-        const row = { method: request.method, path: request.url, status: incoming.statusCode, bytes: 0 }; traffic.push(row)
+      // Transparent test routing to the same real Go backend, never fixture data.
+      const isRealDirectory = Boolean(realScenario) && request.url.startsWith(realDirectoryPrefix)
+      const row = { method: request.method, path: request.url, status: 0, bytes: 0 }
+      if (isRealDirectory && request.method === 'POST') {
+        row.requestBody = ''
+        request.on('data', bytes => { row.requestBody += bytes.toString(); if (row.requestBody.length > 64 * 1024) request.destroy() })
+      }
+      const upstream = http.request({ hostname: '127.0.0.1', port: 18790,
+        path: isRealDirectory ? '/' + request.url.slice(realDirectoryPrefix.length) : request.url, method: request.method, headers: request.headers }, incoming => {
+        row.status = incoming.statusCode; traffic.push(row)
         response.writeHead(incoming.statusCode, incoming.headers)
         incoming.on('data', bytes => { row.bytes += bytes.length }); incoming.pipe(response)
       })
@@ -178,9 +191,11 @@ export async function androidNativeSmoke() {
     // validation remain unchanged; no root cert is installed on the host/device.
     const output = await command(adb, ['-s', serial, 'shell', 'am', 'instrument', '-w', '-r',
       '-e', 'class', `${appId}.ObservationUITest`, '-e', 'solarBackend', 'https://127.0.0.1:18791',
+      ...(realScenario ? ['-e', 'solarRealDirectory', Buffer.from(JSON.stringify(realScenario)).toString('base64')] : []),
       '-e', 'solarCaBase64', (await readFile(join(temporary, 'root.crt'))).toString('base64'), `${appId}.test/androidx.test.runner.AndroidJUnitRunner`],
     { env, log: join(artifact, 'instrumentation.log'), timeout: 240_000 })
-    verifyInstrumentation(output); verifyTraffic(traffic.filter(row => !row.path.startsWith('/coverage-fixture/') && !row.path.startsWith('/identity-fixture/')))
+    verifyInstrumentation(output); verifyTraffic(traffic.filter(row => !row.path.startsWith('/coverage-fixture/') && !row.path.startsWith('/identity-fixture/') && !row.path.startsWith(realDirectoryPrefix)))
+    report.realDirectoryUi = verifyRealDirectoryTraffic(traffic, realScenario)
     report.identityUi = verifyNativeIdentityTraffic(traffic)
     report.coverageUi = verifyNativeCoverageTraffic(traffic)
     report.status = 'passed'
