@@ -195,9 +195,14 @@ private final class NativeHTTPTransfer: NSObject, URLSessionDataDelegate, @unche
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+        guard let http = response as? HTTPURLResponse else {
             completionHandler(.cancel)
-            finish(.failure(StateTileFailure.invalid("Backend HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")))
+            finish(.failure(StateTileFailure.invalid("Backend HTTP response is invalid.")))
+            return
+        }
+        guard http.statusCode == 200 else {
+            completionHandler(.cancel)
+            finish(.failure(NativeHTTPStatusFailure(statusCode: http.statusCode)))
             return
         }
         let type = http.value(forHTTPHeaderField: "Content-Type")?.split(separator: ";").first?.trimmingCharacters(in: .whitespaces).lowercased()

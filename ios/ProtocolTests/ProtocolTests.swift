@@ -48,6 +48,34 @@ struct ProtocolTests {
         data.replaceSubrange(168..<200, with: bytes)
     }
 
+    static func coverageFixture() throws -> Data {
+        let hash = String(repeating: "a", count: 64)
+        let object: [String: Any] = [
+            "apiVersion": "solar.api/v1", "purpose": "source-identity-and-dependency-window-audit",
+            "reportSha256": hash, "catalogVersion": "fixture", "catalogManifestSha256": hash,
+            "inventoryManifestSha256": hash, "sourceSnapshotSha256": hash, "identityMappingSha256": hash,
+            "satelliteCatalogSha256": hash, "sourceBytesVerified": true, "profile": "full",
+            "auditEt": 500, "timeScale": "TDB seconds past J2000", "frame": "ECLIPJ2000",
+            "requestedWindow": ["startEt": 0, "endEt": 1000, "timeScale": "TDB seconds past J2000"],
+            "counts": ["sourceRecords": 10, "mappedSourceRecords": 3, "unresolvedSourceRecords": 7, "explicitNaifTargets": 2, "availableTargetsAtAuditEpoch": 2],
+            "windowCounts": ["dependencyCoveredTargets": 1, "targetsWithDependencyGaps": 1, "numericallyCertifiedWholeWindowTargets": NSNull()],
+            "unresolvedReasons": ["no-explicit-naif-mapping": 6, "unresolved-component": 1]
+        ]
+        return try JSONSerialization.data(withJSONObject: object)
+    }
+
+    static func coverageRejects(_ data: Data, manifest: Data, mutate: (inout [String: Any]) -> Void) throws {
+        var value = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        mutate(&value)
+        try rejectsCoverage(try JSONSerialization.data(withJSONObject: value), manifest: manifest)
+    }
+
+    static func rejectsCoverage(_ data: Data, manifest: Data) throws {
+        do { _ = try NativeCoverageReport(validating: data, catalogManifest: manifest) }
+        catch { return }
+        throw StateTileFailure.invalid("Malformed coverage report was accepted")
+    }
+
     static func rejects(_ data: Data, expected: TileExpectation = ProtocolTests.expected) throws {
         do {
             _ = try StateTileDecoder.decode(data, expected: expected)
@@ -69,6 +97,15 @@ struct ProtocolTests {
     }
 
     static func main() async throws {
+        let coverage = try coverageFixture()
+        let coverageManifest = try JSONSerialization.data(withJSONObject: ["apiVersion": "solar.api/v1", "catalogVersion": "fixture", "catalogManifestSha256": String(repeating: "a", count: 64), "inventoryManifestSha256": String(repeating: "a", count: 64)])
+        _ = try NativeCoverageReport(validating: coverage, catalogManifest: coverageManifest)
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["sourceBytesVerified"] = false }
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["windowCounts"] = ["dependencyCoveredTargets": 1, "targetsWithDependencyGaps": 1] }
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["counts"] = ["sourceRecords": 10, "mappedSourceRecords": 3, "unresolvedSourceRecords": 8, "explicitNaifTargets": 2, "availableTargetsAtAuditEpoch": 2] }
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["unresolvedReasons"] = ["Bad reason": 7] }
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["reportSha256"] = "not-a-hash" }
+        try coverageRejects(coverage, manifest: coverageManifest) { $0["counts"] = ["sourceRecords": 10, "mappedSourceRecords": 3, "unresolvedSourceRecords": 7, "explicitNaifTargets": 3, "availableTargetsAtAuditEpoch": 2] }
         var requests = NativeObservationRequestGate()
         let oldRequest = requests.begin(reference: "naif:10")
         let presetRequest = requests.begin(reference: "naif:399")
