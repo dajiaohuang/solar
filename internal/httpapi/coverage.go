@@ -68,11 +68,19 @@ func (s *Server) coverageTargets(w http.ResponseWriter, r *http.Request) {
 	for _, id := range ids {
 		row := coverageTargetResponse{RequestedID: id, Status: "not_audited"}
 		body, ok := s.catalog.Get(id)
-		if ok && body.NAIFID != 0 {
-			canonicalID := "naif:" + strconv.Itoa(body.NAIFID)
+		targetID, hasTarget := body.NAIFID, ok && body.NAIFID != 0
+		if !hasTarget && strings.HasPrefix(id, "naif:") {
+			parsed, err := strconv.Atoi(strings.TrimPrefix(id, "naif:"))
+			if err == nil && id == "naif:"+strconv.Itoa(parsed) {
+				_, hasTarget = s.coverage.Lookup(parsed)
+				targetID = parsed
+			}
+		}
+		if hasTarget {
+			canonicalID := "naif:" + strconv.Itoa(targetID)
 			row.CanonicalID = canonicalID
-			row.Target = &body.NAIFID
-			if target, covered := s.coverage.Lookup(body.NAIFID); covered {
+			row.Target = &targetID
+			if target, covered := s.coverage.Lookup(targetID); covered {
 				row.Status = "audited"
 				row.Coverage = &target
 			}

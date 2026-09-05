@@ -51,13 +51,28 @@ declared audit epoch; they are not current display counts, live state
 availability, unique-body counts or whole-window numerical-accuracy claims.
 
 `GET /v1/coverage/targets?ids=earth,naif:399` returns at most 64 distinct
-current catalog IDs. Catalog aliases are canonicalized to their NAIF target.
+catalog IDs or explicitly audited canonical NAIF IDs. Catalog aliases are canonicalized to their NAIF target.
 Each row is either `audited`, with its audit-epoch state label, source-record
 references and dependency window points/intervals/gaps, or `not_audited`.
 `not_audited` never implies missing state. The response repeats the report and
 runtime manifest identities and contains no request epoch. Both endpoints
 load the report once at startup; requests use bounded in-memory indexes and do
 not scan the report or inventory shards.
+
+The loader checks actual indexed source ordinals as well as IDs, source rows
+and mapped targets. Available audit states require six explicit finite numbers;
+`no-state-at-audit-epoch` requires an explicit null state and is not counted as
+available. A single-epoch dependency window is valid. Missing numeric fields
+cannot silently become zero, and numerical whole-window certification must be
+explicit null. The HTTP summary is capped at 64 KiB including its envelope;
+report loading is capped at 8 MiB, 2,048 target groups and 8,192 source references.
+Exceeding these bounds fails startup rather than truncating scientific coverage.
+
+Run hermetic coverage checks with `go test ./internal/coverage ./internal/httpapi`.
+Optional real-report tests require all of `SOLAR_COVERAGE_REPORT`,
+`SOLAR_COVERAGE_INVENTORY_DIR` and `SOLAR_COVERAGE_DATA_DIR`; without them those
+external-data cases explicitly skip. Source snapshot/mapping hashes remain audit
+provenance, not independently reread source bytes at server startup.
 
 `GET /v1/catalog?q=&limit=&pageToken=` returns a lexicographically stable,
 paginated list. `limit` is 1–500 and page tokens are opaque to clients.

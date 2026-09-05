@@ -4,6 +4,7 @@
 package coverage
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -24,11 +25,13 @@ const (
 	// MaxReportBytes bounds startup memory and prevents a client-facing service
 	// from accidentally loading an unbounded audit artifact.
 	MaxReportBytes     = 8 << 20
+	MaxSummaryBytes    = 64 << 10
 	maxTargetGroups    = 2048
 	maxSourceRefs      = 4096
 	maxSourceRefsTotal = 8192
 	maxWindowAtoms     = 256
 	maxChainSteps      = 64
+	maxSummaryReasons  = 128
 )
 
 type Summary struct {
@@ -165,6 +168,9 @@ func Load(path string, cat *catalog.Catalog, inv *inventory.Inventory) (*Ledger,
 	if err := json.Unmarshal(raw, &report); err != nil {
 		return nil, fmt.Errorf("parse coverage report: %w", err)
 	}
+	if err := validateExplicitFields(raw); err != nil {
+		return nil, err
+	}
 	if err := validateReport(report, cat, inv); err != nil {
 		return nil, err
 	}
@@ -205,6 +211,13 @@ func Load(path string, cat *catalog.Catalog, inv *inventory.Inventory) (*Ledger,
 		Counts:                  report.Identity.Counts,
 		WindowCounts:            report.WindowCounts,
 		UnresolvedReasons:       cloneCounts(report.Identity.UnresolvedReasons),
+	}
+	encodedSummary, err := json.Marshal(struct {
+		APIVersion string `json:"apiVersion"`
+		Summary
+	}{catalog.APIVersion, summary})
+	if err != nil || len(encodedSummary)+1 > MaxSummaryBytes {
+		return nil, fmt.Errorf("coverage summary exceeds %d-byte limit", MaxSummaryBytes)
 	}
 	return &Ledger{summary: summary, targets: targets}, nil
 }
@@ -270,7 +283,7 @@ type reportTargetGroup struct {
 	Target            int            `json:"target"`
 	Key               string         `json:"key"`
 	StateAtAuditEpoch string         `json:"stateAtAuditEpoch"`
-	EvaluatedState    reportState    `json:"evaluatedState"`
+	EvaluatedState    *reportState   `json:"evaluatedState"`
 	SourceRecords     []SourceRecord `json:"sourceRecords"`
 }
 
@@ -326,11 +339,15 @@ func validateReport(report reportFile, cat *catalog.Catalog, inv *inventory.Inve
 	refTargets := make(map[string]int, report.Identity.Counts.MappedSourceRecords)
 	ordinals := make(map[int]struct{}, report.Identity.Counts.MappedSourceRecords)
 	for _, group := range report.Identity.ExplicitTargetGroups {
-		if group.Key != "naif:"+strconv.Itoa(group.Target) || group.StateAtAuditEpoch == "" || !finiteState(group.EvaluatedState) || len(group.SourceRecords) > maxSourceRefs {
+		available := group.StateAtAuditEpoch == "state-available-at-audit-epoch"
+		missing := group.StateAtAuditEpoch == "no-state-at-audit-epoch"
+		if group.Key != "naif:"+strconv.Itoa(group.Target) || (!available && !missing) ||
+			(available && (group.EvaluatedState == nil || !finiteState(*group.EvaluatedState))) ||
+			(missing && group.EvaluatedState != nil) || len(group.SourceRecords) < 1 || len(group.SourceRecords) > maxSourceRefs {
 			return fmt.Errorf("coverage report target group %d is invalid", group.Target)
 		}
 		body, ok := cat.Get(group.Key)
-		if !ok || body.NAIFID != group.Target || body.Availability != catalog.AvailableOperational {
+		if (ok && body.NAIFID != group.Target) || (available && (!ok || body.Availability != catalog.AvailableOperational)) {
 			return fmt.Errorf("coverage report target %d does not match current catalog", group.Target)
 		}
 		if _, exists := groups[group.Target]; exists {
@@ -355,7 +372,7 @@ func validateReport(report reportFile, cat *catalog.Catalog, inv *inventory.Inve
 	if len(refs) != report.Identity.Counts.MappedSourceRecords || len(refs) > maxSourceRefsTotal {
 		return fmt.Errorf("coverage report mapped source count does not match references")
 	}
-	rows, err := inv.GetMany(context.Background(), mapKeys(refs))
+	rows, actualOrdinals, err := inv.GetManyWithOrdinals(context.Background(), mapKeys(refs))
 	if err != nil {
 		return fmt.Errorf("verify coverage source references: %w", err)
 	}
@@ -364,7 +381,7 @@ func validateReport(report reportFile, cat *catalog.Catalog, inv *inventory.Inve
 	}
 	for id, ref := range refs {
 		record, err := inventory.Decode(rows[id])
-		if err != nil || record.ID != id || record.NAIFID != refTargets[ref.ID] || record.Source != ref.Source || record.SourceRow != ref.SourceRow {
+		if err != nil || record.ID != id || actualOrdinals[id] != ref.Ordinal || record.NAIFID != refTargets[ref.ID] || record.Source != ref.Source || record.SourceRow != ref.SourceRow {
 			return fmt.Errorf("coverage report source reference %q does not match current inventory", id)
 		}
 	}
@@ -390,12 +407,12 @@ func validateReport(report reportFile, cat *catalog.Catalog, inv *inventory.Inve
 
 func validateCounts(report reportFile) error {
 	c := report.Identity.Counts
-	if c.SourceRecords < 0 || c.MappedSourceRecords < 0 || c.UnresolvedSourceRecords < 0 || c.ExplicitNAIFTargets < 0 || c.AvailableTargetsAtAuditET < 0 || c.MappedSourceRecords+c.UnresolvedSourceRecords != c.SourceRecords || c.ExplicitNAIFTargets != len(report.Identity.ExplicitTargetGroups) {
+	if c.SourceRecords < 0 || c.MappedSourceRecords < 0 || c.UnresolvedSourceRecords < 0 || c.ExplicitNAIFTargets < 0 || c.AvailableTargetsAtAuditET < 0 || c.MappedSourceRecords > c.SourceRecords || c.MappedSourceRecords > maxSourceRefsTotal || c.ExplicitNAIFTargets > c.MappedSourceRecords || c.ExplicitNAIFTargets > maxTargetGroups || c.UnresolvedSourceRecords != c.SourceRecords-c.MappedSourceRecords || c.ExplicitNAIFTargets != len(report.Identity.ExplicitTargetGroups) {
 		return fmt.Errorf("coverage report identity counts are inconsistent")
 	}
 	sourceTotal := 0
 	for _, count := range report.Identity.SourceCounts {
-		if count < 0 {
+		if count < 0 || count > c.SourceRecords-sourceTotal {
 			return fmt.Errorf("coverage report source count is negative")
 		}
 		sourceTotal += count
@@ -404,8 +421,16 @@ func validateCounts(report reportFile) error {
 		return fmt.Errorf("coverage report source counts do not reconcile")
 	}
 	reasonTotal := 0
+	if len(report.Identity.UnresolvedReasons) > maxSummaryReasons {
+		return fmt.Errorf("coverage report has too many unresolved reasons")
+	}
+	for reason := range report.Identity.UnresolvedReasons {
+		if !validReason(reason) {
+			return fmt.Errorf("coverage report has invalid unresolved reason")
+		}
+	}
 	for _, count := range report.Identity.UnresolvedReasons {
-		if count < 0 {
+		if count < 0 || count > c.UnresolvedSourceRecords-reasonTotal {
 			return fmt.Errorf("coverage report unresolved count is negative")
 		}
 		reasonTotal += count
@@ -438,7 +463,7 @@ func validateWindow(window reportWindow, requested Window) error {
 	}
 	points := window.DependencyCoverage.Points
 	intervals := window.DependencyCoverage.Intervals
-	if len(points) < 2 || len(points) > maxWindowAtoms || len(intervals) < 1 || len(intervals) > maxWindowAtoms || len(window.Gaps) > maxWindowAtoms {
+	if len(points) < 1 || len(points) > maxWindowAtoms || len(intervals) != len(points)-1 || len(window.Gaps) > maxWindowAtoms {
 		return fmt.Errorf("window atom count is invalid")
 	}
 	pointKeys := make(map[string]struct{}, len(points))
@@ -460,6 +485,9 @@ func validateWindow(window reportWindow, requested Window) error {
 	}
 	intervalKeys := make(map[string]struct{}, len(intervals))
 	for n, interval := range intervals {
+		if interval.StartET != points[n].ET || interval.EndET != points[n+1].ET {
+			return fmt.Errorf("interval atoms do not follow adjacent boundary points")
+		}
 		if !finite(interval.StartET) || !finite(interval.EndET) || interval.StartET >= interval.EndET || interval.StartET < requested.StartET || interval.EndET > requested.EndET || interval.Openness != "(start,end)" || !validateAtomState(interval.State) || (interval.State == "gap" && interval.Reason == "") || (interval.State == "covered" && interval.Reason != "") {
 			return fmt.Errorf("invalid interval atom")
 		}
@@ -538,7 +566,21 @@ func validateChain(chain []ChainStep) error {
 }
 
 func validateAtomState(value string) bool { return value == "covered" || value == "gap" }
-func finite(value float64) bool           { return !math.IsNaN(value) && !math.IsInf(value, 0) }
+func validReason(value string) bool {
+	if len(value) < 1 || len(value) > 128 || !asciiLowerDigit(value[0]) {
+		return false
+	}
+	for n := 1; n < len(value); n++ {
+		if !asciiLowerDigit(value[n]) && value[n] != '-' {
+			return false
+		}
+	}
+	return true
+}
+func asciiLowerDigit(value byte) bool {
+	return value >= 'a' && value <= 'z' || value >= '0' && value <= '9'
+}
+func finite(value float64) bool { return !math.IsNaN(value) && !math.IsInf(value, 0) }
 func finiteState(value reportState) bool {
 	return finite(value.Position.X) && finite(value.Position.Y) && finite(value.Position.Z) && finite(value.Velocity.X) && finite(value.Velocity.Y) && finite(value.Velocity.Z)
 }
@@ -598,22 +640,252 @@ func cloneCounts(values map[string]int) map[string]int {
 	return out
 }
 func cloneWindowCoverage(value WindowCoverage) WindowCoverage {
-	value.Points = make([]WindowPoint, len(value.Points))
-	for n, point := range value.Points {
+	points := value.Points
+	value.Points = make([]WindowPoint, len(points))
+	for n, point := range points {
 		value.Points[n] = point
 		value.Points[n].Chain = cloneChain(point.Chain)
 	}
-	value.Intervals = make([]WindowInterval, len(value.Intervals))
-	for n, interval := range value.Intervals {
+	intervals := value.Intervals
+	value.Intervals = make([]WindowInterval, len(intervals))
+	for n, interval := range intervals {
 		value.Intervals[n] = interval
 		value.Intervals[n].Chain = cloneChain(interval.Chain)
 	}
-	value.Gaps = make([]WindowGap, len(value.Gaps))
-	for n, gap := range value.Gaps {
+	gaps := value.Gaps
+	value.Gaps = make([]WindowGap, len(gaps))
+	for n, gap := range gaps {
 		value.Gaps[n] = gap
 		value.Gaps[n].Chain = cloneChain(gap.Chain)
+		value.Gaps[n].ET = cloneFloat(gap.ET)
+		value.Gaps[n].StartET = cloneFloat(gap.StartET)
+		value.Gaps[n].EndET = cloneFloat(gap.EndET)
 	}
 	return value
+}
+
+func validateExplicitFields(raw []byte) error {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &root); err != nil {
+		return fmt.Errorf("parse coverage report fields: %w", err)
+	}
+	kernels, err := requiredObject(root, "kernels")
+	if err != nil {
+		return err
+	}
+	if err := requiredNonNull(kernels, "auditEt"); err != nil {
+		return fmt.Errorf("kernels: %w", err)
+	}
+	requested, err := requiredObject(root, "requestedWindow")
+	if err != nil {
+		return err
+	}
+	for _, name := range []string{"startEt", "endEt"} {
+		if err := requiredNonNull(requested, name); err != nil {
+			return fmt.Errorf("requestedWindow: %w", err)
+		}
+	}
+	windowCounts, err := requiredObject(root, "windowCounts")
+	if err != nil {
+		return err
+	}
+	numeric, ok := windowCounts["numericallyCertifiedWholeWindowTargets"]
+	if !ok || !bytes.Equal(bytes.TrimSpace(numeric), []byte("null")) {
+		return fmt.Errorf("windowCounts.numericallyCertifiedWholeWindowTargets must be explicit null")
+	}
+	for _, name := range []string{"dependencyCoveredTargets", "targetsWithDependencyGaps"} {
+		if err := requiredNonNull(windowCounts, name); err != nil {
+			return err
+		}
+	}
+	identity, err := requiredObject(root, "identity")
+	if err != nil {
+		return err
+	}
+	counts, err := requiredObject(identity, "counts")
+	if err != nil {
+		return err
+	}
+	for _, name := range []string{"sourceRecords", "mappedSourceRecords", "unresolvedSourceRecords", "explicitNaifTargets", "availableTargetsAtAuditEpoch"} {
+		if err := requiredNonNull(counts, name); err != nil {
+			return err
+		}
+	}
+	groups, err := requiredArray(root, "identity", "explicitTargetGroups")
+	if err != nil {
+		return err
+	}
+	for n, groupRaw := range groups {
+		group, err := object(groupRaw)
+		if err != nil {
+			return fmt.Errorf("identity.explicitTargetGroups[%d]: %w", n, err)
+		}
+		if err := requiredNonNull(group, "target"); err != nil {
+			return err
+		}
+		refs, err := requiredArrayValue(group, "sourceRecords")
+		if err != nil {
+			return err
+		}
+		for _, rawRef := range refs {
+			ref, err := object(rawRef)
+			if err != nil {
+				return err
+			}
+			for _, name := range []string{"ordinal", "sourceRow"} {
+				if err := requiredNonNull(ref, name); err != nil {
+					return err
+				}
+			}
+		}
+		var status string
+		_ = json.Unmarshal(group["stateAtAuditEpoch"], &status)
+		if status == "no-state-at-audit-epoch" {
+			state, exists := group["evaluatedState"]
+			if !exists || !bytes.Equal(bytes.TrimSpace(state), []byte("null")) {
+				return fmt.Errorf("unavailable target must have explicit null evaluatedState")
+			}
+			continue
+		}
+		state, err := requiredObject(group, "evaluatedState")
+		if err != nil {
+			return fmt.Errorf("identity.explicitTargetGroups[%d]: %w", n, err)
+		}
+		for _, vectorName := range []string{"position", "velocity"} {
+			vector, err := requiredObject(state, vectorName)
+			if err != nil {
+				return fmt.Errorf("identity.explicitTargetGroups[%d].evaluatedState: %w", n, err)
+			}
+			for _, component := range []string{"x", "y", "z"} {
+				if err := requiredNonNull(vector, component); err != nil {
+					return fmt.Errorf("identity.explicitTargetGroups[%d].evaluatedState.%s: %w", n, vectorName, err)
+				}
+			}
+		}
+	}
+	windows, err := requiredArrayValue(root, "windows")
+	if err != nil {
+		return err
+	}
+	for n, windowRaw := range windows {
+		window, err := object(windowRaw)
+		if err != nil {
+			return fmt.Errorf("windows[%d]: %w", n, err)
+		}
+		windowRequested, err := requiredObject(window, "requested")
+		if err != nil {
+			return fmt.Errorf("windows[%d]: %w", n, err)
+		}
+		for _, name := range []string{"startEt", "endEt"} {
+			if err := requiredNonNull(windowRequested, name); err != nil {
+				return fmt.Errorf("windows[%d].requested: %w", n, err)
+			}
+		}
+		dependency, err := requiredObject(window, "dependencyCoverage")
+		if err != nil {
+			return fmt.Errorf("windows[%d]: %w", n, err)
+		}
+		points, err := requiredArrayValue(dependency, "points")
+		if err != nil {
+			return fmt.Errorf("windows[%d].dependencyCoverage: %w", n, err)
+		}
+		for pointN, pointRaw := range points {
+			point, err := object(pointRaw)
+			if err != nil {
+				return fmt.Errorf("windows[%d].points[%d]: %w", n, pointN, err)
+			}
+			if err := requiredNonNull(point, "et"); err != nil {
+				return fmt.Errorf("windows[%d].points[%d]: %w", n, pointN, err)
+			}
+		}
+		intervals, err := requiredArrayValue(dependency, "intervals")
+		if err != nil {
+			return fmt.Errorf("windows[%d].dependencyCoverage: %w", n, err)
+		}
+		for intervalN, intervalRaw := range intervals {
+			interval, err := object(intervalRaw)
+			if err != nil {
+				return fmt.Errorf("windows[%d].intervals[%d]: %w", n, intervalN, err)
+			}
+			for _, name := range []string{"startEt", "endEt"} {
+				if err := requiredNonNull(interval, name); err != nil {
+					return fmt.Errorf("windows[%d].intervals[%d]: %w", n, intervalN, err)
+				}
+			}
+		}
+		gaps, err := requiredArrayValue(window, "gaps")
+		if err != nil {
+			return fmt.Errorf("windows[%d]: %w", n, err)
+		}
+		for gapN, gapRaw := range gaps {
+			gap, err := object(gapRaw)
+			if err != nil {
+				return fmt.Errorf("windows[%d].gaps[%d]: %w", n, gapN, err)
+			}
+			var gapFields []string
+			var gapKind string
+			if value, ok := gap["kind"]; ok {
+				_ = json.Unmarshal(value, &gapKind)
+			}
+			if gapKind == "point" {
+				gapFields = []string{"et"}
+			} else if gapKind == "interval" {
+				gapFields = []string{"startEt", "endEt"}
+			} else {
+				return fmt.Errorf("windows[%d].gaps[%d] has invalid kind", n, gapN)
+			}
+			for _, name := range gapFields {
+				if err := requiredNonNull(gap, name); err != nil {
+					return fmt.Errorf("windows[%d].gaps[%d]: %w", n, gapN, err)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func object(raw json.RawMessage) (map[string]json.RawMessage, error) {
+	var value map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &value); err != nil || value == nil {
+		return nil, fmt.Errorf("expected JSON object")
+	}
+	return value, nil
+}
+
+func requiredObject(value map[string]json.RawMessage, name string) (map[string]json.RawMessage, error) {
+	raw, ok := value[name]
+	if !ok || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return nil, fmt.Errorf("missing required object %q", name)
+	}
+	return object(raw)
+}
+
+func requiredArray(value map[string]json.RawMessage, parent, name string) ([]json.RawMessage, error) {
+	parentValue, err := requiredObject(value, parent)
+	if err != nil {
+		return nil, err
+	}
+	return requiredArrayValue(parentValue, name)
+}
+
+func requiredArrayValue(value map[string]json.RawMessage, name string) ([]json.RawMessage, error) {
+	raw, ok := value[name]
+	if !ok || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return nil, fmt.Errorf("missing required array %q", name)
+	}
+	var out []json.RawMessage
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, fmt.Errorf("field %q is not an array", name)
+	}
+	return out, nil
+}
+
+func requiredNonNull(value map[string]json.RawMessage, name string) error {
+	raw, ok := value[name]
+	if !ok || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return fmt.Errorf("missing required field %q", name)
+	}
+	return nil
 }
 
 func cloneChain(value []ChainStep) []ChainStep {

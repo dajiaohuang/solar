@@ -11,13 +11,47 @@ import (
 	"github.com/dajiaohuang/solar/backend/internal/inventory"
 )
 
+func TestLookupReturnsDeepCopies(t *testing.T) {
+	target := 42
+	center := 399
+	frame := 1
+	typeID := 2
+	start := 1.5
+	end := 2.5
+	gapET := 2.0
+	ledger := &Ledger{targets: map[int]TargetCoverage{42: {
+		Target:        42,
+		Key:           "naif:42",
+		SourceRecords: []SourceRecord{{ID: "source:42", Ordinal: 7, Source: "fixture", SourceRow: 8}},
+		DependencyCoverage: WindowCoverage{
+			Points: []WindowPoint{{ET: 1.5, Chain: []ChainStep{{Target: &target, Center: &center, Frame: &frame, Type: &typeID, StartET: &start, EndET: &end}}}},
+			Gaps:   []WindowGap{{Kind: "interval", ET: &gapET, StartET: &start, EndET: &end, Chain: []ChainStep{{Target: &target}}}},
+		},
+	}}}
+	first, ok := ledger.Lookup(42)
+	if !ok {
+		t.Fatal("expected fixture target")
+	}
+	*first.DependencyCoverage.Points[0].Chain[0].Target = 99
+	*first.DependencyCoverage.Points[0].Chain[0].Center = 99
+	*first.DependencyCoverage.Points[0].Chain[0].StartET = 99
+	*first.DependencyCoverage.Gaps[0].ET = 99
+	*first.DependencyCoverage.Gaps[0].StartET = 99
+	*first.DependencyCoverage.Gaps[0].EndET = 99
+	first.SourceRecords[0].ID = "changed"
+	second, ok := ledger.Lookup(42)
+	if !ok || second.SourceRecords[0].ID != "source:42" || second.DependencyCoverage.Points[0].ET != 1.5 || *second.DependencyCoverage.Points[0].Chain[0].Target != 42 || *second.DependencyCoverage.Points[0].Chain[0].Center != 399 || *second.DependencyCoverage.Points[0].Chain[0].StartET != 1.5 || *second.DependencyCoverage.Gaps[0].ET != 2 || *second.DependencyCoverage.Gaps[0].StartET != 1.5 || *second.DependencyCoverage.Gaps[0].EndET != 2.5 {
+		t.Fatalf("lookup result was not isolated: %+v", second)
+	}
+}
+
 func realCoverageInputs(t *testing.T) (string, string, string) {
 	t.Helper()
-	report := filepath.Join("..", "..", ".repostew", "cache", "solar-109-coverage-ledger-full-20260905-g", "report.json")
-	inventoryDir := filepath.Join("..", "..", ".repostew", "cache", "solar-issue109-addressable-inventory-20260905-moon-mapping")
-	dataDir := filepath.Join("..", "..", ".repostew", "cache", "solar-issue109-backend-full-20260905")
-	if _, err := os.Stat(report); os.IsNotExist(err) {
-		t.Skip("real coverage evidence is not available in this checkout")
+	report := os.Getenv("SOLAR_COVERAGE_REPORT")
+	inventoryDir := os.Getenv("SOLAR_COVERAGE_INVENTORY_DIR")
+	dataDir := os.Getenv("SOLAR_COVERAGE_DATA_DIR")
+	if report == "" || inventoryDir == "" || dataDir == "" {
+		t.Skip("set SOLAR_COVERAGE_REPORT, SOLAR_COVERAGE_INVENTORY_DIR and SOLAR_COVERAGE_DATA_DIR for external coverage evidence")
 	}
 	return report, inventoryDir, dataDir
 }

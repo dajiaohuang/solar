@@ -402,6 +402,18 @@ func (i *Inventory) Get(ctx context.Context, id string) (json.RawMessage, bool, 
 // The returned map contains only IDs that were found and preserves the source
 // row bytes for callers that need untouched evidence.
 func (i *Inventory) GetMany(ctx context.Context, ids []string) (map[string]json.RawMessage, error) {
+	return i.getMany(ctx, ids, nil)
+}
+
+// GetManyWithOrdinals binds evidence references to the actual indexed row,
+// using the same grouped reads as GetMany rather than scanning the inventory.
+func (i *Inventory) GetManyWithOrdinals(ctx context.Context, ids []string) (map[string]json.RawMessage, map[string]int, error) {
+	ordinals := make(map[string]int, len(ids))
+	rows, err := i.getMany(ctx, ids, ordinals)
+	return rows, ordinals, err
+}
+
+func (i *Inventory) getMany(ctx context.Context, ids []string, ordinals map[string]int) (map[string]json.RawMessage, error) {
 	out := make(map[string]json.RawMessage, len(ids))
 	if i == nil || i.idx == nil || len(ids) == 0 {
 		return out, nil
@@ -455,6 +467,9 @@ func (i *Inventory) GetMany(ctx context.Context, ids []string) (map[string]json.
 		for _, id := range wanted[refKey(ref)] {
 			if fields.ID == id {
 				out[id] = append(json.RawMessage(nil), rows[n]...)
+				if ordinals != nil {
+					ordinals[id] = int(ref.Ordinal)
+				}
 			}
 		}
 	}
