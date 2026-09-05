@@ -28,6 +28,34 @@ The raised ceilings are capacity envelopes for the single-buffer renderer, not p
 
 The scene URL records the immutable catalog sample, whether the cloud is enabled, and the requested quality profile. It intentionally does not record the locally effective adaptive point count. A comparison gives both frames the same deterministic prefix and discards any unshared remainder. This preserves scientific replay while allowing each browser to protect interactivity.
 
+## Android exact-state display controller
+
+Android's current-state budget is independent of the Web catalog-cloud policy:
+3D initial 100K/max 250K, 2D initial 250K/max 500K, minimum 25K each. An active gesture
+temporarily enables continuous GL rendering; idle/hidden/paused views stop
+continuous work. The bounded sampler uses actual GL callback intervals,
+two warm-up intervals and 12–120 samples over roughly one second. It reports
+p50/p95 and estimated missed 60 Hz slots, not GPU/compositor timings.
+
+Two windows with p95 > 18.5 ms or missed-slot ratio > 5% reduce 25%; p95 > 33.3 ms or
+ratio > 20% reduces after one. Four windows with p95 <= 16.7 ms and ratio < 2% grow
+about 12.5% in 5,000-point steps only when loaded exact candidates exercise the
+budget. A five-second cooldown separates ordinary adjustments. API 29+ severe
+thermal or foreground memory warnings cap 25K immediately; moderate thermal
+caps the initial limit and blocks growth. Recovery never restores a high limit
+without measured headroom. Repeated memory warnings at the minimum reset the
+cooldown and growth evidence. Mode/lifecycle transitions reset evidence; limits
+and controller state remain separate between 2D/3D. Coalesced callbacks and
+generation/PreparedPoints identity checks prevent old samples or prepared
+buffers from changing a newer observation. The Float64 scientific frame remains
+independent of the deterministic reference-first display prefix.
+
+Unit and small real-SPK emulator checks are not target-load SLO evidence.
+Physical 12 GB Android, 16/32 GB desktop, 60-second frame targets, 30 FPS fallback,
+decode/tile-latency feedback and full native/GPU memory measurements remain
+pending. Web exact-state and iOS adaptive control are not implemented by this
+Android controller. See [MOBILE.md](./MOBILE.md) for scope and runtime checks.
+
 ## Data and delivery budgets
 
 | Budget | Limit | Enforcement |

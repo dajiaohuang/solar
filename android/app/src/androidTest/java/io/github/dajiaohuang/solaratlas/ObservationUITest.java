@@ -20,11 +20,14 @@ import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.junit.Assert.fail;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
 
 import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.View;
+import android.view.MotionEvent;
+import android.opengl.GLSurfaceView;
 
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -95,20 +98,34 @@ public final class ObservationUITest {
             fill(IDS_HINT, "naif:399,naif:301,naif:10,unknown:fixture");
             onView(withText("Load observation")).perform(scrollTo(), click());
             waitForText(containsString("3 verified states - 1 data gaps"));
-            waitForText(containsString("3D GPU points 3/3 (limit 250000)"));
+            waitForText(containsString("3D GPU points 3/3 (limit 100000)"));
             waitForEvidence("naif:399 - VERIFIED", "naif:301 - VERIFIED", "naif:10 - VERIFIED", "unknown:fixture - MISSING");
             viewportScreenshot(scenario, "observation-3d.png");
+            verifyInteractionRenderMode();
 
             onView(withText("Switch to 2D")).perform(scrollTo(), click());
-            waitForText(containsString("2D GPU points 3/3 (limit 500000)"));
+            waitForText(containsString("2D GPU points 3/3 (limit 250000)"));
             viewportScreenshot(scenario, "observation-2d.png");
+            verifyInteractionRenderMode();
+
+            // Synthetic pressure delivered through the standard lifecycle
+            // callback, not fabricated states or a production test-only route.
+            scenario.onActivity(activity -> activity.onTrimMemory(android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW));
+            waitForText(containsString("2D GPU points 3/3 (limit 25000)"));
+            waitForText(containsString("native memory warning"));
+            waitForEvidence("naif:399 - VERIFIED", "naif:301 - VERIFIED", "naif:10 - VERIFIED", "unknown:fixture - MISSING");
+            onView(withText("Switch to 3D")).perform(scrollTo(), click());
+            waitForText(containsString("3D GPU points 3/3 (limit 25000)"));
+            onView(withText("Switch to 2D")).perform(scrollTo(), click());
+            waitForText(containsString("2D GPU points 3/3 (limit 25000)"));
 
             scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);
             scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);
             waitForText(containsString("Observation released while inactive"));
+            waitForText(containsString("No current display measurements."));
             onView(withText("Load observation")).perform(scrollTo(), click());
             waitForText(containsString("3 verified states - 1 data gaps"));
-            waitForText(containsString("2D GPU points 3/3 (limit 500000)"));
+            waitForText(containsString("2D GPU points 3/3 (limit 25000)"));
             waitForEvidence("naif:399 - VERIFIED", "naif:301 - VERIFIED", "naif:10 - VERIFIED", "unknown:fixture - MISSING");
             viewportScreenshot(scenario, "observation-resumed.png");
             // Separate, deliberately synthetic coverage cases. Real SPK state
@@ -250,6 +267,38 @@ public final class ObservationUITest {
             SystemClock.sleep(100);
         } while (SystemClock.uptimeMillis() < deadline);
         fail("No verified-state point pixels in fully visible GPU viewport: " + name);
+    }
+
+    private static void verifyInteractionRenderMode() {
+        onView(withContentDescription("Verified state GPU point observation viewport"))
+                .check((view, error) -> {
+                    if (error != null) throw error;
+                    NativeObservationDeck deck = (NativeObservationDeck) view;
+                    assertEquals(GLSurfaceView.RENDERMODE_WHEN_DIRTY, deck.getRenderMode());
+                    long now = SystemClock.uptimeMillis();
+                    MotionEvent down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, 20, 20, 0);
+                    try {
+                        deck.onTouchEvent(down);
+                        assertEquals(GLSurfaceView.RENDERMODE_CONTINUOUSLY, deck.getRenderMode());
+                    } finally { down.recycle(); }
+                });
+        try {
+            // Let actual GL callbacks produce a complete measured window.
+            // Three real states are not a high-load performance benchmark.
+            waitForText(containsString("Interaction GL intervals:"));
+        } finally {
+            onView(withContentDescription("Verified state GPU point observation viewport"))
+                    .check((view, error) -> {
+                        if (error != null) throw error;
+                        NativeObservationDeck deck = (NativeObservationDeck) view;
+                        long now = SystemClock.uptimeMillis();
+                        MotionEvent cancel = MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, 20, 20, 0);
+                        try {
+                            deck.onTouchEvent(cancel);
+                            assertEquals(GLSurfaceView.RENDERMODE_WHEN_DIRTY, deck.getRenderMode());
+                        } finally { cancel.recycle(); }
+                    });
+        }
     }
 
     private static void coverageScreenshot(ActivityScenario<MainActivity> scenario, String name) throws Exception {

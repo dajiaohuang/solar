@@ -3,6 +3,8 @@ package io.github.dajiaohuang.solaratlas;
 import android.app.Activity;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.os.Build;
+import android.os.PowerManager;
 import android.text.InputType;
 import android.view.Gravity;
 import android.widget.Button;
@@ -48,6 +50,11 @@ public final class MainActivity extends Activity {
     private int renderGeneration;
     private int generation;
     private boolean mode3d = true;
+    private final NativeRenderBudget budget3d = new NativeRenderBudget(true);
+    private final NativeRenderBudget budget2d = new NativeRenderBudget(false);
+    private NativeObservationDeck.PreparedPoints currentPrepared;
+    private TextView budgetStatus;
+    private ThermalMonitor thermalMonitor;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         androidx.core.splashscreen.SplashScreen.installSplashScreen(this);
@@ -60,12 +67,15 @@ public final class MainActivity extends Activity {
         content.addView(label("SOLAR ATLAS", 26, Color.WHITE));
         content.addView(label("Observation Deck - native Android", 15, Color.rgb(145, 190, 205)));
         viewport = new NativeObservationDeck(this);
+        viewport.setFrameListener(this::onFrameWindow);
         LinearLayout.LayoutParams viewportParams = new LinearLayout.LayoutParams(-1, dp(300));
         viewportParams.topMargin = dp(14);
         content.addView(viewport, viewportParams);
         status = label("No observation loaded. Configure an HTTPS backend below.", 15, Color.rgb(98, 208, 181));
         status.setPadding(0, dp(10), 0, dp(5));
         content.addView(status);
+        budgetStatus = label(getString(R.string.render_budget_pending), 12, Color.rgb(145, 190, 205));
+        content.addView(budgetStatus);
         content.addView(label("Exact positions appear only after manifest, plan, tile, provenance and SHA-256 checks pass. Missing rows remain visible with their reason; a missing reference never becomes an origin.", 13, Color.rgb(220, 230, 235)));
         backend = input("Full-version backend HTTPS address", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         epoch = input("TDB Julian date", InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL | InputType.TYPE_NUMBER_FLAG_SIGNED);
@@ -86,7 +96,7 @@ public final class MainActivity extends Activity {
         LinearLayout actions = new LinearLayout(this);
         Button load = new Button(this); load.setText("Load observation"); load.setOnClickListener(v -> { if (loadThread != null) cancelLoad(); else loadObservation(); });
         Button switchMode = new Button(this); switchMode.setText("Switch to 2D");
-        switchMode.setOnClickListener(v -> { mode3d = !mode3d; switchMode.setText(mode3d ? "Switch to 2D" : "Switch to 3D"); viewport.clearPoints(); if (currentFrame != null) prepareRenderer(currentFrame, currentReferenceId, epoch.getText().toString().trim(), exactCount(currentFrame)); });
+        switchMode.setOnClickListener(v -> { mode3d = !mode3d; budget3d.resetEvidence(); budget2d.resetEvidence(); switchMode.setText(mode3d ? "Switch to 2D" : "Switch to 3D"); viewport.clearPoints(); if (currentFrame != null) prepareRenderer(currentFrame, currentReferenceId, Double.toString(currentFrame.epochJd), exactCount(currentFrame)); });
         Button tutorial = new Button(this); tutorial.setText("Tutorial"); tutorial.setOnClickListener(v -> showTutorial());
         actions.addView(load, new LinearLayout.LayoutParams(0, -2, 1)); actions.addView(switchMode, new LinearLayout.LayoutParams(0, -2, 1)); actions.addView(tutorial, new LinearLayout.LayoutParams(0, -2, 1)); content.addView(actions);
         content.addView(sectionLabel("STATE EVIDENCE"));
@@ -123,6 +133,7 @@ public final class MainActivity extends Activity {
     }
 
     private void loadObservation() {
+        budget3d.resetEvidence(); budget2d.resetEvidence();
         final int requestGeneration = ++generation;
         final String address = backend.getText().toString().trim();
         final String epochText = epoch.getText().toString().trim();
@@ -156,15 +167,18 @@ public final class MainActivity extends Activity {
         cancelRender();
         final int request = ++renderGeneration;
         final boolean render3d = mode3d;
+        final int displayLimit = activeBudget().limit();
         renderThread = new Thread(() -> {
             try {
-                NativeObservationDeck.PreparedPoints prepared = NativeObservationDeck.prepare(frame, referenceId, render3d);
+                NativeObservationDeck.PreparedPoints prepared = NativeObservationDeck.prepare(frame, referenceId, render3d, displayLimit);
                 if (Thread.currentThread().isInterrupted()) return;
                 runOnUiThread(() -> {
                     if (request != renderGeneration || currentFrame != frame) return;
-                    renderThread = null; viewport.setPrepared(prepared);
+                    renderThread = null; currentPrepared = prepared; viewport.setPrepared(prepared);
                     String referenceStatus = prepared.referenceAvailable ? "" : " Reference state unavailable; no origin substituted.";
                     status.setText(exactCount + " verified states - " + (frame.exact.length - exactCount) + " data gaps - TDB JD " + epochText + ". " + (render3d ? "3D" : "2D") + " GPU points " + prepared.displayedCount + "/" + prepared.candidateCount + " (limit " + prepared.displayLimit + ")." + referenceStatus);
+                    budgetStatus.setText(getString(R.string.render_budget_summary,
+                            prepared.candidateCount - prepared.displayedCount, budgetReason()));
                 });
             } catch (RuntimeException error) {
                 runOnUiThread(() -> { if (request == renderGeneration) { renderThread = null; viewport.clearPoints(); status.setText("GPU point preparation failed; no observation rendered."); } });
@@ -177,7 +191,51 @@ public final class MainActivity extends Activity {
 
     private void fail(int requestGeneration, Exception error) { if (requestGeneration != generation) return; loadThread = null; currentFrame = null; cancelRender(); viewport.clearPoints(); status.setText(error.getMessage() == null ? "State load failed." : error.getMessage()); showEvidence(null, ""); evidence.setText("No partial observation was published."); }
     private void cancelLoad() { generation++; if (loadThread != null) { loadThread.interrupt(); loadThread = null; status.setText("Loading cancelled. No partial observation was published."); } currentFrame = null; cancelRender(); viewport.clearPoints(); }
-    private void cancelRender() { renderGeneration++; if (renderThread != null) { renderThread.interrupt(); renderThread = null; } }
+    private void cancelRender() { renderGeneration++; currentPrepared = null; budgetStatus.setText(R.string.render_budget_empty); if (renderThread != null) { renderThread.interrupt(); renderThread = null; } }
+
+    private NativeRenderBudget activeBudget() { return mode3d ? budget3d : budget2d; }
+
+    private String budgetReason() {
+        switch (activeBudget().reason()) {
+            case SLOW: return getString(R.string.render_budget_slow);
+            case HEADROOM: return getString(R.string.render_budget_headroom);
+            case THERMAL: return getString(R.string.render_budget_thermal);
+            case MODERATE_THERMAL: return getString(R.string.render_budget_moderate_thermal);
+            case MEMORY: return getString(R.string.render_budget_memory);
+            default: return getString(R.string.render_budget_initial);
+        }
+    }
+
+    private void onFrameWindow(NativeObservationDeck.PreparedPoints prepared, NativeRenderBudget.Window window) {
+        if (prepared == null || prepared != currentPrepared || currentFrame == null || prepared.mode3d != mode3d) return;
+        boolean changed = activeBudget().sample(window, prepared.candidateCount, System.nanoTime());
+        budgetStatus.setText(getString(R.string.render_budget_metrics,
+                prepared.candidateCount - prepared.displayedCount, window.p50Ms, window.p95Ms, window.droppedRatio * 100, budgetReason()));
+        if (changed) refreshDisplayBudget();
+    }
+
+    private void refreshDisplayBudget() {
+        if (currentFrame == null) return;
+        viewport.clearPrepared();
+        prepareRenderer(currentFrame, currentReferenceId, Double.toString(currentFrame.epochJd), exactCount(currentFrame));
+    }
+
+    private void thermalChanged(int thermal) {
+        int before = activeBudget().limit();
+        long now = System.nanoTime();
+        budget3d.thermal(thermal, now); budget2d.thermal(thermal, now);
+        if (before != activeBudget().limit()) refreshDisplayBudget();
+    }
+
+    @Override public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level == TRIM_MEMORY_RUNNING_MODERATE || level == TRIM_MEMORY_RUNNING_LOW || level == TRIM_MEMORY_RUNNING_CRITICAL) {
+            int before = activeBudget().limit();
+            long now = System.nanoTime();
+            budget3d.memoryPressure(now); budget2d.memoryPressure(now);
+            if (before != activeBudget().limit()) refreshDisplayBudget();
+        }
+    }
 
     private void showEvidence(StateTileService.Frame frame, String referenceId) { currentFrame = frame; currentReferenceId = referenceId == null ? "" : referenceId; evidencePageIndex = 0; renderEvidencePage(); }
     private void changeEvidencePage(int delta) { evidencePageIndex += delta; renderEvidencePage(); }
@@ -213,14 +271,34 @@ public final class MainActivity extends Activity {
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private void showTutorial() { new android.app.AlertDialog.Builder(this).setTitle("First observation").setMessage("1. Enter an HTTPS backend address and a finite TDB Julian date. 2. Choose a preset or enter custom IDs. 3. Loading verifies manifest, plan and every binary tile; cancellation publishes nothing. 4. Only verified exact rows render. Missing references never become an invented origin.").setPositiveButton("Done", null).show(); }
     @Override protected void onPause() {
+        if (Build.VERSION.SDK_INT >= 29 && thermalMonitor != null) { thermalMonitor.close(); thermalMonitor = null; }
+        budget3d.resetEvidence(); budget2d.resetEvidence();
         coveragePanel.cancelAndClear(R.string.coverage_idle);
         cancelLoad(); showEvidence(null, "");
         status.setText("Observation released while inactive. Load again to resume verified states.");
         viewport.onPause(); super.onPause();
     }
-    @Override protected void onResume() { super.onResume(); viewport.onResume(); }
+    @Override protected void onResume() {
+        super.onResume(); viewport.onResume();
+        if (Build.VERSION.SDK_INT >= 29) {
+            PowerManager manager = (PowerManager) getSystemService(POWER_SERVICE);
+            if (manager != null) thermalMonitor = new ThermalMonitor(manager, this::thermalChanged);
+        }
+    }
     @Override protected void onDestroy() { cancelLoad(); super.onDestroy(); }
 
     private static final class Preset { final String title, reference, ids; Preset(String title, String reference, String ids) { this.title = title; this.reference = reference; this.ids = ids; } }
+
+    @android.annotation.TargetApi(29)
+    private static final class ThermalMonitor {
+        private final PowerManager manager;
+        private final PowerManager.OnThermalStatusChangedListener listener;
+        ThermalMonitor(PowerManager manager, java.util.function.IntConsumer changed) {
+            this.manager = manager; listener = changed::accept;
+            changed.accept(manager.getCurrentThermalStatus());
+            manager.addThermalStatusListener(listener);
+        }
+        void close() { manager.removeThermalStatusListener(listener); }
+    }
 
 }

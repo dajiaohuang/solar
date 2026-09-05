@@ -179,9 +179,35 @@ measurement record as well as a successful test exit, and retains snapshots in
 `Observation.xcresult` and metrics in `report.json` under `pointGeometry`.
 These are synthetic renderer tests, not additional exact bodies or validation
 of UIKit backing scales, interactive camera clipping, FPS, thermal behavior or
-physical devices. The newly added pixel test requires its own macOS CI result;
-the earlier `ef19141` run did not contain it. See Apple's
+physical devices. [CI 33966101514](https://github.com/dajiaohuang/solar/actions/runs/33966101514)
+passed at `13a51bf`: all nine fixed-point snapshots measured 4×4 pixel bounds,
+12 bright pixels, peak 255 and integrated brightness 3060, unchanged with
+distance. The perspective control changed from 110×110 to 2×2 pixels.
+The earlier `ef19141` run did not contain this test. See Apple's
 [screen-space clamp documentation](https://developer.apple.com/documentation/scenekit/scngeometryelement/minimumpointscreenspaceradius).
+
+Android current-state rendering now has independent adaptive display policies:
+3D starts at 100,000 with a 250,000 candidate ceiling; 2D starts at 250,000 with
+a 500,000 ceiling. Both can decrease to 25,000. Only an active touch gesture
+enables continuous GLES drawing; idle/hidden/paused views remain on-demand.
+The bounded sampler discards two warm-up intervals, then measures p50/p95 and
+estimated missed 60 Hz slots over at least 12 samples and roughly one second
+(120-sample maximum). These are GL callback intervals, not GPU timer queries or
+compositor-presented frames. Two slow windows reduce the limit by 25%; severe
+slowness reduces after one. Four fast windows can grow by about 12.5% in 5,000
+point steps, only if available exact rows exercise the current limit. Ordinary
+adjustments have a five-second cooldown. API 29+ severe thermal status or native
+memory warnings lower the limit to 25,000; recovery needs fresh headroom evidence.
+Only the current mode's buffer is rebuilt. Float64 states, provenance and gap
+counts remain intact; selection is deterministic: reference first, then source
+order. The UI exposes the limit, unshown verified count and budget reason.
+Repeated memory warnings at the minimum reset the cooldown and growth evidence.
+The seven policy/sampler tests and buffer tests are synthetic; the Android HTTPS
+smoke additionally exercises real GL callbacks on three real states, gesture
+render-mode transitions and an injected memory callback through the normal
+lifecycle API. None establishes 12 GB device smoothness, physical thermal
+behavior, total native/GPU memory or 60-second target-load acceptance. Native
+iOS and Web exact-state adaptive controllers remain separate unfinished work.
 
 - The first native screen is an Observation Deck for current-state evidence: selected body IDs, exact values, provenance and explicit gaps.
 - iOS starts in native 3D and can switch to native 2D. The 3D and 2D budgets are independent; native 3D does not shrink or fade states solely because of distance.
