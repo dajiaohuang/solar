@@ -86,7 +86,10 @@ public final class ObservationUITest {
                 int[] location = new int[2]; view.getLocationOnScreen(location);
                 assertTrue("Tutorial must be above system navigation", location[1] + view.getHeight() <= view.getRootView().getHeight() - bars.bottom);
                 assertTrue("Tutorial must be below status/cutout area", location[1] >= bars.top);
-            }).perform(click());
+            // A separate Espresso assertion yields to another layout/insets
+            // pass. Re-establish visibility immediately before the real click,
+            // as for the other actions below; do not bypass click constraints.
+            }).perform(scrollTo(), click());
             waitForText(containsString("First observation"));
             onView(withText("Done")).perform(click());
             onView(withText("Load observation")).perform(scrollTo(), click());
