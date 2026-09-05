@@ -220,9 +220,15 @@ at `77c2a8a`, both 50-ID assertions and closing/reopening passed, but the final
 load did not reach the server: the captured button frame was behind the
 navigation bar despite XCTest reporting it hittable. The scroll helper now
 requires the target to be fully inside the content area and captures the
-pre-tap screen. The inventory-change rejection and five-request ledger remain
-unchanged and still require hosted runtime verification; Windows checks do
-not prove that end-to-end test passed. Real-inventory iOS
+pre-tap screen. In
+[CI 33987782740](https://github.com/dajiaohuang/solar/actions/runs/33987782740)
+at `157121d`, iOS protocol/build and all five simulator tests passed. The
+directory test retained all 50 selected IDs, restored them after reopening,
+and rejected inventory drift before planning. Its five-GET ledger and inspected
+pre-tap/rejection screenshots agree. This is a synthetic directory fixture;
+the separate Earth/Moon state and verified-cache checks use real SPK. The run's
+Web job failed on a 32K unit-test timeout, so this is not an overall green-CI
+claim. Real-inventory iOS
 selection, Chinese runtime UI, device FPS and full product parity are not yet
 verified. No source directory or SPK is bundled into the app.
 
