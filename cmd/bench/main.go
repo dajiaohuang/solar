@@ -38,8 +38,12 @@ type report struct {
 	InventoryLoadMs         float64             `json:"inventoryIndexLoadMs,omitempty"`
 	InventoryIndexTerms     int                 `json:"inventoryIndexTerms,omitempty"`
 	InventoryIndexPostings  int                 `json:"inventoryIndexPostings,omitempty"`
+	InventoryBlockCache     map[string]int64    `json:"inventoryBlockCache,omitempty"`
+	DirectoryQueries        []string            `json:"directoryQueries,omitempty"`
 	TrajectoryPrecision     string              `json:"trajectoryPrecision"`
 	CatalogLoadMs           float64             `json:"catalogLoadMs"`
+	CatalogIntegrity        map[string]uint64   `json:"catalogIntegrity"`
+	CatalogSPKRead          map[string]uint64   `json:"catalogSPKRead"`
 	Requests                int                 `json:"latencyRequests"`
 	Concurrency             int                 `json:"concurrency"`
 	FirstRequestMs          float64             `json:"firstRequestMs"`
@@ -81,6 +85,7 @@ type report struct {
 	TotalAlloc              uint64              `json:"totalAllocBytes"`
 	InvalidResponses        int64               `json:"invalidResponses"`
 	CancelledObserved       bool                `json:"cancelledObserved"`
+	CancelLatencyNs         int64               `json:"cancelLatencyNs"`
 	OverloadStatusExpected  int                 `json:"overloadStatusExpected"`
 }
 
@@ -101,7 +106,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	loadMs := float64(time.Since(loadStart).Microseconds()) / 1000
+	loadMs := elapsedMilliseconds(loadStart)
 	var inv *inventory.Inventory
 	var inventoryLoadMs float64
 	var inventoryIndexTerms, inventoryIndexPostings int
@@ -111,12 +116,13 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		inventoryLoadMs = float64(time.Since(inventoryStart).Microseconds()) / 1000
+		inventoryLoadMs = elapsedMilliseconds(inventoryStart)
 		stats := inv.IndexStats()
 		inventoryIndexTerms, inventoryIndexPostings = stats["searchTerms"], stats["indexPostings"]
 	}
 
-	server := httptest.NewServer(httpapi.New(c, *workers, inv))
+	service := httpapi.New(c, *workers, inv)
+	server := httptest.NewServer(service)
 	defer server.Close()
 	client := server.Client()
 	ids := benchmarkBodyIDs(c)
@@ -134,7 +140,7 @@ func main() {
 	if err != nil || firstStatus != http.StatusOK {
 		panic("first trajectory request failed")
 	}
-	firstMs := float64(time.Since(firstStart).Microseconds()) / 1000
+	firstMs := elapsedMilliseconds(firstStart)
 	peak.Sample()
 
 	const latencyBatch = 8
@@ -158,7 +164,7 @@ func main() {
 	if err != nil || batchStatus != http.StatusOK {
 		panic("batch trajectory request failed")
 	}
-	batchMs := float64(time.Since(batchStart).Microseconds()) / 1000
+	batchMs := elapsedMilliseconds(batchStart)
 	peak.Sample()
 
 	longStart := time.Now()
@@ -166,10 +172,10 @@ func main() {
 	if err != nil || longStatus != http.StatusOK {
 		panic("long trajectory request failed")
 	}
-	longMs := float64(time.Since(longStart).Microseconds()) / 1000
+	longMs := elapsedMilliseconds(longStart)
 	peak.Sample()
-	stateTileEvidence := runStateTileWorkloads(client, server.URL, stateTileIDs, []int{len(stateTileIDs)}, *stateEpochJD, *n, *workers, peak)
-	stateTileSourceEvidence := runStateTileWorkloads(client, server.URL, stateTileSourceIDs, []int{16384, 32768}, *stateEpochJD, *n, *workers, peak)
+	stateTileEvidence := runStateTileWorkloads(service, client, server.URL, stateTileIDs, []int{len(stateTileIDs)}, *stateEpochJD, *n, *workers, peak)
+	stateTileSourceEvidence := runStateTileWorkloads(service, client, server.URL, stateTileSourceIDs, []int{16384, 32768}, *stateEpochJD, *n, *workers, peak)
 
 	// The mixed run exercises the sorted catalog index, optional indexed source
 	// inventory and batched trajectory path under the same bounded pool.
@@ -211,22 +217,17 @@ func main() {
 	runtime.ReadMemStats(&after)
 	peak.Sample()
 
-	cctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	req, _ := http.NewRequestWithContext(cctx, http.MethodPost, server.URL+"/v1/trajectory", strings.NewReader(longPayload))
-	_, cancelErr := client.Do(req)
-	if cancelErr == nil {
-		// A pre-cancelled request may be rejected by either the client transport
-		// or the handler; both are valid cancellation observations.
-		cancelErr = context.Canceled
-	}
+	cancelObserved, cancelLatencyNs := runCancellation(c, inv, stateTileSourceIDs, peak)
 	overloadRequests, overloadRejected := runOverload(c, inv, *workers, longPayload, peak)
 
 	sort.Slice(lat, func(i, j int) bool { return lat[i] < lat[j] })
 	catalogStats := c.Stats()
+	catalogRead := c.ReadStats()
 	out := report{
 		Goos: runtime.GOOS, Goarch: runtime.GOARCH, Catalog: c.Len(), CatalogPackagedFiles: catalogStats["packagedFiles"], CatalogManifestSHA256: c.ManifestHash(), InventoryManifestSHA256: inventoryManifestHash(inv),
-		InventoryRecords: inventoryRecords(inv), InventoryShards: inventoryShards(inv), InventoryBytes: inventoryBytes(inv), InventoryLoadMs: inventoryLoadMs, InventoryIndexTerms: inventoryIndexTerms, InventoryIndexPostings: inventoryIndexPostings, CatalogLoadMs: loadMs,
+		InventoryRecords: inventoryRecords(inv), InventoryShards: inventoryShards(inv), InventoryBytes: inventoryBytes(inv), InventoryLoadMs: inventoryLoadMs, InventoryIndexTerms: inventoryIndexTerms, InventoryIndexPostings: inventoryIndexPostings, InventoryBlockCache: inventoryBlockCacheStats(inv), CatalogLoadMs: loadMs,
+		DirectoryQueries: append([]string(nil), benchmarkDirectoryQueries...),
+		CatalogIntegrity: c.IntegrityStats(), CatalogSPKRead: map[string]uint64{"cachedBytes": uint64(catalogRead.CachedBytes), "loadedBytes": uint64(catalogRead.LoadedBytes), "pageLoads": catalogRead.PageLoads, "cacheHits": catalogRead.CacheHits, "cacheMisses": catalogRead.CacheMisses},
 		TrajectoryPrecision: "approximate-opt-in",
 		Requests:            *n * latencyBatch, Concurrency: *workers, FirstRequestMs: firstMs,
 		P50Ns: quantile(lat, .50), P95Ns: quantile(lat, .95), P99Ns: quantile(lat, .99), MinNs: quantile(lat, 0), MaxNs: quantile(lat, 1),
@@ -237,9 +238,13 @@ func main() {
 		StateTilesSource: stateTileSourceEvidence,
 		OverloadRequests: overloadRequests, OverloadRejected: overloadRejected, OverloadStatusExpected: http.StatusTooManyRequests,
 		PeakRSSBytes: peak.rss, PeakRSSSampled: true, RSSMeasurement: "sampled process RSS; not an OS peak", PeakHeapBytes: peak.heap, AllocDelta: nonNegativeDelta(after.Alloc, before.Alloc), TotalAlloc: after.TotalAlloc - before.TotalAlloc,
-		InvalidResponses: invalid + mixed.invalid, CancelledObserved: cancelErr != nil,
+		InvalidResponses: invalid + mixed.invalid, CancelledObserved: cancelObserved, CancelLatencyNs: cancelLatencyNs,
 	}
 	_ = json.NewEncoder(os.Stdout).Encode(out)
+}
+
+func elapsedMilliseconds(start time.Time) float64 {
+	return float64(time.Since(start).Nanoseconds()) / float64(time.Millisecond)
 }
 
 func nonNegativeDelta(after, before uint64) uint64 {
@@ -272,7 +277,7 @@ func runMixed(client *http.Client, base string, n, workers int, payload string, 
 				if i%3 == 1 {
 					path, method, body = "/v1/trajectory", http.MethodPost, payload
 				} else if i%3 == 2 && withInventory {
-					path = "/v1/identities?limit=10&q=Ceres"
+					path = "/v1/identities?limit=10&q=" + benchmarkDirectoryQuery(i)
 				}
 				requestStart := time.Now()
 				status, _, err := doRequest(client, method, base+path, body)
@@ -295,22 +300,31 @@ type stateReport struct {
 }
 
 type stateTileEvidence struct {
-	IDs              int   `json:"ids"`
-	Requests         int   `json:"requests"`
-	SuccessfulTiles  int64 `json:"successfulTiles"`
-	P50Ns            int64 `json:"successfulTileP50Ns"`
-	P95Ns            int64 `json:"successfulTileP95Ns"`
-	P99Ns            int64 `json:"successfulTileP99Ns"`
-	P50Bytes         int64 `json:"successfulTileP50Bytes"`
-	PlanErrors       int64 `json:"planErrors"`
-	Overload429      int64 `json:"overload429"`
-	OtherErrors      int64 `json:"otherErrors"`
-	ExactCount       int   `json:"exactCount"`
-	ApproximateCount int   `json:"approximateCount"`
-	MissingCount     int   `json:"missingCount"`
+	IDs              int     `json:"ids"`
+	Requests         int     `json:"requests"`
+	PlanLatencyNs    int64   `json:"planLatencyNs"`
+	TileLatencyNs    int64   `json:"tileLatencyNs"`
+	TotalLatencyNs   int64   `json:"totalLatencyNs"`
+	SuccessfulRPS    float64 `json:"successfulTilesPerSecond"`
+	RejectedRPS      float64 `json:"rejectedTilesPerSecond"`
+	SuccessfulTiles  int64   `json:"successfulTiles"`
+	P50Ns            int64   `json:"successfulTileP50Ns"`
+	P95Ns            int64   `json:"successfulTileP95Ns"`
+	P99Ns            int64   `json:"successfulTileP99Ns"`
+	P50Bytes         int64   `json:"successfulTileP50Bytes"`
+	PlanErrors       int64   `json:"planErrors"`
+	Overload429      int64   `json:"overload429"`
+	OtherErrors      int64   `json:"otherErrors"`
+	RejectedP50Ns    int64   `json:"rejectedP50Ns"`
+	RejectedP95Ns    int64   `json:"rejectedP95Ns"`
+	CacheHits        uint64  `json:"cacheHits"`
+	CacheMisses      uint64  `json:"cacheMisses"`
+	ExactCount       int     `json:"exactCount"`
+	ApproximateCount int     `json:"approximateCount"`
+	MissingCount     int     `json:"missingCount"`
 }
 
-func runStateTileWorkloads(client *http.Client, base string, ids []string, counts []int, epochJD float64, n, workers int, peak *peakMemory) []stateTileEvidence {
+func runStateTileWorkloads(service *httpapi.Server, client *http.Client, base string, ids []string, counts []int, epochJD float64, n, workers int, peak *peakMemory) []stateTileEvidence {
 	if len(ids) == 0 {
 		return nil
 	}
@@ -323,9 +337,12 @@ func runStateTileWorkloads(client *http.Client, base string, ids []string, count
 			continue
 		}
 		payload := statePlanPayload(ids[:count], epochJD)
+		cacheBefore := service.TileCacheStats()
+		planStart := time.Now()
 		status, rawPlan, err := doRequestBody(client, http.MethodPost, base+"/v1/state/plan", payload)
+		planLatencyNs := time.Since(planStart).Nanoseconds()
 		if err != nil || status != http.StatusOK {
-			out = append(out, stateTileEvidence{IDs: count, Requests: n, PlanErrors: int64(n)})
+			out = append(out, stateTileEvidence{IDs: count, Requests: n, PlanLatencyNs: planLatencyNs, PlanErrors: 1})
 			continue
 		}
 		var plan struct {
@@ -338,12 +355,14 @@ func runStateTileWorkloads(client *http.Client, base string, ids []string, count
 			} `json:"tiles"`
 		}
 		if json.Unmarshal(rawPlan, &plan) != nil || plan.PlanID == "" {
-			out = append(out, stateTileEvidence{IDs: count, Requests: n, PlanErrors: int64(n)})
+			out = append(out, stateTileEvidence{IDs: count, Requests: n, PlanLatencyNs: planLatencyNs, PlanErrors: 1})
 			continue
 		}
 		times := make([]int64, 0, n*len(plan.Tiles))
 		bytes := make([]int64, 0, n*len(plan.Tiles))
+		rejectedTimes := make([]int64, 0)
 		var next, successfulTiles, overload429, otherErrors int64
+		workloadStart := time.Now()
 		var samplesMu sync.Mutex
 		var wg sync.WaitGroup
 		for w := 0; w < workers; w++ {
@@ -370,6 +389,9 @@ func runStateTileWorkloads(client *http.Client, base string, ids []string, count
 						}
 						if tileErr == nil && status == http.StatusTooManyRequests {
 							atomic.AddInt64(&overload429, 1)
+							samplesMu.Lock()
+							rejectedTimes = append(rejectedTimes, elapsed)
+							samplesMu.Unlock()
 						} else {
 							atomic.AddInt64(&otherErrors, 1)
 						}
@@ -379,10 +401,20 @@ func runStateTileWorkloads(client *http.Client, base string, ids []string, count
 			}()
 		}
 		wg.Wait()
+		tileLatencyNs := time.Since(workloadStart).Nanoseconds()
+		totalLatencyNs := planLatencyNs + tileLatencyNs
 		peak.Sample()
 		sort.Slice(times, func(i, j int) bool { return times[i] < times[j] })
 		sort.Slice(bytes, func(i, j int) bool { return bytes[i] < bytes[j] })
-		out = append(out, stateTileEvidence{IDs: count, Requests: n, SuccessfulTiles: successfulTiles, P50Ns: quantile(times, .50), P95Ns: quantile(times, .95), P99Ns: quantile(times, .99), P50Bytes: quantile(bytes, .50), Overload429: overload429, OtherErrors: otherErrors, ExactCount: plan.ExactCount, ApproximateCount: plan.ApproximateCount, MissingCount: plan.MissingCount})
+		sort.Slice(rejectedTimes, func(i, j int) bool { return rejectedTimes[i] < rejectedTimes[j] })
+		cacheStats := service.TileCacheStats()
+		seconds := float64(tileLatencyNs) / float64(time.Second)
+		successfulRPS, rejectedRPS := 0.0, 0.0
+		if seconds > 0 {
+			successfulRPS = float64(successfulTiles) / seconds
+			rejectedRPS = float64(overload429) / seconds
+		}
+		out = append(out, stateTileEvidence{IDs: count, Requests: n, PlanLatencyNs: planLatencyNs, TileLatencyNs: tileLatencyNs, TotalLatencyNs: totalLatencyNs, SuccessfulRPS: successfulRPS, RejectedRPS: rejectedRPS, SuccessfulTiles: successfulTiles, P50Ns: quantile(times, .50), P95Ns: quantile(times, .95), P99Ns: quantile(times, .99), P50Bytes: quantile(bytes, .50), Overload429: overload429, OtherErrors: otherErrors, RejectedP50Ns: quantile(rejectedTimes, .50), RejectedP95Ns: quantile(rejectedTimes, .95), CacheHits: cacheStats["hits"] - cacheBefore["hits"], CacheMisses: cacheStats["misses"] - cacheBefore["misses"], ExactCount: plan.ExactCount, ApproximateCount: plan.ApproximateCount, MissingCount: plan.MissingCount})
 	}
 	return out
 }
@@ -419,7 +451,8 @@ func runInventoryWorkloads(client *http.Client, base string, n, workers int, inv
 					atomic.AddInt64(&errors, 1)
 				}
 				start = time.Now()
-				status, _, err = doRequest(client, http.MethodGet, base+"/v1/identities?limit=10&q=Ceres", "")
+				query := benchmarkDirectoryQuery(i)
+				status, _, err = doRequest(client, http.MethodGet, base+"/v1/identities?limit=10&q="+query, "")
 				if err == nil && status == http.StatusOK {
 					searchTimes[i] = time.Since(start).Nanoseconds()
 				} else {
@@ -457,7 +490,8 @@ func positiveTimes(values []int64) []int64 {
 }
 
 func runOverload(c *catalog.Catalog, inv *inventory.Inventory, workers int, payload string, peak *peakMemory) (int, int64) {
-	server := httptest.NewServer(httpapi.New(c, 1, inv))
+	service := httpapi.New(c, 1, inv)
+	server := httptest.NewServer(service)
 	defer server.Close()
 	client := server.Client()
 	n := workers * 2
@@ -476,6 +510,65 @@ func runOverload(c *catalog.Catalog, inv *inventory.Inventory, workers int, payl
 	wg.Wait()
 	peak.Sample()
 	return n, rejected
+}
+
+func runCancellation(c *catalog.Catalog, inv *inventory.Inventory, ids []string, peak *peakMemory) (bool, int64) {
+	if len(ids) == 0 {
+		return false, 0
+	}
+	service := httpapi.New(c, 1, inv)
+	server := httptest.NewServer(service)
+	defer server.Close()
+	client := server.Client()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, server.URL+"/v1/state/plan", strings.NewReader(statePlanPayload(ids, 2461287.5)))
+	if err != nil {
+		return false, 0
+	}
+	done := make(chan error, 1)
+	go func() {
+		response, requestErr := client.Do(req)
+		if response != nil {
+			_, _ = io.Copy(io.Discard, response.Body)
+			_ = response.Body.Close()
+		}
+		done <- requestErr
+	}()
+	timer := time.NewTimer(time.Millisecond)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return false, 0
+	case <-timer.C:
+		cancelAt := time.Now()
+		cancel()
+		requestErr := <-done
+		latency := int64(0)
+		deadline := time.NewTimer(time.Second)
+		ticker := time.NewTicker(time.Millisecond)
+		defer deadline.Stop()
+		defer ticker.Stop()
+	waitLoop:
+		for service.CancelledRequests() == 0 {
+			select {
+			case <-ticker.C:
+			case <-deadline.C:
+				break waitLoop
+			}
+		}
+		if service.CancelledRequests() > 0 {
+			latency = time.Since(cancelAt).Nanoseconds()
+		}
+		peak.Sample()
+		if service.CancelledRequests() == 0 {
+			return false, 0
+		}
+		if latency < 1 {
+			latency = 1
+		}
+		return requestErr != nil, latency
+	}
 }
 
 func doRequest(client *http.Client, method, url, body string) (int, int64, error) {
@@ -641,4 +734,23 @@ func inventoryBytes(i *inventory.Inventory) int64 {
 		return 0
 	}
 	return i.TotalBytes()
+}
+
+func inventoryBlockCacheStats(i *inventory.Inventory) map[string]int64 {
+	if i == nil {
+		return nil
+	}
+	return i.BlockCacheStats()
+}
+
+var benchmarkDirectoryQueries = []string{"Ceres", "Halley", "Europa", "Sedna", "Apophis", "Voyager"}
+
+func benchmarkDirectoryQuery(index int) string {
+	// A fixed mixer gives the harness varied query order without making the
+	// result depend on goroutine scheduling or global random state.
+	x := uint64(index+1) * 0x9e3779b97f4a7c15
+	x ^= x >> 30
+	x *= 0xbf58476d1ce4e5b9
+	x ^= x >> 27
+	return benchmarkDirectoryQueries[int(x%uint64(len(benchmarkDirectoryQueries)))]
 }

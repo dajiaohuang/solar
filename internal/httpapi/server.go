@@ -28,8 +28,10 @@ type Server struct {
 	slots               chan struct{}
 	tileSlots           chan struct{}
 	plans               *statePlanCache
+	tiles               *stateTileCache
 	stateTileByteBudget int64
 	inFlight            atomic.Int64
+	cancelled           atomic.Uint64
 }
 
 func New(c *catalog.Catalog, maxConcurrent int, inventories ...*inventory.Inventory) *Server {
@@ -40,9 +42,30 @@ func New(c *catalog.Catalog, maxConcurrent int, inventories ...*inventory.Invent
 	if len(inventories) > 0 {
 		inv = inventories[0]
 	}
-	return &Server{catalog: c, inventory: inv, slots: make(chan struct{}, maxConcurrent), tileSlots: make(chan struct{}, 2), plans: newStatePlanCache(statePlanCacheItems), stateTileByteBudget: maxStateTileBytes}
+	return &Server{catalog: c, inventory: inv, slots: make(chan struct{}, maxConcurrent), tileSlots: make(chan struct{}, 2), plans: newStatePlanCache(statePlanCacheItems), tiles: newStateTileCache(stateTileCacheBytes), stateTileByteBudget: maxStateTileBytes}
 }
+
+// TileCacheStats exposes bounded runtime evidence to the local benchmark
+// harness without adding diagnostic state to the wire protocol.
+func (s *Server) TileCacheStats() map[string]uint64 {
+	if s.tiles == nil {
+		return map[string]uint64{}
+	}
+	return s.tiles.stats()
+}
+
+// CancelledRequests reports requests whose server handler observed a canceled
+// context before returning. It is benchmark evidence, not a wire metric.
+func (s *Server) CancelledRequests() uint64 {
+	return s.cancelled.Load()
+}
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	defer func() {
+		if r.Context().Err() != nil {
+			s.cancelled.Add(1)
+		}
+	}()
 	w.Header().Set("X-Solar-API-Version", catalog.APIVersion)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -666,7 +689,10 @@ func (s *Server) trajectory(w http.ResponseWriter, r *http.Request) {
 					tb.States = nil
 					tb.StateStride = 0
 					tb.Availability = catalog.Missing
-					tb.MissingReason = "kernel-coverage-gap"
+					tb.MissingReason = s.catalog.KernelMissingReason(id)
+					if tb.MissingReason == "" {
+						tb.MissingReason = "kernel-coverage-gap"
+					}
 					break
 				}
 				tb.States = appendFlatState(tb.States, st)

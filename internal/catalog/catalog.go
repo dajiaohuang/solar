@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -13,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/dajiaohuang/solar/backend/internal/spk"
 )
@@ -93,11 +95,20 @@ type Catalog struct {
 type kernelBinding struct {
 	id             string
 	sha256         string
+	path           string
+	bytes          int64
 	startET        float64
 	endET          float64
 	kernel         *spk.Kernel
 	dependencyOnly bool
 	solutionIDs    []string
+	mu             sync.Mutex
+	loading        bool
+	ready          chan struct{}
+	verified       bool
+	terminalErr    error
+	integrityBytes int64
+	integrityReads uint64
 }
 
 type manifest struct {
@@ -195,20 +206,16 @@ func Load(dataDir string) (*Catalog, error) {
 		present := pathValid && fileExists(kernelPath)
 		var binding *kernelBinding
 		manifestIdentityValid := pathValid && validManifestIdentity(f)
-		manifestVerified := false
-		if present {
-			if manifestIdentityValid {
-				manifestVerified, _ = verifyManifestPath(kernelPath, f)
-				if manifestVerified {
-					if k, parseErr := spk.OpenWithCache(kernelPath, spk.DefaultPageSize, perKernelCache); parseErr == nil {
-						binding = &kernelBinding{id: f.ID, sha256: f.SHA256, startET: f.StartET, endET: f.EndET, kernel: k, dependencyOnly: f.DependencyOnly, solutionIDs: append([]string(nil), f.SolutionKernelIDs...)}
-						c.kernels[f.ID] = binding
-						c.packagedFiles++
-						for _, target := range f.Targets {
-							c.byTarget[target] = append(c.byTarget[target], binding)
-						}
-					}
-				}
+		if present && manifestIdentityValid {
+			// Keep manifest identity and target coverage available immediately,
+			// but defer the full-byte integrity read and SPK parse until a request
+			// actually needs this kernel. The binding cannot evaluate a state until
+			// kernelFor has completed both checks.
+			binding = &kernelBinding{id: f.ID, sha256: f.SHA256, path: kernelPath, bytes: f.Bytes, startET: f.StartET, endET: f.EndET, dependencyOnly: f.DependencyOnly, solutionIDs: append([]string(nil), f.SolutionKernelIDs...)}
+			c.kernels[f.ID] = binding
+			c.packagedFiles++
+			for _, target := range f.Targets {
+				c.byTarget[target] = append(c.byTarget[target], binding)
 			}
 		}
 		for _, naif := range f.Targets {
@@ -281,25 +288,115 @@ func verifyManifestFile(raw []byte, file manifestFile) bool {
 	return strings.EqualFold(hex.EncodeToString(sum[:]), digest)
 }
 
-func verifyManifestPath(path string, file manifestFile) (bool, error) {
+func verifyManifestPathContext(ctx context.Context, path string, file manifestFile) (bool, int64, error) {
 	if !validManifestIdentity(file) {
-		return false, nil
+		return false, 0, nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return false, err
+		return false, 0, err
 	}
 	defer f.Close()
 	h := sha256.New()
-	n, err := io.Copy(h, f)
-	if err != nil {
-		return false, err
+	buf := make([]byte, 1<<20)
+	var n int64
+	for {
+		if err := ctx.Err(); err != nil {
+			return false, n, err
+		}
+		read, readErr := f.Read(buf)
+		if read > 0 {
+			if _, err := h.Write(buf[:read]); err != nil {
+				return false, n, err
+			}
+			n += int64(read)
+			if n > file.Bytes {
+				return false, n, nil
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return false, n, readErr
+		}
 	}
 	if n != file.Bytes {
-		return false, nil
+		return false, n, nil
 	}
 	digest := strings.TrimSpace(file.SHA256)
-	return strings.EqualFold(hex.EncodeToString(h.Sum(nil)), digest), nil
+	return strings.EqualFold(hex.EncodeToString(h.Sum(nil)), digest), n, nil
+}
+
+// kernelFor verifies the manifest-declared bytes and parses the SPK lazily.
+// Only one goroutine performs the potentially large read per kernel; other
+// callers wait with cancellation rather than duplicating I/O or retaining a
+// second kernel. Integrity and parse failures are terminal for this catalog;
+// caller cancellation is retryable.
+func (b *kernelBinding) kernelFor(ctx context.Context, pageCacheBytes int64) (*spk.Kernel, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	for {
+		b.mu.Lock()
+		if b.kernel != nil {
+			k := b.kernel
+			b.mu.Unlock()
+			return k, nil
+		}
+		if b.terminalErr != nil {
+			err := b.terminalErr
+			b.mu.Unlock()
+			return nil, err
+		}
+		if b.loading {
+			ready := b.ready
+			b.mu.Unlock()
+			select {
+			case <-ready:
+				continue
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		b.loading = true
+		b.ready = make(chan struct{})
+		ready := b.ready
+		b.mu.Unlock()
+
+		verified, integrityBytes, err := verifyManifestPathContext(ctx, b.path, manifestFile{SHA256: b.sha256, Bytes: b.bytes})
+		if err == nil && !verified {
+			err = fmt.Errorf("kernel %s failed manifest integrity verification", b.id)
+		}
+		var kernel *spk.Kernel
+		if err == nil {
+			kernel, err = spk.OpenWithCache(b.path, spk.DefaultPageSize, pageCacheBytes)
+		}
+
+		b.mu.Lock()
+		b.loading = false
+		b.integrityReads++
+		b.integrityBytes += integrityBytes
+		if err == nil {
+			b.kernel = kernel
+			b.verified = true
+		} else if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+			b.terminalErr = err
+		}
+		close(ready)
+		b.ready = nil
+		b.mu.Unlock()
+		return kernel, err
+	}
+}
+
+func (b *kernelBinding) status() (verified, pending, invalid bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.verified, b.kernel == nil && b.terminalErr == nil, b.terminalErr != nil
 }
 
 func validManifestIdentity(file manifestFile) bool {
@@ -346,16 +443,81 @@ func (c *Catalog) ManifestContract() string { return c.manifestContract }
 func (c *Catalog) Close() error {
 	var firstErr error
 	for _, binding := range c.kernels {
-		if err := binding.kernel.Close(); err != nil && firstErr == nil {
-			firstErr = err
+		binding.mu.Lock()
+		kernel := binding.kernel
+		binding.mu.Unlock()
+		if kernel != nil {
+			if err := kernel.Close(); err != nil && firstErr == nil {
+				firstErr = err
+			}
 		}
 	}
 	return firstErr
 }
 func (c *Catalog) Stats() map[string]int {
 	out := map[string]int{"catalogEntries": len(c.bodies), "manifestFiles": c.manifestFiles, "manifestTargets": c.manifestTargets, "packagedFiles": c.packagedFiles, "kernelPageCacheBytesMax": int(c.kernelCacheBudget)}
+	for _, binding := range c.kernels {
+		verified, pending, invalid := binding.status()
+		if verified {
+			out["kernelFilesVerified"]++
+		} else if pending {
+			out["kernelFilesPending"]++
+		} else if invalid {
+			out["kernelFilesInvalid"]++
+		}
+	}
 	for _, b := range c.bodies {
 		out[string(b.Availability)]++
+	}
+	return out
+}
+
+// IntegrityStats reports the deferred manifest reads separately from SPK page
+// traffic. A pending file has performed no integrity I/O, while an invalid
+// file remains excluded from exact evaluation after its failed attempt.
+func (c *Catalog) IntegrityStats() map[string]uint64 {
+	out := map[string]uint64{"reads": 0, "bytesRead": 0, "verified": 0, "pending": 0, "invalid": 0}
+	for _, binding := range c.kernels {
+		binding.mu.Lock()
+		out["reads"] += binding.integrityReads
+		if binding.integrityBytes > 0 {
+			out["bytesRead"] += uint64(binding.integrityBytes)
+		}
+		verified, pending, invalid := binding.verified, binding.kernel == nil && binding.terminalErr == nil, binding.terminalErr != nil
+		binding.mu.Unlock()
+		if verified {
+			out["verified"]++
+		} else if pending {
+			out["pending"]++
+		} else if invalid {
+			out["invalid"]++
+		}
+	}
+	return out
+}
+
+// ReadStats aggregates only kernels that have been requested and verified.
+// Pending files intentionally contribute no I/O, making lazy integrity costs
+// visible instead of being mistaken for startup work.
+func (c *Catalog) ReadStats() spk.ReadStats {
+	var out spk.ReadStats
+	for _, binding := range c.kernels {
+		binding.mu.Lock()
+		kernel := binding.kernel
+		binding.mu.Unlock()
+		if kernel == nil {
+			continue
+		}
+		stats := kernel.ReadStats()
+		if out.PageSize == 0 {
+			out.PageSize = stats.PageSize
+		}
+		out.MaxBytes += stats.MaxBytes
+		out.CachedBytes += stats.CachedBytes
+		out.LoadedBytes += stats.LoadedBytes
+		out.PageLoads += stats.PageLoads
+		out.CacheHits += stats.CacheHits
+		out.CacheMisses += stats.CacheMisses
 	}
 	return out
 }
@@ -408,7 +570,34 @@ func (c *Catalog) KernelSHA256(id string) (string, bool) {
 	if !ok || binding == nil || binding.sha256 == "" {
 		return "", false
 	}
+	if _, err := binding.kernelFor(context.Background(), c.kernelCacheBudgetForBinding()); err != nil {
+		return "", false
+	}
 	return binding.sha256, true
+}
+
+// KernelMissingReason reports a stable wire-level reason only for a manifest
+// kernel that failed lazy verification or parsing. A pending or verified
+// kernel returns an empty reason; epoch coverage gaps are decided by the
+// resolver and are not integrity failures.
+func (c *Catalog) KernelMissingReason(id string) string {
+	binding, ok := c.kernels[id]
+	if !ok || binding == nil {
+		return ""
+	}
+	binding.mu.Lock()
+	defer binding.mu.Unlock()
+	if binding.terminalErr != nil {
+		return "kernel-invalid"
+	}
+	return ""
+}
+
+func (c *Catalog) kernelCacheBudgetForBinding() int64 {
+	if len(c.kernels) == 0 || c.kernelCacheBudget <= 0 {
+		return spk.DefaultCacheBytes
+	}
+	return c.kernelCacheBudget / int64(len(c.kernels))
 }
 
 // OperationalKernelSHA256 identifies the verified kernel selected for an
@@ -420,7 +609,7 @@ func (c *Catalog) OperationalKernelSHA256(id string, jd float64) (string, bool, 
 		return "", false, nil
 	}
 	et := (jd - 2451545.0) * 86400
-	root, err := c.operationalRoot(b.NAIFID, et)
+	root, err := c.operationalRoot(context.Background(), b.NAIFID, et)
 	if err != nil {
 		return "", false, err
 	}
@@ -450,7 +639,7 @@ func (c *Catalog) OperationalProvenance(id string, jd float64) (OperationalProve
 		return OperationalProvenance{}, false, nil
 	}
 	et := (jd - 2451545.0) * 86400
-	root, err := c.operationalRoot(b.NAIFID, et)
+	root, err := c.operationalRoot(context.Background(), b.NAIFID, et)
 	if err != nil || root == nil {
 		return OperationalProvenance{}, false, err
 	}
@@ -527,7 +716,7 @@ func (c *Catalog) OperationalStatesContext(ctx context.Context, ids []string, jd
 		if !ok || b.NAIFID == 0 {
 			continue
 		}
-		root, err := c.operationalRoot(b.NAIFID, et)
+		root, err := c.operationalRoot(ctx, b.NAIFID, et)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -535,7 +724,7 @@ func (c *Catalog) OperationalStatesContext(ctx context.Context, ids []string, jd
 			continue
 		}
 		allowed, pool := operationalPool(root)
-		st, ok, err := c.resolveOperationalCached(b.NAIFID, et, allowed, pool, cache, map[int]bool{})
+		st, ok, err := c.resolveOperationalCached(ctx, b.NAIFID, et, allowed, pool, cache, map[int]bool{})
 		if err != nil {
 			return nil, nil, err
 		}
@@ -561,13 +750,23 @@ type operationalCacheEntry struct {
 	err   error
 }
 
-func (c *Catalog) operationalRoot(target int, et float64) (*kernelBinding, error) {
+func (c *Catalog) operationalRoot(ctx context.Context, target int, et float64) (*kernelBinding, error) {
 	for n := len(c.byTarget[target]) - 1; n >= 0; n-- {
 		candidate := c.byTarget[target][n]
 		if candidate.dependencyOnly {
 			continue
 		}
-		if _, found, err := candidate.kernel.Evaluate(target, et); err != nil {
+		kernel, err := candidate.kernelFor(ctx, c.kernelCacheBudgetForBinding())
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, err
+			}
+			// A corrupt or structurally invalid candidate cannot provide an
+			// exact state. Continue looking for an older valid covering file;
+			// if none exists, the caller will report a missing state.
+			continue
+		}
+		if _, found, err := kernel.Evaluate(target, et); err != nil {
 			return nil, err
 		} else if found {
 			return candidate, nil
@@ -588,7 +787,7 @@ func operationalPool(root *kernelBinding) (map[string]bool, string) {
 	return allowed, root.id + "\x00" + strings.Join(root.solutionIDs, "\x00")
 }
 
-func (c *Catalog) resolveOperationalCached(target int, et float64, allowed map[string]bool, pool string, cache map[operationalCacheKey]operationalCacheEntry, visiting map[int]bool) (spk.State, bool, error) {
+func (c *Catalog) resolveOperationalCached(ctx context.Context, target int, et float64, allowed map[string]bool, pool string, cache map[operationalCacheKey]operationalCacheEntry, visiting map[int]bool) (spk.State, bool, error) {
 	key := operationalCacheKey{target: target, pool: pool}
 	if cache != nil {
 		if entry, ok := cache[key]; ok {
@@ -620,7 +819,17 @@ func (c *Catalog) resolveOperationalCached(target int, et float64, allowed map[s
 		} else if binding.dependencyOnly {
 			continue
 		}
-		st, found, err := binding.kernel.Evaluate(target, et)
+		kernel, err := binding.kernelFor(ctx, c.kernelCacheBudgetForBinding())
+		if err != nil {
+			if ctx.Err() == nil {
+				continue
+			}
+			if cache != nil {
+				cache[key] = operationalCacheEntry{err: err}
+			}
+			return spk.State{}, false, err
+		}
+		st, found, err := kernel.Evaluate(target, et)
 		if err != nil {
 			if cache != nil {
 				cache[key] = operationalCacheEntry{err: err}
@@ -630,7 +839,7 @@ func (c *Catalog) resolveOperationalCached(target int, et float64, allowed map[s
 		if !found {
 			continue
 		}
-		center, centerFound, err := c.resolveOperationalCached(st.Center, et, allowed, pool, cache, visiting)
+		center, centerFound, err := c.resolveOperationalCached(ctx, st.Center, et, allowed, pool, cache, visiting)
 		if err != nil {
 			if cache != nil {
 				cache[key] = operationalCacheEntry{err: err}
@@ -658,7 +867,7 @@ func (c *Catalog) resolveOperationalCached(target int, et float64, allowed map[s
 }
 
 func (c *Catalog) resolveOperational(target int, et float64, allowed map[string]bool, visiting map[int]bool) (spk.State, bool, error) {
-	st, found, err := c.resolveOperationalCached(target, et, allowed, "", nil, visiting)
+	st, found, err := c.resolveOperationalCached(context.Background(), target, et, allowed, "", nil, visiting)
 	if found {
 		st.Center = 0
 	}

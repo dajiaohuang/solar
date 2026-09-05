@@ -27,11 +27,14 @@ The service builds a bounded startup index for the audited source inventory, so
 identity search and detail requests do not rescan all gzip shards. Exact state
 requests use verified SPK data or a validated source snapshot; rounded or
 unvalidated elements are missing unless `precision=approximate` is explicitly
-requested. The service uses a bounded scientific worker pool. When all slots
-are in use it returns `429 overloaded` with `Retry-After: 1`; it does not
-accumulate an unbounded work queue. Reproduce the measured cold/warm, batch,
-long-trajectory, binary state-tile transport, mixed-load, RSS and profile evidence
-with the commands in
+requested. Manifest-valid kernel paths are admitted to the catalog at startup,
+while their full-byte manifest read and SPK parse are deferred until exact
+evaluation needs them; cancellation is retryable and integrity/parse failure is
+terminal for that kernel. The service uses a bounded scientific worker pool.
+When all slots are in use it returns `429 overloaded` with `Retry-After: 1`;
+it does not accumulate an unbounded work queue. Reproduce the measured
+cold/warm, batch, long-trajectory, binary state-tile transport, mixed-load, RSS
+and profile evidence with the commands in
 [`BENCHMARKS.md`](../BENCHMARKS.md).
 
 The current binary state-tile benchmark defaults to TDB `epochJd=2461287.5`,
@@ -47,8 +50,10 @@ For one shared TDB epoch, clients first create an exact plan with
 `POST /v1/state/plan`, then fetch its fixed-header binary tiles through
 `POST /v1/state/tiles`. A plan accepts up to 32,768 unique catalog or source
 IDs; the default tile contains 16,384 rows. Planning resolves and freezes the
-actual exact/missing result, and the bounded two-minute LRU cache makes tile
-retries byte-stable without repeating SPK evaluation. Each tile carries
+actual exact/missing result. A bounded two-minute plan cache avoids repeated
+planning; a separate bounded 64 MiB final-response LRU keyed by plan and tile
+sequence makes successful tile retries byte-stable without repeating encoding
+or SPK evaluation. Each tile carries
 manifest and plan hashes, row metadata, exclusive status bitmaps and little-
 endian Float64 `[x,y,z,vx,vy,vz]` values. Approximate rows are forbidden.
 

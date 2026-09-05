@@ -176,11 +176,15 @@ type blockCacheEntry struct {
 }
 
 type blockCache struct {
-	mu       sync.Mutex
-	maxBytes int64
-	bytes    int64
-	items    map[uint64]*list.Element
-	order    *list.List
+	mu          sync.Mutex
+	maxBytes    int64
+	bytes       int64
+	hits        uint64
+	misses      uint64
+	loads       uint64
+	loadedBytes uint64
+	items       map[uint64]*list.Element
+	order       *list.List
 }
 
 func newBlockCache(maxBytes int64) *blockCache {
@@ -192,8 +196,10 @@ func (c *blockCache) get(key uint64) (*decodedBlock, bool) {
 	defer c.mu.Unlock()
 	e := c.items[key]
 	if e == nil {
+		c.misses++
 		return nil, false
 	}
+	c.hits++
 	c.order.MoveToFront(e)
 	return e.Value.(*blockCacheEntry).block, true
 }
@@ -205,6 +211,8 @@ func (c *blockCache) put(key uint64, value *decodedBlock) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.loads++
+	c.loadedBytes += uint64(len(value.data))
 	if e := c.items[key]; e != nil {
 		entry := e.Value.(*blockCacheEntry)
 		c.bytes -= entry.bytes
@@ -229,6 +237,10 @@ func (c *blockCache) clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.bytes = 0
+	c.hits = 0
+	c.misses = 0
+	c.loads = 0
+	c.loadedBytes = 0
 	c.items = make(map[uint64]*list.Element)
 	c.order.Init()
 }
@@ -236,7 +248,7 @@ func (c *blockCache) clear() {
 func (c *blockCache) stats() map[string]int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return map[string]int64{"entries": int64(len(c.items)), "residentBytes": c.bytes, "maxResidentBytes": c.maxBytes}
+	return map[string]int64{"entries": int64(len(c.items)), "residentBytes": c.bytes, "maxResidentBytes": c.maxBytes, "hits": int64(c.hits), "misses": int64(c.misses), "loads": int64(c.loads), "loadedBytes": int64(c.loadedBytes)}
 }
 
 func Load(dir string) (*Inventory, error) {

@@ -30,6 +30,7 @@ const (
 	statePlanEstimateRow = 1024
 	statePlanCacheBytes  = 128 << 20
 	statePlanCacheItems  = 64
+	stateTileCacheBytes  = 64 << 20
 )
 
 type statePlanRequest struct {
@@ -110,6 +111,104 @@ type statePlanCache struct {
 	ttl      time.Duration
 	items    map[string]*list.Element
 	order    *list.List
+}
+
+type stateTileCacheValue struct {
+	raw  []byte
+	etag string
+}
+
+type stateTileCacheEntry struct {
+	key   string
+	value stateTileCacheValue
+	used  time.Time
+	bytes int64
+}
+
+type stateTileCache struct {
+	mu       sync.Mutex
+	maxBytes int64
+	bytes    int64
+	hits     uint64
+	misses   uint64
+	items    map[string]*list.Element
+	order    *list.List
+}
+
+func newStateTileCache(maxBytes int64) *stateTileCache {
+	if maxBytes < 1 {
+		maxBytes = 1
+	}
+	return &stateTileCache{maxBytes: maxBytes, items: make(map[string]*list.Element), order: list.New()}
+}
+
+func (c *stateTileCache) get(key string) (stateTileCacheValue, bool) {
+	return c.lookup(key, true)
+}
+
+func (c *stateTileCache) peek(key string) (stateTileCacheValue, bool) {
+	return c.lookup(key, false)
+}
+
+func (c *stateTileCache) lookup(key string, count bool) (stateTileCacheValue, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e := c.items[key]
+	if e == nil {
+		if count {
+			c.misses++
+		}
+		return stateTileCacheValue{}, false
+	}
+	entry := e.Value.(*stateTileCacheEntry)
+	if time.Since(entry.used) > statePlanTTL {
+		delete(c.items, key)
+		c.bytes -= entry.bytes
+		c.order.Remove(e)
+		if count {
+			c.misses++
+		}
+		return stateTileCacheValue{}, false
+	}
+	entry.used = time.Now()
+	c.order.MoveToFront(e)
+	if count {
+		c.hits++
+	}
+	return entry.value, true
+}
+
+func (c *stateTileCache) put(key string, value stateTileCacheValue) {
+	weight := int64(len(value.raw) + len(value.etag))
+	if weight > c.maxBytes {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if e := c.items[key]; e != nil {
+		entry := e.Value.(*stateTileCacheEntry)
+		c.bytes -= entry.bytes
+		entry.value, entry.used, entry.bytes = value, time.Now(), weight
+		c.bytes += weight
+		c.order.MoveToFront(e)
+	} else {
+		e := c.order.PushFront(&stateTileCacheEntry{key: key, value: value, used: time.Now(), bytes: weight})
+		c.items[key] = e
+		c.bytes += weight
+	}
+	for c.bytes > c.maxBytes {
+		e := c.order.Back()
+		entry := e.Value.(*stateTileCacheEntry)
+		delete(c.items, entry.key)
+		c.bytes -= entry.bytes
+		c.order.Remove(e)
+	}
+}
+
+func (c *stateTileCache) stats() map[string]uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return map[string]uint64{"items": uint64(len(c.items)), "residentBytes": uint64(c.bytes), "maxResidentBytes": uint64(c.maxBytes), "hits": c.hits, "misses": c.misses}
 }
 
 func newStatePlanCache(max int, maxBytes ...int64) *statePlanCache {
@@ -449,6 +548,9 @@ func (s *Server) resolvePlanRows(ctx context.Context, rows []statePlanRow, epoch
 				}
 			}
 			row.metadata.MissingReason = row.catalogBody.MissingReason
+			if reason := s.catalog.KernelMissingReason(row.catalogBody.ID); reason != "" {
+				row.metadata.MissingReason = reason
+			}
 			if row.metadata.MissingReason == "" {
 				row.metadata.MissingReason = "kernel-coverage-gap"
 			}
@@ -548,6 +650,15 @@ func (s *Server) stateTiles(w http.ResponseWriter, r *http.Request) {
 		s.error(w, http.StatusBadRequest, "invalid_sequence", "tile sequence is outside the plan")
 		return
 	}
+	cacheKey := req.PlanID + ":" + strconv.FormatUint(uint64(req.Sequence), 10)
+	if cached, ok := s.tiles.get(cacheKey); ok {
+		if err := r.Context().Err(); err != nil {
+			s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
+			return
+		}
+		writeStateTile(w, cached.raw, cached.etag)
+		return
+	}
 	select {
 	case s.tileSlots <- struct{}{}:
 		defer func() { <-s.tileSlots }()
@@ -558,6 +669,13 @@ func (s *Server) stateTiles(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := r.Context().Err(); err != nil {
 		s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
+		return
+	}
+	// A concurrent miss may have filled the response while this request was
+	// waiting for the bounded encoder slot. Reuse it without allocating the
+	// tile a second time.
+	if cached, ok := s.tiles.peek(cacheKey); ok {
+		writeStateTile(w, cached.raw, cached.etag)
 		return
 	}
 	tile := plan.response.Tiles[req.Sequence]
@@ -605,9 +723,15 @@ func (s *Server) stateTiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sum := sha256.Sum256(raw[200:])
+	etag := `"` + fmt.Sprintf("%x", sum[:]) + `"`
+	s.tiles.put(cacheKey, stateTileCacheValue{raw: raw, etag: etag})
+	writeStateTile(w, raw, etag)
+}
+
+func writeStateTile(w http.ResponseWriter, raw []byte, etag string) {
 	w.Header().Set("Content-Type", "application/vnd.solar.state-tile+binary")
 	w.Header().Set("Content-Length", strconv.Itoa(len(raw)))
-	w.Header().Set("ETag", `"`+fmt.Sprintf("%x", sum[:])+`"`)
+	w.Header().Set("ETag", etag)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(raw)
 }

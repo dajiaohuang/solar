@@ -57,10 +57,18 @@ func TestStatePlanAndBinaryTileRoundTrip(t *testing.T) {
 	if _, err := statewire.ParseHeader(one.Body.Bytes()); err != nil {
 		t.Fatal(err)
 	}
+	firstStats := s.TileCacheStats()
+	if firstStats["misses"] != 1 || firstStats["hits"] != 0 {
+		t.Fatalf("unexpected tile cache after first response: %+v", firstStats)
+	}
 	two := httptest.NewRecorder()
 	s.ServeHTTP(two, httptest.NewRequest(http.MethodPost, "/v1/state/tiles", strings.NewReader(tileRequest)))
 	if !bytes.Equal(one.Body.Bytes(), two.Body.Bytes()) || one.Header().Get("ETag") != two.Header().Get("ETag") {
 		t.Fatal("repeated tile was not byte-identical")
+	}
+	secondStats := s.TileCacheStats()
+	if secondStats["hits"] != 1 || secondStats["misses"] != 1 || secondStats["residentBytes"] == 0 || secondStats["residentBytes"] > secondStats["maxResidentBytes"] {
+		t.Fatalf("unexpected tile cache after retry: %+v", secondStats)
 	}
 }
 

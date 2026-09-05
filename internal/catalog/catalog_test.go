@@ -25,7 +25,7 @@ func TestLoadManifestRetainsSourceOnlyTargets(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsPackagedKernelWithManifestIdentityMismatch(t *testing.T) {
+func TestLazyVerificationRejectsPackagedKernelWithManifestIdentityMismatch(t *testing.T) {
 	d := t.TempDir()
 	if err := os.WriteFile(filepath.Join(d, "bad.bsp"), []byte("not-a-kernel"), 0600); err != nil {
 		t.Fatal(err)
@@ -39,8 +39,20 @@ func TestLoadRejectsPackagedKernelWithManifestIdentityMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, ok := c.Get("naif:12345")
-	if !ok || b.Availability != Missing || b.MissingReason != "kernel-invalid" {
-		t.Fatalf("unexpected invalid packaged body: %+v", b)
+	if !ok || b.Availability != AvailableOperational {
+		t.Fatalf("unexpected lazy packaged body: %+v", b)
+	}
+	if stats := c.Stats(); stats["kernelFilesPending"] != 1 || stats["kernelFilesInvalid"] != 0 {
+		t.Fatalf("unexpected pre-request kernel stats: %+v", stats)
+	}
+	if _, found, err := c.OperationalState("naif:12345", 2451545); err != nil || found {
+		t.Fatalf("invalid kernel state found=%v err=%v", found, err)
+	}
+	if reason := c.KernelMissingReason("bad"); reason != "kernel-invalid" {
+		t.Fatalf("unexpected invalid kernel reason: %q", reason)
+	}
+	if stats := c.Stats(); stats["kernelFilesPending"] != 0 || stats["kernelFilesInvalid"] != 1 {
+		t.Fatalf("unexpected post-request kernel stats: %+v", stats)
 	}
 }
 

@@ -78,6 +78,9 @@ segments and therefore reported only 18 exact catalog rows. Catalog state
 tiles use all 552 catalog entries. Source workloads first scan the inventory
 index and select a reproducible mixed set containing 16 exact-capable rows and
 the remainder missing at this epoch, then measure 16,384 and 32,768 IDs.
+Directory-search traffic samples a fixed six-name query set
+(`Ceres`, `Halley`, `Europa`, `Sedna`, `Apophis`, `Voyager`) so the run covers
+different indexed terms while remaining reproducible.
 
 Run the current evidence with:
 
@@ -85,21 +88,41 @@ Run the current evidence with:
 go run ./cmd/bench -requests 5 -concurrency 1 -epoch-jd 2461287.5 -data-dir D:/repo/repostew/.repostew/cache/solar-issue109-backend-full-20260905 -inventory-dir D:/repo/repostew/.repostew/cache/solar-issue109-addressable-inventory-20260905 -long-samples 100
 ```
 
-The 2026-09-05 Windows amd64 run reported catalog 552 entries / 510 packaged
-files, catalog exact/missing 552/0, source exact/missing 16/16,368 at 16,384
-IDs and 16/32,752 at 32,768 IDs. Successful tile samples were reported
-separately from `overload429` and `otherErrors`; with concurrency 1 there were
-5, 5 and 10 successful tiles respectively, with zero overload or other errors.
+The 2026-09-05 Windows amd64 run reported catalog 552 entries / 510 manifest-
+valid packaged files, catalog exact/missing 552/0, source exact/missing
+16/16,368 at 16,384 IDs and 16/32,752 at 32,768 IDs. Lazy integrity evidence
+reported 501 verified kernel files, 9 still pending, 0 invalid, 501 full-file
+verification reads and 1,135,819,776 verified bytes after the workload. The
+catalog SPK page counters are reported separately from those integrity reads;
+the warm run recorded 1,252 page loads, 852,574 page-cache hits and 1,252
+page-cache misses. A fresh-process catalog load was about 27 ms on that run;
+the inventory index load was about 7.7 s. These are host- and filesystem-cache-
+dependent observations, not universal startup guarantees.
+
+Successful tile samples are reported separately from `overload429` and
+`otherErrors`; with concurrency 1 there were 5, 5 and 10 successful tiles
+respectively, with zero overload or other errors. Each state result now reports
+plan latency, tile-workload latency, total latency, successful/rejected tile
+throughput, separate successful/rejected quantiles, and final-response cache
+hits/misses. The response cache is bounded at 64 MiB and shares the two-slot
+tile encoder limit. A concurrency-4 run intentionally produced 429
+backpressure (3 catalog, 3 per source size); those rejections are reported
+separately and are not included in successful latency quantiles.
+
 The catalog manifest SHA-256 was
 `7e7fa1df8080b505abba52cc8ca9a4d8bd6d1c10d47d3e421953e7c1b8494257`; the
 inventory manifest SHA-256 was
 `2c0aca1e6412c6e7785acd901bb987ce0f57c5353e2a8ff87aed032b291377b7`.
-The source successful-tile p50 latencies were 46.758 ms (16,384) and 31.592
-ms (32,768); these are transport/encoding measurements for the mixed set, not
-an SLO or a claim that every source row is exact. `peakRSSBytes` is explicitly
-a sampled process RSS value, not an OS peak. A concurrency-4 run intentionally
-produced 429 backpressure (3 catalog, 3 per source size); those rejections are
-reported separately and are not included in successful latency quantiles.
+In a warm-cache concurrency-1 run, source successful-tile p50/p95 latencies
+were 5.808/40.456 ms (16,384) and 17.418/34.641 ms (32,768); these are
+transport/encoding measurements for the mixed set, not an SLO or a claim that
+every source row is exact. `peakRSSBytes` is explicitly a sampled process RSS
+value, not an OS peak. The JSON also records inventory compressed-block cache
+hits/misses/loads and the sampled cancellation-observation delay; no hard-device
+I/O or universal memory claim is inferred from those counters. The same run
+observed the server handler after client cancellation in about 18.5 ms; this is
+an in-process cancellation-observation measurement, not an end-to-end network
+guarantee.
 
 ## Historical JSON/index results (not current implementation claims)
 
