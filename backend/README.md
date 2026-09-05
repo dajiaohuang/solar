@@ -11,7 +11,7 @@ profile into an independent output directory and point the service at it:
 
 ```text
 node scripts/stage-backend-profile.mjs <output-directory> full
-go run ./cmd/solar-backend -data-dir <output-directory> -inventory-dir <inventory-directory>
+go run ./cmd/solar-backend -data-dir <output-directory> -inventory-dir <inventory-directory> -coverage-report <coverage-report.json>
 ```
 
 The staging command streams and verifies source bytes/hashes, prefers hardlinks
@@ -36,6 +36,13 @@ it does not accumulate an unbounded work queue. Reproduce the measured
 cold/warm, batch, long-trajectory, binary state-tile transport, mixed-load, RSS
 and profile evidence with the commands in
 [`BENCHMARKS.md`](../BENCHMARKS.md).
+
+The optional `-coverage-report` flag enables the read-only coverage audit API.
+The report is read once at startup, bounded to 8 MiB, and must match the loaded
+full-profile catalog and inventory manifest hashes, ID and profile. A mismatch
+fails startup; no older report is used as a fallback. Coverage is reported as
+audit evidence at one TDB epoch plus dependency-window atoms, not as a live
+display count or whole-window numerical-accuracy certification.
 
 The current binary state-tile benchmark defaults to TDB `epochJd=2461287.5`,
 the reproducible audited epoch. At that epoch the full-profile evidence used

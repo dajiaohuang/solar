@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 
 	"github.com/dajiaohuang/solar/backend/internal/catalog"
+	"github.com/dajiaohuang/solar/backend/internal/coverage"
 	"github.com/dajiaohuang/solar/backend/internal/inventory"
 	"github.com/dajiaohuang/solar/backend/internal/science"
 )
@@ -30,19 +31,30 @@ type Server struct {
 	plans               *statePlanCache
 	tiles               *stateTileCache
 	stateTileByteBudget int64
+	coverage            *coverage.Ledger
 	inFlight            atomic.Int64
 	cancelled           atomic.Uint64
 }
 
 func New(c *catalog.Catalog, maxConcurrent int, inventories ...*inventory.Inventory) *Server {
-	if maxConcurrent < 1 {
-		maxConcurrent = 1
-	}
 	var inv *inventory.Inventory
 	if len(inventories) > 0 {
 		inv = inventories[0]
 	}
-	return &Server{catalog: c, inventory: inv, slots: make(chan struct{}, maxConcurrent), tileSlots: make(chan struct{}, 2), plans: newStatePlanCache(statePlanCacheItems), tiles: newStateTileCache(stateTileCacheBytes), stateTileByteBudget: maxStateTileBytes}
+	return newServer(c, maxConcurrent, inv, nil)
+}
+
+// NewWithCoverage installs an already validated, immutable coverage ledger.
+// A nil ledger deliberately leaves the optional coverage endpoints unavailable.
+func NewWithCoverage(c *catalog.Catalog, maxConcurrent int, inv *inventory.Inventory, ledger *coverage.Ledger) *Server {
+	return newServer(c, maxConcurrent, inv, ledger)
+}
+
+func newServer(c *catalog.Catalog, maxConcurrent int, inv *inventory.Inventory, ledger *coverage.Ledger) *Server {
+	if maxConcurrent < 1 {
+		maxConcurrent = 1
+	}
+	return &Server{catalog: c, inventory: inv, coverage: ledger, slots: make(chan struct{}, maxConcurrent), tileSlots: make(chan struct{}, 2), plans: newStatePlanCache(statePlanCacheItems), tiles: newStateTileCache(stateTileCacheBytes), stateTileByteBudget: maxStateTileBytes}
 }
 
 // TileCacheStats exposes bounded runtime evidence to the local benchmark
@@ -117,6 +129,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.trajectory(w, r)
 	case r.Method == "GET" && path == "catalog/manifest":
 		s.catalogManifest(w, r)
+	case r.Method == "GET" && path == "coverage":
+		s.coverageSummary(w, r)
+	case r.Method == "GET" && path == "coverage/targets":
+		s.coverageTargets(w, r)
 	case r.Method == "POST" && path == "state/plan":
 		s.statePlan(w, r)
 	case r.Method == "POST" && path == "state/tiles":

@@ -36,6 +36,29 @@ these tuples. The preview profile is a
 product availability policy: full-only entries may be visible but restricted
 actions are blocked.
 
+The optional `-coverage-report` backend configuration enables two read-only
+audit endpoints. Without a validated report they return `404` with
+`coverage_unavailable`; a configured report that does not match the loaded
+full-profile catalog or inventory fails backend startup.
+
+`GET /v1/coverage` returns the small audit summary. It includes the report,
+catalog and inventory SHA-256 identities, the pinned source-snapshot and
+identity-mapping evidence hashes, `auditEt`, fixed TDB/ECLIPJ2000 units, the
+requested dependency window, source identity counts and unresolved reasons.
+`windowCounts.numericallyCertifiedWholeWindowTargets` remains `null` in this
+report. The counts describe source records and dependency availability at the
+declared audit epoch; they are not current display counts, live state
+availability, unique-body counts or whole-window numerical-accuracy claims.
+
+`GET /v1/coverage/targets?ids=earth,naif:399` returns at most 64 distinct
+current catalog IDs. Catalog aliases are canonicalized to their NAIF target.
+Each row is either `audited`, with its audit-epoch state label, source-record
+references and dependency window points/intervals/gaps, or `not_audited`.
+`not_audited` never implies missing state. The response repeats the report and
+runtime manifest identities and contains no request epoch. Both endpoints
+load the report once at startup; requests use bounded in-memory indexes and do
+not scan the report or inventory shards.
+
 `GET /v1/catalog?q=&limit=&pageToken=` returns a lexicographically stable,
 paginated list. `limit` is 1–500 and page tokens are opaque to clients.
 
