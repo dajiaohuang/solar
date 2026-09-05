@@ -254,6 +254,13 @@ func TestHTTPDuplicateTilesJoinWithoutAnotherEncoderSlot(t *testing.T) {
 	defer server.Close()
 	client := &http.Client{Timeout: 5 * time.Second}
 	results := make(chan tileFlightResult, 2)
+	// Saturate request admission as well as both encoders. Duplicate requests
+	// first wait in the bounded interactive queue, then join the existing
+	// flight without consuming another encoder slot when admission is released.
+	admissionA := holdScheduler(t, s.scheduler)
+	admissionB := holdScheduler(t, s.scheduler)
+	defer admissionA()
+	defer admissionB()
 	for i := 0; i < 2; i++ {
 		go func() {
 			res, err := client.Post(server.URL+"/v1/state/tiles", "application/json", strings.NewReader(`{"planId":"`+response.PlanID+`","sequence":0}`))
@@ -269,6 +276,9 @@ func TestHTTPDuplicateTilesJoinWithoutAnotherEncoderSlot(t *testing.T) {
 			results <- tileFlightResult{stateTileCacheValue{raw: raw, etag: res.Header.Get("ETag")}, err}
 		}()
 	}
+	awaitScheduler(t, s.scheduler, func(v map[string]uint64) bool { return v["interactiveQueued"] == 2 })
+	admissionA()
+	admissionB()
 	awaitTileJoiners(t, s.tiles, 2)
 	release <- struct{}{}
 	if got := awaitTileFlight(t, owner); got.err != nil {

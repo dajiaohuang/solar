@@ -78,11 +78,44 @@ waiters and do not raise the resident cache budget.
 
 `TileCacheStats` reports `coalesced` joins and `activeEncodings` alongside resident
 bytes/hits/misses to the local benchmark harness, not as a public metrics API.
-This avoids duplicate encoding, not duplicate plan computation; it is not yet
-a fair priority scheduler or evidence of real-device throughput. Run the
+This avoids duplicate encoding, not duplicate plan computation, and is not
+evidence of real-device throughput. Run the
 deterministic cancellation/concurrency and loopback HTTP regressions with
 `go test ./internal/httpapi -run 'TestTileFlight|TestHTTPDuplicateTiles'`;
 Linux CI also executes the backend race detector.
+
+## Backend request scheduling
+
+Before decoding request bodies or computing states, the service admits at most
+its configured worker count and queues at most 32 requests **per class** (96
+total). The three FIFO queues use weighted round robin: four interactive grants,
+two trajectory grants, then one bulk-directory grant, skipping empty queues.
+State plans/tiles, manifests and body/identity details are interactive;
+`POST /v1/trajectory` is trajectory work; `GET /v1/catalog`, `/v1/inventory` and
+`/v1/identities` are bulk-directory work. Priorities are server-selected, not a
+client field. A background precomputation service is not implemented.
+
+Each nonempty class gets a turn within seven grants under contention. This is
+non-preemptive admission fairness, **not** a latency guarantee: a running job
+or blocked response write still occupies a worker. Full queues reject with
+HTTP 429 and `Retry-After: 1`; queued waits expire after five seconds with the
+same retry response. An observed request-context cancellation removes the
+waiter, returns HTTP 408, and releases any concurrently granted slot. HTTP/1
+disconnect detection can be delayed while a POST body remains unread; that
+case is bounded by queue expiry, not a claimed immediate disconnect signal.
+The two-encoder limit and identical-tile coalescing remain independent.
+
+`SchedulerStats` exposes active/queued limits, peak queued count and per-class
+grants, rejections, cancellations, expiries and aggregate wait nanoseconds to
+the local benchmark. Grants count reserved slots, including a grant returned
+by a racing cancellation; they are not counts of completed science results.
+The benchmark reports main-workload and overload-probe scheduler snapshots
+separately. A short burst may now queue and succeed instead of returning 429;
+zero rejections is not proof that admission limits were exercised.
+
+Run deterministic fairness, boundedness, timeout, cancellation/grant race and
+loopback HTTP checks with
+`go test ./internal/httpapi -run 'TestRequestScheduler|TestHTTPScheduler|TestOverload'`.
 
 ## Backend cold-process startup
 

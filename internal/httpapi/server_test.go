@@ -117,8 +117,13 @@ func TestOverloadFailsFastWithRetryHint(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := New(c, 1)
-	s.slots <- struct{}{}
-	defer func() { <-s.slots }()
+	// A full bounded queue, not simply a running worker, rejects immediately.
+	s.scheduler = newRequestScheduler(1, 0, requestQueueTimeout)
+	release, err := s.scheduler.acquire(context.Background(), interactiveRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
 	rr := httptest.NewRecorder()
 	s.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/v1/catalog?limit=1", nil))
 	if rr.Code != http.StatusTooManyRequests || rr.Header().Get("Retry-After") != "1" {

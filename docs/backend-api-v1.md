@@ -170,6 +170,15 @@ Errors are JSON objects with `apiVersion` and `error.code`/`error.message`.
 Relevant codes include `invalid_limit`, `invalid_page_token`,
 `body_not_found`, `identity_not_found`, `invalid_precision`, `invalid_epoch`,
 `unsupported_frame`, `state_unavailable`, `cancelled`, and `overloaded`. A
-`429 overloaded` response includes `Retry-After: 1`; the backend rejects work
-when its configured scientific worker pool is full rather than accumulating an
-unbounded queue.
+`429 overloaded` response includes `Retry-After: 1`. The backend queues at most
+32 waiting requests in each server-selected class before body decoding: current
+state plans/tiles, manifests and details are interactive; trajectories have their
+own class; catalog/inventory/identity list scans are bulk. FIFO within each class
+and weighted round robin (4 interactive, 2 trajectory, 1 bulk) prevent an occupied
+class from consuming all waiting capacity. Running requests remain bounded by
+the configured worker count. A full class queue or five-second queue wait expiry
+returns 429. Observed context cancellation removes the waiter and returns 408;
+HTTP/1 disconnect notification may be delayed while a POST body is unread, in
+which case queue expiry remains the limit. Running work is not preempted and
+these are not end-to-end latency guarantees. Tile encoding retains its separate
+two-slot limit and may also return 429 when both encoders are occupied.

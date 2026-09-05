@@ -227,10 +227,16 @@ compact numeric array per body when a state exists. `stateStride: 6` and
 there are no parallel object-shaped state arrays to multiply response memory.
 The long response above is 597,239 bytes for 5,000 samples using that layout.
 
-The overload workload uses a one-slot server and confirms fail-fast `429`
-responses with `Retry-After: 1`; the normal worker pool never accumulates an
-unbounded queue. Pre-cancelled requests are observed by the harness, and the
-inventory reader checks cancellation while scanning rows.
+The overload workload uses a one-slot server with the current bounded scheduler.
+Its burst may queue and succeed; `429` with `Retry-After: 1` indicates a full
+class queue or an expired wait, not simply an occupied worker. The report now
+separates main-workload `scheduler` from `overloadScheduler` snapshots, including
+peak queued requests, grants, rejected/expired/cancelled waits and aggregate wait
+nanoseconds. `queueWaitTimeoutNs` is the configured wait limit, not an observed
+maximum latency. Zero rejections does not prove saturation. See
+[request scheduling](./PERFORMANCE.md#backend-request-scheduling) for fairness
+and cancellation limits. The inventory reader checks cancellation while scanning
+rows.
 
 These figures are measurements, not latency, memory, precision or “best”
 guarantees for another client, release, operating system or data profile.

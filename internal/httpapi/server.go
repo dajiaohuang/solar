@@ -26,7 +26,7 @@ const maxBodyBytes = 1 << 20
 type Server struct {
 	catalog             *catalog.Catalog
 	inventory           *inventory.Inventory
-	slots               chan struct{}
+	scheduler           *requestScheduler
 	tileSlots           chan struct{}
 	plans               *statePlanCache
 	tiles               *stateTileCache
@@ -54,8 +54,11 @@ func newServer(c *catalog.Catalog, maxConcurrent int, inv *inventory.Inventory, 
 	if maxConcurrent < 1 {
 		maxConcurrent = 1
 	}
-	return &Server{catalog: c, inventory: inv, coverage: ledger, slots: make(chan struct{}, maxConcurrent), tileSlots: make(chan struct{}, 2), plans: newStatePlanCache(statePlanCacheItems), tiles: newStateTileCache(stateTileCacheBytes), stateTileByteBudget: maxStateTileBytes}
+	return &Server{catalog: c, inventory: inv, coverage: ledger, scheduler: newRequestScheduler(maxConcurrent, requestQueueCapacity, requestQueueTimeout), tileSlots: make(chan struct{}, 2), plans: newStatePlanCache(statePlanCacheItems), tiles: newStateTileCache(stateTileCacheBytes), stateTileByteBudget: maxStateTileBytes}
 }
+
+// SchedulerStats is local benchmark evidence, not a public metrics endpoint.
+func (s *Server) SchedulerStats() map[string]uint64 { return s.scheduler.stats() }
 
 // TileCacheStats exposes bounded runtime evidence to the local benchmark
 // harness without adding diagnostic state to the wire protocol.
@@ -92,21 +95,23 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.error(w, http.StatusNotFound, "not_found", "unknown endpoint")
 		return
 	}
-	// Scientific work is deliberately fail-fast when the bounded worker pool is
-	// full. An unbounded wait queue would let a burst consume memory before
-	// request cancellation can be observed by the handler.
+	// Admission precedes JSON decoding and scientific work. Waiting is bounded
+	// separately per class, so directory scans cannot consume every queue slot.
 	if err := r.Context().Err(); err != nil {
 		s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
 		return
 	}
-	select {
-	case s.slots <- struct{}{}:
-		defer func() { <-s.slots }()
-	default:
+	release, err := s.scheduler.acquire(r.Context(), classifyRequest(r))
+	if err != nil {
+		if r.Context().Err() != nil {
+			s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
+			return
+		}
 		w.Header().Set("Retry-After", "1")
-		s.error(w, http.StatusTooManyRequests, "overloaded", "scientific worker limit reached; retry later")
+		s.error(w, http.StatusTooManyRequests, "overloaded", "scientific queue is full or its wait expired; retry later")
 		return
 	}
+	defer release()
 	s.inFlight.Add(1)
 	defer s.inFlight.Add(-1)
 	path := strings.TrimPrefix(r.URL.Path, "/v1/")

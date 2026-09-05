@@ -79,6 +79,8 @@ type report struct {
 	LongResponseBytes       int64               `json:"longResponseBytes"`
 	OverloadRequests        int                 `json:"overloadRequests"`
 	OverloadRejected        int64               `json:"overloadRejected"`
+	Scheduler               map[string]uint64   `json:"scheduler,omitempty"`
+	OverloadScheduler       map[string]uint64   `json:"overloadScheduler,omitempty"`
 	PeakRSSBytes            uint64              `json:"peakRSSBytes,omitempty"`
 	PeakRSSSampled          bool                `json:"peakRSSSampled"`
 	RSSMeasurement          string              `json:"rssMeasurement"`
@@ -243,7 +245,7 @@ func main() {
 	peak.Sample()
 
 	cancelObserved, cancelLatencyNs := runCancellation(c, inv, stateTileSourceIDs, peak)
-	overloadRequests, overloadRejected := runOverload(c, inv, *workers, longPayload, peak)
+	overloadRequests, overloadRejected, overloadScheduler := runOverload(c, inv, *workers, longPayload, peak)
 
 	sort.Slice(lat, func(i, j int) bool { return lat[i] < lat[j] })
 	catalogStats := c.Stats()
@@ -264,6 +266,7 @@ func main() {
 		StateTiles:       stateTileEvidence,
 		StateTilesSource: stateTileSourceEvidence,
 		OverloadRequests: overloadRequests, OverloadRejected: overloadRejected, OverloadStatusExpected: http.StatusTooManyRequests,
+		Scheduler: service.SchedulerStats(), OverloadScheduler: overloadScheduler,
 		PeakRSSBytes: peak.rss, PeakRSSSampled: true, RSSMeasurement: "sampled process RSS; not an OS peak", PeakHeapBytes: peak.heap, AllocDelta: nonNegativeDelta(after.Alloc, before.Alloc), TotalAlloc: after.TotalAlloc - before.TotalAlloc,
 		InvalidResponses: invalid + mixed.invalid, CancelledObserved: cancelObserved, CancelLatencyNs: cancelLatencyNs,
 	}
@@ -516,7 +519,7 @@ func positiveTimes(values []int64) []int64 {
 	return out
 }
 
-func runOverload(c *catalog.Catalog, inv *inventory.Inventory, workers int, payload string, peak *peakMemory) (int, int64) {
+func runOverload(c *catalog.Catalog, inv *inventory.Inventory, workers int, payload string, peak *peakMemory) (int, int64, map[string]uint64) {
 	service := httpapi.New(c, 1, inv)
 	server := httptest.NewServer(service)
 	defer server.Close()
@@ -536,7 +539,7 @@ func runOverload(c *catalog.Catalog, inv *inventory.Inventory, workers int, payl
 	}
 	wg.Wait()
 	peak.Sample()
-	return n, rejected
+	return n, rejected, service.SchedulerStats()
 }
 
 func runCancellation(c *catalog.Catalog, inv *inventory.Inventory, ids []string, peak *peakMemory) (bool, int64) {
