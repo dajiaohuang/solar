@@ -7,7 +7,20 @@ final class ObservationUITests: XCTestCase {
     private func waitForLabel(_ element: XCUIElement, _ value: String, timeout: TimeInterval = 30) {
         let matches = NSPredicate(format: "label == %@", value)
         let expectation = XCTNSPredicateExpectation(predicate: matches, object: element)
-        XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: timeout), .completed)
+        let result = XCTWaiter.wait(for: [expectation], timeout: timeout)
+        XCTAssertEqual(result, .completed, "Expected \(value); actual element: \(element.debugDescription)")
+    }
+
+    override func tearDown() {
+        if let run = testRun, run.failureCount > 0 {
+            let app = XCUIApplication()
+            screenshot(app, "failed-observation")
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "failed-observation-accessibility"
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+        }
+        super.tearDown()
     }
 
     private func screenshot(_ app: XCUIApplication, _ name: String) {

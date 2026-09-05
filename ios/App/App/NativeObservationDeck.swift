@@ -103,7 +103,9 @@ struct ObservationDeckView: View {
                     }
                     NativeStateViewport(frame: model.frame, reference: reference, mode3D: mode3D)
                         .frame(height: 280)
-                        .accessibilityLabel(mode3D ? "Three-dimensional verified states" : "Two-dimensional verified states")
+                        // A parent label replaces the count/error Text's accessible
+                        // label. Keep its actual content and describe the mode as a hint.
+                        .accessibilityHint(mode3D ? "Three-dimensional verified states" : "Two-dimensional verified states")
                     Text(model.message).font(.callout).foregroundStyle(.secondary)
                         .accessibilityIdentifier("observation.status")
                     if let frame = model.frame {
