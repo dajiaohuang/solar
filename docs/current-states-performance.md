@@ -8,6 +8,20 @@ Leaving the workspace aborts the request; a 30-second deadline bounds a stalled
 load, and retry clears prior totals. Preview refuses before issuing any request.
 This source audit cannot be used as a rendered-body or throughput measurement.
 
+To verify a running loopback Go service against its configured audit file, set
+`SOLAR_TEST_BACKEND_URL` and `SOLAR_COVERAGE_REPORT_PATH`, then run:
+
+```text
+npx vitest run tests/unit/coverage-live.test.ts
+```
+
+This opt-in check compares every audited target in batches of at most 64 IDs:
+source references, window boundaries, intervals, dependency chains and gaps must
+survive the actual HTTP response unchanged. Summary identities/counts are checked
+with the production Web decoder; unknown IDs and the 65-ID rejection are also
+tested. Without both variables these tests explicitly skip. This is transport
+fidelity against the generator's report, not an independent scientific oracle.
+
 The Web client creates an exact plan and downloads fixed-header binary tiles.
 One plan accepts at most 32,768 unique IDs, defaults to 16,384 rows per tile,
 uses at most two concurrent tile requests, retries each tile once, and publishes
