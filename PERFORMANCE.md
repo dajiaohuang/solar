@@ -177,6 +177,26 @@ The synthetic 32,768+1-row regression covers mixed states, aliases, absent
 responses, two references sharing one snapshot, all six-vector bytes and bounded
 evidence reads. Retained Go golden tests check the snapshot's scalar reads too.
 
+Full Web now loads each current-state observation in one reusable module worker:
+manifest/plan HTTP, binary integrity checks, evidence packing, alias indexing and
+reference projection preparation all happen off the UI thread. Plans remain
+serial and capped at 32,768 identities each, with at most two concurrent tile
+transfers per observation; selected coverage is not capped at one plan. Only a
+complete observation is published. The worker transfers ownership of every
+numeric source, evidence, binding and projection buffer. The UI adopts these
+columns and the scalar identity Map without reparsing source rows or rebuilding
+the identity index; references share the same snapshot. Display-body metadata
+stays on the UI side and is not copied into each worker request.
+
+Clock samples reuse the worker. Explicit changes cancel the active request and
+coalesce queued changes; late request IDs and mismatched epochs cannot publish.
+A 120-second whole-observation deadline aborts stalled I/O and reports failure.
+Current-state and history workers still have separate per-job admission limits;
+this is not a verified global client memory/concurrency budget or device SLO.
+Actual-worker tests cover numeric ownership detachment, byte-identical Float64
+six-vectors (including signed zero), alias/gap provenance, zero-reindex adoption,
+corrupt transport, cancellation, queue replacement and deadline behavior.
+
 Reference-relative current positions are scalar views over that same scientific
 snapshot. Each frame retains two Uint32 ordinal columns (capacity eight bytes
 per selected body) and one three-value Float64 reference origin, not per-body

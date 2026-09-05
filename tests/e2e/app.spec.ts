@@ -112,6 +112,7 @@ test('packed historical trails survive switching the active renderer without a s
   await expect(audit).toHaveAttribute('data-end-utc-jd', '2461287.5')
   expect(historicalRequests.length).toBeGreaterThanOrEqual(360)
   expect(workers.some(url => url.includes('backend-trajectories.worker'))).toBe(true)
+  expect(workers.filter(url => url.includes('current-states.worker'))).toHaveLength(1)
   expect(workers.some(url => /\/trajectory\.worker[-.]/.test(url))).toBe(false)
   await expect(planar).toHaveCount(0)
   await spatial.screenshot({ path: info.outputPath('packed-trails-3d.png') })
@@ -133,6 +134,7 @@ test('packed historical trails survive switching the active renderer without a s
   expect(downloaded.sourceOrdinals).toHaveLength(540)
   expect(downloaded.tiles).toHaveLength(180)
   expect(downloaded.sources.every(source => source.source === 'fixture-state-tiles')).toBe(true)
+  expect(workers.filter(url => url.includes('current-states.worker'))).toHaveLength(1)
   expect(errors).toEqual([])
 })
 

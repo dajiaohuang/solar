@@ -102,6 +102,9 @@ test('full-Web fixture preflights manifest/plan and preserves unknown identities
 
 test('keeps a slow 294-body playing tile request alive, coalesces samples, and never calls the legacy endpoint', async ({ page }) => {
   test.setTimeout(30_000)
+  const currentWorkers: string[] = [], errors: string[] = []
+  page.on('worker', worker => { if (worker.url().includes('current-states.worker')) currentWorkers.push(worker.url()) })
+  page.on('pageerror', error => errors.push(error.message))
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   const ids = ['saturn', ...satelliteCatalog.bodies.filter(body => body.parentId === 'saturn').map(body => body.naifId === 606 ? 'titan' : body.id)]
   const legacyRequests: string[] = []; const planRequests: number[] = []; const tileRequests: number[] = []; let completedTiles = 0; const requestTimes: number[] = []; const responseTimes: number[] = []
@@ -118,4 +121,6 @@ test('keeps a slow 294-body playing tile request alive, coalesces samples, and n
   await expect.poll(() => tileRequests.length, { timeout: 3_000 }).toBeLessThanOrEqual(baselineTiles + 3)
   expect(legacyRequests).toHaveLength(0); expect(responseTimes.length).toBe(completedTiles)
   await page.locator('.simulation-bar .primary-button').click(); await expect(summary).not.toContainText('Loading audited full-Web current states', { timeout: 10_000 })
+  expect(currentWorkers).toHaveLength(1)
+  expect(errors).toEqual([])
 })

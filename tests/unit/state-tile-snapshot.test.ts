@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { StateTileSnapshot, buildBackendFrame, decodeStateTile, digestStateTileRequestIds, encodeStateTile, type StateTileMetadata } from '../../src/lib/stateTiles'
 import { coveragePage, summarizeBackendCoverage } from '../../src/lib/backendCoverage'
 import { createBackendPositionResolver } from '../../src/lib/backendFrames'
-import { loadAndPublishStateTileFrames } from '../../src/hooks/useStateTiles'
+import { currentStateObservationTransfers, framesFromCurrentStateObservation, loadCurrentStateObservation } from '../../src/lib/currentStateObservation'
 import { AU_IN_KM } from '../../src/engine/units'
 import type { CelestialBody } from '../../src/types'
 
@@ -181,10 +181,16 @@ describe('shared column-backed scientific snapshots', () => {
       throw new Error(`Unexpected test request: ${url}`)
     }) as typeof fetch & ReturnType<typeof vi.fn>
     const publish = vi.fn()
-    const load = () => loadAndPublishStateTileFrames({ base: 'https://synthetic.example', bodyIds, epochTdbJd: epochJd,
-      epochUtcJd: epochJd - 0.001, bodies, requestedIds, referenceIds: ['body:1', 'body:2'], signal: controller.signal, fetcher, publish })
+    const load = async () => {
+      const observation = await loadCurrentStateObservation({ base: 'https://synthetic.example', epochTdbJd: epochJd,
+        epochUtcJd: epochJd - 0.001, selectedIds: bodies.map(body => body.id), requestedIds, referenceIds: ['body:1', 'body:2'], signal: controller.signal, fetcher })
+      const received = structuredClone(observation, { transfer: currentStateObservationTransfers(observation) })
+      const frames = framesFromCurrentStateObservation(received, bodies, ['body:1', 'body:2'])
+      publish({ frames, publishedEpochUtcJd: received.epochUtcJd })
+      return { observation: received, frames }
+    }
     const loaded = await load()
-    expect(loaded.plans.map(plan => plan.recordCount)).toEqual([32_768, 1])
+    expect(loaded.observation.planRecordCounts).toEqual([32_768, 1])
     expect(fetcher).toHaveBeenCalledTimes(5)
     expect(publish).toHaveBeenCalledTimes(1)
     const first = loaded.frames.get('body:1')!, second = loaded.frames.get('body:2')!

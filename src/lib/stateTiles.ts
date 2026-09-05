@@ -42,18 +42,42 @@ export type StateTileMetadata = {
 const EVIDENCE_STRINGS = ['id', 'source', 'datasetVersion', 'datasetSha256', 'kernelSha256', 'model', 'centerId', 'stateEvidence', 'missingReason', 'identityStatus'] as const
 const EVIDENCE_NUMBERS = ['validityStartEt', 'validityEndEt', 'evidenceWindowStartEt', 'evidenceWindowEndEt'] as const
 
+/** Internal verified-worker transfer, not an alternative network format. */
+export type StateTileEvidenceColumns = {
+  length: number
+  strings: string[]
+  stringIndexes: Uint32Array
+  numbers: Float64Array
+  flags: Uint8Array
+}
+
 /** Immutable, column-packed evidence for a verified tile. Decoding validates
  * each wire row before packing; no parsed row objects survive here.
  * Only an explicitly requested row is materialized, without an object cache. */
 class StateTileEvidence {
   readonly length: number
-  readonly #strings: string[] = []
+  readonly #strings: string[]
   readonly #stringIndexes: Uint32Array
   readonly #numbers: Float64Array
   readonly #flags: Uint8Array
 
-  constructor(length: number, readValidatedRow: (index: number) => StateTileMetadata) {
+  constructor(length: number, readValidatedRow: ((index: number) => StateTileMetadata) | StateTileEvidenceColumns) {
     this.length = length
+    if (typeof readValidatedRow !== 'function') {
+      const columns = readValidatedRow
+      if (!Number.isInteger(length) || length < 1 || length > MAX_STATE_PLAN_BODIES || columns.length !== length
+        || !Array.isArray(columns.strings) || !columns.strings.length
+        || !(columns.stringIndexes instanceof Uint32Array) || columns.stringIndexes.length !== length * EVIDENCE_STRINGS.length
+        || !(columns.numbers instanceof Float64Array) || columns.numbers.length !== length * EVIDENCE_NUMBERS.length
+        || !(columns.flags instanceof Uint8Array) || columns.flags.length !== length) fail('worker evidence columns are invalid')
+      // Provenance, numeric values and string ordinals were checked by the
+      // decoder in our own worker. Adopt transferred storage without rebuilding
+      // an interning Map or materializing/reparsing every metadata row on the UI.
+      this.#strings = columns.strings; this.#stringIndexes = columns.stringIndexes
+      this.#numbers = columns.numbers; this.#flags = columns.flags
+      return
+    }
+    this.#strings = []
     this.#stringIndexes = new Uint32Array(length * EVIDENCE_STRINGS.length)
     this.#numbers = new Float64Array(length * EVIDENCE_NUMBERS.length)
     this.#flags = new Uint8Array(length)
@@ -75,6 +99,10 @@ class StateTileEvidence {
   /** Typed-column bytes only, not a JavaScript heap/RSS estimate. */
   get numericByteLength() { return this.#stringIndexes.byteLength + this.#numbers.byteLength + this.#flags.byteLength }
   get internedStringCount() { return this.#strings.length }
+
+  transferColumns(): StateTileEvidenceColumns {
+    return { length: this.length, strings: this.#strings, stringIndexes: this.#stringIndexes, numbers: this.#numbers, flags: this.#flags }
+  }
 
   #check(index: number) {
     if (!Number.isInteger(index) || index < 0 || index >= this.length) throw new RangeError('State tile evidence ordinal is out of range')
@@ -119,6 +147,16 @@ export type StateTile = {
   catalogManifestSha256: string
   inventoryManifestSha256?: string
   payloadSha256: string
+}
+
+export type TransferredStateTile = Omit<StateTile, 'metadata'> & { metadata: StateTileEvidenceColumns }
+
+function restoreTransferredStateTile(tile: TransferredStateTile): StateTile {
+  if (!(tile.states instanceof Float64Array) || tile.states.length !== tile.recordCount * STATE_TILE_STRIDE
+    || !(tile.exactBitmap instanceof Uint8Array) || !(tile.approximateBitmap instanceof Uint8Array) || !(tile.missingBitmap instanceof Uint8Array)
+    || [tile.exactBitmap, tile.approximateBitmap, tile.missingBitmap].some(bitmap => bitmap.length !== bitmapBytes(tile.recordCount))
+    || tile.stride !== STATE_TILE_STRIDE || tile.fieldMask !== STATE_TILE_FIELD_MASK) fail('worker tile columns are invalid')
+  return { ...tile, metadata: new StateTileEvidence(tile.recordCount, tile.metadata) }
 }
 
 export type StateTileDescriptor = { sequence: number; ordinalStart: number; recordCount: number; url?: string }
@@ -481,6 +519,14 @@ export async function fetchStateTiles(params: { base: string; plan: StateTilePla
 /** All reference views share the verified tile buffers and compact evidence.
  * Only identity-to-ordinal bindings survive assembly, not resolved-state,
  * absolute-position or audit objects for every received source record. */
+export type StateTileSnapshotTransfer = {
+  tiles: TransferredStateTile[]
+  bodyIds: string[]
+  byBody: Map<BodyId, number>
+  tileIndexes: Uint32Array
+  rowIndexes: Uint32Array
+}
+
 export class StateTileSnapshot implements BackendStateEvidence {
   readonly #tiles: readonly StateTile[]
   readonly #bodyIds: string[] = []
@@ -491,17 +537,28 @@ export class StateTileSnapshot implements BackendStateEvidence {
   readonly inventoryManifestSha256?: string
   readonly epochJd: number
 
-  constructor(tiles: readonly StateTile[], requestedIds: ReadonlyMap<BodyId, string>) {
+  constructor(tiles: readonly StateTile[], requestedIds: ReadonlyMap<BodyId, string>, bindings?: Omit<StateTileSnapshotTransfer, 'tiles'>) {
     this.#tiles = [...tiles]
     this.catalogManifestSha256 = tiles[0]?.catalogManifestSha256 ?? ''
     this.inventoryManifestSha256 = tiles[0]?.inventoryManifestSha256
     this.epochJd = tiles[0]?.epochJd ?? NaN
+    for (const tile of tiles) {
+      if (tile.catalogManifestSha256 !== this.catalogManifestSha256 || tile.inventoryManifestSha256 !== this.inventoryManifestSha256 || tile.epochJd !== this.epochJd) fail('snapshot identity or epoch mismatch')
+    }
+    if (bindings) {
+      const count = bindings.bodyIds.length
+      if (!Array.isArray(bindings.bodyIds) || !(bindings.byBody instanceof Map) || bindings.byBody.size !== count
+        || !(bindings.tileIndexes instanceof Uint32Array) || bindings.tileIndexes.length !== count
+        || !(bindings.rowIndexes instanceof Uint32Array) || bindings.rowIndexes.length !== count) fail('worker snapshot bindings are invalid')
+      this.#bodyIds = bindings.bodyIds; this.#byBody = bindings.byBody
+      this.#tileIndexes = bindings.tileIndexes; this.#rowIndexes = bindings.rowIndexes
+      return
+    }
     // A single construction-only identity index binds aliases without
     // duplicating their six-vectors. Tile/row columns refer to source storage.
     const sourceOrdinals = new Map<string, number>()
     let count = 0
     for (const tile of tiles) {
-      if (tile.catalogManifestSha256 !== this.catalogManifestSha256 || tile.inventoryManifestSha256 !== this.inventoryManifestSha256 || tile.epochJd !== this.epochJd) fail('snapshot identity or epoch mismatch')
       for (let row = 0; row < tile.recordCount; row++) {
         const id = tile.metadata.idAt(row)
         if (sourceOrdinals.has(id)) fail('duplicate resolved identity')
@@ -530,6 +587,13 @@ export class StateTileSnapshot implements BackendStateEvidence {
   }
 
   get length() { return this.#bodyIds.length }
+  transfer(): StateTileSnapshotTransfer {
+    return { tiles: this.#tiles.map(tile => ({ ...tile, metadata: tile.metadata.transferColumns() })),
+      bodyIds: this.#bodyIds, byBody: this.#byBody, tileIndexes: this.#tileIndexes, rowIndexes: this.#rowIndexes }
+  }
+  static restoreTransferred(value: StateTileSnapshotTransfer): StateTileSnapshot {
+    return new StateTileSnapshot(value.tiles.map(restoreTransferredStateTile), new Map(), value)
+  }
   indexOf(bodyId: BodyId) { return this.#byBody.get(bodyId) ?? -1 }
   get bindingByteLength() { return this.#tileIndexes.byteLength + this.#rowIndexes.byteLength }
   #check(index: number) { if (!Number.isInteger(index) || index < 0 || index >= this.length) throw new RangeError('Snapshot evidence ordinal is out of range') }
@@ -568,25 +632,50 @@ export class StateTileSnapshot implements BackendStateEvidence {
   }
 }
 
-export function buildBackendFrame(params: { bodies: CelestialBody[]; referenceId: BodyId; evidence: StateTileSnapshot }): BackendFrame {
+export type StateTileFrameProjection = {
+  referenceId: BodyId
+  bodyOrdinals: Uint32Array
+  stateOrdinals: Uint32Array
+  referenceAu: Float64Array
+  missingBodyIds: BodyId[]
+  maxDistance: number
+}
+
+/** Prepare only scalar bindings in the worker; no CelestialBody or Vector3
+ * objects are required for every projected state. */
+export function projectStateTileFrame(params: { bodyIds: readonly BodyId[]; referenceId: BodyId; evidence: StateTileSnapshot }): StateTileFrameProjection {
   const { evidence } = params
   const referenceIndex = evidence.indexOf(params.referenceId)
   const referenceAvailable = referenceIndex >= 0 && evidence.statusAt(referenceIndex) === 'exact'
   const referenceAu = new Float64Array(3)
   if (referenceAvailable) for (let axis = 0; axis < 3; axis++) referenceAu[axis] = evidence.stateValueAt(referenceIndex, axis) / AU_IN_KM
-  const bodyOrdinals = new Uint32Array(params.bodies.length), stateOrdinals = new Uint32Array(params.bodies.length)
+  const bodyOrdinals = new Uint32Array(params.bodyIds.length), stateOrdinals = new Uint32Array(params.bodyIds.length)
   const missingBodyIds: BodyId[] = []
-  let count = 0
-  for (let index = 0; index < params.bodies.length; index++) {
-    const body = params.bodies[index], stateIndex = evidence.indexOf(body.id)
-    if (!referenceAvailable || stateIndex < 0 || evidence.statusAt(stateIndex) !== 'exact') { missingBodyIds.push(body.id); continue }
+  let count = 0, maxDistance = 0
+  for (let index = 0; index < params.bodyIds.length; index++) {
+    const bodyId = params.bodyIds[index], stateIndex = evidence.indexOf(bodyId)
+    if (!referenceAvailable || stateIndex < 0 || evidence.statusAt(stateIndex) !== 'exact') { missingBodyIds.push(bodyId); continue }
     bodyOrdinals[count] = index; stateOrdinals[count++] = stateIndex
+    maxDistance = Math.max(maxDistance, Math.hypot(evidence.stateValueAt(stateIndex, 0) / AU_IN_KM - referenceAu[0],
+      evidence.stateValueAt(stateIndex, 1) / AU_IN_KM - referenceAu[1], evidence.stateValueAt(stateIndex, 2) / AU_IN_KM - referenceAu[2]))
   }
+  return { referenceId: params.referenceId, bodyOrdinals: bodyOrdinals.subarray(0, count), stateOrdinals: stateOrdinals.subarray(0, count), referenceAu, missingBodyIds, maxDistance }
+}
+
+export function frameFromStateTileProjection(params: { bodies: CelestialBody[]; evidence: StateTileSnapshot; projection: StateTileFrameProjection }): BackendFrame {
+  const { evidence, projection } = params
+  const { bodyOrdinals, stateOrdinals, referenceAu, missingBodyIds, maxDistance } = projection
+  if (!(bodyOrdinals instanceof Uint32Array) || !(stateOrdinals instanceof Uint32Array) || bodyOrdinals.length !== stateOrdinals.length
+    || !(referenceAu instanceof Float64Array) || referenceAu.length !== 3 || !Array.isArray(missingBodyIds)
+    || bodyOrdinals.length + missingBodyIds.length !== params.bodies.length || !Number.isFinite(maxDistance) || maxDistance < 0) fail('worker frame projection is invalid')
   // Reference transforms read the same scientific Float64 storage on demand.
   // Preserve conversion-before-subtraction arithmetic; no full relative vectors.
-  const currentPositions = new CurrentPositions(count, index => params.bodies[bodyOrdinals[index]],
+  const currentPositions = new CurrentPositions(bodyOrdinals.length, index => params.bodies[bodyOrdinals[index]],
     (index, axis) => evidence.stateValueAt(stateOrdinals[index], axis) / AU_IN_KM - referenceAu[axis])
-  const maxDistance = currentPositions.maxDistance()
   return { currentPositions, missingBodyIds, maxDistance, evidence, catalogManifestSha256: evidence.catalogManifestSha256,
     inventoryManifestSha256: evidence.inventoryManifestSha256, epochJd: evidence.epochJd, epochTdbJd: evidence.epochJd }
+}
+
+export function buildBackendFrame(params: { bodies: CelestialBody[]; referenceId: BodyId; evidence: StateTileSnapshot }): BackendFrame {
+  return frameFromStateTileProjection({ ...params, projection: projectStateTileFrame({ bodyIds: params.bodies.map(body => body.id), referenceId: params.referenceId, evidence: params.evidence }) })
 }

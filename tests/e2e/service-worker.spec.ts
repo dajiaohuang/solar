@@ -1,4 +1,9 @@
-import { expect, test } from './fixtures'
+import { expect, test } from '@playwright/test'
+
+// Exercise the real shell network, not the state-tile page.route fixture.
+// With service workers enabled the intercepted backend traffic reproducibly
+// stalled SKIP_WAITING activation. Scientific backend behavior is covered
+// separately with service workers blocked.
 
 test.use({ serviceWorkers: 'allow' })
 
@@ -27,14 +32,17 @@ test('service worker preserves unrelated same-origin caches', async ({ page }) =
     const scriptUrl = new URL(`./sw.js?cache-regression=${Date.now()}`, window.location.href).href
     const registration = await navigator.serviceWorker.register(scriptUrl, { scope: './' })
     await new Promise<void>((resolve, reject) => {
-      const deadline = Date.now() + 30_000
+      const deadline = Date.now() + 20_000
+      const transitions: string[] = []
       const checkActivation = () => {
+        const status = JSON.stringify({ installing: [registration.installing?.state, registration.installing?.scriptURL], waiting: [registration.waiting?.state, registration.waiting?.scriptURL], active: [registration.active?.state, registration.active?.scriptURL] })
+        if (transitions.at(-1) !== status) transitions.push(status)
         if (registration.active?.state === 'activated' && registration.active.scriptURL === scriptUrl) {
           resolve()
           return
         }
         if (Date.now() >= deadline) {
-          reject(new Error('Timed out waiting for service worker activation'))
+          reject(new Error(`Timed out waiting for service worker activation: ${transitions.join(' -> ')}`))
           return
         }
         if (registration.waiting?.scriptURL === scriptUrl) {
