@@ -15,13 +15,15 @@
 | iOS cache | Verified state tiles use a bounded 256 MiB cache; cache reuse requires matching tile identity and hashes |
 | Online boundary | Initial manifest and plan loading require the HTTPS backend. Previously verified tiles may be reused; complete offline plan recovery is not implemented |
 | Pages | A curated Web preview only; it is not the native full-state backend |
-| Validation / release status | Android debug build, unit/lint and empty-scene GLES emulator smoke passed locally on 2026-09-05. Android and iOS CI builds and cross-runtime protocol checks passed at the commit linked below; native live-data interaction, real-device performance and store release remain unverified |
+| Validation / release status | Android debug build, unit/lint and empty-scene GLES emulator smoke passed locally on 2026-09-05. Android/iOS CI builds and cross-runtime protocol checks passed; iOS also passed the real-SPK HTTPS simulator tests linked below. Android live-data interaction, real-device performance and store release remain unverified |
 
 The native slice preserves scientific provenance, epoch, units, reference frame, validity and missing-state semantics. Missing precise states remain visibly unavailable; they are not replaced by approximate positions. The native slice does not claim all-body coverage, navigation accuracy, complete ephemeris access, or full Web feature parity.
 
 ## Prerequisites and checks
 
 Verified on 2026-09-05 at commit `9461362762a9f0366abea6b665554c6dc6c9bf47`: [macOS iOS job](https://github.com/dajiaohuang/solar/actions/runs/33943036884/job/101244140251) passed the Go-to-Swift golden check, malformed-payload/cache/cancellation/projection tests, and an unsigned arm64/x86_64 simulator build with Xcode 26.6. The [Android job](https://github.com/dajiaohuang/solar/actions/runs/33943036884/job/101244140351) passed its build and Java golden checks. These are historical job results for that commit, not a claim that later checkouts or the entire PR are green. Neither job launched a simulator or verified live native HTTPS rendering.
+
+At commit `d4f622495be549e8a29ba228d230fcd92d46086d`, the [real-SPK iOS runtime job](https://github.com/dajiaohuang/solar/actions/runs/33945353295/job/101250378243) passed two XCTest cases with zero failures (50.448 seconds). The retained report records three verified Earth/Moon/Sun states, an explicit missing-ID golden, mode switching, cache reuse and background recovery. Its HTTPS ledger contains two manifests, two plans and one tile, all HTTP 200; the reload reused the verified tile. This proves the tested simulator slice, not physical-device performance, all-body coverage or complete offline operation.
 
 Use Node.js 22+ and npm 10+ for repository checks. `npm run native:check` is the static native-project check; it does not build or sign an application.
 
@@ -53,7 +55,7 @@ SPK in that first check is explicitly synthetic: this proves wire interoperabili
 accuracy or live native networking.
 
 The iOS workflow also runs `node scripts/ios-native-smoke.mjs` on macOS. This
-new runtime gate stages and hashes the real full SPK profile, checks an
+runtime gate stages and hashes the real full SPK profile, checks an
 Earth/Moon/Sun plus missing-ID golden in Go, Web and Swift, and launches the
 native app through XCTest against a loopback HTTPS Go backend. It checks preset
 loading, 3D/2D projection counts, online reload with verified tile-cache reuse,
@@ -66,10 +68,10 @@ root with Node, Go, OpenSSL, Xcode and an installed iPhone simulator runtime.
 
 Results, HTTPS request counts, logs and screenshot-bearing XCTest results are
 retained under `build/ios-native-smoke/` and in the matching CI artifact. Existing
-results are not overwritten. This gate is newly added and remains **unverified
-until its exact CI run succeeds**; it is not a real-device FPS, complete offline,
-or full native feature-parity test. The build-only evidence above remains tied
-to its original commit.
+results are not overwritten. The gate passed at the exact runtime commit linked
+above; later commits require their own successful run. It is not a real-device
+FPS, complete offline, or full native feature-parity test. Historical evidence
+remains tied to its original commit.
 
 To repeat this locally, set `SOLAR_STATE_TILE_FIXTURE_DIR` to an absolute new or
 empty directory outside the repository (`$env:SOLAR_STATE_TILE_FIXTURE_DIR` in

@@ -791,6 +791,21 @@ test('shows Hill and Laplace influence definitions independently', async ({ page
   await expect(page.locator('.influence-laplace-soi').first()).toHaveAttribute('title', /Laplace SOI/)
 })
 
+test('localizes 2D canvas body labels with the active language', async ({ page }) => {
+  for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport)
+    await page.goto('./?v=4&page=explorer&view=2d&lang=en&jd=2461287.5&speed=0')
+    const labels = page.locator('.canvas-label-layer .floating-label')
+    await expect.poll(async () => labels.allTextContents()).toEqual(expect.arrayContaining(['Sun', 'Earth']))
+    await expect.poll(async () => labels.allTextContents()).not.toContain('太阳')
+    await page.locator('.language-button').click()
+    await expect.poll(async () => labels.allTextContents()).toEqual(expect.arrayContaining(['太阳', '地球']))
+    await expect.poll(async () => labels.allTextContents()).not.toContain('Sun')
+    await page.locator('.language-button').click()
+    await expect.poll(async () => labels.allTextContents()).toEqual(expect.arrayContaining(['Sun', 'Earth']))
+  }
+})
+
 test('loads and selects the complete filtered catalog separately from focus mode', async ({ page }) => {
   await installMockCatalog(page)
   await page.goto('./?v=4&page=catalog')

@@ -246,6 +246,7 @@ function FrameView({
           lagrangePoints={lagrangePoints}
           influenceCircles={influenceCircles}
           ariaLabel={t('interactive2d')}
+          language={language}
           emptyLabel={t('selectBodyPrompt')}
           webglUnavailableLabel={t('webglUnavailable')}
           influenceLabels={{ hill: t('hill'), soi: t('soi') }}

@@ -3,6 +3,7 @@ import { PREPARE_CANVAS_CAPTURE_EVENT } from '../lib/canvasCapture'
 import { GRID_LEVELS, SVG_PADDING, createProjection, projectPoint, unprojectPoint, type Projection } from '../lib/viewProjection'
 import type { LagrangePoint } from '../lib/lagrange'
 import type { AsteroidRecord, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector2 } from '../types'
+import { bodyDisplayName } from '../lib/bodyNames'
 
 type OrbitEllipse = {
   body: CelestialBody
@@ -10,6 +11,7 @@ type OrbitEllipse = {
 }
 
 type Props = {
+  language?: 'zh' | 'en'
   referenceBody: CelestialBody
   trajectories: TrajectorySample[]
   currentPositions: RenderedBodyPosition[]
@@ -554,6 +556,7 @@ function drawPoints(resources: GlResources, geometry: Geometry, pixelRatio: numb
 }
 
 export function TrajectoryCanvas({
+  language = 'en',
   referenceBody,
   trajectories,
   currentPositions,
@@ -864,7 +867,7 @@ export function TrajectoryCanvas({
             top: `${(projectPoint({ x: 0, y: 0 }, projection).y / Math.max(size.height, 1)) * 100}%`,
           }}
         >
-          {referenceBody.name}
+          {bodyDisplayName(referenceBody, language)}
         </span>
 
         {showEcliptic && [0.33, 0.66, 1.0].map((ratio) => {
@@ -901,7 +904,7 @@ export function TrajectoryCanvas({
                 top: `${(projected.y / Math.max(size.height, 1)) * 100}%`,
               }}
             >
-              {body.shortName ?? body.name}
+              {bodyDisplayName(body, language)}
             </span>
           )
         })}
@@ -918,7 +921,7 @@ export function TrajectoryCanvas({
                   top: `${(projected.y / Math.max(size.height, 1)) * 100}%`,
                   color: lp.color,
                 }}
-                title={`${group.body.name} ${lp.label}`}
+                title={`${bodyDisplayName(group.body, language)} ${lp.label}`}
               >
                 ◆
               </span>
@@ -941,7 +944,7 @@ export function TrajectoryCanvas({
                 width: radiusPx * 2,
                 height: radiusPx * 2,
               }}
-              title={`${influence.body.name} ${label}: ${influence.radiusAU.toFixed(4)} AU`}
+              title={`${bodyDisplayName(influence.body, language)} ${label}: ${influence.radiusAU.toFixed(4)} AU`}
             />
           )
         })}

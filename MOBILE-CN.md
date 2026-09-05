@@ -15,13 +15,15 @@
 | iOS 缓存 | 已验证状态瓦片使用有界 256 MiB 缓存；只有瓦片身份与哈希匹配时才复用 |
 | 在线边界 | 首次加载 manifest 与 plan 必须访问 HTTPS 后端；已验证瓦片可复用，但尚未实现完整离线 plan 恢复 |
 | Pages | 仅为精选 Web 预览，不是原生完整版状态后端 |
-| 验证 / 发布状态 | Android 于 2026-09-05 本地通过 debug 构建、单元测试/lint 和 GLES 模拟器空场景冒烟；Android/iOS CI 构建及跨运行时协议检查已在下方提交通过，原生实时数据交互、真机性能和商店发布仍未验证 |
+| 验证 / 发布状态 | Android 于 2026-09-05 本地通过 debug 构建、单元测试/lint 和 GLES 模拟器空场景冒烟；Android/iOS CI 构建及跨运行时协议检查通过，iOS 还通过下方真实 SPK HTTPS 模拟器测试。Android 实时数据交互、真机性能和商店发布仍未验证 |
 
 原生竖切保留科学来源、历元、单位、参考系、有效区间和缺失状态语义。缺少精确状态时保持明确不可用，不用近似位置替代。当前不声称全天体覆盖、导航精度、完整星历访问或完整 Web 功能对等。
 
 ## 前置条件与检查
 
 2026-09-05，提交 `9461362762a9f0366abea6b665554c6dc6c9bf47` 的 [macOS iOS 作业](https://github.com/dajiaohuang/solar/actions/runs/33943036884/job/101244140251) 通过 Go→Swift 基准、异常载荷/缓存/取消/投影测试，以及 Xcode 26.6 的 arm64/x86_64 未签名模拟器构建。[Android 作业](https://github.com/dajiaohuang/solar/actions/runs/33943036884/job/101244140351) 通过构建及 Java 基准检查。这是该提交的历史作业证据，不代表后续检出或整个 PR 全绿；两个作业均未启动模拟器，也未验证原生实时 HTTPS 渲染。
+
+提交 `d4f622495be549e8a29ba228d230fcd92d46086d` 的[真实 SPK iOS 运行作业](https://github.com/dajiaohuang/solar/actions/runs/33945353295/job/101250378243) 通过两个 XCTest 用例，零失败（50.448 秒）。保留报告记录地球/月球/太阳三个已验证状态、明确缺失 ID 的基准、模式切换、缓存复用及后台恢复；HTTPS 清单为两次 manifest、两次 plan 和一次 tile，均为 HTTP 200，重载复用了已验证瓦片。这只证明被测模拟器竖切，不证明真机性能、全天体覆盖或完整离线运行。
 
 仓库检查使用 Node.js 22+ 与 npm 10+。`npm run native:check` 是原生项目静态检查，不构建或签名应用。
 
@@ -50,7 +52,7 @@ Web 解码器和对应的 Java 或 Swift 解码器读取同一批文件，比较
 分量的位模式、瓦片哈希、行顺序、清单身份及 exact/missing 数量。第一项检查使用的
 SPK 明确为合成测试数据：它证明协议互通，不证明天文精度或原生实时网络链路。
 
-iOS 工作流还在 macOS 上执行 `node scripts/ios-native-smoke.mjs`。新增运行门禁
+iOS 工作流还在 macOS 上执行 `node scripts/ios-native-smoke.mjs`。运行门禁
 会校验并暂存真实完整版 SPK，在 Go、Web、Swift 间验证地球/月球/太阳与一个
 缺失 ID 的基准，并通过 XCTest 启动原生 App，连接本机回环 HTTPS Go 后端。
 覆盖预设加载、3D/2D 投影数量、在线重载与已校验瓦片缓存复用、后台恢复、教程
@@ -60,9 +62,9 @@ TLS 校验开启；结束后移除本次创建的设备，校验临时目录的�
 根目录运行，需要 Node、Go、OpenSSL、Xcode 及已安装的 iPhone 模拟器运行时。
 
 结果、HTTPS 请求计数、日志与包含截图的 XCTest 结果保存在
-`build/ios-native-smoke/` 和对应 CI 产物中，不覆盖旧结果。该门禁刚加入，
-**必须等对应提交的 CI 成功后才能声明通过**；它不代表真机帧率、完整离线能力
-或原生全功能对等。上面的历史构建证据仍只对应其原提交。
+`build/ios-native-smoke/` 和对应 CI 产物中，不覆盖旧结果。该门禁已在上方链接的
+运行测试提交通过；后续提交仍需各自成功的运行证据。它不代表真机帧率、完整
+离线能力或原生全功能对等。历史证据仍只对应其原提交。
 
 本地复现时，将 `SOLAR_STATE_TILE_FIXTURE_DIR` 设置为仓库外新的或空的绝对目录
 （PowerShell 使用 `$env:SOLAR_STATE_TILE_FIXTURE_DIR`，POSIX shell 使用
