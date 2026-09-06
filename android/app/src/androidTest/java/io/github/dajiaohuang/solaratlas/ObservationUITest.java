@@ -35,7 +35,8 @@ import android.view.MotionEvent;
 import android.opengl.GLSurfaceView;
 
 import androidx.test.core.app.ActivityScenario;
-import androidx.test.espresso.EspressoException;
+import androidx.test.espresso.NoMatchingViewException;
+import androidx.test.espresso.PerformException;
 import androidx.test.espresso.ViewInteraction;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
@@ -329,7 +330,7 @@ public final class ObservationUITest {
                     shown(withText(matcher)).perform(scrollTo()).check(matches(isDisplayed()));
                 }
                 return;
-            } catch (AssertionError | EspressoException error) {
+            } catch (AssertionError | NoMatchingViewException | PerformException error) {
                 last = error;
                 recoverInteractiveWindow();
                 SystemClock.sleep(100);
