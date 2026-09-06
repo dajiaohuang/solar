@@ -61,6 +61,12 @@ async function stop(child) {
   })
 }
 
+async function unlockOwnedEmulator(deviceCommand) {
+  await deviceCommand(['shell', 'wm', 'dismiss-keyguard'])
+  await deviceCommand(['shell', 'input', 'keyevent', '224'])
+  await deviceCommand(['shell', 'input', 'keyevent', '82'])
+}
+
 // Only generated/validated local paths reach cmd.exe. No user shell expressions.
 function batch(file, args, options) {
   if (!windows) return command(file, args, options)
@@ -141,7 +147,10 @@ export async function androidNativeSmoke() {
     for (const setting of ['window_animation_scale', 'transition_animation_scale', 'animator_duration_scale']) {
       await deviceCommand(['shell', 'settings', 'put', 'global', setting, '0'])
     }
-    await deviceCommand(['shell', 'input', 'keyevent', '82'])
+    await deviceCommand(['shell', 'settings', 'put', 'global', 'stay_on_while_plugged_in', '3'])
+    await deviceCommand(['shell', 'settings', 'put', 'system', 'screen_off_timeout', '2147483647'])
+    await deviceCommand(['shell', 'locksettings', 'set-disabled', 'true'])
+    await unlockOwnedEmulator(deviceCommand)
     await deviceCommand(['install', resolve('android/app/build/outputs/apk/debug/app-debug.apk')])
     await deviceCommand(['install', resolve('android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk')])
     backend = ownedProcess(executable, ['-data-dir', join(temporary, 'data'), '-listen', '127.0.0.1:18790',
@@ -187,6 +196,9 @@ export async function androidNativeSmoke() {
     })
     await new Promise((done, reject) => { proxy.once('error', reject); proxy.listen(18791, '127.0.0.1', done) })
     await deviceCommand(['reverse', 'tcp:18791', 'tcp:18791'])
+    // Package install and SystemUI boot can steal focus from the activity
+    // window. Wake and dismiss the keyguard again immediately before Espresso.
+    await unlockOwnedEmulator(deviceCommand)
     // Test APK trusts only this temporary CA. Production TLS and hostname
     // validation remain unchanged; no root cert is installed on the host/device.
     const output = await command(adb, ['-s', serial, 'shell', 'am', 'instrument', '-w', '-r',

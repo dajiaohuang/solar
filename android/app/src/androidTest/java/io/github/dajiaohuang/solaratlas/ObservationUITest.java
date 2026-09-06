@@ -7,6 +7,7 @@ import static androidx.test.espresso.action.ViewActions.closeSoftKeyboard;
 import static androidx.test.espresso.action.ViewActions.replaceText;
 import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.RootMatchers.isTouchable;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
@@ -22,16 +23,24 @@ import static org.junit.Assert.fail;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
 
+import android.accessibilityservice.AccessibilityService;
+import android.app.Activity;
+import android.app.Instrumentation;
 import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.os.SystemClock;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.MotionEvent;
 import android.opengl.GLSurfaceView;
 
 import androidx.test.core.app.ActivityScenario;
+import androidx.test.espresso.EspressoException;
+import androidx.test.espresso.ViewInteraction;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry;
+import androidx.test.runner.lifecycle.Stage;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -47,8 +56,10 @@ import java.security.KeyStore;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateFactory;
 import java.util.Base64;
+import java.util.Collection;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
@@ -74,11 +85,14 @@ public final class ObservationUITest {
         try {
             HttpsURLConnection.setDefaultSSLSocketFactory(testCaFactory(caBase64));
             scenario = ActivityScenario.launch(MainActivity.class);
+            // Fresh API 36 emulators can resume the activity before the window
+            // has input focus. Espresso then fails immediately; recover first.
+            awaitInteractiveWindow();
 
             // Exercise the unconfigured first screen before entering network data.
             waitForText(containsString("No observation loaded"));
-            onView(withTagValue(is((Object) "coverage-summary"))).check(matches(withEffectiveVisibility(GONE)));
-            onView(withText("Tutorial")).perform(scrollTo()).check((view, error) -> {
+            shown(withTagValue(is((Object) "coverage-summary"))).check(matches(withEffectiveVisibility(GONE)));
+            shown(withText("Tutorial")).perform(scrollTo()).check((view, error) -> {
                 if (error != null) throw error;
                 WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(view);
                 if (insets == null) throw new AssertionError("Window insets unavailable");
@@ -91,22 +105,22 @@ public final class ObservationUITest {
             // as for the other actions below; do not bypass click constraints.
             }).perform(scrollTo(), click());
             waitForText(containsString("First observation"));
-            onView(withText("Done")).perform(click());
-            onView(withText("Load observation")).perform(scrollTo(), click());
+            shown(withText("Done")).perform(click());
+            shown(withText("Load observation")).perform(scrollTo(), click());
             waitForText(containsString("Enter an HTTPS backend"));
 
-            onView(withText("Earth - Moon")).perform(scrollTo(), click());
+            shown(withText("Earth - Moon")).perform(scrollTo(), click());
             fill(BACKEND_HINT, backend);
             fill(EPOCH_HINT, "2461287.5");
             fill(IDS_HINT, "naif:399,naif:301,naif:10,unknown:fixture");
-            onView(withText("Load observation")).perform(scrollTo(), click());
+            shown(withText("Load observation")).perform(scrollTo(), click());
             waitForText(containsString("3 verified states - 1 data gaps"));
             waitForText(containsString("3D GPU points 3/3 (limit 100000)"));
             waitForEvidence("naif:399 - VERIFIED", "naif:301 - VERIFIED", "naif:10 - VERIFIED", "unknown:fixture - MISSING");
             viewportScreenshot(scenario, "observation-3d.png");
             verifyInteractionRenderMode();
 
-            onView(withText("Switch to 2D")).perform(scrollTo(), click());
+            shown(withText("Switch to 2D")).perform(scrollTo(), click());
             waitForText(containsString("2D GPU points 3/3 (limit 250000)"));
             viewportScreenshot(scenario, "observation-2d.png");
             verifyInteractionRenderMode();
@@ -117,16 +131,16 @@ public final class ObservationUITest {
             waitForText(containsString("2D GPU points 3/3 (limit 25000)"));
             waitForText(containsString("native memory warning"));
             waitForEvidence("naif:399 - VERIFIED", "naif:301 - VERIFIED", "naif:10 - VERIFIED", "unknown:fixture - MISSING");
-            onView(withText("Switch to 3D")).perform(scrollTo(), click());
+            shown(withText("Switch to 3D")).perform(scrollTo(), click());
             waitForText(containsString("3D GPU points 3/3 (limit 25000)"));
-            onView(withText("Switch to 2D")).perform(scrollTo(), click());
+            shown(withText("Switch to 2D")).perform(scrollTo(), click());
             waitForText(containsString("2D GPU points 3/3 (limit 25000)"));
 
             scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);
             scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);
             waitForText(containsString("Observation released while inactive"));
             waitForText(containsString("No current display measurements."));
-            onView(withText("Load observation")).perform(scrollTo(), click());
+            shown(withText("Load observation")).perform(scrollTo(), click());
             waitForText(containsString("3 verified states - 1 data gaps"));
             waitForText(containsString("2D GPU points 3/3 (limit 25000)"));
             waitForEvidence("naif:399 - VERIFIED", "naif:301 - VERIFIED", "naif:10 - VERIFIED", "unknown:fixture - MISSING");
@@ -134,53 +148,53 @@ public final class ObservationUITest {
             // Separate, deliberately synthetic coverage cases. Real SPK state
             // routes above are untouched and verified independently by the harness.
             fill(BACKEND_HINT, backend + "/coverage-fixture/valid");
-            onView(withTagValue(is((Object) "coverage-toggle"))).perform(scrollTo(), click());
+            shown(withTagValue(is((Object) "coverage-toggle"))).perform(scrollTo(), click());
             waitForText(containsString("No coverage report loaded."));
-            onView(withTagValue(is((Object) "coverage-load"))).perform(scrollTo(), click());
+            shown(withTagValue(is((Object) "coverage-load"))).perform(scrollTo(), click());
             waitForText(containsString("Source records: 10"));
-            onView(withTagValue(is((Object) "coverage-summary")))
+            shown(withTagValue(is((Object) "coverage-summary")))
                     .check(matches(withText(containsString("Distinct explicit NAIF targets: 2"))))
                     .check(matches(withText(containsString("Unresolved source records: 7"))))
                     .check(matches(withText(containsString("Audit ET: 500.125"))))
                     .check(matches(withText(containsString("Dependency-covered targets: 1"))))
                     .check(matches(withText(containsString("Whole-window numerical certification has not been established"))));
             coverageScreenshot(scenario, "coverage-synthetic-summary.png");
-            onView(withTagValue(is((Object) "coverage-details"))).check(matches(withEffectiveVisibility(GONE)));
-            onView(withTagValue(is((Object) "coverage-details-toggle"))).perform(scrollTo(), click());
-            onView(withTagValue(is((Object) "coverage-details")))
+            shown(withTagValue(is((Object) "coverage-details"))).check(matches(withEffectiveVisibility(GONE)));
+            shown(withTagValue(is((Object) "coverage-details-toggle"))).perform(scrollTo(), click());
+            shown(withTagValue(is((Object) "coverage-details")))
                     .check(matches(withText(containsString("Catalog: coverage-fixture"))))
                     .check(matches(withText(containsString("no-explicit-naif-mapping: 6"))))
                     .check(matches(withText(containsString("Satellite catalog SHA-256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"))));
-            onView(withTagValue(is((Object) "coverage-load"))).perform(scrollTo(), click());
+            shown(withTagValue(is((Object) "coverage-load"))).perform(scrollTo(), click());
             waitForText(containsString("Coverage report unavailable."));
-            onView(withTagValue(is((Object) "coverage-summary"))).check(matches(not(withText(containsString("Source records: 10")))));
-            onView(withTagValue(is((Object) "coverage-details"))).check(matches(withEffectiveVisibility(GONE))).check(matches(withText("")));
+            shown(withTagValue(is((Object) "coverage-summary"))).check(matches(not(withText(containsString("Source records: 10")))));
+            shown(withTagValue(is((Object) "coverage-details"))).check(matches(withEffectiveVisibility(GONE))).check(matches(withText("")));
             coverageScreenshot(scenario, "coverage-unavailable.png");
             fill(BACKEND_HINT, backend + "/coverage-fixture/invalid");
             waitForText(containsString("No coverage report loaded."));
-            onView(withTagValue(is((Object) "coverage-load"))).perform(scrollTo(), click());
+            shown(withTagValue(is((Object) "coverage-load"))).perform(scrollTo(), click());
             waitForText(containsString("Coverage could not be verified."));
-            onView(withTagValue(is((Object) "coverage-toggle"))).perform(scrollTo(), click());
-            onView(withTagValue(is((Object) "coverage-summary"))).check(matches(withEffectiveVisibility(GONE)));
+            shown(withTagValue(is((Object) "coverage-toggle"))).perform(scrollTo(), click());
+            shown(withTagValue(is((Object) "coverage-summary"))).check(matches(withEffectiveVisibility(GONE)));
             // Synthetic directory rows are never used as a science oracle.
             // The state request must reject changed inventory before planning.
             fill(BACKEND_HINT, backend + "/identity-fixture");
-            onView(withTagValue(is((Object) "identity-toggle"))).perform(scrollTo(), click());
-            onView(withTagValue(is((Object) "identity-summary"))).check(matches(withText("No source page loaded.")));
-            onView(withTagValue(is((Object) "identity-load"))).perform(scrollTo(), click());
+            shown(withTagValue(is((Object) "identity-toggle"))).perform(scrollTo(), click());
+            shown(withTagValue(is((Object) "identity-summary"))).check(matches(withText("No source page loaded.")));
+            shown(withTagValue(is((Object) "identity-load"))).perform(scrollTo(), click());
             waitForText(containsString("Records on this page: 50"));
-            onView(withTagValue(is((Object) "identity-records"))).check(matches(withText(containsString("unknown:source:0"))));
+            shown(withTagValue(is((Object) "identity-records"))).check(matches(withText(containsString("unknown:source:0"))));
             panelScreenshot(scenario, "identity-summary", "source-directory-synthetic.png");
-            onView(withTagValue(is((Object) "identity-next"))).perform(scrollTo(), click());
+            shown(withTagValue(is((Object) "identity-next"))).perform(scrollTo(), click());
             waitForText(containsString("Records on this page: 50"));
-            onView(withTagValue(is((Object) "identity-records"))).check(matches(withText(containsString("unknown:source:50"))));
-            onView(withTagValue(is((Object) "identity-next"))).check(matches(withEffectiveVisibility(GONE)));
-            onView(withTagValue(is((Object) "identity-select"))).perform(scrollTo(), click());
-            onView(withHint(IDS_HINT)).check(matches(withText(containsString("unknown:source:50"))));
-            onView(withText("Load observation")).perform(scrollTo(), click());
+            shown(withTagValue(is((Object) "identity-records"))).check(matches(withText(containsString("unknown:source:50"))));
+            shown(withTagValue(is((Object) "identity-next"))).check(matches(withEffectiveVisibility(GONE)));
+            shown(withTagValue(is((Object) "identity-select"))).perform(scrollTo(), click());
+            shown(withHint(IDS_HINT)).check(matches(withText(containsString("unknown:source:50"))));
+            shown(withText("Load observation")).perform(scrollTo(), click());
             waitForText(containsString("Inventory changed; restart browsing"));
-            onView(withTagValue(is((Object) "identity-toggle"))).perform(scrollTo(), click());
-            onView(withTagValue(is((Object) "identity-records"))).check(matches(withText("")));
+            shown(withTagValue(is((Object) "identity-toggle"))).perform(scrollTo(), click());
+            shown(withTagValue(is((Object) "identity-records"))).check(matches(withText("")));
             String realDirectory = args.getString("solarRealDirectory");
             if (realDirectory != null) {
                 org.json.JSONObject expected = new org.json.JSONObject(new String(Base64.getDecoder().decode(realDirectory), StandardCharsets.UTF_8));
@@ -191,19 +205,19 @@ public final class ObservationUITest {
                 fill(BACKEND_HINT, backend + "/source-directory-real");
                 fill(EPOCH_HINT, Double.toString(expected.getDouble("epochJd")));
                 fill("Reference body ID", expected.getString("reference"));
-                onView(withTagValue(is((Object) "identity-toggle"))).perform(scrollTo(), click());
-                onView(withTagValue(is((Object) "identity-load"))).perform(scrollTo(), click());
+                shown(withTagValue(is((Object) "identity-toggle"))).perform(scrollTo(), click());
+                shown(withTagValue(is((Object) "identity-load"))).perform(scrollTo(), click());
                 waitForText(containsString("Source records: " + expected.getLong("totalRecords")));
-                onView(withTagValue(is((Object) "identity-records"))).check(matches(withText(containsString(expected.getString("inventoryHash")))));
+                shown(withTagValue(is((Object) "identity-records"))).check(matches(withText(containsString(expected.getString("inventoryHash")))));
                 panelScreenshot(scenario, "identity-summary", "source-directory-real.png");
-                onView(withTagValue(is((Object) "identity-select"))).perform(scrollTo(), click());
-                onView(withHint(IDS_HINT)).check(matches(withText(String.join(",", selected))));
-                onView(withText("Load observation")).perform(scrollTo(), click());
+                shown(withTagValue(is((Object) "identity-select"))).perform(scrollTo(), click());
+                shown(withHint(IDS_HINT)).check(matches(withText(String.join(",", selected))));
+                shown(withText("Load observation")).perform(scrollTo(), click());
                 int exact = expected.getInt("exactCount"), missing = expected.getInt("missingCount");
                 waitForText(containsString(exact + " verified states - " + missing + " data gaps"));
                 waitForText(containsString("2D GPU points " + exact + "/" + exact + " (limit 25000)"));
                 viewportScreenshot(scenario, "source-directory-real-2d.png", exact);
-                onView(withText("Switch to 3D")).perform(scrollTo(), click());
+                shown(withText("Switch to 3D")).perform(scrollTo(), click());
                 waitForText(containsString("3D GPU points " + exact + "/" + exact + " (limit 25000)"));
                 viewportScreenshot(scenario, "source-directory-real-3d.png", exact);
             }
@@ -241,32 +255,89 @@ public final class ObservationUITest {
         return context.getSocketFactory();
     }
 
+    private static ViewInteraction shown(org.hamcrest.Matcher<View> matcher) {
+        // Headless API 36 emulators often resume the activity without window
+        // focus. Click constraints stay intact; only the root matcher changes.
+        return onView(matcher).inRoot(isTouchable());
+    }
+
     private static void fill(String hint, String value) {
-        onView(withHint(hint)).perform(scrollTo(), click(), clearText(), replaceText(value), closeSoftKeyboard());
+        shown(withHint(hint)).perform(scrollTo(), click(), clearText(), replaceText(value), closeSoftKeyboard());
     }
 
     private static void waitForEvidence(String... rows) {
         for (String row : rows) waitForText(containsString(row));
     }
 
+    private static void awaitInteractiveWindow() {
+        long deadline = SystemClock.uptimeMillis() + 2_000;
+        while (SystemClock.uptimeMillis() < deadline) {
+            if (hasWindowFocus()) return;
+            recoverInteractiveWindow();
+            SystemClock.sleep(100);
+        }
+        // Interactions use a touchable-root matcher. Focus recovery is
+        // best-effort on headless first-boot API 36 emulators.
+    }
+
+    private static boolean hasWindowFocus() {
+        AtomicBoolean focused = new AtomicBoolean();
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            Collection<Activity> resumed = ActivityLifecycleMonitorRegistry.getInstance()
+                    .getActivitiesInStage(Stage.RESUMED);
+            if (!resumed.isEmpty()) focused.set(resumed.iterator().next().hasWindowFocus());
+        });
+        return focused.get();
+    }
+
+    private static void recoverInteractiveWindow() {
+        Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+        instrumentation.setInTouchMode(true);
+        try {
+            instrumentation.getUiAutomation().performGlobalAction(
+                    AccessibilityService.GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE);
+        } catch (RuntimeException ignored) {
+            // Shade dismissal is best-effort on a headless first-boot emulator.
+        }
+        try {
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_WAKEUP);
+        } catch (SecurityException ignored) {
+            // Headless emulators can reject injected keys while SystemUI holds the display.
+        }
+        instrumentation.runOnMainSync(() -> {
+            Collection<Activity> resumed = ActivityLifecycleMonitorRegistry.getInstance()
+                    .getActivitiesInStage(Stage.RESUMED);
+            if (resumed.isEmpty()) return;
+            Activity activity = resumed.iterator().next();
+            if (activity.hasWindowFocus()) return;
+            View decor = activity.getWindow().getDecorView();
+            decor.setFocusable(true);
+            decor.setFocusableInTouchMode(true);
+            decor.requestFocus();
+        });
+    }
+
     private static void waitForText(org.hamcrest.Matcher<String> matcher) {
         long deadline = SystemClock.uptimeMillis() + UI_TIMEOUT_MS;
-        AssertionError last = null;
+        Throwable last = null;
         while (SystemClock.uptimeMillis() < deadline) {
             try {
                 try {
                     // Dialog titles are not ScrollView descendants.
-                    onView(withText(matcher)).check(matches(isDisplayed()));
+                    shown(withText(matcher)).check(matches(isDisplayed()));
                 } catch (AssertionError notVisible) {
-                    onView(withText(matcher)).perform(scrollTo()).check(matches(isDisplayed()));
+                    shown(withText(matcher)).perform(scrollTo()).check(matches(isDisplayed()));
                 }
                 return;
-            } catch (AssertionError | androidx.test.espresso.NoMatchingViewException error) {
-                if (error instanceof AssertionError) last = (AssertionError) error;
+            } catch (AssertionError | EspressoException error) {
+                last = error;
+                recoverInteractiveWindow();
                 SystemClock.sleep(100);
             }
         }
-        if (last != null) throw last;
+        if (last instanceof AssertionError) throw (AssertionError) last;
+        if (last instanceof RuntimeException) throw (RuntimeException) last;
+        if (last != null) throw new AssertionError(last);
         fail("Timed out waiting for UI text");
     }
 
@@ -284,7 +355,7 @@ public final class ObservationUITest {
             root.setFocusableInTouchMode(true); root.requestFocus();
         });
         int[] bounds = new int[4];
-        onView(withContentDescription("Verified state GPU point observation viewport"))
+        shown(withContentDescription("Verified state GPU point observation viewport"))
                 .perform(scrollTo()).check(matches(isCompletelyDisplayed()));
         // Espresso observes the UI hierarchy before SurfaceFlinger necessarily
         // presents its scroll. Fence two display frames before matching pixels.
@@ -292,7 +363,7 @@ public final class ObservationUITest {
         scenario.onActivity(activity -> activity.getWindow().getDecorView().postOnAnimation(() ->
                 activity.getWindow().getDecorView().postOnAnimation(presented::countDown)));
         assertTrue("Viewport frame was not presented", presented.await(5, TimeUnit.SECONDS));
-        onView(withContentDescription("Verified state GPU point observation viewport"))
+        shown(withContentDescription("Verified state GPU point observation viewport"))
                 .check(matches(isCompletelyDisplayed())).check((view, error) -> {
                     if (error != null) throw error;
                     int[] location = new int[2]; view.getLocationOnScreen(location);
@@ -322,7 +393,7 @@ public final class ObservationUITest {
     }
 
     private static void verifyInteractionRenderMode() {
-        onView(withContentDescription("Verified state GPU point observation viewport"))
+        shown(withContentDescription("Verified state GPU point observation viewport"))
                 .check((view, error) -> {
                     if (error != null) throw error;
                     NativeObservationDeck deck = (NativeObservationDeck) view;
@@ -339,7 +410,7 @@ public final class ObservationUITest {
             // Three real states are not a high-load performance benchmark.
             waitForText(containsString("Interaction GL intervals:"));
         } finally {
-            onView(withContentDescription("Verified state GPU point observation viewport"))
+            shown(withContentDescription("Verified state GPU point observation viewport"))
                     .check((view, error) -> {
                         if (error != null) throw error;
                         NativeObservationDeck deck = (NativeObservationDeck) view;
@@ -364,7 +435,7 @@ public final class ObservationUITest {
             View root = activity.findViewById(android.R.id.content);
             root.setFocusableInTouchMode(true); root.requestFocus();
         });
-        onView(withTagValue(is((Object) tag))).perform(scrollTo()).check(matches(isCompletelyDisplayed()));
+        shown(withTagValue(is((Object) tag))).perform(scrollTo()).check(matches(isCompletelyDisplayed()));
         CountDownLatch presented = new CountDownLatch(1);
         scenario.onActivity(activity -> activity.getWindow().getDecorView().postOnAnimation(() ->
                 activity.getWindow().getDecorView().postOnAnimation(presented::countDown)));
