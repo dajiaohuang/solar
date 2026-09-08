@@ -33,6 +33,7 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.MotionEvent;
 import android.opengl.GLSurfaceView;
+import android.view.accessibility.AccessibilityNodeInfo;
 
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.espresso.NoMatchingViewException;
@@ -315,6 +316,10 @@ public final class ObservationUITest {
             } catch (RuntimeException ignored) {
                 // System dialogs may reject global actions during first boot.
             }
+            // API 36 may keep the Quickstep ANR dialog open after BACK. Use the
+            // system dialog's own Wait action so the target activity can regain
+            // focus; this remains test-only and does not bypass app assertions.
+            dismissQuickstepNotResponding(instrumentation);
         }
         try {
             instrumentation.getUiAutomation().performGlobalAction(
@@ -355,6 +360,31 @@ public final class ObservationUITest {
             decor.setFocusableInTouchMode(true);
             decor.requestFocus();
         });
+    }
+
+    private static void dismissQuickstepNotResponding(Instrumentation instrumentation) {
+        long deadline = SystemClock.uptimeMillis() + 1_500;
+        while (SystemClock.uptimeMillis() < deadline) {
+            AccessibilityNodeInfo root = null;
+            try {
+                root = instrumentation.getUiAutomation().getRootInActiveWindow();
+                if (root != null) {
+                    java.util.List<AccessibilityNodeInfo> waitNodes =
+                            root.findAccessibilityNodeInfosByText("Wait");
+                    for (AccessibilityNodeInfo node : waitNodes) {
+                        if (node.isVisibleToUser() && node.isClickable()
+                                && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                            return;
+                        }
+                    }
+                }
+            } catch (RuntimeException ignored) {
+                // SystemUI can reject accessibility queries during first boot.
+            } finally {
+                if (root != null) root.recycle();
+            }
+            SystemClock.sleep(100);
+        }
     }
 
     private static void waitForText(org.hamcrest.Matcher<String> matcher) {
