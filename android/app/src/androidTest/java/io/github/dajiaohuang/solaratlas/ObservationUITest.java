@@ -325,19 +325,12 @@ public final class ObservationUITest {
         // API 36's freshly booted emulator can show a system Quickstep
         // "isn't responding" dialog above the app. That dialog owns focus and
         // makes Espresso's default root picker fail even though the target
-        // activity is still resumed. Dismiss only when the target is already
-        // unfocused; if no dialog is present, the subsequent reorder restores
-        // the existing activity without changing the test's UI actions.
+        // activity is still resumed. The dialog helper already clicks its own
+        // Wait action when possible. Never send a global BACK here: if the
+        // dialog closes between the accessibility probe and this branch,
+        // Android delivers BACK to the target task and finishes MainActivity.
+        // Keep the existing activity alive and let the next focus probe retry.
         if (!hasWindowFocus() && quickstepDialogSeen) {
-            try {
-                instrumentation.getUiAutomation().performGlobalAction(
-                        AccessibilityService.GLOBAL_ACTION_BACK);
-            } catch (RuntimeException ignored) {
-                // System dialogs may reject global actions during first boot.
-            }
-            // API 36 may keep the Quickstep ANR dialog open after BACK. Use the
-            // system dialog's own Wait action so the target activity can regain
-            // focus; this remains test-only and does not bypass app assertions.
             dismissQuickstepNotResponding(instrumentation);
         }
         try {
