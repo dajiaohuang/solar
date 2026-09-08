@@ -7,7 +7,6 @@ import static androidx.test.espresso.action.ViewActions.closeSoftKeyboard;
 import static androidx.test.espresso.action.ViewActions.replaceText;
 import static androidx.test.espresso.action.ViewActions.scrollTo;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
-import static androidx.test.espresso.matcher.RootMatchers.isTouchable;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.isCompletelyDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withContentDescription;
@@ -258,9 +257,10 @@ public final class ObservationUITest {
     }
 
     private static ViewInteraction shown(org.hamcrest.Matcher<View> matcher) {
-        // Headless API 36 emulators often resume the activity without window
-        // focus. Click constraints stay intact; only the root matcher changes.
-        return onView(matcher).inRoot(isTouchable());
+        // Let Espresso choose its focused application root. A custom
+        // touchable-root matcher can select Android's insertion-handle popup
+        // or a never-focused instrumentation root on API 36.
+        return onView(matcher);
     }
 
     private static void fill(String hint, String value) {
@@ -282,8 +282,8 @@ public final class ObservationUITest {
             recoverInteractiveWindow();
             SystemClock.sleep(100);
         }
-        // Interactions use a touchable-root matcher. Focus recovery is
-        // best-effort on headless first-boot API 36 emulators.
+        // Focus recovery is best-effort on headless first-boot API 36
+        // emulators; Espresso will choose the focused application root.
     }
 
     private static boolean hasWindowFocus() {
