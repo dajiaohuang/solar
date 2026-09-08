@@ -53,5 +53,17 @@
     ],
     "sourcedBodies": ["moon", "io", "europa", "ganymede", "callisto", "titan"],
     "illustrativeBodies": []
+  },
+  "coverage": {
+    "supportedNamedBodies": [
+      "sun", "mercury", "venus", "earth", "moon", "mars", "jupiter", "saturn",
+      "uranus", "neptune", "ceres", "pluto", "eris", "haumea", "makemake",
+      "io", "europa", "ganymede", "callisto", "titan"
+    ],
+    "sourcedSatelliteBodies": ["moon", "io", "europa", "ganymede", "callisto", "titan"],
+    "coverageGaps": [
+      "other-planetary-satellites-not-modeled",
+      "dwarf-planet-elements-are-curated-approximations-not-precision-ephemerides"
+    ]
   }
 }

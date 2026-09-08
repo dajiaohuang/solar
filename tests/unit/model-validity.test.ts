@@ -9,10 +9,12 @@ import {
   jplApproxWindowState,
   jplApproxWindowWarning,
 } from '../../src/engine/ephemeris/modelValidity'
-import { majorBodiesById } from '../../src/data/majorBodies'
+import { defaultSelectedBodyIds, majorBodiesById } from '../../src/data/majorBodies'
+import { JPL_HORIZONS_GIANT_SATELLITE_ELEMENTS } from '../../src/data/satelliteEpochElements'
 import { en } from '../../src/i18n/en'
 import { zh } from '../../src/i18n/zh'
 import { dateToJulianDay } from '../../src/lib/julianDate'
+import modelEvidence from '../../src/data/modelEvidence.json'
 
 describe('JPL approximate element validity', () => {
   const jd = (date: string) => dateToJulianDay(new Date(`${date}T00:00:00Z`))
@@ -87,5 +89,19 @@ describe('JPL approximate element validity', () => {
     expect(zh.satelliteMeanElementsWarning).toContain('ECLIPJ2000')
     expect(zh.satelliteMeanElementsWarning).toContain('时标转换')
     expect(zh.satelliteMeanElementsWarning).toContain('DE440')
+  })
+
+  it('keeps the published coverage inventory aligned with implemented named bodies', () => {
+    const coverage = modelEvidence.coverage
+    expect(coverage.supportedNamedBodies).toEqual(['sun', ...defaultSelectedBodyIds])
+    expect(coverage.sourcedSatelliteBodies).toEqual(SATELLITE_ORBIT_MODEL_EVIDENCE.sourcedBodies)
+    expect(coverage.sourcedSatelliteBodies.every((bodyId) => majorBodiesById.get(bodyId)?.satelliteOrbitEvidence)).toBe(true)
+    expect(coverage.coverageGaps).toEqual([
+      'other-planetary-satellites-not-modeled',
+      'dwarf-planet-elements-are-curated-approximations-not-precision-ephemerides',
+    ])
+    for (const bodyId of ['io', 'europa', 'ganymede', 'callisto', 'titan'] as const) {
+      expect(JPL_HORIZONS_GIANT_SATELLITE_ELEMENTS[bodyId]).toBeDefined()
+    }
   })
 })

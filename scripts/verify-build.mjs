@@ -107,6 +107,11 @@ if (scientificValidation.modelEvidence?.satelliteOrbits?.moonCenterHandling !== 
 if (scientificValidation.modelEvidence?.satelliteOrbits?.sourcedBodies?.join(',') !== 'moon,io,europa,ganymede,callisto,titan') throw new Error('Scientific validation report does not identify every sourced satellite model')
 if (scientificValidation.modelEvidence?.satelliteOrbits?.illustrativeBodies?.length !== 0) throw new Error('Scientific validation report still identifies illustrative satellite elements')
 if (scientificValidation.modelEvidence?.satelliteOrbits?.giantSatelliteFrameTransform !== 'identity-eclipj2000') throw new Error('Scientific validation report is missing the giant-satellite frame contract')
+const coverage = scientificValidation.modelEvidence?.coverage
+const expectedCoverageBodies = 'sun,mercury,venus,earth,moon,mars,jupiter,saturn,uranus,neptune,ceres,pluto,eris,haumea,makemake,io,europa,ganymede,callisto,titan'
+if (coverage?.supportedNamedBodies?.join(',') !== expectedCoverageBodies) throw new Error('Scientific validation report is missing the curated named-body coverage inventory')
+if (coverage?.sourcedSatelliteBodies?.join(',') !== 'moon,io,europa,ganymede,callisto,titan') throw new Error('Scientific validation report is missing the sourced satellite coverage inventory')
+if (coverage?.coverageGaps?.join(',') !== 'other-planetary-satellites-not-modeled,dwarf-planet-elements-are-curated-approximations-not-precision-ephemerides') throw new Error('Scientific validation report is missing explicit coverage gaps')
 const planetaryModelEvidence = scientificValidation.modelEvidence.planetaryApproximation
 const expectedPlanetaryModelWindow = `${planetaryModelEvidence.validFrom}/${planetaryModelEvidence.validTo}`
 if (scientificValidation.modelWindow?.planetaryApproximation !== expectedPlanetaryModelWindow) throw new Error('Scientific validation model window is inconsistent with the canonical model evidence')
