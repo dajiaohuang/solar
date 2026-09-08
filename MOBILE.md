@@ -19,6 +19,8 @@
 
 The native slice preserves scientific provenance, epoch, units, reference frame, validity and missing-state semantics. Missing precise states remain visibly unavailable; they are not replaced by approximate positions. The native slice does not claim all-body coverage, navigation accuracy, complete ephemeris access, or full Web feature parity.
 
+Both native clients expose the same nine source-backed presets: planets, Earth–Moon, Mars moons, Jupiter moons, Saturn moons, Uranus moons, Neptune moons, Pluto moons, and selected SPK asteroids. Preset IDs are only request selections; exact or missing availability remains owned by the configured backend and its source/model evidence.
+
 Android assembles current states directly into one final `double[]` and one
 `boolean[]`, without per-component `Double` boxing or a final numeric-buffer
 copy. Capacity is checked before allocation; tile identities, order, missing
