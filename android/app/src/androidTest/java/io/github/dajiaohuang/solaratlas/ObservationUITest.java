@@ -265,6 +265,7 @@ public final class ObservationUITest {
         // Let Espresso choose its focused application root. A custom
         // touchable-root matcher can select Android's insertion-handle popup
         // or a never-focused instrumentation root on API 36.
+        recoverInteractiveWindow();
         return onView(matcher);
     }
 
@@ -277,7 +278,7 @@ public final class ObservationUITest {
         Throwable last = null;
         while (SystemClock.uptimeMillis() < deadline) {
             try {
-                onView(withHint(hint)).perform(scrollTo(), click(), clearText(), replaceText(value), closeSoftKeyboard());
+                shown(withHint(hint)).perform(scrollTo(), click(), clearText(), replaceText(value), closeSoftKeyboard());
                 return;
             } catch (AssertionError | NoMatchingViewException | PerformException error) {
                 last = error;
@@ -316,6 +317,7 @@ public final class ObservationUITest {
     }
 
     private static void recoverInteractiveWindow() {
+        if (hasWindowFocus()) return;
         Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
         instrumentation.setInTouchMode(true);
         // A system ANR dialog can cover the activity while the activity still
@@ -406,7 +408,13 @@ public final class ObservationUITest {
     }
 
     private static boolean hasWaitAction(AccessibilityNodeInfo root) {
-        return root != null && !root.findAccessibilityNodeInfosByText("Wait").isEmpty();
+        if (root == null) return false;
+        java.util.List<AccessibilityNodeInfo> waitNodes =
+                root.findAccessibilityNodeInfosByText("Wait");
+        if (!waitNodes.isEmpty()) return true;
+        // Some API 36 SystemUI builds expose the ANR action through a
+        // content description rather than a text match.
+        return hasWaitDescription(root);
     }
 
     private static boolean clickWaitAction(AccessibilityNodeInfo root) {
@@ -415,13 +423,51 @@ public final class ObservationUITest {
                 root.findAccessibilityNodeInfosByText("Wait");
         for (AccessibilityNodeInfo node : waitNodes) {
             AccessibilityNodeInfo current = node;
-            for (int depth = 0; current != null && depth < 5; depth++) {
-                if (current.isVisibleToUser() && current.isClickable()
-                        && current.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+            for (int depth = 0; current != null && depth < 12; depth++) {
+                if (clickVisibleNode(current)) {
                     return true;
                 }
                 current = current.getParent();
             }
+        }
+        return clickWaitDescription(root);
+    }
+
+    private static boolean clickVisibleNode(AccessibilityNodeInfo node) {
+        if (node == null || !node.isVisibleToUser()) return false;
+        node.refresh();
+        if (node.isClickable()
+                && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean hasWaitDescription(AccessibilityNodeInfo root) {
+        java.util.List<AccessibilityNodeInfo> nodes = root.findAccessibilityNodeInfosByText("Wait");
+        if (!nodes.isEmpty()) return true;
+        return findDescription(root, false);
+    }
+
+    private static boolean clickWaitDescription(AccessibilityNodeInfo root) {
+        return findDescription(root, true);
+    }
+
+    private static boolean findDescription(AccessibilityNodeInfo node, boolean click) {
+        if (node == null) return false;
+        CharSequence description = node.getContentDescription();
+        if (description != null && description.toString().equalsIgnoreCase("Wait")) {
+            if (!click) return true;
+            AccessibilityNodeInfo current = node;
+            for (int depth = 0; current != null && depth < 12; depth++) {
+                if (clickVisibleNode(current)) return true;
+                current = current.getParent();
+            }
+        }
+        for (int index = 0; index < node.getChildCount(); index++) {
+            AccessibilityNodeInfo child = node.getChild(index);
+            if (findDescription(child, click)) return true;
+            if (child != null) child.recycle();
         }
         return false;
     }
