@@ -281,7 +281,7 @@ struct ProtocolTests {
         precondition(pressure.lastPressureTime == 8)
         precondition(frame.states.map(\.bitPattern) == sourceBits)
         print("iOS display pressure: independent mode limits, thermal/memory reductions, repeated warnings, no automatic restoration, immutable prefix and missing-reference exact counts passed")
-        var sampler = NativeFrameSampler()
+        let sampler = NativeFrameSampler()
         var sampled: NativeFrameWindow?
         for index in 0..<40 {
             if let window = sampler.record(Double(index) * 0.034) { sampled = window }
@@ -289,7 +289,7 @@ struct ProtocolTests {
         precondition(sampled?.samples == 30 && abs((sampled?.p50Ms ?? 0) - 34) < 0.000_001 && abs((sampled?.p95Ms ?? 0) - 34) < 0.000_001)
         precondition(abs((sampled?.droppedRatio ?? 0) - 0.5) < 0.000_001)
         var dynamic = NativeDisplayPressure()
-        let slowWindow = NativeFrameWindow(samples: 60, p50Ms: 20, p95Ms: 40, droppedRatio: 0.3)
+        let slowWindow = NativeFrameWindow(samples: 60, p50Ms: 20, p95Ms: 30, droppedRatio: 0.1)
         precondition(!dynamic.sample(mode3D: true, available: 100_000, window: slowWindow, now: 1))
         precondition(dynamic.sample(mode3D: true, available: 100_000, window: slowWindow, now: 7))
         precondition(dynamic.spatialLimit == 75_000 && dynamic.planarLimit == 250_000)
