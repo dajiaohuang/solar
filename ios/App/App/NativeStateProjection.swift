@@ -178,7 +178,7 @@ struct NativeDisplayPressure: Sendable {
                 return change(mode3D: true, value: reduced(spatialLimit), now: now, reason: .slow)
             }
             if canAdjust(lastSpatialAdjustment, now: now), spatialFast >= 4 {
-                return change(mode3D: true, value: grown(spatialLimit, maximum: Self.maximumSpatial), now: now, reason: .headroom)
+                return change(mode3D: true, value: grown(spatialLimit, maximum: maximum(mode3D: true)), now: now, reason: .headroom)
             }
         } else {
             planarSlow = pressured ? planarSlow + 1 : 0
@@ -188,7 +188,7 @@ struct NativeDisplayPressure: Sendable {
                 return change(mode3D: false, value: reduced(planarLimit), now: now, reason: .slow)
             }
             if canAdjust(lastPlanarAdjustment, now: now), planarFast >= 4 {
-                return change(mode3D: false, value: grown(planarLimit, maximum: Self.maximumPlanar), now: now, reason: .headroom)
+                return change(mode3D: false, value: grown(planarLimit, maximum: maximum(mode3D: false)), now: now, reason: .headroom)
             }
         }
         return false
@@ -205,6 +205,13 @@ struct NativeDisplayPressure: Sendable {
 
     private func reduced(_ value: Int) -> Int { max(Self.minimum, (value * 3 / 4 / 5_000) * 5_000) }
     private func grown(_ value: Int, maximum: Int) -> Int { min(maximum, ((value + value / 8 + 4_999) / 5_000) * 5_000) }
+    private func maximum(mode3D: Bool) -> Int {
+        switch thermalLevel {
+        case 0: return mode3D ? Self.maximumSpatial : Self.maximumPlanar
+        case 1: return mode3D ? 75_000 : 100_000
+        default: return Self.minimum
+        }
+    }
     private func canAdjust(_ last: Double?, now: Double) -> Bool { last == nil || now >= last! + Self.cooldown }
     private mutating func resetSampling() { spatialSlow = 0; planarSlow = 0; spatialFast = 0; planarFast = 0 }
 

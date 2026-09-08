@@ -298,6 +298,9 @@ struct ProtocolTests {
         for index in 0..<3 { precondition(!dynamic.sample(mode3D: false, available: 250_000, window: fastWindow, now: 20 + Double(index))) }
         precondition(dynamic.sample(mode3D: false, available: 250_000, window: fastWindow, now: 25))
         precondition(dynamic.planarLimit == 30_000 && dynamic.spatialLimit == 25_000)
+        dynamic.thermalChanged(.fair, now: 26)
+        for index in 0..<40 { _ = dynamic.sample(mode3D: false, available: 500_000, window: fastWindow, now: 40 + Double(index) * 6) }
+        precondition(dynamic.planarLimit <= 100_000)
         let prefetch = NativeProjectionPrefetch()
         let emptyProjection = try await prefetch.prepare(frame: nil, reference: "naif:10", limit: 1)
         precondition(emptyProjection.points.isEmpty && emptyProjection.candidates == 0)
