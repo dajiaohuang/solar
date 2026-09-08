@@ -97,6 +97,7 @@ export async function androidNativeSmoke() {
     for (const file of ['scripts/android-native-smoke.mjs', 'scripts/ios-native-smoke.mjs', 'scripts/native-coverage-fixture.mjs', 'scripts/native-identity-fixture.mjs', 'scripts/native-real-directory.mjs',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/MainActivity.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/NativeObservationDeck.java',
+      'android/app/src/main/java/io/github/dajiaohuang/solaratlas/NativeProjectionPrefetch.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/NativeRenderBudget.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/StateTileService.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/StateTileDecoder.java',

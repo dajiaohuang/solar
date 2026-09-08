@@ -367,6 +367,7 @@ private struct ProjectionKey: Hashable {
     let reference: String
     let mode3D: Bool
     let active: Bool
+    let budgetRevision: UInt64
 }
 
 private struct NativeStateViewport: View {
@@ -381,7 +382,8 @@ private struct NativeStateViewport: View {
     @State private var projection = NativeProjection()
     @State private var projectedKey: ProjectionKey?
     @State private var projectionError: String?
-    private var key: ProjectionKey { ProjectionKey(frame: frame?.identity, reference: reference, mode3D: mode3D, active: scenePhase == .active) }
+    @State private var projectionPrefetch = NativeProjectionPrefetch()
+    private var key: ProjectionKey { ProjectionKey(frame: frame?.identity, reference: reference, mode3D: mode3D, active: scenePhase == .active, budgetRevision: pressure.revision) }
     private var limit: Int { pressure.limit(mode3D: mode3D) }
 
     private func applyThermal() {
@@ -403,6 +405,15 @@ private struct NativeStateViewport: View {
         case .initial: return zh ? "初始显示预算；尚无帧率自适应或真机性能保证。" : "Initial display budget; frame-time adaptation and device performance are not verified."
         case .thermal: return zh ? "温度压力已降低显示预算；科学状态未删除，冷却不会立即恢复上限。" : "Thermal pressure lowered the display budget; scientific states retained. Cooling does not restore the limit."
         case .memory: return zh ? "内存警告已降低显示预算；科学状态未删除。" : "Memory warning lowered the display budget; scientific states retained."
+        default: return CoverageCopy.isChinese ? "当前显示预算已调整；科学状态仍保留。" : "The display budget changed; scientific states remain retained."
+        }
+    }
+
+    private func sample(_ window: NativeFrameWindow) {
+        var updated = pressure
+        if updated.sample(mode3D: mode3D, available: projection.candidates, window: window,
+                          now: ProcessInfo.processInfo.systemUptime) {
+            pressure = updated
         }
     }
 
@@ -414,7 +425,7 @@ private struct NativeStateViewport: View {
                 Text(projectionError ?? "No verified states to display\nLoad a scene with an available reference body.")
                     .multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.8)).padding()
             } else if mode3D {
-                NativePointScene(projection: projection)
+                NativePointScene(projection: projection, onWindow: sample)
             } else {
                 Canvas { context, size in
                     let scale = min(size.width, size.height) / 12
@@ -428,6 +439,8 @@ private struct NativeStateViewport: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("\(positions.count)/\(projection.candidates) displayed · \(limit.formatted(.number.locale(Locale(identifier: "en_US")))) display limit")
                         .accessibilityIdentifier("observation.displayed")
+                    Text("Computed \(projection.candidates) · displayed \(positions.count) · not displayed \(max(0, projection.candidates - positions.count))")
+                        .accessibilityIdentifier("observation.counts")
                     Text(pressureMessage).accessibilityIdentifier("observation.pressure")
                 }.font(.caption2).foregroundStyle(.white).padding(8).background(.black.opacity(0.7))
             }
@@ -435,26 +448,29 @@ private struct NativeStateViewport: View {
         .task(id: key) {
             let expected = key
             projectionError = nil
-            guard expected.active else { projection = NativeProjection(); projectedKey = nil; return }
+            // Release the previous mode's full projection before starting a
+            // new worker. The prefetch actor also waits for any cancelled
+            // worker before allocating the next mode buffer.
+            projection = NativeProjection(); projectedKey = nil
+            guard expected.active else { return }
             applyThermal()
             let source = frame, sourceReference = reference, renderLimit = limit
-            let worker = Task.detached(priority: .userInitiated) {
-                try NativeProjection.make(frame: source, reference: sourceReference, limit: renderLimit)
-            }
             do {
-                let result = try await withTaskCancellationHandler(operation: { try await worker.value }, onCancel: { worker.cancel() })
+                let result = try await withTaskCancellationHandler(operation: {
+                    try await projectionPrefetch.prepare(frame: source, reference: sourceReference, limit: renderLimit)
+                }, onCancel: { Task { await projectionPrefetch.cancel() } })
                 try Task.checkCancellation()
-                // A pressure warning may arrive while the detached task runs.
-                // Clamp against the current policy, not the captured old limit.
+                // A pressure warning may arrive while the worker runs. Clamp
+                // against the current policy, not the captured old limit.
                 projection = try result.limited(to: limit); projectedKey = expected
             } catch is CancellationError {
                 // SwiftUI restarts for observation/reference/mode/activity changes.
             } catch { if !Task.isCancelled { projectionError = error.localizedDescription } }
         }
         .onChange(of: limit) { value in
-            // No new detached task, full-state copy, scale or camera reset is
-            // needed for pressure-only reductions. Scene identity stays mounted.
-            if let reduced = try? projection.limited(to: value) { projection = reduced }
+            // The budget revision in ProjectionKey restarts the single
+            // cancellable worker for both reductions and gradual growth.
+            if value < projection.points.count { projection = (try? projection.limited(to: value)) ?? NativeProjection() }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification).receive(on: RunLoop.main)) { _ in
             pressure.memoryWarning(now: ProcessInfo.processInfo.systemUptime)
@@ -465,7 +481,17 @@ private struct NativeStateViewport: View {
 
 private struct NativePointScene: UIViewRepresentable {
     let projection: NativeProjection
-    final class Coordinator { var identity: UUID? }
+    let onWindow: (NativeFrameWindow) -> Void
+    final class Coordinator: NSObject, SCNSceneRendererDelegate {
+        var identity: UUID?
+        var onWindow: ((NativeFrameWindow) -> Void)?
+        let sampler = NativeFrameSampler()
+
+        func renderer(_ renderer: SCNSceneRenderer, didRenderScene scene: SCNScene, atTime time: TimeInterval) {
+            guard let window = sampler.record(time) else { return }
+            DispatchQueue.main.async { [weak self] in self?.onWindow?(window) }
+        }
+    }
     func makeCoordinator() -> Coordinator { Coordinator() }
     func makeUIView(context: Context) -> SCNView {
         let view = SCNView()
@@ -473,6 +499,7 @@ private struct NativePointScene: UIViewRepresentable {
         view.allowsCameraControl = true
         view.rendersContinuously = false
         view.preferredFramesPerSecond = 60
+        view.delegate = context.coordinator
         let scene = SCNScene()
         let camera = SCNNode(); camera.camera = SCNCamera(); camera.position = SCNVector3(0, 0, 16)
         camera.camera?.automaticallyAdjustsZRange = true
@@ -482,12 +509,14 @@ private struct NativePointScene: UIViewRepresentable {
         return view
     }
     func updateUIView(_ view: SCNView, context: Context) {
+        context.coordinator.onWindow = onWindow
         guard context.coordinator.identity != projection.identity else { return }
         context.coordinator.identity = projection.identity
         let points = projection.points.map { SCNVector3($0.x, $0.y, $0.z) }
         view.scene?.rootNode.childNode(withName: "verified-states", recursively: false)?.geometry = NativePointGeometry.make(points: points)
     }
     static func dismantleUIView(_ view: SCNView, coordinator: Coordinator) {
+        view.delegate = nil; coordinator.onWindow = nil; coordinator.sampler.reset()
         view.isPlaying = false; view.scene = nil; view.pointOfView = nil
     }
 }

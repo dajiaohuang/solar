@@ -281,6 +281,27 @@ struct ProtocolTests {
         precondition(pressure.lastPressureTime == 8)
         precondition(frame.states.map(\.bitPattern) == sourceBits)
         print("iOS display pressure: independent mode limits, thermal/memory reductions, repeated warnings, no automatic restoration, immutable prefix and missing-reference exact counts passed")
+        var sampler = NativeFrameSampler()
+        var sampled: NativeFrameWindow?
+        for index in 0..<40 {
+            if let window = sampler.record(Double(index) * 0.034) { sampled = window }
+        }
+        precondition(sampled?.samples == 30 && abs((sampled?.p50Ms ?? 0) - 34) < 0.000_001 && abs((sampled?.p95Ms ?? 0) - 34) < 0.000_001)
+        precondition(abs((sampled?.droppedRatio ?? 0) - 0.5) < 0.000_001)
+        var dynamic = NativeDisplayPressure()
+        let slowWindow = NativeFrameWindow(samples: 60, p50Ms: 20, p95Ms: 40, droppedRatio: 0.3)
+        precondition(!dynamic.sample(mode3D: true, available: 100_000, window: slowWindow, now: 1))
+        precondition(dynamic.sample(mode3D: true, available: 100_000, window: slowWindow, now: 7))
+        precondition(dynamic.spatialLimit == 75_000 && dynamic.planarLimit == 250_000)
+        dynamic.memoryWarning(now: 8)
+        let fastWindow = NativeFrameWindow(samples: 60, p50Ms: 16, p95Ms: 16, droppedRatio: 0)
+        for index in 0..<3 { precondition(!dynamic.sample(mode3D: false, available: 250_000, window: fastWindow, now: 20 + Double(index))) }
+        precondition(dynamic.sample(mode3D: false, available: 250_000, window: fastWindow, now: 25))
+        precondition(dynamic.planarLimit == 30_000 && dynamic.spatialLimit == 25_000)
+        let prefetch = NativeProjectionPrefetch()
+        let emptyProjection = try await prefetch.prepare(frame: nil, reference: "naif:10", limit: 1)
+        precondition(emptyProjection.points.isEmpty && emptyProjection.candidates == 0)
+        await prefetch.cancel()
         frame.exact[1] = false
         let absent = try NativeProjection.make(frame: frame, reference: ids[0], limit: 2)
         precondition(absent.points.isEmpty && absent.candidates == 1)

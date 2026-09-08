@@ -44,8 +44,21 @@ public final class NativeObservationDeck extends GLSurfaceView {
     }
 
     public void clearPoints() {
+        clearPoints(null);
+    }
+
+    /**
+     * Clear the active mode's GPU buffer and notify the owner only after the
+     * GL thread has completed the clear.  A new mode buffer must be prepared
+     * from that callback so a 2D/3D switch never holds two full GPU buffers.
+     */
+    void clearPoints(Runnable onCleared) {
         stopInteraction();
-        clearPrepared();
+        queueEvent(() -> {
+            renderer.clearPoints();
+            if (onCleared != null) post(onCleared);
+        });
+        requestRender();
     }
 
     void clearPrepared() {

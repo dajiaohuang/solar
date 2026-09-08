@@ -51,6 +51,7 @@ public final class MainActivity extends Activity {
     private volatile StateTileService activeStateService;
     private Thread loadThread;
     private Thread renderThread;
+    private final NativeProjectionPrefetch projectionPrefetch = new NativeProjectionPrefetch();
     private StateTileService.Frame currentFrame;
     private String currentReferenceId = "";
     private int evidencePageIndex;
@@ -103,7 +104,16 @@ public final class MainActivity extends Activity {
         LinearLayout actions = new LinearLayout(this);
         Button load = new Button(this); load.setText("Load observation"); load.setOnClickListener(v -> { if (loadThread != null) cancelLoad(); else loadObservation(); });
         Button switchMode = new Button(this); switchMode.setText("Switch to 2D");
-        switchMode.setOnClickListener(v -> { mode3d = !mode3d; budget3d.resetEvidence(); budget2d.resetEvidence(); switchMode.setText(mode3d ? "Switch to 2D" : "Switch to 3D"); viewport.clearPoints(); if (currentFrame != null) prepareRenderer(currentFrame, currentReferenceId, Double.toString(currentFrame.epochJd), exactCount(currentFrame)); });
+        switchMode.setOnClickListener(v -> {
+            mode3d = !mode3d; final boolean requestedMode3d = mode3d;
+            budget3d.resetEvidence(); budget2d.resetEvidence();
+            switchMode.setText(mode3d ? "Switch to 2D" : "Switch to 3D");
+            viewport.clearPoints(() -> {
+                if (currentFrame != null && mode3d == requestedMode3d) {
+                    prepareRenderer(currentFrame, currentReferenceId, Double.toString(currentFrame.epochJd), exactCount(currentFrame));
+                }
+            });
+        });
         Button tutorial = new Button(this); tutorial.setText("Tutorial"); tutorial.setOnClickListener(v -> showTutorial());
         actions.addView(load, new LinearLayout.LayoutParams(0, -2, 1)); actions.addView(switchMode, new LinearLayout.LayoutParams(0, -2, 1)); actions.addView(tutorial, new LinearLayout.LayoutParams(0, -2, 1)); content.addView(actions);
         content.addView(sectionLabel("STATE EVIDENCE"));
@@ -198,10 +208,14 @@ public final class MainActivity extends Activity {
     }
 
     private void publish(int requestGeneration, StateTileService.Frame loaded, String referenceId, String epochText) {
-        if (requestGeneration != generation) return; loadThread = null; currentFrame = loaded; currentReferenceId = referenceId; showEvidence(loaded, referenceId); viewport.clearPoints();
+        if (requestGeneration != generation) return; loadThread = null; currentFrame = loaded; currentReferenceId = referenceId; showEvidence(loaded, referenceId);
         int exactCount = 0; for (boolean exact : loaded.exact) if (exact) exactCount++;
         status.setText(exactCount + " verified states - " + (loaded.exact.length - exactCount) + " data gaps - TDB JD " + epochText + ". Preparing GPU points...");
-        prepareRenderer(loaded, referenceId, epochText, exactCount);
+        viewport.clearPoints(() -> {
+            if (requestGeneration == generation && currentFrame == loaded) {
+                prepareRenderer(loaded, referenceId, epochText, exactCount);
+            }
+        });
     }
 
     private void prepareRenderer(StateTileService.Frame frame, String referenceId, String epochText, int exactCount) {
@@ -209,7 +223,7 @@ public final class MainActivity extends Activity {
         final int request = ++renderGeneration;
         final boolean render3d = mode3d;
         final int displayLimit = activeBudget().limit();
-        renderThread = new Thread(() -> {
+        renderThread = projectionPrefetch.start(() -> {
             try {
                 NativeObservationDeck.PreparedPoints prepared = NativeObservationDeck.prepare(frame, referenceId, render3d, displayLimit);
                 if (Thread.currentThread().isInterrupted()) return;
@@ -225,14 +239,13 @@ public final class MainActivity extends Activity {
                 runOnUiThread(() -> { if (request == renderGeneration) { renderThread = null; viewport.clearPoints(); status.setText("GPU point preparation failed; no observation rendered."); } });
             }
         }, "solar-render-prepare");
-        renderThread.start();
     }
 
     private static int exactCount(StateTileService.Frame frame) { int count = 0; for (boolean value : frame.exact) if (value) count++; return count; }
 
     private void fail(int requestGeneration, Exception error) { if (requestGeneration != generation) return; loadThread = null; currentFrame = null; cancelRender(); viewport.clearPoints(); status.setText(error.getMessage() == null ? "State load failed." : error.getMessage()); showEvidence(null, ""); evidence.setText("No partial observation was published."); }
     private void cancelLoad() { generation++; StateTileService service = activeStateService; if (service != null) service.cancel(); if (loadThread != null) { loadThread.interrupt(); loadThread = null; status.setText("Loading cancelled. No partial observation was published."); } currentFrame = null; cancelRender(); viewport.clearPoints(); }
-    private void cancelRender() { renderGeneration++; currentPrepared = null; budgetStatus.setText(R.string.render_budget_empty); if (renderThread != null) { renderThread.interrupt(); renderThread = null; } }
+    private void cancelRender() { renderGeneration++; currentPrepared = null; budgetStatus.setText(R.string.render_budget_empty); projectionPrefetch.cancel(); renderThread = null; }
 
     private NativeRenderBudget activeBudget() { return mode3d ? budget3d : budget2d; }
 
@@ -257,8 +270,9 @@ public final class MainActivity extends Activity {
 
     private void refreshDisplayBudget() {
         if (currentFrame == null) return;
-        viewport.clearPrepared();
-        prepareRenderer(currentFrame, currentReferenceId, Double.toString(currentFrame.epochJd), exactCount(currentFrame));
+        viewport.clearPoints(() -> {
+            if (currentFrame != null) prepareRenderer(currentFrame, currentReferenceId, Double.toString(currentFrame.epochJd), exactCount(currentFrame));
+        });
     }
 
     private void thermalChanged(int thermal) {
@@ -328,7 +342,7 @@ public final class MainActivity extends Activity {
             if (manager != null) thermalMonitor = new ThermalMonitor(manager, this::thermalChanged);
         }
     }
-    @Override protected void onDestroy() { cancelLoad(); if (viewport != null) viewport.release(); super.onDestroy(); }
+    @Override protected void onDestroy() { cancelLoad(); projectionPrefetch.close(); if (viewport != null) viewport.release(); super.onDestroy(); }
 
     private static final class Preset {
         final String id, title, reference, ids;

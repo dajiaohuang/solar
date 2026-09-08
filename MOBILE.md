@@ -295,27 +295,36 @@ slowness reduces after one. Four fast windows can grow by about 12.5% in 5,000
 point steps, only if available exact rows exercise the current limit. Ordinary
 adjustments have a five-second cooldown. API 29+ severe thermal status or native
 memory warnings lower the limit to 25,000; recovery needs fresh headroom evidence.
-Only the current mode's buffer is rebuilt. Float64 states, provenance and gap
+Only the current mode's buffer is rebuilt, and the GL clear completes before a
+new mode-preparation worker is allowed to allocate its buffer. A single
+cancellable projection-preparation owner prevents a stale mode or activity
+from retaining a pending display prefetch. Float64 states, provenance and gap
 counts remain intact; selection is deterministic: reference first, then source
-order. The UI exposes the limit, unshown verified count and budget reason.
+order. The UI exposes computed, displayed, unshown and budget-reason counts.
 Repeated memory warnings at the minimum reset the cooldown and growth evidence.
 The seven policy/sampler tests and buffer tests are synthetic; the Android HTTPS
 smoke additionally exercises real GL callbacks on three real states, gesture
 render-mode transitions and an injected memory callback through the normal
 lifecycle API. None establishes 12 GB device smoothness, physical thermal
 behavior, total native/GPU memory or 60-second target-load acceptance. Native
-iOS now has a pressure-only display policy: 3D starts at 100K, 2D at 250K;
-fair thermal state caps them at 75K/100K, and serious/critical thermal state or
-a memory warning caps both at 25K. Cooling, reload and mode switches do not
-restore high limits. Only the render-coordinate prefix is reduced, preserving
-the full-source scale, camera and Float64 scientific frame. A missing reference
-keeps exact target counts but displays zero points. Backgrounding cancels the
-projection task and releases display coordinates; returning reprojects the
-retained scientific frame under the current limits. This does not bound total
-native/GPU memory or guarantee that a late OS warning can prevent termination.
-Swift protocol regressions cover the policy and immutable prefix; the hosted
-macOS job must compile/run them and the real-SPK UI tests for each changed head.
-iOS actual-draw interval sampling and automatic growth remain unfinished.
+iOS now has a display policy driven by thermal/memory pressure and bounded
+native render-callback windows: 3D starts at 100K, 2D at 250K; fair thermal
+state caps them at 75K/100K, and serious/critical thermal state or a memory
+warning caps both at 25K. Two slow windows reduce the active mode by 25%;
+severe slowness reduces after one. Four fresh healthy windows can grow by about
+12.5% in 5,000-point steps when exact candidates exercise the current limit.
+Adjustments have a five-second cooldown, and pressure resets the evidence.
+Cooling, reload and mode switches do not restore high limits. Only the
+render-coordinate prefix is reduced, preserving the full-source scale, camera
+and Float64 scientific frame. A missing reference keeps exact target counts but
+displays zero points. Backgrounding cancels the projection task and releases
+display coordinates; returning reprojects the retained scientific frame under
+the current limits. Callback intervals are renderer evidence, not compositor
+presented frames or a physical-device SLO. This does not bound total native/GPU
+memory or guarantee that a late OS warning can prevent termination. Swift
+protocol regressions cover the policy, sampler, cancellable prefetch and
+immutable prefix; the hosted macOS job must compile/run them and the real-SPK
+UI tests for each changed head.
 Web has its own display-only controller; see [PERFORMANCE.md](./PERFORMANCE.md).
 None claims full memory/thermal/latency feedback or physical-device SLO acceptance.
 
