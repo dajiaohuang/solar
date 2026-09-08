@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 const android = readFileSync(new URL('../../android/app/src/main/java/io/github/dajiaohuang/solaratlas/MainActivity.java', import.meta.url), 'utf8')
 const ios = readFileSync(new URL('../../ios/App/App/NativeObservationDeck.swift', import.meta.url), 'utf8')
 
-const presetIds = ['planets', 'earth-moon', 'mars-moons', 'jupiter-moons', 'saturn-moons', 'uranus-moons', 'neptune-moons', 'pluto-moons', 'spk-asteroids']
+const presetIds = ['planets', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto-moons', 'spk-asteroids']
 const sourceIds = [
   'naif:10', 'naif:199', 'naif:299', 'naif:301', 'naif:399', 'naif:499', 'naif:401', 'naif:402',
   'naif:599', 'naif:501', 'naif:502', 'naif:503', 'naif:504', 'naif:505', 'naif:514', 'naif:515', 'naif:516',
