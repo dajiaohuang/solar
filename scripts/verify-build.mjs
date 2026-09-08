@@ -119,10 +119,12 @@ if (JSON.stringify(spkDelivery?.satelliteIdentityDelivery) !== JSON.stringify({ 
 if (spkDelivery?.pagesManifest?.id !== 'jpl-satellite-expansion-20260904-pages' || spkDelivery?.pagesManifest?.sha256 !== '5c390d7bb8e02a28ebe45d32979c2f5db12983f8ec6044e4206750c5c89c29e0' || spkDelivery?.pagesManifest?.bytes !== 270908416 || spkDelivery?.pagesManifest?.fileCount !== 510) throw new Error('Scientific validation report is missing the pinned Pages SPK manifest')
 if (spkDelivery?.fullManifest?.id !== 'jpl-satellite-expansion-20260904-full' || spkDelivery?.fullManifest?.sha256 !== '7e7fa1df8080b505abba52cc8ca9a4d8bd6d1c10d47d3e421953e7c1b8494257' || spkDelivery?.fullManifest?.bytes !== 1147897856 || spkDelivery?.fullManifest?.fileCount !== 510) throw new Error('Scientific validation report is missing the pinned full SPK manifest')
 const expectedSatelliteBatches = {
+  mars: 'naif:401,naif:402',
   jupiter: 'naif:505,naif:514,naif:515,naif:516',
-  saturn: 'naif:601,naif:602,naif:603,naif:604,naif:605,naif:607,naif:608,naif:609',
+  saturn: 'naif:601,naif:602,naif:603,naif:604,naif:605,naif:607,naif:608,naif:609,naif:612,naif:613,naif:614,naif:632,naif:634',
   uranus: 'naif:701,naif:702,naif:703,naif:704,naif:705',
   neptune: 'naif:801,naif:802',
+  pluto: 'naif:901,naif:902,naif:903,naif:904,naif:905',
 }
 for (const [parent, expected] of Object.entries(expectedSatelliteBatches)) {
   if (spkDelivery?.sourceBackedSatelliteBatches?.[parent]?.join(',') !== expected) throw new Error(`Scientific validation report is missing the ${parent} satellite coverage batch`)

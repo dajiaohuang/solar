@@ -94,10 +94,12 @@
         "fileCount": 510
       },
       "sourceBackedSatelliteBatches": {
+        "mars": ["naif:401", "naif:402"],
         "jupiter": ["naif:505", "naif:514", "naif:515", "naif:516"],
-        "saturn": ["naif:601", "naif:602", "naif:603", "naif:604", "naif:605", "naif:607", "naif:608", "naif:609"],
+        "saturn": ["naif:601", "naif:602", "naif:603", "naif:604", "naif:605", "naif:607", "naif:608", "naif:609", "naif:612", "naif:613", "naif:614", "naif:632", "naif:634"],
         "uranus": ["naif:701", "naif:702", "naif:703", "naif:704", "naif:705"],
-        "neptune": ["naif:801", "naif:802"]
+        "neptune": ["naif:801", "naif:802"],
+        "pluto": ["naif:901", "naif:902", "naif:903", "naif:904", "naif:905"]
       }
     }
   }

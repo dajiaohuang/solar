@@ -159,13 +159,17 @@ describe('JPL approximate element validity', () => {
 
     const ephemerisById = new Map(ephemerisBodies.bodies.map((body) => [body.id, body]))
     const fullTargetStrings = new Set([...fullTargets].map(String))
+    const expectedBatchLengths = { mars: 2, jupiter: 4, saturn: 13, uranus: 5, neptune: 2, pluto: 5 }
+    const sourceBackedIds = new Set<string>()
     for (const [parent, bodyIds] of Object.entries(spkDelivery.sourceBackedSatelliteBatches)) {
-      expect(bodyIds).toHaveLength(parent === 'jupiter' ? 4 : parent === 'saturn' ? 8 : parent === 'uranus' ? 5 : 2)
+      expect(bodyIds).toHaveLength(expectedBatchLengths[parent as keyof typeof expectedBatchLengths])
       for (const bodyId of bodyIds) {
         const body = ephemerisById.get(bodyId)
         expect(body?.parentId).toBe(parent)
         expect(fullTargetStrings.has(String(body?.naifId))).toBe(true)
+        sourceBackedIds.add(bodyId)
       }
     }
+    expect(ephemerisBodies.bodies.filter((body) => body.kind === 'moon').map((body) => body.id).sort()).toEqual([...sourceBackedIds].sort())
   })
 })
