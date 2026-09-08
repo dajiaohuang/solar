@@ -303,8 +303,9 @@ public final class MainActivity extends Activity {
         budget3d.resetEvidence(); budget2d.resetEvidence();
         coveragePanel.cancelAndClear(R.string.coverage_idle);
         identityPanel.clear();
+        boolean hadObservation = currentFrame != null || loadThread != null;
         cancelLoad(); showEvidence(null, "");
-        status.setText("Observation released while inactive. Load again to resume verified states.");
+        if (hadObservation) status.setText("Observation released while inactive. Load again to resume verified states.");
         viewport.onPause(); super.onPause();
     }
     @Override protected void onResume() {
