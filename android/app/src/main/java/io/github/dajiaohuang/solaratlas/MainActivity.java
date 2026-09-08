@@ -270,8 +270,15 @@ public final class MainActivity extends Activity {
 
     private void refreshDisplayBudget() {
         if (currentFrame == null) return;
+        final StateTileService.Frame frame = currentFrame;
+        final String referenceId = currentReferenceId;
+        final boolean render3d = mode3d;
+        final boolean resumeInteraction = viewport.isInteracting();
         viewport.clearPoints(() -> {
-            if (currentFrame != null) prepareRenderer(currentFrame, currentReferenceId, Double.toString(currentFrame.epochJd), exactCount(currentFrame));
+            if (currentFrame == frame && mode3d == render3d) {
+                prepareRenderer(frame, referenceId, Double.toString(frame.epochJd), exactCount(frame));
+                if (resumeInteraction) viewport.resumeInteraction();
+            }
         });
     }
 

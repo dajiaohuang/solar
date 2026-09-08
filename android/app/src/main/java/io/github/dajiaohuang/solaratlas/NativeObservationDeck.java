@@ -66,6 +66,18 @@ public final class NativeObservationDeck extends GLSurfaceView {
         requestRender();
     }
 
+    boolean isInteracting() { return interacting; }
+
+    /** Resume the current gesture after an adaptive buffer replacement. */
+    void resumeInteraction() {
+        if (!interacting) {
+            interacting = true;
+            queueEvent(renderer.sampler::reset);
+            setRenderMode(RENDERMODE_CONTINUOUSLY);
+        }
+        requestRender();
+    }
+
     /** Release GL-owned objects on the GL thread before the view is destroyed. */
     void release() {
         stopInteraction();
