@@ -26,6 +26,7 @@ import static org.junit.Assert.assertEquals;
 import android.accessibilityservice.AccessibilityService;
 import android.app.Activity;
 import android.app.Instrumentation;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.os.SystemClock;
@@ -311,6 +312,18 @@ public final class ObservationUITest {
             if (resumed.isEmpty()) return;
             Activity activity = resumed.iterator().next();
             if (activity.hasWindowFocus()) return;
+            // API 36 can leave the target task behind the instrumentation
+            // EmptyActivity after launch or a keyboard transition. Reorder
+            // the existing singleTask activity to the front before asking
+            // Espresso to pick its root; this preserves the observation state
+            // and does not bypass any click or input constraint.
+            try {
+                activity.startActivity(new Intent(activity, MainActivity.class)
+                        .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+            } catch (RuntimeException ignored) {
+                // Best-effort; the normal focus request below still handles
+                // emulators where the task is already foregrounded.
+            }
             View decor = activity.getWindow().getDecorView();
             decor.setFocusable(true);
             decor.setFocusableInTouchMode(true);
