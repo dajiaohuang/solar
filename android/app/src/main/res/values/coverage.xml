@@ -18,5 +18,7 @@
     <string name="coverage_details">Reasons and source identities</string>
     <string name="coverage_hide_details">Hide source identities</string>
     <string name="coverage_identities">Catalog: %1$s\nCatalog SHA-256: %2$s\nInventory SHA-256: %3$s\nReport SHA-256: %4$s\nSource snapshot SHA-256: %5$s\nIdentity mapping SHA-256: %6$s\nSatellite catalog SHA-256: %7$s</string>
+    <string name="coverage_states">State coverage by source and model</string>
+    <string name="coverage_state">%1$s · %2$s — exact: %3$d, approximate: %4$d, missing: %5$d</string>
     <string name="coverage_reasons">Unresolved reasons (source codes)</string>
 </resources>

@@ -59,6 +59,7 @@ struct ProtocolTests {
             "requestedWindow": ["startEt": 0, "endEt": 1000, "timeScale": "TDB seconds past J2000"],
             "counts": ["sourceRecords": 10, "mappedSourceRecords": 3, "unresolvedSourceRecords": 7, "explicitNaifTargets": 2, "availableTargetsAtAuditEpoch": 2],
             "windowCounts": ["dependencyCoveredTargets": 1, "targetsWithDependencyGaps": 1, "numericallyCertifiedWholeWindowTargets": NSNull()],
+            "coverage": [["datasetVersion": "fixture", "source": "synthetic", "model": "spk-at-audit-epoch", "auditEt": 500, "frame": "ECLIPJ2000", "exact": 3, "approximate": 0, "missing": 7]],
             "unresolvedReasons": ["no-explicit-naif-mapping": 6, "unresolved-component": 1]
         ]
         return try JSONSerialization.data(withJSONObject: object)
@@ -187,6 +188,7 @@ struct ProtocolTests {
         boundary["requestedWindow"] = ["startEt": -1.5, "endEt": 1.5, "timeScale": "TDB seconds past J2000"]
         boundary["counts"] = ["sourceRecords": 0, "mappedSourceRecords": 0, "unresolvedSourceRecords": 0, "explicitNaifTargets": 0, "availableTargetsAtAuditEpoch": 0]
         boundary["windowCounts"] = ["dependencyCoveredTargets": 0, "targetsWithDependencyGaps": 0, "numericallyCertifiedWholeWindowTargets": NSNull()]
+        boundary["coverage"] = [["datasetVersion": "fixture", "source": "synthetic", "model": "none", "auditEt": boundary["auditEt"] as! Double, "frame": "ECLIPJ2000", "exact": 0, "approximate": 0, "missing": 0]]
         boundary["unresolvedReasons"] = [String: UInt64]()
         _ = try NativeCoverageReport(validating: JSONSerialization.data(withJSONObject: boundary), catalogManifest: coverageManifest)
         try coverageRejects(coverage, manifest: coverageManifest) { $0["sourceBytesVerified"] = false }

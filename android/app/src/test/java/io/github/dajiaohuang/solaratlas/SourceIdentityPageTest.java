@@ -23,7 +23,7 @@ public class SourceIdentityPageTest {
         for (String value : new String[] {page().replace("not-deduplicated", "unique-bodies"), page().replace("\"sourceRecords\":true", "\"sourceRecords\":false"),
                 page().replace("\"totalRecords\":100", "\"totalRecords\":0"), page().replace("\"limit\":50", "\"limit\":51"),
                 page().replace(row(), row() + "," + row()), page().replace("\"sourceRow\":1", "\"sourceRow\":1.5"),
-                page().replace("sb:comet:1P", "bad\\nID"), page().replace(row(), ""),
+                page().replace("sb:comet:1P", "bad\\nID"), page().replace("sb:comet:1P", "id,split"), page().replace("sb:comet:1P", "id split"), page().replace(row(), ""),
                 page().replace(row(), String.join(",", java.util.Collections.nCopies(51, row()))), page().replace(INVENTORY, HASH)}) {
             assertThrows(StateTileDecoder.ProtocolException.class, () -> decode(value));
         }

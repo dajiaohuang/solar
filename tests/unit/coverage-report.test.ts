@@ -26,10 +26,11 @@ describe('pinned all-source coverage summary', () => {
   it('keeps source aliases, distinct targets and window availability separate', () => {
     const report = validateCoverageReport(coverageSummaryFixture(), manifest)
     expect(report.counts).toEqual({ sourceRecords: 10, mappedSourceRecords: 3, unresolvedSourceRecords: 7, explicitNaifTargets: 2, availableTargetsAtAuditEpoch: 2 })
+    expect(report.coverage).toEqual([{ datasetVersion: 'coverage-fixture', source: 'synthetic', model: 'spk-at-audit-epoch', auditEt: 500, frame: 'ECLIPJ2000', exact: 3, approximate: 0, missing: 7 }])
     expect(report.windowCounts.numericallyCertifiedWholeWindowTargets).toBeNull()
   })
   it('allows an audit epoch outside the independently requested window', () => {
-    const value = coverageSummaryFixture(); value.auditEt = 2000
+    const value = coverageSummaryFixture(); value.auditEt = 2000; value.coverage[0].auditEt = 2000
     expect(validateCoverageReport(value, manifest).auditEt).toBe(2000)
   })
   it.each([
@@ -56,6 +57,12 @@ describe('pinned all-source coverage summary', () => {
     expect(() => validateCoverageReport({ ...value, unresolvedReasons: {} }, manifest)).toThrow()
     expect(() => validateCoverageReport({ ...value, unresolvedReasons: { missing: 8 } }, manifest)).toThrow()
     expect(() => validateCoverageReport({ ...value, requestedWindow: { ...value.requestedWindow, endEt: -1 } }, manifest)).toThrow()
+  })
+  it('rejects unbound, repeated or non-reconciling state buckets', () => {
+    const value = coverageSummaryFixture()
+    expect(() => validateCoverageReport({ ...value, coverage: [{ ...value.coverage[0], datasetVersion: 'other' }] }, manifest)).toThrow()
+    expect(() => validateCoverageReport({ ...value, coverage: [value.coverage[0], value.coverage[0]] }, manifest)).toThrow()
+    expect(() => validateCoverageReport({ ...value, coverage: [{ ...value.coverage[0], missing: 6 }] }, manifest)).toThrow()
   })
   it('refuses preview or unconfigured loads without making any request', async () => {
     const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher)

@@ -1,8 +1,14 @@
 /** Only records explicitly reattached by the audited identity mapping enter a
  * NAIF target group. Everything else remains a source record, not a new body. */
 export function createIdentityLedger() {
-  const groups = new Map(), unresolvedReasons = {}, sourceCounts = {}
+  const groups = new Map(), unresolvedReasons = {}, sourceCounts = {}, coverageCounts = new Map()
   let total = 0, mapped = 0
+  function addCoverage(source, status, model) {
+    const key = JSON.stringify([source, status, model])
+    const current = coverageCounts.get(key)
+    if (current) current.count++
+    else coverageCounts.set(key, { source, status, model, count: 1 })
+  }
   return {
     add(record, ordinal) {
       if (ordinal !== total || typeof record.id !== 'string' || !record.id || typeof record.source !== 'string') throw new Error('Invalid ordered identity record')
@@ -14,6 +20,7 @@ export function createIdentityLedger() {
       else if (record.naifId === undefined) reason = 'no-explicit-naif-mapping'
       if (reason) {
         unresolvedReasons[reason] = (unresolvedReasons[reason] ?? 0) + 1
+        addCoverage(record.source, 'missing', 'no-exact-state-at-audit-epoch')
         return
       }
       if (!Number.isSafeInteger(record.naifId) || record.kernelEvidence?.target !== record.naifId ||
@@ -24,6 +31,9 @@ export function createIdentityLedger() {
           if (!Number.isFinite(evaluatedState?.[part]?.[axis])) throw new Error('Nonfinite evaluated identity state')
         }
       } else if (evaluatedState !== null) throw new Error('Unavailable identity must not retain a state')
+      addCoverage(record.source,
+        record.ephemerisStatus === 'state-available-at-audit-epoch' ? 'exact' : 'missing',
+        record.ephemerisStatus === 'state-available-at-audit-epoch' ? 'spk-at-audit-epoch' : 'no-exact-state-at-audit-epoch')
       let group = groups.get(record.naifId)
       if (!group) {
         group = { target: record.naifId, key: `naif:${record.naifId}`, parentId: record.parentId ?? null,
@@ -37,9 +47,10 @@ export function createIdentityLedger() {
     },
     finish() {
       const explicitTargetGroups = [...groups.values()].sort((a, b) => a.target - b.target)
+      const coverage = [...coverageCounts.values()].sort((a, b) => a.source.localeCompare(b.source) || a.status.localeCompare(b.status) || a.model.localeCompare(b.model))
       return { counts: { sourceRecords: total, mappedSourceRecords: mapped, unresolvedSourceRecords: total - mapped,
         explicitNaifTargets: groups.size, availableTargetsAtAuditEpoch: explicitTargetGroups.filter(group => group.stateAtAuditEpoch === 'state-available-at-audit-epoch').length },
-      sourceCounts, unresolvedReasons, explicitTargetGroups,
+      sourceCounts, unresolvedReasons, coverage, explicitTargetGroups,
       meaning: 'NAIF target groups use explicit mappings only; unresolved source records are not counted as unique physical bodies. Unlisted ordinals remain addressable in the pinned input inventory, with unresolved-component, unconfirmed, then no-explicit-mapping reason precedence.' }
     },
   }

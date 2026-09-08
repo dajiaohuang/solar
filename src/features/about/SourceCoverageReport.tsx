@@ -48,6 +48,12 @@ export function SourceCoverageReport() {
       </dl>
       <p>{t('sourceCoverageNotCertified')}</p>
       <p>{t('sourceCoverageEpoch')}: {report.auditEt}<br />{t('sourceCoverageWindow')}: {report.requestedWindow.startEt} … {report.requestedWindow.endEt}<br />{report.timeScale}; {report.frame}</p>
+      <details><summary>{t('sourceCoverageStates')}</summary>
+        <dl className="source-coverage-counts">{report.coverage.map(entry => <div key={[entry.datasetVersion, entry.source, entry.model, entry.auditEt, entry.frame].join('|')}>
+          <dt>{entry.source} · {entry.model}</dt>
+          <dd>{t('sourceCoverageExact')}: {number(entry.exact)} · {t('sourceCoverageApproximate')}: {number(entry.approximate)} · {t('sourceCoverageMissing')}: {number(entry.missing)}</dd>
+        </div>)}</dl>
+      </details>
       <details><summary>{t('sourceCoverageReasons')}</summary>
         <dl className="source-coverage-counts">{report.unresolvedReasons.map(entry => <div key={entry.reason}><dt>{entry.reason}</dt><dd>{number(entry.count)}</dd></div>)}</dl>
       </details>

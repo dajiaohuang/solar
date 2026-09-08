@@ -107,6 +107,8 @@ private enum CoverageCopy {
     static var reload: String { zh ? "重新加载覆盖" : "Reload coverage" }
     static var cancel: String { zh ? "取消" : "Cancel" }
     static var reasons: String { zh ? "原因与哈希" : "Reasons and hashes" }
+    static var states: String { zh ? "按来源与模型划分的状态覆盖" : "State coverage by source and model" }
+    static var state: (String, String, UInt64, UInt64, UInt64) -> String { { source, model, exact, approximate, missing in zh ? "\(source) · \(model)：精确 \(exact) · 近似 \(approximate) · 缺失 \(missing)" : "\(source) · \(model): exact \(exact) · approximate \(approximate) · missing \(missing)" } }
     static var expanded: String { zh ? "已展开" : "Expanded" }
     static var collapsed: String { zh ? "已收起" : "Collapsed" }
     static var counts: (UInt64, UInt64, UInt64) -> String { { a, b, c in zh ? "来源记录：\(a) · 已映射：\(b) · 未解析：\(c)" : "Source records: \(a) · mapped: \(b) · unresolved: \(c)" } }
@@ -264,6 +266,11 @@ struct ObservationDeckView: View {
                             Text(CoverageCopy.dependency(report.windowCounts.dependencyCoveredTargets, report.windowCounts.targetsWithDependencyGaps)).accessibilityIdentifier("coverage.windowCounts")
                             Text(CoverageCopy.auditWindow(report.auditEt, report.requestedWindow.startEt, report.requestedWindow.endEt, report.timeScale) + " · ECLIPJ2000").accessibilityIdentifier("coverage.audit")
                             Text(CoverageCopy.caveat).accessibilityIdentifier("coverage.caveat")
+                            Text(CoverageCopy.states)
+                            ForEach(report.coverage.indices, id: \.self) { index in
+                                let bucket = report.coverage[index]
+                                Text(CoverageCopy.state(bucket.source, bucket.model, bucket.exact, bucket.approximate, bucket.missing))
+                            }
                             Button { coverageDetailsExpanded.toggle() } label: {
                                 HStack {
                                     Text(CoverageCopy.reasons)

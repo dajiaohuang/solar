@@ -45,6 +45,11 @@ full-profile catalog or inventory fails backend startup.
 catalog and inventory SHA-256 identities, the pinned source-snapshot and
 identity-mapping evidence hashes, `auditEt`, fixed TDB/ECLIPJ2000 units, the
 requested dependency window, source identity counts and unresolved reasons.
+The `coverage` array adds source/model buckets for the independent audit epoch;
+each bucket carries the bound dataset version and frame plus mutually exclusive
+`exact`, `approximate` and `missing` counts. Bucket totals reconcile to
+`identity.counts.sourceRecords`; an approximate count is zero unless the audit
+generator explicitly produces an approved approximate state.
 `windowCounts.numericallyCertifiedWholeWindowTargets` remains `null` in this
 report. The counts describe source records and dependency availability at the
 declared audit epoch; they are not current display counts, live state

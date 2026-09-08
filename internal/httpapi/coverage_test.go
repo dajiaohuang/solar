@@ -127,7 +127,7 @@ func newHermeticCoverageFixture(t *testing.T) hermeticCoverageFixture {
 		return map[string]any{"startEt": start, "endEt": end, "openness": "(start,end)", "state": state, "reason": reason, "chain": chain}
 	}
 	window := map[string]any{"target": -210001, "requested": map[string]any{"startEt": 0, "endEt": 1000}, "dependencyCoverage": map[string]any{"points": []any{point(0, "covered", "", chainCovered), point(500, "covered", "", chainCovered), point(1000, "gap", "fixture-gap", chainGap)}, "intervals": []any{interval(0, 500, "covered", "", chainCovered), interval(500, 1000, "gap", "fixture-gap", chainGap)}}, "gaps": []any{map[string]any{"kind": "point", "et": 1000, "reason": "fixture-gap", "chain": chainGap}, map[string]any{"kind": "interval", "startEt": 500, "endEt": 1000, "reason": "fixture-gap", "chain": chainGap}}, "meaning": "Descriptor and dependency availability only; fixture evidence."}
-	reportValue := map[string]any{"schemaVersion": 1, "purpose": "source-identity-and-dependency-window-audit", "inputInventorySha256": inv.ManifestHash(), "sourceSnapshotSha256": strings.Repeat("a", 64), "sourceBytesVerified": true, "kernels": map[string]any{"manifestId": cat.Version(), "profile": "full", "manifestSha256": cat.ManifestHash(), "auditEt": 500, "identityMappingSha256": strings.Repeat("b", 64), "satelliteCatalogSha256": strings.Repeat("c", 64), "timeScale": "TDB seconds past J2000", "frame": "ECLIPJ2000", "positionUnit": "km", "velocityUnit": "km/s", "meaning": "fixture"}, "requestedWindow": map[string]any{"startEt": 0, "endEt": 1000, "timeScale": "TDB seconds past J2000"}, "identity": map[string]any{"counts": map[string]any{"sourceRecords": 2, "mappedSourceRecords": 1, "unresolvedSourceRecords": 1, "explicitNaifTargets": 1, "availableTargetsAtAuditEpoch": 1}, "sourceCounts": map[string]any{"synthetic": 2}, "unresolvedReasons": map[string]any{"no-explicit-naif-mapping": 1}, "explicitTargetGroups": []any{map[string]any{"target": -210001, "key": "naif:-210001", "stateAtAuditEpoch": "state-available-at-audit-epoch", "evaluatedState": map[string]any{"position": map[string]any{"x": 1, "y": 2, "z": 3}, "velocity": map[string]any{"x": 4, "y": 5, "z": 6}}, "sourceRecords": []any{map[string]any{"id": "sb:fixture:operational", "ordinal": 0, "source": "synthetic", "sourceRow": 7}}}}}, "windowCounts": map[string]any{"dependencyCoveredTargets": 0, "targetsWithDependencyGaps": 1, "numericallyCertifiedWholeWindowTargets": nil}, "windows": []any{window}, "limitations": []string{"fixture"}}
+	reportValue := map[string]any{"schemaVersion": 1, "purpose": "source-identity-and-dependency-window-audit", "inputInventorySha256": inv.ManifestHash(), "sourceSnapshotSha256": strings.Repeat("a", 64), "sourceBytesVerified": true, "kernels": map[string]any{"manifestId": cat.Version(), "profile": "full", "manifestSha256": cat.ManifestHash(), "auditEt": 500, "identityMappingSha256": strings.Repeat("b", 64), "satelliteCatalogSha256": strings.Repeat("c", 64), "timeScale": "TDB seconds past J2000", "frame": "ECLIPJ2000", "positionUnit": "km", "velocityUnit": "km/s", "meaning": "fixture"}, "requestedWindow": map[string]any{"startEt": 0, "endEt": 1000, "timeScale": "TDB seconds past J2000"}, "identity": map[string]any{"counts": map[string]any{"sourceRecords": 2, "mappedSourceRecords": 1, "unresolvedSourceRecords": 1, "explicitNaifTargets": 1, "availableTargetsAtAuditEpoch": 1}, "sourceCounts": map[string]any{"synthetic": 2}, "unresolvedReasons": map[string]any{"no-explicit-naif-mapping": 1}, "explicitTargetGroups": []any{map[string]any{"target": -210001, "key": "naif:-210001", "stateAtAuditEpoch": "state-available-at-audit-epoch", "evaluatedState": map[string]any{"position": map[string]any{"x": 1, "y": 2, "z": 3}, "velocity": map[string]any{"x": 4, "y": 5, "z": 6}}, "sourceRecords": []any{map[string]any{"id": "sb:fixture:operational", "ordinal": 0, "source": "synthetic", "sourceRow": 7}}}}}, "coverage": []any{map[string]any{"datasetVersion": cat.Version(), "source": "synthetic", "model": "spk-at-audit-epoch", "auditEt": 500, "frame": "ECLIPJ2000", "exact": 1, "approximate": 0, "missing": 1}}, "windowCounts": map[string]any{"dependencyCoveredTargets": 0, "targetsWithDependencyGaps": 1, "numericallyCertifiedWholeWindowTargets": nil}, "windows": []any{window}, "limitations": []string{"fixture"}}
 	reportBytes, err := json.MarshalIndent(reportValue, "", "  ")
 	if err != nil {
 		t.Fatal(err)
@@ -154,6 +154,9 @@ func TestHermeticCoverageAPI(t *testing.T) {
 	var summary map[string]any
 	if err := json.Unmarshal(recorder.Body.Bytes(), &summary); err != nil || summary["purpose"] != "source-identity-and-dependency-window-audit" {
 		t.Fatalf("summary=%s err=%v", recorder.Body.String(), err)
+	}
+	if buckets, ok := summary["coverage"].([]any); !ok || len(buckets) != 1 {
+		t.Fatalf("summary coverage=%v", summary["coverage"])
 	}
 	recorder = httptest.NewRecorder()
 	server.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/v1/coverage/targets?ids=naif:-210001,unknown:fixture", nil))
@@ -206,6 +209,7 @@ func TestHermeticCoverageRejectsTamperedReport(t *testing.T) {
 		"window-kind":    bytes.Replace(raw, []byte(`"kind": "point"`), []byte(`"kind": "invalid"`), 1),
 		"missing-audit":  bytes.Replace(raw, []byte(`"auditEt": 500`), []byte(`"auditEt": null`), 1),
 		"numeric-claim":  bytes.Replace(raw, []byte(`"numericallyCertifiedWholeWindowTargets": null`), []byte(`"numericallyCertifiedWholeWindowTargets": 0`), 1),
+		"missing-coverage": bytes.Replace(raw, []byte(`"coverage": [`), []byte(`"coverage": null`), 1),
 	}
 	for name, mutated := range mutations {
 		if bytes.Equal(mutated, raw) {
@@ -271,6 +275,12 @@ func TestHermeticCoverageStrictFieldsAndOrdinals(t *testing.T) {
 		},
 		"invalid reason": func(r map[string]any) {
 			r["identity"].(map[string]any)["unresolvedReasons"] = map[string]any{"Invalid Reason": 1}
+		},
+		"missing coverage field": func(r map[string]any) {
+			delete(r["coverage"].([]any)[0].(map[string]any), "exact")
+		},
+		"repeated coverage bucket": func(r map[string]any) {
+			r["coverage"] = append(r["coverage"].([]any), r["coverage"].([]any)[0])
 		},
 	}
 	for name, mutate := range mutations {

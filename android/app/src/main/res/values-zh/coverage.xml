@@ -18,5 +18,7 @@
     <string name="coverage_details">缺口原因与来源身份</string>
     <string name="coverage_hide_details">收起来源身份</string>
     <string name="coverage_identities">目录：%1$s\n目录 SHA-256：%2$s\n库存 SHA-256：%3$s\n报告 SHA-256：%4$s\n来源快照 SHA-256：%5$s\n身份映射 SHA-256：%6$s\n卫星目录 SHA-256：%7$s</string>
+    <string name="coverage_states">按来源与模型划分的状态覆盖</string>
+    <string name="coverage_state">%1$s · %2$s — 精确：%3$d，近似：%4$d，缺失：%5$d</string>
     <string name="coverage_reasons">未解析原因（来源代码）</string>
 </resources>

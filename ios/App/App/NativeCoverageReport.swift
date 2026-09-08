@@ -1,6 +1,16 @@
 import Foundation
 
 struct NativeCoverageReport: Decodable, Equatable {
+    struct CoverageBucket: Decodable, Equatable {
+        let datasetVersion: String
+        let source: String
+        let model: String
+        let auditEt: Double
+        let frame: String
+        let exact: UInt64
+        let approximate: UInt64
+        let missing: UInt64
+    }
     struct Window: Decodable, Equatable {
         let startEt: Double
         let endEt: Double
@@ -47,10 +57,12 @@ struct NativeCoverageReport: Decodable, Equatable {
     let requestedWindow: Window
     let counts: Counts
     let windowCounts: WindowCounts
+    let coverage: [CoverageBucket]
     let unresolvedReasons: [String: UInt64]
 
     static let maxBytes = 64 * 1024
     static let maxReasonLength = 128
+    static let maxCoverageBuckets = 256
     private static let maxSafeInteger: UInt64 = 9_007_199_254_740_991
     private static let hashPattern = "\\A[0-9a-f]{64}\\z"
 
@@ -101,9 +113,30 @@ struct NativeCoverageReport: Decodable, Equatable {
         }), Self.sum(unresolvedReasons.values) == c.unresolvedSourceRecords else {
             throw StateTileFailure.invalid("Coverage unresolved reasons are invalid.")
         }
+        guard !coverage.isEmpty, coverage.count <= Self.maxCoverageBuckets else {
+            throw StateTileFailure.invalid("Coverage status buckets are invalid.")
+        }
+        var keys = Set<String>(), total: UInt64 = 0
+        for bucket in coverage {
+            guard Self.coverageText(bucket.datasetVersion), Self.coverageText(bucket.source), Self.coverageText(bucket.model),
+                  bucket.datasetVersion == catalogVersion, bucket.frame == "ECLIPJ2000", bucket.auditEt == auditEt,
+                  Self.safe(bucket.exact), Self.safe(bucket.approximate), Self.safe(bucket.missing),
+                  let bucketTotal = Self.sum([bucket.exact, bucket.approximate, bucket.missing]),
+                  keys.insert("\(bucket.datasetVersion)\u{0}\(bucket.source)\u{0}\(bucket.model)\u{0}\(bucket.auditEt)\u{0}\(bucket.frame)").inserted,
+                  let next = Self.sum([total, bucketTotal]) else {
+                throw StateTileFailure.invalid("Coverage status buckets are invalid.")
+            }
+            total = next
+        }
+        guard total == c.sourceRecords else {
+            throw StateTileFailure.invalid("Coverage status buckets do not reconcile.")
+        }
     }
 
     static func isHash(_ value: String) -> Bool { value.utf8.count == 64 && value.range(of: hashPattern, options: .regularExpression) != nil }
+    private static func coverageText(_ value: String) -> Bool {
+        !value.isEmpty && value.utf8.count <= 512 && value.unicodeScalars.allSatisfy { $0.value >= 32 && $0.value != 127 }
+    }
     private static func safe(_ value: UInt64) -> Bool { value <= maxSafeInteger }
     private static func sum<S: Sequence>(_ values: S) -> UInt64? where S.Element == UInt64 {
         var total: UInt64 = 0

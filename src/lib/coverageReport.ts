@@ -20,6 +20,10 @@ function hash(value: unknown): string {
   if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) throw new Error('Invalid coverage hash')
   return value
 }
+function coverageText(value: unknown, field: string): string {
+  if (typeof value !== 'string' || !value || value.length > 512 || [...value].some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)) throw new Error(`Invalid coverage ${field}`)
+  return value
+}
 
 /** An audit of a pinned source population, never the current rendered frame. */
 export function validateCoverageReport(raw: unknown, manifest: StateTileManifest) {
@@ -62,6 +66,23 @@ export function validateCoverageReport(raw: unknown, manifest: StateTileManifest
     remaining -= entry.count
   }
   if (remaining !== 0) throw new Error('Incomplete coverage reasons')
+  const rawCoverage = value.coverage
+  if (!Array.isArray(rawCoverage) || rawCoverage.length < 1 || rawCoverage.length > 256) throw new Error('Invalid coverage status buckets')
+  const coverage = rawCoverage.map(raw => {
+    const bucket = object(raw)
+    const datasetVersion = coverageText(bucket.datasetVersion, 'dataset')
+    const source = coverageText(bucket.source, 'source')
+    const model = coverageText(bucket.model, 'model')
+    const frame = coverageText(bucket.frame, 'frame')
+    const auditEt = finite(bucket.auditEt)
+    const exact = count(bucket.exact), approximate = count(bucket.approximate), missing = count(bucket.missing)
+    if (datasetVersion !== manifest.catalogVersion || frame !== 'ECLIPJ2000' || auditEt !== finite(value.auditEt)) throw new Error('Invalid coverage status bucket')
+    return { datasetVersion, source, model, auditEt, frame, exact, approximate, missing }
+  })
+  const coverageKeys = new Set(coverage.map(entry => JSON.stringify([entry.datasetVersion, entry.source, entry.model, entry.auditEt, entry.frame])))
+  if (coverageKeys.size !== coverage.length) throw new Error('Repeated coverage status bucket')
+  const coverageTotal = coverage.reduce((sum, entry) => sum + entry.exact + entry.approximate + entry.missing, 0)
+  if (!Number.isSafeInteger(coverageTotal) || coverageTotal !== counts.sourceRecords) throw new Error('Coverage status buckets do not reconcile')
   const inputWindow = object(value.requestedWindow)
   const requestedWindow = { startEt: finite(inputWindow.startEt), endEt: finite(inputWindow.endEt), timeScale: TIME_SCALE }
   if (inputWindow.timeScale !== TIME_SCALE || requestedWindow.startEt > requestedWindow.endEt) throw new Error('Invalid coverage window')
@@ -71,7 +92,7 @@ export function validateCoverageReport(raw: unknown, manifest: StateTileManifest
     reportSha256: hash(value.reportSha256), sourceSnapshotSha256: hash(value.sourceSnapshotSha256),
     identityMappingSha256: hash(value.identityMappingSha256), satelliteCatalogSha256: hash(value.satelliteCatalogSha256),
     auditEt: finite(value.auditEt), timeScale: TIME_SCALE, frame: 'ECLIPJ2000',
-    requestedWindow, counts, windowCounts, unresolvedReasons,
+    requestedWindow, counts, coverage, windowCounts, unresolvedReasons,
   }
 }
 

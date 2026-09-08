@@ -32,26 +32,28 @@ const (
 	maxWindowAtoms     = 256
 	maxChainSteps      = 64
 	maxSummaryReasons  = 128
+	maxCoverageBuckets = 256
 )
 
 type Summary struct {
-	Purpose                 string         `json:"purpose"`
-	ReportSHA256            string         `json:"reportSha256"`
-	CatalogVersion          string         `json:"catalogVersion"`
-	CatalogManifestSHA256   string         `json:"catalogManifestSha256"`
-	InventoryManifestSHA256 string         `json:"inventoryManifestSha256"`
-	SourceSnapshotSHA256    string         `json:"sourceSnapshotSha256"`
-	IdentityMappingSHA256   string         `json:"identityMappingSha256"`
-	SatelliteCatalogSHA256  string         `json:"satelliteCatalogSha256"`
-	SourceBytesVerified     bool           `json:"sourceBytesVerified"`
-	Profile                 string         `json:"profile"`
-	AuditET                 float64        `json:"auditEt"`
-	TimeScale               string         `json:"timeScale"`
-	Frame                   string         `json:"frame"`
-	RequestedWindow         Window         `json:"requestedWindow"`
-	Counts                  Counts         `json:"counts"`
-	WindowCounts            WindowCounts   `json:"windowCounts"`
-	UnresolvedReasons       map[string]int `json:"unresolvedReasons"`
+	Purpose                 string           `json:"purpose"`
+	ReportSHA256            string           `json:"reportSha256"`
+	CatalogVersion          string           `json:"catalogVersion"`
+	CatalogManifestSHA256   string           `json:"catalogManifestSha256"`
+	InventoryManifestSHA256 string           `json:"inventoryManifestSha256"`
+	SourceSnapshotSHA256    string           `json:"sourceSnapshotSha256"`
+	IdentityMappingSHA256   string           `json:"identityMappingSha256"`
+	SatelliteCatalogSHA256  string           `json:"satelliteCatalogSha256"`
+	SourceBytesVerified     bool             `json:"sourceBytesVerified"`
+	Profile                 string           `json:"profile"`
+	AuditET                 float64          `json:"auditEt"`
+	TimeScale               string           `json:"timeScale"`
+	Frame                   string           `json:"frame"`
+	RequestedWindow         Window           `json:"requestedWindow"`
+	Counts                  Counts           `json:"counts"`
+	WindowCounts            WindowCounts     `json:"windowCounts"`
+	UnresolvedReasons       map[string]int   `json:"unresolvedReasons"`
+	Coverage                []CoverageBucket `json:"coverage"`
 }
 
 type Counts struct {
@@ -66,6 +68,23 @@ type WindowCounts struct {
 	DependencyCoveredTargets               int  `json:"dependencyCoveredTargets"`
 	TargetsWithDependencyGaps              int  `json:"targetsWithDependencyGaps"`
 	NumericallyCertifiedWholeWindowTargets *int `json:"numericallyCertifiedWholeWindowTargets"`
+}
+
+// CoverageBucket is a source-population ledger row for the independent audit
+// epoch. The three status counters are mutually exclusive and sum to the
+// source rows represented by this dataset/source/model tuple. Approximate
+// states are explicit rather than inferred; the current audit generator emits
+// zero for them because it never substitutes an element model for an exact
+// SPK state.
+type CoverageBucket struct {
+	DatasetVersion string  `json:"datasetVersion"`
+	Source         string  `json:"source"`
+	Model          string  `json:"model"`
+	AuditET        float64 `json:"auditEt"`
+	Frame          string  `json:"frame"`
+	Exact          int     `json:"exact"`
+	Approximate    int     `json:"approximate"`
+	Missing        int     `json:"missing"`
 }
 
 type Window struct {
@@ -211,6 +230,7 @@ func Load(path string, cat *catalog.Catalog, inv *inventory.Inventory) (*Ledger,
 		Counts:                  report.Identity.Counts,
 		WindowCounts:            report.WindowCounts,
 		UnresolvedReasons:       cloneCounts(report.Identity.UnresolvedReasons),
+		Coverage:                cloneCoverage(report.Coverage),
 	}
 	encodedSummary, err := json.Marshal(struct {
 		APIVersion string `json:"apiVersion"`
@@ -228,6 +248,7 @@ func (l *Ledger) Summary() Summary {
 	}
 	out := l.summary
 	out.UnresolvedReasons = cloneCounts(out.UnresolvedReasons)
+	out.Coverage = cloneCoverage(out.Coverage)
 	return out
 }
 
@@ -245,17 +266,18 @@ func (l *Ledger) Lookup(target int) (TargetCoverage, bool) {
 }
 
 type reportFile struct {
-	SchemaVersion        int            `json:"schemaVersion"`
-	Purpose              string         `json:"purpose"`
-	InputInventorySHA256 string         `json:"inputInventorySha256"`
-	SourceSnapshotSHA256 string         `json:"sourceSnapshotSha256"`
-	SourceBytesVerified  bool           `json:"sourceBytesVerified"`
-	Kernels              reportKernels  `json:"kernels"`
-	RequestedWindow      Window         `json:"requestedWindow"`
-	Identity             reportIdentity `json:"identity"`
-	WindowCounts         WindowCounts   `json:"windowCounts"`
-	Windows              []reportWindow `json:"windows"`
-	Limitations          []string       `json:"limitations"`
+	SchemaVersion        int              `json:"schemaVersion"`
+	Purpose              string           `json:"purpose"`
+	InputInventorySHA256 string           `json:"inputInventorySha256"`
+	SourceSnapshotSHA256 string           `json:"sourceSnapshotSha256"`
+	SourceBytesVerified  bool             `json:"sourceBytesVerified"`
+	Kernels              reportKernels    `json:"kernels"`
+	RequestedWindow      Window           `json:"requestedWindow"`
+	Identity             reportIdentity   `json:"identity"`
+	WindowCounts         WindowCounts     `json:"windowCounts"`
+	Coverage             []CoverageBucket `json:"coverage"`
+	Windows              []reportWindow   `json:"windows"`
+	Limitations          []string         `json:"limitations"`
 }
 
 type reportKernels struct {
@@ -329,6 +351,9 @@ func validateReport(report reportFile, cat *catalog.Catalog, inv *inventory.Inve
 		return fmt.Errorf("coverage report contains unsupported whole-window numerical certification")
 	}
 	if err := validateCounts(report); err != nil {
+		return err
+	}
+	if err := validateCoverage(report); err != nil {
 		return err
 	}
 	if len(report.Identity.ExplicitTargetGroups) < 1 || len(report.Identity.ExplicitTargetGroups) > maxTargetGroups || len(report.Windows) != len(report.Identity.ExplicitTargetGroups) {
@@ -453,6 +478,38 @@ func validateCounts(report reportFile) error {
 	}
 	if available != c.AvailableTargetsAtAuditET || covered != report.WindowCounts.DependencyCoveredTargets || gaps != report.WindowCounts.TargetsWithDependencyGaps || covered+gaps != c.ExplicitNAIFTargets {
 		return fmt.Errorf("coverage report window counts do not reconcile")
+	}
+	return nil
+}
+
+func validateCoverage(report reportFile) error {
+	if len(report.Coverage) < 1 || len(report.Coverage) > maxCoverageBuckets {
+		return fmt.Errorf("coverage status buckets are invalid")
+	}
+	seen := make(map[string]struct{}, len(report.Coverage))
+	total := 0
+	for _, bucket := range report.Coverage {
+		if bucket.DatasetVersion != report.Kernels.ManifestID || bucket.Source == "" || bucket.Model == "" ||
+			bucket.Frame != report.Kernels.Frame || !finite(bucket.AuditET) || bucket.AuditET != report.Kernels.AuditET ||
+			bucket.Exact < 0 || bucket.Approximate < 0 || bucket.Missing < 0 {
+			return fmt.Errorf("coverage status bucket is invalid")
+		}
+		key := strings.Join([]string{bucket.DatasetVersion, bucket.Source, bucket.Model, strconv.FormatFloat(bucket.AuditET, 'g', -1, 64), bucket.Frame}, "\x00")
+		if _, exists := seen[key]; exists {
+			return fmt.Errorf("coverage status bucket is repeated")
+		}
+		seen[key] = struct{}{}
+		remaining := report.Identity.Counts.SourceRecords - total
+		for _, count := range []int{bucket.Exact, bucket.Approximate, bucket.Missing} {
+			if count < 0 || count > remaining {
+				return fmt.Errorf("coverage status bucket count is invalid")
+			}
+			remaining -= count
+		}
+		total = report.Identity.Counts.SourceRecords - remaining
+	}
+	if total != report.Identity.Counts.SourceRecords {
+		return fmt.Errorf("coverage status buckets do not reconcile")
 	}
 	return nil
 }
@@ -639,6 +696,9 @@ func cloneCounts(values map[string]int) map[string]int {
 	}
 	return out
 }
+func cloneCoverage(values []CoverageBucket) []CoverageBucket {
+	return append([]CoverageBucket(nil), values...)
+}
 func cloneWindowCoverage(value WindowCoverage) WindowCoverage {
 	points := value.Points
 	value.Points = make([]WindowPoint, len(points))
@@ -709,6 +769,21 @@ func validateExplicitFields(raw []byte) error {
 	for _, name := range []string{"sourceRecords", "mappedSourceRecords", "unresolvedSourceRecords", "explicitNaifTargets", "availableTargetsAtAuditEpoch"} {
 		if err := requiredNonNull(counts, name); err != nil {
 			return err
+		}
+	}
+	coverage, err := requiredArrayValue(root, "coverage")
+	if err != nil {
+		return err
+	}
+	for n, coverageRaw := range coverage {
+		bucket, err := object(coverageRaw)
+		if err != nil {
+			return fmt.Errorf("coverage[%d]: %w", n, err)
+		}
+		for _, name := range []string{"datasetVersion", "source", "model", "auditEt", "frame", "exact", "approximate", "missing"} {
+			if err := requiredNonNull(bucket, name); err != nil {
+				return fmt.Errorf("coverage[%d]: %w", n, err)
+			}
 		}
 	}
 	groups, err := requiredArray(root, "identity", "explicitTargetGroups")

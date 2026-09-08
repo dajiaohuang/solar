@@ -239,8 +239,9 @@ from the observation and presets. Opening it does not fetch data. Explicit
 Load/Reload requests a fresh HTTPS catalog manifest and `/v1/coverage` summary
 (maximum 64 KiB), bound to the catalog and inventory identities. It reports
 source/mapped/unresolved records, distinct explicit targets, audit-epoch
-availability, dependency-window counts, TDB audit/window ET, reasons and six
-provenance hashes. Source aliases do not inflate the distinct target count;
+availability, dependency-window counts, source/model buckets for exact,
+approximate and missing states, TDB audit/window ET, reasons and six provenance
+hashes. Source aliases do not inflate the distinct target count;
 dependency availability is not whole-window numerical accuracy certification.
 These totals are not current displayed-state counts.
 

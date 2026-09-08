@@ -17,7 +17,7 @@ public final class SourceIdentityPage {
         public final String id, name, category, source, identityStatus, ephemerisStatus;
         public final long sourceRow;
         Row(Map<String, Object> row) throws StateTileDecoder.ProtocolException {
-            id = text(row.get("id"), false, 512); name = text(row.get("name"), true, 512);
+            id = sourceId(row.get("id")); name = text(row.get("name"), true, 512);
             category = text(row.get("category"), false, 512); source = text(row.get("source"), false, 512);
             identityStatus = text(row.get("identityStatus"), false, 512);
             ephemerisStatus = text(row.get("ephemerisStatus"), false, 512); sourceRow = integer(row.get("sourceRow"));
@@ -58,6 +58,11 @@ public final class SourceIdentityPage {
         require((optional || !text.isEmpty()) && text.length() <= max, "Identity text exceeds limit");
         for (int i = 0; i < text.length(); i++) require(text.charAt(i) >= 32 && text.charAt(i) != 127, "Invalid identity control character");
         return text;
+    }
+    private static String sourceId(Object value) throws StateTileDecoder.ProtocolException {
+        String result = text(value, false, 512);
+        for (int i = 0; i < result.length(); i++) require(!Character.isWhitespace(result.charAt(i)) && result.charAt(i) != ',', "Source ID cannot contain whitespace or commas");
+        return result;
     }
     private static String hash(Object value) throws StateTileDecoder.ProtocolException {
         String result = text(value, false, 64); require(result.matches("[0-9a-f]{64}"), "Invalid identity hash"); return result;

@@ -9,6 +9,7 @@ export function coverageSummaryFixture() {
     timeScale: 'TDB seconds past J2000', frame: 'ECLIPJ2000',
     requestedWindow: { startEt: 0, endEt: 1000, timeScale: 'TDB seconds past J2000' },
     counts: { sourceRecords: 10, mappedSourceRecords: 3, unresolvedSourceRecords: 7, explicitNaifTargets: 2, availableTargetsAtAuditEpoch: 2 },
+    coverage: [{ datasetVersion: 'coverage-fixture', source: 'synthetic', model: 'spk-at-audit-epoch', auditEt: 500, frame: 'ECLIPJ2000', exact: 3, approximate: 0, missing: 7 }],
     windowCounts: { dependencyCoveredTargets: 1, targetsWithDependencyGaps: 1, numericallyCertifiedWholeWindowTargets: null },
     unresolvedReasons: { 'no-explicit-naif-mapping': 6, 'unresolved-component': 1 },
   }

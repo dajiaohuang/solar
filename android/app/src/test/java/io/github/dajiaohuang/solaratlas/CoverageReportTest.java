@@ -29,6 +29,7 @@ public class CoverageReportTest {
                 + "\"explicitNaifTargets\":2,\"availableTargetsAtAuditEpoch\":2},"
                 + "\"windowCounts\":{\"dependencyCoveredTargets\":1,\"targetsWithDependencyGaps\":1,"
                 + "\"numericallyCertifiedWholeWindowTargets\":null},"
+                + "\"coverage\":[{\"datasetVersion\":\"coverage-fixture\",\"source\":\"synthetic\",\"model\":\"spk-at-audit-epoch\",\"auditEt\":500,\"frame\":\"ECLIPJ2000\",\"exact\":3,\"approximate\":0,\"missing\":7}],"
                 + "\"unresolvedReasons\":{\"no-explicit-naif-mapping\":6,\"unresolved-component\":1}}";
     }
     private static CoverageReport decode(String value) throws Exception { return CoverageReport.decode(bytes(value), bytes(manifest())); }
@@ -43,6 +44,7 @@ public class CoverageReportTest {
         assertEquals(hash('c'), report.inventoryHash); assertEquals(hash('d'), report.sourceHash);
         assertEquals(hash('e'), report.mappingHash); assertEquals(hash('f'), report.satelliteHash);
         assertEquals(500, report.auditEt, 0); assertEquals(0, report.windowStartEt, 0); assertEquals(1000, report.windowEndEt, 0);
+        assertEquals(1, report.coverage.size()); assertEquals(3, report.coverage.get(0).exact); assertEquals(7, report.coverage.get(0).missing);
         assertThrows(UnsupportedOperationException.class, () -> report.unresolvedReasons.put("fake", 1L));
     }
 
@@ -55,6 +57,7 @@ public class CoverageReportTest {
     @Test public void acceptsEmptyOrZeroReasonsForNoUnresolvedRecords() throws Exception {
         String complete = summary().replace("\"sourceRecords\":10", "\"sourceRecords\":3")
                 .replace("\"unresolvedSourceRecords\":7", "\"unresolvedSourceRecords\":0")
+                .replace("\"exact\":3,\"approximate\":0,\"missing\":7", "\"exact\":3,\"approximate\":0,\"missing\":0")
                 .replace("\"no-explicit-naif-mapping\":6,\"unresolved-component\":1", "");
         assertTrue(decode(complete).unresolvedReasons.isEmpty());
         assertEquals(Long.valueOf(0), decode(complete.replace("\"unresolvedReasons\":{}", "\"unresolvedReasons\":{\"none\":0}")).unresolvedReasons.get("none"));
@@ -86,7 +89,8 @@ public class CoverageReportTest {
                 {"\"no-explicit-naif-mapping\":6", "\"no-explicit-naif-mapping\":5"},
                 {"\"no-explicit-naif-mapping\":6", "\"no-explicit-naif-mapping\":8"},
                 {"unresolved-component", "bad reason"}, {"\"startEt\":0", "\"startEt\":1001"},
-                {"\"auditEt\":500", "\"auditEt\":1e309"}, {"\"endEt\":1000", "\"endEt\":\"1000\""}
+                {"\"auditEt\":500", "\"auditEt\":1e309"}, {"\"endEt\":1000", "\"endEt\":\"1000\""},
+                {"\"missing\":7", "\"missing\":6"}, {"\"frame\":\"ECLIPJ2000\"", "\"frame\":\"J2000\""}
         }) reject(summary().replace(change[0], change[1]));
         StringBuilder reasons = new StringBuilder("\"no-explicit-naif-mapping\":6,\"unresolved-component\":1");
         for (int i = 0; i < 127; i++) reasons.append(",\"reason-").append(i).append("\":0");

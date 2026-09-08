@@ -104,6 +104,11 @@ final class CoveragePanel extends LinearLayout {
                 + "\n\n" + getResources().getString(R.string.coverage_limits));
         StringBuilder text = new StringBuilder(getResources().getString(R.string.coverage_identities, report.catalogVersion, report.catalogHash,
                 report.inventoryHash, report.reportHash, report.sourceHash, report.mappingHash, report.satelliteHash));
+        text.append("\n\n").append(getResources().getString(R.string.coverage_states));
+        for (CoverageReport.CoverageBucket bucket : report.coverage) {
+            text.append('\n').append(getResources().getString(R.string.coverage_state, bucket.source, bucket.model,
+                    bucket.exact, bucket.approximate, bucket.missing));
+        }
         text.append("\n\n").append(getResources().getString(R.string.coverage_reasons));
         for (Map.Entry<String, Long> reason : report.unresolvedReasons.entrySet()) text.append('\n').append(reason.getKey()).append(": ").append(reason.getValue());
         details.setText(text); detailToggle.setVisibility(VISIBLE); load.setText(R.string.coverage_reload);

@@ -31,6 +31,19 @@ export async function auditBodyCoverage({ inventory, sources, output, root = ROO
     targetsWithDependencyGaps: windows.filter(window => window.gaps.length > 0).length,
     numericallyCertifiedWholeWindowTargets: null,
   }
+  // Every pinned source row receives exactly one auditable state bucket. The
+  // audit is exact-only: approximate is deliberately emitted as zero rather
+  // than allowing a source-element fallback to masquerade as an exact state.
+  const coverage = identity.coverage.map(bucket => ({
+    datasetVersion: kernels.evidence.manifestId,
+    source: bucket.source,
+    model: bucket.model,
+    auditEt,
+    frame: kernels.evidence.frame,
+    exact: bucket.status === 'exact' ? bucket.count : 0,
+    approximate: bucket.status === 'approximate' ? bucket.count : 0,
+    missing: bucket.status === 'missing' ? bucket.count : 0,
+  }))
   const generator = []
   for (const path of ['scripts/audit-body-coverage.mjs', 'scripts/validate-body-inventory.mjs', 'scripts/lib/body-identity-ledger.mjs',
     'scripts/lib/inventory-kernels.mjs', 'scripts/lib/kernel-window-coverage.mjs', 'scripts/lib/inventory-snapshot.mjs',
@@ -41,7 +54,7 @@ export async function auditBodyCoverage({ inventory, sources, output, root = ROO
   const report = { schemaVersion: 1, purpose: 'source-identity-and-dependency-window-audit',
     inputInventorySha256: verified.manifestSha256, sourceSnapshotSha256: verified.snapshotSha256, sourceBytesVerified: Boolean(sources),
     generator, kernels: kernels.evidence, requestedWindow: { startEt, endEt, timeScale: 'TDB seconds past J2000' },
-    identity, windowCounts, windows,
+    identity, coverage, windowCounts, windows,
     limitations: [
       'Explicit NAIF target groups are not an all-source unique physical-body count. Unmapped, unresolved and candidate records stay in the pinned input inventory.',
       'State availability is evaluated only at auditEt. Window atoms certify descriptor and center dependency availability, not continuous numerical accuracy or observational uncertainty.',
