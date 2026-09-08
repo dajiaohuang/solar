@@ -71,9 +71,12 @@ import javax.net.ssl.TrustManagerFactory;
 @RunWith(AndroidJUnit4.class)
 public final class ObservationUITest {
     private static final long UI_TIMEOUT_MS = 30_000;
+    private static final long FRONT_REQUEST_INTERVAL_MS = 2_000;
     private static final String BACKEND_HINT = "Full-version backend HTTPS address";
     private static final String EPOCH_HINT = "TDB Julian date";
     private static final String IDS_HINT = "Body IDs separated by commas or whitespace (custom selection)";
+    private static final java.util.concurrent.atomic.AtomicLong lastFrontRequestAt =
+            new java.util.concurrent.atomic.AtomicLong(Long.MIN_VALUE);
 
     @Test
     public void realEarthMoonStatesModesAndCacheReuse() throws Exception {
@@ -321,12 +324,17 @@ public final class ObservationUITest {
             // the existing singleTask activity to the front before asking
             // Espresso to pick its root; this preserves the observation state
             // and does not bypass any click or input constraint.
-            try {
-                activity.startActivity(new Intent(activity, MainActivity.class)
-                        .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP));
-            } catch (RuntimeException ignored) {
-                // Best-effort; the normal focus request below still handles
-                // emulators where the task is already foregrounded.
+            long now = SystemClock.uptimeMillis();
+            long previous = lastFrontRequestAt.get();
+            if ((previous == Long.MIN_VALUE || now - previous >= FRONT_REQUEST_INTERVAL_MS)
+                    && lastFrontRequestAt.compareAndSet(previous, now)) {
+                try {
+                    activity.startActivity(new Intent(activity, MainActivity.class)
+                            .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+                } catch (RuntimeException ignored) {
+                    // Best-effort; the normal focus request below still handles
+                    // emulators where the task is already foregrounded.
+                }
             }
             View decor = activity.getWindow().getDecorView();
             decor.setFocusable(true);
