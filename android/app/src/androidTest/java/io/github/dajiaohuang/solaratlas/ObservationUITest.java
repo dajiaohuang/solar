@@ -302,6 +302,20 @@ public final class ObservationUITest {
     private static void recoverInteractiveWindow() {
         Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
         instrumentation.setInTouchMode(true);
+        // API 36's freshly booted emulator can show a system Quickstep
+        // "isn't responding" dialog above the app. That dialog owns focus and
+        // makes Espresso's default root picker fail even though the target
+        // activity is still resumed. Dismiss only when the target is already
+        // unfocused; if no dialog is present, the subsequent reorder restores
+        // the existing activity without changing the test's UI actions.
+        if (!hasWindowFocus()) {
+            try {
+                instrumentation.getUiAutomation().performGlobalAction(
+                        AccessibilityService.GLOBAL_ACTION_BACK);
+            } catch (RuntimeException ignored) {
+                // System dialogs may reject global actions during first boot.
+            }
+        }
         try {
             instrumentation.getUiAutomation().performGlobalAction(
                     AccessibilityService.GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE);

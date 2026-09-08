@@ -112,6 +112,20 @@ const expectedCoverageBodies = 'sun,mercury,venus,earth,moon,mars,jupiter,saturn
 if (coverage?.supportedNamedBodies?.join(',') !== expectedCoverageBodies) throw new Error('Scientific validation report is missing the curated named-body coverage inventory')
 if (coverage?.sourcedSatelliteBodies?.join(',') !== 'moon,io,europa,ganymede,callisto,titan') throw new Error('Scientific validation report is missing the sourced satellite coverage inventory')
 if (coverage?.coverageGaps?.join(',') !== 'other-planetary-satellites-not-modeled,dwarf-planet-elements-are-curated-approximations-not-precision-ephemerides') throw new Error('Scientific validation report is missing explicit coverage gaps')
+const spkDelivery = coverage?.spkDelivery
+if (spkDelivery?.stateBoundary !== 'geometric-spk-six-vector-when-kernel-and-center-chain-cover-epoch') throw new Error('Scientific validation report is missing the SPK state boundary')
+if (spkDelivery?.ephemerisBodyCount !== 46 || spkDelivery?.planetarySatelliteBodyCount !== 31 || spkDelivery?.smallBodyBodyCount !== 15 || spkDelivery?.satelliteIdentityCount !== 472) throw new Error('Scientific validation report is missing the expanded SPK coverage counts')
+if (spkDelivery?.pagesManifest?.id !== 'jpl-satellite-expansion-20260904-pages' || spkDelivery?.pagesManifest?.sha256 !== '5c390d7bb8e02a28ebe45d32979c2f5db12983f8ec6044e4206750c5c89c29e0' || spkDelivery?.pagesManifest?.bytes !== 270908416 || spkDelivery?.pagesManifest?.fileCount !== 510) throw new Error('Scientific validation report is missing the pinned Pages SPK manifest')
+if (spkDelivery?.fullManifest?.id !== 'jpl-satellite-expansion-20260904-full' || spkDelivery?.fullManifest?.sha256 !== '7e7fa1df8080b505abba52cc8ca9a4d8bd6d1c10d47d3e421953e7c1b8494257' || spkDelivery?.fullManifest?.bytes !== 1147897856 || spkDelivery?.fullManifest?.fileCount !== 510) throw new Error('Scientific validation report is missing the pinned full SPK manifest')
+const expectedSatelliteBatches = {
+  jupiter: 'naif:505,naif:514,naif:515,naif:516',
+  saturn: 'naif:601,naif:602,naif:603,naif:604,naif:605,naif:607,naif:608,naif:609',
+  uranus: 'naif:701,naif:702,naif:703,naif:704,naif:705',
+  neptune: 'naif:801,naif:802',
+}
+for (const [parent, expected] of Object.entries(expectedSatelliteBatches)) {
+  if (spkDelivery?.sourceBackedSatelliteBatches?.[parent]?.join(',') !== expected) throw new Error(`Scientific validation report is missing the ${parent} satellite coverage batch`)
+}
 const planetaryModelEvidence = scientificValidation.modelEvidence.planetaryApproximation
 const expectedPlanetaryModelWindow = `${planetaryModelEvidence.validFrom}/${planetaryModelEvidence.validTo}`
 if (scientificValidation.modelWindow?.planetaryApproximation !== expectedPlanetaryModelWindow) throw new Error('Scientific validation model window is inconsistent with the canonical model evidence')

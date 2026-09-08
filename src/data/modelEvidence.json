@@ -64,6 +64,31 @@
     "coverageGaps": [
       "other-planetary-satellites-not-modeled",
       "dwarf-planet-elements-are-curated-approximations-not-precision-ephemerides"
-    ]
+    ],
+    "spkDelivery": {
+      "stateBoundary": "geometric-spk-six-vector-when-kernel-and-center-chain-cover-epoch",
+      "ephemerisBodyCount": 46,
+      "planetarySatelliteBodyCount": 31,
+      "smallBodyBodyCount": 15,
+      "satelliteIdentityCount": 472,
+      "pagesManifest": {
+        "id": "jpl-satellite-expansion-20260904-pages",
+        "sha256": "5c390d7bb8e02a28ebe45d32979c2f5db12983f8ec6044e4206750c5c89c29e0",
+        "bytes": 270908416,
+        "fileCount": 510
+      },
+      "fullManifest": {
+        "id": "jpl-satellite-expansion-20260904-full",
+        "sha256": "7e7fa1df8080b505abba52cc8ca9a4d8bd6d1c10d47d3e421953e7c1b8494257",
+        "bytes": 1147897856,
+        "fileCount": 510
+      },
+      "sourceBackedSatelliteBatches": {
+        "jupiter": ["naif:505", "naif:514", "naif:515", "naif:516"],
+        "saturn": ["naif:601", "naif:602", "naif:603", "naif:604", "naif:605", "naif:607", "naif:608", "naif:609"],
+        "uranus": ["naif:701", "naif:702", "naif:703", "naif:704", "naif:705"],
+        "neptune": ["naif:801", "naif:802"]
+      }
+    }
   }
 }

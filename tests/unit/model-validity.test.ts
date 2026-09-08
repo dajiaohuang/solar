@@ -10,7 +10,11 @@ import {
   jplApproxWindowWarning,
 } from '../../src/engine/ephemeris/modelValidity'
 import { defaultSelectedBodyIds, majorBodiesById } from '../../src/data/majorBodies'
+import ephemerisBodies from '../../src/data/ephemerisBodies.json'
+import ephemerisManifest from '../../src/data/ephemeris-manifest.json'
+import ephemerisManifestFull from '../../src/data/ephemeris-manifest-full.json'
 import { JPL_HORIZONS_GIANT_SATELLITE_ELEMENTS } from '../../src/data/satelliteEpochElements'
+import satelliteCatalog from '../../src/data/satelliteCatalog.json'
 import { en } from '../../src/i18n/en'
 import { zh } from '../../src/i18n/zh'
 import { dateToJulianDay } from '../../src/lib/julianDate'
@@ -102,6 +106,44 @@ describe('JPL approximate element validity', () => {
     ])
     for (const bodyId of ['io', 'europa', 'ganymede', 'callisto', 'titan'] as const) {
       expect(JPL_HORIZONS_GIANT_SATELLITE_ELEMENTS[bodyId]).toBeDefined()
+    }
+  })
+
+  it('publishes the pinned full-profile outer-planet satellite batch', () => {
+    const spkDelivery = modelEvidence.coverage.spkDelivery
+    expect(spkDelivery).toMatchObject({
+      stateBoundary: 'geometric-spk-six-vector-when-kernel-and-center-chain-cover-epoch',
+      ephemerisBodyCount: 46,
+      planetarySatelliteBodyCount: 31,
+      smallBodyBodyCount: 15,
+      satelliteIdentityCount: 472,
+      pagesManifest: {
+        id: ephemerisManifest.id,
+        sha256: '5c390d7bb8e02a28ebe45d32979c2f5db12983f8ec6044e4206750c5c89c29e0',
+        bytes: 270908416,
+        fileCount: 510,
+      },
+      fullManifest: {
+        id: ephemerisManifestFull.id,
+        sha256: '7e7fa1df8080b505abba52cc8ca9a4d8bd6d1c10d47d3e421953e7c1b8494257',
+        bytes: 1147897856,
+        fileCount: 510,
+      },
+    })
+    expect(ephemerisBodies.bodies).toHaveLength(spkDelivery.ephemerisBodyCount)
+    expect(ephemerisBodies.bodies.filter((body) => body.kind === 'moon')).toHaveLength(spkDelivery.planetarySatelliteBodyCount)
+    expect(ephemerisBodies.bodies.filter((body) => body.kind === 'asteroid')).toHaveLength(spkDelivery.smallBodyBodyCount)
+    expect(satelliteCatalog.bodies).toHaveLength(spkDelivery.satelliteIdentityCount)
+
+    const ephemerisById = new Map(ephemerisBodies.bodies.map((body) => [body.id, body]))
+    const fullTargets = new Set(ephemerisManifestFull.files.flatMap((file) => file.targets ?? []).map(String))
+    for (const [parent, bodyIds] of Object.entries(spkDelivery.sourceBackedSatelliteBatches)) {
+      expect(bodyIds).toHaveLength(parent === 'jupiter' ? 4 : parent === 'saturn' ? 8 : parent === 'uranus' ? 5 : 2)
+      for (const bodyId of bodyIds) {
+        const body = ephemerisById.get(bodyId)
+        expect(body?.parentId).toBe(parent)
+        expect(fullTargets.has(String(body?.naifId))).toBe(true)
+      }
     }
   })
 })
