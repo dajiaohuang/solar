@@ -209,7 +209,7 @@ public final class MainActivity extends Activity {
 
     private void publish(int requestGeneration, StateTileService.Frame loaded, String referenceId, String epochText) {
         if (requestGeneration != generation) return; loadThread = null; currentFrame = loaded; currentReferenceId = referenceId; showEvidence(loaded, referenceId);
-        int exactCount = 0; for (boolean exact : loaded.exact) if (exact) exactCount++;
+        final int exactCount = exactCount(loaded);
         status.setText(exactCount + " verified states - " + (loaded.exact.length - exactCount) + " data gaps - TDB JD " + epochText + ". Preparing GPU points...");
         viewport.clearPoints(() -> {
             if (requestGeneration == generation && currentFrame == loaded) {
