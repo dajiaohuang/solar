@@ -10,6 +10,10 @@ describe('explicitly synthetic native coverage transport', () => {
   })
   it('creates isolated fixtures and serves valid then unavailable fresh reloads', () => {
     const reply = createNativeCoverageResponder(), fixture = nativeCoverageFixture()
+    expect(fixture.summary.coverage).toEqual([{
+      datasetVersion: 'coverage-fixture', source: 'synthetic', model: 'spk-at-audit-epoch',
+      auditEt: 500.125, frame: 'ECLIPJ2000', exact: 3, approximate: 0, missing: 7,
+    }])
     fixture.summary.counts.sourceRecords = 999
     expect(reply('GET', '/coverage-fixture/valid/v1/catalog/manifest')?.body).toEqual(nativeCoverageFixture().manifest)
     expect(reply('GET', '/coverage-fixture/valid/v1/coverage')?.body).toEqual(nativeCoverageFixture().summary)
