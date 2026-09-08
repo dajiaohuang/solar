@@ -34,6 +34,7 @@ import android.view.View;
 import android.view.MotionEvent;
 import android.opengl.GLSurfaceView;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowInfo;
 
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.espresso.NoMatchingViewException;
@@ -303,6 +304,10 @@ public final class ObservationUITest {
     private static void recoverInteractiveWindow() {
         Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
         instrumentation.setInTouchMode(true);
+        // A system ANR dialog can cover the activity while the activity still
+        // reports window focus. Probe and dismiss it before relying on that
+        // focus signal; with no dialog this is a no-op.
+        dismissQuickstepNotResponding(instrumentation);
         // API 36's freshly booted emulator can show a system Quickstep
         // "isn't responding" dialog above the app. That dialog owns focus and
         // makes Espresso's default root picker fail even though the target
@@ -365,26 +370,41 @@ public final class ObservationUITest {
     private static void dismissQuickstepNotResponding(Instrumentation instrumentation) {
         long deadline = SystemClock.uptimeMillis() + 1_500;
         while (SystemClock.uptimeMillis() < deadline) {
-            AccessibilityNodeInfo root = null;
+            AccessibilityNodeInfo activeRoot = null;
             try {
-                root = instrumentation.getUiAutomation().getRootInActiveWindow();
-                if (root != null) {
-                    java.util.List<AccessibilityNodeInfo> waitNodes =
-                            root.findAccessibilityNodeInfosByText("Wait");
-                    for (AccessibilityNodeInfo node : waitNodes) {
-                        if (node.isVisibleToUser() && node.isClickable()
-                                && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-                            return;
-                        }
+                android.app.UiAutomation automation = instrumentation.getUiAutomation();
+                activeRoot = automation.getRootInActiveWindow();
+                if (clickWaitAction(activeRoot)) return;
+                for (AccessibilityWindowInfo window : automation.getWindows()) {
+                    AccessibilityNodeInfo root = null;
+                    try {
+                        root = window.getRoot();
+                        if (clickWaitAction(root)) return;
+                    } finally {
+                        if (root != null) root.recycle();
+                        window.recycle();
                     }
                 }
             } catch (RuntimeException ignored) {
                 // SystemUI can reject accessibility queries during first boot.
             } finally {
-                if (root != null) root.recycle();
+                if (activeRoot != null) activeRoot.recycle();
             }
             SystemClock.sleep(100);
         }
+    }
+
+    private static boolean clickWaitAction(AccessibilityNodeInfo root) {
+        if (root == null) return false;
+        java.util.List<AccessibilityNodeInfo> waitNodes =
+                root.findAccessibilityNodeInfosByText("Wait");
+        for (AccessibilityNodeInfo node : waitNodes) {
+            if (node.isVisibleToUser() && node.isClickable()
+                    && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void waitForText(org.hamcrest.Matcher<String> matcher) {
