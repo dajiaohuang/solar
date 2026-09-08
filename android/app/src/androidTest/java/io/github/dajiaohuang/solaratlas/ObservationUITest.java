@@ -273,7 +273,21 @@ public final class ObservationUITest {
         // matcher can select Android's non-focusable insertion-handle popup
         // after the previous field closes, hiding the real EditText from the
         // matcher even though it remains on the activity screen.
-        onView(withHint(hint)).perform(scrollTo(), click(), clearText(), replaceText(value), closeSoftKeyboard());
+        long deadline = SystemClock.uptimeMillis() + UI_TIMEOUT_MS;
+        Throwable last = null;
+        while (SystemClock.uptimeMillis() < deadline) {
+            try {
+                onView(withHint(hint)).perform(scrollTo(), click(), clearText(), replaceText(value), closeSoftKeyboard());
+                return;
+            } catch (AssertionError | NoMatchingViewException | PerformException error) {
+                last = error;
+                recoverInteractiveWindow();
+                SystemClock.sleep(100);
+            }
+        }
+        if (last instanceof AssertionError) throw (AssertionError) last;
+        if (last instanceof RuntimeException) throw (RuntimeException) last;
+        fail("Timed out filling editor: " + hint);
     }
 
     private static void waitForEvidence(String... rows) {
@@ -399,9 +413,13 @@ public final class ObservationUITest {
         java.util.List<AccessibilityNodeInfo> waitNodes =
                 root.findAccessibilityNodeInfosByText("Wait");
         for (AccessibilityNodeInfo node : waitNodes) {
-            if (node.isVisibleToUser() && node.isClickable()
-                    && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-                return true;
+            AccessibilityNodeInfo current = node;
+            for (int depth = 0; current != null && depth < 5; depth++) {
+                if (current.isVisibleToUser() && current.isClickable()
+                        && current.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                    return true;
+                }
+                current = current.getParent();
             }
         }
         return false;
