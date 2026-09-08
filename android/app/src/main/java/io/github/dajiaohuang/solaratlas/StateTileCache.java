@@ -48,6 +48,12 @@ public final class StateTileCache {
         return bytes;
     }
 
+    /** Remove a verified-byte file whose protocol metadata no longer matches. */
+    public synchronized void invalidate(String requestKey) {
+        validateKey(requestKey);
+        remove(file(requestKey));
+    }
+
     public synchronized void put(String payloadHash, byte[] bytes) throws IOException {
         validateKey(payloadHash);
         if (bytes == null || bytes.length < StateTileDecoder.HEADER_BYTES || bytes.length > StateTileDecoder.MAX_TILE_BYTES) throw new IOException("tile exceeds 64 MiB cache entry limit");

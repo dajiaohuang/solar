@@ -12,6 +12,17 @@ public final class StateTileClient {
     private static final String CONTENT_TYPE = "application/vnd.solar.state-tile+binary";
     private StateTileClient() {}
 
+    /**
+     * Service-owned cancellation lets a caller close an in-flight connection
+     * immediately. Thread interruption remains a fallback for callers that do
+     * not need an explicit lifecycle.
+     */
+    interface Cancellation {
+        void check() throws IOException;
+        void register(HttpURLConnection connection) throws IOException;
+        void unregister(HttpURLConnection connection);
+    }
+
     public static StateTileDecoder.DecodedTile fetchTile(String baseUrl, String planHash, int sequence,
                                                          int tileCount, String catalogHash,
                                                          String inventoryHash, StateTileCache cache)
@@ -24,13 +35,23 @@ public final class StateTileClient {
                                                          String inventoryHash, StateTileCache cache,
                                                          String cacheKey)
             throws IOException {
+        return fetchTile(baseUrl, planHash, sequence, tileCount, catalogHash, inventoryHash, cache, cacheKey, null);
+    }
+
+    static StateTileDecoder.DecodedTile fetchTile(String baseUrl, String planHash, int sequence,
+                                                  int tileCount, String catalogHash,
+                                                  String inventoryHash, StateTileCache cache,
+                                                  String cacheKey, Cancellation cancellation)
+            throws IOException {
         if (!isHash(planHash) || !isHash(catalogHash) || sequence < 0 || sequence >= tileCount) {
             throw new StateTileDecoder.ProtocolException("invalid tile request identity");
         }
         HttpURLConnection connection = null;
         try {
+            if (cancellation != null) cancellation.check();
             URL url = new URL(baseUrl.replaceAll("/+\\z", "") + "/v1/state/tiles");
             connection = (HttpURLConnection) url.openConnection();
+            if (cancellation != null) cancellation.register(connection);
             connection.setRequestMethod("POST");
             connection.setInstanceFollowRedirects(false);
             connection.setConnectTimeout(10_000);
@@ -43,6 +64,7 @@ public final class StateTileClient {
             try (java.io.OutputStream output = connection.getOutputStream()) {
                 output.write(request);
             }
+            if (cancellation != null) cancellation.check();
             int status = connection.getResponseCode();
             if (status != HttpURLConnection.HTTP_OK) throw new IOException("state tile HTTP " + status);
             String contentType = connection.getHeaderField("Content-Type");
@@ -50,6 +72,7 @@ public final class StateTileClient {
             long declared = connection.getContentLengthLong();
             if (declared <= 0 || declared > StateTileDecoder.MAX_TILE_BYTES) throw new StateTileDecoder.ProtocolException("state tile Content-Length is invalid");
             byte[] raw = readBounded(connection.getInputStream(), StateTileDecoder.MAX_TILE_BYTES);
+            if (cancellation != null) cancellation.check();
             StateTileDecoder.DecodedTile decoded = StateTileDecoder.decode(raw, planHash, catalogHash, inventoryHash, sequence, tileCount);
             String etag = connection.getHeaderField("ETag");
             if (etag == null || !stripQuotes(etag).equals(decoded.payloadSha256)) throw new StateTileDecoder.ProtocolException("state tile ETag mismatch");
@@ -59,6 +82,7 @@ public final class StateTileClient {
             }
             return decoded;
         } finally {
+            if (cancellation != null && connection != null) cancellation.unregister(connection);
             if (connection != null) connection.disconnect();
         }
     }

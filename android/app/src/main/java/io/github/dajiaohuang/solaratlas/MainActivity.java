@@ -48,6 +48,7 @@ public final class MainActivity extends Activity {
     private SourceIdentityPanel identityPanel;
     private SourceIdentityPage selectedSourcePage;
     private StateTileCache tileCache;
+    private volatile StateTileService activeStateService;
     private Thread loadThread;
     private Thread renderThread;
     private StateTileService.Frame currentFrame;
@@ -176,13 +177,21 @@ public final class MainActivity extends Activity {
         if (!Double.isFinite(epochJd) || address.isEmpty() || ids.isEmpty() || referenceId.isEmpty()) { status.setText("Enter an HTTPS backend, finite TDB JD, body IDs and a reference ID."); return; }
         cancelRender(); currentFrame = null; viewport.clearPoints(); showEvidence(null, ""); evidence.setText("Loading; no partial observation will be published."); status.setText("Loading manifest, plans and verified state tiles...");
         loadThread = new Thread(() -> {
+            StateTileService service = null;
             try {
                 if (tileCache == null) throw new StateTileDecoder.ProtocolException("tile cache is unavailable");
-                StateTileService.Frame loaded = new StateTileService(address, tileCache).load(ids, epochJd, sourcePage);
+                service = new StateTileService(address, tileCache);
+                activeStateService = service;
+                StateTileService.Frame loaded = service.load(ids, epochJd, sourcePage);
                 if (Thread.currentThread().isInterrupted()) throw new StateTileDecoder.ProtocolException("state load cancelled");
                 runOnUiThread(() -> publish(requestGeneration, loaded, referenceId, epochText));
             } catch (Exception error) {
                 runOnUiThread(() -> fail(requestGeneration, error));
+            } finally {
+                if (service != null) {
+                    service.close();
+                    if (activeStateService == service) activeStateService = null;
+                }
             }
         }, "solar-state-load");
         loadThread.start();
@@ -222,7 +231,7 @@ public final class MainActivity extends Activity {
     private static int exactCount(StateTileService.Frame frame) { int count = 0; for (boolean value : frame.exact) if (value) count++; return count; }
 
     private void fail(int requestGeneration, Exception error) { if (requestGeneration != generation) return; loadThread = null; currentFrame = null; cancelRender(); viewport.clearPoints(); status.setText(error.getMessage() == null ? "State load failed." : error.getMessage()); showEvidence(null, ""); evidence.setText("No partial observation was published."); }
-    private void cancelLoad() { generation++; if (loadThread != null) { loadThread.interrupt(); loadThread = null; status.setText("Loading cancelled. No partial observation was published."); } currentFrame = null; cancelRender(); viewport.clearPoints(); }
+    private void cancelLoad() { generation++; StateTileService service = activeStateService; if (service != null) service.cancel(); if (loadThread != null) { loadThread.interrupt(); loadThread = null; status.setText("Loading cancelled. No partial observation was published."); } currentFrame = null; cancelRender(); viewport.clearPoints(); }
     private void cancelRender() { renderGeneration++; currentPrepared = null; budgetStatus.setText(R.string.render_budget_empty); if (renderThread != null) { renderThread.interrupt(); renderThread = null; } }
 
     private NativeRenderBudget activeBudget() { return mode3d ? budget3d : budget2d; }
@@ -319,7 +328,7 @@ public final class MainActivity extends Activity {
             if (manager != null) thermalMonitor = new ThermalMonitor(manager, this::thermalChanged);
         }
     }
-    @Override protected void onDestroy() { cancelLoad(); super.onDestroy(); }
+    @Override protected void onDestroy() { cancelLoad(); if (viewport != null) viewport.release(); super.onDestroy(); }
 
     private static final class Preset {
         final String id, title, reference, ids;

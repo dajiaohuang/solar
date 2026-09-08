@@ -53,6 +53,14 @@ public final class NativeObservationDeck extends GLSurfaceView {
         requestRender();
     }
 
+    /** Release GL-owned objects on the GL thread before the view is destroyed. */
+    void release() {
+        stopInteraction();
+        frameListener = null;
+        queueEvent(renderer::release);
+        requestRender();
+    }
+
     @Override public boolean onTouchEvent(MotionEvent event) {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
@@ -215,6 +223,15 @@ public final class NativeObservationDeck extends GLSurfaceView {
 
         void setPrepared(PreparedPoints prepared) { this.prepared = prepared; sampler.reset(); points = prepared == null ? null : prepared.positions; pointCount = prepared == null ? 0 : prepared.displayedCount; mode3d = prepared == null || prepared.mode3d; }
         void clearPoints() { prepared = null; sampler.reset(); points = null; pointCount = 0; }
+
+        void release() {
+            clearPoints();
+            if (program != 0) {
+                GLES20.glDeleteProgram(program);
+                program = 0;
+            }
+            positionHandle = zoomHandle = rotationXHandle = rotationYHandle = aspectHandle = colorHandle = -1;
+        }
 
         private int link(String vertexSource, String fragmentSource) {
             int vertex = compile(GLES20.GL_VERTEX_SHADER, vertexSource), fragment = compile(GLES20.GL_FRAGMENT_SHADER, fragmentSource), linked = GLES20.glCreateProgram();

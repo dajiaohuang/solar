@@ -1,6 +1,7 @@
 package io.github.dajiaohuang.solaratlas;
 
 import java.io.ByteArrayOutputStream;
+import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -10,13 +11,16 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Manifest/plan/tile orchestration with bounded sequential backpressure. */
-public final class StateTileService {
+public final class StateTileService implements Closeable {
     private static final String API_VERSION = "solar.api/v1";
     private static final int MAX_PLAN_BYTES = 8 * 1024 * 1024;
     private static final int MAX_AGGREGATE_ROWS = 2_000_000;
@@ -24,6 +28,7 @@ public final class StateTileService {
     private static final int TILE_SIZE = 16_384;
     private final String baseUrl;
     private final StateTileCache cache;
+    private final RequestControl requestControl = new RequestControl();
 
     public StateTileService(String address, File cacheDirectory) throws IOException {
         this(address, new StateTileCache(cacheDirectory));
@@ -41,6 +46,52 @@ public final class StateTileService {
         baseUrl = trimmed.replaceAll("/+\\z", "");
         if (sharedCache == null) throw new StateTileDecoder.ProtocolException("tile cache is unavailable");
         cache = sharedCache;
+    }
+
+    /** Cancel all work owned by this service, including a blocked HTTP read. */
+    public void cancel() { requestControl.cancel(); }
+
+    /**
+     * A service is single-use from the UI's perspective. Closing is idempotent
+     * and prevents a late worker from publishing a result after its owner has
+     * left the screen.
+     */
+    @Override public void close() { requestControl.cancel(); }
+
+    private static final class RequestControl implements StateTileClient.Cancellation {
+        private final AtomicBoolean cancelled = new AtomicBoolean();
+        private final Set<HttpURLConnection> connections =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+
+        @Override public void check() throws IOException {
+            if (cancelled.get() || Thread.currentThread().isInterrupted()) {
+                throw new IOException("state load cancelled");
+            }
+        }
+
+        @Override public void register(HttpURLConnection connection) throws IOException {
+            synchronized (connections) {
+                if (cancelled.get()) {
+                    connection.disconnect();
+                    throw new IOException("state load cancelled");
+                }
+                connections.add(connection);
+            }
+        }
+
+        @Override public void unregister(HttpURLConnection connection) {
+            synchronized (connections) { connections.remove(connection); }
+        }
+
+        void cancel() {
+            cancelled.set(true);
+            HttpURLConnection[] active;
+            synchronized (connections) {
+                active = connections.toArray(new HttpURLConnection[0]);
+                connections.clear();
+            }
+            for (HttpURLConnection connection : active) connection.disconnect();
+        }
     }
 
     public static final class Frame {
@@ -63,7 +114,7 @@ public final class StateTileService {
 
     /** A directory selection must still match the current server inventory. */
     public Frame load(List<String> inputIds, double epochJd, SourceIdentityPage selectedPage) throws IOException {
-        checkCancelled();
+        checkLoadCancelled();
         if (!Double.isFinite(epochJd) || inputIds == null || inputIds.isEmpty() || inputIds.size() > MAX_AGGREGATE_ROWS) throw new StateTileDecoder.ProtocolException("finite TDB epoch and bounded IDs are required");
         List<String> ids = normalizeIds(inputIds);
         byte[] manifestBytes = receive("v1/catalog/manifest", null, false);
@@ -79,7 +130,7 @@ public final class StateTileService {
         require(!catalogVersion.isEmpty(), "manifest catalog version is missing");
         StateAccumulator accumulator = new StateAccumulator(ids.size(), MAX_RESIDENT_STATE_BYTES);
         for (int start = 0; start < ids.size(); start += StateTileDecoder.MAX_ROWS) {
-            checkCancelled();
+            checkLoadCancelled();
             List<String> chunk = new ArrayList<>(ids.subList(start, Math.min(ids.size(), start + StateTileDecoder.MAX_ROWS)));
             String request = "{\"ids\":" + stringsJson(chunk) + ",\"epochJd\":" + Double.toString(epochJd) + ",\"timeScale\":\"TDB\",\"frame\":\"ECLIPJ2000\",\"precision\":\"exact\",\"fieldMask\":[\"position\",\"velocity\"],\"tileSize\":" + TILE_SIZE + "}";
             Map<String, Object> plan = object(receive("v1/state/plan", request, false));
@@ -89,7 +140,7 @@ public final class StateTileService {
             List<?> tileValues = list(plan, "tiles");
             int decodedExact = 0, ordinal = 0;
             for (int sequence = 0; sequence < tileValues.size(); sequence++) {
-                checkCancelled();
+                checkLoadCancelled();
                 Map<String, Object> descriptor = object(tileValues.get(sequence));
                 int descriptorSequence = integer(descriptor, "sequence");
                 int descriptorStart = integer(descriptor, "ordinalStart");
@@ -97,9 +148,20 @@ public final class StateTileService {
                 require(descriptorSequence == sequence && descriptorStart == ordinal && descriptorCount > 0 && descriptorCount <= chunk.size() - ordinal, "plan tile ordering is invalid");
                 String requestKey = sha256((planId + ":" + sequence).getBytes(StandardCharsets.UTF_8));
                 byte[] cached = cache.getByRequestKey(requestKey);
-                StateTileDecoder.DecodedTile tile = cached == null
-                        ? StateTileClient.fetchTile(baseUrl, planId, sequence, tileCount, catalogHash, inventoryHash, cache, requestKey)
-                        : StateTileDecoder.decode(cached, planId, catalogHash, inventoryHash, sequence, tileCount);
+                StateTileDecoder.DecodedTile tile;
+                if (cached != null) {
+                    try {
+                        tile = StateTileDecoder.decode(cached, planId, catalogHash, inventoryHash, sequence, tileCount);
+                    } catch (StateTileDecoder.ProtocolException corrupted) {
+                        // A request-key file can have a valid payload digest but
+                        // stale protocol metadata. Evict it and recover once from
+                        // the authoritative tile endpoint.
+                        cache.invalidate(requestKey);
+                        tile = fetchTileWithRetry(planId, sequence, tileCount, catalogHash, inventoryHash, requestKey);
+                    }
+                } else {
+                    tile = fetchTileWithRetry(planId, sequence, tileCount, catalogHash, inventoryHash, requestKey);
+                }
                 require(tile.recordCount == descriptorCount && tile.ordinalStart == descriptorStart && tile.epochJd == epochJd, "tile descriptor mismatch");
                 decodedExact += accumulator.append(tile, ids, start + ordinal);
                 ordinal += descriptorCount;
@@ -107,6 +169,22 @@ public final class StateTileService {
             require(ordinal == chunk.size() && decodedExact == exactCount, "incomplete plan or precision count mismatch");
         }
         return accumulator.finish(epochJd, catalogHash, inventoryHash);
+    }
+
+    private StateTileDecoder.DecodedTile fetchTileWithRetry(String planId, int sequence, int tileCount,
+                                                            String catalogHash, String inventoryHash,
+                                                            String requestKey) throws IOException {
+        IOException failure = null;
+        for (int attempt = 0; attempt < 2; attempt++) {
+            checkLoadCancelled();
+            try {
+                return StateTileClient.fetchTile(baseUrl, planId, sequence, tileCount, catalogHash,
+                        inventoryHash, cache, requestKey, requestControl);
+            } catch (IOException error) {
+                failure = error;
+            }
+        }
+        throw failure == null ? new IOException("state tile fetch failed") : failure;
     }
 
     /** Single final primitive allocation; budget is an estimate, not a process RSS cap. */
@@ -184,18 +262,26 @@ public final class StateTileService {
     private byte[] receive(String path, String body, boolean binary) throws IOException {
         HttpURLConnection connection = null;
         try {
+            requestControl.check();
             connection = (HttpURLConnection) new URL(baseUrl + "/" + path).openConnection();
+            requestControl.register(connection);
             connection.setRequestMethod(body == null ? "GET" : "POST"); connection.setConnectTimeout(10_000); connection.setReadTimeout(30_000); connection.setDoInput(true);
             connection.setInstanceFollowRedirects(false);
             connection.setRequestProperty("Accept", binary ? "application/vnd.solar.state-tile+binary" : "application/json");
             if (body != null) { connection.setDoOutput(true); connection.setRequestProperty("Content-Type", "application/json"); byte[] request = body.getBytes(StandardCharsets.UTF_8); connection.setFixedLengthStreamingMode(request.length); try (java.io.OutputStream output = connection.getOutputStream()) { output.write(request); } }
+            requestControl.check();
             int status = connection.getResponseCode(); if (status != HttpURLConnection.HTTP_OK) throw new IOException("backend HTTP " + status);
             long declared = connection.getContentLengthLong(); int limit = binary ? StateTileDecoder.MAX_TILE_BYTES : MAX_PLAN_BYTES;
             if (declared <= 0 || declared > limit) throw new StateTileDecoder.ProtocolException("backend response length is invalid");
             String type = connection.getHeaderField("Content-Type"); String expected = binary ? "application/vnd.solar.state-tile+binary" : "application/json";
             if (type == null || !type.split(";", 2)[0].trim().equalsIgnoreCase(expected)) throw new StateTileDecoder.ProtocolException("backend response type is invalid");
-            return readBounded(connection.getInputStream(), limit);
-        } finally { if (connection != null) connection.disconnect(); }
+            byte[] response = readBounded(connection.getInputStream(), limit);
+            requestControl.check();
+            return response;
+        } finally {
+            if (connection != null) requestControl.unregister(connection);
+            if (connection != null) connection.disconnect();
+        }
     }
 
     private static byte[] readBounded(InputStream input, int limit) throws IOException { try (InputStream source = input; ByteArrayOutputStream output = new ByteArrayOutputStream(Math.min(limit, 64 * 1024))) { byte[] buffer = new byte[16 * 1024]; int total = 0, count; while ((count = source.read(buffer)) != -1) { checkCancelled(); if (count > limit - total) throw new StateTileDecoder.ProtocolException("backend response exceeds limit"); output.write(buffer, 0, count); total += count; } return output.toByteArray(); } }
@@ -220,5 +306,11 @@ public final class StateTileService {
     }
     private static long stringBytes(String value) { return value == null ? 0L : (long) value.length() * Character.BYTES; }
     private static void require(boolean condition, String message) throws StateTileDecoder.ProtocolException { if (!condition) throw new StateTileDecoder.ProtocolException(message); }
+    private void checkLoadCancelled() throws StateTileDecoder.ProtocolException {
+        if (Thread.currentThread().isInterrupted() || requestControl.cancelled.get()) {
+            throw new StateTileDecoder.ProtocolException("state load cancelled");
+        }
+    }
+
     private static void checkCancelled() throws StateTileDecoder.ProtocolException { if (Thread.currentThread().isInterrupted()) throw new StateTileDecoder.ProtocolException("state load cancelled"); }
 }

@@ -111,7 +111,7 @@ actor StateTileService {
                 if let cached = try await cache.read(key: key, expected: expected) {
                     decoded = cached
                 } else {
-                    let (data, response) = try await receive(path: "v1/state/tiles", body: ["planId": plan.planId, "sequence": sequence], binary: true)
+                    let (data, response) = try await receiveTileWithRetry(planId: plan.planId, sequence: sequence)
                     guard let etag = response.value(forHTTPHeaderField: "ETag") else {
                         throw StateTileFailure.invalid("State tile ETag missing.")
                     }
@@ -136,6 +136,24 @@ actor StateTileService {
         }
         try Task.checkCancellation()
         return result
+    }
+
+    /// A tile request is idempotent. Retry one interrupted transport or
+    /// checksum response after cancellation has been checked, so a transient
+    /// disconnect does not discard the complete observation.
+    private func receiveTileWithRetry(planId: String, sequence: Int) async throws -> (Data, HTTPURLResponse) {
+        var failure: Error?
+        for attempt in 0..<2 {
+            do {
+                try Task.checkCancellation()
+                return try await receive(path: "v1/state/tiles", body: ["planId": planId, "sequence": sequence], binary: true)
+            } catch {
+                failure = error
+                try Task.checkCancellation()
+                if attempt == 1 { throw error }
+            }
+        }
+        throw failure ?? CancellationError()
     }
 }
 
