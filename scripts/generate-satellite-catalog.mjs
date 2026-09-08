@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { digest } from './lib/inventory-snapshot.mjs'
 import { makeSatelliteCatalog } from './lib/satellite-catalog.mjs'
-import { SMALL_BODY_SATELLITE_SOURCES, smallBodySatelliteIdentities, smallBodyPrimaryIdentity, smallBodySourceLedger } from './lib/small-body-satellites.mjs'
+import { SMALL_BODY_SATELLITE_SOURCES, SMALL_BODY_SOURCE_ONLY_SYSTEMS, smallBodySatelliteIdentities, smallBodyPrimaryIdentity, smallBodySourceOnlyIdentities, smallBodySourceLedger } from './lib/small-body-satellites.mjs'
 
 const [archive, output, mode] = process.argv.slice(2)
 if (!archive || !output || (mode && mode !== '--replace-generated')) throw new Error('Usage: node scripts/generate-satellite-catalog.mjs VERIFIED_SURVEY OUTPUT.json [--replace-generated]')
@@ -30,9 +30,16 @@ for (const selection of SMALL_BODY_SATELLITE_SOURCES) {
   const primary = smallBodyPrimaryIdentity(selection, JSON.parse(sourceBytes), digest(sourceBytes))
   if (primary) primaries.push(primary)
 }
+const sourceOnlyBodies = []
+for (const system of SMALL_BODY_SOURCE_ONLY_SYSTEMS) {
+  const sourceBytes = await readFile(join(archive, `${system.id}.json`))
+  sourceOnlyBodies.push(...smallBodySourceOnlyIdentities(system, JSON.parse(sourceBytes), digest(sourceBytes)))
+}
 if (new Set(bodies.map(body => body.id)).size !== bodies.length || new Set(bodies.filter(body => body.naifId !== undefined).map(body => body.naifId)).size !== bodies.filter(body => body.naifId !== undefined).length) throw new Error('Duplicate selected satellite identity')
+if (new Set(sourceOnlyBodies.map(body => body.id)).size !== sourceOnlyBodies.length || sourceOnlyBodies.some(body => bodies.some(candidate => candidate.id === body.id))) throw new Error('Duplicate source-only satellite identity')
 const result = { schemaVersion: 1, generatedAt: new Date().toISOString(), primaries, sourceSelections,
   contract: 'Auditable satellite identities; no generated orbit, GM, phase, physical radius or claim of available ephemeris states.',
-  source: { surveySha256: digest(bytes), discovery: { url: 'https://ssd.jpl.nasa.gov/sats/discovery.html', bytes: report.discovery.bytes, sha256: report.discovery.sha256 }, sourcePages: report.pageEvidence.map(({ url, sha256 }) => ({ url, sha256 })) }, bodies }
+  source: { surveySha256: digest(bytes), discovery: { url: 'https://ssd.jpl.nasa.gov/sats/discovery.html', bytes: report.discovery.bytes, sha256: report.discovery.sha256 }, sourcePages: report.pageEvidence.map(({ url, sha256 }) => ({ url, sha256 })) }, bodies, sourceOnlyBodies }
 await writeFile(output, `${JSON.stringify(result, null, 2)}\n`, { flag: mode ? 'w' : 'wx' })
-console.log(JSON.stringify({ identities: bodies.length, mapped: bodies.filter(body => body.naifId !== undefined).length, unresolved: bodies.filter(body => body.naifId === undefined).length }))
+console.log(JSON.stringify({ identities: bodies.length, mapped: bodies.filter(body => body.naifId !== undefined).length,
+  unresolved: bodies.filter(body => body.naifId === undefined).length, sourceOnly: sourceOnlyBodies.length }))

@@ -3,10 +3,12 @@ import { bodyNaifId } from './ephemerisTargets'
 import type { CelestialBody } from '../types'
 
 export const SATELLITE_IDENTITIES = satelliteCatalog.bodies
+export const SOURCE_ONLY_IDENTITIES = satelliteCatalog.sourceOnlyBodies ?? []
 export const SMALL_BODY_PRIMARIES = satelliteCatalog.primaries
 const primaryById = new Map(SMALL_BODY_PRIMARIES.map(entry => [entry.id, entry]))
-const byNaifId = new Map(SATELLITE_IDENTITIES.filter(entry => entry.naifId !== undefined).map(entry => [entry.naifId, entry]))
-const byId = new Map(SATELLITE_IDENTITIES.map(entry => [entry.id, entry]))
+const ALL_IDENTITIES = [...SATELLITE_IDENTITIES, ...SOURCE_ONLY_IDENTITIES]
+const byNaifId = new Map(ALL_IDENTITIES.filter(entry => entry.naifId !== undefined).map(entry => [entry.naifId, entry]))
+const byId = new Map(ALL_IDENTITIES.map(entry => [entry.id, entry]))
 
 export function satelliteIdentity(body: Pick<CelestialBody, 'id' | 'naifId'>) {
   const naifId = bodyNaifId(body)
@@ -35,6 +37,7 @@ export function additionalSatelliteBodies(existing: CelestialBody[]): CelestialB
 export function satelliteSearchTerms(body: Pick<CelestialBody, 'id' | 'naifId'>): string {
   const entry = satelliteIdentity(body)
   const primary = primaryById.get(body.id)
-  return entry ? [entry.name, ...entry.aliases, entry.discoveryId, entry.naifId].filter(value => value !== undefined).join(' ')
+  const discoveryId = entry && 'discoveryId' in entry ? entry.discoveryId : undefined
+  return entry ? [entry.name, ...entry.aliases, discoveryId, entry.naifId].filter(value => value !== undefined).join(' ')
     : primary ? [primary.name, primary.designation, primary.naifId].join(' ') : ''
 }

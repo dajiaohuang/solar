@@ -31,8 +31,11 @@ and Patroclus source-only. The Patroclus JPL082/DE440 file has primary/companion
 offsets but no system trajectory. The separately archived Lucy solution 54/DE431
 barycenter is older and is not silently composed into a claimed same-source fit.
 Its raw companion label `Manoetius` is preserved in the ledger; this is not a
-formal-name adjudication or delivered heliocentric state. This ledger covers
-the frozen survey, not every publicly known satellite or every public source.
+formal-name adjudication or delivered heliocentric state. The catalog now keeps
+Patroclus and Manoetius in a separate `sourceOnlyBodies` identity list with the
+JPL082 hash and missing-center reason; they are not selectable state bodies and
+carry no orbit, GM, radius, position or velocity. This ledger covers the frozen
+survey, not every publicly known satellite or every public source.
 
 Dysnomia, Hiʻiaka and Namaka use the original published component offsets,
 not new Keplerian seed orbits. Their full windows end at **2030-01-02 TDB**;

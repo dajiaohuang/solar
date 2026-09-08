@@ -170,8 +170,11 @@ Haumea v001 is retained alongside the chosen v001b; Patroclus JPL082 is explicit
 source-only because it omits system target 20000617. The raw `Manoetius` name is
 retained, not silently rewritten from another publication. A separate older
 Lucy solution 54/DE431 system trajectory does not establish a same-source fit
-with JPL082/DE440. Unknown source additions require an explicit reviewed ledger
-decision; regeneration fails instead of silently omitting them.
+with JPL082/DE440. Regeneration records both explicit component identities in
+`sourceOnlyBodies`, pinned to JPL082 and marked unavailable until a compatible
+system trajectory is independently validated; they are not runtime state
+targets. Unknown source additions require an explicit reviewed ledger decision;
+regeneration fails instead of silently omitting them.
 
 The survey itself does not select sources. The separate offline integrator accepts
 a reviewed local JSON plan: `survey` and `surveySha256`, `cores` with `id` and

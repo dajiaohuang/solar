@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { SMALL_BODY_SATELLITE_SOURCES, smallBodySatelliteIdentities, smallBodyPrimaryIdentity, smallBodySourceLedger } from '../../scripts/lib/small-body-satellites.mjs'
+import { SMALL_BODY_SATELLITE_SOURCES, SMALL_BODY_SOURCE_ONLY_SYSTEMS, smallBodySatelliteIdentities, smallBodyPrimaryIdentity, smallBodySourceOnlyIdentities, smallBodySourceLedger } from '../../scripts/lib/small-body-satellites.mjs'
 import satelliteCatalog from '../../src/data/satelliteCatalog.json'
 import { majorBodiesById } from '../../src/data/majorBodies'
 import { SMALL_BODY_PRIMARIES, satelliteIdentity, satelliteSearchTerms } from '../../src/data/satelliteIdentities'
@@ -76,6 +76,23 @@ describe('source-backed small-body satellite identities', () => {
     expect(gap.components).toEqual([{ name: 'Patroclus', naifId: 920000617 }, { name: 'Manoetius', naifId: 120000617 }])
     expect(gap.targets).not.toContain(gap.missingCenter)
     expect([...majorBodiesById.values()].some(body => body.naifId === 120000617)).toBe(false)
+  })
+
+  it('publishes Patroclus and Manoetius as explicit identity-only source records', () => {
+    const system = SMALL_BODY_SOURCE_ONLY_SYSTEMS[0]
+    const sourceRecord = { source: { source: `https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/${system.id}.bsp` },
+      comments: 'Patroclus 920000617 0.07 1 15 SATORBINT\nManoetius 120000617 0.02 1 15 SATORBINT',
+      segments: system.components.map(component => ({ target: component.naifId, center: system.system, frame: 1, type: 2 })) }
+    const result = smallBodySourceOnlyIdentities(system, sourceRecord, sha)
+    expect(result.map(body => body.id)).toEqual(['naif:920000617', 'naif:120000617'])
+    expect(satelliteCatalog.sourceOnlyBodies.map(body => body.id).sort()).toEqual(['naif:120000617', 'naif:920000617'])
+    expect(satelliteCatalog.sourceOnlyBodies.every(body => body.ephemerisStatus === 'source-only-missing-compatible-system')).toBe(true)
+    for (const body of result) {
+      expect(body).toMatchObject({ ephemerisStatus: 'source-only-missing-compatible-system', systemNaifId: 20000617 })
+      for (const field of ['orbit', 'radiusKm', 'massKg']) expect(body).not.toHaveProperty(field)
+    }
+    expect(() => smallBodySourceOnlyIdentities(system, { ...sourceRecord, comments: sourceRecord.comments.replace('Manoetius', 'Menoetius') }, sha)).toThrow('name/number')
+    expect(() => smallBodySourceOnlyIdentities(system, { ...sourceRecord, segments: sourceRecord.segments.map(segment => ({ ...segment, center: 10 })) }, sha)).toThrow('center chain')
   })
 
   it('fails source reconciliation closed on unknown sources or altered source-only semantics', () => {
