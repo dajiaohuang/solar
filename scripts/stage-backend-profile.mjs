@@ -36,6 +36,11 @@ export async function stageBackendProfile({ root, output, profile = 'full' }) {
     }
   }
   await copyFile(join(root, 'src/data/ephemerisBodies.json'), join(output, 'ephemerisBodies.json'), constants.COPYFILE_EXCL)
+  try {
+    await copyFile(join(root, 'src/data/sourceOnlyBodies.json'), join(output, 'sourceOnlyBodies.json'), constants.COPYFILE_EXCL)
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+  }
   await copyFile(manifestPath, join(output, 'ephemeris-manifest.json'), constants.COPYFILE_EXCL)
   return { profile, files: manifest.files.length, bytes: totalBytes, linkedFiles, manifestSha256: createHash('sha256').update(manifestBytes).digest('hex') }
 }

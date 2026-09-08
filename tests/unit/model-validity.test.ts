@@ -150,11 +150,16 @@ describe('JPL approximate element validity', () => {
       fullManifestTargets: 471,
       identityOnlyBodies: 1,
       identityOnlyIds: ['sat:planet:saturn:provisional:S/2009 S1'],
+      sourceOnlyBodies: 2,
+      sourceOnlyIds: ['naif:120000617', 'naif:920000617'],
+      sourceOnlyBoundary: 'JPL082 publishes explicit Patroclus/Manoetius component offsets but omits compatible system target 20000617; these identities remain source-only and never imply an exact state or local orbit.',
       boundary: 'A pinned manifest target proves source delivery identity; an exact state still requires verified kernel bytes and a covered center chain at the requested epoch.',
       localOrbitBoundary: 'Catalog identities without generated local orbit elements remain source-backed current-state candidates; no fallback orbit is created for them.',
     })
     expect(new Set(numericSatelliteIds)).toHaveLength(471)
     expect(identityOnlyIds).toEqual(['sat:planet:saturn:provisional:S/2009 S1'])
+    expect(satelliteCatalog.sourceOnlyBodies).toHaveLength(spkDelivery.satelliteIdentityDelivery.sourceOnlyBodies)
+    expect(satelliteCatalog.sourceOnlyBodies.map((body) => body.id).sort()).toEqual(spkDelivery.satelliteIdentityDelivery.sourceOnlyIds)
     expect(numericSatelliteIds.every((id) => pagesTargets.has(id) && fullTargets.has(id))).toBe(true)
 
     const ephemerisById = new Map(ephemerisBodies.bodies.map((body) => [body.id, body]))

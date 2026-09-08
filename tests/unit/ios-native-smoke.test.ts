@@ -113,7 +113,7 @@ describe('isolated native iOS runtime validation', () => {
     expect(service).toContain('base.scheme == "https"')
     expect(service).not.toMatch(/serverTrust|URLProtocol|#if DEBUG/)
     expect(uiTests).toContain('https://127.0.0.1:18791')
-    expect(uiTests).toContain('3 verified states · 0 data gaps')
+    expect(uiTests).toContain('4 verified states · 1 data gap')
     expect(uiTests).toContain('XCUIDevice.shared.press(.home)')
   })
 })

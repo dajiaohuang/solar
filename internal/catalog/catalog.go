@@ -42,6 +42,14 @@ type Body struct {
 	Kind               string       `json:"kind"`
 	ParentID           string       `json:"parentId,omitempty"`
 	Source             string       `json:"source"`
+	IdentityStatus     string       `json:"identityStatus,omitempty"`
+	EphemerisStatus    string       `json:"ephemerisStatus,omitempty"`
+	SourceURL          string       `json:"sourceUrl,omitempty"`
+	SourceSHA256       string       `json:"sourceSha256,omitempty"`
+	SourceEphemerides  []string     `json:"sourceEphemerides,omitempty"`
+	PrimaryNAIFID      int          `json:"primaryNaifId,omitempty"`
+	SystemNAIFID       int          `json:"systemNaifId,omitempty"`
+	Provenance         string       `json:"provenance,omitempty"`
 	DatasetVersion     string       `json:"datasetVersion"`
 	Availability       Availability `json:"availability"`
 	MissingReason      string       `json:"missingReason,omitempty"`
@@ -163,6 +171,28 @@ type ephemerisBodyFile struct {
 	} `json:"bodies"`
 }
 
+type sourceOnlyFile struct {
+	SchemaVersion int              `json:"schemaVersion"`
+	Bodies        []sourceOnlyBody `json:"bodies"`
+}
+
+type sourceOnlyBody struct {
+	ID                string   `json:"id"`
+	NAIFID            int      `json:"naifId"`
+	Name              string   `json:"name"`
+	Kind              string   `json:"kind"`
+	Source            string   `json:"source"`
+	IdentityStatus    string   `json:"identityStatus"`
+	EphemerisStatus   string   `json:"ephemerisStatus"`
+	MissingReason     string   `json:"missingReason"`
+	SourceEphemerides []string `json:"sourceEphemerides"`
+	SourceURL         string   `json:"sourceUrl"`
+	SourceSHA256      string   `json:"sourceSha256"`
+	PrimaryNAIFID     int      `json:"primaryNaifId"`
+	SystemNAIFID      int      `json:"systemNaifId"`
+	Provenance        string   `json:"provenance"`
+}
+
 // Load requires a deliberate data directory. It never downloads or guesses a path.
 // Manifest targets are retained even when their binary kernel is not packaged.
 func Load(dataDir string) (*Catalog, error) {
@@ -188,6 +218,10 @@ func Load(dataDir string) (*Catalog, error) {
 		return loadBuiltins(fmt.Errorf("manifest has %d files; limit is %d", len(m.Files), maxManifestKernelFiles))
 	}
 	h := sha256.Sum256(mb)
+	sourceOnly, sourceOnlyErr := readSourceOnlyBodies(dataDir, m.ID)
+	if sourceOnlyErr != nil {
+		return loadBuiltins(sourceOnlyErr)
+	}
 	perKernelCache := int64(spk.DefaultCacheBytes)
 	if len(m.Files) > 0 && perKernelCache*int64(len(m.Files)) > globalKernelCacheBytes {
 		perKernelCache = globalKernelCacheBytes / int64(len(m.Files))
@@ -199,6 +233,9 @@ func Load(dataDir string) (*Catalog, error) {
 	manifestTargetIDs := make(map[int]struct{})
 	// Keep stable, well-known body identities available even without the large kernels.
 	for _, b := range builtins() {
+		c.add(b)
+	}
+	for _, b := range sourceOnly {
 		c.add(b)
 	}
 	for _, f := range m.Files {
@@ -227,6 +264,12 @@ func Load(dataDir string) (*Catalog, error) {
 		}
 		for _, naif := range f.Targets {
 			id := "naif:" + strconv.Itoa(naif)
+			if existing, ok := c.byID[id]; ok && existing.EphemerisStatus == "source-only-missing-compatible-system" {
+				// A source-only identity is deliberately not promoted merely because
+				// a future manifest happens to reuse its component target. The
+				// sidecar must be regenerated with an explicit compatible center.
+				continue
+			}
 			b, ok := c.byID[id]
 			if !ok {
 				b = Body{ID: id, NAIFID: naif, Name: "NAIF " + strconv.Itoa(naif), Kind: "unknown", Source: f.ID, DatasetVersion: m.ID, Availability: Missing}
@@ -271,6 +314,9 @@ func Load(dataDir string) (*Catalog, error) {
 		}
 	}
 	for id, b := range c.byID {
+		if b.EphemerisStatus == "source-only-missing-compatible-system" {
+			continue
+		}
 		if b.NAIFID != 0 && len(c.byTarget[b.NAIFID]) > 0 {
 			b.Availability = AvailableOperational
 			b.MissingReason = ""
@@ -280,6 +326,49 @@ func Load(dataDir string) (*Catalog, error) {
 	}
 	c.rebuild()
 	return c, nil
+}
+
+func readSourceOnlyBodies(dataDir, version string) ([]Body, error) {
+	raw, err := os.ReadFile(filepath.Join(dataDir, "sourceOnlyBodies.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read source-only identities: %w", err)
+	}
+	var file sourceOnlyFile
+	if err := json.Unmarshal(raw, &file); err != nil {
+		return nil, fmt.Errorf("parse source-only identities: %w", err)
+	}
+	if file.SchemaVersion != 1 || len(file.Bodies) == 0 || len(file.Bodies) > 64 {
+		return nil, fmt.Errorf("invalid source-only identity file")
+	}
+	seen := make(map[string]struct{}, len(file.Bodies))
+	result := make([]Body, 0, len(file.Bodies))
+	for _, source := range file.Bodies {
+		if !strings.HasPrefix(source.ID, "naif:") || source.NAIFID <= 0 || source.ID != "naif:"+strconv.Itoa(source.NAIFID) || source.Name == "" || source.Kind == "" || source.Source == "" || source.IdentityStatus == "" || source.EphemerisStatus != "source-only-missing-compatible-system" || source.MissingReason == "" || source.SourceURL == "" || !validSHA256(source.SourceSHA256) || len(source.SourceEphemerides) == 0 || source.PrimaryNAIFID <= 0 || source.SystemNAIFID <= 0 || source.Provenance == "" {
+			return nil, fmt.Errorf("invalid source-only identity %q", source.ID)
+		}
+		if _, ok := seen[source.ID]; ok {
+			return nil, fmt.Errorf("duplicate source-only identity %q", source.ID)
+		}
+		seen[source.ID] = struct{}{}
+		result = append(result, Body{ID: source.ID, NAIFID: source.NAIFID, Name: source.Name, Kind: source.Kind, Source: source.Source,
+			IdentityStatus: source.IdentityStatus, EphemerisStatus: source.EphemerisStatus, SourceURL: source.SourceURL,
+			SourceSHA256: source.SourceSHA256, SourceEphemerides: append([]string(nil), source.SourceEphemerides...),
+			PrimaryNAIFID: source.PrimaryNAIFID, SystemNAIFID: source.SystemNAIFID, Provenance: source.Provenance,
+			DatasetVersion: version, Availability: Missing, MissingReason: source.MissingReason, Model: "exact-only"})
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
+	return result, nil
+}
+
+func validSHA256(value string) bool {
+	if len(value) != sha256.Size*2 {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
 }
 
 // verifyManifestFile is intentionally strict for a file that is present on

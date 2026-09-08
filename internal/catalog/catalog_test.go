@@ -30,6 +30,25 @@ func TestLoadManifestRetainsSourceOnlyTargets(t *testing.T) {
 	}
 }
 
+func TestLoadRetainsExplicitSourceOnlySatelliteGap(t *testing.T) {
+	d := t.TempDir()
+	if err := os.WriteFile(filepath.Join(d, "ephemeris-manifest.json"), []byte(`{"id":"test-v1","files":[{"id":"k","path":"not-present.bsp","targets":[10],"startEt":1,"endEt":2}]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	sourceOnly := `{"schemaVersion":1,"bodies":[{"id":"naif:920000617","naifId":920000617,"name":"Patroclus","kind":"asteroid","source":"jpl-satellite-source-only","identityStatus":"source-identified-not-in-discovery-snapshot","ephemerisStatus":"source-only-missing-compatible-system","missingReason":"missing-compatible-system-center","sourceEphemerides":["tnosat_v001_20000617_jpl082_20230601"],"sourceUrl":"https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20000617_jpl082_20230601.bsp","sourceSha256":"f9f8ff5dc582253937e78ee205179041a517bbe2205aaed764bb5669ff306ea1","primaryNaifId":920000617,"systemNaifId":20000617,"provenance":"Published component offset with an explicit source identity; compatible system center is absent, so no exact state is delivered."}]}`
+	if err := os.WriteFile(filepath.Join(d, "sourceOnlyBodies.json"), []byte(sourceOnly), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, ok := c.Get("naif:920000617")
+	if !ok || b.Availability != Missing || b.MissingReason != "missing-compatible-system-center" || b.EphemerisStatus != "source-only-missing-compatible-system" || b.SourceURL == "" || b.SystemNAIFID != 20000617 {
+		t.Fatalf("unexpected source-only satellite body: %+v", b)
+	}
+}
+
 func TestLazyVerificationRejectsPackagedKernelWithManifestIdentityMismatch(t *testing.T) {
 	d := t.TempDir()
 	if err := os.WriteFile(filepath.Join(d, "bad.bsp"), []byte("not-a-kernel"), 0600); err != nil {
