@@ -264,7 +264,11 @@ public final class ObservationUITest {
     }
 
     private static void fill(String hint, String value) {
-        shown(withHint(hint)).perform(scrollTo(), click(), clearText(), replaceText(value), closeSoftKeyboard());
+        // Use Espresso's default root for editor fields. The touchable-root
+        // matcher can select Android's non-focusable insertion-handle popup
+        // after the previous field closes, hiding the real EditText from the
+        // matcher even though it remains on the activity screen.
+        onView(withHint(hint)).perform(scrollTo(), click(), clearText(), replaceText(value), closeSoftKeyboard());
     }
 
     private static void waitForEvidence(String... rows) {
