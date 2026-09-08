@@ -321,14 +321,14 @@ public final class ObservationUITest {
         // A system ANR dialog can cover the activity while the activity still
         // reports window focus. Probe and dismiss it before relying on that
         // focus signal; with no dialog this is a no-op.
-        dismissQuickstepNotResponding(instrumentation);
+        boolean quickstepDialogSeen = dismissQuickstepNotResponding(instrumentation);
         // API 36's freshly booted emulator can show a system Quickstep
         // "isn't responding" dialog above the app. That dialog owns focus and
         // makes Espresso's default root picker fail even though the target
         // activity is still resumed. Dismiss only when the target is already
         // unfocused; if no dialog is present, the subsequent reorder restores
         // the existing activity without changing the test's UI actions.
-        if (!hasWindowFocus()) {
+        if (!hasWindowFocus() && quickstepDialogSeen) {
             try {
                 instrumentation.getUiAutomation().performGlobalAction(
                         AccessibilityService.GLOBAL_ACTION_BACK);
@@ -381,19 +381,22 @@ public final class ObservationUITest {
         });
     }
 
-    private static void dismissQuickstepNotResponding(Instrumentation instrumentation) {
+    private static boolean dismissQuickstepNotResponding(Instrumentation instrumentation) {
         long deadline = SystemClock.uptimeMillis() + 1_500;
+        boolean dialogSeen = false;
         while (SystemClock.uptimeMillis() < deadline) {
             AccessibilityNodeInfo activeRoot = null;
             try {
                 android.app.UiAutomation automation = instrumentation.getUiAutomation();
                 activeRoot = automation.getRootInActiveWindow();
-                if (clickWaitAction(activeRoot)) return;
+                dialogSeen |= hasWaitAction(activeRoot);
+                if (clickWaitAction(activeRoot)) return true;
                 for (AccessibilityWindowInfo window : automation.getWindows()) {
                     AccessibilityNodeInfo root = null;
                     try {
                         root = window.getRoot();
-                        if (clickWaitAction(root)) return;
+                        dialogSeen |= hasWaitAction(root);
+                        if (clickWaitAction(root)) return true;
                     } finally {
                         if (root != null) root.recycle();
                         window.recycle();
@@ -406,6 +409,11 @@ public final class ObservationUITest {
             }
             SystemClock.sleep(100);
         }
+        return dialogSeen;
+    }
+
+    private static boolean hasWaitAction(AccessibilityNodeInfo root) {
+        return root != null && !root.findAccessibilityNodeInfosByText("Wait").isEmpty();
     }
 
     private static boolean clickWaitAction(AccessibilityNodeInfo root) {
