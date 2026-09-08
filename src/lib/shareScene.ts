@@ -20,6 +20,9 @@ export function encodeCurrentScene() {
   const ui = uiStore.getState()
   const mission = missionStore.getState()
   const capabilities = VIEW_CAPABILITIES[simulation.viewMode]
+  const referenced = new Set([...selection.selectedIds, simulation.referenceId, ...(simulation.comparisonEnabled ? [simulation.comparisonReferenceId] : [])])
+  const sourceSelection = selection.sourceSceneError || selection.sourceScene?.ids.some(id => referenced.has(id))
+    ? selection.sourceSceneEncoded ?? undefined : undefined
   if (ui.route === 'home') {
     const language = ui.language === 'zh' ? '?lang=zh' : ''
     return `${sceneBaseUrl()}${language}`
@@ -44,6 +47,7 @@ export function encodeCurrentScene() {
     compareRef: simulation.comparisonReferenceId,
     compare: simulation.comparisonEnabled,
     bodies: selection.selectedIds,
+    sourceSelection,
     jd: simulationClock.getJulianDay(),
     zoom: simulation.zoom,
     speed: simulationClock.getSnapshot().rateDaysPerSecond,

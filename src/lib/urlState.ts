@@ -18,6 +18,8 @@ export type AppUrlState = {
   compareRef?: BodyId
   compare?: boolean
   bodies?: BodyId[]
+  /** Opaque directory snapshot pin; validated before a source scene can load. */
+  sourceSelection?: string
   jd?: number
   zoom?: number
   speed?: number
@@ -94,7 +96,10 @@ export function encodeUrlState(state: AppUrlState) {
   if (state.ref && state.ref !== 'sun') params.set('ref', state.ref)
   if (state.compareRef) params.set('compareRef', state.compareRef)
   if (state.compare) params.set('compare', '1')
-  if (state.bodies?.length) params.set('bodies', state.bodies.join(','))
+  if (state.sourceSelection !== undefined) {
+    params.set('sourceSelection', state.sourceSelection)
+    params.set('bodies', JSON.stringify(state.bodies ?? []))
+  } else if (state.bodies?.length) params.set('bodies', state.bodies.join(','))
   if (state.jd !== undefined) params.set('jd', state.jd.toFixed(5))
   if (state.zoom !== undefined && state.zoom !== 1) params.set('zoom', state.zoom.toFixed(2))
   if (state.speed !== undefined && state.speed !== 30) params.set('speed', String(state.speed))
@@ -160,7 +165,17 @@ export function decodeUrlState(search = typeof window === 'undefined' ? '' : win
   if (compareRef) state.compareRef = compareRef
   state.compare = params.get('compare') === '1'
   const bodies = params.get('bodies')
-  if (bodies) state.bodies = bodies.split(',').filter(Boolean)
+  if (params.has('sourceSelection')) {
+    state.sourceSelection = params.get('sourceSelection')!
+    try {
+      const ids: unknown = JSON.parse(bodies ?? '[]')
+      if (!Array.isArray(ids) || ids.some(id => typeof id !== 'string' || !id || new TextEncoder().encode(id).length > 512 || [...id].some(character => { const code = character.charCodeAt(0); return code < 0x20 || code === 0x7f }))) throw new Error('Invalid source IDs')
+      state.bodies = [...new Set(ids as string[])]
+    } catch {
+      // Preserve a blocked scene rather than silently selecting the defaults.
+      state.bodies = []; state.sourceSelection = JSON.stringify({ invalidSourceSelection: state.sourceSelection, invalidBodies: bodies })
+    }
+  } else if (bodies) state.bodies = bodies.split(',').filter(Boolean)
   state.jd = finite(params.get('jd'))
   state.zoom = finite(params.get('zoom'))
   state.speed = finite(params.get('speed'))

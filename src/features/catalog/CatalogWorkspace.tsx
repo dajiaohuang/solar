@@ -237,7 +237,12 @@ export function CatalogWorkspace() {
         </div>
       </div>
 
-      <SourceIdentityBrowser />
+      <SourceIdentityBrowser onSelectPage={(page) => {
+        const base = import.meta.env.VITE_SOLAR_API_BASE_URL?.trim() || ''
+        const selected = selectionActions.selectSourcePage(page, base)
+        if (selected) uiActions.navigate('explorer')
+        return selected
+      }} />
       <div className="catalog-layout">
         <aside className="filter-panel glass-panel">
           <DatasetCard />

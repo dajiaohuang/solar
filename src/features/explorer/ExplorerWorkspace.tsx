@@ -39,6 +39,8 @@ import { summarizeBackendCoverage } from '../../lib/backendCoverage'
 import { concatCurrentPositions, currentPositionDetails, EMPTY_CURRENT_POSITIONS } from '../../lib/currentPositions'
 import { exportBackendTrajectoryAudit } from '../../lib/backendTrajectories'
 import { saveTextExport } from '../../lib/platform'
+import { sourcePinFor } from '../../lib/sourceScene'
+import type { TranslationKey } from '../../i18n/en'
 import { uiActions } from '../../state/ui-store'
 
 const TrajectoryCanvas3D = lazy(async () => {
@@ -345,6 +347,9 @@ export function ExplorerWorkspace() {
   // renderer's adaptive draw/trail budgets remain independent from protocol
   // coverage, so selected identities are not silently dropped at 510 rows.
   const currentStateReferenceIds = useMemo(() => [simulation.referenceId, ...(simulation.comparisonEnabled ? [simulation.comparisonReferenceId] : [])], [simulation.comparisonEnabled, simulation.comparisonReferenceId, simulation.referenceId])
+  const sourcePin = useMemo(() => selection.sourceScene && selection.sourceBase
+    ? sourcePinFor(selection.sourceScene, selection.sourceBase)
+    : undefined, [selection.sourceBase, selection.sourceScene])
   const currentStates = useStateTiles({
     // Protocol-sized plans are created as needed. Renderer budgets do not
     // silently truncate the exact-state identity set.
@@ -357,6 +362,7 @@ export function ExplorerWorkspace() {
     epochUtcJd: requestedJulianDay,
     isPlaying: clock.isPlaying,
     seekRevision: clock.seekRevision,
+    sourcePin,
   })
   // A backend frame is an audited snapshot, so its UTC epoch is the only
   // epoch allowed beside that frame while a newer request is loading.
@@ -443,8 +449,9 @@ export function ExplorerWorkspace() {
   return (
     <div className={`explorer-workspace ${inspectorOpen ? 'inspector-open' : ''}`}>
       <ControlDrawer bodies={allBodies} referenceOptions={allBodies.filter((body) => body.kind !== 'spacecraft')} onResetView={resetView} trajectoryAudit={primaryFrame.trajectoryAudit ?? (PRODUCT_PROFILE === 'full' ? null : undefined)} />
-      <main className="explorer-stage">
+        <main className="explorer-stage">
         <SimulationControls />
+        {selection.sourceSceneError && <div className="error-banner" role="alert">{t(selection.sourceSceneError as TranslationKey)}</div>}
         {simulation.showCatalogCloud && catalog.sampleError && (
           <div className="error-banner catalog-cloud-error" role="alert">{catalogSampleErrorMessage(catalog.sampleError, t)}</div>
         )}

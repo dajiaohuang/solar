@@ -42,6 +42,7 @@ export function availabilityAttributes(result: Availability) {
  * Preserve the original URL separately; never filter bodies into a new scene. */
 export function sceneAvailability(scene: AppUrlState, profile = PRODUCT_PROFILE): Availability {
   if (profile === 'full') return permitted
+  if (scene.sourceSelection !== undefined) return denied('catalog', 'source-directory')
   const route = routeAvailability(scene.route ?? 'explorer', profile)
   if (!route.available) return route
   for (const id of [...(scene.bodies ?? []), scene.ref, scene.compareRef, scene.focused, scene.missionFrom, scene.missionTo]) {

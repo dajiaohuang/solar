@@ -99,7 +99,7 @@ export function BodyInspector({ body, currentPositions, bodiesById }: Props) {
       ? t('fixedMeanEllipseBoundary')
       : t('illustrativeFixedEllipseBoundary')
   const phaseNames = { 'new': t('phaseNew'), 'waxing-crescent': t('phaseWaxingCrescent'), 'first-quarter': t('phaseFirstQuarter'), 'waxing-gibbous': t('phaseWaxingGibbous'), 'full': t('phaseFull'), 'waning-gibbous': t('phaseWaningGibbous'), 'last-quarter': t('phaseLastQuarter'), 'waning-crescent': t('phaseWaningCrescent') }
-  const kindLabels = body ? { star: t('bodyKindStar'), planet: t('bodyKindPlanet'), moon: t('bodyKindMoon'), dwarfPlanet: t('bodyKindDwarfPlanet'), asteroid: t('bodyKindAsteroid'), spacecraft: t('bodyKindSpacecraft') } : null
+  const kindLabels = body ? { star: t('bodyKindStar'), planet: t('bodyKindPlanet'), moon: t('bodyKindMoon'), dwarfPlanet: t('bodyKindDwarfPlanet'), asteroid: t('bodyKindAsteroid'), spacecraft: t('bodyKindSpacecraft'), sourceRecord: t('bodyKindSourceRecord') } : null
   const profileId = `profile-${(body?.id ?? 'none').replace(/[^a-zA-Z0-9_-]/g, '-')}`
   const panelProps = (item: Tab) => ({ id: `${profileId}-panel-${item}`, 'aria-labelledby': `${profileId}-tab-${item}`, role: 'tabpanel' as const })
 

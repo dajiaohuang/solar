@@ -3,7 +3,11 @@ import { useI18n } from '../../i18n/context'
 import { PRODUCT_PROFILE } from '../../lib/productAvailability'
 import { inspectSourceIdentityPage, loadSourceIdentityPage, type SourceIdentityPage } from '../../lib/sourceIdentityPage'
 
-export function SourceIdentityBrowser() {
+type Props = {
+  onSelectPage?: (page: SourceIdentityPage) => boolean
+}
+
+export function SourceIdentityBrowser({ onSelectPage }: Props) {
   const { t } = useI18n()
   const [query, setQuery] = useState(''), [epoch, setEpoch] = useState('2461287.5')
   const [page, setPage] = useState<SourceIdentityPage | null>(null)
@@ -56,6 +60,13 @@ export function SourceIdentityBrowser() {
         <p>{row.category} · {row.source} · {row.sourceRow}</p>
         <p>{t('sourceIdentityAssertion')}: {row.identityStatus} · {row.ephemerisStatus}</p>
       </li>)}</ul>
+      {page.items.length > 0 && onSelectPage && <>
+        <button className="primary-button" data-testid="source-identity-select-page"
+          onClick={() => { onSelectPage(page) }}>
+          {t('sourceIdentitySelectPage')}
+        </button>
+        <p>{t('sourceIdentitySelectBoundary')}</p>
+      </>}
       <label className="field"><span>{t('sourceIdentityEpoch')}</span><input value={epoch} onChange={event => { cancel(); setEpoch(event.target.value); setResult(null) }} /></label>
       <button className="secondary-button" disabled={!page.items.length || status === 'loading'} onClick={() => void run('states')}>{t('sourceIdentityInspect')}</button>
     </>}

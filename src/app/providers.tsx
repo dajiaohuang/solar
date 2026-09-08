@@ -82,6 +82,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
       arrivalDate: initial.arrivalDate ?? DEFAULT_MISSION_STATE.arrivalDate,
     })
     selectionActions.setSelectedIds(selectedIds)
+    selectionActions.restoreSourceScene(initial.sourceSelection, import.meta.env.VITE_SOLAR_API_BASE_URL?.trim() || null, initial.sourceSelection ? selectedIds : undefined)
     selectionActions.focus(focusedId)
     simulationActions.patch({
       ...DEFAULT_SIMULATION_STATE,

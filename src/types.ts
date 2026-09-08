@@ -1,8 +1,8 @@
 export type BodyId = string
 
-export type BodyKind = 'star' | 'planet' | 'moon' | 'dwarfPlanet' | 'asteroid' | 'spacecraft'
+export type BodyKind = 'star' | 'planet' | 'moon' | 'dwarfPlanet' | 'asteroid' | 'spacecraft' | 'sourceRecord'
 
-export type OrbitSource = 'jpl-approx' | 'jpl-satellite-mean' | 'jpl-satellite-inventory' | 'jpl-sbdb' | 'mpcorb' | 'horizons' | 'curated-approx' | 'schematic' | 'custom' | 'jpl-spk-osculating-fallback'
+export type OrbitSource = 'jpl-approx' | 'jpl-satellite-mean' | 'jpl-satellite-inventory' | 'jpl-sbdb' | 'mpcorb' | 'horizons' | 'curated-approx' | 'schematic' | 'custom' | 'jpl-spk-osculating-fallback' | 'source-inventory'
 
 export type SatelliteOrbitEvidence = {
   sourceFrame: 'jpl-ecliptic' | 'undocumented-illustrative'
@@ -109,6 +109,10 @@ export type CelestialBody = {
   color: string
   size: number
   source: OrbitSource
+  sourceIdentity?: {
+    id: string; name: string; designation: string; category: string; source: string; sourceRow: number
+    identityStatus: string; ephemerisStatus: string; parentId: string; confirmation: string
+  }
   satelliteOrbitEvidence?: SatelliteOrbitEvidence
   orbitRepresents?: 'earth-moon-barycenter'
   positionRepresents?: 'earth-geocenter'

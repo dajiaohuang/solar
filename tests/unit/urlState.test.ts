@@ -38,6 +38,17 @@ describe('reproducible scene URLs', () => {
     expect(decoded.arrivalDate).toBe('2027-08-01')
   })
 
+  it('round-trips a pinned source selection without comma-splitting raw IDs', () => {
+    const sourceSelection = JSON.stringify({
+      catalogVersion: 'catalog-v1', catalogManifestSha256: 'a'.repeat(64), inventoryManifestSha256: 'b'.repeat(64),
+      ids: ['source,one', 'source:two'],
+    })
+    const encoded = encodeUrlState({ route: 'explorer', sourceSelection, bodies: ['source,one', 'source:two'], focused: 'source,one' })
+    const decoded = decodeUrlState(`?${encoded}`)
+    expect(decoded.sourceSelection).toBe(sourceSelection)
+    expect(decoded.bodies).toEqual(['source,one', 'source:two'])
+  })
+
   it('does not reinterpret retired v2/v3 scenes as the current contract', () => {
     for (const version of [2, 3]) {
       const decoded = decodeUrlState(`?v=${version}&ref=earth&view=2d&catalogSample=mobile&catalogSampleCount=8000&catalogCloud=1&quality=max`)

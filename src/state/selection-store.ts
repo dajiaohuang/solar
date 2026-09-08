@@ -2,12 +2,18 @@ import type { BodyId, CelestialBody } from '../types'
 import { createStore } from './createStore'
 import { bodyAvailability, sceneAvailability } from '../lib/productAvailability'
 import { availabilityActions } from './availability-store'
+import { parseSourceScene, sourceRecordBody, sourceSceneFromPage, sourcePinFor, type SourceSceneIdentity } from '../lib/sourceScene'
+import type { SourceIdentityPage } from '../lib/sourceIdentityPage'
 
 type SelectionState = {
   selectedIds: BodyId[]
   focusedId: BodyId | null
   catalogBodies: Record<BodyId, CelestialBody>
   savedCollections: Record<string, BodyId[]>
+  sourceScene: SourceSceneIdentity | null
+  sourceSceneEncoded: string | null
+  sourceSceneError: string | null
+  sourceBase: string | null
 }
 function loadCollections() {
   try {
@@ -25,6 +31,7 @@ const initialSelectionState: SelectionState = {
   selectedIds: DEFAULT_SELECTED_IDS,
   focusedId: DEFAULT_FOCUSED_ID,
   catalogBodies: {},
+  sourceScene: null, sourceSceneEncoded: null, sourceSceneError: null, sourceBase: null,
   savedCollections: typeof window === 'undefined' ? {} : loadCollections(),
 }
 
@@ -39,9 +46,34 @@ function persistCollections(collections: Record<string, BodyId[]>) {
 }
 
 export const selectionActions = {
+  selectSourcePage(page: SourceIdentityPage, base: string) {
+    const identity = sourceSceneFromPage(page), pin = sourcePinFor(identity, base)
+    if (!availabilityActions.require(sceneAvailability({ bodies: identity.ids, sourceSelection: JSON.stringify(identity) }))) return false
+    const retained = Object.fromEntries(Object.entries(selectionStore.getState().catalogBodies).filter(([, body]) => body.source !== 'source-inventory'))
+    selectionStore.setState({ catalogBodies: { ...retained, ...Object.fromEntries(page.items.map(row => [row.id, sourceRecordBody(row.id, row)])) },
+      selectedIds: [...identity.ids], focusedId: identity.ids[0], sourceScene: identity,
+      sourceSceneEncoded: JSON.stringify(identity), sourceSceneError: null, sourceBase: pin.base })
+    return true
+  },
+  restoreSourceScene(encoded: string | undefined, base: string | null, expectedIds?: BodyId[]) {
+    const retained = Object.fromEntries(Object.entries(selectionStore.getState().catalogBodies).filter(([, body]) => body.source !== 'source-inventory'))
+    if (encoded === undefined) {
+      selectionStore.setState({ catalogBodies: retained, sourceScene: null, sourceSceneEncoded: null, sourceSceneError: null, sourceBase: null })
+      return
+    }
+    try {
+      const identity = parseSourceScene(encoded), pin = sourcePinFor(identity, base ?? '')
+      if (expectedIds && (expectedIds.length !== identity.ids.length || expectedIds.some(id => !identity.ids.includes(id)))) throw new Error('Source selection IDs do not match its pinned identity')
+      selectionStore.setState({ catalogBodies: { ...retained, ...Object.fromEntries(identity.ids.map(id => [id, sourceRecordBody(id)])) },
+        selectedIds: [...identity.ids], sourceScene: identity, sourceSceneEncoded: JSON.stringify(identity), sourceSceneError: null, sourceBase: pin.base })
+    } catch {
+      selectionStore.setState({ catalogBodies: retained, selectedIds: encoded === undefined ? selectionStore.getState().selectedIds : [], sourceScene: null, sourceSceneEncoded: encoded,
+        sourceSceneError: 'sourceIdentitySelectionError', sourceBase: null })
+    }
+  },
   setSelectedIds(selectedIds: BodyId[]) {
     if (!availabilityActions.require(sceneAvailability({ bodies: selectedIds }))) return false
-    selectionStore.setState({ selectedIds: [...new Set(selectedIds)] })
+    selectionStore.setState({ selectedIds: [...new Set(selectedIds)], sourceSceneError: null })
     return true
   },
   toggle(bodyId: BodyId) {

@@ -161,6 +161,15 @@ describe('current-state worker transfer', () => {
     const all = currentStateObservationTransfers(value)
     expect(new Set(all).size).toBe(all.length)
   })
+
+  it('rejects a pinned source scene before requesting any state plan when the inventory manifest drifts', async () => {
+    const runtime = await fixture()
+    await expect(loadCurrentStateObservation({ ...input, sourcePin: {
+      base: input.base, catalogVersion: 'fixture', catalogManifestSha256: hash, inventoryManifestSha256: 'd'.repeat(64),
+    }, fetcher: runtime.fetcher, signal: new AbortController().signal })).rejects.toThrow('snapshot changed')
+    expect(runtime.fetcher).toHaveBeenCalledTimes(1)
+    expect(runtime.fetcher.mock.calls.every(([url]) => String(url).endsWith('/catalog/manifest'))).toBe(true)
+  })
 })
 
 function clientPort() {

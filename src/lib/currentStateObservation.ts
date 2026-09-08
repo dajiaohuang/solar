@@ -3,6 +3,7 @@ import { chunkStatePlanIds, fetchStateTiles, frameFromStateTileProjection, proje
 import { fetchStateTilePlan } from './stateTileClient'
 import type { BackendFrame } from './backendFrames'
 import type { BodyId, CelestialBody } from '../types'
+import { requireSourcePin, type SourceScenePin } from './sourceScene'
 
 export type CurrentStateObservationRequest = {
   base: string
@@ -11,6 +12,7 @@ export type CurrentStateObservationRequest = {
   referenceIds: BodyId[]
   epochTdbJd: number
   epochUtcJd: number
+  sourcePin?: SourceScenePin
 }
 
 /** Internal worker result. Original HTTP bytes are verified before this
@@ -29,6 +31,7 @@ export async function loadCurrentStateObservation(params: CurrentStateObservatio
   if (!Number.isFinite(params.epochTdbJd) || !Number.isFinite(params.epochUtcJd) || !params.requestedIds.size) throw new Error('Invalid current-state observation request')
   const fetcher = params.fetcher ?? fetch
   const manifest = validateStateTileManifest(await readStateTileJson(await fetcher(`${params.base}/v1/catalog/manifest`, { signal: params.signal }), 'State catalog manifest'))
+  if (params.sourcePin) requireSourcePin(params.sourcePin, params.base, manifest)
   const tiles: StateTile[] = [], planRecordCounts: number[] = []
   // Plans are serial; each plan admits at most two tile transfers. No partial
   // selection is published if a later plan fails or cancellation is observed.

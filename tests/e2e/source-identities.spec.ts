@@ -41,6 +41,29 @@ test('source directory is explicit, bounded, cursor-driven and clears stale evid
   await page.screenshot({ path: test.info().outputPath('source-identities-error-zh.png') })
 })
 
+test('selecting a source page pins its raw identities in the Observation Deck URL', async ({ page }) => {
+  const hash = 'b'.repeat(64)
+  await page.route('**/solar-test-api/v1/catalog/manifest', route => route.fulfill({ json: {
+    apiVersion: 'solar.api/v1', catalogVersion: 'fixture-v1', catalogManifestSha256: 'a'.repeat(64), inventoryManifestSha256: hash,
+  } }))
+  await page.route('**/solar-test-api/v1/identities?*', route => route.fulfill({ json: {
+    apiVersion: 'solar.api/v1', catalogVersion: 'fixture-v1', inventoryManifestSha256: hash,
+    sourceRecords: true, identityAssertions: true, uniqueBodySemantics: 'not-deduplicated', totalRecords: 2, limit: 50,
+    items: ['source,one', 'source:two'].map((id, sourceRow) => ({ id, name: id, category: 'asteroid', source: 'fixture', sourceRow, identityStatus: 'source-designation', ephemerisStatus: 'unmapped' })),
+    nextPageToken: '',
+  } }))
+  await page.goto('./?v=4&page=catalog&lang=en')
+  const browser = page.getByTestId('source-identity-browser')
+  await browser.locator(':scope > summary').click()
+  await browser.getByRole('button', { name: 'Browse from first page' }).click()
+  await expect(browser.getByTestId('source-identity-select-page')).toBeVisible()
+  const explorerUrl = page.waitForURL(/sourceSelection=/)
+  await browser.getByTestId('source-identity-select-page').click()
+  await explorerUrl
+  expect(page.url()).toContain('source%2Cone')
+  expect(page.url()).toContain('source%3Atwo')
+})
+
 test('collapsing a source directory cancels and prevents a late page publication', async ({ page }) => {
   let finishResponse!: () => void
   const responseFinished = new Promise<void>(resolve => { finishResponse = resolve })
