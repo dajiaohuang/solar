@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Buffer } from 'node:buffer'
-import { assembleStateTiles, chunkStatePlanIds, StateTileSnapshot, decodeStateTile, digestStateTileRequestIds, encodeStateTile, fetchStateTiles, STATE_TILE_HEADER_BYTES, STATE_TILE_MAGIC, validateStateTileManifest, validateStateTilePlan } from '../../src/lib/stateTiles'
+import { assembleStateTiles, chunkStatePlanIds, StateTileSnapshot, decodeStateTile, digestStateTileRequestIds, encodeStateTile, fetchStateTiles, readStateTileJson, STATE_TILE_HEADER_BYTES, STATE_TILE_MAGIC, validateStateTileManifest, validateStateTilePlan } from '../../src/lib/stateTiles'
 import { createStateTileAdmissionPool, createWorkerTileAdmission, serveStateTileAdmission } from '../../src/lib/stateTileAdmission'
 
 const catalogManifestSha256 = 'a'.repeat(64)
@@ -28,6 +28,23 @@ async function replaceMetadata(buffer: ArrayBuffer, text: string) {
 function response(buffer: ArrayBuffer, ok = true, extraHeaders: Record<string, string> = {}): Response { const bytes = new Uint8Array(buffer); const payloadHash = [...bytes.slice(168, 200)].map(value => value.toString(16).padStart(2, '0')).join(''); return { ok, status: ok ? 200 : 503, headers: new Headers({ 'content-type': 'application/vnd.solar.state-tile+binary', 'content-length': String(bytes.byteLength), etag: `"${payloadHash}"`, ...extraHeaders }), arrayBuffer: async () => buffer } as Response }
 
 describe('state tile binary protocol', () => {
+  it.each(['status', 'type', 'length'])('cancels an unread JSON %s failure body', async invalid => {
+    let canceled = false
+    const body = new TextEncoder().encode('{}')
+    const streamed = new Response(new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(body) },
+      cancel() { canceled = true },
+    }), {
+      status: invalid === 'status' ? 503 : 200,
+      headers: {
+        'content-type': invalid === 'type' ? 'text/plain' : 'application/json',
+        'content-length': invalid === 'length' ? '-1' : String(body.byteLength),
+      },
+    })
+    await expect(readStateTileJson(streamed, 'JSON fixture')).rejects.toThrow(/HTTP 503|content type|content length/)
+    expect(canceled).toBe(true)
+  })
+
   it.each(['status', 'type', 'length'])('holds admission until an unread %s failure body is canceled', async invalid => {
     const pool = createStateTileAdmissionPool(1)
     let finishCancellation!: () => void

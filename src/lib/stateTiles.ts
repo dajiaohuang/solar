@@ -295,17 +295,24 @@ async function readBounded(response: Response, expectedType: string, limit: numb
 }
 
 export async function readStateTileJson(response: Response, name: string) {
-  if (!response.ok) throw new Error(`${name} HTTP ${response.status}`)
-  if (normalizedContentType(response) !== 'application/json') throw new StateTileProtocolError(`${name} content type is invalid`)
-  const length = contentLength(response, 4 * 1024 * 1024)
-  if (!response.body) {
-    const text = await response.text()
-    if (new TextEncoder().encode(text).byteLength !== length) throw new StateTileProtocolError(`${name} content length mismatch`)
-    return JSON.parse(text) as unknown
+  const cancel = () => response.body?.cancel().catch(() => undefined)
+  if (!response.ok) { await cancel(); throw new Error(`${name} HTTP ${response.status}`) }
+  if (normalizedContentType(response) !== 'application/json') { await cancel(); throw new StateTileProtocolError(`${name} content type is invalid`) }
+  let length: number
+  try { length = contentLength(response, 4 * 1024 * 1024) } catch (error) { await cancel(); throw error }
+  try {
+    if (!response.body) {
+      const text = await response.text()
+      if (new TextEncoder().encode(text).byteLength !== length) throw new StateTileProtocolError(`${name} content length mismatch`)
+      return JSON.parse(text) as unknown
+    }
+    const bytes = await readBounded(response, 'application/json', 4 * 1024 * 1024)
+    if (bytes.byteLength !== length) throw new StateTileProtocolError(`${name} content length mismatch`)
+    return JSON.parse(new TextDecoder().decode(bytes)) as unknown
+  } catch (error) {
+    await cancel()
+    throw error
   }
-  const bytes = await readBounded(response, 'application/json', 4 * 1024 * 1024)
-  if (bytes.byteLength !== length) throw new StateTileProtocolError(`${name} content length mismatch`)
-  return JSON.parse(new TextDecoder().decode(bytes)) as unknown
 }
 
 export function validateStateTilePlan(raw: unknown, manifest: StateTileManifest, epochJd: number, requestIds: readonly string[], expectedRequestIdsSha256: string): StateTilePlan {
