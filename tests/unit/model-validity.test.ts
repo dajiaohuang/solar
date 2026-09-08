@@ -135,14 +135,36 @@ describe('JPL approximate element validity', () => {
     expect(ephemerisBodies.bodies.filter((body) => body.kind === 'asteroid')).toHaveLength(spkDelivery.smallBodyBodyCount)
     expect(satelliteCatalog.bodies).toHaveLength(spkDelivery.satelliteIdentityCount)
 
+    const numericSatelliteIds = satelliteCatalog.bodies
+      .filter((body) => Number.isSafeInteger(body.naifId))
+      .map((body) => body.naifId as number)
+    const identityOnlyIds = satelliteCatalog.bodies
+      .filter((body) => !Number.isSafeInteger(body.naifId))
+      .map((body) => body.id)
+    const pagesTargets = new Set(ephemerisManifest.files.flatMap((file) => file.targets ?? []))
+    const fullTargets = new Set(ephemerisManifestFull.files.flatMap((file) => file.targets ?? []))
+    expect(spkDelivery.satelliteIdentityDelivery).toEqual({
+      catalogBodies: 472,
+      numericNaifIdentities: 471,
+      pagesManifestTargets: 471,
+      fullManifestTargets: 471,
+      identityOnlyBodies: 1,
+      identityOnlyIds: ['sat:planet:saturn:provisional:S/2009 S1'],
+      boundary: 'A pinned manifest target proves source delivery identity; an exact state still requires verified kernel bytes and a covered center chain at the requested epoch.',
+      localOrbitBoundary: 'Catalog identities without generated local orbit elements remain source-backed current-state candidates; no fallback orbit is created for them.',
+    })
+    expect(new Set(numericSatelliteIds)).toHaveLength(471)
+    expect(identityOnlyIds).toEqual(['sat:planet:saturn:provisional:S/2009 S1'])
+    expect(numericSatelliteIds.every((id) => pagesTargets.has(id) && fullTargets.has(id))).toBe(true)
+
     const ephemerisById = new Map(ephemerisBodies.bodies.map((body) => [body.id, body]))
-    const fullTargets = new Set(ephemerisManifestFull.files.flatMap((file) => file.targets ?? []).map(String))
+    const fullTargetStrings = new Set([...fullTargets].map(String))
     for (const [parent, bodyIds] of Object.entries(spkDelivery.sourceBackedSatelliteBatches)) {
       expect(bodyIds).toHaveLength(parent === 'jupiter' ? 4 : parent === 'saturn' ? 8 : parent === 'uranus' ? 5 : 2)
       for (const bodyId of bodyIds) {
         const body = ephemerisById.get(bodyId)
         expect(body?.parentId).toBe(parent)
-        expect(fullTargets.has(String(body?.naifId))).toBe(true)
+        expect(fullTargetStrings.has(String(body?.naifId))).toBe(true)
       }
     }
   })

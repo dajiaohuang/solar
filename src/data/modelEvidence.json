@@ -71,6 +71,16 @@
       "planetarySatelliteBodyCount": 31,
       "smallBodyBodyCount": 15,
       "satelliteIdentityCount": 472,
+      "satelliteIdentityDelivery": {
+        "catalogBodies": 472,
+        "numericNaifIdentities": 471,
+        "pagesManifestTargets": 471,
+        "fullManifestTargets": 471,
+        "identityOnlyBodies": 1,
+        "identityOnlyIds": ["sat:planet:saturn:provisional:S/2009 S1"],
+        "boundary": "A pinned manifest target proves source delivery identity; an exact state still requires verified kernel bytes and a covered center chain at the requested epoch.",
+        "localOrbitBoundary": "Catalog identities without generated local orbit elements remain source-backed current-state candidates; no fallback orbit is created for them."
+      },
       "pagesManifest": {
         "id": "jpl-satellite-expansion-20260904-pages",
         "sha256": "5c390d7bb8e02a28ebe45d32979c2f5db12983f8ec6044e4206750c5c89c29e0",
