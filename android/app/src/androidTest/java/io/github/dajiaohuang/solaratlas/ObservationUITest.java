@@ -262,6 +262,7 @@ public final class ObservationUITest {
     }
 
     private static ViewInteraction shown(org.hamcrest.Matcher<View> matcher) {
+        awaitInteractiveWindow();
         // Let Espresso choose its focused application root. A custom
         // touchable-root matcher can select Android's insertion-handle popup
         // or a never-focused instrumentation root on API 36.
@@ -278,11 +279,14 @@ public final class ObservationUITest {
         Throwable last = null;
         while (SystemClock.uptimeMillis() < deadline) {
             try {
+                awaitInteractiveWindow();
                 shown(withHint(hint)).perform(scrollTo(), click(), clearText(), replaceText(value), closeSoftKeyboard());
+                awaitInteractiveWindow();
                 return;
             } catch (AssertionError | NoMatchingViewException | PerformException error) {
                 last = error;
                 recoverInteractiveWindow();
+                awaitInteractiveWindow();
                 SystemClock.sleep(100);
             }
         }
@@ -296,10 +300,15 @@ public final class ObservationUITest {
     }
 
     private static void awaitInteractiveWindow() {
-        long deadline = SystemClock.uptimeMillis() + 2_000;
+        long deadline = SystemClock.uptimeMillis() + 5_000;
+        int stableFocusSamples = 0;
         while (SystemClock.uptimeMillis() < deadline) {
-            if (hasWindowFocus()) return;
-            recoverInteractiveWindow();
+            if (hasWindowFocus()) {
+                if (++stableFocusSamples >= 2) return;
+            } else {
+                stableFocusSamples = 0;
+                recoverInteractiveWindow();
+            }
             SystemClock.sleep(100);
         }
         // Focus recovery is best-effort on headless first-boot API 36
