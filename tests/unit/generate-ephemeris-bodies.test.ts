@@ -32,6 +32,7 @@ describe('optional SPK body seed artifact', () => {
   })
 
   it('labels every entry as an instantaneous, parent-relative fallback', () => {
+    expect(new Set(bodies.bodies.map((body) => body.id)).size).toBe(bodies.bodies.length)
     expect(bodies.epochTimeScale).toBe('TDB')
     for (const body of bodies.bodies) {
       expect(body.source).toBe('jpl-spk-osculating-fallback')
