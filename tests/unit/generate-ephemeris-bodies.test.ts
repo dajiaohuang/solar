@@ -25,11 +25,11 @@ describe('optional SPK body seed artifact', () => {
     const ids = new Set(bodies.bodies.map((body) => body.id))
     expect(ids).toContain('naif:632')
     expect(ids).toContain('naif:634')
-    for (const number of [2, 3, 4, 7, 10, 15, 16, 31, 52, 65, 87, 88, 107, 511, 704, 17, 23, 26, 28, 32]) expect(ids).toContain(`asteroid:${number}`)
+    for (const number of [2, 3, 4, 7, 10, 15, 16, 31, 52, 65, 87, 88, 107, 511, 704, 17, 23, 26, 28, 32, 51, 2060, 5145, 10199, 20000]) expect(ids).toContain(`asteroid:${number}`)
     expect(ids).not.toContain('asteroid:1')
     for (const designation of ['243', '433', '951', '25143', '99942', '162173', '3200', '3122', '65803', '4179', '1036', '1580', '2867', '52768', '29075', '231937', '486958', '132524', '152830', '341843', '469219', '162421', '6', '9', '14', '18', '19', '90', '216', '11', '13', '21', '24', '29', '39', '44', '3753', '6489', '6178', '46610', '98943', '5', '8', '12', '20', '40', '22', '45', '93', '121', '130', '25', '27', '30', '34', '37']) expect(ids).toContain(`asteroid:${designation}`)
     expect(majorBodiesById.get('asteroid:243')).toMatchObject({ name: '小行星 Ida', shortName: 'Ida', naifId: 20000243 })
-    for (const [id, naifId, batch] of [['asteroid:87', 20000087, 'batch12'], ['asteroid:107', 20000107, 'batch12'], ['asteroid:511', 20000511, 'batch12'], ['asteroid:704', 20000704, 'batch12'], ['asteroid:17', 20000017, 'batch13'], ['asteroid:23', 20000023, 'batch13'], ['asteroid:26', 20000026, 'batch13'], ['asteroid:28', 20000028, 'batch13'], ['asteroid:32', 20000032, 'batch13'] ] as const) {
+    for (const [id, naifId, batch] of [['asteroid:87', 20000087, 'batch12'], ['asteroid:107', 20000107, 'batch12'], ['asteroid:511', 20000511, 'batch12'], ['asteroid:704', 20000704, 'batch12'], ['asteroid:17', 20000017, 'batch13'], ['asteroid:23', 20000023, 'batch13'], ['asteroid:26', 20000026, 'batch13'], ['asteroid:28', 20000028, 'batch13'], ['asteroid:32', 20000032, 'batch13'], ['asteroid:51', 20000051, 'batch14'], ['asteroid:2060', 20002060, 'batch14'], ['asteroid:5145', 20005145, 'batch14'], ['asteroid:10199', 20010199, 'batch14'], ['asteroid:20000', 20020000, 'batch14'] ] as const) {
       expect(bodies.bodies.find((body) => body.id === id)).toMatchObject({ naifId, sourceKernelId: expect.stringContaining(`horizons-asteroids-${batch}-20260909`) })
     }
   })
