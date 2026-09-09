@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-09T04:42:03.647Z",
+  "generatedAt": "2026-09-09T05:15:20.263Z",
   "epochJd": 2461287.5,
   "epochTimeScale": "TDB",
   "source": {
     "manifestPath": "src/data/ephemeris-manifest.json",
     "manifestId": "jpl-satellite-expansion-20260904-pages",
-    "manifestSha256": "08dc71abcc3aff371adc4103c41f137fd07569c4ffb6972590ba0e7a07f2325f",
+    "manifestSha256": "546911d95d7641393ba93a39611b41e3e0603c8c13880988e5fe5f1adb23f2dd",
     "gmUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
     "gmFile": "src/data/gm_de440.tpc",
     "gmSha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
@@ -2050,6 +2050,86 @@
       "sourceKernelId": "horizons-asteroids-batch3-20260909-metis-2026-01-01-2027-01-01"
     },
     {
+      "id": "asteroid:11",
+      "name": "Parthenope",
+      "shortName": "Parthenope",
+      "kind": "asteroid",
+      "naifId": 20000011,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 2.4520872226902335,
+        "eccentricity": 0.1009722936073729,
+        "inclinationDeg": 4.636204131236866,
+        "ascendingNodeDeg": 125.46987323936224,
+        "argPeriapsisDeg": 196.4729862956736,
+        "meanAnomalyDeg": 247.26042614714248,
+        "meanMotionDegPerDay": 0.25668482980189217
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -362043647.8299599,
+          "y": -124880623.72959866,
+          "z": 29787558.542718574
+        },
+        "velocity": {
+          "x": 7.449596613785126,
+          "y": -16.541107187325466,
+          "z": 0.2863660900480465
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2711%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch4-20260909-parthenope-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:13",
+      "name": "Egeria",
+      "shortName": "Egeria",
+      "kind": "asteroid",
+      "naifId": 20000013,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 2.576479206247959,
+        "eccentricity": 0.0845684168167771,
+        "inclinationDeg": 16.52469450626133,
+        "ascendingNodeDeg": 43.177075634408254,
+        "argPeriapsisDeg": 79.14675561733753,
+        "meanAnomalyDeg": 109.32655182943279,
+        "meanMotionDegPerDay": 0.23832198704111326
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -199906206.0910721,
+          "y": -343164617.8969507,
+          "z": -33662564.53834467
+        },
+        "velocity": {
+          "x": 14.375353316082329,
+          "y": -9.499433265068278,
+          "z": -4.973524851146925
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2713%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch4-20260909-egeria-2026-01-01-2027-01-01"
+    },
+    {
       "id": "asteroid:14",
       "name": "Irene",
       "shortName": "Irene",
@@ -2168,6 +2248,206 @@
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2719%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
       "sourceKernelId": "horizons-asteroids-batch3-20260909-fortuna-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:21",
+      "name": "Lutetia",
+      "shortName": "Lutetia",
+      "kind": "asteroid",
+      "naifId": 20000021,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 2.434583144659694,
+        "eccentricity": 0.16479384660690652,
+        "inclinationDeg": 3.0643924453382807,
+        "ascendingNodeDeg": 80.83850100342954,
+        "argPeriapsisDeg": 249.86181698601678,
+        "meanAnomalyDeg": 321.36444534581756,
+        "meanMotionDegPerDay": 0.2594580546189384
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": 45651548.16103395,
+          "y": -318737206.9299552,
+          "z": -5129588.155036539
+        },
+        "velocity": {
+          "x": 20.690034867891242,
+          "y": 5.5375083364154465,
+          "z": -1.0463071194305682
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2721%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch4-20260909-lutetia-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:24",
+      "name": "Themis",
+      "shortName": "Themis",
+      "kind": "asteroid",
+      "naifId": 20000024,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 3.144253945256449,
+        "eccentricity": 0.11536143927548392,
+        "inclinationDeg": 0.7366184413531845,
+        "ascendingNodeDeg": 36.39059263683333,
+        "argPeriapsisDeg": 109.26227614716606,
+        "meanAnomalyDeg": 107.3564367453352,
+        "meanMotionDegPerDay": 0.1767777704135553
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -42742571.142851785,
+          "y": -490059509.9484935,
+          "z": -4746015.060346544
+        },
+        "velocity": {
+          "x": 15.744894381836644,
+          "y": -3.0784367155511507,
+          "z": -0.15196288349860732
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2724%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch4-20260909-themis-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:29",
+      "name": "Amphitrite",
+      "shortName": "Amphitrite",
+      "kind": "asteroid",
+      "naifId": 20000029,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 2.5547321840349215,
+        "eccentricity": 0.07309835696370182,
+        "inclinationDeg": 6.077047546751088,
+        "ascendingNodeDeg": 356.24857616662285,
+        "argPeriapsisDeg": 61.91597578440178,
+        "meanAnomalyDeg": 214.38975101869056,
+        "meanMotionDegPerDay": 0.2413715087545419
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -12881944.760397408,
+          "y": -403349088.1036245,
+          "z": -42939883.82563797
+        },
+        "velocity": {
+          "x": 17.514151463277877,
+          "y": 0.11338865873925869,
+          "z": 0.13404461868399037
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2729%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch4-20260909-amphitrite-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:39",
+      "name": "Laetitia",
+      "shortName": "Laetitia",
+      "kind": "asteroid",
+      "naifId": 20000039,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 2.76843637132148,
+        "eccentricity": 0.11408101005463574,
+        "inclinationDeg": 10.385981840845115,
+        "ascendingNodeDeg": 156.8192035922698,
+        "argPeriapsisDeg": 210.028045128775,
+        "meanAnomalyDeg": 155.2866477887328,
+        "meanMotionDegPerDay": 0.21396968850630313
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -445564860.0762726,
+          "y": 104492347.34626575,
+          "z": 14540267.301340498
+        },
+        "velocity": {
+          "x": -4.206314609789966,
+          "y": -15.2729925792507,
+          "z": 2.876732642207795
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2739%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch4-20260909-laetitia-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:44",
+      "name": "Nysa",
+      "shortName": "Nysa",
+      "kind": "asteroid",
+      "naifId": 20000044,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 2.422201584779818,
+        "eccentricity": 0.1495991790351693,
+        "inclinationDeg": 3.713179775071434,
+        "ascendingNodeDeg": 131.47699343125646,
+        "argPeriapsisDeg": 343.8604428671794,
+        "meanAnomalyDeg": 64.23630791752407,
+        "meanMotionDegPerDay": 0.2614500010951595
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -331848162.91586804,
+          "y": -95723284.66630334,
+          "z": 20249972.78450275
+        },
+        "velocity": {
+          "x": 2.7799689410485064,
+          "y": -19.816584214274243,
+          "z": 0.7166107510732678
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2744%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch4-20260909-nysa-2026-01-01-2027-01-01"
     },
     {
       "id": "asteroid:90",
