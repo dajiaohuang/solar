@@ -65,8 +65,8 @@ hashes before copying the manifest last; `src/data` alone is source-only
 metadata and does not prove that exact kernel files are available. The results
 below are retained evidence for their recorded fixtures, not a final profile
 performance sign-off; repeat measurements after staging the intended profile.
-The recorded full-profile staging check found 516 files totaling
-1,149,197,312 bytes; this is an artifact validation result, not a runtime
+The recorded full-profile staging check found 519 files totaling
+1,149,878,272 bytes; this is an artifact validation result, not a runtime
 resident-memory or performance guarantee.
 
 ## Current binary state-tile evidence
@@ -85,23 +85,23 @@ different indexed terms while remaining reproducible.
 Run the current evidence with:
 
 ```text
-go run ./cmd/bench -requests 5 -concurrency 1 -epoch-jd 2461287.5 -data-dir D:/repo/repostew/.repostew/cache/solar-issue109-backend-full-20260905 -inventory-dir D:/repo/repostew/.repostew/cache/solar-issue109-addressable-inventory-20260905 -long-samples 100
+go run ./cmd/bench -requests 5 -concurrency 1 -epoch-jd 2461287.5 -data-dir <staged-full-profile> -inventory-dir D:/repo/repostew/.repostew/cache/solar-issue109-addressable-inventory-20260905 -long-samples 100
 ```
 
-The 2026-09-09 Windows amd64 run reported catalog 566 entries / 516 manifest-
-valid packaged files, catalog exact/missing 566/0, source exact/missing
+The 2026-09-09 Windows amd64 run reported catalog 572 entries / 519 manifest-
+valid packaged files, catalog exact/missing 572/0, source exact/missing
 16/16,368 at 16,384 IDs and 16/32,752 at 32,768 IDs. Lazy integrity evidence
 is reported separately by the workload; the startup-only probes below perform
 zero full-file verification reads. The
 catalog SPK page counters are reported separately from those integrity reads;
-the warm run recorded 1,252 page loads, 852,574 page-cache hits and 1,252
-page-cache misses. A fresh-process catalog load was about 27 ms on that run;
-the inventory index load was about 7.7 s. These are host- and filesystem-cache-
+the warm run recorded 1,264 page loads, 699,126 page-cache hits and 1,264
+page-cache misses. A fresh-process catalog load was about 35 ms on that run;
+the inventory index load was about 8.2 s. These are host- and filesystem-cache-
 dependent observations, not universal startup guarantees.
 
 The same host's two fresh startup-only processes retained
-`89,663,920` and `89,664,448` bytes of Go heap for the loaded inventory index
-(85.51 MiB each), with 4,034,405 indexed terms and 4,034,430 postings. This
+`89,648,744` and `89,668,696` bytes of Go heap for the loaded inventory index
+(85.50 and 85.52 MiB), with 4,034,405 indexed terms and 4,034,430 postings. This
 `inventoryIndexHeapBytes` value is a post-GC retained heap delta measured by the
 Go runtime after the temporary decode cache and sortable posting buffer were
 released; it includes retained index maps and strings, excludes allocator pages
@@ -112,8 +112,8 @@ term ranges, and posting values. The two fresh builds both produced
 `38f9430c50dfdeb2476452e42fff2f3ee5650cb8c413adc429a8101450fd77e9`; this is
 the constructed index output digest and is distinct from the input inventory
 manifest SHA-256. Raw reports are retained as
-`solar-bench-startup-full-index-516-run1-v2.json` and
-`solar-bench-startup-full-index-516-run2-v2.json`.
+`solar-bench-startup-full-index-519-run1-20260909.json` and
+`solar-bench-startup-full-index-519-run2-20260909.json`.
 
 Successful tile samples are reported separately from `overload429` and
 `otherErrors`; with concurrency 1 there were 5, 5 and 10 successful tiles
@@ -122,15 +122,15 @@ plan latency, tile-workload latency, total latency, successful/rejected tile
 throughput, separate successful/rejected quantiles, and final-response cache
 hits/misses. The response cache is bounded at 64 MiB and shares the two-slot
 tile encoder limit. A concurrency-4 run intentionally produced 429
-backpressure (3 catalog, 3 per source size); those rejections are reported
+backpressure (2 per source plan); those rejections are reported
 separately and are not included in successful latency quantiles.
 
 The catalog manifest SHA-256 was
-`9058cd96aa87a2e5c24bd071ae72e6edf8637953167301f27a9254ec70b56258`; the
+`6293862136e2fc571b25b69c0995189c38b3ded42bbc756f12cc37ee4bd9b5b0`; the
 inventory manifest SHA-256 was
 `2c0aca1e6412c6e7785acd901bb987ce0f57c5353e2a8ff87aed032b291377b7`.
 In a warm-cache concurrency-1 run, source successful-tile p50/p95 latencies
-were 5.808/40.456 ms (16,384) and 17.418/34.641 ms (32,768); these are
+were 30.984/32.685 ms (16,384) and 19.517/41.552 ms (32,768); these are
 transport/encoding measurements for the mixed set, not an SLO or a claim that
 every source row is exact. `peakRSSBytes` is explicitly a sampled process RSS
 value, not an OS peak. The JSON also records inventory compressed-block cache
