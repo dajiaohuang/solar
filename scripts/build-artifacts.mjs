@@ -483,6 +483,10 @@ async function writeManifestsAndCapacity(buildInfo, dataset) {
   const coldLoadEntries = entries.filter((entry) => entry.path === 'index.html' || entry.path === 'manifest.webmanifest' || entry.path.startsWith('assets/'))
   const typicalExtra = datasetEntries.filter((entry) => /catalog-index\.bin$|catalog-sample-(?:desktop|mobile)\.(bin|json\.gz)$|manifest\.json$|provenance\.json$|dataset-version\.json$/.test(entry.path))
   const totalBytes = bytes(entries)
+  // The full-product build is a test-only artifact for the strict E2E adapter;
+  // only the curated preview is uploaded to GitHub Pages and subject to its
+  // hosting cap. Keep the cap fail-closed for that published profile.
+  const pagesBudgetApplies = DELIVERY.product === 'preview'
   const report = {
     schemaVersion: 1,
     generatedAt: buildInfo.buildTime,
@@ -490,9 +494,9 @@ async function writeManifestsAndCapacity(buildInfo, dataset) {
     ephemerisProfile: EPHEMERIS_PROFILE,
     productProfile: DELIVERY.product,
     productAvailabilitySha256: DELIVERY.availabilitySha256,
-    // Full Web coverage does not inherit the Pages hosting cap.
-    withinBudget: EPHEMERIS_PROFILE === 'full' || totalBytes <= MAX_ARTIFACT_BYTES,
-    warning: EPHEMERIS_PROFILE === 'pages' && totalBytes > WARN_ARTIFACT_BYTES,
+    // The full-product E2E artifact is not the Pages upload.
+    withinBudget: !pagesBudgetApplies || totalBytes <= MAX_ARTIFACT_BYTES,
+    warning: pagesBudgetApplies && totalBytes > WARN_ARTIFACT_BYTES,
     distTotalBytes: totalBytes,
     applicationShellBytes: bytes(shellEntries),
     datasetTotalBytes: bytes(datasetEntries),
