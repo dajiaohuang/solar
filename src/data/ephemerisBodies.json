@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-09T15:48:31.061Z",
+  "generatedAt": "2026-09-09T18:05:11.427Z",
   "epochJd": 2461287.5,
   "epochTimeScale": "TDB",
   "source": {
     "manifestPath": "src/data/ephemeris-manifest.json",
     "manifestId": "jpl-satellite-expansion-20260904-pages",
-    "manifestSha256": "dd0090673d0ff3085a3c861ab68cb5ee3a6550e24c1d4c0c462dc80d1b2baf50",
+    "manifestSha256": "28c06405c62b0ba81b16ba071a4d27fe6215a3c896be5f2d71fb730e0dc1c366",
     "gmUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
     "gmFile": "src/data/gm_de440.tpc",
     "gmSha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
@@ -2890,6 +2890,46 @@
       "sourceKernelId": "horizons-asteroids-batch13-20260909-pomona-2026-01-01-2027-01-01"
     },
     {
+      "id": "asteroid:33",
+      "name": "Polyhymnia",
+      "shortName": "Polyhymnia",
+      "kind": "asteroid",
+      "naifId": 20000033,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 2.870175706185909,
+        "eccentricity": 0.33501829550336787,
+        "inclinationDeg": 1.8549474974209355,
+        "ascendingNodeDeg": 8.110992957490168,
+        "argPeriapsisDeg": 338.8101934626938,
+        "meanAnomalyDeg": 165.2514089110682,
+        "meanMotionDegPerDay": 0.20269421210241875
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -532985529.94872314,
+          "y": 203392818.91094854,
+          "z": 8956670.632075638
+        },
+        "velocity": {
+          "x": -5.242638019509244,
+          "y": -11.336969431649752,
+          "z": -0.3395333511730376
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2733%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch16-20260910-polyhymnia-2026-01-01-2027-01-01"
+    },
+    {
       "id": "asteroid:34",
       "name": "Circe",
       "shortName": "Circe",
@@ -2930,6 +2970,86 @@
       "sourceKernelId": "horizons-asteroids-batch11-20260909-circe-2026-01-01-2027-01-01"
     },
     {
+      "id": "asteroid:35",
+      "name": "Leukothea",
+      "shortName": "Leukothea",
+      "kind": "asteroid",
+      "naifId": 20000035,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 3.0042309173557693,
+        "eccentricity": 0.217005273601167,
+        "inclinationDeg": 7.867797453563768,
+        "ascendingNodeDeg": 352.9046742683592,
+        "argPeriapsisDeg": 215.54261813272115,
+        "meanAnomalyDeg": 3.339365876514023,
+        "meanMotionDegPerDay": 0.18927972967046272
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -292509814.0488064,
+          "y": -193561785.67998803,
+          "z": -31536094.824034095
+        },
+        "velocity": {
+          "x": 11.621779326543306,
+          "y": -17.840254563790147,
+          "z": -2.248067588781228
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2735%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch16-20260910-leukothea-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:36",
+      "name": "Atalante",
+      "shortName": "Atalante",
+      "kind": "asteroid",
+      "naifId": 20000036,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 2.7447128475220937,
+        "eccentricity": 0.30615864246374896,
+        "inclinationDeg": 18.37340791001762,
+        "ascendingNodeDeg": 358.16187611431604,
+        "argPeriapsisDeg": 47.75357448545424,
+        "meanAnomalyDeg": 161.80707760066593,
+        "meanMotionDegPerDay": 0.21674979786262913
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -431894474.51588213,
+          "y": -294378723.2899013,
+          "z": -102325994.90697634
+        },
+        "velocity": {
+          "x": 6.8895832949876255,
+          "y": -10.745724181394626,
+          "z": -3.493852457953459
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2736%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch16-20260910-atalante-2026-01-01-2027-01-01"
+    },
+    {
       "id": "asteroid:37",
       "name": "Fides",
       "shortName": "Fides",
@@ -2968,6 +3088,46 @@
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2737%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
       "sourceKernelId": "horizons-asteroids-batch11-20260909-fides-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:38",
+      "name": "Leda",
+      "shortName": "Leda",
+      "kind": "asteroid",
+      "naifId": 20000038,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 2.7426282974719927,
+        "eccentricity": 0.15086702218984538,
+        "inclinationDeg": 6.951367202265418,
+        "ascendingNodeDeg": 295.4926198847982,
+        "argPeriapsisDeg": 169.8385699761219,
+        "meanAnomalyDeg": 227.9655973824886,
+        "meanMotionDegPerDay": 0.21699695766444568
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": 357991422.4065765,
+          "y": -281656211.4021838,
+          "z": 24618002.77675672
+        },
+        "velocity": {
+          "x": 8.470207522227877,
+          "y": 13.562638648587615,
+          "z": 1.643869471110567
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2738%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch16-20260910-leda-2026-01-01-2027-01-01"
     },
     {
       "id": "asteroid:39",
