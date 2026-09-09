@@ -27,7 +27,7 @@ describe('optional SPK body seed artifact', () => {
     expect(ids).toContain('naif:634')
     for (const number of [2, 3, 4, 7, 10, 15, 16, 31, 52, 65, 87, 88, 107, 511, 704]) expect(ids).toContain(`asteroid:${number}`)
     expect(ids).not.toContain('asteroid:1')
-    for (const designation of ['243', '433', '951', '25143', '99942', '162173', '3200', '3122', '65803', '16']) expect(ids).toContain(`asteroid:${designation}`)
+    for (const designation of ['243', '433', '951', '25143', '99942', '162173', '3200', '3122', '65803']) expect(ids).toContain(`asteroid:${designation}`)
     expect(majorBodiesById.get('asteroid:243')).toMatchObject({ name: '小行星 Ida', shortName: 'Ida', naifId: 20000243 })
   })
 

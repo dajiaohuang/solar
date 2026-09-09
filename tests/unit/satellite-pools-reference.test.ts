@@ -177,16 +177,17 @@ describe('integrated satellite source pools and delivery profiles', () => {
         expect(kernel.evaluate(target, file.endEt + 1)).toBeNull()
       }
     }
-    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(1149197312)
-    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(271043584)
+    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(1149878272)
+    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(271115264)
   })
 
   it('pins the bounded Horizons asteroid snapshots without treating the API as immutable', () => {
     const expected = new Map([
       [20000243, '243'], [20000433, '433'], [20000951, '951'],
       [20025143, '25143'], [20099942, '99942'], [20162173, '162173'],
+      [20003200, '3200'], [20003122, '3122'], [20065803, '65803'],
     ])
-    const roots = pages.files.filter(file => file.integrationBatch === 'horizons-asteroids-20260909')
+    const roots = pages.files.filter(file => file.integrationBatch === 'horizons-asteroids-20260909' || file.integrationBatch === 'horizons-asteroids-next-20260909')
     expect(roots).toHaveLength(expected.size)
     for (const file of roots) {
       const target = file.targets[0]

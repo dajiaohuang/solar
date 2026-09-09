@@ -14,7 +14,6 @@ const targets = [
   ['phaethon', 'Phaethon', 3200, 20003200],
   ['florence', 'Florence', 3122, 20003122],
   ['didymos', 'Didymos', 65803, 20065803],
-  ['psyche', 'Psyche', 16, 20000016],
 ]
 const fromEt = (date) => (Date.parse(`${date}T00:00:00Z`) / 86400000 + 2440587.5 - 2451545) * 86400
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex')

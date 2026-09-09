@@ -22,12 +22,12 @@ const NAMES = {
   801: 'Triton', 802: 'Nereid', 901: 'Charon', 902: 'Nix', 903: 'Hydra', 904: 'Kerberos', 905: 'Styx',
   20000243: 'Ida', 20000433: 'Eros', 20000951: 'Gaspra', 20025143: 'Itokawa',
   20099942: 'Apophis', 20162173: 'Ryugu', 20003200: 'Phaethon',
-  20003122: 'Florence', 20065803: 'Didymos', 20000016: 'Psyche',
+  20003122: 'Florence', 20065803: 'Didymos',
 }
 // Bodies already represented by majorBodies are intentionally not duplicated.
 const MAJOR = new Set([10, 199, 299, 399, 301, 499, 599, 699, 799, 899, 999, 501, 502, 503, 504, 606, 920136199, 920136108])
-const HELIOCENTRIC_ASTEROIDS = new Set([20000243, 20000433, 20000951, 20025143, 20099942, 20162173, 20003200, 20003122, 20065803, 20000016])
-const DESIGNATIONS = { 20000243: '243', 20000433: '433', 20000951: '951', 20025143: '25143', 20099942: '99942', 20162173: '162173', 20003200: '3200', 20003122: '3122', 20065803: '65803', 20000016: '16' }
+const HELIOCENTRIC_ASTEROIDS = new Set([20000243, 20000433, 20000951, 20025143, 20099942, 20162173, 20003200, 20003122, 20065803])
+const DESIGNATIONS = { 20000243: '243', 20000433: '433', 20000951: '951', 20025143: '25143', 20099942: '99942', 20162173: '162173', 20003200: '3200', 20003122: '3122', 20065803: '65803' }
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(name)
