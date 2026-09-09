@@ -40,7 +40,10 @@ describe('selectable satellite identity catalog', () => {
     for (const entry of SOURCE_ONLY_IDENTITIES) {
       expect(entry).toMatchObject({ naifId: entry.naifId, ephemerisStatus: 'source-only-missing-compatible-system', systemNaifId: 20000617 })
       for (const field of ['orbit', 'radiusKm', 'massKg']) expect(entry).not.toHaveProperty(field)
-      expect(majorBodiesById.has(entry.id)).toBe(false)
+      const body = majorBodiesById.get(entry.id)
+      expect(body).toMatchObject({ id: entry.id, naifId: entry.naifId, source: 'jpl-satellite-inventory', kind: 'asteroid' })
+      expect(body?.orbit).toBeUndefined()
+      expect(body?.radiusKm).toBeUndefined()
       expect(defaultSelectedBodyIds).not.toContain(entry.id)
     }
   })

@@ -75,7 +75,12 @@ describe('source-backed small-body satellite identities', () => {
     expect(gap.missingCenter).toBe(20000617)
     expect(gap.components).toEqual([{ name: 'Patroclus', naifId: 920000617 }, { name: 'Manoetius', naifId: 120000617 }])
     expect(gap.targets).not.toContain(gap.missingCenter)
-    expect([...majorBodiesById.values()].some(body => body.naifId === 120000617)).toBe(false)
+    for (const target of [120000617, 920000617]) {
+      const body = majorBodiesById.get(`naif:${target}`)!
+      expect(body).toMatchObject({ naifId: target, source: 'jpl-satellite-inventory', kind: 'asteroid' })
+      expect(body.orbit).toBeUndefined()
+      expect(body.radiusKm).toBeUndefined()
+    }
   })
 
   it('publishes Patroclus and Manoetius as explicit identity-only source records', () => {

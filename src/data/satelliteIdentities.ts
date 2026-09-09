@@ -24,6 +24,14 @@ export function additionalSatelliteBodies(existing: CelestialBody[]): CelestialB
     .filter(entry => !existingIds.has(entry.id) && !existingNumbers.has(entry.naifId))
     .map(entry => ({ id: entry.id, naifId: entry.naifId, name: entry.name, shortName: entry.name,
       kind: 'asteroid', source: 'jpl-satellite-inventory', color: '#b8c7d8', size: 3 }))
+  // Keep source-only identities in the Web registry as browseable records so
+  // Web and native clients expose the same audited identity set. They have no
+  // orbit or physical measurements; the normal missing-state path therefore
+  // remains explicit and they are still excluded from the default selection.
+  const sourceOnly: CelestialBody[] = SOURCE_ONLY_IDENTITIES
+    .filter(entry => !existingIds.has(entry.id) && (entry.naifId === undefined || !existingNumbers.has(entry.naifId)))
+    .map(entry => ({ id: entry.id, naifId: entry.naifId, name: entry.name, shortName: entry.name,
+      kind: 'asteroid', source: 'jpl-satellite-inventory', color: '#e3bb68', size: 2.1 }))
   return [...primaries, ...SATELLITE_IDENTITIES
     .filter(entry => !existingIds.has(entry.id) && (entry.naifId === undefined || !existingNumbers.has(entry.naifId)))
     .map((entry): CelestialBody => ({
@@ -31,7 +39,7 @@ export function additionalSatelliteBodies(existing: CelestialBody[]): CelestialB
       kind: 'moon', parentId: entry.parentId, source: 'jpl-satellite-inventory',
       // Screen marker size, not a measured physical radius.
       color: '#b8c7d8', size: 2.1,
-    }))]
+    })), ...sourceOnly]
 }
 
 export function satelliteSearchTerms(body: Pick<CelestialBody, 'id' | 'naifId'>): string {
