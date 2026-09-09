@@ -75,7 +75,7 @@ The current harness uses `-epoch-jd 2461287.5` by default. This is TDB
 ET=841,752,000, the audited inventory epoch, and is inside the packaged full
 profile coverage; the older `2451545.0` default was outside most packaged
 segments and therefore reported only 18 exact catalog rows. Catalog state
-tiles use all 552 catalog entries. Source workloads first scan the inventory
+tiles use all 566 catalog entries. Source workloads first scan the inventory
 index and select a reproducible mixed set containing 16 exact-capable rows and
 the remainder missing at this epoch, then measure 16,384 and 32,768 IDs.
 Directory-search traffic samples a fixed six-name query set
@@ -88,16 +88,27 @@ Run the current evidence with:
 go run ./cmd/bench -requests 5 -concurrency 1 -epoch-jd 2461287.5 -data-dir D:/repo/repostew/.repostew/cache/solar-issue109-backend-full-20260905 -inventory-dir D:/repo/repostew/.repostew/cache/solar-issue109-addressable-inventory-20260905 -long-samples 100
 ```
 
-The 2026-09-05 Windows amd64 run reported catalog 552 entries / 510 manifest-
-valid packaged files, catalog exact/missing 552/0, source exact/missing
+The 2026-09-09 Windows amd64 run reported catalog 566 entries / 516 manifest-
+valid packaged files, catalog exact/missing 566/0, source exact/missing
 16/16,368 at 16,384 IDs and 16/32,752 at 32,768 IDs. Lazy integrity evidence
-reported 501 verified kernel files, 9 still pending, 0 invalid, 501 full-file
-verification reads and 1,135,819,776 verified bytes after the workload. The
+is reported separately by the workload; the startup-only probes below perform
+zero full-file verification reads. The
 catalog SPK page counters are reported separately from those integrity reads;
 the warm run recorded 1,252 page loads, 852,574 page-cache hits and 1,252
 page-cache misses. A fresh-process catalog load was about 27 ms on that run;
 the inventory index load was about 7.7 s. These are host- and filesystem-cache-
 dependent observations, not universal startup guarantees.
+
+The same host's two fresh startup-only processes retained
+`89,663,920` and `89,664,448` bytes of Go heap for the loaded inventory index
+(85.51 MiB each), with 4,034,405 indexed terms and 4,034,430 postings. This
+`inventoryIndexHeapBytes` value is a post-GC retained heap delta measured by the
+Go runtime after the temporary decode cache and sortable posting buffer were
+released; it includes retained index maps and strings, excludes allocator pages
+and process RSS, and is evidence for this runtime/dataset rather than a
+portable memory guarantee. Raw reports are retained as
+`solar-bench-startup-full-index-516-run1.json` and
+`solar-bench-startup-full-index-516-run2.json`.
 
 Successful tile samples are reported separately from `overload429` and
 `otherErrors`; with concurrency 1 there were 5, 5 and 10 successful tiles

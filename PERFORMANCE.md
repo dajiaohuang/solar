@@ -418,27 +418,31 @@ implemented on Windows; other platforms report `processPeakAvailable: false`
 instead of substituting an ordinary RSS sample. The normal benchmark also
 retains this startup evidence before running its mixed workloads.
 
-A frozen executable was run in three sequential fresh Windows amd64 processes
-on an i9-14900KF (2026-09-05), with the same 1,567,193-source-record inventory,
-314 shards / 97,111,820 compressed bytes, and 510 packaged SPK candidates:
+A frozen executable was run in two sequential fresh Windows amd64 processes on
+an i9-14900KF (2026-09-09), with the same 1,567,193-source-record inventory,
+314 shards / 97,110,144 compressed bytes, and 516 packaged SPK files. The
+startup-only harness now also reports the retained Go heap delta for the
+inventory index after its temporary decode cache and sortable posting buffer
+are released:
 
-| Run | Catalog + index startup | OS process peak working set |
-| --- | ---: | ---: |
-| 1 | 7.682 s | 461.70 MiB |
-| 2 | 7.649 s | 424.30 MiB |
-| 3 | 7.758 s | 422.55 MiB |
+| Run | Catalog + index startup | Retained index heap | OS process peak working set |
+| --- | ---: | ---: | ---: |
+| 1 | 7.816 s | 85.51 MiB | 423.32 MiB |
+| 2 | 8.803 s | 85.51 MiB | 459.78 MiB |
 
-All three observed peaks are below the 512 MiB startup target **for this data,
+Both observed peaks are below the 512 MiB startup target **for this data,
 machine and cold-process workload only**. Filesystem caches were not flushed;
 other user processes were not stopped. This does not prove cold-disk latency,
 cross-platform memory, first-use integrity costs, concurrent request memory or
-native rendering smoothness. All 510 candidates remained pending verification
-with zero integrity bytes read; they are not 510 verified current states.
+native rendering smoothness. All 516 files remained pending verification with
+zero integrity bytes read; they are not 516 verified current states. The
+retained index values are runtime measurements for these processes, not
+allocator-page or process-RSS totals and not a portable memory guarantee.
 
 The measured catalog manifest SHA-256 was
 `9058cd96aa87a2e5c24bd071ae72e6edf8637953167301f27a9254ec70b56258`;
 inventory manifest SHA-256 was
-`bef21e3bc5820db0b70c24ad464262cb67df279f8d0a3e2b8731ca5ca9c39583`.
+`2c0aca1e6412c6e7785acd901bb987ce0f57c5353e2a8ff87aed032b291377b7`.
 The exact executable SHA-256 and raw reports are retained with local benchmark
 evidence; generated datasets and the executable are not committed.
 

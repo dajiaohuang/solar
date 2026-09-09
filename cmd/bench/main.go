@@ -40,6 +40,7 @@ type report struct {
 	InventoryLoadMs         float64             `json:"inventoryIndexLoadMs,omitempty"`
 	InventoryIndexTerms     int                 `json:"inventoryIndexTerms,omitempty"`
 	InventoryIndexPostings  int                 `json:"inventoryIndexPostings,omitempty"`
+	InventoryIndexHeapBytes uint64              `json:"inventoryIndexHeapBytes,omitempty"`
 	InventoryBlockCache     map[string]int64    `json:"inventoryBlockCache,omitempty"`
 	DirectoryQueries        []string            `json:"directoryQueries,omitempty"`
 	TrajectoryPrecision     string              `json:"trajectoryPrecision"`
@@ -124,6 +125,7 @@ func main() {
 	var inv *inventory.Inventory
 	var inventoryLoadMs float64
 	var inventoryIndexTerms, inventoryIndexPostings int
+	var inventoryIndexHeapBytes uint64
 	if *inventoryDir != "" {
 		inventoryStart := time.Now()
 		inv, err = inventory.Load(*inventoryDir)
@@ -133,6 +135,7 @@ func main() {
 		inventoryLoadMs = elapsedMilliseconds(inventoryStart)
 		stats := inv.IndexStats()
 		inventoryIndexTerms, inventoryIndexPostings = stats["searchTerms"], stats["indexPostings"]
+		inventoryIndexHeapBytes = inv.IndexHeapBytes()
 	}
 	peak.Sample()
 	startup := captureStartup(loadStart)
@@ -144,7 +147,8 @@ func main() {
 			InventoryManifestSHA256: inventoryManifestHash(inv), InventoryRecords: inventoryRecords(inv),
 			InventoryShards: inventoryShards(inv), InventoryBytes: inventoryBytes(inv), InventoryLoadMs: inventoryLoadMs,
 			InventoryIndexTerms: inventoryIndexTerms, InventoryIndexPostings: inventoryIndexPostings,
-			CatalogLoadMs: loadMs, CatalogIntegrity: c.IntegrityStats(),
+			InventoryIndexHeapBytes: inventoryIndexHeapBytes,
+			CatalogLoadMs:           loadMs, CatalogIntegrity: c.IntegrityStats(),
 			PeakRSSBytes: peak.rss, PeakRSSSampled: peak.rss > 0, RSSMeasurement: "startup boundary samples; use startup.processPeakRSSBytes when available",
 			PeakHeapBytes: peak.heap,
 		}
@@ -172,7 +176,8 @@ func main() {
 			Catalog: c.Len(), CatalogPackagedFiles: c.Stats()["packagedFiles"], CatalogManifestSHA256: c.ManifestHash(),
 			InventoryManifestSHA256: inventoryManifestHash(inv), InventoryRecords: inventoryRecords(inv),
 			InventoryShards: inventoryShards(inv), InventoryBytes: inventoryBytes(inv), InventoryLoadMs: inventoryLoadMs,
-			CatalogLoadMs: loadMs, CatalogIntegrity: c.IntegrityStats(), CatalogSPKRead: map[string]uint64{"cachedBytes": uint64(reads.CachedBytes), "loadedBytes": uint64(reads.LoadedBytes), "pageLoads": reads.PageLoads, "cacheHits": reads.CacheHits, "cacheMisses": reads.CacheMisses},
+			InventoryIndexHeapBytes: inventoryIndexHeapBytes,
+			CatalogLoadMs:           loadMs, CatalogIntegrity: c.IntegrityStats(), CatalogSPKRead: map[string]uint64{"cachedBytes": uint64(reads.CachedBytes), "loadedBytes": uint64(reads.LoadedBytes), "pageLoads": reads.PageLoads, "cacheHits": reads.CacheHits, "cacheMisses": reads.CacheMisses},
 			Concurrency: *workers, StateEpochJD: *stateEpochJD, TileMemory: &evidence, Scheduler: service.SchedulerStats()}
 		if err := json.NewEncoder(os.Stdout).Encode(out); err != nil {
 			panic(err)
@@ -281,8 +286,9 @@ func main() {
 		Startup: startup,
 		Goos:    runtime.GOOS, Goarch: runtime.GOARCH, Catalog: c.Len(), CatalogPackagedFiles: catalogStats["packagedFiles"], CatalogManifestSHA256: c.ManifestHash(), InventoryManifestSHA256: inventoryManifestHash(inv),
 		InventoryRecords: inventoryRecords(inv), InventoryShards: inventoryShards(inv), InventoryBytes: inventoryBytes(inv), InventoryLoadMs: inventoryLoadMs, InventoryIndexTerms: inventoryIndexTerms, InventoryIndexPostings: inventoryIndexPostings, InventoryBlockCache: inventoryBlockCacheStats(inv), CatalogLoadMs: loadMs,
-		DirectoryQueries: append([]string(nil), benchmarkDirectoryQueries...),
-		CatalogIntegrity: c.IntegrityStats(), CatalogSPKRead: map[string]uint64{"cachedBytes": uint64(catalogRead.CachedBytes), "loadedBytes": uint64(catalogRead.LoadedBytes), "pageLoads": catalogRead.PageLoads, "cacheHits": catalogRead.CacheHits, "cacheMisses": catalogRead.CacheMisses},
+		InventoryIndexHeapBytes: inventoryIndexHeapBytes,
+		DirectoryQueries:        append([]string(nil), benchmarkDirectoryQueries...),
+		CatalogIntegrity:        c.IntegrityStats(), CatalogSPKRead: map[string]uint64{"cachedBytes": uint64(catalogRead.CachedBytes), "loadedBytes": uint64(catalogRead.LoadedBytes), "pageLoads": catalogRead.PageLoads, "cacheHits": catalogRead.CacheHits, "cacheMisses": catalogRead.CacheMisses},
 		TrajectoryPrecision: "approximate-opt-in",
 		Requests:            *n * latencyBatch, Concurrency: *workers, FirstRequestMs: firstMs,
 		P50Ns: quantile(lat, .50), P95Ns: quantile(lat, .95), P99Ns: quantile(lat, .99), MinNs: quantile(lat, 0), MaxNs: quantile(lat, 1),

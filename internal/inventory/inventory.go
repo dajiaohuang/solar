@@ -155,13 +155,17 @@ type sourceIndex struct {
 }
 
 type Inventory struct {
-	dir     string
-	m       manifest
-	hash    string
-	idx     *sourceIndex
-	sources map[string]struct{}
-	models  map[string]map[string]struct{}
-	blocks  *blockCache
+	dir  string
+	m    manifest
+	hash string
+	idx  *sourceIndex
+	// indexHeapBytes is the retained Go heap delta measured after the startup
+	// index has been built and temporary decode/sort buffers have been released.
+	// It is evidence for this load and runtime, not a portable allocator size.
+	indexHeapBytes uint64
+	sources        map[string]struct{}
+	models         map[string]map[string]struct{}
+	blocks         *blockCache
 }
 
 type decodedBlock struct {
@@ -295,10 +299,23 @@ func Load(dir string) (*Inventory, error) {
 	}
 	sum := sha256.Sum256(raw)
 	i := &Inventory{dir: abs, m: m, hash: hex.EncodeToString(sum[:]), sources: make(map[string]struct{}), models: make(map[string]map[string]struct{}), blocks: newBlockCache(BlockCacheBytes)}
+	runtime.GC()
+	var before runtime.MemStats
+	runtime.ReadMemStats(&before)
 	if err := i.buildIndex(); err != nil {
 		return nil, err
 	}
 	i.blocks.clear()
+	// buildIndex collects before the decode cache is cleared so that the
+	// sortable posting buffer can be released promptly. Collect once more at
+	// the steady-state boundary so the reported delta excludes decoded blocks.
+	runtime.GC()
+	debug.FreeOSMemory()
+	var after runtime.MemStats
+	runtime.ReadMemStats(&after)
+	if after.HeapAlloc >= before.HeapAlloc {
+		i.indexHeapBytes = after.HeapAlloc - before.HeapAlloc
+	}
 	return i, nil
 }
 
@@ -314,6 +331,18 @@ func (i *Inventory) TotalBytes() int64 {
 }
 
 func (i *Inventory) BlockCacheStats() map[string]int64 { return i.blocks.stats() }
+
+// IndexHeapBytes reports the retained heap delta observed while building this
+// index. The measurement includes the index's maps and strings as retained by
+// the loader, and excludes the temporary sortable postings buffer after the
+// post-build collection. It is a runtime measurement, not a cross-platform
+// promise about allocator pages or process RSS.
+func (i *Inventory) IndexHeapBytes() uint64 {
+	if i == nil {
+		return 0
+	}
+	return i.indexHeapBytes
+}
 
 // IndexStats exposes bounded startup-index evidence without exposing mutable
 // internal maps to callers.
