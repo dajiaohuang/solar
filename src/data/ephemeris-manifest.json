@@ -16631,6 +16631,211 @@
         },
         "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
       }
+    },
+    {
+      "id": "horizons-asteroids-batch8-20260909-cruithne-2026-01-01-2027-01-01",
+      "path": "horizons-asteroids-batch8-20260909-cruithne-2026-01-01-2027-01-01.bsp",
+      "sha256": "9210d049b805a0a524a3301e312249fc08fc3169880598942ce757f29894700a",
+      "bytes": 23552,
+      "targets": [
+        20003753
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%273753%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%273753%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T08:35:23.658Z",
+        "bytes": 272384,
+        "sha256": "7bdc3e7e6250ba0536a2ce945ac0f4e75502f23d7886e7e81978cec83e6e7174",
+        "responseSha256": "e466e528d0d142c010f17eb4dfc39d53e7a9eb04d8912fc7ab6debd7e5fc9a67",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20003753,
+        "designation": "3753",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS               3753 Cruithne (1986 TO)         2026-Sep-09 01:35:25\nRec #:    3753 (+COV) Soln.date: 2026-Sep-02_08:23:00   # obs: 1704 (1973-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2457856.5 ! 2017-Apr-13.00 (TDB)         Residual RMS= .33599\n   EC= .514893929539582    QR= .4839966378578295   TP= 2457740.1721867067\n   OM= 126.236685808004    W=  43.82854802643352   IN= 19.80621923344624\n   A= .997713010266939     MA= 115.0480296093922   ADIST= 1.511429382676049\n   PER= .99659             N= .988998472           ANGMOM= .014729694\n   DAN= .53462             DDN= 1.1665             L= 168.323054\n   B= 13.5708539           MOID= .0714425          TP= 2016-Dec-17.6721867067\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 1.0355             ROTPER= 27.3099\n   H= 15.42                G= .150                 B-V= n.a.\n                           ALBEDO= .365            STYP= Q\n\nASTEROID comments: \n1: soln ref.= JPL#310, OCC=0\n2: source=ORB\n*******************************************************************************\n\n  \nID= '20003753'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch8-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "Cruithne (3753) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "e466e528d0d142c010f17eb4dfc39d53e7a9eb04d8912fc7ab6debd7e5fc9a67",
+          "binarySha256": "7bdc3e7e6250ba0536a2ce945ac0f4e75502f23d7886e7e81978cec83e6e7174",
+          "retrievedAt": "2026-09-09T08:35:23.658Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-asteroids-batch8-20260909-golevka-2026-01-01-2027-01-01",
+      "path": "horizons-asteroids-batch8-20260909-golevka-2026-01-01-2027-01-01.bsp",
+      "sha256": "8002eccad39003888ea72e241d825051f08f6eb0851432e0636c79a2be6dff2d",
+      "bytes": 21504,
+      "targets": [
+        20006489
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%276489%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%276489%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T08:35:25.370Z",
+        "bytes": 258048,
+        "sha256": "3d5cd77073698d03dc2300d834694a7089df19e17740ddeaabef15eb1e36e693",
+        "responseSha256": "889f657bb6036c845d3c8f2e4ef27ff4298d8aba18df95f6257981a955b33e07",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20006489,
+        "designation": "6489",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS               6489 Golevka (1991 JX)          2026-Sep-09 01:35:27\nRec #:    6489 (+COV) Soln.date: 2022-Dec-20_14:07:28   # obs: 1017 (1991-2015)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2452413.5 ! 2002-May-19.00 (TDB)         Residual RMS= .3589\n   EC= .6051896111299258   QR= .9883219389666285   TP= 2452808.2425294677\n   OM= 211.1243017895301   W=  66.56347298401046   IN= 2.276154591271521\n   A= 2.503282504280477    MA= 261.7679522336765   ADIST= 4.018243069594325\n   PER= 3.96071            N= .248850936           ANGMOM= .021666753\n   DAN= 1.27866            DDN= 2.08936            L= 277.6712673\n   B= 2.0882877            MOID= .0281669          TP= 2003-Jun-17.7425294677\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= .265               ROTPER= 6.026\n   H= 19.22                G= .150                 B-V= n.a.\n                           ALBEDO= .151            STYP= Q\n\nAsteroid non-gravitational force model (AMRAT= m^2/kg;A1,A2,A3=au/d^2;R0=au):\n   AMRAT=  0.\n   A1= 0.                  A2= -1.218508373313E-14 A3= 0.\n Non-standard or simulated/proxy model:\n   ALN=  1.            NK=  0.       NM=  2.       NN=  5.093    R0=  1.\n\nASTEROID comments: \n1: soln ref.= JPL#107, PHA  OCC=0       radar(20 delay,20 Dop.)\n2: source=ORB; Nongravitational accels. using nonstandard g(r) = (1 au/ r)^2\n*******************************************************************************\n\nID= '20006489'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch8-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "Golevka (6489) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "889f657bb6036c845d3c8f2e4ef27ff4298d8aba18df95f6257981a955b33e07",
+          "binarySha256": "3d5cd77073698d03dc2300d834694a7089df19e17740ddeaabef15eb1e36e693",
+          "retrievedAt": "2026-09-09T08:35:25.370Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-asteroids-batch8-20260909-1986-da-2026-01-01-2027-01-01",
+      "path": "horizons-asteroids-batch8-20260909-1986-da-2026-01-01-2027-01-01.bsp",
+      "sha256": "e931b9e8786bc31d23d185967a54851a4da24d3e3cb1132ee9d3e3f8ec35cc0f",
+      "bytes": 21504,
+      "targets": [
+        20006178
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%276178%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%276178%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T08:35:26.094Z",
+        "bytes": 272384,
+        "sha256": "4e38302ad18612ee75284b3f8c8bfe32a578d60a394d00c870c8e846fb05aad9",
+        "responseSha256": "cb664295837141b8ce1d84ef98693ce26178932eedc033ad2a616083c676cba0",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20006178,
+        "designation": "6178",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS                   6178 (1986 DA)              2026-Sep-09 01:35:27\nRec #:    6178 (+COV) Soln.date: 2026-Aug-04_06:19:35   # obs: 1394 (1977-2025)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458886.5 ! 2020-Feb-07.00 (TDB)         Residual RMS= .24788\n   EC= .5818606690263404   QR= 1.179813021085608   TP= 2458610.7118286756\n   OM= 64.62966306342581   W=  127.3725781394937   IN= 4.304967983380315\n   A= 2.82157867890196     MA= 57.35106163784577   ADIST= 4.463344336718312\n   PER= 4.73965            N= .207953305           ANGMOM= .023500232\n   DAN= 2.88538            DDN= 1.37919            L= 192.0803588\n   B= 3.4199929            MOID= .190859           TP= 2019-May-07.2118286756\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 1.15               ROTPER= 3.5002\n   H= 15.71                G= .150                 B-V= .677\n                           ALBEDO= .150            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#241, OCC=0           radar( 1 delay, 1 Dop.)\n2: source=ORB\n*******************************************************************************\n\nID= '20006178'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch8-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "1986 DA (6178) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "cb664295837141b8ce1d84ef98693ce26178932eedc033ad2a616083c676cba0",
+          "binarySha256": "4e38302ad18612ee75284b3f8c8bfe32a578d60a394d00c870c8e846fb05aad9",
+          "retrievedAt": "2026-09-09T08:35:26.094Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-asteroids-batch8-20260909-besixdouze-2026-01-01-2027-01-01",
+      "path": "horizons-asteroids-batch8-20260909-besixdouze-2026-01-01-2027-01-01.bsp",
+      "sha256": "0b3cf1e1c8b2ed7974ccd0094f734d98dd1468711b89aaf9324ff9a3fc666b61",
+      "bytes": 21504,
+      "targets": [
+        20046610
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2746610%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2746610%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T08:35:26.887Z",
+        "bytes": 272384,
+        "sha256": "9db6e704052fe9beabbd17a9bf21286413d7c031c1b4f4e0e30b89e646233ac9",
+        "responseSha256": "71beb48477ae69eff90b9a59769f17f152ee65c436935e1bf6988bd3b032e989",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20046610,
+        "designation": "46610",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS             46610 Besixdouze (1993 TQ1)       2026-Sep-09 01:35:28\nRec #:   46610 (+COV) Soln.date: 2026-Jun-06_03:18:26   # obs: 2613 (1986-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458188.5 ! 2018-Mar-11.00 (TDB)         Residual RMS= .24212\n   EC= .1813919543155661   QR= 1.858115970270842   TP= 2458017.0867108554\n   OM= 172.133195237317    W=  211.8311501856685   IN= 2.405277997347667\n   A= 2.269848164902021    MA= 49.40300331412676   ADIST= 2.6815803595332\n   PER= 3.41982            N= .288209879           ANGMOM= .025486773\n   DAN= 2.5951             DDN= 1.90204            L= 23.9417202\n   B= -1.2683174           MOID= .86121601         TP= 2017-Sep-20.5867108554\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 1.032              ROTPER= n.a.\n   H= 15.51                G= .150                 B-V= n.a.\n                           ALBEDO= .262            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#52, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20046610'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch8-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "Besixdouze (46610) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "71beb48477ae69eff90b9a59769f17f152ee65c436935e1bf6988bd3b032e989",
+          "binarySha256": "9db6e704052fe9beabbd17a9bf21286413d7c031c1b4f4e0e30b89e646233ac9",
+          "retrievedAt": "2026-09-09T08:35:26.887Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-asteroids-batch8-20260909-torifune-2026-01-01-2027-01-01",
+      "path": "horizons-asteroids-batch8-20260909-torifune-2026-01-01-2027-01-01.bsp",
+      "sha256": "2d3df13438c2f2f4ccc5a4a895e9006d59a730a9a4de4b15142554a02c733598",
+      "bytes": 21504,
+      "targets": [
+        20098943
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2798943%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2798943%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T08:35:27.678Z",
+        "bytes": 278528,
+        "sha256": "28e8a69ba9dde8b4c63c018fe47588d3cd4d4c30d114faee40ada4583c06c8f1",
+        "responseSha256": "5ba6fb9f66772bfb68b5ac788e7de83f8062bb8cfb605a6e189baaf0776ed4d7",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20098943,
+        "designation": "98943",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS             98943 Torifune (2001 CC21)        2026-Sep-09 01:35:29\nRec #:   98943 (+COV) Soln.date: 2026-Mar-30_08:24:35   # obs: 2398 (1982-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2459938.5 ! 2022-Dec-25.00 (TDB)         Residual RMS= .16379\n   EC= .2191802754035751   QR= .8059120697301343   TP= 2460084.7410263014\n   OM= 75.55072717608479   W=  179.4374579670385   IN= 4.808220699440845\n   A= 1.032135900699331    MA= 222.5426479142792   ADIST= 1.258359731668527\n   PER= 1.04861            N= .939937004           ANGMOM= .017051368\n   DAN= 1.25834            DDN= .80592             L= 254.9901647\n   B= .047152              MOID= .0830709          TP= 2023-May-20.2410263014\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= 5.0159\n   H= 18.71                G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= L\n\nNon-default Earth gravity model (EOBL_LIM= au):\n   EOBL_LIM= 1.000                                 EOBL_MOD = 2x0 (J2 only)\nAsteroid non-gravitational force model (AMRAT= m^2/kg;A1,A2,A3=au/d^2;R0=au):\n   AMRAT=  0.\n   A1= 0.                  A2= 1.308908281317E-14  A3= 0.\n Non-standard or simulated/proxy model:\n   ALN=  1.            NK=  0.       NM=  2.       NN=  5.093    R0=  1.\n\nASTEROID comments: \n1: soln ref.= JPL#322, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20098943'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch8-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "Torifune (98943) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "5ba6fb9f66772bfb68b5ac788e7de83f8062bb8cfb605a6e189baaf0776ed4d7",
+          "binarySha256": "28e8a69ba9dde8b4c63c018fe47588d3cd4d4c30d114faee40ada4583c06c8f1",
+          "retrievedAt": "2026-09-09T08:35:27.678Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
     }
   ]
 }
