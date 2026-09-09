@@ -1,7 +1,7 @@
 {
   "oracle": "CSPICE N0067 spkgeo_c",
   "oracleSourceSha256": "fe0ef850dc74a9737a9f890c4a7c0cd2d6ec81c5bb9c36fae736ebd66321ab7c",
-  "manifestSha256": "7e7fa1df8080b505abba52cc8ca9a4d8bd6d1c10d47d3e421953e7c1b8494257",
+  "manifestSha256": "9058cd96aa87a2e5c24bd071ae72e6edf8637953167301f27a9254ec70b56258",
   "frame": "ECLIPJ2000",
   "timeScale": "TDB seconds past J2000",
   "positionUnit": "km",

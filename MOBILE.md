@@ -182,7 +182,7 @@ to the SHA-256 of its `manifest.json`, then run `node scripts/android-native-smo
 with the SDK/JDK/HTTPS toolchain described above and a new output directory.
 The retained run used inventory hash
 `bef21e3bc5820db0b70c24ad464262cb67df279f8d0a3e2b8731ca5ca9c39583` and
-full catalog hash `7e7fa1df8080b505abba52cc8ca9a4d8bd6d1c10d47d3e421953e7c1b8494257`.
+full catalog hash `9058cd96aa87a2e5c24bd071ae72e6edf8637953167301f27a9254ec70b56258`.
 No source archive is fetched from the internet, rewritten or packaged into the app. Without both inventory
 inputs, the report explicitly marks this additional case `not-configured`;
 ordinary hosted native smoke alone does not prove real-directory selection.

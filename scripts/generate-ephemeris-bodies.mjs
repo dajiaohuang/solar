@@ -20,9 +20,13 @@ const NAMES = {
   609: 'Phoebe', 612: 'Helene', 613: 'Telesto', 614: 'Calypso', 632: 'Methone', 634: 'Polydeuces',
   701: 'Ariel', 702: 'Umbriel', 703: 'Titania', 704: 'Oberon', 705: 'Miranda',
   801: 'Triton', 802: 'Nereid', 901: 'Charon', 902: 'Nix', 903: 'Hydra', 904: 'Kerberos', 905: 'Styx',
+  20000243: 'Ida', 20000433: 'Eros', 20000951: 'Gaspra', 20025143: 'Itokawa',
+  20099942: 'Apophis', 20162173: 'Ryugu',
 }
 // Bodies already represented by majorBodies are intentionally not duplicated.
 const MAJOR = new Set([10, 199, 299, 399, 301, 499, 599, 699, 799, 899, 999, 501, 502, 503, 504, 606, 920136199, 920136108])
+const HELIOCENTRIC_ASTEROIDS = new Set([20000243, 20000433, 20000951, 20025143, 20099942, 20162173])
+const DESIGNATIONS = { 20000243: '243', 20000433: '433', 20000951: '951', 20025143: '25143', 20099942: '99942', 20162173: '162173' }
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(name)
@@ -53,6 +57,8 @@ function readGm(file) {
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
 const gm = readGm(gmPath)
+const previousBodies = fs.existsSync(outputPath) ? JSON.parse(fs.readFileSync(outputPath, 'utf8')).bodies ?? [] : []
+const previousById = new Map(previousBodies.map((body) => [body.id, body]))
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
 const manifestBytes = fs.readFileSync(manifestPath)
 const gmBytes = fs.readFileSync(gmPath)
@@ -76,7 +82,7 @@ for (const target of [...new Set(manifest.files.flatMap((f) => f.targets))].sort
   // This generator only knows legacy numbered-asteroid IDs. New system,
   // primary and component IDs require explicit mappings; never invent an
   // "Asteroid 18136199" from an Eris system barycenter.
-  if (target >= 3000000) continue
+  if (target >= 3000000 && !HELIOCENTRIC_ASTEROIDS.has(target)) continue
   const name = NAMES[target] ?? (target >= 2000000 ? `Asteroid ${target - 2000000}` : null)
   if (!name) continue
   let state, source
@@ -96,12 +102,15 @@ for (const target of [...new Set(manifest.files.flatMap((f) => f.targets))].sort
   if (!orbit) continue
   const parentNames = { 10: 'sun', 199: 'mercury', 299: 'venus', 399: 'earth', 499: 'mars', 599: 'jupiter', 699: 'saturn', 799: 'uranus', 899: 'neptune', 999: 'pluto' }
   const parentId = parentNames[parentNaifId] ?? `naif:${parentNaifId}`
-  bodies.push({ id: target >= 2000000 ? `asteroid:${target - 2000000}` : `naif:${target}`, name, shortName: name, kind: target >= 2000000 ? 'asteroid' : 'moon', naifId: target,
+  const generated = { id: target >= 2000000 ? `asteroid:${DESIGNATIONS[target] ?? target - 2000000}` : `naif:${target}`, name, shortName: name, kind: target >= 2000000 ? 'asteroid' : 'moon', naifId: target,
     parentId, source: 'jpl-spk-osculating-fallback',
     orbit: { model: 'keplerian', epochJd, ...orbit },
     parentRelativeStateKm: relative,
     fallback: { label: 'instantaneous two-body osculating ellipse; not an operational ephemeris', gmKm3S2: gmUsed, gmApproximation: satelliteGm == null ? 'parent-only (satellite GM unavailable)' : 'parent-plus-satellite', centerNaifId: parentNaifId },
-    sourceUrl: source.source, sourceKernelId: source.id })
+    sourceUrl: source.source, sourceKernelId: source.id }
+  // Existing fallback seeds are intentionally stable against later source-pool
+  // additions; exact states use the manifest resolver when a kernel covers.
+  bodies.push(previousById.get(generated.id) ?? generated)
 }
 const result = { schemaVersion: 1, generatedAt: new Date().toISOString(), epochJd, epochTimeScale: 'TDB', source: {
   manifestPath: 'src/data/ephemeris-manifest.json', manifestId: manifest.id, manifestSha256: sha256(manifestBytes), gmUrl: GM_URL, gmFile: 'src/data/gm_de440.tpc', gmSha256: sha256(gmBytes), gmKm3S2: Object.fromEntries(gm),

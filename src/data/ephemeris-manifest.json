@@ -14745,6 +14745,252 @@
       "startEt": 836136000,
       "endEt": 852033600,
       "integrationBatch": "satellite-expansion-20260904"
+    },
+    {
+      "id": "horizons-ida-2026-01-01-2027-01-01",
+      "path": "horizons-ida-2026-01-01-2027-01-01.bsp",
+      "sha256": "52c5209da9ee09b992c2196ea45d1ccf4013c602e57e3849a18fb808f068aade",
+      "bytes": 22528,
+      "targets": [
+        20000243
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27243%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27243%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T01:43:04.118Z",
+        "bytes": 268288,
+        "sha256": "7785358d509ff9c1244c3797ef25ebe894e4bce8eac0743bef5fe4f55f11b1fa",
+        "responseSha256": "c1dccdc2e6b875b162e4664638fae2a693bbcdc32fb235a89c6e66d54e119c5c",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20000243,
+        "designation": "243",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS                  243 Ida (A884 SB)            2026-Sep-08 18:43:04\nRec #:     243 (+COV) Soln.date: 2026-Jun-05_03:20:34  # obs: 12966 (1885-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2457351.5 ! 2015-Nov-25.00 (TDB)         Residual RMS= .24115\n   EC= .04122993671311469  QR= 2.743314291471128   TP= 2457409.7583745634\n   OM= 324.0195562677311   W=  110.8060925381941   IN= 1.13212254291052\n   A= 2.861284886249381    MA= 348.1362827903862   ADIST= 2.979255481027635\n   PER= 4.84005            N= .203639688           ANGMOM= .029073181\n   DAN= 2.89888            DDN= 2.81519            L= 74.8293632\n   B= 1.0582858            MOID= 1.75810003        TP= 2016-Jan-22.2583745634\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= .00275              RAD= 16.                ROTPER= 4.634\n   H= 10.06                G= .150                 B-V= .802\n                           ALBEDO= .262            STYP= S\n\nASTEROID comments: \n1: soln ref.= JPL#191, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20000243'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 + DE440 Sun conversion",
+      "integrationBatch": "horizons-asteroids-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "Ida (243) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "c1dccdc2e6b875b162e4664638fae2a693bbcdc32fb235a89c6e66d54e119c5c",
+          "binarySha256": "7785358d509ff9c1244c3797ef25ebe894e4bce8eac0743bef5fe4f55f11b1fa",
+          "retrievedAt": "2026-09-09T01:43:04.118Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-eros-2026-01-01-2027-01-01",
+      "path": "horizons-eros-2026-01-01-2027-01-01.bsp",
+      "sha256": "c9240dfdbe410ed08705306c01276b70ec54f34dbb9f135759f5734e16f74f6d",
+      "bytes": 22528,
+      "targets": [
+        20000433
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27433%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27433%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T01:42:44.082Z",
+        "bytes": 269312,
+        "sha256": "1b4b144924a9f67d3b5fe8b69df6830fe0b9643e2daa2a5435610f1de39e2466",
+        "responseSha256": "2407717e6968bcf3f4d0655a187e9c8df928b7da8bbc7488fe1144a0067cd776",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20000433,
+        "designation": "433",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS                 433 Eros (A898 PA)            2026-Sep-08 18:42:44\nRec #:     433 (+COV) Soln.date: 2021-May-24_17:55:05   # obs: 9130 (1893-2021)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2453311.5 ! 2004-Nov-02.00 (TDB)         Residual RMS= .3494\n   EC= .2228078944584026   QR= 1.133355399799004   TP= 2453371.5859943051\n   OM= 304.4010273379536   W=  178.665326776373    IN= 10.8291838260782\n   A= 1.458269315549994    MA= 326.37047603642     ADIST= 1.783183231300984\n   PER= 1.76102            N= .559689897           ANGMOM= .020250867\n   DAN= 1.78304            DDN= 1.13341            L= 123.090114\n   B= .2507387             MOID= .149124           TP= 2005-Jan-01.0859943051\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= .0004463            RAD= 8.42               ROTPER= 5.27\n   H= 10.4                 G= .460                 B-V= .921\n                           ALBEDO= .250            STYP= S\n\nASTEROID comments: \n1: soln ref.= JPL#659, OCC=0           radar( 4 delay, 2 Dop.)\n2: source=ORB\n*******************************************************************************\n\nID= '20000433'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 + DE440 Sun conversion",
+      "integrationBatch": "horizons-asteroids-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "Eros (433) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "2407717e6968bcf3f4d0655a187e9c8df928b7da8bbc7488fe1144a0067cd776",
+          "binarySha256": "1b4b144924a9f67d3b5fe8b69df6830fe0b9643e2daa2a5435610f1de39e2466",
+          "retrievedAt": "2026-09-09T01:42:44.082Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-gaspra-2026-01-01-2027-01-01",
+      "path": "horizons-gaspra-2026-01-01-2027-01-01.bsp",
+      "sha256": "ba2c7509bc7b10b4938b3ddaa6650315f4e6e0c591f4f8d1f1e9054d0ae8b522",
+      "bytes": 23552,
+      "targets": [
+        20000951
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27951%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27951%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T01:43:05.583Z",
+        "bytes": 269312,
+        "sha256": "1d2f8c29991f6ca1fae84b2edcb7eb19cecd53bbe89b414bb207a718dbb7aebd",
+        "responseSha256": "c3b9de0ca9dd57e95454d517174a9b96f30d5a2df45c76d44107b0f8c19b4e8b",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20000951,
+        "designation": "951",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS                951 Gaspra (A916 OJ)           2026-Sep-08 18:43:06\nRec #:     951 (+COV) Soln.date: 2026-Jun-05_04:16:02   # obs: 6315 (1913-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2457494.5 ! 2016-Apr-16.00 (TDB)         Residual RMS= .25357\n   EC= .1732376805673328   QR= 1.826870243370493   TP= 2457223.0491970377\n   OM= 253.1590449794715   W=  129.5161306698612   IN= 4.102515912480554\n   A= 2.209668003041201    MA= 81.45254606028575   ADIST= 2.592465762711909\n   PER= 3.28472            N= .300063751           ANGMOM= .025184208\n   DAN= 2.40889            DDN= 1.93055            L= 22.747351\n   B= 3.1637712            MOID= .83362699         TP= 2015-Jul-19.5491970377\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 6.1                ROTPER= 7.042\n   H= 11.49                G= .150                 B-V= .870\n                           ALBEDO= .246            STYP= S\n\nASTEROID comments: \n1: soln ref.= JPL#162, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20000951'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 + DE440 Sun conversion",
+      "integrationBatch": "horizons-asteroids-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "Gaspra (951) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "c3b9de0ca9dd57e95454d517174a9b96f30d5a2df45c76d44107b0f8c19b4e8b",
+          "binarySha256": "1d2f8c29991f6ca1fae84b2edcb7eb19cecd53bbe89b414bb207a718dbb7aebd",
+          "retrievedAt": "2026-09-09T01:43:05.583Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-itokawa-2026-01-01-2027-01-01",
+      "path": "horizons-itokawa-2026-01-01-2027-01-01.bsp",
+      "sha256": "a92b59a83b51ef94ba11d684cfaf8dcbbcb7e49e1cc71488b8dcd55833fd5735",
+      "bytes": 23552,
+      "targets": [
+        20025143
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2725143%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2725143%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T01:43:06.151Z",
+        "bytes": 264192,
+        "sha256": "58ccff8049a999b5b4464e366ddfbd307837a3a17aa4eddda22869cbf3692609",
+        "responseSha256": "a31183e16fa21a210b0be513c7be98e91be4fb57508639c0123dda6be448fdce",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20025143,
+        "designation": "25143",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS              25143 Itokawa (1998 SF36)        2026-Sep-08 18:43:06\nRec #:   25143 (+COV) Soln.date: 2025-May-22_17:09:17   # obs: 1025 (1998-2024)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2453005.5 ! 2004-Jan-01.00 (TDB)         Residual RMS= .18946\n   EC= .279465894044321    QR= .9531059217424466   TP= 2453145.4131572028\n   OM= 70.91767938852736   W=  161.0144462702274   IN= 1.727962095421385\n   A= 1.322776970395172    MA= 269.357329363154    ADIST= 1.692448019047896\n   PER= 1.52138            N= .647849512           ANGMOM= .018996185\n   DAN= 1.65748            DDN= .96457             L= 231.9401412\n   B= .5620813             MOID= .0128853          TP= 2004-May-19.9131572028\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= 2.1E-9              RAD= .165               ROTPER= 12.132\n   H= 19.26                G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= S(IV)\n\nAsteroid non-gravitational force model (AMRAT= m^2/kg;A1,A2,A3=au/d^2;R0=au):\n   AMRAT=  0.\n   A1= 0.                  A2= -2.855043703676E-14 A3= 0.\n Non-standard or simulated/proxy model:\n   ALN=  1.            NK=  0.       NM=  2.       NN=  5.093    R0=  1.\n\nASTEROID comments: \n1: soln ref.= JPL#237, PHA  OCC=0       radar(21 delay,18 Dop.)\n2: source=ORB; Nongravitational accels. using nonstandard g(r) = (1 au/ r)^2\n*******************************************************************************\n\nID= '20025143'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 + DE440 Sun conversion",
+      "integrationBatch": "horizons-asteroids-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "Itokawa (25143) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "a31183e16fa21a210b0be513c7be98e91be4fb57508639c0123dda6be448fdce",
+          "binarySha256": "58ccff8049a999b5b4464e366ddfbd307837a3a17aa4eddda22869cbf3692609",
+          "retrievedAt": "2026-09-09T01:43:06.151Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-apophis-2026-01-01-2027-01-01",
+      "path": "horizons-apophis-2026-01-01-2027-01-01.bsp",
+      "sha256": "9048e718db00a10dd7d1795049b6a449b75045d6a46104ee42b8829a67435364",
+      "bytes": 21504,
+      "targets": [
+        20099942
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2799942%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2799942%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T01:43:06.530Z",
+        "bytes": 319488,
+        "sha256": "8f8c5b14404053e7aada3bf8c4ab869f0f2c439ca50149919187d26d730820ab",
+        "responseSha256": "3bc70c6dae737c2072a83eddd7c7f89b7b08abded450dc4eea2942664f997681",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20099942,
+        "designation": "99942",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS              99942 Apophis (2004 MN4)         2026-Sep-08 18:43:07\nRec #:   99942 (+COV) Soln.date: 2024-Jun-25_10:48:08   # obs: 7370 (2004-2022)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2459215.5 ! 2021-Jan-01.00 (TDB)         Residual RMS= .080135\n   EC= .1915216893501022   QR= .7458270478466523   TP= 2459101.0394224627\n   OM= 204.0389272089208   W=  126.6520518368553   IN= 3.336751320066756\n   A= .9225071817289903    MA= 127.3225632013606   ADIST= 1.099187315611328\n   PER= .88606             N= 1.112370442          ANGMOM= .016216289\n   DAN= 1.00339            DDN= .79749             L= 330.7375495\n   B= 2.6764541            MOID= .0003822          TP= 2020-Sep-08.5394224627\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= .170               ROTPER= 30.56\n   H= 19.09                G= .240                 B-V= n.a.\n                           ALBEDO= .350            STYP= Sq\n\nNon-default Earth gravity model (EOBL_LIM= au):\n   EOBL_LIM= 1.000                                 EOBL_MOD = 2x0 (J2 only)\nAsteroid non-gravitational force model (AMRAT= m^2/kg;A1,A2,A3=au/d^2;R0=au):\n   AMRAT=  0.\n   A1= 4.999999873689E-13  A2= -2.901766720242E-14 A3= 0.\n Non-standard or simulated/proxy model:\n   ALN=  1.            NK=  0.       NM=  2.       NN=  5.093    R0=  1.\n\nASTEROID comments: \n1: soln ref.= JPL#220, PHA  OCC=0       radar(20 delay,30 Dop.)\n2: source=ORB\n*******************************************************************************\n\nID= '20099942'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 + DE440 Sun conversion",
+      "integrationBatch": "horizons-asteroids-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "Apophis (99942) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "3bc70c6dae737c2072a83eddd7c7f89b7b08abded450dc4eea2942664f997681",
+          "binarySha256": "8f8c5b14404053e7aada3bf8c4ab869f0f2c439ca50149919187d26d730820ab",
+          "retrievedAt": "2026-09-09T01:43:06.530Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-ryugu-2026-01-01-2027-01-01",
+      "path": "horizons-ryugu-2026-01-01-2027-01-01.bsp",
+      "sha256": "703512bcaca000ba5b03d6073d363becf38cf48b7c919bc7014f009e58bbddfd",
+      "bytes": 21504,
+      "targets": [
+        20162173
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27162173%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27162173%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T01:43:07.152Z",
+        "bytes": 277504,
+        "sha256": "a73104d9c00d314de8b4b0f4a80d3cb88dc6b0c3178219b5a2898c012ce48c6f",
+        "responseSha256": "9288e518a9f845766492350c2df6a53c5015553c523443d25b83bf0d93dac654",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20162173,
+        "designation": "162173",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS               162173 Ryugu (1999 JU3)         2026-Sep-08 18:43:07\nRec #:  162173 (+COV) Soln.date: 2026-Aug-11_13:41:47   # obs: 5124 (1986-2025)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458753.5 ! 2019-Sep-27.00 (TDB)         Residual RMS= .18156\n   EC= .1903782605596403   QR= .963114783617966    TP= 2458745.5392894726\n   OM= 251.5874649641874   W=  211.4457746039085   IN= 5.884195597891756\n   A= 1.18958611991287     MA= 6.047307793310185   ADIST= 1.416057456207773\n   PER= 1.29748            N= .759644227           ANGMOM= .018418869\n   DAN= 1.36879            DDN= .98628             L= 102.8986866\n   B= -3.0658037           MOID= 8.213E-5          TP= 2019-Sep-19.0392894726\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= 3.E-8               RAD= .448               ROTPER= 7.63262\n   H= 19.55                G= .150                 B-V= n.a.\n                           ALBEDO= .045            STYP= Cb\n\nAsteroid non-gravitational force model (AMRAT= m^2/kg;A1,A2,A3=au/d^2;R0=au):\n   AMRAT=  0.\n   A1= 0.                  A2= -2.487268602636E-14 A3= 0.\n Non-standard or simulated/proxy model:\n   ALN=  1.            NK=  0.       NM=  2.       NN=  5.093    R0=  1.\n\nASTEROID comments: \n1: soln ref.= JPL#270, PHA  OCC=0       radar( 2 delay, 0 Dop.)\n2: source=ORB; Nongravitational accels. using nonstandard g(r) = (1 au/ r)^2\n*******************************************************************************\n\nID= '20162173'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 + DE440 Sun conversion",
+      "integrationBatch": "horizons-asteroids-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "Ryugu (162173) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "9288e518a9f845766492350c2df6a53c5015553c523443d25b83bf0d93dac654",
+          "binarySha256": "a73104d9c00d314de8b4b0f4a80d3cb88dc6b0c3178219b5a2898c012ce48c6f",
+          "retrievedAt": "2026-09-09T01:43:07.152Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
     }
   ]
 }

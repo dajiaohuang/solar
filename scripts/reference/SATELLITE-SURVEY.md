@@ -232,11 +232,11 @@ an existing output path are refused. The legacy `data:ephemerides` generator now
 refuses to overwrite an integrated source-pool manifest. Prepare any changed
 baseline separately and review its integration rather than losing added targets.
 
-Pages and full each list 510 files and the same target identities. Pages narrows
+Pages and full each list 516 files and the same target identities. Pages narrows
 large satellite files to 2026/2027 TDB; full retains 2020/2031 for planetary
 satellites and 2020/2030-01-02 for the Eris/Haumea companions. The eight other
 binary systems have the explicit ten-year/full and half-year/Pages windows above. At the modern
-test epoch, 508 selectable centers resolve, with the remaining gaps enumerated
+test epoch, 514 selectable centers resolve, with the remaining gaps enumerated
 in the [physical contract](../../docs/physical-ephemerides.md). The full package
 is a delivery profile, not a claim of complete physical coverage of all bodies.
 

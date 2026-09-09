@@ -436,7 +436,7 @@ native rendering smoothness. All 510 candidates remained pending verification
 with zero integrity bytes read; they are not 510 verified current states.
 
 The measured catalog manifest SHA-256 was
-`7e7fa1df8080b505abba52cc8ca9a4d8bd6d1c10d47d3e421953e7c1b8494257`;
+`9058cd96aa87a2e5c24bd071ae72e6edf8637953167301f27a9254ec70b56258`;
 inventory manifest SHA-256 was
 `bef21e3bc5820db0b70c24ad464262cb67df279f8d0a3e2b8731ca5ca9c39583`.
 The exact executable SHA-256 and raw reports are retained with local benchmark

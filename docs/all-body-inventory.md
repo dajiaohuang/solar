@@ -189,7 +189,7 @@ passed the complete block/shard validator against the source snapshot:
 | Shards / independently compressed blocks | 314 / 12,538 |
 | Compressed shard bytes | 97,110,144 |
 | Manifest SHA-256 (both replays) | `2c0aca1e6412c6e7785acd901bb987ce0f57c5353e2a8ff87aed032b291377b7` |
-| Kernel manifest SHA-256 | `5c390d7bb8e02a28ebe45d32979c2f5db12983f8ec6044e4206750c5c89c29e0` |
+| Kernel manifest SHA-256 | `8e29cfb40a957dcaee094d09ed494900675caf3feecb15937c6ef3cb6694ca14` |
 | Identity mapping SHA-256 | `6d36c44543bc7f28e2f1696ec8c7e18c7a5ddedc58b51aec25826ad08395188e` |
 | TDB audit seconds past J2000 | 841752000 |
 | States available at that audit epoch | 496 |

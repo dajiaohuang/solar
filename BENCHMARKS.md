@@ -19,7 +19,7 @@ The benchmark below uses the retained `inventory-pr94-20260904` snapshot. Its
 manifest is 1,567,193 records in 314 gzip shards with 89,626,020 declared
 compressed bytes, manifest SHA-256
 `99312497b037caae4097b3e663283d1e8fc63799bd5e546e52a2ae3489e1e9c1`, kernel
-manifest `5c390d7bb8e02a28ebe45d32979c2f5db12983f8ec6044e4206750c5c89c29e0`,
+manifest `8e29cfb40a957dcaee094d09ed494900675caf3feecb15937c6ef3cb6694ca14`,
 and identity mapping `6d36c44543bc7f28e2f1696ec8c7e18c7a5ddedc58b51aec25826ad08395188e`.
 The separately retained `inventory-20260904-final` snapshot has the same row
 and shard counts but 89,588,299 bytes, manifest SHA-256
@@ -65,8 +65,8 @@ hashes before copying the manifest last; `src/data` alone is source-only
 metadata and does not prove that exact kernel files are available. The results
 below are retained evidence for their recorded fixtures, not a final profile
 performance sign-off; repeat measurements after staging the intended profile.
-The recorded full-profile staging check found 510 files totaling
-1,147,897,856 bytes; this is an artifact validation result, not a runtime
+The recorded full-profile staging check found 516 files totaling
+1,149,197,312 bytes; this is an artifact validation result, not a runtime
 resident-memory or performance guarantee.
 
 ## Current binary state-tile evidence
@@ -110,7 +110,7 @@ backpressure (3 catalog, 3 per source size); those rejections are reported
 separately and are not included in successful latency quantiles.
 
 The catalog manifest SHA-256 was
-`7e7fa1df8080b505abba52cc8ca9a4d8bd6d1c10d47d3e421953e7c1b8494257`; the
+`9058cd96aa87a2e5c24bd071ae72e6edf8637953167301f27a9254ec70b56258`; the
 inventory manifest SHA-256 was
 `2c0aca1e6412c6e7785acd901bb987ce0f57c5353e2a8ff87aed032b291377b7`.
 In a warm-cache concurrency-1 run, source successful-tile p50/p95 latencies

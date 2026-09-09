@@ -151,7 +151,7 @@ Java Float64 位级检查。这只证明该页的集成，不证明全目录精�
 的可寻址目录，`SOLAR_ANDROID_INVENTORY_SHA256` 设为其 `manifest.json` 的 SHA-256，
 然后使用上述 SDK/JDK/HTTPS 工具链及新的输出目录运行 `node scripts/android-native-smoke.mjs`。
 本次目录哈希为 `bef21e3bc5820db0b70c24ad464262cb67df279f8d0a3e2b8731ca5ca9c39583`，
-完整星历清单哈希为 `7e7fa1df8080b505abba52cc8ca9a4d8bd6d1c10d47d3e421953e7c1b8494257`。
+完整星历清单哈希为 `9058cd96aa87a2e5c24bd071ae72e6edf8637953167301f27a9254ec70b56258`。
 不会从互联网获取原始数据归档、改写数据或打包进 App。两项目录输入均未设置时，报告明确将该额外用例
 标为 `not-configured`；普通托管原生测试本身不证明真实来源目录选择。
 
