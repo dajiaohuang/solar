@@ -15975,6 +15975,252 @@
         },
         "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
       }
+    },
+    {
+      "id": "horizons-asteroids-batch5-20260909-arrokoth-2026-01-01-2027-01-01",
+      "path": "horizons-asteroids-batch5-20260909-arrokoth-2026-01-01-2027-01-01.bsp",
+      "sha256": "7bc79586e0da62691bf08df4fcaab7549cee909d76ce5732b05f09daa177278f",
+      "bytes": 22528,
+      "targets": [
+        20486958
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27486958%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27486958%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T05:43:04.080Z",
+        "bytes": 264192,
+        "sha256": "22f1b0a20ffdf398ffb6ff20a8c7fbf19ccf11df9d0b935e525883e118fde52e",
+        "responseSha256": "42a3bc15083d0e87e260cc0b034a17780b7c7251dc2d837367402a027b838955",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20486958,
+        "designation": "486958",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS             486958 Arrokoth (2014 MU69)       2026-Sep-08 22:43:05\nRec #:  486958 (+COV) Soln.date: 2024-Feb-21_21:21:36    # obs: 112 (2014-2018)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458101.5 ! 2017-Dec-14.00 (TDB)         Residual RMS= .00066411\n   EC= .03868645692376498  QR= 42.72577233600888   TP= 2472213.5237931227\n   OM= 158.939446659904    W=  176.1507602341478   IN= 2.45301305206896\n   A= 44.44519963724322    MA= 313.05859524999     ADIST= 46.16462693847756\n   PER= 296.30944          N= .003326341           ANGMOM= .114595783\n   DAN= 46.16044           DDN= 42.72936           L= 335.0937235\n   B= .1646241             MOID= 41.71509933       TP= 2056-Aug-03.0237931227\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= 15.918\n   H= 11.06                G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#3, OCC=4\n2: source=ORB\n*******************************************************************************\n\nID= '20486958'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch5-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "Arrokoth (486958) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "42a3bc15083d0e87e260cc0b034a17780b7c7251dc2d837367402a027b838955",
+          "binarySha256": "22f1b0a20ffdf398ffb6ff20a8c7fbf19ccf11df9d0b935e525883e118fde52e",
+          "retrievedAt": "2026-09-09T05:43:04.080Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-asteroids-batch5-20260909-apl-2026-01-01-2027-01-01",
+      "path": "horizons-asteroids-batch5-20260909-apl-2026-01-01-2027-01-01.bsp",
+      "sha256": "810e704a3e239036bdae760f2b5c10c26b329a6b49d0e491110b9c9d92231376",
+      "bytes": 20480,
+      "targets": [
+        20132524
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27132524%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27132524%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T05:43:05.579Z",
+        "bytes": 267264,
+        "sha256": "adba815194ee170b13c251ad33a07453f633dc9cf85a73191a9a28a15330e145",
+        "responseSha256": "b24c04d1ba589ac65494c34e8dd9bfd86e0e66e2c6f5fdc8bb90d3e7c0d39dd6",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20132524,
+        "designation": "132524",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS               132524 APL (2002 JF56)          2026-Sep-08 22:43:06\nRec #:  132524 (+COV) Soln.date: 2026-Jun-06_20:36:48   # obs: 1627 (1990-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458133.5 ! 2018-Jan-15.00 (TDB)         Residual RMS= .21997\n   EC= .2740304178958411   QR= 1.888667693676955   TP= 2458770.7123851143\n   OM= 51.69422439779969   W=  262.037821565308    IN= 4.15956765484118\n   A= 2.601579653244999    MA= 210.3307469600178   ADIST= 3.314491612813043\n   PER= 4.19627            N= .234881268           ANGMOM= .026683888\n   DAN= 2.50116            DDN= 2.31822            L= 313.7112882\n   B= -4.1193987           MOID= .87846601         TP= 2019-Oct-14.2123851143\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= n.a.\n   H= 15.51                G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#71, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20132524'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch5-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "APL (132524) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "b24c04d1ba589ac65494c34e8dd9bfd86e0e66e2c6f5fdc8bb90d3e7c0d39dd6",
+          "binarySha256": "adba815194ee170b13c251ad33a07453f633dc9cf85a73191a9a28a15330e145",
+          "retrievedAt": "2026-09-09T05:43:05.579Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-asteroids-batch5-20260909-dinkinesh-2026-01-01-2027-01-01",
+      "path": "horizons-asteroids-batch5-20260909-dinkinesh-2026-01-01-2027-01-01.bsp",
+      "sha256": "36bbff254e1a044135b83439589de9fb63bef78be2a594cd2bdf5fa8756accce",
+      "bytes": 21504,
+      "targets": [
+        20152830
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27152830%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27152830%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T05:43:06.162Z",
+        "bytes": 273408,
+        "sha256": "211c1f5d6d12df422a53423d63774106b9103378ade6e3f8a12cde8de91af097",
+        "responseSha256": "2a7a4776d6c5d0f569b51dd3e005fe7593ce710d67896c640df0f2fbe3ca8ed1",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20152830,
+        "designation": "152830",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS            152830 Dinkinesh (1999 VD57)       2026-Sep-08 22:43:07\nRec #:  152830 (+COV) Soln.date: 2023-Mar-16_11:29:46    # obs: 690 (1999-2023)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2460249.5 ! 2023-Nov-01.00 (TDB)         Residual RMS= .10251\n   EC= .1121269945294693   QR= 1.945882791435475   TP= 2459917.6529205604\n   OM= 21.38248704730461   W=  66.78467710309617   IN= 2.093523142255687\n   A= 2.191622877873451    MA= 100.80761403436     ADIST= 2.437362964311428\n   PER= 3.24457            N= .303777313           ANGMOM= .025305619\n   DAN= 2.07247            DDN= 2.26414            L= 88.1533019\n   B= 1.9239439            MOID= .96316898         TP= 2022-Dec-04.1529205604\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= 3.3E-8              RAD= .3595              ROTPER= 52.67\n   H= 17.4                 G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#23, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20152830'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch5-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "Dinkinesh (152830) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "2a7a4776d6c5d0f569b51dd3e005fe7593ce710d67896c640df0f2fbe3ca8ed1",
+          "binarySha256": "211c1f5d6d12df422a53423d63774106b9103378ade6e3f8a12cde8de91af097",
+          "retrievedAt": "2026-09-09T05:43:06.162Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-asteroids-batch5-20260909-ev5-2008-2026-01-01-2027-01-01",
+      "path": "horizons-asteroids-batch5-20260909-ev5-2008-2026-01-01-2027-01-01.bsp",
+      "sha256": "cdfb3e7ee4c85997944878e8add6d6d88f6a883bc97f0b3034554f2acdb1f84f",
+      "bytes": 21504,
+      "targets": [
+        20341843
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27341843%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27341843%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T05:43:06.743Z",
+        "bytes": 284672,
+        "sha256": "a7aaa71684781f3dae86c096377ecd155a104ab5c6f5ff7f69ed2b0b71141f7b",
+        "responseSha256": "8ec111a6c18623c975720b86cf1b2b90af9f4224ea7c29846456ad63088a4dd1",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20341843,
+        "designation": "341843",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS                  341843 (2008 EV5)            2026-Sep-08 22:43:07\nRec #:  341843 (+COV) Soln.date: 2026-Apr-24_06:21:52   # obs: 1486 (2008-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458136.5 ! 2018-Jan-18.00 (TDB)         Residual RMS= .24008\n   EC= .08345224018240011  QR= .8783064681390266   TP= 2458139.9082653392\n   OM= 93.3884519776299    W=  234.8326082807916   IN= 7.43693356075285\n   A= .9582768150716078    MA= 356.4190273777784   ADIST= 1.038247162004189\n   PER= .93809             N= 1.050673074          ANGMOM= .016780673\n   DAN= .99965             DDN= .90796             L= 327.9928462\n   B= -6.073804            MOID= .0137116          TP= 2018-Jan-21.4082653392\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= .200               ROTPER= 3.725\n   H= 20.05                G= .150                 B-V= n.a.\n                           ALBEDO= .137            STYP= n.a.\n\nAsteroid non-gravitational force model (AMRAT= m^2/kg;A1,A2,A3=au/d^2;R0=au):\n   AMRAT=  0.\n   A1= 0.                  A2= -3.252981287005E-14 A3= 0.\n Non-standard or simulated/proxy model:\n   ALN=  1.            NK=  0.       NM=  2.       NN=  5.093    R0=  1.\n\nASTEROID comments: \n1: soln ref.= JPL#171, PHA  OCC=0       radar( 8 delay, 0 Dop.)\n2: source=ORB; Nongravitational accels. using nonstandard g(r) = (1 au/ r)^2\n*******************************************************************************\n\nID= '20341843'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch5-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "2008 EV5 (341843) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "8ec111a6c18623c975720b86cf1b2b90af9f4224ea7c29846456ad63088a4dd1",
+          "binarySha256": "a7aaa71684781f3dae86c096377ecd155a104ab5c6f5ff7f69ed2b0b71141f7b",
+          "retrievedAt": "2026-09-09T05:43:06.743Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-asteroids-batch5-20260909-kamo-oalewa-2026-01-01-2027-01-01",
+      "path": "horizons-asteroids-batch5-20260909-kamo-oalewa-2026-01-01-2027-01-01.bsp",
+      "sha256": "bfd023ad6551200737ec37eb100fec08fd23cc461ec7c767d036f192200d622c",
+      "bytes": 29696,
+      "targets": [
+        20469219
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27469219%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27469219%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T05:43:07.143Z",
+        "bytes": 353280,
+        "sha256": "a9494d4db7eee6337e03fd188e728264881be81697465f3a668822fa12094832",
+        "responseSha256": "49f1c9b20d1b5d4e5cddbdecf5799da348b665e2f4365de066cfb6b90db5086d",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20469219,
+        "designation": "469219",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS            469219 Kamo`oalewa (2016 HO3)      2026-Sep-08 22:43:08\nRec #:  469219 (+COV) Soln.date: 2026-Sep-03_06:19:15    # obs: 335 (2004-2025)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2457840.5 ! 2017-Mar-28.00 (TDB)         Residual RMS= .082511\n   EC= .1040582038250376   QR= .8968554901921088   TP= 2457663.8361124136\n   OM= 66.44807887655541   W=  307.1000764257706   IN= 7.773040106221678\n   A= 1.001019814033732    MA= 173.855264518868    ADIST= 1.105184137875356\n   PER= 1.00155            N= .984101883           ANGMOM= .017117434\n   DAN= .9317              DDN= 1.0565             L= 13.8029262\n   B= -6.1926957           MOID= .0338355          TP= 2016-Oct-02.3361124136\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= .467\n   H= 24.31                G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nAsteroid non-gravitational force model (AMRAT= m^2/kg;A1,A2,A3=au/d^2;R0=au):\n   AMRAT=  0.\n   A1= 0.                  A2= -1.341168353974E-13 A3= 0.\n Non-standard or simulated/proxy model:\n   ALN=  1.            NK=  0.       NM=  2.       NN=  5.093    R0=  1.\n\nASTEROID comments: \n1: soln ref.= JPL#37, OCC=0\n2: source=ORB; Nongravitational accels. using nonstandard g(r) = (1 au/ r)^2\n*******************************************************************************\n\nID= '20469219'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch5-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "Kamoʻoalewa (469219) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "49f1c9b20d1b5d4e5cddbdecf5799da348b665e2f4365de066cfb6b90db5086d",
+          "binarySha256": "a9494d4db7eee6337e03fd188e728264881be81697465f3a668822fa12094832",
+          "retrievedAt": "2026-09-09T05:43:07.143Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-asteroids-batch5-20260909-et70-2000-2026-01-01-2027-01-01",
+      "path": "horizons-asteroids-batch5-20260909-et70-2000-2026-01-01-2027-01-01.bsp",
+      "sha256": "6cc79ff87be16c0e5d65e77af310287b86d31384c56a55c95348577d8992ffa8",
+      "bytes": 21504,
+      "targets": [
+        20162421
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27162421%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27162421%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T05:43:07.756Z",
+        "bytes": 261120,
+        "sha256": "7390bcb8fafd2a157649d8c0d55f3cb292832ac03d1f2e7a95f2362120504870",
+        "responseSha256": "84704e10b00ceaffc8df1325eab58d6d975d17c618481081f77515f7117736a9",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20162421,
+        "designation": "162421",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS                 162421 (2000 ET70)            2026-Sep-08 22:43:08\nRec #:  162421 (+COV) Soln.date: 2026-Jan-17_05:54:59    # obs: 743 (1977-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458497.5 ! 2019-Jan-14.00 (TDB)         Residual RMS= .30269\n   EC= .1237123574355651   QR= .8295464182560085   TP= 2458552.4788817819\n   OM= 331.1484064137794   W=  46.11316117274868   IN= 22.32273121554384\n   A= .9466599526935706    MA= 301.1686290951502   ADIST= 1.063773487131133\n   PER= .92108             N= 1.070072162          ANGMOM= .01660846\n   DAN= .85854             DDN= 1.01962            L= 15.0305283\n   B= 15.8870902           MOID= .0303273          TP= 2019-Mar-09.9788817819\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= 8.947\n   H= 18.11                G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nAsteroid non-gravitational force model (AMRAT= m^2/kg;A1,A2,A3=au/d^2;R0=au):\n   AMRAT=  0.\n   A1= 0.                  A2= -1.395253093506E-14 A3= 0.\n Non-standard or simulated/proxy model:\n   ALN=  1.            NK=  0.       NM=  2.       NN=  5.093    R0=  1.\n\nASTEROID comments: \n1: soln ref.= JPL#176, PHA  OCC=0       radar(18 delay, 0 Dop.)\n2: source=ORB; Nongravitational accels. using nonstandard g(r) = (1 au/ r)^2\n*******************************************************************************\n\nID= '20162421'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch5-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "2000 ET70 (162421) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "84704e10b00ceaffc8df1325eab58d6d975d17c618481081f77515f7117736a9",
+          "binarySha256": "7390bcb8fafd2a157649d8c0d55f3cb292832ac03d1f2e7a95f2362120504870",
+          "retrievedAt": "2026-09-09T05:43:07.756Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
     }
   ]
 }
