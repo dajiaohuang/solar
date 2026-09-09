@@ -178,8 +178,8 @@ describe('integrated satellite source pools and delivery profiles', () => {
         expect(kernel.evaluate(target, file.endEt + 1)).toBeNull()
       }
     }
-    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(1155543040)
-    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(271713280)
+    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(1156593664)
+    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(271823872)
   })
 
   it('pins the bounded Horizons asteroid snapshots without treating the API as immutable', () => {
@@ -190,12 +190,13 @@ describe('integrated satellite source pools and delivery profiles', () => {
       [20004179, '4179'], [20001036, '1036'], [20001580, '1580'],
       [20002867, '2867'], [20052768, '52768'], [20029075, '29075'], [20231937, '231937'],
       [20486958, '486958'], [20132524, '132524'], [20152830, '152830'], [20341843, '341843'], [20469219, '469219'], [20162421, '162421'],
+      [20153591, '153591'], [20308635, '308635'], [20163899, '163899'], [20357439, '357439'], [20367943, '367943'],
       [20000006, '6'], [20000009, '9'], [20000014, '14'], [20000018, '18'],
       [20000019, '19'], [20000090, '90'], [20000216, '216'],
       [20000011, '11'], [20000013, '13'], [20000021, '21'], [20000024, '24'],
       [20000029, '29'], [20000039, '39'], [20000044, '44'],
     ])
-    const roots = pages.files.filter(file => file.integrationBatch === 'horizons-asteroids-20260909' || file.integrationBatch === 'horizons-asteroids-next-20260909' || file.integrationBatch === 'horizons-asteroids-followup-20260909' || file.integrationBatch === 'horizons-asteroids-batch3-20260909' || file.integrationBatch === 'horizons-asteroids-batch4-20260909' || file.integrationBatch === 'horizons-asteroids-batch5-20260909')
+    const roots = pages.files.filter(file => file.integrationBatch === 'horizons-asteroids-20260909' || file.integrationBatch === 'horizons-asteroids-next-20260909' || file.integrationBatch === 'horizons-asteroids-followup-20260909' || file.integrationBatch === 'horizons-asteroids-batch3-20260909' || file.integrationBatch === 'horizons-asteroids-batch4-20260909' || file.integrationBatch === 'horizons-asteroids-batch5-20260909' || file.integrationBatch === 'horizons-asteroids-batch6-20260909')
     expect(roots).toHaveLength(expected.size)
     for (const file of roots) {
       const target = file.targets[0]

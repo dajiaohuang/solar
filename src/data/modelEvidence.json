@@ -67,9 +67,9 @@
     ],
     "spkDelivery": {
       "stateBoundary": "geometric-spk-six-vector-when-kernel-and-center-chain-cover-epoch",
-      "ephemerisBodyCount": 82,
+      "ephemerisBodyCount": 87,
       "planetarySatelliteBodyCount": 31,
-      "smallBodyBodyCount": 51,
+      "smallBodyBodyCount": 56,
       "satelliteIdentityCount": 472,
       "satelliteIdentityDelivery": {
         "catalogBodies": 472,
@@ -86,15 +86,15 @@
       },
       "pagesManifest": {
         "id": "jpl-satellite-expansion-20260904-pages",
-        "sha256": "af0a79e8a3bfc1b3e81977110bfb5e323150007e416d2ea228a1ada216228e91",
-        "bytes": 271713280,
-        "fileCount": 546
+        "sha256": "a22ec725a918e9bc754d8065b640c20aa44e556bb74ba86a2c09b37a644efbef",
+        "bytes": 271823872,
+        "fileCount": 551
       },
       "fullManifest": {
         "id": "jpl-satellite-expansion-20260904-full",
-        "sha256": "eb9a289bb6edc684324500eb763ce664e08d9e638d80473f389a66b01f7d9355",
-        "bytes": 1155543040,
-        "fileCount": 546
+        "sha256": "3b64454a64fbfeb80930c9b8906f55993c8ce2c2f87ccf2f6f4ec88ec7e2cf72",
+        "bytes": 1156593664,
+        "fileCount": 551
       },
       "sourceBackedSatelliteBatches": {
         "mars": ["naif:401", "naif:402"],
@@ -116,7 +116,7 @@
       ],
       "frozenHorizonsAsteroids": [
         "243", "433", "951", "25143", "99942", "162173", "3200", "3122", "65803",
-        "4179", "1036", "1580", "2867", "52768", "29075", "231937", "486958", "132524", "152830", "341843", "469219", "162421",
+        "4179", "1036", "1580", "2867", "52768", "29075", "231937", "486958", "132524", "152830", "341843", "469219", "162421", "153591", "308635", "163899", "357439", "367943",
         "6", "9", "14", "18", "19", "90", "216", "11", "13", "21", "24", "29", "39", "44"
       ]
     }
