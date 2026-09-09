@@ -3,16 +3,13 @@ import { describe, expect, it } from 'vitest'
 
 const android = readFileSync(new URL('../../android/app/src/main/java/io/github/dajiaohuang/solaratlas/MainActivity.java', import.meta.url), 'utf8')
 const ios = readFileSync(new URL('../../ios/App/App/NativeObservationDeck.swift', import.meta.url), 'utf8')
+const ephemerisBodies = JSON.parse(readFileSync(new URL('../../src/data/ephemerisBodies.json', import.meta.url), 'utf8')) as { bodies: Array<{ id: string }> }
 
 const presetIds = ['planets', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto-moons', 'spk-asteroids']
-const sourceIds = [
-  'naif:10', 'naif:199', 'naif:299', 'naif:301', 'naif:399', 'naif:499', 'naif:401', 'naif:402',
-  'naif:599', 'naif:501', 'naif:502', 'naif:503', 'naif:504', 'naif:505', 'naif:514', 'naif:515', 'naif:516',
-  'naif:699', 'naif:601', 'naif:602', 'naif:603', 'naif:604', 'naif:605', 'naif:606', 'naif:607', 'naif:608', 'naif:609', 'naif:612', 'naif:613', 'naif:614', 'naif:632', 'naif:634',
-  'naif:799', 'naif:701', 'naif:702', 'naif:703', 'naif:704', 'naif:705', 'naif:899', 'naif:801', 'naif:802',
-  'naif:999', 'naif:901', 'naif:902', 'naif:903', 'naif:904', 'naif:905',
-  'asteroid:2', 'asteroid:3', 'asteroid:4', 'asteroid:7', 'asteroid:10', 'asteroid:15', 'asteroid:16', 'asteroid:31', 'asteroid:52', 'asteroid:65', 'asteroid:87', 'asteroid:88', 'asteroid:107', 'asteroid:511', 'asteroid:704',
-]
+const sourceIds = ephemerisBodies.bodies.map(body => body.id)
+const asteroidIds = sourceIds.filter(id => id.startsWith('asteroid:'))
+const asteroidPresetLine = (source: string) => source.split('\n').find(line => line.includes('spk-asteroids')) ?? ''
+const asteroidPresetIds = (source: string) => asteroidPresetLine(source).match(/asteroid:\d+/g) ?? []
 
 describe('native preset parity', () => {
   it('keeps Android and iOS preset identities aligned with the packaged source targets', () => {
@@ -26,5 +23,13 @@ describe('native preset parity', () => {
       expect(android).toContain(id)
       expect(ios).toContain(id)
     }
+    // The asteroid preset is the native entry point for every packaged
+    // asteroid identity; keep its static lists aligned with the source file.
+    for (const id of asteroidIds) {
+      expect(asteroidPresetLine(android)).toContain(id)
+      expect(asteroidPresetLine(ios)).toContain(id)
+    }
+    expect(asteroidPresetIds(android)).toEqual(asteroidIds)
+    expect(asteroidPresetIds(ios)).toEqual(asteroidIds)
   })
 })
