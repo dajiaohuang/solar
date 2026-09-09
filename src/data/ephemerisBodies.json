@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-09T14:56:32.640Z",
+  "generatedAt": "2026-09-09T15:48:31.061Z",
   "epochJd": 2461287.5,
   "epochTimeScale": "TDB",
   "source": {
     "manifestPath": "src/data/ephemeris-manifest.json",
     "manifestId": "jpl-satellite-expansion-20260904-pages",
-    "manifestSha256": "b2dd6520a54b48a838a6044cc3a2a155ded54a25a88087443ca5b3bb44930ef4",
+    "manifestSha256": "dd0090673d0ff3085a3c861ab68cb5ee3a6550e24c1d4c0c462dc80d1b2baf50",
     "gmUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
     "gmFile": "src/data/gm_de440.tpc",
     "gmSha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
@@ -1571,43 +1571,43 @@
     },
     {
       "id": "asteroid:15",
-      "name": "Asteroid 15",
-      "shortName": "Asteroid 15",
+      "name": "Eunomia",
+      "shortName": "Eunomia",
       "kind": "asteroid",
-      "naifId": 2000015,
+      "naifId": 20000015,
       "parentId": "sun",
       "source": "jpl-spk-osculating-fallback",
       "orbit": {
         "model": "keplerian",
         "epochJd": 2461287.5,
-        "semiMajorAxisAU": 2.6419522078921505,
-        "eccentricity": 0.18776410498030258,
-        "inclinationDeg": 11.761401272850353,
-        "ascendingNodeDeg": 292.88111797833733,
-        "argPeriapsisDeg": 98.44661687885673,
-        "meanAnomalyDeg": 179.67783563573153,
-        "meanMotionDegPerDay": 0.22951794049633856
+        "semiMajorAxisAU": 2.641952197668735,
+        "eccentricity": 0.18776409365043592,
+        "inclinationDeg": 11.76139898538319,
+        "ascendingNodeDeg": 292.8811077646509,
+        "argPeriapsisDeg": 98.44663693987195,
+        "meanAnomalyDeg": 179.67783495101787,
+        "meanMotionDegPerDay": 0.22951794182681842
       },
       "parentRelativeStateKm": {
         "position": {
-          "x": -392964146.2104969,
-          "y": -238712568.56368482,
-          "z": -94705347.12219046
+          "x": -392964104.54857296,
+          "y": -238712634.32546836,
+          "z": -94705323.01538295
         },
         "velocity": {
-          "x": 7.774567777796911,
-          "y": -12.999471750114843,
-          "z": 0.4389763528341666
+          "x": 7.774569896300812,
+          "y": -12.999470692305026,
+          "z": 0.4389773137445925
         }
       },
       "fallback": {
         "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
-        "gmKm3S2": 132712440043.30244,
-        "gmApproximation": "parent-plus-satellite",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
         "centerNaifId": 10
       },
-      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/small_bodies/asteroids_de441/sb441-n16.bsp",
-      "sourceKernelId": "sb441-n16-2000015-2020-01-01-2031-01-01"
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2715%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch15-20260909-eunomia-2026-01-01-2027-01-01"
     },
     {
       "id": "asteroid:16",
@@ -1811,43 +1811,43 @@
     },
     {
       "id": "asteroid:88",
-      "name": "Asteroid 88",
-      "shortName": "Asteroid 88",
+      "name": "Thisbe",
+      "shortName": "Thisbe",
       "kind": "asteroid",
-      "naifId": 2000088,
+      "naifId": 20000088,
       "parentId": "sun",
       "source": "jpl-spk-osculating-fallback",
       "orbit": {
         "model": "keplerian",
         "epochJd": 2461287.5,
-        "semiMajorAxisAU": 2.766072617019602,
-        "eccentricity": 0.16570607485875047,
-        "inclinationDeg": 5.226231935347952,
-        "ascendingNodeDeg": 276.31846299332176,
-        "argPeriapsisDeg": 36.98020572294547,
-        "meanAnomalyDeg": 262.9938812592769,
-        "meanMotionDegPerDay": 0.214244019596033
+        "semiMajorAxisAU": 2.766072608826019,
+        "eccentricity": 0.16570609230248046,
+        "inclinationDeg": 5.226233171063904,
+        "ascendingNodeDeg": 276.3184520303152,
+        "argPeriapsisDeg": 36.98020573636501,
+        "meanAnomalyDeg": 262.9938952549576,
+        "meanMotionDegPerDay": 0.2142440205470141
       },
       "parentRelativeStateKm": {
         "position": {
-          "x": -409406937.2282898,
-          "y": -135099564.48846814,
-          "z": -38580462.46344341
+          "x": -409406923.87658435,
+          "y": -135099559.55027762,
+          "z": -38580468.811303884
         },
         "velocity": {
-          "x": 7.840757745938413,
-          "y": -15.18888318997379,
-          "z": 0.5599281994206473
+          "x": 7.840758338717432,
+          "y": -15.188883469972694,
+          "z": 0.559928662941588
         }
       },
       "fallback": {
         "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
-        "gmKm3S2": 132712440042.46922,
-        "gmApproximation": "parent-plus-satellite",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
         "centerNaifId": 10
       },
-      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/small_bodies/asteroids_de441/sb441-n16.bsp",
-      "sourceKernelId": "sb441-n16-2000088-2020-01-01-2031-01-01"
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2788%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch15-20260909-thisbe-2026-01-01-2027-01-01"
     },
     {
       "id": "asteroid:107",
@@ -3448,6 +3448,86 @@
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27433%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
       "sourceKernelId": "horizons-eros-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:624",
+      "name": "Hektor",
+      "shortName": "Hektor",
+      "kind": "asteroid",
+      "naifId": 20000624,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 5.277062770263284,
+        "eccentricity": 0.024311651864642198,
+        "inclinationDeg": 18.147109517534684,
+        "ascendingNodeDeg": 342.80175972051296,
+        "argPeriapsisDeg": 181.50651883539058,
+        "meanAnomalyDeg": 31.780807235289785,
+        "meanMotionDegPerDay": 0.08130470600029502
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -730591329.7654719,
+          "y": -212779808.85882765,
+          "z": -137425524.53362507
+        },
+        "velocity": {
+          "x": 3.9965329816651334,
+          "y": -12.145305221440358,
+          "z": -3.4154524179300965
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27624%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch15-20260909-hektor-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:911",
+      "name": "Agamemnon",
+      "shortName": "Agamemnon",
+      "kind": "asteroid",
+      "naifId": 20000911,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 5.286634074163865,
+        "eccentricity": 0.06659885677312191,
+        "inclinationDeg": 21.753685399069727,
+        "ascendingNodeDeg": 338.0190318978909,
+        "argPeriapsisDeg": 82.32700866317447,
+        "meanAnomalyDeg": 125.6810699533662,
+        "meanMotionDegPerDay": 0.08108400610637956
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -793735860.3308189,
+          "y": -139913511.87658268,
+          "z": -170322587.89341983
+        },
+        "velocity": {
+          "x": 2.2160902670867264,
+          "y": -11.570775555814558,
+          "z": -3.95051588659215
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27911%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch15-20260909-agamemnon-2026-01-01-2027-01-01"
     },
     {
       "id": "asteroid:951",
