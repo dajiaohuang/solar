@@ -65,6 +65,8 @@ describe('inventory does not confuse source membership with SPK coverage', () =>
     expect(() => snapshot.evaluate(506, et + 1)).toThrow('another epoch')
     expect(() => snapshotKernelAtEpoch(original, NaN)).toThrow('Finite')
   })
+  // This cold-cache audit reads both delivery profiles; keep its budget above
+  // Vitest's default without weakening the assertions or the production path.
   it('audits the requested delivery profile without borrowing the full window for Pages', async () => {
     const record = { id: 'naif:706', category: 'moon', parentId: 'naif:799' }
     const et = 900000000 // After the narrow Pages interval, inside full coverage.
@@ -81,7 +83,7 @@ describe('inventory does not confuse source membership with SPK coverage', () =>
       }
     }
     await expect(inventoryKernels(process.cwd(), et, 'unknown')).rejects.toThrow('Unknown')
-  })
+  }, 15_000)
   it('resolves only explicit identities, including the correct satellite parent', async () => {
     const kernels = await inventoryKernels(process.cwd(), 841752000)
     const phobos = { id: 'sat:planet:mars:iau:I', category: 'moon', name: 'Phobos', parentId: 'naif:499' }
