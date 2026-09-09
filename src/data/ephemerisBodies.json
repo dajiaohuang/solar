@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-09T09:54:09.192Z",
+  "generatedAt": "2026-09-09T10:49:38.707Z",
   "epochJd": 2461287.5,
   "epochTimeScale": "TDB",
   "source": {
     "manifestPath": "src/data/ephemeris-manifest.json",
     "manifestId": "jpl-satellite-expansion-20260904-pages",
-    "manifestSha256": "b3f035db6d68c5d5e29dce30ce66d3011fe5e272d46d70fa4a5261b1234679e5",
+    "manifestSha256": "e068df5fd1127c48db9989adde0cb9c45a494c81c0d1002e203b560542d08693",
     "gmUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
     "gmFile": "src/data/gm_de440.tpc",
     "gmSha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
