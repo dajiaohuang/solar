@@ -21,8 +21,12 @@ const manifestBytes = await readFile('src/data/ephemeris-manifest-full.json')
 const manifest = JSON.parse(manifestBytes)
 const byId = new Map(manifest.files.map(file => [file.id, file]))
 const contexts = [], requests = []
-for (const root of manifest.files.filter(file => file.solutionKernelIds && !file.dependencyOnly)) {
-  const pool = [...root.solutionKernelIds.map(id => byId.get(id)), root]
+// The original root set covers explicit satellite solutions. Include the
+// packaged de440s core root as its own fixed context so Sun/Earth and the
+// remaining core planets receive the same independent boundary audit.
+const roots = manifest.files.filter(file => (file.solutionKernelIds && !file.dependencyOnly) || file.id === 'de440s-2000-01-01-2051-01-01')
+for (const root of roots) {
+  const pool = [...(root.solutionKernelIds ?? []).map(id => byId.get(id)), root]
   if (pool.some(file => !file || !/^[\w.-]+\.bsp$/.test(file.path))) throw new Error('Invalid reference pool')
   for (const file of pool) {
     const bytes = await readFile(`public/data/ephemerides/${file.path}`)
@@ -30,8 +34,8 @@ for (const root of manifest.files.filter(file => file.solutionKernelIds && !file
   }
   const index = contexts.length
   contexts.push({ rootId: root.id, files: pool.map(file => ({ id: file.id, path: file.path, sha256: file.sha256 })) })
-  for (const target of root.targets) for (const et of [root.startEt, (root.startEt + root.endEt) / 2, root.endEt]) {
-    requests.push({ context: index, target, et, line: `${target} ${et} ${pool.length} ${pool.map(file => file.path).join(' ')}` })
+  for (const target of root.targets) for (const [boundary, et] of [['start', root.startEt], ['interior', (root.startEt + root.endEt) / 2], ['end', root.endEt]]) {
+    requests.push({ context: index, target, et, boundary, line: `${target} ${et} ${pool.length} ${pool.map(file => file.path).join(' ')}` })
   }
 }
 const oracle = spawnSync(command, args, { input: requests.map(request => request.line).join('\n') + '\n', encoding: 'utf8', timeout: 60000, maxBuffer: 16 * 1024 * 1024 })
@@ -40,7 +44,7 @@ const states = oracle.stdout.trim().split(/\r?\n/).map(line => JSON.parse(line))
 if (states.length !== requests.length || states.some(state => [state.heliocentric, state.barycentric].some(values => !Array.isArray(values) || values.length !== 6 || !values.every(Number.isFinite)))) throw new Error('Invalid independent states')
 const result = { oracle: 'CSPICE N0067 spkgeo_c', oracleSourceSha256: digest(await readFile(new URL('./spk-pool-oracle.c', import.meta.url))),
   manifestSha256: digest(manifestBytes), frame: 'ECLIPJ2000', timeScale: 'TDB seconds past J2000', positionUnit: 'km', velocityUnit: 'km/s',
-  contract: 'Independent original-kernel numerical parity at three epochs per integrated root. Not continuous physical uncertainty, all dates, or one global fit.',
+  contract: 'Independent original-kernel numerical parity at start, interior, and end epochs per integrated root, including the packaged de440s core context for Sun/Earth and core planets. Not continuous physical uncertainty, all dates, or one global fit.',
   contexts, samples: requests.map(({ line: _line, ...request }, index) => ({ ...request, ...states[index] })) }
 if (replaceGenerated && digest(await readFile(output)) !== previousDigest) throw new Error('Reference changed during regeneration')
 await writeFile(output, `${JSON.stringify(result, null, 2)}\n`, { flag: replaceGenerated ? 'w' : 'wx' })

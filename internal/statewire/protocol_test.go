@@ -71,6 +71,25 @@ func TestEncodeUsesFixedLittleEndianHeaderAndChecksum(t *testing.T) {
 	}
 }
 
+func TestEncodePreservesFloat64PayloadBits(t *testing.T) {
+	tile := testTile(1)
+	tile.States = []float64{-0, math.SmallestNonzeroFloat64, math.MaxFloat64, -math.MaxFloat64, 1.5, -2.25}
+	raw, err := Encode(tile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, err := ParseHeader(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, want := range tile.States {
+		got := binary.LittleEndian.Uint64(raw[int(h.StatesOffset)+index*8:])
+		if got != math.Float64bits(want) {
+			t.Fatalf("state[%d] wire bits=%016x want=%016x", index, got, math.Float64bits(want))
+		}
+	}
+}
+
 func TestParseHeaderRejectsBitmapLengthNotCeilRecordCount(t *testing.T) {
 	plan := sha256.Sum256([]byte("plan"))
 	catalog := sha256.Sum256([]byte("catalog"))

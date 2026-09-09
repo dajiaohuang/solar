@@ -106,9 +106,14 @@ The same host's two fresh startup-only processes retained
 Go runtime after the temporary decode cache and sortable posting buffer were
 released; it includes retained index maps and strings, excludes allocator pages
 and process RSS, and is evidence for this runtime/dataset rather than a
-portable memory guarantee. Raw reports are retained as
-`solar-bench-startup-full-index-516-run1.json` and
-`solar-bench-startup-full-index-516-run2.json`.
+portable memory guarantee. Each report also records `inventoryIndexDigest`, a
+SHA-256 over the retained sorted record references, shard starts, term keys,
+term ranges, and posting values. The two fresh builds both produced
+`38f9430c50dfdeb2476452e42fff2f3ee5650cb8c413adc429a8101450fd77e9`; this is
+the constructed index output digest and is distinct from the input inventory
+manifest SHA-256. Raw reports are retained as
+`solar-bench-startup-full-index-516-run1-v2.json` and
+`solar-bench-startup-full-index-516-run2-v2.json`.
 
 Successful tile samples are reported separately from `overload429` and
 `otherErrors`; with concurrency 1 there were 5, 5 and 10 successful tiles

@@ -123,6 +123,28 @@ func TestIndexedSearchAndStableDetail(t *testing.T) {
 	}
 }
 
+func TestIndexDigestIsDeterministicAndCoversConstructedIndex(t *testing.T) {
+	rows := [][]string{{`{"id":"sb:asteroid:1","designation":"1","name":"Ceres","aliases":["ceres-old"]}`, `{"id":"sb:comet:2","name":"Halley"}`}}
+	firstDir, secondDir := t.TempDir(), t.TempDir()
+	writeAddressableInventory(t, firstDir, rows)
+	writeAddressableInventory(t, secondDir, rows)
+	first, err := Load(firstDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := Load(secondDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstDigest, secondDigest := first.IndexDigest(), second.IndexDigest()
+	if len(firstDigest) != 64 || firstDigest != secondDigest {
+		t.Fatalf("index digest is not deterministic: first=%q second=%q", firstDigest, secondDigest)
+	}
+	if firstDigest == first.ManifestHash() {
+		t.Fatal("index digest must not be the input manifest digest")
+	}
+}
+
 func TestGetManyGroupsIndexedRowsAndPreservesExactIDs(t *testing.T) {
 	d := t.TempDir()
 	writeAddressableInventory(t, d, [][]string{{`{"id":"sb:asteroid:1","name":"Ceres"}`, `{"id":"sb:asteroid:2","name":"Pallas"}`}, {`{"id":"sb:comet:halley","name":"Halley"}`}})

@@ -344,6 +344,58 @@ func (i *Inventory) IndexHeapBytes() uint64 {
 	return i.indexHeapBytes
 }
 
+// IndexDigest returns a deterministic SHA-256 digest of the retained search
+// index. It covers the sorted source references and every packed term key,
+// posting range, and posting value that serves identity lookup. The input
+// inventory manifest digest is intentionally not reused: this is a digest of
+// the constructed in-memory index output.
+func (i *Inventory) IndexDigest() string {
+	if i == nil || i.idx == nil {
+		return ""
+	}
+	h := sha256.New()
+	h.Write([]byte("solar-inventory-index-v1\x00"))
+	writeU32 := func(value uint32) {
+		var raw [4]byte
+		binary.LittleEndian.PutUint32(raw[:], value)
+		_, _ = h.Write(raw[:])
+	}
+	writeU64 := func(value uint64) {
+		var raw [8]byte
+		binary.LittleEndian.PutUint64(raw[:], value)
+		_, _ = h.Write(raw[:])
+	}
+	writeU16 := func(value uint16) {
+		var raw [2]byte
+		binary.LittleEndian.PutUint16(raw[:], value)
+		_, _ = h.Write(raw[:])
+	}
+	writeU32(uint32(len(i.idx.records)))
+	for _, ref := range i.idx.records {
+		writeU32(ref.Shard)
+		writeU16(ref.Block)
+		writeU32(ref.Row)
+		writeU32(ref.Ordinal)
+	}
+	writeU32(uint32(len(i.idx.shardStarts)))
+	for _, value := range i.idx.shardStarts {
+		writeU32(value)
+	}
+	writeU32(uint32(len(i.idx.termKeys)))
+	for _, value := range i.idx.termKeys {
+		writeU64(value)
+	}
+	writeU32(uint32(len(i.idx.termStarts)))
+	for _, value := range i.idx.termStarts {
+		writeU32(value)
+	}
+	writeU32(uint32(len(i.idx.termRefs)))
+	for _, value := range i.idx.termRefs {
+		writeU32(value)
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 // IndexStats exposes bounded startup-index evidence without exposing mutable
 // internal maps to callers.
 func (i *Inventory) IndexStats() map[string]int {
