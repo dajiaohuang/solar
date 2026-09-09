@@ -17,7 +17,7 @@ describe('preview scientific delivery closure', () => {
     const before = JSON.stringify([pages, full])
     const selected = previewEphemerisManifest(pages)
     expect(selected.files).toHaveLength(36)
-    expect(selected.files.reduce((sum, file) => sum + file.bytes, 0)).toBe(90800128)
+    expect(selected.files.reduce((sum, file) => sum + file.bytes, 0)).toBe(90732544)
     const ids = new Set(selected.files.map(file => file.id))
     expect(ids.has('de442-satellite-2020-2031')).toBe(true)
     for (const file of selected.files) {

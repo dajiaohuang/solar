@@ -29,6 +29,9 @@ describe('optional SPK body seed artifact', () => {
     expect(ids).not.toContain('asteroid:1')
     for (const designation of ['243', '433', '951', '25143', '99942', '162173', '3200', '3122', '65803', '4179', '1036', '1580', '2867', '52768', '29075', '231937', '486958', '132524', '152830', '341843', '469219', '162421', '6', '9', '14', '18', '19', '90', '216', '11', '13', '21', '24', '29', '39', '44', '3753', '6489', '6178', '46610', '98943', '5', '8', '12', '20', '40', '22', '45', '93', '121', '130', '25', '27', '30', '34', '37']) expect(ids).toContain(`asteroid:${designation}`)
     expect(majorBodiesById.get('asteroid:243')).toMatchObject({ name: '小行星 Ida', shortName: 'Ida', naifId: 20000243 })
+    for (const [id, naifId] of [['asteroid:87', 20000087], ['asteroid:107', 20000107], ['asteroid:511', 20000511], ['asteroid:704', 20000704] as const]) {
+      expect(bodies.bodies.find((body) => body.id === id)).toMatchObject({ naifId, sourceKernelId: expect.stringContaining('horizons-asteroids-batch12-20260909') })
+    }
   })
 
   it('labels every entry as an instantaneous, parent-relative fallback', () => {

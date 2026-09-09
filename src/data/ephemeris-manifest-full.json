@@ -17451,6 +17451,170 @@
         },
         "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
       }
+    },
+    {
+      "id": "horizons-asteroids-batch12-20260909-sylvia-2020-01-01-2031-01-01",
+      "path": "horizons-asteroids-batch12-20260909-sylvia-2020-01-01-2031-01-01.bsp",
+      "sha256": "c1af203a509383101c221cd84a89fc86f74b9f15f3f997573f6e99886b2dc103",
+      "bytes": 204800,
+      "targets": [
+        20000087
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2787%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2787%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T12:44:31.530Z",
+        "bytes": 266240,
+        "sha256": "169661a74381880f0af53e009731c3d637179e92d1d06730295bcbff6ab2c7cf",
+        "responseSha256": "933c6f0814a871026433d5af89ddd59d67418c64032c2b48669a7b84a6c4222d",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20000087,
+        "designation": "87",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS                 87 Sylvia (A866 KA)           2026-Sep-09 05:44:34\nRec #:      87 (+COV) Soln.date: 2026-Jun-05_03:08:26   # obs: 7387 (1885-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458183.5 ! 2018-Mar-06.00 (TDB)         Residual RMS= .21243\n   EC= .09273906498295156  QR= 3.158964786406858   TP= 2457988.2050619442\n   OM= 73.04709042962104   W=  263.5300135595193   IN= 10.87674391668213\n   A= 3.481870170401967    MA= 29.62621706746326   ADIST= 3.804775554397075\n   PER= 6.49721            N= .151699872           ANGMOM= .03196039\n   DAN= 3.48838            DDN= 3.41622            L= 336.4597779\n   B= -10.806634           MOID= 2.17561007        TP= 2017-Aug-22.7050619442\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 126.5255           ROTPER= 5.184\n   H= 6.93                 G= .150                 B-V= .710\n                           ALBEDO= .046            STYP= X\n\nASTEROID comments: \n1: soln ref.= JPL#130, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20000087'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch12-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "Sylvia (87) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "933c6f0814a871026433d5af89ddd59d67418c64032c2b48669a7b84a6c4222d",
+          "binarySha256": "169661a74381880f0af53e009731c3d637179e92d1d06730295bcbff6ab2c7cf",
+          "retrievedAt": "2026-09-09T12:44:31.530Z"
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-asteroids-batch12-20260909-camilla-2020-01-01-2031-01-01",
+      "path": "horizons-asteroids-batch12-20260909-camilla-2020-01-01-2031-01-01.bsp",
+      "sha256": "bc56385cf0f4eeac51b23e444e503544d33fd182d12788b33aecae387d924de6",
+      "bytes": 204800,
+      "targets": [
+        20000107
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27107%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27107%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T12:44:33.363Z",
+        "bytes": 266240,
+        "sha256": "2f9365feecef0dfe196a567a71ab9e12b8475222bbc79d55a05a4bced4e5eeec",
+        "responseSha256": "21185606e2507c9cc4c0c34c27ddd64f2d8bffd71bf70c5963de80270f146469",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20000107,
+        "designation": "107",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS                107 Camilla (A868 WA)          2026-Sep-09 05:44:35\nRec #:     107 (+COV) Soln.date: 2026-Jun-05_03:09:57   # obs: 6755 (1868-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458158.5 ! 2018-Feb-09.00 (TDB)         Residual RMS= .19422\n   EC= .06561377007303566  QR= 3.262024258261425   TP= 2458823.3467258574\n   OM= 172.6102139793551   W=  306.7907731556056   IN= 10.00150438072522\n   A= 3.491087682784451    MA= 259.5420126137547   ADIST= 3.720151107307477\n   PER= 6.52303            N= .151099469           ANGMOM= .032071919\n   DAN= 3.34463            DDN= 3.61824            L= 119.8226935\n   B= -7.9947869           MOID= 2.28992009        TP= 2019-Dec-05.8467258574\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= .7475               RAD= 105.185            ROTPER= 4.844\n   H= 7.09                 G= .080                 B-V= .705\n                           ALBEDO= .059            STYP= X\n\nASTEROID comments: \n1: soln ref.= JPL#149, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20000107'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch12-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "Camilla (107) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "21185606e2507c9cc4c0c34c27ddd64f2d8bffd71bf70c5963de80270f146469",
+          "binarySha256": "2f9365feecef0dfe196a567a71ab9e12b8475222bbc79d55a05a4bced4e5eeec",
+          "retrievedAt": "2026-09-09T12:44:33.363Z"
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-asteroids-batch12-20260909-davida-2020-01-01-2031-01-01",
+      "path": "horizons-asteroids-batch12-20260909-davida-2020-01-01-2031-01-01.bsp",
+      "sha256": "6d2195a312adf996cf55c64184e64a37f4d5ed0a5ddc717a94471b159bd56d33",
+      "bytes": 212992,
+      "targets": [
+        20000511
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27511%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27511%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T12:44:34.208Z",
+        "bytes": 274432,
+        "sha256": "b40bd3b6716606c489a00dc5523118c2e7dd575e978c8e7afefaef107fc76396",
+        "responseSha256": "3748747d726528905bce4c39661af04b5088f6044ee956d03d9460b6bf17e625",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20000511,
+        "designation": "511",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS                511 Davida (A903 KB)           2026-Sep-09 05:44:36\nRec #:     511 (+COV) Soln.date: 2026-Jun-05_03:41:36   # obs: 5110 (1903-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2457897.5 ! 2017-May-24.00 (TDB)         Residual RMS= .22053\n   EC= .1881510201647112   QR= 2.567902876073004   TP= 2458749.6694223331\n   OM= 107.6071776831559   W=  337.6125129653269   IN= 15.94046073352377\n   A= 3.16303024312969     MA= 210.6947757952626   ADIST= 3.758157610186375\n   PER= 5.62553            N= .175206033           ANGMOM= .030047377\n   DAN= 2.59892            DDN= 3.69364            L= 85.99986389999999\n   B= -6.0041828           MOID= 1.58960998        TP= 2019-Sep-23.1694223331\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 135.1635           ROTPER= 5.1297\n   H= 6.42                 G= .160                 B-V= .717\n                           ALBEDO= .076            STYP= C\n\nASTEROID comments: \n1: soln ref.= JPL#128, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20000511'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch12-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "Davida (511) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "3748747d726528905bce4c39661af04b5088f6044ee956d03d9460b6bf17e625",
+          "binarySha256": "b40bd3b6716606c489a00dc5523118c2e7dd575e978c8e7afefaef107fc76396",
+          "retrievedAt": "2026-09-09T12:44:34.208Z"
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-asteroids-batch12-20260909-interamnia-2020-01-01-2031-01-01",
+      "path": "horizons-asteroids-batch12-20260909-interamnia-2020-01-01-2031-01-01.bsp",
+      "sha256": "3265f3e41db98d60cd2f74c1f93717a4dffdeeafee2aa1678f23b49e451522d4",
+      "bytes": 205824,
+      "targets": [
+        20000704
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27704%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27704%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T12:44:34.946Z",
+        "bytes": 267264,
+        "sha256": "c121114a6af128d2bd70e8b20167ff7d3260ca890309070ce9e1d179983710d6",
+        "responseSha256": "4316a6f417c06abaaab797b89371673e48a957b67d1259208d50db6f37c48c25",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20000704,
+        "designation": "704",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS              704 Interamnia (A910 TC)         2026-Sep-09 05:44:37\nRec #:     704 (+COV) Soln.date: 2026-Jun-05_03:56:56   # obs: 8225 (1910-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458017.5 ! 2017-Sep-21.00 (TDB)         Residual RMS= .21896\n   EC= .1544907966122377   QR= 2.586047142291063   TP= 2458055.1798834042\n   OM= 280.2915505068219   W=  95.11910176428331   IN= 17.30633244763847\n   A= 3.058567703260193    MA= 353.0571708745686   ADIST= 3.531088264229322\n   PER= 5.34916            N= .184258243           ANGMOM= .029723154\n   DAN= 3.0273             DDN= 2.94497            L= 15.6520118\n   B= 17.2351389           MOID= 1.65848005        TP= 2017-Oct-28.6798834042\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= 5.                  RAD= 153.1565           ROTPER= 8.727\n   H= 6.34                 G= -.020                B-V= .645\n                           ALBEDO= .078            STYP= B\n\nASTEROID comments: \n1: soln ref.= JPL#179, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20000704'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch12-20260909",
+      "selectionEvidence": {
+        "sourceSelection": "Interamnia (704) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "4316a6f417c06abaaab797b89371673e48a957b67d1259208d50db6f37c48c25",
+          "binarySha256": "c121114a6af128d2bd70e8b20167ff7d3260ca890309070ce9e1d179983710d6",
+          "retrievedAt": "2026-09-09T12:44:34.946Z"
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
+      }
     }
   ]
 }
