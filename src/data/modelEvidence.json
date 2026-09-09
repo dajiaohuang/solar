@@ -67,9 +67,9 @@
     ],
     "spkDelivery": {
       "stateBoundary": "geometric-spk-six-vector-when-kernel-and-center-chain-cover-epoch",
-        "ephemerisBodyCount": 123,
+        "ephemerisBodyCount": 127,
       "planetarySatelliteBodyCount": 31,
-        "smallBodyBodyCount": 92,
+        "smallBodyBodyCount": 96,
       "satelliteIdentityCount": 472,
       "satelliteIdentityDelivery": {
         "catalogBodies": 472,
@@ -86,15 +86,15 @@
       },
       "pagesManifest": {
         "id": "jpl-satellite-expansion-20260904-pages",
-        "sha256": "28c06405c62b0ba81b16ba071a4d27fe6215a3c896be5f2d71fb730e0dc1c366",
-        "bytes": 272862208,
-        "fileCount": 598
+        "sha256": "785150b7d039f048dc3a115cfb1c6c8c7cecf0dec7adae516b38a1c03df1207b",
+        "bytes": 272951296,
+        "fileCount": 602
       },
       "fullManifest": {
         "id": "jpl-satellite-expansion-20260904-full",
-        "sha256": "e42aaf63bb6f282b161d2c6289a477fb3e6cae7c2abcf3ff9bcd459106dc2715",
-        "bytes": 1166339072,
-        "fileCount": 598
+        "sha256": "7f922d388ac241e2cd91be3e0fe51f630f39ebef98a49477cfb923a3e2c99ae1",
+        "bytes": 1167155200,
+        "fileCount": 602
       },
       "sourceBackedSatelliteBatches": {
         "mars": ["naif:401", "naif:402"],
@@ -117,9 +117,9 @@
       "frozenHorizonsAsteroids": [
         "243", "433", "951", "25143", "99942", "162173", "3200", "3122", "65803",
         "4179", "1036", "1580", "2867", "52768", "29075", "231937", "486958", "132524", "152830", "341843", "469219", "162421", "153591", "308635", "163899", "357439", "367943",
-        "6", "9", "14", "18", "19", "90", "216", "11", "13", "21", "24", "29", "39", "44", "5", "8", "12", "20", "40", "3753", "6489", "6178", "46610", "98943", "22", "45", "93", "121", "130", "3", "7", "31", "52", "65", "25", "27", "30", "34", "37", "87", "107", "511", "704", "17", "23", "26", "28", "32", "51", "2060", "5145", "10199", "20000", "15", "88", "624", "911", "33", "35", "36", "38"
+        "6", "9", "14", "18", "19", "90", "216", "11", "13", "21", "24", "29", "39", "44", "5", "8", "12", "20", "40", "3753", "6489", "6178", "46610", "98943", "22", "45", "93", "121", "130", "3", "7", "31", "52", "65", "25", "27", "30", "34", "37", "87", "107", "511", "704", "17", "23", "26", "28", "32", "51", "2060", "5145", "10199", "20000", "15", "88", "624", "911", "33", "35", "36", "38", "41", "46", "48", "49"
       ],
-      "frozenHorizonsPrimaryOnly": ["33", "35", "36", "38", "624", "911"],
+      "frozenHorizonsPrimaryOnly": ["33", "35", "36", "38", "41", "46", "48", "49", "624", "911"],
       "frozenHorizonsPrimaryOnlyBoundary": "All frozen Horizons asteroid entries are direct primary heliocentric states only; no companion or system-center state is delivered, and no binary coverage is implied."
     }
   }
