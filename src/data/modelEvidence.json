@@ -67,9 +67,9 @@
     ],
     "spkDelivery": {
       "stateBoundary": "geometric-spk-six-vector-when-kernel-and-center-chain-cover-epoch",
-        "ephemerisBodyCount": 107,
+        "ephemerisBodyCount": 112,
       "planetarySatelliteBodyCount": 31,
-        "smallBodyBodyCount": 76,
+        "smallBodyBodyCount": 81,
       "satelliteIdentityCount": 472,
       "satelliteIdentityDelivery": {
         "catalogBodies": 472,
@@ -86,15 +86,15 @@
       },
       "pagesManifest": {
         "id": "jpl-satellite-expansion-20260904-pages",
-        "sha256": "2f7b4d2d80c59ad9074ef05bf1fd7b40d3277d6579fd7fa6b52bff26dc800997",
-        "bytes": 272471040,
-        "fileCount": 580
+        "sha256": "51c6095c29938944b4982d7014f46ec3b08eecd7e3395a1591526cb0b1586553",
+        "bytes": 272577536,
+        "fileCount": 585
       },
       "fullManifest": {
         "id": "jpl-satellite-expansion-20260904-full",
-        "sha256": "c9ea6e7026f5cbae0bd99bba6efce3d4b08f91e310cf8e5fa20d6c97034f274e",
-        "bytes": 1162620928,
-        "fileCount": 580
+        "sha256": "4c7c383fe016a1a314771a0289742ff0f236d12fcfc6a6cb769fd3f44acf2d8e",
+        "bytes": 1163642880,
+        "fileCount": 585
       },
       "sourceBackedSatelliteBatches": {
         "mars": ["naif:401", "naif:402"],
@@ -117,7 +117,7 @@
       "frozenHorizonsAsteroids": [
         "243", "433", "951", "25143", "99942", "162173", "3200", "3122", "65803",
         "4179", "1036", "1580", "2867", "52768", "29075", "231937", "486958", "132524", "152830", "341843", "469219", "162421", "153591", "308635", "163899", "357439", "367943",
-        "6", "9", "14", "18", "19", "90", "216", "11", "13", "21", "24", "29", "39", "44", "5", "8", "12", "20", "40", "3753", "6489", "6178", "46610", "98943", "22", "45", "93", "121", "130", "3", "7", "31", "52", "65", "25", "27", "30", "34", "37", "87", "107", "511", "704"
+        "6", "9", "14", "18", "19", "90", "216", "11", "13", "21", "24", "29", "39", "44", "5", "8", "12", "20", "40", "3753", "6489", "6178", "46610", "98943", "22", "45", "93", "121", "130", "3", "7", "31", "52", "65", "25", "27", "30", "34", "37", "87", "107", "511", "704", "17", "23", "26", "28", "32"
       ]
     }
   }
