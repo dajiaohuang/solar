@@ -86,10 +86,7 @@ struct NativeSourceDirectorySection: View {
                             Text(row.name?.isEmpty == false ? (row.name ?? row.id) : row.id).font(.headline)
                             Text(row.id).textSelection(.enabled)
                             Text("\(row.source) · \(row.category) · \(row.sourceRow)").font(.caption)
-                            Text(SourceDirectoryCopy.mapping + ": " + (row.naifId.map { "NAIF \($0)" } ?? SourceDirectoryCopy.noTarget)
-                                 + (row.parentId.map { " · \(SourceDirectoryCopy.parent) \($0)\(row.parentResolution.map { " (\($0))" } ?? "")" } ?? "")
-                                 + (row.centerId.map { " · \(SourceDirectoryCopy.center) \($0)\(row.centerResolution.map { " (\($0))" } ?? "")" } ?? ""))
-                                .font(.caption)
+                            Text(SourceDirectoryCopy.mapping(for: row)).font(.caption)
                             if let aliases = row.aliases, !aliases.isEmpty {
                                 Text("\(SourceDirectoryCopy.aliases): \(aliases.joined(separator: ", "))").font(.caption)
                             }
@@ -131,6 +128,18 @@ enum SourceDirectoryCopy {
     static var center: String { zh ? "中心" : "center" }
     static var aliases: String { zh ? "别名" : "Aliases" }
     static var evidence: String { zh ? "身份证据" : "Identity evidence" }
+    static func mapping(for row: NativeSourceIdentityPage.Row) -> String {
+        var value = row.naifId.map { "NAIF \($0)" } ?? noTarget
+        if let parent = row.parentId {
+            value += " · \(Self.parent) \(parent)"
+            if let resolution = row.parentResolution { value += " (\(resolution))" }
+        }
+        if let center = row.centerId {
+            value += " · \(Self.center) \(center)"
+            if let resolution = row.centerResolution { value += " (\(resolution))" }
+        }
+        return "\(Self.mapping): \(value)"
+    }
     static var caveat: String { zh ? "来源记录可能包含别名，不等于去重后的天体或已验证状态。浏览不会填补星历缺口。" : "Source records can include aliases; they are not deduplicated bodies or verified states. Browsing does not fill ephemeris gaps." }
     static func counts(_ count: Int, _ total: UInt64) -> String {
         zh ? "本页：\(count) · 来源记录总数：\(total)" : "This page: \(count) · total source records: \(total)"
