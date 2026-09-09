@@ -65,6 +65,12 @@ async function unlockOwnedEmulator(deviceCommand) {
   await deviceCommand(['shell', 'wm', 'dismiss-keyguard'])
   await deviceCommand(['shell', 'input', 'keyevent', '224'])
   await deviceCommand(['shell', 'input', 'keyevent', '82'])
+  // The headless API 36 image can leave Quickstep's home process wedged
+  // behind the target window. Its system ANR dialog steals focus from
+  // Espresso even though MainActivity remains resumed. This emulator is
+  // disposable and the smoke test never navigates home, so clear that stale
+  // process immediately before the app is launched.
+  await deviceCommand(['shell', 'am', 'force-stop', 'com.android.launcher3'])
 }
 
 // Only generated/validated local paths reach cmd.exe. No user shell expressions.
