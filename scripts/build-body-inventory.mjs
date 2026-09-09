@@ -14,6 +14,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const DWARFS = new Set(['1', '134340', '136108', '136199', '136472'])
 const CORE = [[10, 'Sun', 'star'], [199, 'Mercury', 'planet'], [299, 'Venus', 'planet'], [399, 'Earth', 'planet'], [301, 'Moon', 'moon'], [499, 'Mars', 'planet'], [599, 'Jupiter', 'planet'], [699, 'Saturn', 'planet'], [799, 'Uranus', 'planet'], [899, 'Neptune', 'planet']]
 const increment = (map, key) => { map[key] = (map[key] ?? 0) + 1 }
+export const INVENTORY_SCHEMA_VERSION = 2
+export const INVENTORY_BLOCK_ROWS = 128
 
 export async function buildInventory({ sources, output, root = ROOT, auditEt = 841752000, shardSize = 5000 }) {
   if (!Number.isFinite(auditEt) || !Number.isSafeInteger(shardSize) || shardSize < 1 || shardSize > 10000) throw new Error('Invalid audit epoch or shard size')
@@ -41,10 +43,17 @@ export async function buildInventory({ sources, output, root = ROOT, auditEt = 8
   let pending = [], totalRecords = 0
   async function flush() {
     if (!pending.length) return
-    const file = `records-${String(shards.length).padStart(5, '0')}.jsonl.gz`
-    const bytes = gzipSync(pending.join('\n') + '\n')
+    const file = `records-${String(shards.length).padStart(5, '0')}.jsonl.bgz`
+    const blocks = []
+    for (let rowStart = 0; rowStart < pending.length; rowStart += INVENTORY_BLOCK_ROWS) {
+      const rows = pending.slice(rowStart, rowStart + INVENTORY_BLOCK_ROWS)
+      const uncompressed = Buffer.from(rows.join('\n') + '\n')
+      const compressed = gzipSync(uncompressed, { mtime: 0 })
+      blocks.push({ rowStart, count: rows.length, offset: blocks.reduce((sum, block) => sum + block.bytes, 0), bytes: compressed.length, payload: compressed, uncompressedBytes: uncompressed.length, sha256: digest(compressed) })
+    }
+    const bytes = Buffer.concat(blocks.map(block => block.payload))
     await writeFile(join(output, file), bytes, { flag: 'wx' })
-    shards.push({ file, count: pending.length, bytes: bytes.length, sha256: digest(bytes) })
+    shards.push({ file, count: pending.length, bytes: bytes.length, sha256: digest(bytes), blocks: blocks.map(({ payload: _payload, ...block }) => block) })
     pending = []
   }
   async function append(record, source, sourceRow) {
@@ -85,8 +94,8 @@ export async function buildInventory({ sources, output, root = ROOT, auditEt = 8
   for (const record of satellites) await append(record, 'smallBodySatellites', record.sourceRow)
   await flush()
   const missingParents = [...parents].filter((id) => !seen.has(id)).sort()
-  const manifest = { schemaVersion: 1, purpose: 'source-inventory-not-runtime-catalog',
-    snapshot, generator: { id: 'body-inventory-v1', files: generatorFiles }, elementTableUpdated: metadata.updated, totalRecords, counts, expectedCounts, shards, kernels: kernels.evidence,
+  const manifest = { schemaVersion: INVENTORY_SCHEMA_VERSION, format: 'jsonl-deterministic-gzip-blocks-v2', blockRows: INVENTORY_BLOCK_ROWS, purpose: 'source-inventory-addressable-v2',
+    snapshot, generator: { id: 'body-inventory-v2', files: generatorFiles }, elementTableUpdated: metadata.updated, totalRecords, counts, expectedCounts, shards, kernels: kernels.evidence,
     missingParents, planetaryGroups: planetary.groups,
     gaps: ['Unresolved component records are snapshot-row identities, not unique-body assertions.',
       'Cross-source asteroid/comet aliases and component aliases still require reconciliation; counts are source records, not an all-known-body union.',

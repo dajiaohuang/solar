@@ -15,7 +15,9 @@ export const BODY_NAIF_IDS: Record<string, number> = {
   triton: 801, nereid: 802, charon: 901, nix: 902, hydra: 903, kerberos: 904, styx: 905,
 }
 
-export function bodyNaifId(body: { id: string; naifId?: number }): number | undefined {
+export function bodyNaifId(body: { id: string; naifId?: number; source?: string }): number | undefined {
+  // Only the backend may reconcile a pinned source record with its kernels.
+  if (body.source === 'source-inventory') return undefined
   if (Number.isSafeInteger(body.naifId)) return body.naifId
   if (BODY_NAIF_IDS[body.id] !== undefined) return BODY_NAIF_IDS[body.id]
   // Only conventional numbered asteroid SPK IDs; unknown/provisional targets

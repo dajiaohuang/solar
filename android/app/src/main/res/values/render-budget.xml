@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="render_budget_pending">Display budget is a candidate; interaction measurements pending.</string>
+    <string name="render_budget_empty">No current display measurements.</string>
+    <string name="render_budget_summary">%1$d verified states not displayed. %2$s; reference first, then source order. Source states retained.</string>
+    <string name="render_budget_metrics">%1$d verified states not displayed. Interaction GL intervals: p50 %2$.1f ms / p95 %3$.1f ms; estimated missed 60 Hz slots %4$.1f%%. %5$s.</string>
+    <string name="render_budget_initial">initial candidate budget</string>
+    <string name="render_budget_slow">slow interaction frames</string>
+    <string name="render_budget_headroom">sustained measured headroom</string>
+    <string name="render_budget_thermal">thermal pressure</string>
+    <string name="render_budget_moderate_thermal">thermal growth restricted</string>
+    <string name="render_budget_memory">native memory warning</string>
+</resources>

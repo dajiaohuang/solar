@@ -1,4 +1,21 @@
 import * as THREE from 'three'
+import type { CurrentPositions } from './currentPositions'
+
+/** Bulk current-state layer reads scalar source storage directly. Color identity
+ * includes the exact ordinal selection, which may change without a new frame. */
+export function updateCurrentPointGeometry(previous: THREE.BufferGeometry, source: CurrentPositions, ordinals: Uint32Array) {
+  const color = new THREE.Color()
+  return updatePointGeometry(previous, ordinals.length, ordinals,
+    (values, index) => {
+      const ordinal = ordinals[index]
+      values[index * 3] = source.coordinateAt(ordinal, 0)
+      values[index * 3 + 1] = source.coordinateAt(ordinal, 2)
+      values[index * 3 + 2] = source.coordinateAt(ordinal, 1)
+    }, (values, index) => {
+      color.set(source.bodyAt(ordinals[index]).color)
+      color.toArray(values, index * 3)
+    })
+}
 
 /** Keep GPU buffers across epochs; resize geometrically and release old GPU data. */
 export function updatePointGeometry(

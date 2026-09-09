@@ -7,30 +7,44 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
-		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
-		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
+		B11200010000000000000001 /* NativeSourceIdentityPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11200020000000000000001 /* NativeSourceIdentityPage.swift */; };
+		B11200010000000000000002 /* NativeSourceDirectory.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11200020000000000000002 /* NativeSourceDirectory.swift */; };
+		B11100010000000000000001 /* NativePointGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11100020000000000000001 /* NativePointGeometry.swift */; };
+		B11100010000000000000002 /* NativePointGeometry.swift in Test Sources */ = {isa = PBXBuildFile; fileRef = B11100020000000000000001 /* NativePointGeometry.swift */; };
+		B11100010000000000000003 /* NativePointGeometryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11100020000000000000002 /* NativePointGeometryTests.swift */; };
+		B11000010000000000000001 /* ObservationUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B11000020000000000000001 /* ObservationUITests.swift */; };
+		B10900010000000000000005 /* NativeStateProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10900020000000000000005 /* NativeStateProjection.swift */; };
+		B10900010000000000000001 /* NativeObservationDeck.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10900020000000000000001 /* NativeObservationDeck.swift */; };
+		B10900010000000000000002 /* StateTileDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10900020000000000000002 /* StateTileDecoder.swift */; };
+		B10900010000000000000003 /* StateTileCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10900020000000000000003 /* StateTileCache.swift */; };
+		B10900010000000000000004 /* StateTileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10900020000000000000004 /* StateTileService.swift */; };
+		B10900010000000000000007 /* NativeCoverageReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10900020000000000000007 /* NativeCoverageReport.swift */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
-		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
-		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
 		A11A5E332FEA100000000001 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A11A5E322FEA100000000001 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
-		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
+		B11200020000000000000001 /* NativeSourceIdentityPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSourceIdentityPage.swift; sourceTree = "<group>"; };
+		B11200020000000000000002 /* NativeSourceDirectory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSourceDirectory.swift; sourceTree = "<group>"; };
+		B11100020000000000000001 /* NativePointGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePointGeometry.swift; sourceTree = "<group>"; };
+		B11100020000000000000002 /* NativePointGeometryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePointGeometryTests.swift; sourceTree = "<group>"; };
+		B11000020000000000000001 /* ObservationUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ObservationUITests.swift; sourceTree = "<group>"; };
+		B11000020000000000000002 /* ObservationUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ObservationUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10900020000000000000005 /* NativeStateProjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeStateProjection.swift; sourceTree = "<group>"; };
+		B10900020000000000000001 /* NativeObservationDeck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeObservationDeck.swift; sourceTree = "<group>"; };
+		B10900020000000000000002 /* StateTileDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateTileDecoder.swift; sourceTree = "<group>"; };
+		B10900020000000000000003 /* StateTileCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateTileCache.swift; sourceTree = "<group>"; };
+		B10900020000000000000004 /* StateTileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateTileService.swift; sourceTree = "<group>"; };
+		B10900020000000000000007 /* NativeCoverageReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeCoverageReport.swift; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
-		504EC30C1FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		504EC30E1FED79650016851F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
-		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		A11A5E322FEA100000000001 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -39,7 +53,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -49,8 +62,8 @@
 		504EC2FB1FED79650016851F = {
 			isa = PBXGroup;
 			children = (
-				958DCC722DB07C7200EA8C5F /* debug.xcconfig */,
 				504EC3061FED79650016851F /* App */,
+				B11000030000000000000001 /* ObservationUITests */,
 				504EC3051FED79650016851F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -59,6 +72,7 @@
 			isa = PBXGroup;
 			children = (
 				504EC3041FED79650016851F /* App.app */,
+				B11000020000000000000002 /* ObservationUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -67,22 +81,52 @@
 			isa = PBXGroup;
 			children = (
 				9582B6822FE993A50072D4E8 /* SceneDelegate.swift */,
-				50379B222058CBB4000EE86E /* capacitor.config.json */,
+				B10900020000000000000001 /* NativeObservationDeck.swift */,
+				B10900020000000000000002 /* StateTileDecoder.swift */,
+				B10900020000000000000003 /* StateTileCache.swift */,
+				B10900020000000000000004 /* StateTileService.swift */,
+				B10900020000000000000007 /* NativeCoverageReport.swift */,
+				B11200020000000000000001 /* NativeSourceIdentityPage.swift */,
+				B11200020000000000000002 /* NativeSourceDirectory.swift */,
+				B10900020000000000000005 /* NativeStateProjection.swift */,
+				B11100020000000000000001 /* NativePointGeometry.swift */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
-				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
 				504EC3131FED79650016851F /* Info.plist */,
 				A11A5E322FEA100000000001 /* PrivacyInfo.xcprivacy */,
-				2FAD9762203C412B000D30F8 /* config.xml */,
-				50B271D01FEDC1A000F3C39B /* public */,
 			);
 			path = App;
 			sourceTree = "<group>";
 		};
+		B11000030000000000000001 /* ObservationUITests */ = {
+			isa = PBXGroup;
+			children = (B11000020000000000000001 /* ObservationUITests.swift */, B11100020000000000000002 /* NativePointGeometryTests.swift */);
+			path = ObservationUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
+/* Begin PBXContainerItemProxy section */
+		B11000040000000000000001 = {isa = PBXContainerItemProxy; containerPortal = 504EC2FC1FED79650016851F; proxyType = 1; remoteGlobalIDString = 504EC3031FED79650016851F; remoteInfo = App; };
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXTargetDependency section */
+		B11000040000000000000002 = {isa = PBXTargetDependency; target = 504EC3031FED79650016851F; targetProxy = B11000040000000000000001; };
+/* End PBXTargetDependency section */
+
 /* Begin PBXNativeTarget section */
+		B11000050000000000000001 /* ObservationUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B11000060000000000000003;
+			buildPhases = (B11000070000000000000001);
+			buildRules = ();
+			dependencies = (B11000040000000000000002);
+			name = ObservationUITests;
+			productName = ObservationUITests;
+			productReference = B11000020000000000000002;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		504EC3031FED79650016851F /* App */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 504EC3161FED79650016851F /* Build configuration list for PBXNativeTarget "App" */;
@@ -97,7 +141,6 @@
 			);
 			name = App;
 			packageProductDependencies = (
-				4D22ABE82AF431CB00220026 /* CapApp-SPM */,
 			);
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
@@ -112,6 +155,7 @@
 				LastSwiftUpdateCheck = 0920;
 				LastUpgradeCheck = 0920;
 				TargetAttributes = {
+					B11000050000000000000001 = {CreatedOnToolsVersion = 26.0; TestTargetID = 504EC3031FED79650016851F; };
 					504EC3031FED79650016851F = {
 						CreatedOnToolsVersion = 9.2;
 						LastSwiftMigration = 1100;
@@ -129,13 +173,13 @@
 			);
 			mainGroup = 504EC2FB1FED79650016851F;
 			packageReferences = (
-				D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */,
 			);
 			productRefGroup = 504EC3051FED79650016851F /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				504EC3031FED79650016851F /* App */,
+				B11000050000000000000001 /* ObservationUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -146,11 +190,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
-				50B271D11FEDC1A000F3C39B /* public in Resources */,
 				504EC30F1FED79650016851F /* Assets.xcassets in Resources */,
-				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,
-				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
-				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
 				A11A5E332FEA100000000001 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -158,26 +198,37 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		B11000070000000000000001 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B11000010000000000000001 /* ObservationUITests.swift in Sources */,
+				B11100010000000000000002 /* NativePointGeometry.swift in Test Sources */,
+				B11100010000000000000003 /* NativePointGeometryTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		504EC3001FED79650016851F /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
+				B10900010000000000000001 /* NativeObservationDeck.swift in Sources */,
+				B10900010000000000000002 /* StateTileDecoder.swift in Sources */,
+				B10900010000000000000003 /* StateTileCache.swift in Sources */,
+				B10900010000000000000004 /* StateTileService.swift in Sources */,
+				B10900010000000000000007 /* NativeCoverageReport.swift in Sources */,
+				B11200010000000000000001 /* NativeSourceIdentityPage.swift in Sources */,
+				B11200010000000000000002 /* NativeSourceDirectory.swift in Sources */,
+				B10900010000000000000005 /* NativeStateProjection.swift in Sources */,
+				B11100010000000000000001 /* NativePointGeometry.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXVariantGroup section */
-		504EC30B1FED79650016851F /* Main.storyboard */ = {
-			isa = PBXVariantGroup;
-			children = (
-				504EC30C1FED79650016851F /* Base */,
-			);
-			name = Main.storyboard;
-			sourceTree = "<group>";
-		};
 		504EC3101FED79650016851F /* LaunchScreen.storyboard */ = {
 			isa = PBXVariantGroup;
 			children = (
@@ -189,9 +240,34 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		B11000060000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.dajiaohuang.solaratlas.ObservationUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = App;
+			};
+			name = Debug;
+		};
+		B11000060000000000000002 /* Release */ = {
+				isa = XCBuildConfiguration;
+				buildSettings = {
+					GENERATE_INFOPLIST_FILE = YES;
+					IPHONEOS_DEPLOYMENT_TARGET = 16.4;
+					PRODUCT_BUNDLE_IDENTIFIER = io.github.dajiaohuang.solaratlas.ObservationUITests;
+					PRODUCT_NAME = "$(TARGET_NAME)";
+					SWIFT_VERSION = 5.0;
+					TARGETED_DEVICE_FAMILY = "1,2";
+					TEST_TARGET_NAME = App;
+				};
+				name = Release;
+		};
 		504EC3141FED79650016851F /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 958DCC722DB07C7200EA8C5F /* debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -300,7 +376,6 @@
 		};
 		504EC3171FED79650016851F /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 958DCC722DB07C7200EA8C5F /* debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
@@ -312,7 +387,6 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.11.0;
-				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.dajiaohuang.solaratlas;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
@@ -345,6 +419,12 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		B11000060000000000000003 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (B11000060000000000000001, B11000060000000000000002);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		504EC2FF1FED79650016851F /* Build configuration list for PBXProject "App" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -365,20 +445,6 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = "CapApp-SPM";
-		};
-/* End XCLocalSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		4D22ABE82AF431CB00220026 /* CapApp-SPM */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */;
-			productName = "CapApp-SPM";
-		};
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 504EC2FC1FED79650016851F /* Project object */;
 }

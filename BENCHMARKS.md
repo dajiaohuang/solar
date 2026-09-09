@@ -1,21 +1,25 @@
 # Reproducible backend performance evidence
 
 The harness exercises the real `httpapi.Server` through an in-process HTTP
-server backed by the post-PR94 catalog and the audited source inventory. It
-measures cold catalog/inventory load, warm catalog latency and throughput,
+server backed by a deliberately selected catalog and audited source inventory. It
+measures fresh-process catalog/inventory load, warm catalog latency and throughput,
 mixed catalog/trajectory/search traffic, exact source-state lookup at the
 declared audit epoch, compact trajectory transport, cancellation, overload
 backpressure, allocations and process memory. It does not use a toy catalog
 or an empty handler, and the measurements are evidence for the recorded
 machine and dataset rather than universal guarantees.
 
-## Snapshot identity
+## Historical snapshot identity (pre-tile implementation)
+
+This section preserves earlier measurements, not a supported storage format.
+The current reader requires independently compressed inventory v2 blocks;
+use the current binary state-tile command below for the current checkout.
 
 The benchmark below uses the retained `inventory-pr94-20260904` snapshot. Its
 manifest is 1,567,193 records in 314 gzip shards with 89,626,020 declared
 compressed bytes, manifest SHA-256
 `99312497b037caae4097b3e663283d1e8fc63799bd5e546e52a2ae3489e1e9c1`, kernel
-manifest `5c390d7bb8e02a28ebe45d32979c2f5db12983f8ec6044e4206750c5c89c29e0`,
+manifest `8e29cfb40a957dcaee094d09ed494900675caf3feecb15937c6ef3cb6694ca14`,
 and identity mapping `6d36c44543bc7f28e2f1696ec8c7e18c7a5ddedc58b51aec25826ad08395188e`.
 The separately retained `inventory-20260904-final` snapshot has the same row
 and shard counts but 89,588,299 bytes, manifest SHA-256
@@ -25,7 +29,7 @@ and identity mapping `397d23592b3a63a7a174cbb35f0b0c20d238eb076b0c940c64e67c6175
 They are different point-in-time outputs and must not be combined in a single
 claim or benchmark.
 
-Run from this worktree:
+Commands recorded for the historical implementation (not the current checkout):
 
 ```text
 go run ./cmd/bench -requests 500 -concurrency 32 -long-samples 10000 -inventory-dir D:/repo/repostew/.repostew/cache/solar-all-body-coverage/inventory-pr94-20260904
@@ -46,11 +50,97 @@ identity and source row.
 
 Record the complete JSON line together with `go version`, OS/architecture, CPU
 model, request arguments and the `manifestSha256` returned by
-`/v1/capabilities`. `catalogLoadMs` and `inventoryIndexLoadMs` are cold startup
-paths. `firstRequestMs`, repeated latency and mixed runs are warm in-process
+`/v1/capabilities`. `catalogLoadMs` and `inventoryIndexLoadMs` are fresh-process startup
+paths, not proof of a cold operating-system/disk cache. `firstRequestMs`, repeated latency and mixed runs are warm in-process
 paths. `peakRSSBytes` is sampled process working set on Windows and `/proc`
 RSS on Linux; `peakHeapBytes` remains available on every platform. Go's
 benchmark reports authoritative `B/op` and `allocs/op`.
+
+The backend must be measured against an explicitly staged profile. First run
+the normal build/data preparation so `public/data/ephemerides` contains the
+selected profile, then run `node scripts/stage-backend-profile.mjs
+<output-directory> [full|pages]` and start `go run ./cmd/solar-backend
+-data-dir <output-directory>`. The staging validator checks all source bytes and
+hashes before copying the manifest last; `src/data` alone is source-only
+metadata and does not prove that exact kernel files are available. The results
+below are retained evidence for their recorded fixtures, not a final profile
+performance sign-off; repeat measurements after staging the intended profile.
+The recorded full-profile staging check found 519 files totaling
+1,149,878,272 bytes; this is an artifact validation result, not a runtime
+resident-memory or performance guarantee.
+
+## Current binary state-tile evidence
+
+The current harness uses `-epoch-jd 2461287.5` by default. This is TDB
+ET=841,752,000, the audited inventory epoch, and is inside the packaged full
+profile coverage; the older `2451545.0` default was outside most packaged
+segments and therefore reported only 18 exact catalog rows. Catalog state
+tiles use all 566 catalog entries. Source workloads first scan the inventory
+index and select a reproducible mixed set containing 16 exact-capable rows and
+the remainder missing at this epoch, then measure 16,384 and 32,768 IDs.
+Directory-search traffic samples a fixed six-name query set
+(`Ceres`, `Halley`, `Europa`, `Sedna`, `Apophis`, `Voyager`) so the run covers
+different indexed terms while remaining reproducible.
+
+Run the current evidence with:
+
+```text
+go run ./cmd/bench -requests 5 -concurrency 1 -epoch-jd 2461287.5 -data-dir <staged-full-profile> -inventory-dir D:/repo/repostew/.repostew/cache/solar-issue109-addressable-inventory-20260905 -long-samples 100
+```
+
+The 2026-09-09 Windows amd64 run reported catalog 572 entries / 519 manifest-
+valid packaged files, catalog exact/missing 572/0, source exact/missing
+16/16,368 at 16,384 IDs and 16/32,752 at 32,768 IDs. Lazy integrity evidence
+is reported separately by the workload; the startup-only probes below perform
+zero full-file verification reads. The
+catalog SPK page counters are reported separately from those integrity reads;
+the warm run recorded 1,264 page loads, 699,126 page-cache hits and 1,264
+page-cache misses. A fresh-process catalog load was about 35 ms on that run;
+the inventory index load was about 8.2 s. These are host- and filesystem-cache-
+dependent observations, not universal startup guarantees.
+
+The same host's two fresh startup-only processes retained
+`89,648,744` and `89,668,696` bytes of Go heap for the loaded inventory index
+(85.50 and 85.52 MiB), with 4,034,405 indexed terms and 4,034,430 postings. This
+`inventoryIndexHeapBytes` value is a post-GC retained heap delta measured by the
+Go runtime after the temporary decode cache and sortable posting buffer were
+released; it includes retained index maps and strings, excludes allocator pages
+and process RSS, and is evidence for this runtime/dataset rather than a
+portable memory guarantee. Each report also records `inventoryIndexDigest`, a
+SHA-256 over the retained sorted record references, shard starts, term keys,
+term ranges, and posting values. The two fresh builds both produced
+`38f9430c50dfdeb2476452e42fff2f3ee5650cb8c413adc429a8101450fd77e9`; this is
+the constructed index output digest and is distinct from the input inventory
+manifest SHA-256. Raw reports are retained as
+`solar-bench-startup-full-index-519-run1-20260909.json` and
+`solar-bench-startup-full-index-519-run2-20260909.json`.
+
+Successful tile samples are reported separately from `overload429` and
+`otherErrors`; with concurrency 1 there were 5, 5 and 10 successful tiles
+respectively, with zero overload or other errors. Each state result now reports
+plan latency, tile-workload latency, total latency, successful/rejected tile
+throughput, separate successful/rejected quantiles, and final-response cache
+hits/misses. The response cache is bounded at 64 MiB and shares the two-slot
+tile encoder limit. A concurrency-4 run intentionally produced 429
+backpressure (2 per source plan); those rejections are reported
+separately and are not included in successful latency quantiles.
+
+The catalog manifest SHA-256 was
+`6293862136e2fc571b25b69c0995189c38b3ded42bbc756f12cc37ee4bd9b5b0`; the
+inventory manifest SHA-256 was
+`2c0aca1e6412c6e7785acd901bb987ce0f57c5353e2a8ff87aed032b291377b7`.
+In a warm-cache concurrency-1 run, source successful-tile p50/p95 latencies
+were 30.984/32.685 ms (16,384) and 19.517/41.552 ms (32,768); these are
+transport/encoding measurements for the mixed set, not an SLO or a claim that
+every source row is exact. `peakRSSBytes` is explicitly a sampled process RSS
+value, not an OS peak. The JSON also records inventory compressed-block cache
+hits/misses/loads and the sampled cancellation-observation delay; no hard-device
+I/O or universal memory claim is inferred from those counters. The same run
+observed the server handler after client cancellation in about 18.5 ms; this is
+an in-process cancellation-observation measurement, not an end-to-end network
+guarantee.
+
+## Historical JSON/index results (not current implementation claims)
 
 Reference harness run (2026-09-05, Windows amd64, Intel Core i9-14900KF,
 full source inventory 1,567,193 rows / 314 gzip shards, 89,626,020 declared
@@ -72,11 +162,12 @@ once the requested rows are found. There is no unbounded response cache: the
 bounded startup index and the operating-system page cache are the only retained
 warm data paths.
 
-Current-state batch reference run (2026-09-05, same Windows amd64 Intel Core
+Historical JSON current-state batch reference run (2026-09-05, same Windows amd64 Intel Core
 i9-14900KF host, PR94 inventory snapshot above, 100 requests per size, 16
-workers) recorded the following JSON evidence. Each request uses one shared
-TDB epoch and explicit `precision: "approximate"` for catalog fallback rows;
-operational rows remain exact when packaged SPK data is available.
+workers) recorded the following JSON evidence. This is retained as historical
+backend evidence only; it is not the current client wire contract. Each request
+uses one shared TDB epoch and explicit `precision: "approximate"` for catalog
+fallback rows; operational rows remain exact when packaged SPK data is available.
 
 ```json
 {"currentStateBatches":[{"ids":160,"requests":100,"p50Ns":1000200,"p95Ns":2999400,"p99Ns":4001100,"p50Bytes":36815,"errors":0},{"ids":294,"requests":100,"p50Ns":1051400,"p95Ns":1810600,"p99Ns":2325300,"p50Bytes":65868,"errors":0},{"ids":510,"requests":100,"p50Ns":1046200,"p95Ns":1585200,"p99Ns":2108500,"p50Bytes":110677,"errors":0}],"inventoryIndexLoadMs":10206.074,"inventoryIndexTerms":4034405,"inventoryIndexPostings":4034430,"peakRSSBytes":245587968,"peakHeapBytes":150828048,"cancelledObserved":true,"overloadRequests":32,"overloadRejected":31,"invalidResponses":0}
@@ -121,12 +212,11 @@ BenchmarkTrajectory10000Samples-32       50    4852430 ns/op    3120147 B/op  92
 ```
 
 The same machine compared candidate one-epoch batch wire shapes using the
-same 160/294/510 row counts. Columnar JSON was selected for the shared Web,
-Android and iOS contract: it preserves auditable parallel metadata arrays and
-maps directly to typed numeric buffers without a new dependency or a custom
-decoder. A fixed little-endian binary candidate was smaller but omitted the
-rich source/model/evidence fields unless a new schema and decoder were added;
-row JSON repeated those fields per object.
+same 160/294/510 row counts. Those results are historical serialization
+evidence. The current Web and native contract is the fixed little-endian
+binary state-tile protocol with manifest/plan identity, provenance and typed
+Float64 payloads; see [current-state tile performance](./docs/current-states-performance.md).
+The row and columnar JSON measurements below are not supported transport APIs.
 
 | IDs | Columnar JSON | Row JSON | Fixed binary candidate |
 | ---: | ---: | ---: | ---: |
@@ -153,10 +243,16 @@ compact numeric array per body when a state exists. `stateStride: 6` and
 there are no parallel object-shaped state arrays to multiply response memory.
 The long response above is 597,239 bytes for 5,000 samples using that layout.
 
-The overload workload uses a one-slot server and confirms fail-fast `429`
-responses with `Retry-After: 1`; the normal worker pool never accumulates an
-unbounded queue. Pre-cancelled requests are observed by the harness, and the
-inventory reader checks cancellation while scanning rows.
+The overload workload uses a one-slot server with the current bounded scheduler.
+Its burst may queue and succeed; `429` with `Retry-After: 1` indicates a full
+class queue or an expired wait, not simply an occupied worker. The report now
+separates main-workload `scheduler` from `overloadScheduler` snapshots, including
+peak queued requests, grants, rejected/expired/cancelled waits and aggregate wait
+nanoseconds. `queueWaitTimeoutNs` is the configured wait limit, not an observed
+maximum latency. Zero rejections does not prove saturation. See
+[request scheduling](./PERFORMANCE.md#backend-request-scheduling) for fairness
+and cancellation limits. The inventory reader checks cancellation while scanning
+rows.
 
 These figures are measurements, not latency, memory, precision or “best”
 guarantees for another client, release, operating system or data profile.

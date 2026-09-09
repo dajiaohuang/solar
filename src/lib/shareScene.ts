@@ -5,11 +5,11 @@ import { simulationStore } from '../state/simulation-store'
 import { uiStore } from '../state/ui-store'
 import { missionStore } from '../state/mission-store'
 import { encodeUrlState } from './urlState'
-import { CANONICAL_APP_URL, IS_NATIVE_APP } from './platform'
+import { CANONICAL_APP_URL } from './platform'
 import { VIEW_CAPABILITIES } from './viewCapabilities'
 
 function sceneBaseUrl() {
-  if (IS_NATIVE_APP || typeof window === 'undefined') return CANONICAL_APP_URL
+  if (typeof window === 'undefined') return CANONICAL_APP_URL
   return `${window.location.origin}${window.location.pathname}`
 }
 
@@ -20,6 +20,9 @@ export function encodeCurrentScene() {
   const ui = uiStore.getState()
   const mission = missionStore.getState()
   const capabilities = VIEW_CAPABILITIES[simulation.viewMode]
+  const referenced = new Set([...selection.selectedIds, simulation.referenceId, ...(simulation.comparisonEnabled ? [simulation.comparisonReferenceId] : [])])
+  const sourceSelection = selection.sourceSceneError || selection.sourceScene?.ids.some(id => referenced.has(id))
+    ? selection.sourceSceneEncoded ?? undefined : undefined
   if (ui.route === 'home') {
     const language = ui.language === 'zh' ? '?lang=zh' : ''
     return `${sceneBaseUrl()}${language}`
@@ -44,6 +47,7 @@ export function encodeCurrentScene() {
     compareRef: simulation.comparisonReferenceId,
     compare: simulation.comparisonEnabled,
     bodies: selection.selectedIds,
+    sourceSelection,
     jd: simulationClock.getJulianDay(),
     zoom: simulation.zoom,
     speed: simulationClock.getSnapshot().rateDaysPerSecond,

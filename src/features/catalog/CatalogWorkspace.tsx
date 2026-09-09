@@ -27,6 +27,7 @@ import { bodyDisplayName } from '../../lib/bodyNames'
 import { catalogSampleErrorMessage } from '../../lib/catalogSampleProfile'
 import { CATALOG_ORBIT_CLASS_FILTERS } from '../../lib/catalogFilters'
 import { DatasetCard } from './DatasetCard'
+import { SourceIdentityBrowser } from './SourceIdentityBrowser'
 
 export function CatalogWorkspace() {
   useCatalogSample()
@@ -132,7 +133,7 @@ export function CatalogWorkspace() {
   const pointRecords = useMemo(() => exactResultIsPartial && !catalog.filters.query.trim()
     ? filterCatalogRecords(catalog.baseSampleRecords, catalog.filters)
     : filtered, [catalog.baseSampleRecords, catalog.filters, exactResultIsPartial, filtered])
-  const pointCloud = useCatalogPointWorker(pointRecords, catalogEpoch)
+  const pointCloud = useCatalogPointWorker(pointRecords, catalogEpoch, '2d')
 
   async function scanEntireCatalog() {
     if (!catalog.manifest) return null
@@ -236,6 +237,12 @@ export function CatalogWorkspace() {
         </div>
       </div>
 
+      <SourceIdentityBrowser onSelectPage={(page) => {
+        const base = import.meta.env.VITE_SOLAR_API_BASE_URL?.trim() || ''
+        const selected = selectionActions.selectSourcePage(page, base)
+        if (selected) uiActions.navigate('explorer')
+        return selected
+      }} />
       <div className="catalog-layout">
         <aside className="filter-panel glass-panel">
           <DatasetCard />

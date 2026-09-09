@@ -270,6 +270,60 @@
     }
   ],
   "contract": "Auditable satellite identities; no generated orbit, GM, phase, physical radius or claim of available ephemeris states.",
+  "sourceOnlyBodies": [
+    {
+      "id": "naif:120000617",
+      "naifId": 120000617,
+      "name": "Manoetius",
+      "aliases": [],
+      "identityStatus": "source-identified-not-in-discovery-snapshot",
+      "identityResolution": "original-comment-name-number-and-missing-system-center-descriptor",
+      "sourceEphemerides": [
+        "tnosat_v001_20000617_jpl082_20230601"
+      ],
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20000617_jpl082_20230601.bsp",
+      "sourceSha256": "f9f8ff5dc582253937e78ee205179041a517bbe2205aaed764bb5669ff306ea1",
+      "primaryNaifId": 920000617,
+      "systemNaifId": 20000617,
+      "ephemerisStatus": "source-only-missing-compatible-system",
+      "provenance": "Published component offset with an explicit source identity; compatible system center is absent, so no exact state is delivered.",
+      "sourceClaims": [
+        {
+          "name": "Manoetius",
+          "parentNaifId": 920000617,
+          "systemNaifId": 20000617,
+          "ephemeris": "tnosat_v001_20000617_jpl082_20230601",
+          "evidence": "original-comment-name-number-and-missing-system-center-descriptor"
+        }
+      ]
+    },
+    {
+      "id": "naif:920000617",
+      "naifId": 920000617,
+      "name": "Patroclus",
+      "aliases": [],
+      "identityStatus": "source-identified-not-in-discovery-snapshot",
+      "identityResolution": "original-comment-name-number-and-missing-system-center-descriptor",
+      "sourceEphemerides": [
+        "tnosat_v001_20000617_jpl082_20230601"
+      ],
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20000617_jpl082_20230601.bsp",
+      "sourceSha256": "f9f8ff5dc582253937e78ee205179041a517bbe2205aaed764bb5669ff306ea1",
+      "primaryNaifId": 920000617,
+      "systemNaifId": 20000617,
+      "ephemerisStatus": "source-only-missing-compatible-system",
+      "provenance": "Published component offset with an explicit source identity; compatible system center is absent, so no exact state is delivered.",
+      "sourceClaims": [
+        {
+          "name": "Patroclus",
+          "parentNaifId": 920000617,
+          "systemNaifId": 20000617,
+          "ephemeris": "tnosat_v001_20000617_jpl082_20230601",
+          "evidence": "original-comment-name-number-and-missing-system-center-descriptor"
+        }
+      ]
+    }
+  ],
   "source": {
     "surveySha256": "26e4b02f58e0d46d1907dc38939e453cbc4ad516e0b6d1c267dbf62fa7938920",
     "discovery": {

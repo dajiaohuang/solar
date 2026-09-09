@@ -78,7 +78,7 @@ if (sw.includes('__BUILD_SHA__') || sw.includes('const PRECACHE_URLS = ["./"]'))
 const capacity = JSON.parse(await readFile(join(dist, 'capacity-report.json'), 'utf8'))
 if (!capacity.withinBudget) throw new Error('Generated artifact exceeds its declared capacity budget')
 const buildInfo = JSON.parse(await readFile(join(dist, 'build-info.json'), 'utf8'))
-const delivery = productDelivery(undefined, buildInfo.productProfile, buildInfo.ephemerisProfile)
+const delivery = productDelivery(buildInfo.productProfile, buildInfo.ephemerisProfile)
 const availabilityText = await readFile(join(dist, 'product-availability.json'), 'utf8')
 if (availabilityText !== jsonDocument(delivery.availability) || sha256(availabilityText) !== buildInfo.productAvailabilitySha256) throw new Error('Product availability identity mismatch')
 if (capacity.productProfile !== delivery.product || capacity.productAvailabilitySha256 !== delivery.availabilitySha256) throw new Error('Capacity report product identity mismatch')
@@ -107,6 +107,30 @@ if (scientificValidation.modelEvidence?.satelliteOrbits?.moonCenterHandling !== 
 if (scientificValidation.modelEvidence?.satelliteOrbits?.sourcedBodies?.join(',') !== 'moon,io,europa,ganymede,callisto,titan') throw new Error('Scientific validation report does not identify every sourced satellite model')
 if (scientificValidation.modelEvidence?.satelliteOrbits?.illustrativeBodies?.length !== 0) throw new Error('Scientific validation report still identifies illustrative satellite elements')
 if (scientificValidation.modelEvidence?.satelliteOrbits?.giantSatelliteFrameTransform !== 'identity-eclipj2000') throw new Error('Scientific validation report is missing the giant-satellite frame contract')
+const coverage = scientificValidation.modelEvidence?.coverage
+const expectedCoverageBodies = 'sun,mercury,venus,earth,moon,mars,jupiter,saturn,uranus,neptune,ceres,pluto,eris,haumea,makemake,io,europa,ganymede,callisto,titan'
+if (coverage?.supportedNamedBodies?.join(',') !== expectedCoverageBodies) throw new Error('Scientific validation report is missing the curated named-body coverage inventory')
+if (coverage?.sourcedSatelliteBodies?.join(',') !== 'moon,io,europa,ganymede,callisto,titan') throw new Error('Scientific validation report is missing the sourced satellite coverage inventory')
+if (coverage?.coverageGaps?.join(',') !== 'other-planetary-satellites-not-modeled,dwarf-planet-elements-are-curated-approximations-not-precision-ephemerides') throw new Error('Scientific validation report is missing explicit coverage gaps')
+const spkDelivery = coverage?.spkDelivery
+if (spkDelivery?.stateBoundary !== 'geometric-spk-six-vector-when-kernel-and-center-chain-cover-epoch') throw new Error('Scientific validation report is missing the SPK state boundary')
+if (spkDelivery?.ephemerisBodyCount !== 87 || spkDelivery?.planetarySatelliteBodyCount !== 31 || spkDelivery?.smallBodyBodyCount !== 56 || spkDelivery?.satelliteIdentityCount !== 472) throw new Error('Scientific validation report is missing the expanded SPK coverage counts')
+if (JSON.stringify(spkDelivery?.satelliteIdentityDelivery) !== JSON.stringify({ catalogBodies: 472, numericNaifIdentities: 471, pagesManifestTargets: 471, fullManifestTargets: 471, identityOnlyBodies: 1, identityOnlyIds: ['sat:planet:saturn:provisional:S/2009 S1'], sourceOnlyBodies: 2, sourceOnlyIds: ['naif:120000617', 'naif:920000617'], sourceOnlyBoundary: 'JPL082 publishes explicit Patroclus/Manoetius component offsets but omits compatible system target 20000617; these identities remain source-only and never imply an exact state or local orbit.', boundary: 'A pinned manifest target proves source delivery identity; an exact state still requires verified kernel bytes and a covered center chain at the requested epoch.', localOrbitBoundary: 'Catalog identities without generated local orbit elements remain source-backed current-state candidates; no fallback orbit is created for them.' })) throw new Error('Scientific validation report is missing complete satellite identity delivery evidence')
+if (spkDelivery?.pagesManifest?.id !== 'jpl-satellite-expansion-20260904-pages' || spkDelivery?.pagesManifest?.sha256 !== 'a22ec725a918e9bc754d8065b640c20aa44e556bb74ba86a2c09b37a644efbef' || spkDelivery?.pagesManifest?.bytes !== 271823872 || spkDelivery?.pagesManifest?.fileCount !== 551) throw new Error('Scientific validation report is missing the pinned Pages SPK manifest')
+if (spkDelivery?.fullManifest?.id !== 'jpl-satellite-expansion-20260904-full' || spkDelivery?.fullManifest?.sha256 !== '3b64454a64fbfeb80930c9b8906f55993c8ce2c2f87ccf2f6f4ec88ec7e2cf72' || spkDelivery?.fullManifest?.bytes !== 1156593664 || spkDelivery?.fullManifest?.fileCount !== 551) throw new Error('Scientific validation report is missing the pinned full SPK manifest')
+const expectedSatelliteBatches = {
+  mars: 'naif:401,naif:402',
+  jupiter: 'naif:505,naif:514,naif:515,naif:516',
+  saturn: 'naif:601,naif:602,naif:603,naif:604,naif:605,naif:607,naif:608,naif:609,naif:612,naif:613,naif:614,naif:632,naif:634',
+  uranus: 'naif:701,naif:702,naif:703,naif:704,naif:705',
+  neptune: 'naif:801,naif:802',
+  pluto: 'naif:901,naif:902,naif:903,naif:904,naif:905',
+}
+for (const [parent, expected] of Object.entries(expectedSatelliteBatches)) {
+  if (spkDelivery?.sourceBackedSatelliteBatches?.[parent]?.join(',') !== expected) throw new Error(`Scientific validation report is missing the ${parent} satellite coverage batch`)
+}
+if (JSON.stringify(spkDelivery?.sourceBackedSmallBodyPrimaries) !== JSON.stringify(['quaoar', 'orcus', 'salacia', '1998ww31', '2001qw322', 'kagara', '1999oj4', '2003un284'])) throw new Error('Scientific validation report is missing the reviewed small-body primary coverage batch')
+if (JSON.stringify(spkDelivery?.frozenHorizonsAsteroids) !== JSON.stringify(['243', '433', '951', '25143', '99942', '162173', '3200', '3122', '65803', '4179', '1036', '1580', '2867', '52768', '29075', '231937', '486958', '132524', '152830', '341843', '469219', '162421', '153591', '308635', '163899', '357439', '367943', '6', '9', '14', '18', '19', '90', '216', '11', '13', '21', '24', '29', '39', '44'])) throw new Error('Scientific validation report is missing the frozen Horizons asteroid batch')
 const planetaryModelEvidence = scientificValidation.modelEvidence.planetaryApproximation
 const expectedPlanetaryModelWindow = `${planetaryModelEvidence.validFrom}/${planetaryModelEvidence.validTo}`
 if (scientificValidation.modelWindow?.planetaryApproximation !== expectedPlanetaryModelWindow) throw new Error('Scientific validation model window is inconsistent with the canonical model evidence')

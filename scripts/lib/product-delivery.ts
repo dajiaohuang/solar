@@ -10,9 +10,9 @@ export function jsonDocument(value: unknown) { return `${JSON.stringify(value, n
 export function sha256(value: string | Uint8Array) { return createHash('sha256').update(value).digest('hex') }
 
 /** Build-only policy. Runtime imports the same deterministic SPK selector. */
-export function productDelivery(target?: string, requestedProduct?: string, requestedEphemeris?: string) {
-  const product = productProfile(target, requestedProduct)
-  const scientificProfile = ephemerisProfile(target, requestedEphemeris)
+export function productDelivery(requestedProduct?: string, requestedEphemeris?: string) {
+  const product = productProfile(requestedProduct)
+  const scientificProfile = ephemerisProfile(requestedEphemeris)
   const source = scientificProfile === 'full' ? full : pages
   const manifest = product === 'preview' ? previewEphemerisManifest(source) : source
   const availability = {
@@ -27,7 +27,7 @@ export function productDelivery(target?: string, requestedProduct?: string, requ
   return {
     product, scientificProfile, manifest, availability, availabilitySha256,
     // A trimmed manifest must NEVER replace an immutable full manifest at the
-    // same URL: old full/native IndexedDB caches and new preview caches coexist.
+    // same URL: full and preview caches coexist by content-addressed path.
     catalogDirectory: product === 'preview' ? `data/asteroids/preview/${availabilitySha256}` : 'data/asteroids',
   }
 }

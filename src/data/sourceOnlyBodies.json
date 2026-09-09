@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "sourceCatalog": "src/data/satelliteCatalog.json",
+  "bodies": [
+    {
+      "id": "naif:120000617",
+      "naifId": 120000617,
+      "name": "Manoetius",
+      "kind": "asteroid",
+      "source": "jpl-satellite-source-only",
+      "identityStatus": "source-identified-not-in-discovery-snapshot",
+      "ephemerisStatus": "source-only-missing-compatible-system",
+      "missingReason": "missing-compatible-system-center",
+      "sourceEphemerides": ["tnosat_v001_20000617_jpl082_20230601"],
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20000617_jpl082_20230601.bsp",
+      "sourceSha256": "f9f8ff5dc582253937e78ee205179041a517bbe2205aaed764bb5669ff306ea1",
+      "primaryNaifId": 920000617,
+      "systemNaifId": 20000617,
+      "provenance": "Published component offset with an explicit source identity; compatible system center is absent, so no exact state is delivered."
+    },
+    {
+      "id": "naif:920000617",
+      "naifId": 920000617,
+      "name": "Patroclus",
+      "kind": "asteroid",
+      "source": "jpl-satellite-source-only",
+      "identityStatus": "source-identified-not-in-discovery-snapshot",
+      "ephemerisStatus": "source-only-missing-compatible-system",
+      "missingReason": "missing-compatible-system-center",
+      "sourceEphemerides": ["tnosat_v001_20000617_jpl082_20230601"],
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/tnosat_v001_20000617_jpl082_20230601.bsp",
+      "sourceSha256": "f9f8ff5dc582253937e78ee205179041a517bbe2205aaed764bb5669ff306ea1",
+      "primaryNaifId": 920000617,
+      "systemNaifId": 20000617,
+      "provenance": "Published component offset with an explicit source identity; compatible system center is absent, so no exact state is delivered."
+    }
+  ]
+}

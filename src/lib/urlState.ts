@@ -2,8 +2,7 @@ import type { AppRoute, ElementPlotMode } from '../state/ui-store'
 import type { BodyId, DatasetMode, MagnitudeStatus, RenderQuality } from '../types'
 
 export const SCENE_URL_VERSION = 4 as const
-export const LEGACY_SCENE_URL_VERSIONS = [2, 3] as const
-type SceneUrlVersion = typeof SCENE_URL_VERSION | typeof LEGACY_SCENE_URL_VERSIONS[number]
+type SceneUrlVersion = typeof SCENE_URL_VERSION
 export type ScientificLayer = 'ecliptic' | 'orbits' | 'lagrange' | 'hill' | 'soi' | 'spacecraft'
 
 export type AppUrlState = {
@@ -19,6 +18,8 @@ export type AppUrlState = {
   compareRef?: BodyId
   compare?: boolean
   bodies?: BodyId[]
+  /** Opaque directory snapshot pin; validated before a source scene can load. */
+  sourceSelection?: string
   jd?: number
   zoom?: number
   speed?: number
@@ -95,7 +96,10 @@ export function encodeUrlState(state: AppUrlState) {
   if (state.ref && state.ref !== 'sun') params.set('ref', state.ref)
   if (state.compareRef) params.set('compareRef', state.compareRef)
   if (state.compare) params.set('compare', '1')
-  if (state.bodies?.length) params.set('bodies', state.bodies.join(','))
+  if (state.sourceSelection !== undefined) {
+    params.set('sourceSelection', state.sourceSelection)
+    params.set('bodies', JSON.stringify(state.bodies ?? []))
+  } else if (state.bodies?.length) params.set('bodies', state.bodies.join(','))
   if (state.jd !== undefined) params.set('jd', state.jd.toFixed(5))
   if (state.zoom !== undefined && state.zoom !== 1) params.set('zoom', state.zoom.toFixed(2))
   if (state.speed !== undefined && state.speed !== 30) params.set('speed', String(state.speed))
@@ -131,11 +135,9 @@ export function encodeUrlState(state: AppUrlState) {
 export function decodeUrlState(search = typeof window === 'undefined' ? '' : window.location.search): AppUrlState {
   const params = new URLSearchParams(search)
   const encodedVersion = params.get('v')
-  const supportedVersionStrings = [...LEGACY_SCENE_URL_VERSIONS, SCENE_URL_VERSION].map(String)
   const versionPresent = params.has('v')
-  if (versionPresent && !supportedVersionStrings.includes(encodedVersion ?? '')) return {}
-  const version = versionPresent ? Number(encodedVersion) as SceneUrlVersion : SCENE_URL_VERSION
-  const state: AppUrlState = { version, view: '3d' }
+  if (versionPresent && encodedVersion !== String(SCENE_URL_VERSION)) return {}
+  const state: AppUrlState = { version: SCENE_URL_VERSION, view: '3d' }
   const routes: AppRoute[] = ['home', 'explorer', 'catalog', 'elements', 'events', 'mission', 'stories', 'about']
   const route = params.get('page') as AppRoute | null
   if (route && routes.includes(route)) state.route = route
@@ -145,7 +147,7 @@ export function decodeUrlState(search = typeof window === 'undefined' ? '' : win
   if (mode === 'lite' || mode === 'full') state.mode = mode
   const catalogSamplePresent = params.has('catalogSample')
   const catalogSampleCountPresent = params.has('catalogSampleCount')
-  if (version === SCENE_URL_VERSION && (catalogSamplePresent || catalogSampleCountPresent)) {
+  if (catalogSamplePresent || catalogSampleCountPresent) {
     const catalogSample = params.get('catalogSample') ?? ''
     const catalogSampleCountText = params.get('catalogSampleCount') ?? ''
     const catalogSampleCount = Number(catalogSampleCountText)
@@ -163,7 +165,17 @@ export function decodeUrlState(search = typeof window === 'undefined' ? '' : win
   if (compareRef) state.compareRef = compareRef
   state.compare = params.get('compare') === '1'
   const bodies = params.get('bodies')
-  if (bodies) state.bodies = bodies.split(',').filter(Boolean)
+  if (params.has('sourceSelection')) {
+    state.sourceSelection = params.get('sourceSelection')!
+    try {
+      const ids: unknown = JSON.parse(bodies ?? '[]')
+      if (!Array.isArray(ids) || ids.some(id => typeof id !== 'string' || !id || new TextEncoder().encode(id).length > 512 || [...id].some(character => { const code = character.charCodeAt(0); return code < 0x20 || code === 0x7f }))) throw new Error('Invalid source IDs')
+      state.bodies = [...new Set(ids as string[])]
+    } catch {
+      // Preserve a blocked scene rather than silently selecting the defaults.
+      state.bodies = []; state.sourceSelection = JSON.stringify({ invalidSourceSelection: state.sourceSelection, invalidBodies: bodies })
+    }
+  } else if (bodies) state.bodies = bodies.split(',').filter(Boolean)
   state.jd = finite(params.get('jd'))
   state.zoom = finite(params.get('zoom'))
   state.speed = finite(params.get('speed'))
@@ -172,11 +184,9 @@ export function decodeUrlState(search = typeof window === 'undefined' ? '' : win
   if (samples !== undefined && samples >= 32 && samples <= 480) state.samples = Math.floor(samples)
   const view = params.get('view')
   if (view === '2d' || view === '3d') state.view = view
-  if (version === SCENE_URL_VERSION) {
-    state.catalogCloud = params.get('catalogCloud') === '1'
-    const quality = params.get('quality')
-    if (quality === 'auto' || quality === 'balanced' || quality === 'max') state.quality = quality
-  }
+  state.catalogCloud = params.get('catalogCloud') === '1'
+  const quality = params.get('quality')
+  if (quality === 'auto' || quality === 'balanced' || quality === 'max') state.quality = quality
   const filter = params.get('filter')
   if (filter) state.filter = filter
   const searchText = params.get('search')

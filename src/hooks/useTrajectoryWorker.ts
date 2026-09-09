@@ -4,13 +4,16 @@ import { getEphemerisSnapshot, loadedKernelIds } from '../engine/ephemeris/kerne
 import type {
   BodyId,
   CelestialBody,
-  PackedTrajectoryData,
   TrajectorySample,
   TrajectoryWorkerRequest,
   TrajectoryWorkerResponse,
   Vector3,
 } from '../types'
-import type { BackendFrame } from '../lib/currentStates'
+import type { BackendFrame } from '../lib/backendFrames'
+import { EMPTY_CURRENT_POSITIONS } from '../lib/currentPositions'
+import { trajectoryViews } from '../lib/trajectorySamples'
+import { PRODUCT_PROFILE } from '../lib/productAvailability'
+import { useBackendTrajectoryWorker } from './useBackendTrajectoryWorker'
 
 type Params = {
   bodies: CelestialBody[]
@@ -22,29 +25,8 @@ type Params = {
   trajectoryJulianDay: number
   historyDays: number
   sampleCount: number
-  currentFrame?: Pick<BackendFrame, 'currentPositions' | 'missingBodyIds' | 'maxDistance'> | null
-}
-
-function unpackTrajectories(packed: PackedTrajectoryData, bodiesById: Map<BodyId, CelestialBody>) {
-  const trajectories: TrajectorySample[] = []
-  for (let index = 0; index < packed.bodyIds.length; index += 1) {
-    const body = bodiesById.get(packed.bodyIds[index])
-    if (!body) continue
-    const start = packed.offsets[index]
-    const end = packed.offsets[index + 1]
-    const points = []
-    const points3D = []
-    for (let cursor = start; cursor < end; cursor += 1) {
-      points.push({ x: packed.points2D[cursor * 2], y: packed.points2D[cursor * 2 + 1] })
-      points3D.push({
-        x: packed.points3D[cursor * 3],
-        y: packed.points3D[cursor * 3 + 1],
-        z: packed.points3D[cursor * 3 + 2],
-      })
-    }
-    trajectories.push({ body, points, points3D })
-  }
-  return trajectories
+  seekRevision?: number
+  currentFrame?: BackendFrame | null
 }
 
 export function useTrajectoryWorker(params: Params) {
@@ -67,26 +49,34 @@ export function useTrajectoryWorker(params: Params) {
   const [progress, setProgress] = useState(0)
   const [isComputing, setIsComputing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const kernelKey = loadedKernelIds().join('|')
-  const ephemerisLoading = getEphemerisSnapshot().loading > 0
-  const requestKey = useMemo(() => JSON.stringify([referenceId, trajectoryJulianDay, historyDays, sampleCount, kernelKey, trajectoryBodies, resolutionBodies]),
-    [referenceId, trajectoryJulianDay, historyDays, sampleCount, kernelKey, trajectoryBodies, resolutionBodies])
+  const backendEnabled = PRODUCT_PROFILE === 'full'
+  const kernelKey = backendEnabled ? '' : loadedKernelIds().join('|')
+  const ephemerisLoading = !backendEnabled && getEphemerisSnapshot().loading > 0
+  const requestKey = useMemo(() => backendEnabled ? '' : JSON.stringify([referenceId, trajectoryJulianDay, historyDays, sampleCount, kernelKey, trajectoryBodies, resolutionBodies]),
+    [backendEnabled, referenceId, trajectoryJulianDay, historyDays, sampleCount, kernelKey, trajectoryBodies, resolutionBodies])
   const [completedRequestKey, setCompletedRequestKey] = useState<string | null>(null)
   const bodiesById = useMemo(
     () => new Map<BodyId, CelestialBody>(resolutionBodies.map((body) => [body.id, body])),
     [resolutionBodies],
   )
+  const configured = import.meta.env.VITE_SOLAR_API_BASE_URL
+  const backend = useBackendTrajectoryWorker({ enabled: backendEnabled && currentFrame !== null,
+    base: typeof configured === 'string' && configured.trim() ? configured.trim().replace(/\/+$/, '') : null,
+    bodies: trajectoryBodies, referenceBody: bodiesById.get(referenceId), centerUtcJd: trajectoryJulianDay, historyDays, sampleCount,
+    sourceKey: `${currentFrame?.catalogManifestSha256 ?? ''}:${currentFrame?.inventoryManifestSha256 ?? ''}`, seekRevision: params.seekRevision ?? 0,
+    expectedCatalogManifestSha256: currentFrame?.catalogManifestSha256, expectedInventoryManifestSha256: currentFrame?.inventoryManifestSha256 })
 
-  const localCurrent = useMemo(() => currentFrame === undefined ? buildCurrentPositions({
+  const localCurrent = useMemo(() => !backendEnabled && currentFrame === undefined ? buildCurrentPositions({
     bodies,
     bodiesById,
     referenceId,
     julianDay: currentJulianDay,
     resolveBodyPosition,
-  }) : { currentPositions: [], missingBodyIds: bodies.map(body => body.id), maxDistance: 0, trajectoryUnavailableBodyIds: [] as BodyId[] },
-  [bodies, bodiesById, currentFrame, currentJulianDay, referenceId, resolveBodyPosition])
+  }) : { currentPositions: EMPTY_CURRENT_POSITIONS, missingBodyIds: bodies.map(body => body.id), maxDistance: 0, trajectoryUnavailableBodyIds: [] as BodyId[] },
+  [backendEnabled, bodies, bodiesById, currentFrame, currentJulianDay, referenceId, resolveBodyPosition])
 
   useEffect(() => {
+    if (backendEnabled) return
     // A large preset may install hundreds of files. Current positions can
     // update progressively, but do not restart a full sampled trajectory for
     // every partial pool and repeatedly send all those kernels to the worker.
@@ -118,7 +108,7 @@ export function useTrajectoryWorker(params: Params) {
       if (response.type === 'progress') {
         setProgress(response.progress ?? 0)
       } else if (response.type === 'result' && response.packed) {
-        setTrajectories(unpackTrajectories(response.packed, bodiesById))
+        setTrajectories(trajectoryViews(response.packed, bodiesById))
         setTrajectoryUnavailableBodyIds(response.packed.trajectoryUnavailableBodyIds ?? [])
         setCompletedRequestKey(requestKey)
         setProgress(1)
@@ -158,7 +148,7 @@ export function useTrajectoryWorker(params: Params) {
         worker.postMessage({ type: 'cancel', requestId })
       }
     }
-  }, [trajectoryBodies, bodiesById, ephemerisLoading, historyDays, referenceId, requestKey, resolutionBodies, sampleCount, trajectoryJulianDay])
+  }, [backendEnabled, trajectoryBodies, bodiesById, ephemerisLoading, historyDays, referenceId, requestKey, resolutionBodies, sampleCount, trajectoryJulianDay])
 
   useEffect(() => () => {
     workerRef.current?.terminate()
@@ -167,18 +157,19 @@ export function useTrajectoryWorker(params: Params) {
 
   const frame = useMemo(() => ({
     ...(currentFrame !== undefined
-      ? (currentFrame ? { ...currentFrame, trajectoryUnavailableBodyIds: [] as BodyId[] } : { currentPositions: [], missingBodyIds: bodies.map(body => body.id), maxDistance: 0, trajectoryUnavailableBodyIds: [] as BodyId[] })
+      ? (currentFrame ? { ...currentFrame, trajectoryUnavailableBodyIds: [] as BodyId[] } : { currentPositions: EMPTY_CURRENT_POSITIONS, missingBodyIds: bodies.map(body => body.id), maxDistance: 0, trajectoryUnavailableBodyIds: [] as BodyId[] })
       : localCurrent),
-    trajectories: completedRequestKey === requestKey
+    trajectories: backendEnabled ? backend.trajectories : completedRequestKey === requestKey
       ? trajectories.filter(sample => !(currentFrame ? currentFrame.missingBodyIds : localCurrent.missingBodyIds).includes(sample.body.id))
       : [],
-    trajectoryUnavailableBodyIds: completedRequestKey === requestKey ? trajectoryUnavailableBodyIds : [],
-  }), [bodies, completedRequestKey, currentFrame, localCurrent, requestKey, trajectories, trajectoryUnavailableBodyIds])
+    trajectoryUnavailableBodyIds: backendEnabled ? backend.unavailableBodyIds : completedRequestKey === requestKey ? trajectoryUnavailableBodyIds : [],
+    trajectoryAudit: backendEnabled ? backend.audit : undefined,
+  }), [backendEnabled, backend.audit, backend.trajectories, backend.unavailableBodyIds, bodies, completedRequestKey, currentFrame, localCurrent, requestKey, trajectories, trajectoryUnavailableBodyIds])
 
   return {
     frame,
-    progress,
-    isComputing,
-    error,
+    progress: backendEnabled ? backend.progress : progress,
+    isComputing: backendEnabled ? backend.isComputing : isComputing,
+    error: backendEnabled ? backend.error : error,
   }
 }

@@ -49,7 +49,7 @@ const home = await fetchWithRetry('./')
 if (!(await home.text()).includes('Solar Atlas')) throw new Error('Production homepage does not contain the application shell')
 const health = await fetchExpectedHealth()
 console.log(`Confirmed production build ${health.build?.commitSha ?? 'unknown'}`)
-const delivery = productDelivery(undefined, health.build?.productProfile, health.build?.ephemerisProfile)
+const delivery = productDelivery(health.build?.productProfile, health.build?.ephemerisProfile)
 const isPreview = delivery.product === 'preview'
 if (!health.dataset?.included || health.dataset.root !== delivery.catalogDirectory) throw new Error('Production dataset root differs from the active product')
 const availability = await (await fetchWithRetry('./product-availability.json')).text()

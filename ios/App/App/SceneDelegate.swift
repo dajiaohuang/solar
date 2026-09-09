@@ -1,24 +1,38 @@
 import UIKit
-import Capacitor
+import SwiftUI
+
+@MainActor
+private final class NativeSceneLifecycle: ObservableObject {
+    @Published var phase: ScenePhase = .inactive
+}
+
+private struct NativeSceneRoot: View {
+    @ObservedObject var lifecycle: NativeSceneLifecycle
+
+    var body: some View {
+        ObservationDeckView().environment(\.scenePhase, lifecycle.phase)
+    }
+}
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
+    private let lifecycle = NativeSceneLifecycle()
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
 
         window = UIWindow(windowScene: windowScene)
-        window?.rootViewController = CAPBridgeViewController()
+        // A UIKit-owned window does not have a SwiftUI App/WindowGroup to
+        // publish scenePhase. Bridge this window's lifecycle explicitly;
+        // otherwise the viewport can stay inactive after verified data loads.
+        window?.rootViewController = UIHostingController(rootView: NativeSceneRoot(lifecycle: lifecycle))
         window?.makeKeyAndVisible()
 
-        SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
     }
 
-    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
-        SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
-    }
-
-    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
-        SceneDelegateProxy.shared.scene(scene, continue: userActivity)
-    }
+    func sceneDidBecomeActive(_ scene: UIScene) { lifecycle.phase = .active }
+    func sceneWillResignActive(_ scene: UIScene) { lifecycle.phase = .inactive }
+    func sceneWillEnterForeground(_ scene: UIScene) { lifecycle.phase = .inactive }
+    func sceneDidEnterBackground(_ scene: UIScene) { lifecycle.phase = .background }
+    func sceneDidDisconnect(_ scene: UIScene) { lifecycle.phase = .background }
 }

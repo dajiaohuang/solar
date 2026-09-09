@@ -18,14 +18,12 @@ const source = {
 
 describe('physical preview artifact policy', () => {
   it('separates product identity, coefficient profile and immutable full/preview cache URLs', () => {
-    const full = productDelivery(), preview = productDelivery(undefined, 'preview'), native = productDelivery('native')
+    const full = productDelivery(), preview = productDelivery('preview')
     expect(full.product).toBe('full')
-    expect(native.scientificProfile).toBe('full')
-    expect(native.manifest.files).toHaveLength(510)
     expect(full.catalogDirectory).toBe('data/asteroids')
     expect(preview.catalogDirectory).toBe(`data/asteroids/preview/${preview.availabilitySha256}`)
     expect(preview.availabilitySha256).toBe(sha256(jsonDocument(preview.availability)))
-    expect(() => productDelivery('native', 'preview')).toThrow(/Native/)
+    expect(productDelivery('full', 'full').scientificProfile).toBe('full')
   })
   it('publishes only mobile sample and source evidence without advertising full resources', () => {
     const before = JSON.stringify(source)

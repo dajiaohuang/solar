@@ -31,6 +31,15 @@ export const SMALL_BODY_SATELLITE_SOURCES = [
     moons: [{ target: 120612687, sourceName: 'Sat1', name: '2003 UN284 · Sat1', aliases: [] }] },
 ]
 
+// JPL082 publishes the Patroclus/Manoetius component offsets but omits the
+// compatible system trajectory (20000617). Keep these source identities
+// separate from delivered state bodies: the NAIF numbers are explicit source
+// labels, not permission to resolve a state through an absent center.
+export const SMALL_BODY_SOURCE_ONLY_SYSTEMS = [
+  { id: 'tnosat_v001_20000617_jpl082_20230601', system: 20000617,
+    components: [{ name: 'Patroclus', naifId: 920000617 }, { name: 'Manoetius', naifId: 120000617 }] },
+]
+
 export function smallBodySatelliteIdentities(selection, record, sourceSha256) {
   const url = `https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/${selection.id}.bsp`
   if (record.source?.source !== url || !/^[a-f0-9]{64}$/.test(sourceSha256)) throw new Error('Small-body satellite source identity mismatch')
@@ -74,6 +83,31 @@ export function smallBodyPrimaryIdentity(selection, record, sourceSha256) {
     meaning: 'Named primary from original component offsets, not its system barycenter; no invented orbit or physical properties.' }
 }
 
+export function smallBodySourceOnlyIdentities(system, record, sourceSha256) {
+  const url = `https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/${system.id}.bsp`
+  if (record.source?.source !== url || !/^[a-f0-9]{64}$/.test(sourceSha256)) throw new Error('Source-only small-body source identity mismatch')
+  const targets = [...new Set(record.segments.map(segment => segment.target))]
+  if (targets.length !== system.components.length || system.components.some(component => !targets.includes(component.naifId))) throw new Error('Source-only small-body target mismatch')
+  if (record.segments.some(segment => segment.center !== system.system || segment.frame !== 1 || segment.type !== 2)) throw new Error('Source-only small-body center chain mismatch')
+  const requireName = ({ name, naifId }) => {
+    if (!/^[A-Za-z0-9]+$/.test(name) || !Number.isSafeInteger(naifId)) throw new Error('Invalid explicit source-only identity')
+    const line = new RegExp(`^\\s*${name}\\s+${naifId}\\s+[-+0-9.Ee]+\\s+\\d+\\s+\\d+\\s+SATORBINT\\s*$`, 'm')
+    if (!line.test(record.comments)) throw new Error('Missing source-only name/number evidence')
+  }
+  for (const component of system.components) requireName(component)
+  return system.components.map(component => ({
+    id: `naif:${component.naifId}`, naifId: component.naifId, name: component.name, aliases: [],
+    identityStatus: 'source-identified-not-in-discovery-snapshot',
+    identityResolution: 'original-comment-name-number-and-missing-system-center-descriptor',
+    sourceEphemerides: [system.id], sourceUrl: url, sourceSha256,
+    primaryNaifId: system.components[0].naifId, systemNaifId: system.system,
+    ephemerisStatus: 'source-only-missing-compatible-system',
+    provenance: 'Published component offset with an explicit source identity; compatible system center is absent, so no exact state is delivered.',
+    sourceClaims: [{ name: component.name, parentNaifId: system.components[0].naifId, systemNaifId: system.system,
+      ephemeris: system.id, evidence: 'original-comment-name-number-and-missing-system-center-descriptor' }],
+  }))
+}
+
 /** Account for every frozen small-body publication, not only selected states.
  * This is source inventory, not a second body registry or a coverage claim. */
 export function smallBodySourceLedger(records) {
@@ -97,11 +131,13 @@ export function smallBodySourceLedger(records) {
         reason: 'Retained original source evidence; the explicitly selected v001b publication supplies this system.' }
     }
     if (id === 'tnosat_v001_20000617_jpl082_20230601') {
-      const components = [{ name: 'Patroclus', naifId: 920000617 }, { name: 'Manoetius', naifId: 120000617 }]
+      const sourceOnly = SMALL_BODY_SOURCE_ONLY_SYSTEMS.find(system => system.id === id)
+      if (!sourceOnly) throw new Error('Missing reviewed source-only system')
+      const components = sourceOnly.components
       if (targets.length !== 2 || components.some(({ name, naifId }) => !targets.includes(naifId)
         || !new RegExp(`^\\s*${name}\\s+${naifId}\\s+[-+0-9.Ee]+\\s+\\d+\\s+\\d+\\s+SATORBINT\\s*$`, 'm').test(record.comments))
-        || record.segments.some(segment => segment.center !== 20000617 || segment.frame !== 1 || segment.type !== 2)) throw new Error('Patroclus source-only evidence mismatch')
-      return { ...base, status: 'source-only-missing-compatible-system', components, missingCenter: 20000617,
+        || record.segments.some(segment => segment.center !== sourceOnly.system || segment.frame !== 1 || segment.type !== 2)) throw new Error('Patroclus source-only evidence mismatch')
+      return { ...base, status: 'source-only-missing-compatible-system', components, missingCenter: sourceOnly.system,
         reason: 'Original JPL082/DE440 publication contains offsets only. Lucy solution 54/DE431 is a separate older system solution; no mixed fit is silently substituted. Names are raw source labels, not a formal-name adjudication.' }
     }
     throw new Error(`Unreviewed small-body source ${id}`)

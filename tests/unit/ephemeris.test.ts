@@ -106,8 +106,8 @@ describe('Earth-Moon barycentric composition', () => {
       referenceId: 'earth',
       julianDay,
     })
-    const earthPosition = frame.currentPositions.find((item) => item.body.id === 'earth')!.position3D!
-    const moonPosition = frame.currentPositions.find((item) => item.body.id === 'moon')!.position3D!
+    const earthPosition = frame.currentPositions.rowAt(frame.currentPositions.indexOf('earth')).position3D!
+    const moonPosition = frame.currentPositions.rowAt(frame.currentPositions.indexOf('moon')).position3D!
     expect(vector3Magnitude(earthPosition)).toBeLessThan(1e-15)
     expect(vectorDifferenceMagnitude(moonPosition, earthToMoon)).toBeLessThan(1e-14)
 

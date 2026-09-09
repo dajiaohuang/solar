@@ -231,6 +231,7 @@ export function createBodyPositionResolver(bodiesById: Map<BodyId, CelestialBody
     if (!body) {
       throw new Error(`Unknown body: ${bodyId}`)
     }
+    if (body.source === 'source-inventory') throw new MissingBodyStateError(bodyId, julianDay)
 
     const target = bodyNaifId(body)
     const state = precise && target !== undefined ? precise.relative(target, 10) : null

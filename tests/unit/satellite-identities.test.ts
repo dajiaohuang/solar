@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { defaultSelectedBodyIds, majorBodies, majorBodiesById } from '../../src/data/majorBodies'
 import { bodyNaifId } from '../../src/data/ephemerisTargets'
-import { SATELLITE_IDENTITIES, satelliteIdentity, satelliteSearchTerms } from '../../src/data/satelliteIdentities'
+import { SATELLITE_IDENTITIES, SOURCE_ONLY_IDENTITIES, satelliteIdentity, satelliteSearchTerms } from '../../src/data/satelliteIdentities'
+import { EPHEMERIS_MANIFEST, kernelFilesForBodies } from '../../src/engine/ephemeris/kernelStore'
 
 describe('selectable satellite identity catalog', () => {
   it('retains every frozen identity exactly once without renaming existing shared IDs', () => {
@@ -32,5 +33,29 @@ describe('selectable satellite identity catalog', () => {
     expect(satelliteSearchTerms(majorBodiesById.get('naif:562')!)).toContain('S/2016 J2')
     expect(satelliteIdentity(majorBodiesById.get('io')!)?.name).toBe('Io')
     expect(satelliteIdentity(majorBodiesById.get('naif:55524')!)?.identityStatus).toBe('source-identified-not-in-discovery-snapshot')
+  })
+
+  it('exposes explicit source-only small-body identities without a state target', () => {
+    expect(SOURCE_ONLY_IDENTITIES.map(entry => entry.naifId).sort()).toEqual([120000617, 920000617])
+    for (const entry of SOURCE_ONLY_IDENTITIES) {
+      expect(entry).toMatchObject({ naifId: entry.naifId, ephemerisStatus: 'source-only-missing-compatible-system', systemNaifId: 20000617 })
+      for (const field of ['orbit', 'radiusKm', 'massKg']) expect(entry).not.toHaveProperty(field)
+      const body = majorBodiesById.get(entry.id)
+      expect(body).toMatchObject({ id: entry.id, naifId: entry.naifId, source: 'jpl-satellite-inventory', kind: 'asteroid' })
+      expect(body?.orbit).toBeUndefined()
+      expect(body?.radiusKm).toBeUndefined()
+      expect(defaultSelectedBodyIds).not.toContain(entry.id)
+    }
+  })
+
+  it('binds every numeric identity to an explicit selected-profile SPK target', () => {
+    const byId = new Map(EPHEMERIS_MANIFEST.files.map(file => [file.id, file]))
+    const numeric = SATELLITE_IDENTITIES.filter(entry => Number.isSafeInteger(entry.naifId))
+    expect(numeric).toHaveLength(471)
+    for (const entry of numeric) {
+      const ids = kernelFilesForBodies([{ id: entry.id, naifId: entry.naifId }])
+      const roots = ids.map(id => byId.get(id)).filter(file => file && !file.dependencyOnly)
+      expect(roots.some(file => file?.targets.includes(entry.naifId as number)), entry.id).toBe(true)
+    }
   })
 })

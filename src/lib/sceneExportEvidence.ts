@@ -6,6 +6,7 @@ import {
 } from '../engine/ephemeris/modelValidity'
 import type { BodyId } from '../types'
 import { EPHEMERIS_MANIFEST, kernelCoverage, kernelsForWindow, loadedKernelIds } from '../engine/ephemeris/kernelStore'
+import type { BackendTrajectoryAudit } from './backendTrajectories'
 
 function bodyUsesJplApproximation(bodyId: BodyId, visited = new Set<BodyId>()): boolean {
   if (visited.has(bodyId)) return false
@@ -38,7 +39,15 @@ export function createSceneExportModelEvidenceLines(
   referenceId: BodyId,
   startJulianDay: number,
   endJulianDay: number,
+  trajectoryAudit?: BackendTrajectoryAudit | null,
 ) {
+  if (trajectoryAudit === null) return [language === 'zh' ? '后端历史采样尚未完成或不可用；不以浏览器模型替代其证据。' : 'Backend history is pending or unavailable; browser models do not replace its evidence.']
+  if (trajectoryAudit) return [
+    `Backend Float64 samples · TDB / ECLIPJ2000 · reference ${trajectoryAudit.referenceId}`,
+    `UTC JD ${trajectoryAudit.startUtcJd.toFixed(6)} → ${trajectoryAudit.endUtcJd.toFixed(6)} · ${trajectoryAudit.epochsTdbJd.length} samples`,
+    `catalog SHA256 ${trajectoryAudit.catalogManifestSha256}`,
+    language === 'zh' ? '连线为显示插值，不代表连续精确星历；缺失采样不以近似补齐。' : 'Lines are display interpolation, not certified continuous ephemerides; missing samples are not approximated.',
+  ]
   const loaded = loadedKernelIds()
   if (loaded.length) {
     const bodies = [...new Set([...selectedIds, referenceId])].map((id) => majorBodiesById.get(id) ?? { id })

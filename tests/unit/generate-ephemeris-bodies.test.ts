@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import bodies from '../../src/data/ephemerisBodies.json'
+import { majorBodiesById } from '../../src/data/majorBodies'
 
 const AU_KM = 149597870.7
 const deg = Math.PI / 180
@@ -26,6 +27,8 @@ describe('optional SPK body seed artifact', () => {
     expect(ids).toContain('naif:634')
     for (const number of [2, 3, 4, 7, 10, 15, 16, 31, 52, 65, 87, 88, 107, 511, 704]) expect(ids).toContain(`asteroid:${number}`)
     expect(ids).not.toContain('asteroid:1')
+    for (const designation of ['243', '433', '951', '25143', '99942', '162173', '3200', '3122', '65803', '4179', '1036', '1580', '2867', '52768', '29075', '231937', '486958', '132524', '152830', '341843', '469219', '162421', '6', '9', '14', '18', '19', '90', '216', '11', '13', '21', '24', '29', '39', '44']) expect(ids).toContain(`asteroid:${designation}`)
+    expect(majorBodiesById.get('asteroid:243')).toMatchObject({ name: '小行星 Ida', shortName: 'Ida', naifId: 20000243 })
   })
 
   it('labels every entry as an instantaneous, parent-relative fallback', () => {

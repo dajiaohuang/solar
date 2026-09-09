@@ -11,7 +11,7 @@ export function useEphemerides() {
   return useSyncExternalStore(subscribeEphemerides, getEphemerisSnapshot)
 }
 
-/** No large transfer before the first-visit choice; same local assets on native. */
+/** No large transfer before the first-visit choice; Web assets load on demand. */
 export function useEphemerisLoading() {
   useEffect(() => {
     let requested = ''

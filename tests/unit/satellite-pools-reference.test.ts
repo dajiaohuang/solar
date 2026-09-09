@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { SpkKernel } from '../../src/engine/ephemeris/spk'
 import { createKernelResolver, toEcliptic, type LoadedKernel } from '../../src/engine/ephemeris/kernelPool'
-import { ephemerisProfile } from '../../src/data/ephemerisProfile'
 import type { KernelFile } from '../../src/engine/ephemeris/kernelStore'
 import fixture from '../fixtures/satellite-pools-cspice.json'
 import { SMALL_BODY_PRIMARIES, SATELLITE_IDENTITIES } from '../../src/data/satelliteIdentities'
@@ -112,12 +111,13 @@ describe('integrated satellite source pools and delivery profiles', () => {
     expect(fixture.oracle).toBe('CSPICE N0067 spkgeo_c')
     expect(digest(readFileSync('scripts/reference/spk-pool-oracle.c'))).toBe(fixture.oracleSourceSha256)
     expect(digest(manifestBytes)).toBe(fixture.manifestSha256)
-    expect(fixture.contexts.map(context => context.rootId)).toEqual(full.files.filter(file => file.solutionKernelIds && !file.dependencyOnly).map(file => file.id))
-    expect(fixture.contexts).toHaveLength(444)
-    expect(fixture.samples).toHaveLength(1380)
+    const oracleRoots = full.files.filter(file => (file.solutionKernelIds && !file.dependencyOnly) || file.id === 'de440s-2000-01-01-2051-01-01')
+    expect(fixture.contexts.map(context => context.rootId)).toEqual(oracleRoots.map(file => file.id))
+    expect(fixture.contexts).toHaveLength(445)
+    expect(fixture.samples).toHaveLength(1422)
     for (const context of fixture.contexts) {
       const root = byId.get(context.rootId)!
-      expect(context.files.map(file => file.id)).toEqual([...root.solutionKernelIds!, root.id])
+      expect(context.files.map(file => file.id)).toEqual([...(root.solutionKernelIds ?? []), root.id])
     }
   })
 
@@ -178,16 +178,39 @@ describe('integrated satellite source pools and delivery profiles', () => {
         expect(kernel.evaluate(target, file.endEt + 1)).toBeNull()
       }
     }
-    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(1147897856)
-    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(270908416)
+    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(1156593664)
+    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(271823872)
   })
 
-  it('defaults native to full without imposing the Pages policy on explicit full Web builds', () => {
-    expect(ephemerisProfile('native')).toBe('full')
-    expect(ephemerisProfile()).toBe('pages')
-    expect(ephemerisProfile('web', 'full')).toBe('full')
-    expect(ephemerisProfile('native', 'pages')).toBe('pages')
-    expect(() => ephemerisProfile('web', 'unknown')).toThrow('Unknown')
+  it('pins the bounded Horizons asteroid snapshots without treating the API as immutable', () => {
+    const expected = new Map([
+      [20000243, '243'], [20000433, '433'], [20000951, '951'],
+      [20025143, '25143'], [20099942, '99942'], [20162173, '162173'],
+      [20003200, '3200'], [20003122, '3122'], [20065803, '65803'],
+      [20004179, '4179'], [20001036, '1036'], [20001580, '1580'],
+      [20002867, '2867'], [20052768, '52768'], [20029075, '29075'], [20231937, '231937'],
+      [20486958, '486958'], [20132524, '132524'], [20152830, '152830'], [20341843, '341843'], [20469219, '469219'], [20162421, '162421'],
+      [20153591, '153591'], [20308635, '308635'], [20163899, '163899'], [20357439, '357439'], [20367943, '367943'],
+      [20000006, '6'], [20000009, '9'], [20000014, '14'], [20000018, '18'],
+      [20000019, '19'], [20000090, '90'], [20000216, '216'],
+      [20000011, '11'], [20000013, '13'], [20000021, '21'], [20000024, '24'],
+      [20000029, '29'], [20000039, '39'], [20000044, '44'],
+    ])
+    const roots = pages.files.filter(file => file.integrationBatch === 'horizons-asteroids-20260909' || file.integrationBatch === 'horizons-asteroids-next-20260909' || file.integrationBatch === 'horizons-asteroids-followup-20260909' || file.integrationBatch === 'horizons-asteroids-batch3-20260909' || file.integrationBatch === 'horizons-asteroids-batch4-20260909' || file.integrationBatch === 'horizons-asteroids-batch5-20260909' || file.integrationBatch === 'horizons-asteroids-batch6-20260909')
+    expect(roots).toHaveLength(expected.size)
+    for (const file of roots) {
+      const target = file.targets[0]
+      expect(expected.get(target)).toBeTruthy()
+      expect(file.source).toMatch(/^https:\/\/ssd\.jpl\.nasa\.gov\/api\/horizons\.api/)
+      expect(file.sourceIdentity).toMatchObject({ target, responseSha256: expect.any(String), sha256: expect.any(String), retrievedAt: expect.any(String) })
+      expect(file.selectionEvidence.sourceSnapshot).toEqual({
+        responseSha256: file.sourceIdentity.responseSha256,
+        binarySha256: file.sourceIdentity.sha256,
+        retrievedAt: file.sourceIdentity.retrievedAt,
+      })
+      expect(file.solutionKernelIds).toBeUndefined()
+      expect(file.targets).toEqual([target])
+    }
   })
 
   it('keeps English and Chinese delivery documentation aligned with both manifests', () => {
@@ -200,10 +223,7 @@ describe('integrated satellite source pools and delivery profiles', () => {
         expect(document, path).toContain(`${(bytes / 1024 / 1024).toFixed(1)} MiB`)
       }
     }
-    for (const path of ['MOBILE.md', 'MOBILE-CN.md']) {
-      const document = readFileSync(path, 'utf8')
-      expect(document, path).toContain(`${(fullBytes / 1024 / 1024).toFixed(1)} MiB`)
-      expect(document, path).toContain(String(full.files.length))
-    }
+    // Native applications consume verified backend tiles. Their packaging is
+    // checked by native:check and must not require an offline SPK profile.
   })
 })

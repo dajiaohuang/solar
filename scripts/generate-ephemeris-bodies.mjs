@@ -20,9 +20,24 @@ const NAMES = {
   609: 'Phoebe', 612: 'Helene', 613: 'Telesto', 614: 'Calypso', 632: 'Methone', 634: 'Polydeuces',
   701: 'Ariel', 702: 'Umbriel', 703: 'Titania', 704: 'Oberon', 705: 'Miranda',
   801: 'Triton', 802: 'Nereid', 901: 'Charon', 902: 'Nix', 903: 'Hydra', 904: 'Kerberos', 905: 'Styx',
+  20000243: 'Ida', 20000433: 'Eros', 20000951: 'Gaspra', 20025143: 'Itokawa',
+  20099942: 'Apophis', 20162173: 'Ryugu', 20003200: 'Phaethon',
+  20003122: 'Florence', 20065803: 'Didymos',
+  20004179: 'Toutatis', 20001036: 'Ganymed', 20001580: 'Betulia',
+  20002867: 'Steins', 20052768: '1998 OR2', 20029075: '1950 DA', 20231937: '2001 FO32',
+  20486958: 'Arrokoth', 20132524: 'APL', 20152830: 'Dinkinesh', 20341843: '2008 EV5',
+  20469219: 'Kamoʻoalewa', 20162421: '2000 ET70',
+  20153591: '2001 SN263', 20308635: '2005 YU55', 20163899: '2003 SD220',
+  20357439: '2004 BL86', 20367943: 'Duende',
+  20000006: 'Hebe', 20000009: 'Metis', 20000014: 'Irene', 20000018: 'Melpomene',
+  20000019: 'Fortuna', 20000090: 'Antiope', 20000216: 'Kleopatra',
+  20000011: 'Parthenope', 20000013: 'Egeria', 20000021: 'Lutetia', 20000024: 'Themis',
+  20000029: 'Amphitrite', 20000039: 'Laetitia', 20000044: 'Nysa',
 }
 // Bodies already represented by majorBodies are intentionally not duplicated.
 const MAJOR = new Set([10, 199, 299, 399, 301, 499, 599, 699, 799, 899, 999, 501, 502, 503, 504, 606, 920136199, 920136108])
+const HELIOCENTRIC_ASTEROIDS = new Set([20000243, 20000433, 20000951, 20025143, 20099942, 20162173, 20003200, 20003122, 20065803, 20004179, 20001036, 20001580, 20002867, 20052768, 20029075, 20231937, 20486958, 20132524, 20152830, 20341843, 20469219, 20162421, 20153591, 20308635, 20163899, 20357439, 20367943, 20000006, 20000009, 20000014, 20000018, 20000019, 20000090, 20000216, 20000011, 20000013, 20000021, 20000024, 20000029, 20000039, 20000044])
+const DESIGNATIONS = { 20000243: '243', 20000433: '433', 20000951: '951', 20025143: '25143', 20099942: '99942', 20162173: '162173', 20003200: '3200', 20003122: '3122', 20065803: '65803', 20004179: '4179', 20001036: '1036', 20001580: '1580', 20002867: '2867', 20052768: '52768', 20029075: '29075', 20231937: '231937', 20486958: '486958', 20132524: '132524', 20152830: '152830', 20341843: '341843', 20469219: '469219', 20162421: '162421', 20153591: '153591', 20308635: '308635', 20163899: '163899', 20357439: '357439', 20367943: '367943', 20000006: '6', 20000009: '9', 20000014: '14', 20000018: '18', 20000019: '19', 20000090: '90', 20000216: '216', 20000011: '11', 20000013: '13', 20000021: '21', 20000024: '24', 20000029: '29', 20000039: '39', 20000044: '44' }
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(name)
@@ -53,6 +68,8 @@ function readGm(file) {
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
 const gm = readGm(gmPath)
+const previousBodies = fs.existsSync(outputPath) ? JSON.parse(fs.readFileSync(outputPath, 'utf8')).bodies ?? [] : []
+const previousById = new Map(previousBodies.map((body) => [body.id, body]))
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
 const manifestBytes = fs.readFileSync(manifestPath)
 const gmBytes = fs.readFileSync(gmPath)
@@ -76,7 +93,7 @@ for (const target of [...new Set(manifest.files.flatMap((f) => f.targets))].sort
   // This generator only knows legacy numbered-asteroid IDs. New system,
   // primary and component IDs require explicit mappings; never invent an
   // "Asteroid 18136199" from an Eris system barycenter.
-  if (target >= 3000000) continue
+  if (target >= 3000000 && !HELIOCENTRIC_ASTEROIDS.has(target)) continue
   const name = NAMES[target] ?? (target >= 2000000 ? `Asteroid ${target - 2000000}` : null)
   if (!name) continue
   let state, source
@@ -96,12 +113,15 @@ for (const target of [...new Set(manifest.files.flatMap((f) => f.targets))].sort
   if (!orbit) continue
   const parentNames = { 10: 'sun', 199: 'mercury', 299: 'venus', 399: 'earth', 499: 'mars', 599: 'jupiter', 699: 'saturn', 799: 'uranus', 899: 'neptune', 999: 'pluto' }
   const parentId = parentNames[parentNaifId] ?? `naif:${parentNaifId}`
-  bodies.push({ id: target >= 2000000 ? `asteroid:${target - 2000000}` : `naif:${target}`, name, shortName: name, kind: target >= 2000000 ? 'asteroid' : 'moon', naifId: target,
+  const generated = { id: target >= 2000000 ? `asteroid:${DESIGNATIONS[target] ?? target - 2000000}` : `naif:${target}`, name, shortName: name, kind: target >= 2000000 ? 'asteroid' : 'moon', naifId: target,
     parentId, source: 'jpl-spk-osculating-fallback',
     orbit: { model: 'keplerian', epochJd, ...orbit },
     parentRelativeStateKm: relative,
     fallback: { label: 'instantaneous two-body osculating ellipse; not an operational ephemeris', gmKm3S2: gmUsed, gmApproximation: satelliteGm == null ? 'parent-only (satellite GM unavailable)' : 'parent-plus-satellite', centerNaifId: parentNaifId },
-    sourceUrl: source.source, sourceKernelId: source.id })
+    sourceUrl: source.source, sourceKernelId: source.id }
+  // Existing fallback seeds are intentionally stable against later source-pool
+  // additions; exact states use the manifest resolver when a kernel covers.
+  bodies.push(previousById.get(generated.id) ?? generated)
 }
 const result = { schemaVersion: 1, generatedAt: new Date().toISOString(), epochJd, epochTimeScale: 'TDB', source: {
   manifestPath: 'src/data/ephemeris-manifest.json', manifestId: manifest.id, manifestSha256: sha256(manifestBytes), gmUrl: GM_URL, gmFile: 'src/data/gm_de440.tpc', gmSha256: sha256(gmBytes), gmKm3S2: Object.fromEntries(gm),

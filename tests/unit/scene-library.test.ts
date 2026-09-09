@@ -7,7 +7,7 @@ function memoryStorage() {
 }
 
 const scene: SavedScene = {
-  schemaVersion: 1, id: 'scene-1', title: 'Mars', notes: 'Geocentric loop', url: 'https://example.test/solar/?v=3&page=explorer',
+  schemaVersion: 1, id: 'scene-1', title: 'Mars', notes: 'Geocentric loop', url: 'https://example.test/solar/?v=4&page=explorer',
   datasetVersion: 'fixture-full', createdAt: '2026-08-20T00:00:00.000Z', updatedAt: '2026-08-20T00:00:00.000Z',
 }
 
@@ -29,9 +29,9 @@ describe('local scene library', () => {
 
   it('opens an imported scene on the current deployment origin and base path', () => {
     expect(localizeSavedSceneUrl(
-      'https://dajiaohuang.github.io/solar/?v=3&page=events#result',
-      'http://127.0.0.1:4173/solar/?v=3&page=home',
-    )).toBe('http://127.0.0.1:4173/solar/?v=3&page=events#result')
+      'https://dajiaohuang.github.io/solar/?v=4&page=events#result',
+      'http://127.0.0.1:4173/solar/?v=4&page=home',
+    )).toBe('http://127.0.0.1:4173/solar/?v=4&page=events#result')
   })
 
   it('exports the planetary seed and Earth-Moon mass-partition identities with the scene URLs', () => {

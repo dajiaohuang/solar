@@ -9,10 +9,16 @@ import {
   jplApproxWindowState,
   jplApproxWindowWarning,
 } from '../../src/engine/ephemeris/modelValidity'
-import { majorBodiesById } from '../../src/data/majorBodies'
+import { defaultSelectedBodyIds, majorBodiesById } from '../../src/data/majorBodies'
+import ephemerisBodies from '../../src/data/ephemerisBodies.json'
+import ephemerisManifest from '../../src/data/ephemeris-manifest.json'
+import ephemerisManifestFull from '../../src/data/ephemeris-manifest-full.json'
+import { JPL_HORIZONS_GIANT_SATELLITE_ELEMENTS } from '../../src/data/satelliteEpochElements'
+import satelliteCatalog from '../../src/data/satelliteCatalog.json'
 import { en } from '../../src/i18n/en'
 import { zh } from '../../src/i18n/zh'
 import { dateToJulianDay } from '../../src/lib/julianDate'
+import modelEvidence from '../../src/data/modelEvidence.json'
 
 describe('JPL approximate element validity', () => {
   const jd = (date: string) => dateToJulianDay(new Date(`${date}T00:00:00Z`))
@@ -87,5 +93,96 @@ describe('JPL approximate element validity', () => {
     expect(zh.satelliteMeanElementsWarning).toContain('ECLIPJ2000')
     expect(zh.satelliteMeanElementsWarning).toContain('时标转换')
     expect(zh.satelliteMeanElementsWarning).toContain('DE440')
+  })
+
+  it('keeps the published coverage inventory aligned with implemented named bodies', () => {
+    const coverage = modelEvidence.coverage
+    expect(coverage.supportedNamedBodies).toEqual(['sun', ...defaultSelectedBodyIds])
+    expect(coverage.sourcedSatelliteBodies).toEqual(SATELLITE_ORBIT_MODEL_EVIDENCE.sourcedBodies)
+    expect(coverage.sourcedSatelliteBodies.every((bodyId) => majorBodiesById.get(bodyId)?.satelliteOrbitEvidence)).toBe(true)
+    expect(coverage.coverageGaps).toEqual([
+      'other-planetary-satellites-not-modeled',
+      'dwarf-planet-elements-are-curated-approximations-not-precision-ephemerides',
+    ])
+    for (const bodyId of ['io', 'europa', 'ganymede', 'callisto', 'titan'] as const) {
+      expect(JPL_HORIZONS_GIANT_SATELLITE_ELEMENTS[bodyId]).toBeDefined()
+    }
+  })
+
+  it('publishes the pinned full-profile outer-planet satellite batch', () => {
+    const spkDelivery = modelEvidence.coverage.spkDelivery
+    expect(spkDelivery).toMatchObject({
+      stateBoundary: 'geometric-spk-six-vector-when-kernel-and-center-chain-cover-epoch',
+        ephemerisBodyCount: 87,
+        planetarySatelliteBodyCount: 31,
+        smallBodyBodyCount: 56,
+      satelliteIdentityCount: 472,
+      pagesManifest: {
+        id: ephemerisManifest.id,
+        sha256: 'a22ec725a918e9bc754d8065b640c20aa44e556bb74ba86a2c09b37a644efbef',
+        bytes: 271823872,
+        fileCount: 551,
+      },
+      fullManifest: {
+        id: ephemerisManifestFull.id,
+        sha256: '3b64454a64fbfeb80930c9b8906f55993c8ce2c2f87ccf2f6f4ec88ec7e2cf72',
+        bytes: 1156593664,
+        fileCount: 551,
+      },
+    })
+    expect(ephemerisBodies.bodies).toHaveLength(spkDelivery.ephemerisBodyCount)
+    expect(ephemerisBodies.bodies.filter((body) => body.kind === 'moon')).toHaveLength(spkDelivery.planetarySatelliteBodyCount)
+    expect(ephemerisBodies.bodies.filter((body) => body.kind === 'asteroid')).toHaveLength(spkDelivery.smallBodyBodyCount)
+    expect(satelliteCatalog.bodies).toHaveLength(spkDelivery.satelliteIdentityCount)
+    expect(spkDelivery.sourceBackedSmallBodyPrimaries).toEqual(satelliteCatalog.primaries.map((body) => body.id))
+
+    const numericSatelliteIds = satelliteCatalog.bodies
+      .filter((body) => Number.isSafeInteger(body.naifId))
+      .map((body) => body.naifId as number)
+    const identityOnlyIds = satelliteCatalog.bodies
+      .filter((body) => !Number.isSafeInteger(body.naifId))
+      .map((body) => body.id)
+    const pagesTargets = new Set(ephemerisManifest.files.flatMap((file) => file.targets ?? []))
+    const fullTargets = new Set(ephemerisManifestFull.files.flatMap((file) => file.targets ?? []))
+    expect(spkDelivery.satelliteIdentityDelivery).toEqual({
+      catalogBodies: 472,
+      numericNaifIdentities: 471,
+      pagesManifestTargets: 471,
+      fullManifestTargets: 471,
+      identityOnlyBodies: 1,
+      identityOnlyIds: ['sat:planet:saturn:provisional:S/2009 S1'],
+      sourceOnlyBodies: 2,
+      sourceOnlyIds: ['naif:120000617', 'naif:920000617'],
+      sourceOnlyBoundary: 'JPL082 publishes explicit Patroclus/Manoetius component offsets but omits compatible system target 20000617; these identities remain source-only and never imply an exact state or local orbit.',
+      boundary: 'A pinned manifest target proves source delivery identity; an exact state still requires verified kernel bytes and a covered center chain at the requested epoch.',
+      localOrbitBoundary: 'Catalog identities without generated local orbit elements remain source-backed current-state candidates; no fallback orbit is created for them.',
+    })
+    expect(new Set(numericSatelliteIds)).toHaveLength(471)
+    expect(identityOnlyIds).toEqual(['sat:planet:saturn:provisional:S/2009 S1'])
+    expect(satelliteCatalog.sourceOnlyBodies).toHaveLength(spkDelivery.satelliteIdentityDelivery.sourceOnlyBodies)
+    expect(satelliteCatalog.sourceOnlyBodies.map((body) => body.id).sort()).toEqual(spkDelivery.satelliteIdentityDelivery.sourceOnlyIds)
+    expect(numericSatelliteIds.every((id) => pagesTargets.has(id) && fullTargets.has(id))).toBe(true)
+
+    const ephemerisById = new Map(ephemerisBodies.bodies.map((body) => [body.id, body]))
+    const fullTargetStrings = new Set([...fullTargets].map(String))
+    const expectedBatchLengths = { mars: 2, jupiter: 4, saturn: 13, uranus: 5, neptune: 2, pluto: 5 }
+    const sourceBackedIds = new Set<string>()
+    for (const [parent, bodyIds] of Object.entries(spkDelivery.sourceBackedSatelliteBatches)) {
+      expect(bodyIds).toHaveLength(expectedBatchLengths[parent as keyof typeof expectedBatchLengths])
+      for (const bodyId of bodyIds) {
+        const body = ephemerisById.get(bodyId)
+        expect(body?.parentId).toBe(parent)
+        expect(fullTargetStrings.has(String(body?.naifId))).toBe(true)
+        sourceBackedIds.add(bodyId)
+      }
+    }
+    expect(ephemerisBodies.bodies.filter((body) => body.kind === 'moon').map((body) => body.id).sort()).toEqual([...sourceBackedIds].sort())
+    const fullPrimaryTargets = new Set(ephemerisManifestFull.files.flatMap((file) => file.targets ?? []))
+    for (const primary of satelliteCatalog.primaries) {
+      const body = majorBodiesById.get(primary.id)
+      expect(body, primary.id).toMatchObject({ id: primary.id, naifId: primary.naifId, source: 'jpl-satellite-inventory' })
+      expect(body?.orbit, primary.id).toBeUndefined()
+      expect(fullPrimaryTargets.has(primary.naifId), primary.id).toBe(true)
+    }
   })
 })

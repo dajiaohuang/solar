@@ -1,8 +1,8 @@
 export type BodyId = string
 
-export type BodyKind = 'star' | 'planet' | 'moon' | 'dwarfPlanet' | 'asteroid' | 'spacecraft'
+export type BodyKind = 'star' | 'planet' | 'moon' | 'dwarfPlanet' | 'asteroid' | 'spacecraft' | 'sourceRecord'
 
-export type OrbitSource = 'jpl-approx' | 'jpl-satellite-mean' | 'jpl-satellite-inventory' | 'jpl-sbdb' | 'mpcorb' | 'horizons' | 'curated-approx' | 'schematic' | 'custom' | 'jpl-spk-osculating-fallback'
+export type OrbitSource = 'jpl-approx' | 'jpl-satellite-mean' | 'jpl-satellite-inventory' | 'jpl-sbdb' | 'mpcorb' | 'horizons' | 'curated-approx' | 'schematic' | 'custom' | 'jpl-spk-osculating-fallback' | 'source-inventory'
 
 export type SatelliteOrbitEvidence = {
   sourceFrame: 'jpl-ecliptic' | 'undocumented-illustrative'
@@ -109,6 +109,12 @@ export type CelestialBody = {
   color: string
   size: number
   source: OrbitSource
+  sourceIdentity?: {
+    id: string; name: string; designation: string; category: string; source: string; sourceRow: number
+    identityStatus: string; ephemerisStatus: string; parentId: string; parentResolution?: string
+    centerId?: string; centerResolution?: string; confirmation: string; geometryStatus?: string
+    naifId?: number; aliases?: string[]; identityEvidence?: string[]
+  }
   satelliteOrbitEvidence?: SatelliteOrbitEvidence
   orbitRepresents?: 'earth-moon-barycenter'
   positionRepresents?: 'earth-geocenter'
@@ -137,16 +143,17 @@ export type RenderedBodyPosition = {
 
 export type TrajectorySample = {
   body: CelestialBody
-  points: Vector2[]
-  points3D?: Vector3[]
+  /** One interleaved AU xyz source; 2D reads xy without a second buffer. */
+  coordinates: Float64Array
 }
 
 export type TrajectoryFrameData = {
-  currentPositions: RenderedBodyPosition[]
+  currentPositions: import('./lib/currentPositions').CurrentPositions
   trajectories: TrajectorySample[]
   /** Bodies omitted because at least one historical sample had no state. */
   trajectoryUnavailableBodyIds: BodyId[]
   maxDistance: number
+  trajectoryAudit?: import('./lib/backendTrajectories').BackendTrajectoryAudit
 }
 
 export type TrajectoryWorkerRequest = {
@@ -170,8 +177,7 @@ export type PackedTrajectoryData = {
   bodyIds: BodyId[]
   trajectoryUnavailableBodyIds: BodyId[]
   offsets: Uint32Array
-  points2D: Float64Array
-  points3D: Float64Array
+  coordinates: Float64Array
 }
 
 export type TrajectoryWorkerResponse = {
@@ -179,22 +185,6 @@ export type TrajectoryWorkerResponse = {
   requestId: number
   packed?: PackedTrajectoryData
   progress?: number
-  error?: string
-}
-
-export type CatalogPointWorkerRequest = {
-  type: 'compute'
-  requestId: number
-  julianDay: number
-  elements: Float64Array
-}
-
-export type CatalogPointWorkerResponse = {
-  type: 'progress' | 'result' | 'error'
-  requestId: number
-  progress?: number
-  positions?: Float32Array
-  positions3D?: Float32Array
   error?: string
 }
 

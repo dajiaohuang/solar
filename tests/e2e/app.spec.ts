@@ -1,15 +1,180 @@
 import { expect, test } from './fixtures'
 import type { Page } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
 import datasetPin from '../../.github/asteroid-dataset.json' with { type: 'json' }
 import satelliteCatalog from '../../src/data/satelliteCatalog.json' with { type: 'json' }
+import { coverageSummaryFixture } from '../fixtures/coverageReport'
+
+type CatalogWorkerEvent = { type: 'start' | 'stop' | 'compute' | 'result'; id: number; mode?: string; bytes?: number; arrays?: number }
+type CatalogWorkerAuditWindow = Window & { catalogWorkerAudit: CatalogWorkerEvent[] }
+
+async function auditCatalogWorkers(page: Page) {
+  await page.addInitScript(() => {
+    const events: CatalogWorkerEvent[] = []
+    ;(window as CatalogWorkerAuditWindow).catalogWorkerAudit = events
+    const NativeWorker = window.Worker
+    let sequence = 0
+    window.Worker = class extends NativeWorker {
+      private auditId: number
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(url, options)
+        this.auditId = String(url).includes('catalog-points.worker') ? ++sequence : 0
+        if (!this.auditId) return
+        events.push({ type: 'start', id: this.auditId })
+        this.addEventListener('message', event => {
+          const result = event.data as { type: string; mode?: string; positions?: Float32Array }
+          if (result.type !== 'result') return
+          events.push({ type: 'result', id: this.auditId, mode: result.mode, bytes: result.positions?.byteLength,
+            arrays: Object.values(result).filter(value => ArrayBuffer.isView(value)).length })
+        })
+      }
+      override postMessage(data: unknown, options?: Transferable[] | StructuredSerializeOptions) {
+        const request = data as { type: string; mode?: string }
+        if (this.auditId && request.type === 'compute') events.push({ type: 'compute', id: this.auditId, mode: request.mode })
+        if (Array.isArray(options)) super.postMessage(data, options)
+        else super.postMessage(data, options)
+      }
+      override terminate() {
+        if (this.auditId) events.push({ type: 'stop', id: this.auditId })
+        super.terminate()
+      }
+    }
+  })
+}
+
+test('all-source audit loads on demand and rejects stale totals on retry', async ({ page }, info) => {
+  const errors: string[] = []; const requests: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  const fixture = coverageSummaryFixture()
+  let mismatched = false
+  await page.route('**/solar-test-api/v1/catalog/manifest', async route => {
+    requests.push('manifest')
+    const body = JSON.stringify(fixture)
+    await route.fulfill({ body, contentType: 'application/json', headers: { 'content-length': String(Buffer.byteLength(body)) } })
+  })
+  await page.route('**/solar-test-api/v1/coverage', async route => {
+    requests.push('coverage')
+    const body = JSON.stringify({ ...fixture, inventoryManifestSha256: mismatched ? '0'.repeat(64) : fixture.inventoryManifestSha256 })
+    await route.fulfill({ body, contentType: 'application/json', headers: { 'content-length': String(Buffer.byteLength(body)) } })
+  })
+  await page.goto('?v=4&page=about&lang=en&view=3d')
+  const panel = page.getByTestId('source-coverage-report')
+  await expect(panel.getByRole('heading', { name: 'All-source coverage audit' })).toBeVisible()
+  expect(requests).toEqual([])
+  await panel.getByRole('button', { name: 'Load coverage summary' }).click()
+  await expect(panel.locator(':scope > dl dd')).toHaveText(['10', '3', '7', '2', '2', '1', '1'])
+  expect(requests).toEqual(['manifest', 'coverage'])
+  await expect(panel).toContainText('Whole-window numerical certification has not been established')
+  await panel.getByText('Report identity and provenance', { exact: true }).click()
+  await expect(panel).toContainText(fixture.inventoryManifestSha256)
+  await panel.screenshot({ path: info.outputPath('coverage-summary-en.png') })
+  mismatched = true
+  await panel.getByRole('button', { name: 'Load coverage summary' }).click()
+  await expect(panel.getByRole('status')).toContainText('could not be verified')
+  await expect(panel.locator('dl')).toHaveCount(0)
+  mismatched = false
+  await page.goto('?v=4&page=about&lang=zh&view=3d')
+  await panel.getByRole('button', { name: '加载覆盖摘要' }).click()
+  await expect(panel.locator(':scope > dl dd')).toHaveText(['10', '3', '7', '2', '2', '1', '1'])
+  await expect(panel).toContainText('目前尚未建立整窗数值精度认证')
+  await panel.screenshot({ path: info.outputPath('coverage-summary-zh.png') })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
+  expect(errors).toEqual([])
+})
+
+test('all-source audit treats absent reports as unavailable, not zero coverage', async ({ page }) => {
+  const fixture = coverageSummaryFixture()
+  await page.route('**/solar-test-api/v1/catalog/manifest', async route => {
+    const body = JSON.stringify(fixture)
+    await route.fulfill({ body, contentType: 'application/json', headers: { 'content-length': String(Buffer.byteLength(body)) } })
+  })
+  await page.route('**/solar-test-api/v1/coverage', route => route.fulfill({ status: 404, body: '{}' }))
+  await page.goto('?v=4&page=about&lang=en&view=3d')
+  const panel = page.getByTestId('source-coverage-report')
+  await panel.getByRole('button', { name: 'Load coverage summary' }).click()
+  await expect(panel.getByRole('status')).toContainText('no coverage report configured')
+  await expect(panel.locator('dl')).toHaveCount(0)
+})
+
+test('packed historical trails survive switching the active renderer without a second canvas', async ({ page }, info) => {
+  const errors: string[] = []
+  const workers: string[] = [], historicalRequests: string[] = []
+  page.on('worker', worker => workers.push(worker.url()))
+  page.on('request', request => { if (request.url().includes('workload=trajectory')) historicalRequests.push(request.url()) })
+  page.on('pageerror', error => errors.push(error.message))
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('?v=4&lang=en&view=3d&bodies=earth%2Cmars&ref=sun&jd=2461287.5&history=365&samples=180&speed=0')
+  const spatial = page.getByTestId('trajectory-canvas-3d'), planar = page.locator('canvas.trajectory-canvas')
+  await expect(spatial).toHaveAttribute('data-trail-count', '2', { timeout: 30_000 })
+  const audit = page.getByTestId('backend-trajectory-audit')
+  await expect(audit).toHaveAttribute('data-samples', '180')
+  await expect(audit).toHaveAttribute('data-start-utc-jd', String(2461287.5 - 365))
+  await expect(audit).toHaveAttribute('data-end-utc-jd', '2461287.5')
+  expect(historicalRequests.length).toBeGreaterThanOrEqual(360)
+  expect(workers.some(url => url.includes('backend-trajectories.worker'))).toBe(true)
+  expect(workers.filter(url => url.includes('current-states.worker'))).toHaveLength(1)
+  expect(workers.some(url => /\/trajectory\.worker[-.]/.test(url))).toBe(false)
+  await expect(planar).toHaveCount(0)
+  await spatial.screenshot({ path: info.outputPath('packed-trails-3d.png') })
+  await page.getByRole('button', { name: '2D', exact: true }).click()
+  await expect(planar).toHaveAttribute('data-trail-count', '2', { timeout: 30_000 })
+  await expect(spatial).toHaveCount(0)
+  await planar.screenshot({ path: info.outputPath('packed-trails-2d.png') })
+  await page.getByRole('button', { name: '3D', exact: true }).click()
+  await expect(spatial).toHaveAttribute('data-trail-count', '2', { timeout: 30_000 })
+  await expect(planar).toHaveCount(0)
+  await audit.locator('summary').click()
+  await expect(audit).toContainText('Connecting lines are visual interpolation')
+  const downloadPromise = page.waitForEvent('download')
+  await audit.getByRole('button', { name: 'Download historical source audit' }).click()
+  const download = await downloadPromise
+  const downloaded = JSON.parse(await readFile((await download.path())!, 'utf8')) as { bodyIds: string[]; epochsTdbJd: number[]; sourceOrdinals: number[]; sources: { source: string }[]; tiles: unknown[] }
+  expect(downloaded.bodyIds).toEqual(['earth', 'mars', 'sun'])
+  expect(downloaded.epochsTdbJd).toHaveLength(180)
+  expect(downloaded.sourceOrdinals).toHaveLength(540)
+  expect(downloaded.tiles).toHaveLength(180)
+  expect(downloaded.sources.every(source => source.source === 'fixture-state-tiles')).toBe(true)
+  expect(workers.filter(url => url.includes('current-states.worker'))).toHaveLength(1)
+  expect(errors).toEqual([])
+})
+
+test('backend historical failures never invoke browser trajectories or erase verified current states', async ({ page }) => {
+  const workers: string[] = [], errors: string[] = []
+  page.on('worker', worker => workers.push(worker.url()))
+  page.on('pageerror', error => errors.push(error.message))
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.route('**/solar-test-api/v1/state/tiles?workload=trajectory', route => route.fulfill({ status: 503, body: 'unavailable' }))
+  await page.goto('?v=4&lang=en&view=3d&bodies=earth%2Cmars&ref=sun&jd=2461287.5&history=1&samples=32&speed=0')
+  const canvas = page.getByTestId('trajectory-canvas-3d')
+  await expect(canvas).toHaveAttribute('data-position-count', '2')
+  await expect(page.locator('.canvas-error').filter({ hasText: 'State tile HTTP 503' })).toBeVisible()
+  await expect(canvas).toHaveAttribute('data-trail-count', '0')
+  await expect(page.getByTestId('backend-trajectory-audit')).toHaveCount(0)
+  expect(workers.some(url => /\/trajectory\.worker[-.]/.test(url))).toBe(false)
+  expect(errors).toEqual([])
+})
+
+test('backend historical source window and boundary are readable in Chinese', async ({ page }, info) => {
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('?v=4&lang=zh&view=2d&bodies=earth%2Cmars&ref=sun&jd=2461287.5&history=1&samples=32&speed=0')
+  const audit = page.getByTestId('backend-trajectory-audit')
+  await expect(audit).toHaveAttribute('data-trails', '2')
+  await expect(audit).toHaveAttribute('data-samples', '32')
+  await audit.locator('summary').click()
+  await expect(audit).toContainText('连线只是可视化插值')
+  await expect(audit.getByRole('button', { name: '下载历史轨迹来源审计' })).toBeVisible()
+  await audit.screenshot({ path: info.outputPath('backend-history-audit-zh.png') })
+})
 
 test('complete Saturn current positions remain independent of 3D trail budgets', async ({ page }) => {
   test.setTimeout(120_000)
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   const ids = ['saturn', ...satelliteCatalog.bodies.filter(body => body.parentId === 'saturn').map(body => body.naifId === 606 ? 'titan' : body.id)]
-  const currentStateRequests: Array<{ ids: string[]; precision?: string }> = []
+  const legacyCurrentStateRequests: string[] = []
+  const stateTileRequests: Array<{ url: string; body: Record<string, unknown> }> = []
   page.on('request', request => {
-    if (request.url().endsWith('/solar-test-api/v1/current-states')) currentStateRequests.push(JSON.parse(request.postData() ?? '{}') as { ids: string[]; precision?: string })
+    if (request.url().endsWith('/solar-test-api/v1/current-states')) legacyCurrentStateRequests.push(request.url())
+    if (request.url().endsWith('/solar-test-api/v1/state/plan') || request.url().endsWith('/solar-test-api/v1/state/tiles')) stateTileRequests.push({ url: request.url(), body: JSON.parse(request.postData() ?? '{}') as Record<string, unknown> })
   })
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
@@ -17,19 +182,46 @@ test('complete Saturn current positions remain independent of 3D trail budgets',
   await page.goto(`?${query}`)
   const canvas = page.getByTestId('trajectory-canvas-3d')
   await expect(canvas).toHaveAttribute('data-position-count', '293', { timeout: 90_000 })
-  await expect.poll(() => currentStateRequests.length).toBeGreaterThan(0)
-  expect(currentStateRequests.every(request => request.ids.length <= 510 && request.precision === 'exact')).toBe(true)
-  await expect(page.getByTestId('ephemeris-status').locator('summary')).toContainText('293/294', { timeout: 90_000 })
+  await expect.poll(() => stateTileRequests.length).toBeGreaterThan(0)
+  expect(legacyCurrentStateRequests).toHaveLength(0)
+  expect(stateTileRequests.some(request => request.url.endsWith('/state/plan'))).toBe(true)
+  expect(stateTileRequests.some(request => request.url.endsWith('/state/tiles'))).toBe(true)
+  expect(stateTileRequests.filter(request => request.url.endsWith('/state/plan')).every(request => Array.isArray(request.body.ids) && request.body.ids.length <= 32768 && request.body.precision === 'exact')).toBe(true)
+  await expect(page.getByTestId('ephemeris-status').locator(':scope > summary')).toContainText('293/294', { timeout: 90_000 })
   // The paused clock should settle after one exact request even though the
   // parent rebuilds selection arrays while the scene workers publish.
-  await expect.poll(() => currentStateRequests.length).toBe(1)
+  await expect.poll(() => stateTileRequests.filter(request => request.url.endsWith('/state/tiles')).length).toBe(1)
   await page.waitForTimeout(750)
-  expect(currentStateRequests).toHaveLength(1)
+  expect(legacyCurrentStateRequests).toHaveLength(0)
   await expect(page.getByTestId('focus-layer-budget')).toContainText('160/294')
   expect(new URL(page.url()).searchParams.get('bodies')?.split(',')).toEqual(ids)
   expect(Number(await canvas.getAttribute('data-detail-count'))).toBeLessThanOrEqual(160)
   expect(Number(await canvas.getAttribute('data-state-point-count'))).toBeGreaterThan(130)
   await expect(page.getByTestId('missing-position-notice')).toContainText('1')
+  const displayBudget = page.getByTestId('exact-display-budget')
+  await expect(displayBudget).toHaveAttribute('data-computed', '293')
+  await expect(displayBudget).toHaveAttribute('data-displayed', '293')
+  await expect(displayBudget).toHaveAttribute('data-sampling', 'false')
+  const verifyMeasuredInteraction = async () => {
+    const viewport = page.locator('canvas').first()
+    // Hold an actual browser pointer gesture while renderer RAF callbacks run.
+    // This small scene is lifecycle evidence, not a target-load benchmark.
+    const box = await viewport.boundingBox()
+    expect(box).not.toBeNull()
+    await page.mouse.move(box!.x + box!.width * .8, box!.y + box!.height * .8)
+    await page.mouse.down()
+    try {
+      await expect(displayBudget.first()).toHaveAttribute('data-sampling', 'true')
+      // Shared CI software rendering can take over 10 seconds for the two
+      // warmup frames plus 12 measured intervals. This verifies live sampling,
+      // not an FPS floor; keep the full sample requirement on slower hosts.
+      await expect.poll(async () => Number(await displayBudget.first().getAttribute('data-samples')), { timeout: 30_000 }).toBeGreaterThanOrEqual(12)
+    } finally { await page.mouse.up() }
+    await expect(displayBudget.first()).toHaveAttribute('data-sampling', 'false')
+    await expect(displayBudget.first()).toHaveAttribute('data-computed', '293')
+    await expect(displayBudget.first()).toHaveAttribute('data-displayed', '293')
+  }
+  await verifyMeasuredInteraction()
   await page.screenshot({ path: test.info().outputPath('saturn-complete-current-positions.png') })
   const accessible = page.locator('.accessible-scene-controls')
   await accessible.locator('summary').click()
@@ -37,6 +229,18 @@ test('complete Saturn current positions remain independent of 3D trail budgets',
   await expect(accessible.locator('li')).toHaveCount(80)
   await accessible.getByRole('button', { name: 'Next', exact: true }).click()
   await expect(accessible.locator('.body-list-pagination')).toContainText('81–160 / 294')
+  await accessible.getByRole('button', { name: 'Next', exact: true }).click()
+  await expect(accessible.locator('.body-list-pagination')).toContainText('161–240 / 294')
+  // Promote an originally bulk-only position into the bounded focus layer.
+  // Ordinal remapping must not change full coverage or lose its original ID.
+  const lateRow = accessible.locator('li').last()
+  const lateName = (await lateRow.locator('span').innerText()).trim()
+  await lateRow.getByRole('button', { name: 'Focus object', exact: true }).click()
+  await expect(page.locator('.inspector-toggle')).toContainText(lateName)
+  await expect(canvas).toHaveAttribute('data-position-count', '293')
+  expect(Number(await canvas.getAttribute('data-detail-count'))).toBeLessThanOrEqual(160)
+  expect(Number(await canvas.getAttribute('data-state-point-count'))).toBeGreaterThan(130)
+  await expect(displayBudget).toHaveAttribute('data-computed', '293')
   await accessible.locator('summary').click()
   query.set('compare', '1')
   query.set('compareRef', 'titan')
@@ -48,6 +252,10 @@ test('complete Saturn current positions remain independent of 3D trail budgets',
   await page.getByRole('button', { name: '2D', exact: true }).click()
   await expect(page.locator('canvas.trajectory-canvas')).toHaveCount(2)
   for (const frame of await page.locator('canvas.trajectory-canvas').all()) await expect(frame).toHaveAttribute('data-position-count', '293')
+  await expect(displayBudget).toHaveCount(2)
+  expect(await displayBudget.first().getAttribute('data-limit')).toBe(await displayBudget.nth(1).getAttribute('data-limit'))
+  await verifyMeasuredInteraction()
+  await page.screenshot({ path: test.info().outputPath('exact-display-budget-2d.png') })
   expect(errors).toEqual([])
 })
 
@@ -177,6 +385,9 @@ test('lazy-loads catalog samples only inside catalog workspaces and only once', 
 })
 
 test('renders an explicitly enabled reproducible catalog cloud without reloading it across view changes', async ({ page }, testInfo) => {
+  await auditCatalogWorkers(page)
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
   const sampleRequests: string[] = []
   page.on('request', (request) => {
     if (/catalog-sample-(desktop|mobile)\.(json|bin)$/.test(request.url())) sampleRequests.push(request.url())
@@ -193,13 +404,42 @@ test('renders an explicitly enabled reproducible catalog cloud without reloading
   await expect(page.locator('.frame-label small')).toContainText(`catalog ${sampleCount.toLocaleString()} / ${sampleCount.toLocaleString()} · Maximum`)
   await expect(page).toHaveURL(/[?&]catalogCloud=1(?:&|$)/)
   await expect(page).toHaveURL(/[?&]quality=max(?:&|$)/)
+  const latestResult = () => page.evaluate(() => (window as CatalogWorkerAuditWindow).catalogWorkerAudit.filter(event => event.type === 'result').at(-1))
+  await expect.poll(latestResult).toMatchObject({ mode: '3d', bytes: sampleCount * 12, arrays: 1 })
+  await page.getByTestId('trajectory-canvas-3d').screenshot({ path: testInfo.outputPath('single-mode-cloud-3d.png') })
 
   const viewSwitch = page.locator('.simulation-bar .segmented-control')
   await viewSwitch.getByRole('button', { name: '2D' }).click()
   await expect(page.locator('.trajectory-canvas')).toBeVisible()
+  await expect.poll(latestResult).toMatchObject({ mode: '2d', bytes: sampleCount * 8, arrays: 1 })
+  await expect(page.getByTestId('trajectory-canvas-3d')).toHaveCount(0)
+  await expect(page.locator('.frame-label small')).toContainText(`catalog ${sampleCount.toLocaleString()} / ${sampleCount.toLocaleString()}`)
+  await page.locator('.trajectory-canvas').screenshot({ path: testInfo.outputPath('single-mode-cloud-2d.png') })
   await viewSwitch.getByRole('button', { name: '3D' }).click()
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
+  await expect.poll(latestResult).toMatchObject({ mode: '3d', bytes: sampleCount * 12, arrays: 1 })
+  await expect(page.locator('.trajectory-canvas')).toHaveCount(0)
+  // The dedicated catalog workspace is always planar, independently of the
+  // Explorer's last mode. It must retire the Explorer worker on navigation.
+  await openCatalog(page)
+  await expect(page.locator('canvas.catalog-point-canvas')).toBeVisible()
+  await expect.poll(latestResult).toMatchObject({ mode: '2d', arrays: 1 })
+  await openExplorer(page)
+  await expect.poll(latestResult).toMatchObject({ mode: '3d', arrays: 1 })
+  await page.locator('.advanced-controls > summary').click()
+  await page.getByRole('checkbox', { name: 'Catalog point cloud', exact: true }).uncheck()
+  await expect.poll(() => page.evaluate(() => (window as CatalogWorkerAuditWindow).catalogWorkerAudit
+    .reduce((active, event) => active + (event.type === 'start' ? 1 : event.type === 'stop' ? -1 : 0), 0))).toBe(0)
+  const audit = await page.evaluate(() => (window as CatalogWorkerAuditWindow).catalogWorkerAudit)
+  let active = 0
+  for (const event of audit) {
+    active += event.type === 'start' ? 1 : event.type === 'stop' ? -1 : 0
+    expect(active).toBeGreaterThanOrEqual(0)
+    expect(active).toBeLessThanOrEqual(1)
+  }
+  expect(audit.filter(event => event.type === 'result').every(event => event.arrays === 1)).toBe(true)
   expect(sampleRequests).toHaveLength(2)
+  expect(errors).toEqual([])
 })
 
 test('fails closed visibly when an enabled catalog cloud has an invalid sample tuple', async ({ page }) => {
@@ -234,13 +474,13 @@ test('loads the same pinned catalog sample on desktop and mobile', async ({ page
   await expect(page).toHaveURL(/[?&]catalogSampleCount=1(?:&|$)/)
 })
 
-test('upgrades a legacy catalog URL to the viewport-selected pinned sample', async ({ page }, testInfo) => {
+test('adds the viewport-selected pinned sample to a current catalog URL', async ({ page }, testInfo) => {
   const sampleRequests: string[] = []
   page.on('request', (request) => {
     if (/catalog-sample-(desktop|mobile)\.(json|bin)$/.test(request.url())) sampleRequests.push(request.url())
   })
   await installMockCatalog(page, { precomputed: true, profileSamples: { desktop: [0, 2], mobile: [1] } })
-  await page.goto('./?v=3&page=catalog&dataset=mock-content-lite&lang=en')
+  await page.goto('./?v=4&page=catalog&dataset=mock-content-lite&lang=en')
 
   const expectedProfile = testInfo.project.name.startsWith('mobile') ? 'mobile' : 'desktop'
   const expectedCount = expectedProfile === 'mobile' ? 1 : 2
@@ -278,7 +518,7 @@ test('loads the deployable catalog through gzip JSON delivery', async ({ page })
   page.on('response', (response) => {
     if (response.ok() && response.url().endsWith('.json.gz')) gzipResponses.push(response.url())
   })
-  await page.goto('./?v=3&page=catalog&lang=en')
+  await page.goto('./?v=4&page=catalog&lang=en')
   await expect(page.getByRole('heading', { name: 'Catalog' })).toBeVisible()
   await expect(page.locator('.catalog-table > li > button').first()).toBeVisible({ timeout: 30_000 })
   await expect.poll(() => gzipResponses.some((url) => /catalog-sample-(desktop|mobile)\.json\.gz$/.test(url))).toBe(true)
@@ -288,7 +528,7 @@ test('loads the deployable catalog through gzip JSON delivery', async ({ page })
 
 test('hydrates an exact compact-index match that is absent from the precomputed sample', async ({ page }) => {
   await installMockCatalog(page, { precomputed: true, sampleCount: 2 })
-  await page.goto('./?v=3&page=catalog')
+  await page.goto('./?v=4&page=catalog')
   await page.getByLabel(/Orbit class|轨道分类/).selectOption('TNO')
   await expect(page.locator('.catalog-table')).not.toContainText('Gamma')
   await page.getByRole('button', { name: /Scan full catalog|扫描完整目录/ }).click()
@@ -333,7 +573,7 @@ test('degrades cleanly when service worker registration is unavailable', async (
 
 test('applies a reproducible story scene with the requested frame and view', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  await page.goto('./?v=3&page=stories&story=retrograde-mars')
+  await page.goto('./?v=4&page=stories&story=retrograde-mars')
   await expect(page.getByRole('heading', { name: /Stories|引导故事/ })).toBeVisible()
   await page.getByRole('button', { name: /Next|下一步/ }).click()
   await page.getByRole('button', { name: /Next|下一步/ }).click()
@@ -367,8 +607,8 @@ test('loads resolved TNO primary centers lazily and keeps Makemake coverage expl
   await page.goto('./?v=4&page=explorer&bodies=eris,haumea,makemake&ref=sun&jd=2461222.5&zoom=0.15&lang=en')
   await page.waitForLoadState('networkidle')
   const status = page.getByTestId('ephemeris-status')
-  await expect(status.locator('summary')).toContainText('2/3', { timeout: 30_000 })
-  await status.locator('summary').click()
+  await expect(status.locator(':scope > summary')).toContainText('2/3', { timeout: 30_000 })
+  await status.locator(':scope > summary').click()
   await expect(status).toContainText('makemake')
   await expect(status.getByRole('alert')).toHaveCount(0)
   // The main resolver and trajectory worker each load the same pinned assets.
@@ -383,7 +623,7 @@ test('loads resolved TNO primary centers lazily and keeps Makemake coverage expl
 
 test('offers a complete reproducible observation deck on desktop and mobile', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  await page.goto('./?v=3&page=explorer&lang=en')
+  await page.goto('./?v=4&page=explorer&lang=en')
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible({ timeout: 15_000 })
 
   const presets = page.locator('.preset-list')
@@ -470,7 +710,7 @@ test('replays 3D zoom and labels unsupported 2D-only controls truthfully', async
     // ephemeris and trajectory workers to finish before asserting the applied
     // zoom/distance, so this tests readiness rather than a transient fit.
     const status = page.getByTestId('ephemeris-status')
-    await expect(status.locator('summary')).not.toContainText('Loading', { timeout: 15_000 })
+    await expect(status.locator(':scope > summary')).not.toContainText('Loading', { timeout: 15_000 })
     await expect(page.locator('.compute-progress')).toHaveCount(0, { timeout: 15_000 })
     await expect(canvas).toHaveAttribute('data-fit-generation', /[1-9]\d*/, { timeout: 15_000 })
     await expect(canvas).toHaveAttribute('data-applied-zoom', String(zoom), { timeout: 15_000 })
@@ -591,9 +831,9 @@ test('loads and replays both pinned main-belt presets on desktop and mobile', as
   await expect(page).not.toHaveURL(/[?&]filter=MBA(?:&|$)/)
 })
 
-test('routes legacy home URLs to the deck and lets visitors reopen the tutorial', async ({ page }) => {
+test('routes the home entry to the deck and lets visitors reopen the tutorial', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  await page.goto('./?v=3&page=home&lang=en')
+  await page.goto('./?v=4&page=home&lang=en')
   await expect(page.locator('.trajectory-canvas, [data-testid="trajectory-canvas-3d"]')).toBeVisible({ timeout: 15_000 })
   await page.getByRole('button', { name: 'Start tutorial' }).click()
   await expect(page.getByRole('dialog', { name: 'How would you like to begin?' })).toBeFocused()
@@ -606,7 +846,7 @@ test('offers a first-run choice and finishes the tutorial on the deck', async ({
     if (request.url().includes('TrajectoryCanvas3D-')) rendererRequests.push(request.url())
     if (request.url().endsWith('.bsp')) kernelRequests.push(request.url())
   })
-  await page.goto('./?v=3&lang=en')
+  await page.goto('./?v=4&lang=en')
   const choice = page.getByRole('dialog', { name: 'How would you like to begin?' })
   await expect(choice).toBeVisible()
   await expect(choice).toBeFocused()
@@ -631,7 +871,7 @@ test('offers a first-run choice and finishes the tutorial on the deck', async ({
 })
 
 test('starts the 3D renderer after choosing independent exploration', async ({ page }) => {
-  await page.goto('./?v=3&lang=en')
+  await page.goto('./?v=4&lang=en')
   const choice = page.getByRole('dialog', { name: 'How would you like to begin?' })
   await expect(page.locator('.trajectory-3d-placeholder')).toBeVisible()
   await expect(page.getByTestId('trajectory-canvas-3d')).toHaveCount(0)
@@ -648,7 +888,7 @@ test('keeps renderer activation while the explorer workspace is still loading', 
     await route.continue()
   })
 
-  await page.goto('./?v=3&lang=en', { waitUntil: 'domcontentloaded' })
+  await page.goto('./?v=4&lang=en', { waitUntil: 'domcontentloaded' })
   const choice = page.getByRole('dialog', { name: 'How would you like to begin?' })
   await expect(choice).toBeVisible()
   await choice.getByRole('button', { name: 'Start tutorial' }).click()
@@ -660,7 +900,7 @@ test('keeps renderer activation while the explorer workspace is still loading', 
 test('computes the Earth-to-Mars transfer and worker porkchop map', async ({ page }) => {
   const errors: string[] = []
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })
-  await page.goto('./?v=3&page=mission')
+  await page.goto('./?v=4&page=mission')
   await page.getByRole('button', { name: /Compute transfer|计算转移/ }).click()
   await expect(page.getByText('5.594')).toBeVisible()
   await expect(page.getByText('C3')).toBeVisible()
@@ -675,7 +915,7 @@ test('computes the Earth-to-Mars transfer and worker porkchop map', async ({ pag
 })
 
 test('falls back safely when a shared mission URL has invalid parameters', async ({ page }) => {
-  await page.goto('./?v=3&page=mission&from=bogus&to=mars&depart=2026-99-99&arrive=2027-02-30')
+  await page.goto('./?v=4&page=mission&from=bogus&to=mars&depart=2026-99-99&arrive=2027-02-30')
   await expect(page.getByRole('heading', { name: /Mission Lab|任务实验室/ })).toBeVisible()
   await expect(page.getByLabel(/Departure body|出发天体/)).toHaveValue('earth')
   await expect(page.getByLabel(/Arrival body|到达天体/)).toHaveValue('mars')
@@ -685,18 +925,18 @@ test('falls back safely when a shared mission URL has invalid parameters', async
 })
 
 test('discloses the derived Earth geocenter and out-of-range mission extrapolation bilingually', async ({ page }) => {
-  await page.goto('./?v=3&page=mission&from=earth&to=mars&depart=2050-06-01&arrive=2050-12-01&lang=en')
+  await page.goto('./?v=4&page=mission&from=earth&to=mars&depart=2050-06-01&arrive=2050-12-01&lang=en')
   await expect(page.getByText(/year 2051 is outside the 1800–2050 validity interval/)).toBeVisible()
 
-  await page.goto('./?v=3&page=mission&from=earth&to=mars&depart=2051-01-01&arrive=2051-09-01&lang=en')
+  await page.goto('./?v=4&page=mission&from=earth&to=mars&depart=2051-01-01&arrive=2051-09-01&lang=en')
   await expect(page.getByText('Mission endpoint model boundary')).toBeVisible()
   await expect(page.getByText(/geocenter derived from the JPL Table 1 EMB seed/)).toBeVisible()
   await expect(page.getByText(/year 2052 is outside the 1800–2050 validity interval/)).toBeVisible()
 
-  await page.goto('./?v=3&page=mission&from=ceres&to=pluto&depart=2051-01-01&arrive=2051-09-01&lang=en')
+  await page.goto('./?v=4&page=mission&from=ceres&to=pluto&depart=2051-01-01&arrive=2051-09-01&lang=en')
   await expect(page.locator('.mission-model-boundary')).toHaveCount(0)
 
-  await page.goto('./?v=3&page=mission&from=earth&to=mars&depart=2051-01-01&arrive=2051-09-01&lang=zh')
+  await page.goto('./?v=4&page=mission&from=earth&to=mars&depart=2051-01-01&arrive=2051-09-01&lang=zh')
   await expect(page.getByText('任务端点模型边界')).toBeVisible()
   await expect(page.getByText(/由 JPL 表 1 地月质心种子.*推导的地心/)).toBeVisible()
   await expect(page.getByText(/2052 超出 JPL 行星近似根数的 1800–2050 有效区间/)).toBeVisible()
@@ -706,7 +946,7 @@ test('publishes the exact planetary model provenance in Evidence and the Earth p
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   // This regression exercises the explicitly retained fallback provenance.
   await page.route('**/data/ephemerides/**', (route) => route.abort())
-  await page.goto('./?v=3&page=about&lang=en')
+  await page.goto('./?v=4&page=about&lang=en')
   await expect(page.getByText('jpl-approx-table-1')).toBeVisible()
   await expect(page.getByText('Fitted Keplerian elements with secular rates', { exact: true })).toBeVisible()
   await expect(page.getByText('Mean ecliptic and equinox of J2000', { exact: true })).toBeVisible()
@@ -714,7 +954,7 @@ test('publishes the exact planetary model provenance in Evidence and the Earth p
   await expect(page.getByText('Earth geocenter derived from the EMB seed', { exact: true })).toBeVisible()
   await expect(page.getByText('de440-earth-moon-gm-partition-v1')).toBeVisible()
 
-  await page.goto('./?v=3&page=explorer&focused=earth&lang=en')
+  await page.goto('./?v=4&page=explorer&focused=earth&lang=en')
   await page.getByRole('button', { name: 'Show body details' }).click()
   await page.getByRole('tab', { name: 'Context' }).click()
   await expect(page.getByText('Rendered point')).toBeVisible()
@@ -743,7 +983,7 @@ test('does not present the build-time dataset pin as loaded when the catalog is 
 
 test('discloses sourced satellite frames, phases, and fixed-ellipse limits', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  await page.goto('./?v=3&page=explorer&focused=moon&bodies=earth%2Cmoon&lang=en')
+  await page.goto('./?v=4&page=explorer&focused=moon&bodies=earth%2Cmoon&lang=en')
   await page.getByRole('button', { name: 'Show body details' }).click()
   await page.getByRole('tab', { name: 'Context' }).click()
   await expect(page.getByText('JPL planet-centered ecliptic', { exact: true })).toBeVisible()
@@ -756,7 +996,7 @@ test('discloses sourced satellite frames, phases, and fixed-ellipse limits', asy
   await expect(page.getByRole('link', { name: /NAIF\/JPL DE440 GM/ })).toBeVisible()
   await expect(page.getByRole('link', { name: /JPL approximate positions/ })).toHaveCount(0)
 
-  await page.goto('./?v=3&page=explorer&focused=io&bodies=jupiter%2Cio&lang=zh')
+  await page.goto('./?v=4&page=explorer&focused=io&bodies=jupiter%2Cio&lang=zh')
   await page.getByRole('button', { name: '查看天体详情' }).click()
   await page.getByRole('tab', { name: '背景' }).click()
   await expect(page.getByText('JPL 行星中心黄道平面', { exact: true })).toBeVisible()
@@ -767,7 +1007,7 @@ test('discloses sourced satellite frames, phases, and fixed-ellipse limits', asy
   await expect(page.getByRole('link', { name: /JPL 卫星轨道根数/ })).toBeVisible()
   await expect(page.getByRole('link', { name: /复现这条 Horizons 历元查询/ })).toHaveAttribute('href', /COMMAND=%27501%27/)
 
-  await page.goto('./?v=3&page=about&lang=zh')
+  await page.goto('./?v=4&page=about&lang=zh')
   await expect(page.getByText('satellite-two-body-contract-v2')).toBeVisible()
   await expect(page.getByText('de440-earth-moon-gm-partition-v1')).toBeVisible()
   await expect(page.getByRole('definition').filter({ hasText: /不是连续星历/ }).first()).toBeVisible()
@@ -778,7 +1018,7 @@ test('discloses sourced satellite frames, phases, and fixed-ellipse limits', asy
 })
 
 test('shows Hill and Laplace influence definitions independently', async ({ page }) => {
-  await page.goto('./?v=2&view=2d')
+  await page.goto('./?v=4&view=2d')
   await page.locator('.advanced-controls > summary').click()
   await page.getByLabel(/Hill sphere|希尔球/, { exact: true }).check()
   await page.getByLabel(/Laplace SOI|拉普拉斯影响球/, { exact: true }).check()
@@ -786,9 +1026,24 @@ test('shows Hill and Laplace influence definitions independently', async ({ page
   await expect(page.locator('.influence-laplace-soi').first()).toHaveAttribute('title', /Laplace SOI/)
 })
 
+test('localizes 2D canvas body labels with the active language', async ({ page }) => {
+  for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(viewport)
+    await page.goto('./?v=4&page=explorer&view=2d&lang=en&jd=2461287.5&speed=0')
+    const labels = page.locator('.canvas-label-layer .floating-label')
+    await expect.poll(async () => labels.allTextContents()).toEqual(expect.arrayContaining(['Sun', 'Earth']))
+    await expect.poll(async () => labels.allTextContents()).not.toContain('太阳')
+    await page.locator('.language-button').click()
+    await expect.poll(async () => labels.allTextContents()).toEqual(expect.arrayContaining(['太阳', '地球']))
+    await expect.poll(async () => labels.allTextContents()).not.toContain('Sun')
+    await page.locator('.language-button').click()
+    await expect.poll(async () => labels.allTextContents()).toEqual(expect.arrayContaining(['Sun', 'Earth']))
+  }
+})
+
 test('loads and selects the complete filtered catalog separately from focus mode', async ({ page }) => {
   await installMockCatalog(page)
-  await page.goto('./?v=3&page=catalog')
+  await page.goto('./?v=4&page=catalog')
   await expect(page.getByRole('img', { name: /GPU catalog view of small bodies|小天体 GPU 目录视图/ })).toBeVisible()
   await page.getByRole('button', { name: /Scan full catalog|扫描完整目录/ }).click()
   await page.getByRole('button', { name: /Select complete filtered catalog|全选完整筛选目录/ }).click()
@@ -832,7 +1087,7 @@ test('reflows Evidence and exposes independent body and catalog actions', async 
 
 test('separates known and unknown absolute-magnitude records', async ({ page }) => {
   await installMockCatalog(page)
-  await page.goto('./?v=3&page=catalog')
+  await page.goto('./?v=4&page=catalog')
   const magnitudeStatus = page.getByLabel(/H status|H 状态/)
   await magnitudeStatus.selectOption('known')
   await expect(page.locator('.catalog-results .section-heading span')).toContainText('2')
@@ -864,21 +1119,21 @@ test('restores discrete workspace history and updates the page title', async ({ 
 })
 
 test('gives every story step and mission setup a reproducible URL', async ({ page }) => {
-  await page.goto('./?v=3&page=stories&story=retrograde-mars')
+  await page.goto('./?v=4&page=stories&story=retrograde-mars')
   await page.getByRole('button', { name: /Next|下一步/ }).click()
   await expect(page).toHaveURL(/story=retrograde-mars/)
   await expect(page).toHaveURL(/[?&]step=1(?:&|$)/)
   await page.goBack()
   await expect(page.locator('.story-copy .eyebrow')).toContainText('1/6')
 
-  await page.goto('./?v=3&page=mission')
+  await page.goto('./?v=4&page=mission')
   await page.getByLabel(/Arrival body|到达天体/).selectOption('jupiter')
   await expect(page).toHaveURL(/[?&]to=jupiter(?:&|$)/)
   await expect(page).toHaveTitle(/Earth.*Jupiter|地球.*木星/)
 })
 
 test('keeps a guided story active across workspaces and advances its reproducible scene', async ({ page }) => {
-  await page.goto('./?v=3&page=stories&story=retrograde-mars&step=0&lang=en')
+  await page.goto('./?v=4&page=stories&story=retrograde-mars&step=0&lang=en')
   await page.getByRole('button', { name: 'Open this scene' }).click()
   const guide = page.getByRole('dialog', { name: 'Why Mars moves backward' })
   await expect(guide).toBeVisible()
@@ -900,7 +1155,7 @@ test('keeps a guided story active across workspaces and advances its reproducibl
 
 test('searches workspaces, objects, stories, and terms from the keyboard palette', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  await page.goto('./?v=3&page=home&lang=en')
+  await page.goto('./?v=4&page=home&lang=en')
   await expect(page.locator('.trajectory-canvas, [data-testid="trajectory-canvas-3d"]')).toBeVisible({ timeout: 15_000 })
   if ((page.viewportSize()?.width ?? 1280) > 980) await page.keyboard.press('Control+K')
   else await page.getByRole('button', { name: 'Search Solar Atlas' }).click()
@@ -924,7 +1179,7 @@ test('searches workspaces, objects, stories, and terms from the keyboard palette
 
 test('persists a named reproducible scene in the local scene library', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  await page.goto('./?v=3&page=explorer&view=2d&lang=en')
+  await page.goto('./?v=4&page=explorer&view=2d&lang=en')
   await page.locator('.advanced-controls > summary').click()
   await page.getByPlaceholder('Scene title').fill('Mars lesson')
   await page.getByRole('button', { name: 'Save scene', exact: true }).click()
@@ -936,7 +1191,7 @@ test('persists a named reproducible scene in the local scene library', async ({ 
 
 test('falls back to the 2D explorer when the WebGL context is lost', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  await page.goto('./?v=3&page=explorer&view=3d&lang=en')
+  await page.goto('./?v=4&page=explorer&view=3d&lang=en')
   const threeDimensional = page.getByTestId('trajectory-canvas-3d')
   await expect(threeDimensional).toBeVisible({ timeout: 15_000 })
   await threeDimensional.locator('canvas').evaluate((canvas) => canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true })))
@@ -946,7 +1201,7 @@ test('falls back to the 2D explorer when the WebGL context is lost', async ({ pa
 
 test('shows recovery actions when a shared dataset version is unavailable', async ({ page }) => {
   await page.route('**/data/asteroids/releases/missing-version/manifest.json', (route) => route.fulfill({ status: 404 }))
-  await page.goto('./?v=2&page=catalog&dataset=missing-version')
+  await page.goto('./?v=4&page=catalog&dataset=missing-version')
   await expect(page.getByText(/requested immutable dataset version is not available|请求的不可变数据集版本当前不可用/)).toBeVisible()
   await expect(page.getByRole('button', { name: /Open current dataset|打开当前数据集/ })).toBeVisible()
   await expect(page.getByRole('button', { name: /Retry|重试/ })).toBeVisible()

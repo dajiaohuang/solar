@@ -74,6 +74,41 @@ func TestSyntheticType21MatchesCSPICEFixture(t *testing.T) {
 	}
 }
 
+func TestOpenUsesBoundedLazyReaderAt(t *testing.T) {
+	path := filepath.Join("..", "..", "tests", "fixtures", "spk21-synthetic.bsp")
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	k, err := OpenWithCache(path, 4096, 16<<10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer k.Close()
+	if k.data != nil || k.source == nil {
+		t.Fatal("file-backed kernel retained an in-memory file image")
+	}
+	opened := k.ReadStats()
+	if opened.CachedBytes > opened.MaxBytes || opened.LoadedBytes >= info.Size() {
+		t.Fatalf("metadata parse was not lazy/bounded: %+v fileBytes=%d", opened, info.Size())
+	}
+	state, found, err := k.Evaluate(-210001, 0)
+	if err != nil || !found || state.Position.X < 99999949 || state.Position.X > 99999951 {
+		t.Fatalf("lazy evaluate: found=%v err=%v state=%+v", found, err, state)
+	}
+	evaluated := k.ReadStats()
+	if evaluated.CachedBytes > evaluated.MaxBytes || evaluated.LoadedBytes <= opened.LoadedBytes {
+		t.Fatalf("evaluation did not load bounded pages: %+v opened=%+v", evaluated, opened)
+	}
+	if _, found, err := k.Evaluate(-210001, 0); err != nil || !found {
+		t.Fatalf("repeat lazy evaluate: found=%v err=%v", found, err)
+	}
+	repeated := k.ReadStats()
+	if repeated.CacheHits <= evaluated.CacheHits {
+		t.Fatalf("repeat evaluation did not reuse page cache: evaluated=%+v repeated=%+v", evaluated, repeated)
+	}
+}
+
 func TestRejectsMalformedSPK(t *testing.T) {
 	if _, err := New(make([]byte, 3072)); err == nil {
 		t.Fatal("expected malformed header rejection")

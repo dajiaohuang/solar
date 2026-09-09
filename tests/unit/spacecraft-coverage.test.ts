@@ -27,7 +27,7 @@ describe('spacecraft historical reference coverage', () => {
       trajectoryPoints: [{ jd: jd('2023-12-09T12:00:00Z'), x: 1, y: 0, z: 0 }, { jd: current, x: 2, y: 0, z: 0 }],
     }
     const frame = buildSpacecraftFrame([probe], target.id, bodies, current)
-    expect(frame.currentPositions.map(item => item.body.id)).toEqual(['probe'])
+    expect(Array.from({ length: frame.currentPositions.length }, (_, i) => frame.currentPositions.bodyAt(i).id)).toEqual(['probe'])
     expect(frame.trajectories).toEqual([])
     expect(frame.trajectoryUnavailableBodyIds).toEqual(['probe'])
     const covered = { ...probe, trajectoryPoints: [{ ...probe.trajectoryPoints[0], jd: jd('2023-12-10T12:00:00Z') }, probe.trajectoryPoints[1]] }

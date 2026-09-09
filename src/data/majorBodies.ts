@@ -346,8 +346,8 @@ const parentLabels: Record<string, string> = { mars: '火星', jupiter: '木星'
 // a fallback. The resolver replaces them with SPK states only when covered.
 majorBodies.push(...ephemerisBodies.bodies.map((entry): CelestialBody => ({
   id: entry.id, naifId: entry.naifId,
-  name: entry.kind === 'moon' ? `${parentLabels[entry.parentId]}卫星 NAIF ${entry.naifId} · ${entry.name}` : `小行星 ${entry.naifId - 2000000}`,
-  shortName: entry.shortName,
+  name: entry.kind === 'moon' ? `${parentLabels[entry.parentId]}卫星 NAIF ${entry.naifId} · ${entry.name}` : entry.name.startsWith('Asteroid ') ? `小行星 ${entry.naifId - 2000000}` : `小行星 ${entry.name}`,
+  shortName: entry.kind === 'asteroid' && !entry.name.startsWith('Asteroid ') ? entry.name : entry.shortName,
   kind: entry.kind === 'moon' ? 'moon' : 'asteroid',
   parentId: entry.parentId === 'sun' ? undefined : entry.parentId,
   source: 'jpl-spk-osculating-fallback',

@@ -170,8 +170,11 @@ Haumea v001 is retained alongside the chosen v001b; Patroclus JPL082 is explicit
 source-only because it omits system target 20000617. The raw `Manoetius` name is
 retained, not silently rewritten from another publication. A separate older
 Lucy solution 54/DE431 system trajectory does not establish a same-source fit
-with JPL082/DE440. Unknown source additions require an explicit reviewed ledger
-decision; regeneration fails instead of silently omitting them.
+with JPL082/DE440. Regeneration records both explicit component identities in
+`sourceOnlyBodies`, pinned to JPL082 and marked unavailable until a compatible
+system trajectory is independently validated; they are not runtime state
+targets. Unknown source additions require an explicit reviewed ledger decision;
+regeneration fails instead of silently omitting them.
 
 The survey itself does not select sources. The separate offline integrator accepts
 a reviewed local JSON plan: `survey` and `surveySha256`, `cores` with `id` and
@@ -229,11 +232,11 @@ an existing output path are refused. The legacy `data:ephemerides` generator now
 refuses to overwrite an integrated source-pool manifest. Prepare any changed
 baseline separately and review its integration rather than losing added targets.
 
-Pages and full each list 510 files and the same target identities. Pages narrows
+Pages and full each list 516 files and the same target identities. Pages narrows
 large satellite files to 2026/2027 TDB; full retains 2020/2031 for planetary
 satellites and 2020/2030-01-02 for the Eris/Haumea companions. The eight other
 binary systems have the explicit ten-year/full and half-year/Pages windows above. At the modern
-test epoch, 508 selectable centers resolve, with the remaining gaps enumerated
+test epoch, 514 selectable centers resolve, with the remaining gaps enumerated
 in the [physical contract](../../docs/physical-ephemerides.md). The full package
 is a delivery profile, not a claim of complete physical coverage of all bodies.
 
@@ -255,7 +258,7 @@ six-vector pairs, including each root's endpoints and midpoint. Tests verify
 every source hash, dependency order and numerical agreement. They do not measure
 observational uncertainty, certify all dates, or turn different source families
 into one globally fitted solution. The build profile is included in build
-identity and exported manifest links; full/native does not inherit Pages' cap.
+identity and exported manifest links; the backend full profile does not inherit Pages' cap.
 
 ## 中文边界
 

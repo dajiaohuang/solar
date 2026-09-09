@@ -53,5 +53,72 @@
     ],
     "sourcedBodies": ["moon", "io", "europa", "ganymede", "callisto", "titan"],
     "illustrativeBodies": []
+  },
+  "coverage": {
+    "supportedNamedBodies": [
+      "sun", "mercury", "venus", "earth", "moon", "mars", "jupiter", "saturn",
+      "uranus", "neptune", "ceres", "pluto", "eris", "haumea", "makemake",
+      "io", "europa", "ganymede", "callisto", "titan"
+    ],
+    "sourcedSatelliteBodies": ["moon", "io", "europa", "ganymede", "callisto", "titan"],
+    "coverageGaps": [
+      "other-planetary-satellites-not-modeled",
+      "dwarf-planet-elements-are-curated-approximations-not-precision-ephemerides"
+    ],
+    "spkDelivery": {
+      "stateBoundary": "geometric-spk-six-vector-when-kernel-and-center-chain-cover-epoch",
+      "ephemerisBodyCount": 87,
+      "planetarySatelliteBodyCount": 31,
+      "smallBodyBodyCount": 56,
+      "satelliteIdentityCount": 472,
+      "satelliteIdentityDelivery": {
+        "catalogBodies": 472,
+        "numericNaifIdentities": 471,
+        "pagesManifestTargets": 471,
+        "fullManifestTargets": 471,
+        "identityOnlyBodies": 1,
+        "identityOnlyIds": ["sat:planet:saturn:provisional:S/2009 S1"],
+        "sourceOnlyBodies": 2,
+        "sourceOnlyIds": ["naif:120000617", "naif:920000617"],
+        "sourceOnlyBoundary": "JPL082 publishes explicit Patroclus/Manoetius component offsets but omits compatible system target 20000617; these identities remain source-only and never imply an exact state or local orbit.",
+        "boundary": "A pinned manifest target proves source delivery identity; an exact state still requires verified kernel bytes and a covered center chain at the requested epoch.",
+        "localOrbitBoundary": "Catalog identities without generated local orbit elements remain source-backed current-state candidates; no fallback orbit is created for them."
+      },
+      "pagesManifest": {
+        "id": "jpl-satellite-expansion-20260904-pages",
+        "sha256": "a22ec725a918e9bc754d8065b640c20aa44e556bb74ba86a2c09b37a644efbef",
+        "bytes": 271823872,
+        "fileCount": 551
+      },
+      "fullManifest": {
+        "id": "jpl-satellite-expansion-20260904-full",
+        "sha256": "3b64454a64fbfeb80930c9b8906f55993c8ce2c2f87ccf2f6f4ec88ec7e2cf72",
+        "bytes": 1156593664,
+        "fileCount": 551
+      },
+      "sourceBackedSatelliteBatches": {
+        "mars": ["naif:401", "naif:402"],
+        "jupiter": ["naif:505", "naif:514", "naif:515", "naif:516"],
+        "saturn": ["naif:601", "naif:602", "naif:603", "naif:604", "naif:605", "naif:607", "naif:608", "naif:609", "naif:612", "naif:613", "naif:614", "naif:632", "naif:634"],
+        "uranus": ["naif:701", "naif:702", "naif:703", "naif:704", "naif:705"],
+        "neptune": ["naif:801", "naif:802"],
+        "pluto": ["naif:901", "naif:902", "naif:903", "naif:904", "naif:905"]
+      },
+      "sourceBackedSmallBodyPrimaries": [
+        "quaoar",
+        "orcus",
+        "salacia",
+        "1998ww31",
+        "2001qw322",
+        "kagara",
+        "1999oj4",
+        "2003un284"
+      ],
+      "frozenHorizonsAsteroids": [
+        "243", "433", "951", "25143", "99942", "162173", "3200", "3122", "65803",
+        "4179", "1036", "1580", "2867", "52768", "29075", "231937", "486958", "132524", "152830", "341843", "469219", "162421", "153591", "308635", "163899", "357439", "367943",
+        "6", "9", "14", "18", "19", "90", "216", "11", "13", "21", "24", "29", "39", "44"
+      ]
+    }
   }
 }

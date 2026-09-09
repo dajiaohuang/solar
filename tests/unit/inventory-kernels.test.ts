@@ -3,8 +3,50 @@ import { inventoryKernels, snapshotKernelAtEpoch } from '../../scripts/lib/inven
 import { readFileSync } from 'node:fs'
 import { SpkKernel } from '../../src/engine/ephemeris/spk'
 import { createKernelResolver } from '../../src/engine/ephemeris/kernelPool'
+import { analyzeKernelWindow } from '../../scripts/lib/kernel-window-coverage.mjs'
+import { parseSmallBodySatellites } from '../../scripts/lib/satellite-inventory.mjs'
+import { createIdentityLedger } from '../../scripts/lib/body-identity-ledger.mjs'
 
 describe('inventory does not confuse source membership with SPK coverage', () => {
+  it('joins named confirmed small-body moons through IAU evidence and the explicit primary only', async () => {
+    const kernels = await inventoryKernels(process.cwd(), 841752000)
+    const rows = [
+      ['50000', 1, 'Weywot', 120050000], ['90482', 1, 'Vanth', 120090482], ['120347', 1, 'Actaea', 120120347],
+      ['136108', 1, "Hi'iaka", 120136108], ['136108', 2, 'Namaka', 220136108], ['136199', 1, 'Dysnomia', 120136199],
+      ['134340', 1, 'Charon', 901], ['134340', 2, 'Nix', 902], ['134340', 3, 'Hydra', 903],
+      ['134340', 4, 'Kerberos', 904], ['134340', 5, 'Styx', 905],
+    ] as const
+    const records = parseSmallBodySatellites({ signature: { version: '1.0', source: 'NASA/JPL Small-Body Satellites API' },
+      count: rows.length, data: rows.map(([pdes, iau_num, iau_name]) => ({ sat: { pdes, iau_num, iau_name, kind: 'an', confirmed: 'Y' } })) })
+    for (const [index, record] of records.entries()) {
+      const expectedTarget = rows[index][3]
+      const mapped = kernels.attach(record)
+      expect(mapped).toMatchObject({ naifId: expectedTarget, ephemerisStatus: 'state-available-at-audit-epoch',
+        identityMappingEvidence: { method: 'jpl-iau-name-and-primary-to-audited-spk-alias', sourceRecordId: record.id, primaryId: record.parentId, target: expectedTarget } })
+      expect(mapped.kernelEvidence.stateAtAuditEpoch).toEqual(kernels.attach({ id: `naif:${expectedTarget}`, category: 'moon', parentId: record.parentId }).kernelEvidence.stateAtAuditEpoch)
+      expect(mapped.identityMappingEvidence.satelliteCatalogSha256).toMatch(/^[a-f0-9]{64}$/)
+      for (const invalid of [
+        { ...record, parentId: 'sb:asteroid:1' }, { ...record, id: 'sat:wrong-component' },
+        { ...record, confirmation: 'candidate' }, { ...record, identityStatus: 'unresolved-component' },
+        { ...record, sourceRef: { ...record.sourceRef, confirmed: 'N' } },
+        { ...record, sourceRef: { ...record.sourceRef, iau_name: '' } },
+        { ...record, sourceRef: { ...record.sourceRef, iau_num: null } },
+        { ...record, sourceRef: { ...record.sourceRef, pdes: '1' } },
+        { ...record, sourceRef: { ...record.sourceRef, kind: 'pn' } },
+        { ...record, sourceRef: { ...record.sourceRef, iau_name: 'Uncorroborated name' } },
+      ]) expect(kernels.attach(invalid).ephemerisStatus).toBe('not-mapped-to-bundled-kernel')
+    }
+    const unnamed = parseSmallBodySatellites({ signature: { version: '1.0', source: 'NASA/JPL Small-Body Satellites API' }, count: 1,
+      data: [{ sat: { pdes: '469705', kind: 'an', confirmed: 'Y', prov_year: 2009 } }] })[0]
+    expect(kernels.attach({ ...unnamed, name: 'Haunu' }).ephemerisStatus).toBe('not-mapped-to-bundled-kernel')
+    const ledger = createIdentityLedger()
+    ledger.add({ ...kernels.attach(records[6]), source: 'smallBodySatellites' }, 0)
+    ledger.add({ ...kernels.attach({ id: 'sat:planet:pluto:iau:I', category: 'moon', name: 'Charon', parentId: 'sb:asteroid:134340',
+      confirmation: 'confirmed', identityStatus: 'source-designation' }), source: 'planetarySatellites' }, 1)
+    expect(ledger.finish().counts).toMatchObject({ sourceRecords: 2, mappedSourceRecords: 2, explicitNaifTargets: 1 })
+    expect(ledger.finish().explicitTargetGroups[0].sourceRecords.map(record => record.id)).toEqual(['sat:sb:asteroid:134340:iau:1', 'sat:planet:pluto:iau:I'])
+    expect(ledger.finish().explicitTargetGroups[0].sourceRecords[0].mappingEvidence).toEqual(kernels.attach(records[6]).identityMappingEvidence)
+  })
   it('retains original one-epoch states and center metadata without retaining coefficient buffers', () => {
     const bytes = readFileSync('tests/fixtures/jup347-himalia-join.bsp')
     const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
@@ -32,6 +74,12 @@ describe('inventory does not confuse source membership with SPK coverage', () =>
     const full = await inventoryKernels(process.cwd(), et, 'full')
     expect(full.evidence.profile).toBe('full')
     expect(full.attach(record).ephemerisStatus).toBe('state-available-at-audit-epoch')
+    for (const kernels of [pages, full]) {
+      for (const target of [10, 301, 399, 706, 920136199, 120136199, 999999]) {
+        const window = analyzeKernelWindow({ kernels: kernels.descriptors, target, startEt: et, endEt: et })
+        expect(window.gaps.length === 0).toBe(kernels.attach({ id: `naif:${target}`, category: 'fixture' }).ephemerisStatus === 'state-available-at-audit-epoch')
+      }
+    }
     await expect(inventoryKernels(process.cwd(), et, 'unknown')).rejects.toThrow('Unknown')
   })
   it('resolves only explicit identities, including the correct satellite parent', async () => {

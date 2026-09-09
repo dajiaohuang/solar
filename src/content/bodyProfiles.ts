@@ -48,6 +48,7 @@ export const BODY_PROFILES: Record<string, BodyProfile> = {
 
 export function fallbackBodyProfile(kind: BodyKind, orbitClass?: string): Pick<BodyProfile, 'overview' | 'significance'> {
   const labels: Record<BodyKind, Localized> = {
+    sourceRecord: { en: 'An original source record. Its identity does not establish a physical state or a propagation model.', zh: '原始来源记录。身份记录不代表已有物理状态或可用传播模型。' },
     star: { en: 'A stellar reference object in the atlas.', zh: '图谱中的恒星参考对象。' },
     planet: { en: 'A major planet propagated with the declared planetary approximation.', zh: '使用已声明行星近似模型传播的主要行星。' },
     moon: { en: 'A cataloged natural satellite. Its identity does not imply that a position or orbit model is available for the selected date.', zh: '已收录的天然卫星身份；收录不代表在所选日期已有位置或轨道模型。' },

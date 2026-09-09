@@ -7,12 +7,9 @@ import { createTrajectoryAccumulator } from '../lib/trajectorySamples'
 import type {
   BodyId,
   CelestialBody,
-  PackedTrajectoryData,
   TrajectoryWorkerCancelRequest,
   TrajectoryWorkerRequest,
   TrajectoryWorkerResponse,
-  Vector2,
-  Vector3,
 } from '../types'
 
 const workerScope = self as DedicatedWorkerGlobalScope
@@ -23,36 +20,13 @@ function yieldToWorker() {
   return new Promise<void>((resolve) => setTimeout(resolve, 0))
 }
 
-function packTrajectories(bodyIds: BodyId[], trajectoryUnavailableBodyIds: BodyId[], points: Vector2[][], points3D: Vector3[][]): PackedTrajectoryData {
-  const totalPoints = points.reduce((sum, bodyPoints) => sum + bodyPoints.length, 0)
-  const offsets = new Uint32Array(bodyIds.length + 1)
-  const points2D = new Float64Array(totalPoints * 2)
-  const packed3D = new Float64Array(totalPoints * 3)
-  let cursor = 0
-  for (let bodyIndex = 0; bodyIndex < bodyIds.length; bodyIndex += 1) {
-    offsets[bodyIndex] = cursor
-    for (let pointIndex = 0; pointIndex < points[bodyIndex].length; pointIndex += 1) {
-      const point2D = points[bodyIndex][pointIndex]
-      const point3D = points3D[bodyIndex][pointIndex]
-      points2D[cursor * 2] = point2D.x
-      points2D[cursor * 2 + 1] = point2D.y
-      packed3D[cursor * 3] = point3D.x
-      packed3D[cursor * 3 + 1] = point3D.y
-      packed3D[cursor * 3 + 2] = point3D.z
-      cursor += 1
-    }
-  }
-  offsets[bodyIds.length] = cursor
-  return { bodyIds, trajectoryUnavailableBodyIds, offsets, points2D, points3D: packed3D }
-}
-
 async function compute(request: TrajectoryWorkerRequest) {
   activeRequestId = request.requestId
   await ensureKernelFiles(request.ephemerisFiles ?? [])
   const kernels = kernelsForWindow(request.centerJulianDay - request.historyDays, request.centerJulianDay, request.ephemerisFiles ?? [])
   const bodiesById = new Map<BodyId, CelestialBody>(request.resolutionBodies.map((body) => [body.id, body]))
-  const accumulator = createTrajectoryAccumulator(request.bodies)
   const sampleCount = Math.max(2, request.sampleCount)
+  const accumulator = createTrajectoryAccumulator(request.bodies, sampleCount)
 
   for (let index = 0; index < sampleCount; index += 1) {
     if (cancelledRequestId === request.requestId || activeRequestId !== request.requestId) {
@@ -74,10 +48,14 @@ async function compute(request: TrajectoryWorkerRequest) {
     }
   }
 
-  const complete = accumulator.complete(sampleCount)
-  const packed = packTrajectories(complete.map(sample => sample.body.id), accumulator.incompleteBodyIds(), complete.map(sample => sample.points), complete.map(sample => sample.points3D))
+  // The final progress yield can deliver cancellation or a newer request.
+  if (cancelledRequestId === request.requestId || activeRequestId !== request.requestId) {
+    workerScope.postMessage({ type: 'cancelled', requestId: request.requestId } satisfies TrajectoryWorkerResponse)
+    return
+  }
+  const packed = accumulator.finish()
   const response: TrajectoryWorkerResponse = { type: 'result', requestId: request.requestId, packed }
-  workerScope.postMessage(response, [packed.offsets.buffer, packed.points2D.buffer, packed.points3D.buffer])
+  workerScope.postMessage(response, [packed.offsets.buffer, packed.coordinates.buffer])
 }
 
 workerScope.onmessage = (event: MessageEvent<TrajectoryWorkerRequest | TrajectoryWorkerCancelRequest>) => {

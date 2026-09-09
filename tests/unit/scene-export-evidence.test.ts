@@ -1,9 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import { createSceneExportModelEvidenceLines, sceneUsesEarthMoonSystem, sceneUsesJplApproximation } from '../../src/lib/sceneExportEvidence'
 import { dateToJulianDay } from '../../src/lib/julianDate'
+import type { BackendTrajectoryAudit } from '../../src/lib/backendTrajectories'
 
 describe('annotated scene export model evidence', () => {
   const jd = (date: string) => dateToJulianDay(new Date(`${date}T00:00:00Z`))
+
+  it('uses the actual backend history window and never attributes it to browser fallback models', () => {
+    const audit = { referenceId: 'earth', startUtcJd: 2451545, endUtcJd: 2451546, epochsTdbJd: new Float64Array(3), catalogManifestSha256: 'a'.repeat(64) } as BackendTrajectoryAudit
+    const lines = createSceneExportModelEvidenceLines('en', ['moon'], 'earth', 2460000, 2460100, audit).join('\n')
+    expect(lines).toContain('2451545.000000 → 2451546.000000')
+    expect(lines).toContain('3 samples'); expect(lines).toContain('display interpolation')
+    expect(lines).not.toContain('jpl-approx-table-1'); expect(lines).not.toContain('2460000')
+    expect(createSceneExportModelEvidenceLines('zh', ['moon'], 'earth', 0, 1, audit).join('\n')).toContain('缺失采样不以近似补齐')
+    expect(createSceneExportModelEvidenceLines('en', ['moon'], 'earth', 0, 1, null).join('\n')).toContain('pending or unavailable')
+  })
 
   it('tracks planetary parent models and the full trajectory interval', () => {
     expect(sceneUsesJplApproximation(['moon'], 'sun')).toBe(true)
