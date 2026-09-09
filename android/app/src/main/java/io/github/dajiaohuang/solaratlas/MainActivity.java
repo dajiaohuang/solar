@@ -29,7 +29,7 @@ import java.util.Set;
 public final class MainActivity extends Activity {
     private static final List<Preset> PRESETS = Arrays.asList(
             new Preset("planets", "Solar system - Sun reference", "naif:10", "naif:10,naif:199,naif:299,naif:399,naif:499,naif:599,naif:699,naif:799,naif:899"),
-            new Preset("earth", "Earth - Moon", "naif:399", "naif:399,naif:301,naif:10"),
+            new Preset("earth", "Earth - Moon, TNO and source gaps", "naif:399", "naif:399,naif:301,naif:10,naif:120050000,naif:920000617,naif:120000617"),
             new Preset("mars", "Mars - Phobos - Deimos", "naif:499", "naif:499,naif:401,naif:402"),
             new Preset("jupiter", "Jupiter - all bundled moons", "naif:599", "naif:599,naif:501,naif:502,naif:503,naif:504,naif:505,naif:514,naif:515,naif:516"),
             new Preset("saturn", "Saturn - all bundled moons", "naif:699", "naif:699,naif:601,naif:602,naif:603,naif:604,naif:605,naif:606,naif:607,naif:608,naif:609,naif:612,naif:613,naif:614,naif:632,naif:634"),

@@ -115,7 +115,8 @@ public final class ObservationUITest {
             shown(withText("Load observation")).perform(scrollTo(), click());
             waitForText(containsString("Enter an HTTPS backend"));
 
-            shown(withText("Earth - Moon")).perform(scrollTo(), click());
+            shown(withText(containsString("Earth - Moon"))).perform(scrollTo(), click());
+            shown(withHint(IDS_HINT)).check(matches(withText("naif:399,naif:301,naif:10,naif:120050000,naif:920000617,naif:120000617")));
             fill(BACKEND_HINT, backend);
             fill(EPOCH_HINT, "2461287.5");
             fill(IDS_HINT, "naif:399,naif:301,naif:10,naif:120050000,naif:920000617,naif:120000617,unknown:fixture");
