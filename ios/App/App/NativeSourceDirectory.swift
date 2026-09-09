@@ -82,11 +82,12 @@ struct NativeSourceDirectorySection: View {
                     Button(SourceDirectoryCopy.next) { model.load(address: address, query: query, next: true) }
                         .disabled(page.next.isEmpty).accessibilityIdentifier("identity.next")
                     ForEach(page.rows) { row in
+                        let mappingText = SourceDirectoryCopy.mapping(for: row)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(row.name?.isEmpty == false ? (row.name ?? row.id) : row.id).font(.headline)
                             Text(row.id).textSelection(.enabled)
                             Text("\(row.source) · \(row.category) · \(row.sourceRow)").font(.caption)
-                            Text(SourceDirectoryCopy.mapping(for: row)).font(.caption)
+                            Text(mappingText).font(.caption)
                             if let aliases = row.aliases, !aliases.isEmpty {
                                 Text("\(SourceDirectoryCopy.aliases): \(aliases.joined(separator: ", "))").font(.caption)
                             }
