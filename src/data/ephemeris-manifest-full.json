@@ -18359,6 +18359,174 @@
         "windowPolicy": "2020-01-01 to 2031-01-01 TDB",
         "stateBoundary": "Primary heliocentric state only; companion/system-center coverage is not included."
       }
+    },
+    {
+      "id": "horizons-asteroids-batch17-20260910-daphne-2020-01-01-2031-01-01",
+      "path": "horizons-asteroids-batch17-20260910-daphne-2020-01-01-2031-01-01.bsp",
+      "sha256": "194b9d7cbbc15297b80500bbf3a3eca4a95d90e00045b5e1fd45108379e77a5f",
+      "bytes": 209920,
+      "targets": [
+        20000041
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2741%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2741%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T19:11:46.060Z",
+        "bytes": 271360,
+        "sha256": "7c9efe38a93b3317a217b6416905ea31a5d247aadb3f67f59d9f5feff08a6535",
+        "responseSha256": "2127a820531bd6ddd4b1ad3584beb7c04a6b968dad882c5fa45a3d83a32ac777",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20000041,
+        "designation": "41",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS                 41 Daphne (A856 KA)           2026-Sep-09 12:11:49\nRec #:      41 (+COV) Soln.date: 2026-Jun-05_03:04:51   # obs: 8160 (1866-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458011.5 ! 2017-Sep-15.00 (TDB)         Residual RMS= .15194\n   EC= .2757744712228835   QR= 1.999174600351372   TP= 2457975.3631067513\n   OM= 178.0901235110595   W=  45.86126416021672   IN= 15.79465787050737\n   A= 2.760430999618389    MA= 7.765859747282798   ADIST= 3.521687398885406\n   PER= 4.58642            N= .214901145           ANGMOM= .02747222\n   DAN= 2.13959            DDN= 3.15675            L= 222.848924\n   B= 11.2645319           MOID= 1.02497005        TP= 2017-Aug-09.8631067513\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 102.7475           ROTPER= 5.988\n   H= 7.58                 G= .100                 B-V= .726\n                           ALBEDO= .059            STYP= Ch\n\nASTEROID comments: \n1: soln ref.= JPL#169, OCC=0\n2: source=ORB\n*******************************************************************************\n\n  \nID= '20000041'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch17-20260910",
+      "selectionEvidence": {
+        "sourceSelection": "Daphne (41) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "2127a820531bd6ddd4b1ad3584beb7c04a6b968dad882c5fa45a3d83a32ac777",
+          "binarySha256": "7c9efe38a93b3317a217b6416905ea31a5d247aadb3f67f59d9f5feff08a6535",
+          "retrievedAt": "2026-09-09T19:11:46.060Z"
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB",
+        "stateBoundary": "Primary heliocentric state only; companion/system-center coverage is not included."
+      }
+    },
+    {
+      "id": "horizons-asteroids-batch17-20260910-hestia-2020-01-01-2031-01-01",
+      "path": "horizons-asteroids-batch17-20260910-hestia-2020-01-01-2031-01-01.bsp",
+      "sha256": "fac563729ba4bae4d01daec34bf6043548fc6b72af86063791b7a3e01ff154da",
+      "bytes": 197632,
+      "targets": [
+        20000046
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2746%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2746%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T19:11:47.779Z",
+        "bytes": 259072,
+        "sha256": "fdf1529fe8eb6604f13cf16aeb064059169e2431c733333636c02b890ebd3664",
+        "responseSha256": "d1dce0fde5bf971e0ea16b49c6f24c550a55c6e352197a72c1e1ffc96f1c173e",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20000046,
+        "designation": "46",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS                 46 Hestia (A857 QA)           2026-Sep-09 12:11:51\nRec #:      46 (+COV) Soln.date: 2026-Mar-11_21:15:06   # obs: 6903 (1864-2025)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2457742.5 ! 2016-Dec-20.00 (TDB)         Residual RMS= .24666\n   EC= .1714611665548302   QR= 2.093616693650809   TP= 2458315.2913148627\n   OM= 181.0845137911382   W=  177.1997274588726   IN= 2.349449019166287\n   A= 2.526878172921944    MA= 219.4522031932685   ADIST= 2.960139652193079\n   PER= 4.01684            N= .245373477           ANGMOM= .026939776\n   DAN= 2.95941            DDN= 2.09398            L= 358.2865915\n   B= .1147491             MOID= 1.0898            TP= 2018-Jul-15.7913148627\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 65.7355            ROTPER= 21.04\n   H= 8.52                 G= .060                 B-V= .692\n                           ALBEDO= .046            STYP= Xc\n\nASTEROID comments: \n1: soln ref.= JPL#195, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20000046'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch17-20260910",
+      "selectionEvidence": {
+        "sourceSelection": "Hestia (46) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "d1dce0fde5bf971e0ea16b49c6f24c550a55c6e352197a72c1e1ffc96f1c173e",
+          "binarySha256": "fdf1529fe8eb6604f13cf16aeb064059169e2431c733333636c02b890ebd3664",
+          "retrievedAt": "2026-09-09T19:11:47.779Z"
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB",
+        "stateBoundary": "Primary heliocentric state only; companion/system-center coverage is not included."
+      }
+    },
+    {
+      "id": "horizons-asteroids-batch17-20260910-doris-2020-01-01-2031-01-01",
+      "path": "horizons-asteroids-batch17-20260910-doris-2020-01-01-2031-01-01.bsp",
+      "sha256": "c685e369b7fac3a1ac3c2cc8e00842f4764dc291770ffcfeb5c9d8304a2d2be6",
+      "bytes": 200704,
+      "targets": [
+        20000048
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2748%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2748%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T19:11:48.386Z",
+        "bytes": 262144,
+        "sha256": "14f4cacce7fda79d98f845633b3954c9eea203f24599fc4baf05818d480e95bc",
+        "responseSha256": "c1aac40018812d55a9313ec6e2b60efd4586c94c4f8c66a19145e792c2169fc7",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20000048,
+        "designation": "48",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS                 48 Doris (A857 SA)            2026-Sep-09 12:11:51\nRec #:      48 (+COV) Soln.date: 2026-Jun-05_03:05:11   # obs: 5531 (1860-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2457787.5 ! 2017-Feb-03.00 (TDB)         Residual RMS= .21806\n   EC= .07290859712664134  QR= 2.884595052473608   TP= 2458216.2274005283\n   OM= 183.5652144471161   W=  253.4213481750631   IN= 6.547360169048769\n   A= 3.111446232306013    MA= 283.0086625777604   ADIST= 3.338297412138419\n   PER= 5.48847            N= .179581098           ANGMOM= .03026253\n   DAN= 3.16066            DDN= 3.03184            L= 76.8837549\n   B= -6.2740624           MOID= 1.90764999        TP= 2018-Apr-07.7274005283\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 108.2365           ROTPER= 11.89\n   H= 7.1                  G= .150                 B-V= .716\n                           ALBEDO= .065            STYP= Ch\n\nASTEROID comments: \n1: soln ref.= JPL#207, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20000048'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch17-20260910",
+      "selectionEvidence": {
+        "sourceSelection": "Doris (48) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "c1aac40018812d55a9313ec6e2b60efd4586c94c4f8c66a19145e792c2169fc7",
+          "binarySha256": "14f4cacce7fda79d98f845633b3954c9eea203f24599fc4baf05818d480e95bc",
+          "retrievedAt": "2026-09-09T19:11:48.386Z"
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB",
+        "stateBoundary": "Primary heliocentric state only; companion/system-center coverage is not included."
+      }
+    },
+    {
+      "id": "horizons-asteroids-batch17-20260910-pales-2020-01-01-2031-01-01",
+      "path": "horizons-asteroids-batch17-20260910-pales-2020-01-01-2031-01-01.bsp",
+      "sha256": "14a8518cdf7f60961f0a1403bbcd55c1c356ff14b89091ceded4fa2290d9a6a4",
+      "bytes": 207872,
+      "targets": [
+        20000049
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2749%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2749%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-09T19:11:49.101Z",
+        "bytes": 269312,
+        "sha256": "172d0f16a3aff0e426056d00a656bd75d55f51c9ec4fa75549fde1d45c63731f",
+        "responseSha256": "014f713937c66e0a075bce0edc0987e47337b447329fda5a5ea82334dba9617b",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20000049,
+        "designation": "49",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS                 49 Pales (A857 SB)            2026-Sep-09 12:11:52\nRec #:      49 (+COV) Soln.date: 2026-Jun-05_03:05:17   # obs: 9991 (1863-2025)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2457323.5 ! 2015-Oct-28.00 (TDB)         Residual RMS= .27675\n   EC= .2272592880299699   QR= 2.390031178852614   TP= 2457260.5775292702\n   OM= 285.9890691228645   W=  110.2149677505624   IN= 3.173705315251081\n   A= 3.092927733494788    MA= 11.40132123261448   ADIST= 3.795824288136962\n   PER= 5.43955            N= .181196337           ANGMOM= .029461265\n   DAN= 3.18315            DDN= 2.71962            L= 36.2325699\n   B= 2.9780319            MOID= 1.39891005        TP= 2015-Aug-26.0775292702\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 83.126             ROTPER= 20.705\n   H= 7.99                 G= .150                 B-V= .749\n                           ALBEDO= .048            STYP= Ch\n\nASTEROID comments: \n1: soln ref.= JPL#128, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20000049'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch17-20260910",
+      "selectionEvidence": {
+        "sourceSelection": "Pales (49) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "014f713937c66e0a075bce0edc0987e47337b447329fda5a5ea82334dba9617b",
+          "binarySha256": "172d0f16a3aff0e426056d00a656bd75d55f51c9ec4fa75549fde1d45c63731f",
+          "retrievedAt": "2026-09-09T19:11:49.101Z"
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB",
+        "stateBoundary": "Primary heliocentric state only; companion/system-center coverage is not included."
+      }
     }
   ]
 }
