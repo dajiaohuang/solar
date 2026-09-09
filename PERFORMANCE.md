@@ -146,7 +146,7 @@ When a current dataset is installed, the benchmark measures its compact index an
 
 The local timing is diagnostic, not a cross-machine performance guarantee. Stable byte, object-count, request-count, cancellation, accessibility, and layout budgets are hard release gates. Performance score and largest-contentful-paint thresholds begin as warnings because hosted-runner timing is noisy; their reports are retained for regression review. Real-device profiling remains required before making hardware-specific smoothness claims.
 
-Production uses `npm run build:deploy`. The builder excludes stale releases, copies only the audited active version, keeps binary numeric artifacts byte-identical, and deterministically gzip-compresses large search, lookup, metadata, legacy chunk, and sample JSON. The generated capacity report separates application shell, total dataset, cold-load, and typical Catalog-session bytes; it fails closed above the Pages budget.
+Production uses `npm run build:deploy` for full-product validation, followed by the curated `npm run build:preview` artifact that Pages actually uploads. The builder excludes stale releases, copies only the audited active version, keeps binary numeric artifacts byte-identical, and deterministically gzip-compresses large search, lookup, metadata, legacy chunk, and sample JSON. The generated capacity report separates application shell, total dataset, cold-load, and typical Catalog-session bytes; only the published preview fails closed above the Pages budget.
 
 ## Web state-tile evidence storage
 

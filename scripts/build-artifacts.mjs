@@ -490,9 +490,10 @@ async function writeManifestsAndCapacity(buildInfo, dataset) {
     ephemerisProfile: EPHEMERIS_PROFILE,
     productProfile: DELIVERY.product,
     productAvailabilitySha256: DELIVERY.availabilitySha256,
-    // Full Web coverage does not inherit the Pages hosting cap.
-    withinBudget: EPHEMERIS_PROFILE === 'full' || totalBytes <= MAX_ARTIFACT_BYTES,
-    warning: EPHEMERIS_PROFILE === 'pages' && totalBytes > WARN_ARTIFACT_BYTES,
+    // Full Web validation is not the artifact uploaded to Pages. Apply the
+    // hosting cap to the curated product that is actually published.
+    withinBudget: DELIVERY.product === 'full' || totalBytes <= MAX_ARTIFACT_BYTES,
+    warning: DELIVERY.product === 'preview' && totalBytes > WARN_ARTIFACT_BYTES,
     distTotalBytes: totalBytes,
     applicationShellBytes: bytes(shellEntries),
     datasetTotalBytes: bytes(datasetEntries),
