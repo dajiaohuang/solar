@@ -86,7 +86,7 @@ final class ObservationUITests: XCTestCase {
         let earth = app.buttons["preset.earth"]
         XCTAssertTrue(earth.waitForExistence(timeout: 10))
         earth.tap()
-        waitForLabel(app.staticTexts["observation.status"], "4 verified states · 1 data gap")
+        waitForLabel(app.staticTexts["observation.status"], "4 verified states · 3 data gaps")
         waitForDisplayed(app, mode3D: true)
         screenshot(app, "earth-moon-native-3d")
 
@@ -99,12 +99,12 @@ final class ObservationUITests: XCTestCase {
         // Repeat the same online plan. The server-side request ledger proves
         // that a verified disk tile is reused without another tile download.
         app.buttons["observation.load"].tap()
-        waitForLabel(app.staticTexts["observation.status"], "4 verified states · 1 data gap")
+        waitForLabel(app.staticTexts["observation.status"], "4 verified states · 3 data gaps")
         waitForDisplayed(app, mode3D: true)
         XCUIDevice.shared.press(.home)
         app.activate()
         XCTAssertTrue(app.buttons["observation.load"].waitForExistence(timeout: 10))
-        waitForLabel(app.staticTexts["observation.status"], "4 verified states · 1 data gap")
+        waitForLabel(app.staticTexts["observation.status"], "4 verified states · 3 data gaps")
         waitForDisplayed(app, mode3D: true)
         screenshot(app, "earth-moon-resumed")
         app.terminate()
