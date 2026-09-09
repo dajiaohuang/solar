@@ -90,7 +90,7 @@ export const SCENE_PRESETS: ScenePreset[] = [
     })
   }),
   {
-    id: 'large-asteroid-ephemerides', name: { en: '16 large asteroids · JPL SPK', zh: '16 颗大型小行星 · JPL SPK' },
+    id: 'large-asteroid-ephemerides', name: { en: '38 source-backed asteroids · JPL SPK', zh: '38 颗有来源支持的小行星 · JPL SPK' },
     description: { en: 'Selected DE441 companion asteroid solutions between Mars and Jupiter; not the complete belt.', zh: '火星与木星之间的 DE441 配套小行星解；并非完整小行星带。' },
     referenceId: 'sun', selectedMajorBodyIds: ['mars', 'jupiter', 'ceres', ...majorBodies.filter((body) => body.source === 'jpl-spk-osculating-fallback' && body.kind === 'asteroid' && (body.naifId ?? 0) < 3000000).map((body) => body.id)],
     julianDay: dateToJD('2026-09-04'), viewMode: '3d', zoomLevel: 1, historyDays: 365,
