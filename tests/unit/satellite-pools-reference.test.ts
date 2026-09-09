@@ -111,12 +111,13 @@ describe('integrated satellite source pools and delivery profiles', () => {
     expect(fixture.oracle).toBe('CSPICE N0067 spkgeo_c')
     expect(digest(readFileSync('scripts/reference/spk-pool-oracle.c'))).toBe(fixture.oracleSourceSha256)
     expect(digest(manifestBytes)).toBe(fixture.manifestSha256)
-    expect(fixture.contexts.map(context => context.rootId)).toEqual(full.files.filter(file => file.solutionKernelIds && !file.dependencyOnly).map(file => file.id))
-    expect(fixture.contexts).toHaveLength(444)
-    expect(fixture.samples).toHaveLength(1380)
+    const oracleRoots = full.files.filter(file => (file.solutionKernelIds && !file.dependencyOnly) || file.id === 'de440s-2000-01-01-2051-01-01')
+    expect(fixture.contexts.map(context => context.rootId)).toEqual(oracleRoots.map(file => file.id))
+    expect(fixture.contexts).toHaveLength(445)
+    expect(fixture.samples).toHaveLength(1422)
     for (const context of fixture.contexts) {
       const root = byId.get(context.rootId)!
-      expect(context.files.map(file => file.id)).toEqual([...root.solutionKernelIds!, root.id])
+      expect(context.files.map(file => file.id)).toEqual([...(root.solutionKernelIds ?? []), root.id])
     }
   })
 
