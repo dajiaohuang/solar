@@ -111,7 +111,10 @@ describe('integrated satellite source pools and delivery profiles', () => {
     expect(fixture.oracle).toBe('CSPICE N0067 spkgeo_c')
     expect(digest(readFileSync('scripts/reference/spk-pool-oracle.c'))).toBe(fixture.oracleSourceSha256)
     expect(digest(manifestBytes)).toBe(fixture.manifestSha256)
-    const oracleRoots = full.files.filter(file => (file.solutionKernelIds && !file.dependencyOnly) || file.id === 'de440s-2000-01-01-2051-01-01')
+    // The independent CSPICE fixture predates the latest Horizons batch; the
+    // new roots have their own source/hash/state checks below and are not
+    // silently treated as CSPICE oracle coverage.
+    const oracleRoots = full.files.filter(file => file.integrationBatch !== 'horizons-asteroids-batch7-20260909' && ((file.solutionKernelIds && !file.dependencyOnly) || file.id === 'de440s-2000-01-01-2051-01-01'))
     expect(fixture.contexts.map(context => context.rootId)).toEqual(oracleRoots.map(file => file.id))
     expect(fixture.contexts).toHaveLength(445)
     expect(fixture.samples).toHaveLength(1422)
@@ -178,8 +181,8 @@ describe('integrated satellite source pools and delivery profiles', () => {
         expect(kernel.evaluate(target, file.endEt + 1)).toBeNull()
       }
     }
-    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(1156593664)
-    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(271823872)
+    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(1157643264)
+    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(271935488)
   })
 
   it('pins the bounded Horizons asteroid snapshots without treating the API as immutable', () => {
@@ -195,8 +198,9 @@ describe('integrated satellite source pools and delivery profiles', () => {
       [20000019, '19'], [20000090, '90'], [20000216, '216'],
       [20000011, '11'], [20000013, '13'], [20000021, '21'], [20000024, '24'],
       [20000029, '29'], [20000039, '39'], [20000044, '44'],
+      [20000005, '5'], [20000008, '8'], [20000012, '12'], [20000020, '20'], [20000040, '40'],
     ])
-    const roots = pages.files.filter(file => file.integrationBatch === 'horizons-asteroids-20260909' || file.integrationBatch === 'horizons-asteroids-next-20260909' || file.integrationBatch === 'horizons-asteroids-followup-20260909' || file.integrationBatch === 'horizons-asteroids-batch3-20260909' || file.integrationBatch === 'horizons-asteroids-batch4-20260909' || file.integrationBatch === 'horizons-asteroids-batch5-20260909' || file.integrationBatch === 'horizons-asteroids-batch6-20260909')
+    const roots = pages.files.filter(file => file.integrationBatch === 'horizons-asteroids-20260909' || file.integrationBatch === 'horizons-asteroids-next-20260909' || file.integrationBatch === 'horizons-asteroids-followup-20260909' || file.integrationBatch === 'horizons-asteroids-batch3-20260909' || file.integrationBatch === 'horizons-asteroids-batch4-20260909' || file.integrationBatch === 'horizons-asteroids-batch5-20260909' || file.integrationBatch === 'horizons-asteroids-batch6-20260909' || file.integrationBatch === 'horizons-asteroids-batch7-20260909')
     expect(roots).toHaveLength(expected.size)
     for (const file of roots) {
       const target = file.targets[0]
@@ -210,6 +214,22 @@ describe('integrated satellite source pools and delivery profiles', () => {
       })
       expect(file.solutionKernelIds).toBeUndefined()
       expect(file.targets).toEqual([target])
+    }
+  })
+
+  it('evaluates every batch-7 Horizons root at both delivery profiles', () => {
+    const roots = full.files.filter(file => file.integrationBatch === 'horizons-asteroids-batch7-20260909')
+    expect(roots).toHaveLength(5)
+    for (const root of roots) {
+      expect(root.targets).toHaveLength(1)
+      const bytes = readFileSync(`public/data/ephemerides/${root.path}`)
+      expect(bytes.length).toBe(root.bytes)
+      expect(digest(bytes)).toBe(root.sha256)
+      const kernel = new SpkKernel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
+      const target = root.targets[0]
+      for (const et of [root.startEt, (root.startEt + root.endEt) / 2, root.endEt]) {
+        expect(kernel.evaluate(target, et), `${root.id}/${et}`).not.toBeNull()
+      }
     }
   })
 
