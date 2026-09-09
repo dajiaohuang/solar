@@ -55,7 +55,8 @@ final class ObservationModel: ObservableObject {
                 frame = result
                 let exact = result.exact.reduce(0) { $0 + ($1 ? 1 : 0) }
                 let gaps = result.exact.count - exact
-                message = "\(exact) verified states · \(gaps) \(gaps == 1 ? \"data gap\" : \"data gaps\")"
+                let gapLabel = gaps == 1 ? "data gap" : "data gaps"
+                message = "\(exact) verified states · \(gaps) \(gapLabel)"
             } catch {
                 guard requestGate.isCurrent(current) else { return }
                 message = error.localizedDescription
