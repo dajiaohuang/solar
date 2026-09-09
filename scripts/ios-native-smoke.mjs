@@ -187,7 +187,7 @@ export async function nativeSmoke() {
     report.profile = await stageBackendProfile({ root: process.cwd(), output: join(temporary, 'data'), profile: 'full' })
     await command('go', ['build', '-o', join(temporary, 'solar-backend'), './cmd/solar-backend'])
     await command('go', ['run', './cmd/state-tile-fixture', '-out', join(temporary, 'real-golden'),
-      '-data-dir', join(temporary, 'data'), '-ids', 'naif:399,naif:301,naif:10,naif:120050000,naif:920000617,unknown:fixture', '-tile-size', '2'])
+      '-data-dir', join(temporary, 'data'), '-ids', 'naif:399,naif:301,naif:10,naif:120050000,naif:920000617,naif:120000617,unknown:fixture', '-tile-size', '2'])
     const goldenEnv = { ...process.env, SOLAR_STATE_TILE_FIXTURE_DIR: join(temporary, 'real-golden') }
     await command(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', 'tests/unit/state-tiles-golden.test.ts'],
       { env: goldenEnv, log: join(artifact, 'real-web-golden.log') })
@@ -195,7 +195,7 @@ export async function nativeSmoke() {
       'ios/App/App/NativeStateProjection.swift', 'ios/App/App/NativeCoverageReport.swift', 'ios/App/App/NativeSourceIdentityPage.swift', 'ios/ProtocolTests/ProtocolTests.swift', '-o', join(temporary, 'protocol-tests')])
     await command(join(temporary, 'protocol-tests'), [], { env: goldenEnv, log: join(artifact, 'real-swift-golden.log') })
     report.golden = JSON.parse(await readFile(join(temporary, 'real-golden/manifest.json'), 'utf8'))
-    if (report.golden.plan.exactCount !== 4 || report.golden.plan.missingCount !== 2) throw new Error('Real Earth/Moon/TNO/source-only fixture must contain four exact states and two explicit gaps')
+    if (report.golden.plan.exactCount !== 4 || report.golden.plan.missingCount !== 3) throw new Error('Real Earth/Moon/TNO/source-only fixture must contain four exact states and three explicit gaps')
 
     await certificates(temporary)
     const snapshot = JSON.parse(await command('xcrun', ['simctl', 'list', 'devices', 'available', '--json']))

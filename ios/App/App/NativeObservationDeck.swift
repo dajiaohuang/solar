@@ -129,7 +129,7 @@ private struct NativePreset: Identifiable {
     let ids: [String]
     static let all: [NativePreset] = [
         .init(id: "planets", title: "Planets · Sun reference", reference: "naif:10", ids: ["naif:10", "naif:199", "naif:299", "naif:399", "naif:499", "naif:599", "naif:699", "naif:799", "naif:899"]),
-        .init(id: "earth", title: "Earth, Moon, TNO and source gap", reference: "naif:399", ids: ["naif:399", "naif:301", "naif:10", "naif:120050000", "naif:920000617"]),
+        .init(id: "earth", title: "Earth, Moon, TNO and source gaps", reference: "naif:399", ids: ["naif:399", "naif:301", "naif:10", "naif:120050000", "naif:920000617", "naif:120000617"]),
         .init(id: "mars", title: "Mars, Phobos and Deimos", reference: "naif:499", ids: ["naif:499", "naif:401", "naif:402"]),
         .init(id: "jupiter", title: "Jupiter and all bundled moons", reference: "naif:599", ids: ["naif:599", "naif:501", "naif:502", "naif:503", "naif:504", "naif:505", "naif:514", "naif:515", "naif:516"]),
         .init(id: "saturn", title: "Saturn and all bundled moons", reference: "naif:699", ids: ["naif:699", "naif:601", "naif:602", "naif:603", "naif:604", "naif:605", "naif:606", "naif:607", "naif:608", "naif:609", "naif:612", "naif:613", "naif:614", "naif:632", "naif:634"]),

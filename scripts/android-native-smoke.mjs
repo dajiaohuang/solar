@@ -129,13 +129,13 @@ export async function androidNativeSmoke() {
     await command('go', ['build', '-o', executable, './cmd/solar-backend'])
     const fixture = join(temporary, 'real-golden')
     await command('go', ['run', './cmd/state-tile-fixture', '-out', fixture, '-data-dir', join(temporary, 'data'),
-      '-ids', 'naif:399,naif:301,naif:10,naif:120050000,naif:920000617,unknown:fixture', '-tile-size', '2'])
+      '-ids', 'naif:399,naif:301,naif:10,naif:120050000,naif:920000617,naif:120000617,unknown:fixture', '-tile-size', '2'])
     const goldenEnv = { ...env, SOLAR_STATE_TILE_FIXTURE_DIR: fixture }
     await command(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', 'tests/unit/state-tiles-golden.test.ts'], { env: goldenEnv, log: join(artifact, 'real-web-golden.log') })
     await batch(resolve('android', windows ? 'gradlew.bat' : 'gradlew'), ['-p', resolve('android'), 'testDebugUnitTest', 'assembleDebug', 'assembleDebugAndroidTest'],
       { env: goldenEnv, log: join(artifact, 'android-build.log'), timeout: 600_000 })
     report.golden = JSON.parse(await readFile(join(fixture, 'manifest.json'), 'utf8'))
-    if (report.golden.plan.exactCount !== 4 || report.golden.plan.missingCount !== 2) throw new Error('Real golden must contain 4 exact states and 2 explicit gaps')
+    if (report.golden.plan.exactCount !== 4 || report.golden.plan.missingCount !== 3) throw new Error('Real golden must contain 4 exact states and 3 explicit gaps')
     await certificates(temporary, process.env.SOLAR_OPENSSL || 'openssl')
     await batch(avdmanager, ['create', 'avd', '-n', name, '-k', 'system-images;android-36;default;x86_64', '-p', join(env.ANDROID_AVD_HOME, name + '.avd'), '-d', 'pixel_6'], { env })
     device = ownedProcess(emulator, ['-avd', name, '-port', '5580', '-no-window', '-no-audio', '-no-boot-anim', '-no-snapshot', '-gpu', 'swiftshader', '-memory', '4096'], env, join(artifact, 'emulator.log'))

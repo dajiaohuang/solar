@@ -118,11 +118,11 @@ public final class ObservationUITest {
             shown(withText("Earth - Moon")).perform(scrollTo(), click());
             fill(BACKEND_HINT, backend);
             fill(EPOCH_HINT, "2461287.5");
-            fill(IDS_HINT, "naif:399,naif:301,naif:10,naif:120050000,naif:920000617,unknown:fixture");
+            fill(IDS_HINT, "naif:399,naif:301,naif:10,naif:120050000,naif:920000617,naif:120000617,unknown:fixture");
             shown(withText("Load observation")).perform(scrollTo(), click());
-            waitForText(containsString("4 verified states - 2 data gaps"));
+            waitForText(containsString("4 verified states - 3 data gaps"));
             waitForText(containsString("3D GPU points 4/4 (limit 100000)"));
-            waitForEvidence("naif:399 - VERIFIED", "naif:301 - VERIFIED", "naif:10 - VERIFIED", "naif:120050000 - VERIFIED", "naif:920000617 - MISSING - missing-compatible-system-center", "unknown:fixture - MISSING");
+            waitForEvidence("naif:399 - VERIFIED", "naif:301 - VERIFIED", "naif:10 - VERIFIED", "naif:120050000 - VERIFIED", "naif:920000617 - MISSING - missing-compatible-system-center", "naif:120000617 - MISSING - missing-compatible-system-center", "unknown:fixture - MISSING");
             viewportScreenshot(scenario, "observation-3d.png");
             verifyInteractionRenderMode();
 
@@ -136,7 +136,7 @@ public final class ObservationUITest {
             scenario.onActivity(activity -> activity.onTrimMemory(android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW));
             waitForText(containsString("2D GPU points 4/4 (limit 25000)"));
             waitForText(containsString("native memory warning"));
-            waitForEvidence("naif:399 - VERIFIED", "naif:301 - VERIFIED", "naif:10 - VERIFIED", "naif:120050000 - VERIFIED", "naif:920000617 - MISSING - missing-compatible-system-center", "unknown:fixture - MISSING");
+            waitForEvidence("naif:399 - VERIFIED", "naif:301 - VERIFIED", "naif:10 - VERIFIED", "naif:120050000 - VERIFIED", "naif:920000617 - MISSING - missing-compatible-system-center", "naif:120000617 - MISSING - missing-compatible-system-center", "unknown:fixture - MISSING");
             shown(withText("Switch to 3D")).perform(scrollTo(), click());
             waitForText(containsString("3D GPU points 4/4 (limit 25000)"));
             shown(withText("Switch to 2D")).perform(scrollTo(), click());
@@ -147,9 +147,9 @@ public final class ObservationUITest {
             waitForText(containsString("Observation released while inactive"));
             waitForText(containsString("No current display measurements."));
             shown(withText("Load observation")).perform(scrollTo(), click());
-            waitForText(containsString("4 verified states - 2 data gaps"));
+            waitForText(containsString("4 verified states - 3 data gaps"));
             waitForText(containsString("2D GPU points 4/4 (limit 25000)"));
-            waitForEvidence("naif:399 - VERIFIED", "naif:301 - VERIFIED", "naif:10 - VERIFIED", "naif:120050000 - VERIFIED", "naif:920000617 - MISSING - missing-compatible-system-center", "unknown:fixture - MISSING");
+            waitForEvidence("naif:399 - VERIFIED", "naif:301 - VERIFIED", "naif:10 - VERIFIED", "naif:120050000 - VERIFIED", "naif:120000617 - MISSING - missing-compatible-system-center", "naif:920000617 - MISSING - missing-compatible-system-center", "unknown:fixture - MISSING");
             viewportScreenshot(scenario, "observation-resumed.png");
             // Separate, deliberately synthetic coverage cases. Real SPK state
             // routes above are untouched and verified independently by the harness.
