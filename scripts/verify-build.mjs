@@ -129,6 +129,7 @@ const expectedSatelliteBatches = {
 for (const [parent, expected] of Object.entries(expectedSatelliteBatches)) {
   if (spkDelivery?.sourceBackedSatelliteBatches?.[parent]?.join(',') !== expected) throw new Error(`Scientific validation report is missing the ${parent} satellite coverage batch`)
 }
+if (JSON.stringify(spkDelivery?.sourceBackedSmallBodyPrimaries) !== JSON.stringify(['quaoar', 'orcus', 'salacia', '1998ww31', '2001qw322', 'kagara', '1999oj4', '2003un284'])) throw new Error('Scientific validation report is missing the reviewed small-body primary coverage batch')
 const planetaryModelEvidence = scientificValidation.modelEvidence.planetaryApproximation
 const expectedPlanetaryModelWindow = `${planetaryModelEvidence.validFrom}/${planetaryModelEvidence.validTo}`
 if (scientificValidation.modelWindow?.planetaryApproximation !== expectedPlanetaryModelWindow) throw new Error('Scientific validation model window is inconsistent with the canonical model evidence')

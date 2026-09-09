@@ -3,7 +3,7 @@ import { inspectSourceIdentityPage, loadSourceIdentityPage, validateSourceIdenti
 import type { StateTileManifest } from '../../src/lib/stateTiles'
 
 const manifest: StateTileManifest = { apiVersion: 'solar.api/v1', catalogVersion: 'test', catalogManifestSha256: 'a'.repeat(64), inventoryManifestSha256: 'b'.repeat(64) }
-const row = { id: 'sb:comet:1P', name: 'Halley', category: 'comet', source: 'test-source', sourceRow: 1, identityStatus: 'source-designation', ephemerisStatus: 'not-mapped-to-bundled-kernel', naifId: 1000036 }
+const row = { id: 'sb:comet:1P', name: 'Halley', designation: '1P', category: 'comet', source: 'test-source', sourceRow: 1, identityStatus: 'source-designation', ephemerisStatus: 'not-mapped-to-bundled-kernel', naifId: 1000036, parentId: 'sun', parentResolution: 'index-match', centerId: 'sun', centerResolution: 'index-match', aliases: ['1P/Halley'], confirmation: 'confirmed', geometryStatus: 'open-conic-elements', identityEvidence: ['source-id', 'source-designation'] }
 function raw() { return { ...manifest, sourceRecords: true, identityAssertions: true, uniqueBodySemantics: 'not-deduplicated', totalRecords: 100, limit: 50, items: [row], nextPageToken: 'next' } }
 function json(value: unknown) {
   const body = JSON.stringify(value)
@@ -16,6 +16,9 @@ describe('bounded all-source directory', () => {
     const page = validateSourceIdentityPage(raw(), manifest)
     expect(page.items[0].id).toBe('sb:comet:1P')
     expect(page.items[0].ephemerisStatus).toBe('not-mapped-to-bundled-kernel')
+    expect(page.items[0].naifId).toBe(1000036)
+    expect(page.items[0].aliases).toEqual(['1P/Halley'])
+    expect(page.items[0].identityEvidence).toEqual(['source-id', 'source-designation'])
     expect(page.totalRecords).toBe(100)
     expect(page.items).toHaveLength(1)
     expect(page.items[0]).not.toHaveProperty('states')

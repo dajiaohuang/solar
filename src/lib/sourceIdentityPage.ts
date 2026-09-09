@@ -25,9 +25,22 @@ export function validateSourceIdentityPage(raw: unknown, manifest: StateTileMani
     const row = object(raw), id = text(row.id)
     if (ids.has(id) || !Number.isSafeInteger(row.sourceRow) || (row.sourceRow as number) < 0) throw new Error('Invalid source identity')
     ids.add(id)
+    const optionalList = (value: unknown, maxItems = 32) => {
+      if (value === undefined) return [] as string[]
+      if (!Array.isArray(value) || value.length > maxItems) throw new Error('Invalid source identity list')
+      return value.map(item => text(item, false, 512))
+    }
+    const optionalInteger = (value: unknown) => {
+      if (value === undefined) return undefined
+      if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error('Invalid source identity target')
+      return value as number
+    }
+    const naifId = optionalInteger(row.naifId)
     return { id, name: text(row.name, true), designation: text(row.designation, true), category: text(row.category),
       source: text(row.source), sourceRow: row.sourceRow as number, identityStatus: text(row.identityStatus),
-      ephemerisStatus: text(row.ephemerisStatus), parentId: text(row.parentId, true), confirmation: text(row.confirmation, true) }
+      ephemerisStatus: text(row.ephemerisStatus), parentId: text(row.parentId, true), parentResolution: text(row.parentResolution, true),
+      centerId: text(row.centerId, true), centerResolution: text(row.centerResolution, true), confirmation: text(row.confirmation, true),
+      geometryStatus: text(row.geometryStatus, true), naifId, aliases: optionalList(row.aliases), identityEvidence: optionalList(row.identityEvidence) }
   })
   const nextPageToken = text(value.nextPageToken, true, 4096)
   if (nextPageToken && !items.length) throw new Error('Empty identity page cannot advance')

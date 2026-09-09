@@ -111,7 +111,9 @@ export type CelestialBody = {
   source: OrbitSource
   sourceIdentity?: {
     id: string; name: string; designation: string; category: string; source: string; sourceRow: number
-    identityStatus: string; ephemerisStatus: string; parentId: string; confirmation: string
+    identityStatus: string; ephemerisStatus: string; parentId: string; parentResolution?: string
+    centerId?: string; centerResolution?: string; confirmation: string; geometryStatus?: string
+    naifId?: number; aliases?: string[]; identityEvidence?: string[]
   }
   satelliteOrbitEvidence?: SatelliteOrbitEvidence
   orbitRepresents?: 'earth-moon-barycenter'

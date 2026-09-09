@@ -10,11 +10,21 @@ struct NativeSourceIdentityPage: Sendable {
     struct Row: Decodable, Identifiable, Sendable {
         let id: String
         let name: String?
+        let designation: String?
         let category: String
         let source: String
         let sourceRow: UInt64
         let identityStatus: String
         let ephemerisStatus: String
+        let parentId: String?
+        let parentResolution: String?
+        let centerId: String?
+        let centerResolution: String?
+        let confirmation: String?
+        let geometryStatus: String?
+        let naifId: UInt64?
+        let aliases: [String]?
+        let identityEvidence: [String]?
     }
 
     private struct Manifest: Decodable, Equatable, Sendable {
@@ -64,9 +74,15 @@ struct NativeSourceIdentityPage: Sendable {
         var ids = Set<String>()
         for row in page.items {
             guard Self.validText(row.id), Self.validText(row.name ?? "", optional: true),
+                  Self.validText(row.designation ?? "", optional: true),
                   Self.validText(row.category), Self.validText(row.source),
                   Self.validText(row.identityStatus), Self.validText(row.ephemerisStatus),
+                  Self.validText(row.parentId ?? "", optional: true), Self.validText(row.parentResolution ?? "", optional: true),
+                  Self.validText(row.centerId ?? "", optional: true), Self.validText(row.centerResolution ?? "", optional: true),
+                  Self.validText(row.confirmation ?? "", optional: true), Self.validText(row.geometryStatus ?? "", optional: true),
                   row.sourceRow <= Self.maxSafeInteger, ids.insert(row.id).inserted,
+                  row.naifId.map({ $0 <= Self.maxSafeInteger }) ?? true,
+                  Self.validList(row.aliases), Self.validList(row.identityEvidence),
                   !row.id.contains(where: { $0.isWhitespace || $0 == "," }) else {
                 // The custom-ID editor uses whitespace/comma delimiters. Reject
                 // unrepresentable IDs instead of silently splitting or renaming.
@@ -104,6 +120,11 @@ struct NativeSourceIdentityPage: Sendable {
     private static func validText(_ value: String, optional: Bool = false, limit: Int = 512) -> Bool {
         (optional || !value.isEmpty) && value.utf16.count <= limit
             && value.unicodeScalars.allSatisfy { $0.value >= 32 && $0.value != 127 }
+    }
+
+    private static func validList(_ values: [String]?, maxItems: Int = 32) -> Bool {
+        guard let values else { return true }
+        return values.count <= maxItems && values.allSatisfy { validText($0) }
     }
 
     private static func decodeManifest(_ data: Data) throws -> Manifest {

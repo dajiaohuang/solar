@@ -95,6 +95,11 @@ final class SourceIdentityPanel extends LinearLayout {
         StringBuilder text = new StringBuilder(getResources().getString(R.string.identity_hash, result.inventoryHash));
         for (SourceIdentityPage.Row row : result.rows) text.append("\n\n").append(row.name.isEmpty() ? row.id : row.name)
                 .append('\n').append(row.id).append('\n').append(row.category).append(" / ").append(row.source).append(" / ").append(row.sourceRow)
+                .append('\n').append(getResources().getString(R.string.identity_mapping)).append(": ").append(row.naifId == null ? getResources().getString(R.string.identity_no_target) : "NAIF " + row.naifId)
+                .append(" / ").append(row.parentId).append(row.parentResolution.isEmpty() ? "" : " (" + row.parentResolution + ")")
+                .append(" / ").append(row.centerId).append(row.centerResolution.isEmpty() ? "" : " (" + row.centerResolution + ")")
+                .append(row.aliases.isEmpty() ? "" : "\n" + getResources().getString(R.string.identity_aliases) + ": " + String.join(", ", row.aliases))
+                .append(row.identityEvidence.isEmpty() ? "" : "\n" + getResources().getString(R.string.identity_evidence) + ": " + String.join(", ", row.identityEvidence))
                 .append('\n').append(row.identityStatus).append(" / ").append(row.ephemerisStatus);
         records.setText(text); next.setVisibility(result.next.isEmpty() ? GONE : VISIBLE); select.setVisibility(result.rows.isEmpty() ? GONE : VISIBLE);
     }

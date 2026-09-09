@@ -103,7 +103,17 @@
         "uranus": ["naif:701", "naif:702", "naif:703", "naif:704", "naif:705"],
         "neptune": ["naif:801", "naif:802"],
         "pluto": ["naif:901", "naif:902", "naif:903", "naif:904", "naif:905"]
-      }
+      },
+      "sourceBackedSmallBodyPrimaries": [
+        "quaoar",
+        "orcus",
+        "salacia",
+        "1998ww31",
+        "2001qw322",
+        "kagara",
+        "1999oj4",
+        "2003un284"
+      ]
     }
   }
 }

@@ -9,7 +9,7 @@ const page: SourceIdentityPage = {
   },
   query: '', totalRecords: 2, limit: 50, nextPageToken: null,
   items: [
-    { id: 'source,one', name: 'One', designation: '1', category: 'asteroid', source: 'fixture', sourceRow: 1, identityStatus: 'unmapped', ephemerisStatus: 'missing' },
+    { id: 'source,one', name: 'One', designation: '1', category: 'asteroid', source: 'fixture', sourceRow: 1, identityStatus: 'unmapped', ephemerisStatus: 'missing', naifId: 42, parentId: 'sun', parentResolution: 'index-match', aliases: ['One alias'], identityEvidence: ['source-id'] },
     { id: 'source:two', name: 'Two', designation: '2', category: 'comet', source: 'fixture', sourceRow: 2, identityStatus: 'unmapped', ephemerisStatus: 'missing' },
   ],
 }
@@ -18,7 +18,8 @@ describe('source scene identity pins', () => {
   it('keeps raw IDs and manifests without inventing physical fields', () => {
     const identity = sourceSceneFromPage(page)
     expect(identity.ids).toEqual(['source,one', 'source:two'])
-    expect(sourceRecordBody('source,one', page.items[0])).toMatchObject({ kind: 'sourceRecord', source: 'source-inventory' })
+    expect(sourceRecordBody('source,one', page.items[0])).toMatchObject({ kind: 'sourceRecord', source: 'source-inventory', sourceIdentity: { naifId: 42, parentId: 'sun' } })
+    expect(sourceRecordBody('source,one', page.items[0])).not.toHaveProperty('naifId')
     expect(sourceRecordBody('source,one', page.items[0])).not.toHaveProperty('orbit')
     expect(sourcePinFor(identity, 'https://api.example/')).toMatchObject({ base: 'https://api.example' })
   })

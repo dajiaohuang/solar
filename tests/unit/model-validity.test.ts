@@ -134,6 +134,7 @@ describe('JPL approximate element validity', () => {
     expect(ephemerisBodies.bodies.filter((body) => body.kind === 'moon')).toHaveLength(spkDelivery.planetarySatelliteBodyCount)
     expect(ephemerisBodies.bodies.filter((body) => body.kind === 'asteroid')).toHaveLength(spkDelivery.smallBodyBodyCount)
     expect(satelliteCatalog.bodies).toHaveLength(spkDelivery.satelliteIdentityCount)
+    expect(spkDelivery.sourceBackedSmallBodyPrimaries).toEqual(satelliteCatalog.primaries.map((body) => body.id))
 
     const numericSatelliteIds = satelliteCatalog.bodies
       .filter((body) => Number.isSafeInteger(body.naifId))
@@ -176,5 +177,12 @@ describe('JPL approximate element validity', () => {
       }
     }
     expect(ephemerisBodies.bodies.filter((body) => body.kind === 'moon').map((body) => body.id).sort()).toEqual([...sourceBackedIds].sort())
+    const fullPrimaryTargets = new Set(ephemerisManifestFull.files.flatMap((file) => file.targets ?? []))
+    for (const primary of satelliteCatalog.primaries) {
+      const body = majorBodiesById.get(primary.id)
+      expect(body, primary.id).toMatchObject({ id: primary.id, naifId: primary.naifId, source: 'jpl-satellite-inventory' })
+      expect(body?.orbit, primary.id).toBeUndefined()
+      expect(fullPrimaryTargets.has(primary.naifId), primary.id).toBe(true)
+    }
   })
 })

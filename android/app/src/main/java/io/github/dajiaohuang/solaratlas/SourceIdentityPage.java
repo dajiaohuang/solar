@@ -1,6 +1,7 @@
 package io.github.dajiaohuang.solaratlas;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -14,13 +15,20 @@ public final class SourceIdentityPage {
     public final String next, query, base, catalogVersion, catalogHash, inventoryHash;
 
     public static final class Row {
-        public final String id, name, category, source, identityStatus, ephemerisStatus;
+        public final String id, name, designation, category, source, identityStatus, ephemerisStatus;
+        public final String parentId, parentResolution, centerId, centerResolution, confirmation, geometryStatus;
+        public final Long naifId;
+        public final List<String> aliases, identityEvidence;
         public final long sourceRow;
         Row(Map<String, Object> row) throws StateTileDecoder.ProtocolException {
-            id = sourceId(row.get("id")); name = text(row.get("name"), true, 512);
+            id = sourceId(row.get("id")); name = text(row.get("name"), true, 512); designation = text(row.get("designation"), true, 512);
             category = text(row.get("category"), false, 512); source = text(row.get("source"), false, 512);
             identityStatus = text(row.get("identityStatus"), false, 512);
             ephemerisStatus = text(row.get("ephemerisStatus"), false, 512); sourceRow = integer(row.get("sourceRow"));
+            parentId = text(row.get("parentId"), true, 512); parentResolution = text(row.get("parentResolution"), true, 512);
+            centerId = text(row.get("centerId"), true, 512); centerResolution = text(row.get("centerResolution"), true, 512);
+            confirmation = text(row.get("confirmation"), true, 512); geometryStatus = text(row.get("geometryStatus"), true, 512);
+            naifId = optionalInteger(row.get("naifId")); aliases = list(row.get("aliases")); identityEvidence = list(row.get("identityEvidence"));
         }
     }
 
@@ -66,6 +74,19 @@ public final class SourceIdentityPage {
     }
     private static String hash(Object value) throws StateTileDecoder.ProtocolException {
         String result = text(value, false, 64); require(result.matches("[0-9a-f]{64}"), "Invalid identity hash"); return result;
+    }
+    private static Long optionalInteger(Object value) throws StateTileDecoder.ProtocolException {
+        if (value == null) return null;
+        require(value instanceof Number, "Invalid identity target"); double number = ((Number) value).doubleValue();
+        require(Double.isFinite(number) && number >= 0 && number <= 9_007_199_254_740_991d && number == Math.rint(number), "Invalid identity target");
+        return (long) number;
+    }
+    private static List<String> list(Object value) throws StateTileDecoder.ProtocolException {
+        if (value == null) return Collections.emptyList();
+        require(value instanceof List && ((List<?>) value).size() <= 32, "Invalid identity list");
+        List<String> result = new ArrayList<>();
+        for (Object item : (List<?>) value) result.add(text(item, false, 512));
+        return Collections.unmodifiableList(result);
     }
     private static long integer(Object value) throws StateTileDecoder.ProtocolException {
         require(value instanceof Number, "Invalid identity number"); double number = ((Number) value).doubleValue();

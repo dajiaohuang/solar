@@ -9,13 +9,15 @@ public class SourceIdentityPageTest {
     private static byte[] bytes(String value) { return value.getBytes(StandardCharsets.UTF_8); }
     private static final String HASH = "a".repeat(64), INVENTORY = "b".repeat(64);
     private static String manifest() { return "{\"apiVersion\":\"solar.api/v1\",\"catalogVersion\":\"test\",\"catalogManifestSha256\":\"" + HASH + "\",\"inventoryManifestSha256\":\"" + INVENTORY + "\"}"; }
-    private static String row() { return "{\"id\":\"sb:comet:1P\",\"name\":\"Halley\",\"category\":\"comet\",\"source\":\"synthetic-parser-fixture\",\"sourceRow\":1,\"identityStatus\":\"source-designation\",\"ephemerisStatus\":\"unmapped\"}"; }
+    private static String row() { return "{\"id\":\"sb:comet:1P\",\"name\":\"Halley\",\"designation\":\"1P\",\"category\":\"comet\",\"source\":\"synthetic-parser-fixture\",\"sourceRow\":1,\"identityStatus\":\"source-designation\",\"ephemerisStatus\":\"unmapped\",\"naifId\":1000036,\"parentId\":\"sun\",\"parentResolution\":\"index-match\",\"aliases\":[\"1P/Halley\"],\"identityEvidence\":[\"source-id\"]}"; }
     private static String page() { return "{\"apiVersion\":\"solar.api/v1\",\"catalogVersion\":\"test\",\"inventoryManifestSha256\":\"" + INVENTORY + "\",\"sourceRecords\":true,\"identityAssertions\":true,\"uniqueBodySemantics\":\"not-deduplicated\",\"totalRecords\":100,\"limit\":50,\"nextPageToken\":\"next\",\"items\":[" + row() + "]}"; }
     private static SourceIdentityPage decode(String value) throws Exception { return SourceIdentityPage.decode(bytes(value), bytes(manifest()), "https://example.test", "Halley"); }
 
     @Test public void preservesOriginalSourceIdsAndSeparatePopulationCount() throws Exception {
         SourceIdentityPage result = decode(page()); assertEquals(100, result.totalRecords); assertEquals(1, result.rows.size());
         assertEquals("sb:comet:1P", result.rows.get(0).id); assertEquals("unmapped", result.rows.get(0).ephemerisStatus);
+        assertEquals(Long.valueOf(1000036), result.rows.get(0).naifId); assertEquals("sun", result.rows.get(0).parentId);
+        assertEquals(java.util.Collections.singletonList("1P/Halley"), result.rows.get(0).aliases);
         assertEquals(INVENTORY, result.inventoryHash); assertEquals("Halley", result.query);
         assertThrows(UnsupportedOperationException.class, () -> result.rows.clear());
     }

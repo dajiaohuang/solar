@@ -14,4 +14,8 @@
     <string name="identity_counts">本页来源记录：%1$d\n来源记录总数：%2$d（不等于独立天体数或精确状态数）</string>
     <string name="identity_hash">目录清单 SHA-256：%1$s</string>
     <string name="identity_inputs_changed">观测参数已更改，请重新加载并验证状态。</string>
+    <string name="identity_mapping">明确映射</string>
+    <string name="identity_no_target">没有明确 NAIF 目标</string>
+    <string name="identity_aliases">别名</string>
+    <string name="identity_evidence">身份证据</string>
 </resources>

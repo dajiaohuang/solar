@@ -102,8 +102,10 @@ struct ProtocolTests {
         let manifestObject: [String: Any] = ["apiVersion": "solar.api/v1", "catalogVersion": "fixture", "catalogManifestSha256": hashA, "inventoryManifestSha256": hashB]
         let manifest = try JSONSerialization.data(withJSONObject: manifestObject)
         let rows: [[String: Any]] = (0..<50).map { index in
-            ["id": "unknown:source:\(index)", "name": "来源 \(index)", "category": "comet", "source": "synthetic-only",
+            var row: [String: Any] = ["id": "unknown:source:\(index)", "name": "来源 \(index)", "category": "comet", "source": "synthetic-only",
              "sourceRow": index, "identityStatus": "source-designation", "ephemerisStatus": "unmapped"]
+            if index == 0 { row["naifId"] = 1000036; row["parentId"] = "sun"; row["parentResolution"] = "index-match"; row["aliases"] = ["1P/Halley"]; row["identityEvidence"] = ["source-id"] }
+            return row
         }
         let object: [String: Any] = ["apiVersion": "solar.api/v1", "catalogVersion": "fixture", "inventoryManifestSha256": hashB,
             "sourceRecords": true, "identityAssertions": true, "uniqueBodySemantics": "not-deduplicated",
@@ -112,6 +114,7 @@ struct ProtocolTests {
         let page = try NativeSourceIdentityPage(validating: data, catalogManifest: manifest, base: base, query: "火星+moon")
         precondition(page.rows.map(\.id) == (0..<50).map { "unknown:source:\($0)" })
         precondition(page.rows[49].name == "来源 49" && page.rows[49].sourceRow == 49)
+        precondition(page.rows[0].naifId == 1000036 && page.rows[0].parentId == "sun" && page.rows[0].aliases == ["1P/Halley"])
         precondition(page.totalRecords == NativeSourceIdentityPage.maxSafeInteger && page.next == "next")
         precondition(page.query == "火星+moon" && page.inventoryHash == hashB && page.catalogHash == hashA)
         try page.requireManifest(manifest, base: URL(string: "https://example.test/full")!)

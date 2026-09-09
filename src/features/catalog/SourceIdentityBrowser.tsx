@@ -58,6 +58,12 @@ export function SourceIdentityBrowser({ onSelectPage }: Props) {
       <ul>{page.items.map(row => <li key={row.id}>
         <strong>{row.name || row.designation || row.id}</strong><p className="checksum">{row.id}</p>
         <p>{row.category} · {row.source} · {row.sourceRow}</p>
+        <p>{t('sourceIdentityMapping')}: {row.naifId === undefined ? t('sourceIdentityNoExplicitTarget') : `NAIF ${row.naifId}`}
+          {row.parentId && ` · ${row.parentId}${row.parentResolution ? ` (${row.parentResolution})` : ''}`}
+          {row.centerId && ` · ${row.centerId}${row.centerResolution ? ` (${row.centerResolution})` : ''}`}</p>
+        {(row.aliases.length > 0 || row.confirmation || row.geometryStatus || row.identityEvidence.length > 0) &&
+          <p>{row.aliases.length > 0 ? `${t('sourceIdentityAliases')}: ${row.aliases.join(', ')} · ` : ''}
+            {row.confirmation || row.geometryStatus || row.identityEvidence.join(', ')}</p>}
         <p>{t('sourceIdentityAssertion')}: {row.identityStatus} · {row.ephemerisStatus}</p>
       </li>)}</ul>
       {page.items.length > 0 && onSelectPage && <>

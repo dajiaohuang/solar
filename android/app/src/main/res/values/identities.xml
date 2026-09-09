@@ -14,4 +14,8 @@
     <string name="identity_counts">Records on this page: %1$d\nSource records: %2$d (not a unique-body or exact-state count)</string>
     <string name="identity_hash">Inventory SHA-256: %1$s</string>
     <string name="identity_inputs_changed">Observation inputs changed. Load again to verify current states.</string>
+    <string name="identity_mapping">Explicit mapping</string>
+    <string name="identity_no_target">No explicit NAIF target</string>
+    <string name="identity_aliases">Aliases</string>
+    <string name="identity_evidence">Identity evidence</string>
 </resources>

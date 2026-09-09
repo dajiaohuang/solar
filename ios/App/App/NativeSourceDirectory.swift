@@ -86,6 +86,16 @@ struct NativeSourceDirectorySection: View {
                             Text(row.name?.isEmpty == false ? (row.name ?? row.id) : row.id).font(.headline)
                             Text(row.id).textSelection(.enabled)
                             Text("\(row.source) · \(row.category) · \(row.sourceRow)").font(.caption)
+                            Text(SourceDirectoryCopy.mapping + ": " + (row.naifId.map { "NAIF \($0)" } ?? SourceDirectoryCopy.noTarget)
+                                 + (row.parentId.map { " · \(SourceDirectoryCopy.parent) \($0)\(row.parentResolution.map { " (\($0))" } ?? "")" } ?? "")
+                                 + (row.centerId.map { " · \(SourceDirectoryCopy.center) \($0)\(row.centerResolution.map { " (\($0))" } ?? "")" } ?? ""))
+                                .font(.caption)
+                            if let aliases = row.aliases, !aliases.isEmpty {
+                                Text("\(SourceDirectoryCopy.aliases): \(aliases.joined(separator: ", "))").font(.caption)
+                            }
+                            if let evidence = row.identityEvidence, !evidence.isEmpty {
+                                Text("\(SourceDirectoryCopy.evidence): \(evidence.joined(separator: ", "))").font(.caption)
+                            }
                             Text("\(row.identityStatus) · \(row.ephemerisStatus)").font(.caption).foregroundStyle(.secondary)
                         }
                         .accessibilityElement(children: .combine)
@@ -115,6 +125,12 @@ enum SourceDirectoryCopy {
     static var expanded: String { zh ? "已展开" : "Expanded" }
     static var collapsed: String { zh ? "已收起" : "Collapsed" }
     static var hash: String { zh ? "目录 SHA-256" : "Inventory SHA-256" }
+    static var mapping: String { zh ? "明确映射" : "Explicit mapping" }
+    static var noTarget: String { zh ? "没有明确 NAIF 目标" : "No explicit NAIF target" }
+    static var parent: String { zh ? "父项" : "parent" }
+    static var center: String { zh ? "中心" : "center" }
+    static var aliases: String { zh ? "别名" : "Aliases" }
+    static var evidence: String { zh ? "身份证据" : "Identity evidence" }
     static var caveat: String { zh ? "来源记录可能包含别名，不等于去重后的天体或已验证状态。浏览不会填补星历缺口。" : "Source records can include aliases; they are not deduplicated bodies or verified states. Browsing does not fill ephemeris gaps." }
     static func counts(_ count: Int, _ total: UInt64) -> String {
         zh ? "本页：\(count) · 来源记录总数：\(total)" : "This page: \(count) · total source records: \(total)"
