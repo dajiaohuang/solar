@@ -1,11 +1,12 @@
 import { expect, test } from './fixtures'
 
-test('keeps ephemeris-only identities selectable and their missing-state notices separate', async ({ page }) => {
+test('keeps source-backed fallback identities selectable and their missing-state notices separate', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  // Outside the shipped satellite window: a catalog identity is not an orbit.
+  // Outside the shipped satellite window: the fallback seed is diagnostic only;
+  // covered geometric state remains unavailable.
   await page.goto('?v=4&lang=en&ref=jupiter&bodies=jupiter,naif:506&focused=naif:506&jd=2466154.5&history=1')
   const position = page.getByTestId('missing-position-notice')
   const trail = page.getByTestId('missing-trajectory-notice')
@@ -18,7 +19,7 @@ test('keeps ephemeris-only identities selectable and their missing-state notices
   await expect(position.locator('p')).toHaveText('Himalia')
   await page.getByRole('button', { name: /Show body details/ }).click()
   await expect(page.getByTestId('satellite-identity')).toContainText('NAIF 506')
-  await expect(page.getByTestId('body-model')).toContainText('No orbital propagation model')
+  await expect(page.getByTestId('body-model')).toContainText('Elliptic two-body Kepler propagation')
   await page.getByRole('tab', { name: 'Sources', exact: true }).click()
   await expect(page.locator('.inspector-panel a[href="https://ssd.jpl.nasa.gov/sats/discovery.html"]')).toBeVisible()
   expect(errors).toEqual([])
