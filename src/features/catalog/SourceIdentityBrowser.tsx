@@ -21,7 +21,9 @@ export function SourceIdentityBrowser({ onSelectPage }: Props) {
   async function run(operation: 'first' | 'next' | 'states') {
     cancel(); setResult(null)
     const previous = operation === 'next' ? page ?? undefined : undefined
-    if (operation !== 'states') setPage(null)
+    // Keep the verified directory page available for retry after a failed
+    // next-page request or state inspection. Query edits clear it separately.
+    if (operation === 'first') setPage(null)
     const controller = new AbortController(); active.current = controller; setStatus('loading')
     const timer = setTimeout(() => controller.abort(), 30_000)
     try {
@@ -35,7 +37,7 @@ export function SourceIdentityBrowser({ onSelectPage }: Props) {
       }
       if (active.current === controller) setStatus('idle')
     } catch {
-      if (active.current === controller) { setPage(null); setResult(null); setStatus('error') }
+      if (active.current === controller) { setResult(null); setStatus('error') }
     } finally { clearTimeout(timer); if (active.current === controller) active.current = null }
   }
   return <details className="source-identity-browser glass-panel" data-testid="source-identity-browser"
@@ -50,7 +52,7 @@ export function SourceIdentityBrowser({ onSelectPage }: Props) {
       {page?.nextPageToken && <button className="secondary-button" disabled={status === 'loading'} onClick={() => void run('next')}>{t('sourceIdentityNext')}</button>}
       {status === 'loading' && <button className="secondary-button" onClick={cancel}>{t('sourceIdentityCancel')}</button>}
     </div>
-    <p role="status">{status === 'loading' ? t('loading') : status === 'error' ? t('sourceIdentityError') : ''}</p>
+    <p role="status">{status === 'loading' ? t('loading') : status === 'error' ? t(page ? 'sourceIdentityRetainedError' : 'sourceIdentityError') : ''}</p>
     {page && <>
       <p data-testid="source-identity-counts">{t('sourceIdentityRows')}: {page.items.length} · {t('sourceCoverageRecords')}: {page.totalRecords.toLocaleString()}</p>
       <p className="checksum">{page.manifest.inventoryManifestSha256}</p>
@@ -67,7 +69,7 @@ export function SourceIdentityBrowser({ onSelectPage }: Props) {
         <p>{t('sourceIdentityAssertion')}: {row.identityStatus} · {row.ephemerisStatus}</p>
       </li>)}</ul>
       {page.items.length > 0 && onSelectPage && <>
-        <button className="primary-button" data-testid="source-identity-select-page"
+        <button className="primary-button" data-testid="source-identity-select-page" disabled={status === 'loading'}
           onClick={() => { onSelectPage(page) }}>
           {t('sourceIdentitySelectPage')}
         </button>

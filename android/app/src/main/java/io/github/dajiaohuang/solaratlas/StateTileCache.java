@@ -92,13 +92,18 @@ public final class StateTileCache {
     public synchronized long residentBytes() { return residentBytes; }
 
     private void reconcile() {
-        residentBytes = 0;
+        long total = 0;
         File[] files = directory.listFiles((dir, name) -> name.matches("[0-9a-f]{64}\\.tile"));
-        if (files == null) return;
+        if (files == null) { residentBytes = 0; return; }
         for (File file : files) {
-            if (file.length() < StateTileDecoder.HEADER_BYTES || file.length() > StateTileDecoder.MAX_TILE_BYTES) remove(file);
-            else residentBytes += file.length();
+            // A corrupt file has not yet entered the total. Removing it must
+            // not subtract from previously counted valid files.
+            long size = file.length();
+            if (size < StateTileDecoder.HEADER_BYTES || size > StateTileDecoder.MAX_TILE_BYTES) {
+                if (!file.delete()) total += size;
+            } else total += size;
         }
+        residentBytes = total;
         trim();
     }
 

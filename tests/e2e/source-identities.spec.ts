@@ -2,13 +2,14 @@ import { expect, test } from './fixtures'
 
 test('source directory is explicit, bounded, cursor-driven and clears stale evidence', async ({ page }) => {
   const hash = 'b'.repeat(64)
-  let requests = 0, invalid = false
+  let requests = 0, invalid = false, failNext = true
   await page.route('**/solar-test-api/v1/catalog/manifest', route => route.fulfill({ json: {
     apiVersion: 'solar.api/v1', catalogVersion: 'fixture-v1', catalogManifestSha256: 'a'.repeat(64), inventoryManifestSha256: hash,
   } }))
   await page.route('**/solar-test-api/v1/identities?*', route => {
     const next = new URL(route.request().url()).searchParams.get('pageToken')
     requests++
+    if (next && failNext) { failNext = false; return route.fulfill({ status: 503, body: 'Temporary failure' }) }
     return route.fulfill({ json: { apiVersion: 'solar.api/v1', catalogVersion: 'fixture-v1', inventoryManifestSha256: invalid ? 'c'.repeat(64) : hash,
       sourceRecords: true, identityAssertions: true, uniqueBodySemantics: 'not-deduplicated', totalRecords: 1_567_193, limit: 50,
       items: Array.from({ length: 50 }, (_, i) => ({ id: `source:${(next ? 50 : 0) + i}`, name: `Source ${(next ? 50 : 0) + i}`, category: 'comet', source: 'synthetic-identity-test', sourceRow: i, identityStatus: 'source-designation', ephemerisStatus: 'unmapped' })),
@@ -25,8 +26,12 @@ test('source directory is explicit, bounded, cursor-driven and clears stale evid
   await expect(browser.getByTestId('source-identity-counts')).toContainText('1,567,193')
   await expect(browser.locator('li').first()).toContainText('source:0')
   await browser.getByRole('button', { name: 'Next source page' }).click()
+  await expect(browser.getByRole('status')).toContainText('previous verified directory page')
+  await expect(browser.locator('li').first()).toContainText('source:0')
+  await expect(browser.getByRole('button', { name: 'Next source page' })).toBeEnabled()
+  await browser.getByRole('button', { name: 'Next source page' }).click()
   await expect(browser.locator('li').first()).toContainText('source:50')
-  expect(requests).toBe(2)
+  expect(requests).toBe(3)
   await expect(browser.getByRole('button', { name: 'Next source page' })).toHaveCount(0)
   invalid = true
   await browser.getByRole('button', { name: 'Browse from first page' }).click()

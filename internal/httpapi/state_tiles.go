@@ -855,7 +855,9 @@ func estimateStateTileBudget(bodyCount, tileSize int, maxPlanBytes, maxTileBytes
 }
 
 func decodeOneJSON(r *http.Request, out any) error {
-	dec := json.NewDecoder(io.LimitReader(r.Body, maxBodyBytes))
+	// LimitReader fabricates EOF at the limit, accepting a valid prefix even
+	// when another JSON value or oversized whitespace follows it.
+	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, maxBodyBytes))
 	if err := dec.Decode(out); err != nil {
 		return fmt.Errorf("request body is not valid JSON")
 	}

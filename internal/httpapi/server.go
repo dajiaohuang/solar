@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math"
 	"net/http"
 	"runtime"
@@ -641,14 +640,8 @@ type sourceStateResult struct {
 
 func (s *Server) trajectory(w http.ResponseWriter, r *http.Request) {
 	var req trajectoryRequest
-	dec := json.NewDecoder(io.LimitReader(r.Body, maxBodyBytes))
-	if err := dec.Decode(&req); err != nil {
-		s.error(w, 400, "invalid_json", "request body is not valid JSON")
-		return
-	}
-	var extra any
-	if err := dec.Decode(&extra); err != io.EOF {
-		s.error(w, 400, "invalid_json", "request body must contain one JSON object")
+	if err := decodeOneJSON(r, &req); err != nil {
+		s.error(w, 400, "invalid_json", err.Error())
 		return
 	}
 	if len(req.BodyIDs) < 1 || len(req.BodyIDs) > 64 {

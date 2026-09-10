@@ -77,6 +77,15 @@ if (sw.includes('__BUILD_SHA__') || sw.includes('const PRECACHE_URLS = ["./"]'))
 
 const capacity = JSON.parse(await readFile(join(dist, 'capacity-report.json'), 'utf8'))
 if (!capacity.withinBudget) throw new Error('Generated artifact exceeds its declared capacity budget')
+// These compute workers need the compact execution index, not source audit
+// narratives or fallback preview identity tables. Check the emitted artifact,
+// since ordinary unit imports do not exercise the separate worker bundler.
+for (const name of await readdir(join(dist, 'assets'))) {
+  if (!/^(trajectory|conjunction|porkchop)\.worker-.*\.js$/.test(name)) continue
+  if ((await stat(join(dist, 'assets', name))).size > 512 * 1024) {
+    throw new Error(`${name} exceeds the 512 KiB scientific worker budget; inspect embedded manifests`)
+  }
+}
 const buildInfo = JSON.parse(await readFile(join(dist, 'build-info.json'), 'utf8'))
 const delivery = productDelivery(buildInfo.productProfile, buildInfo.ephemerisProfile)
 const availabilityText = await readFile(join(dist, 'product-availability.json'), 'utf8')

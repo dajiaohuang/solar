@@ -15,6 +15,7 @@ type CacheRecord = {
 let preparedVersion: string | null = null
 let preparePromise: Promise<void> | null = null
 let writesSincePrune = 0
+const inFlight = new Map<string, Promise<{ buffer: ArrayBuffer; cached: boolean }>>()
 
 export function datasetVersionFromUrl(url: string) {
   try {
@@ -42,8 +43,8 @@ function isCacheRecord(value: unknown): value is CacheRecord {
   const candidate = value as Partial<CacheRecord>
   return candidate.buffer instanceof ArrayBuffer &&
     typeof candidate.datasetVersion === 'string' &&
-    typeof candidate.byteLength === 'number' &&
-    typeof candidate.lastAccessed === 'number'
+    candidate.byteLength === candidate.buffer.byteLength &&
+    Number.isFinite(candidate.lastAccessed)
 }
 
 function openDatabase() {
@@ -52,15 +53,28 @@ function openDatabase() {
       resolve(null)
       return
     }
-    const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION)
+    let settled = false
+    const finish = (database: IDBDatabase | null) => {
+      if (settled) { database?.close(); return }
+      settled = true
+      clearTimeout(timeout)
+      if (database) database.onversionchange = () => database.close()
+      resolve(database)
+    }
+    // Optional persistence must not block network delivery indefinitely, e.g.
+    // when another tab holds an old database open during an upgrade.
+    const timeout = setTimeout(() => finish(null), 1500)
+    let request: IDBOpenDBRequest
+    try { request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION) }
+    catch { finish(null); return }
     request.onupgradeneeded = () => {
       if (!request.result.objectStoreNames.contains(STORE_NAME)) {
         request.result.createObjectStore(STORE_NAME)
       }
     }
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => resolve(null)
-    request.onblocked = () => resolve(null)
+    request.onsuccess = () => finish(request.result)
+    request.onerror = () => finish(null)
+    request.onblocked = () => finish(null)
   })
 }
 
@@ -98,23 +112,25 @@ async function pruneDatasetCache(activeVersion: string, maximumBytes: number) {
     try {
       const transaction = database.transaction(STORE_NAME, 'readwrite')
       const store = transaction.objectStore(STORE_NAME)
-      const activeEntries: Array<{ key: IDBValidKey; record: CacheRecord }> = []
+      const activeEntries: Array<{ key: IDBValidKey; byteLength: number; lastAccessed: number }> = []
       const cursorRequest = store.openCursor()
       cursorRequest.onsuccess = () => {
         const cursor = cursorRequest.result
         if (!cursor) {
-          activeEntries.sort((left, right) => right.record.lastAccessed - left.record.lastAccessed)
+          activeEntries.sort((left, right) => right.lastAccessed - left.lastAccessed)
           let retainedBytes = 0
           for (const entry of activeEntries) {
-            retainedBytes += entry.record.byteLength
-            if (retainedBytes > maximumBytes) store.delete(entry.key)
+            if (retainedBytes + entry.byteLength > maximumBytes) store.delete(entry.key)
+            else retainedBytes += entry.byteLength
           }
           return
         }
         if (!isCacheRecord(cursor.value) || isObsoleteDatasetVersion(cursor.value.datasetVersion, activeVersion)) {
           cursor.delete()
         } else {
-          activeEntries.push({ key: cursor.primaryKey, record: cursor.value })
+          // Retain only metadata. Keeping each record also retains every large
+          // ArrayBuffer until sorting completes (up to the whole cache budget).
+          activeEntries.push({ key: cursor.primaryKey, byteLength: cursor.value.byteLength, lastAccessed: cursor.value.lastAccessed })
         }
         cursor.continue()
       }
@@ -216,20 +232,56 @@ async function writeCache(key: string, value: ArrayBuffer) {
   }
 }
 
-export async function fetchImmutableArrayBuffer(url: string) {
+async function invalidateCache(key: string) {
+  const database = await openDatabase()
+  if (!database) return
+  await new Promise<void>(resolve => {
+    const finish = () => { database.close(); resolve() }
+    try {
+      const transaction = database.transaction(STORE_NAME, 'readwrite')
+      transaction.objectStore(STORE_NAME).delete(key)
+      transaction.oncomplete = finish; transaction.onabort = finish; transaction.onerror = finish
+    } catch { finish() }
+  })
+}
+
+export async function fetchImmutableArrayBuffer(url: string, validate?: (buffer: ArrayBuffer) => void | Promise<void>) {
+  let pending = inFlight.get(url)
+  if (!pending) {
+    pending = loadImmutableArrayBuffer(url)
+    inFlight.set(url, pending)
+  }
+  try {
+    // Callers may transfer or modify their buffer without detaching a sibling
+    // consumer's result. Only active requests, not completed data, live here.
+    const { buffer, cached } = await pending
+    try { await validate?.(buffer) }
+    catch (error) {
+      if (cached) await invalidateCache(url)
+      throw error
+    }
+    // Never persist a network payload before its caller's format validation.
+    if (!cached) void writeCache(url, buffer).catch(() => undefined)
+    return buffer.slice(0)
+  } finally {
+    if (inFlight.get(url) === pending) inFlight.delete(url)
+  }
+}
+
+async function loadImmutableArrayBuffer(url: string) {
   await prepareDatasetCache(datasetVersionFromUrl(url))
   const cached = await readCache(url)
-  if (cached) return cached
+  if (cached) return { buffer: cached, cached: true }
   const response = await fetch(url)
   if (!response.ok) throw new Error(`Failed to load ${url}: ${response.status}`)
   const buffer = await response.arrayBuffer()
-  void writeCache(url, buffer.slice(0))
-  return buffer
+  return { buffer, cached: false }
 }
 
 export async function fetchImmutableJson<T>(url: string): Promise<T> {
-  const buffer = await fetchImmutableArrayBuffer(url)
-  return JSON.parse(new TextDecoder().decode(buffer)) as T
+  let parsed!: T
+  await fetchImmutableArrayBuffer(url, buffer => { parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(buffer)) as T })
+  return parsed
 }
 
 export async function parseMaybeGzipJson<T>(buffer: ArrayBuffer): Promise<T> {
@@ -245,5 +297,7 @@ export async function parseMaybeGzipJson<T>(buffer: ArrayBuffer): Promise<T> {
 }
 
 export async function fetchImmutableGzipJson<T>(url: string): Promise<T> {
-  return parseMaybeGzipJson<T>(await fetchImmutableArrayBuffer(url))
+  let parsed!: T
+  await fetchImmutableArrayBuffer(url, async buffer => { parsed = await parseMaybeGzipJson<T>(buffer) })
+  return parsed
 }

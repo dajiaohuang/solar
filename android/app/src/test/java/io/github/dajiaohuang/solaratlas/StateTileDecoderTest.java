@@ -75,6 +75,25 @@ public class StateTileDecoderTest {
         }
     }
 
+    @Test
+    public void reopeningCacheDoesNotSubtractUncountedCorruptFiles() throws Exception {
+        File root = Files.createTempDirectory("solar-reconcile").toFile();
+        File ordered = new File(root.getPath()) {
+            @Override public File[] listFiles(java.io.FilenameFilter filter) {
+                File[] files = super.listFiles(filter);
+                if (files != null) Arrays.sort(files, java.util.Comparator.comparingLong(File::length).reversed());
+                return files;
+            }
+        };
+        try {
+            byte[] valid = tile("naif:399", true, false, 1);
+            Files.write(new File(root, StateTileDecoder.payloadHash(valid) + ".tile").toPath(), valid);
+            Files.write(new File(root, repeat('0') + ".tile").toPath(), new byte[100]);
+            StateTileCache cache = new StateTileCache(ordered);
+            assertEquals(valid.length, cache.residentBytes());
+        } finally { delete(root); }
+    }
+
     static byte[] tile(String id, boolean exact, boolean approximate, double value) throws Exception {
         return tile(id, exact, approximate, value, "");
     }

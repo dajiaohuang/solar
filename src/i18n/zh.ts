@@ -8,6 +8,7 @@ export const zh: Record<TranslationKey, string> = {
   sourceIdentityBrowse: '从第一页浏览',
   sourceIdentityNext: '下一页来源记录',
   sourceIdentityError: '无法验证本次请求，结果已清空。请检查完整版后端并从第一页重新浏览。',
+  sourceIdentityRetainedError: '无法验证本次请求，仍显示上次已验证的目录页。请重试本次请求或从第一页重新浏览。',
   sourceIdentityRows: '本页来源记录',
   sourceIdentityEmpty: '本页没有来源记录。请更换搜索条件或留空浏览。',
   sourceIdentityAssertion: '来源声明',

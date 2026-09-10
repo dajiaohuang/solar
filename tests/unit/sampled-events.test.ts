@@ -2,6 +2,26 @@ import { describe, expect, it } from 'vitest'
 import { extremumJulianDay, findSampledExtrema, refineBracketedExtremum } from '../../src/engine/events/sampledExtrema'
 
 describe('sampled astronomical event extrema', () => {
+  it('excludes plateaus touching either window endpoint', () => {
+    expect(findSampledExtrema([1, 1, 2], 'minimum')).toEqual([])
+    expect(findSampledExtrema([2, 1, 1], 'minimum')).toEqual([])
+    expect(findSampledExtrema([2, 2, 1], 'maximum')).toEqual([])
+  })
+
+  it('scans a long non-extremal plateau with linear sample reads', () => {
+    let reads = 0
+    const values = new Proxy(Array<number>(10000).fill(1), { get(target, property, receiver) {
+      if (typeof property === 'string' && /^\d+$/.test(property)) reads++
+      return Reflect.get(target, property, receiver)
+    } })
+    expect(findSampledExtrema(values, 'minimum')).toEqual([])
+    expect(reads).toBeLessThan(values.length * 4)
+  })
+
+  it('does not publish refinements across invalid model values', () => {
+    expect(() => refineBracketedExtremum(100, 101, 'minimum', () => NaN)).toThrow(/non-finite/)
+    expect(() => refineBracketedExtremum(100, Infinity, 'minimum', () => 1)).toThrow(/finite/)
+  })
   it('never labels a time-window endpoint as an event', () => {
     expect(findSampledExtrema([1, 2, 3, 4], 'minimum')).toEqual([])
     expect(findSampledExtrema([4, 3, 2, 1], 'maximum')).toEqual([])

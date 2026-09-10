@@ -1,6 +1,7 @@
 const OWN_PREFIX = 'solar-atlas-'
 const SHELL_CACHE = 'solar-atlas-shell-__BUILD_SHA__'
 const PRECACHE_URLS = ['./'] // __SOLAR_ATLAS_PRECACHE__
+const SHELL_URLS = new Set(PRECACHE_URLS.map(path => new URL(path, self.location.href).href))
 const EXPECTED_KEYS = new Set([SHELL_CACHE])
 
 self.addEventListener('install', (event) => {
@@ -30,24 +31,27 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.includes('/data/asteroids/')) return
 
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).then(async (response) => {
-      if (response.ok && url.pathname.endsWith('/solar/')) {
-        const cache = await caches.open(SHELL_CACHE)
-        await cache.put(new URL('./', self.location.href).href, response.clone())
-      }
-      return response
-    }).catch(async () => {
+    // Keep the installed HTML and its precached asset generation together.
+    // New online HTML must not overwrite the old build's offline entry point.
+    event.respondWith(fetch(request).catch(async () => {
       const cache = await caches.open(SHELL_CACHE)
       return (await cache.match(request)) || (await cache.match(new URL('./', self.location.href).href)) || Response.error()
     }))
     return
   }
 
-  event.respondWith(caches.open(SHELL_CACHE).then(async (cache) => {
+  // Dynamic API responses, manifests and scientific downloads are not shell
+  // assets. Never replay them from this cache, even when served on this origin.
+  if (!SHELL_URLS.has(url.href)) return
+
+  event.respondWith(caches.open(SHELL_CACHE).catch(() => null).then(async (cache) => {
+    if (!cache) return fetch(request)
     const cached = await cache.match(request)
     if (cached) return cached
     const response = await fetch(request)
-    if (response.ok) void cache.put(request, response.clone())
+    if (response.ok && !/\bno-store\b/i.test(response.headers.get('Cache-Control') || '')) {
+      event.waitUntil(cache.put(request, response.clone()).catch(() => {}))
+    }
     return response
   }))
 })

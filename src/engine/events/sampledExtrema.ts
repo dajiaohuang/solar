@@ -16,15 +16,18 @@ export function findSampledExtrema(values: readonly number[], mode: ExtremumMode
   for (let index = 1; index < values.length - 1; index += 1) {
     const plateauStart = index
     let plateauEnd = index
-    while (plateauEnd + 1 < values.length - 1 && values[plateauEnd + 1] === values[plateauStart]) plateauEnd += 1
+    while (plateauEnd + 1 < values.length && values[plateauEnd + 1] === values[plateauStart]) plateauEnd += 1
+    // Advance even when the plateau is not an extremum or borders a gap.
+    // Otherwise a flat track is rescanned quadratically.
+    index = plateauEnd
     const sampleIndex = Math.floor((plateauStart + plateauEnd) / 2)
     const before = values[plateauStart - 1]
     const current = values[sampleIndex]
     const after = values[plateauEnd + 1]
     if (![before, current, after].every(Number.isFinite)) continue
 
-    const isMinimum = current <= before && current <= after && (current < before || current < after)
-    const isMaximum = current >= before && current >= after && (current > before || current > after)
+    const isMinimum = current < before && current < after
+    const isMaximum = current > before && current > after
     if ((mode === 'minimum' && !isMinimum) || (mode === 'maximum' && !isMaximum)) continue
 
     const curvature = plateauStart === plateauEnd ? before - 2 * current + after : 0
@@ -35,7 +38,6 @@ export function findSampledExtrema(values: readonly number[], mode: ExtremumMode
       : 0
     const refinedValue = current - 0.25 * (before - after) * sampleOffset
     extrema.push({ sampleIndex, sampleOffset, value: refinedValue })
-    index = plateauEnd
   }
   return extrema
 }
@@ -72,9 +74,14 @@ export function refineBracketedExtremum(
   evaluate: (julianDay: number) => number,
   iterations = 16,
 ): RefinedExtremum {
-  if (!(endJulianDay > startJulianDay)) throw new RangeError('Extremum bracket must have positive width')
+  if (![startJulianDay, endJulianDay, iterations].every(Number.isFinite) || !(endJulianDay > startJulianDay)) throw new RangeError('Extremum bracket and iterations must be finite with positive width')
   const boundedIterations = Math.max(1, Math.min(Math.trunc(iterations), 64))
-  const objective = mode === 'minimum' ? evaluate : (julianDay: number) => -evaluate(julianDay)
+  const checkedValue = (julianDay: number) => {
+    const value = evaluate(julianDay)
+    if (!Number.isFinite(value)) throw new RangeError('Extremum refinement encountered a missing or non-finite model value')
+    return value
+  }
+  const objective = mode === 'minimum' ? checkedValue : (julianDay: number) => -checkedValue(julianDay)
   const ratio = (Math.sqrt(5) - 1) / 2
   let left = startJulianDay
   let right = endJulianDay
@@ -100,7 +107,7 @@ export function refineBracketedExtremum(
   const julianDay = (left + right) / 2
   return {
     julianDay,
-    value: evaluate(julianDay),
+    value: checkedValue(julianDay),
     numericalRefinementHalfWidthDays: (right - left) / 2,
     iterations: boundedIterations,
   }

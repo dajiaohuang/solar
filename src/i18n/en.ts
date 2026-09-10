@@ -6,6 +6,7 @@ export const en = {
   sourceIdentityBrowse: 'Browse from first page',
   sourceIdentityNext: 'Next source page',
   sourceIdentityError: 'Could not verify this request. Results were cleared. Check the full backend and restart from the first page.',
+  sourceIdentityRetainedError: 'Could not verify this request. The previous verified directory page is still shown. Retry the request or browse from the first page.',
   sourceIdentityRows: 'Records on this page',
   sourceIdentityEmpty: 'No source records on this page. Change the search or browse without a filter.',
   sourceIdentityAssertion: 'Source assertion',

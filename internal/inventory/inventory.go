@@ -277,6 +277,7 @@ func Load(dir string) (*Inventory, error) {
 	if m.TotalRecords > MaxIndexedRecords {
 		return nil, fmt.Errorf("inventory has %d records; index limit is %d", m.TotalRecords, MaxIndexedRecords)
 	}
+	declaredRecords := 0
 	for _, s := range m.Shards {
 		clean := filepath.Clean(s.File)
 		if s.File == "" || filepath.IsAbs(s.File) || clean != s.File || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
@@ -284,6 +285,10 @@ func Load(dir string) (*Inventory, error) {
 		}
 		if s.Count < 1 || s.Count > 10000 || s.Bytes < 1 || s.Bytes > MaxShardBytes || !validSHA256(s.SHA256) || len(s.Blocks) < 1 || len(s.Blocks) > 65535 {
 			return nil, fmt.Errorf("invalid inventory shard metadata")
+		}
+		declaredRecords += s.Count
+		if declaredRecords > m.TotalRecords {
+			return nil, fmt.Errorf("inventory shard counts exceed declared total")
 		}
 		rowStart, offset := 0, int64(0)
 		for _, b := range s.Blocks {
@@ -296,6 +301,9 @@ func Load(dir string) (*Inventory, error) {
 		if rowStart != s.Count || offset != int64(s.Bytes) {
 			return nil, fmt.Errorf("inventory block coverage mismatch")
 		}
+	}
+	if declaredRecords != m.TotalRecords {
+		return nil, fmt.Errorf("inventory shard counts do not match declared total")
 	}
 	sum := sha256.Sum256(raw)
 	i := &Inventory{dir: abs, m: m, hash: hex.EncodeToString(sum[:]), sources: make(map[string]struct{}), models: make(map[string]map[string]struct{}), blocks: newBlockCache(BlockCacheBytes)}
@@ -742,8 +750,16 @@ func (i *Inventory) buildIndex() error {
 		}
 		return (termPairOrdinal(idx.termPairs[a]) &^ idPostingBit) < (termPairOrdinal(idx.termPairs[b]) &^ idPostingBit)
 	})
-	idx.termKeys = make([]uint64, 0, len(idx.termPairs))
-	idx.termStarts = make([]uint32, 0, len(idx.termPairs)+1)
+	// Posting count can be much larger than unique term count. Size retained
+	// arrays exactly rather than keeping unused posting-sized backing arrays.
+	uniqueTerms := 0
+	for n, pair := range idx.termPairs {
+		if n == 0 || termPairHash(pair) != termPairHash(idx.termPairs[n-1]) {
+			uniqueTerms++
+		}
+	}
+	idx.termKeys = make([]uint64, 0, uniqueTerms)
+	idx.termStarts = make([]uint32, 0, uniqueTerms+1)
 	idx.termRefs = make([]uint32, len(idx.termPairs))
 	for n, pair := range idx.termPairs {
 		pairHash := termPairHash(pair)

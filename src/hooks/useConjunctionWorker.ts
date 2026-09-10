@@ -64,7 +64,6 @@ function cacheEventAnalysis(key: string, entry: CachedEventAnalysis) {
 export function useConjunctionWorker() {
   const workerRef = useRef<Worker | null>(null)
   const latestRequestId = useRef(0)
-  const activeCacheKey = useRef('')
   const [events, setEvents] = useState<AnalysisEvent[]>([])
   const [status, setStatus] = useState<'idle' | 'running' | 'complete' | 'cancelled' | 'error'>('idle')
   const [progress, setProgress] = useState(0)
@@ -72,15 +71,16 @@ export function useConjunctionWorker() {
   const [lastRun, setLastRun] = useState<RunEventAnalysisParams | null>(null)
 
   const cancel = useCallback(() => {
+    latestRequestId.current += 1
     const worker = workerRef.current
     if (!worker) return
-    worker.postMessage({ type: 'cancel', requestId: latestRequestId.current })
     worker.terminate()
     workerRef.current = null
     setStatus('cancelled')
   }, [])
 
   const run = useCallback((params: RunEventAnalysisParams) => {
+    const requestId = ++latestRequestId.current
     if (workerRef.current) workerRef.current.terminate()
     workerRef.current = null
     const cacheKey = eventAnalysisCacheKey(params)
@@ -97,9 +97,6 @@ export function useConjunctionWorker() {
     }
     const worker = new Worker(new URL('../workers/conjunction.worker.ts', import.meta.url), { type: 'module' })
     workerRef.current = worker
-    activeCacheKey.current = cacheKey
-    const requestId = latestRequestId.current + 1
-    latestRequestId.current = requestId
     setStatus('running')
     setProgress(0)
     setError(null)
@@ -108,12 +105,12 @@ export function useConjunctionWorker() {
     setLastRun(storedParams)
     worker.onmessage = (event: MessageEvent<EventAnalysisResponse>) => {
       const response = event.data
-      if (response.requestId !== latestRequestId.current) return
+      if (response.requestId !== latestRequestId.current || workerRef.current !== worker) return
       if (response.type === 'progress') setProgress(response.progress ?? 0)
       if (response.type === 'result') {
         const resultEvents = response.events ?? []
         setEvents(resultEvents)
-        cacheEventAnalysis(activeCacheKey.current, { events: [...resultEvents], params: storedParams })
+        cacheEventAnalysis(cacheKey, { events: [...resultEvents], params: storedParams })
         setProgress(1)
         setStatus('complete')
         worker.terminate()
@@ -132,7 +129,7 @@ export function useConjunctionWorker() {
       }
     }
     worker.onerror = (event) => {
-      if (requestId !== latestRequestId.current) return
+      if (requestId !== latestRequestId.current || workerRef.current !== worker) return
       setError(event.message || 'Event worker failed')
       setStatus('error')
       worker.terminate()
@@ -142,7 +139,11 @@ export function useConjunctionWorker() {
     worker.postMessage(request)
   }, [])
 
-  useEffect(() => () => workerRef.current?.terminate(), [])
+  useEffect(() => () => {
+    latestRequestId.current += 1
+    workerRef.current?.terminate()
+    workerRef.current = null
+  }, [])
 
   return { events, status, progress, error, lastRun, run, cancel }
 }

@@ -378,7 +378,7 @@ func (k *Kernel) evaluate(target int, et float64) (State, bool, error) {
 }
 
 // eval21Correct follows SPKE21's address arithmetic directly. Keeping this
-// implementation separate from the compact legacy helper makes the offsets
+// implementation follows the source record layout, keeping its offsets
 // auditable against the NAIF routine and the CSPICE fixtures.
 func (k *Kernel) eval21Correct(s Segment, et float64) ([6]float64, error) {
 	var out [6]float64
@@ -403,7 +403,10 @@ func (k *Kernel) eval21Correct(s Segment, et float64) ([6]float64, error) {
 		return out, err
 	}
 	max := int(k.addr(off + 4*m.Dimension + 7))
-	fc, wc, w := make([]float64, m.Dimension), make([]float64, m.Dimension), make([]float64, m.Dimension+2)
+	// inspect21 bounds the dimension to 25. Request-local stack storage avoids
+	// three heap allocations per evaluated record without shared scratch state.
+	var fc, wc [25]float64
+	var w [27]float64
 	fc[0] = 1
 	tp := delta
 	for j := 1; j <= max-2; j++ {
@@ -670,72 +673,6 @@ func (k *Kernel) inspect21(s Segment) (type21Meta, error) {
 	epochs := s.Start + int(n)*rs
 	return type21Meta{int(dim), rs, int(n), epochs}, nil
 }
-func (k *Kernel) eval21(s Segment, et float64) ([6]float64, error) {
-	var out [6]float64
-	m := *s.type21
-	lo, hi := 0, m.Records
-	for lo < hi {
-		mid := (lo + hi) / 2
-		if k.addr(m.Epochs+mid) < et {
-			lo = mid + 1
-		} else {
-			hi = mid
-		}
-	}
-	if lo == m.Records {
-		return out, fmt.Errorf("SPK type 21 epoch outside coverage")
-	}
-	off := s.Start + lo*m.RecordSize
-	delta := et - k.addr(off)
-	max := int(k.addr(off + 4*m.Dimension + 7))
-	fc, wc, w := make([]float64, m.Dimension), make([]float64, m.Dimension), make([]float64, m.Dimension+2)
-	fc[0] = 1
-	tp := delta
-	for j := 1; j <= max-2; j++ {
-		step := k.addr(off + j)
-		fc[j] = tp / step
-		wc[j-1] = delta / step
-		tp = delta + step
-	}
-	for j := 1; j <= max; j++ {
-		w[j-1] = 1 / float64(j)
-	}
-	ks, jx, ks1 := max-1, 0, max-2
-	for ks >= 2 {
-		jx++
-		for j := 1; j <= jx; j++ {
-			w[j+ks-1] = fc[j]*w[j+ks1-1] - wc[j-1]*w[j+ks-1]
-		}
-		ks, ks1 = ks1, ks1-1
-	}
-	for ax := 0; ax < 3; ax++ {
-		sum := 0.0
-		ord := int(k.addr(off + 4*m.Dimension + 8 + ax))
-		for j := ord; j >= 1; j-- {
-			sum += k.addr(off+m.Dimension+7+ax*m.Dimension+j) * w[j+ks-1]
-		}
-		out[ax] = k.addr(off+m.Dimension+1+2*ax) + delta*(k.addr(off+m.Dimension+2+2*ax)+delta*sum)
-	}
-	for j := 1; j <= jx; j++ {
-		w[j+ks-1] = fc[j]*w[j+ks1-1] - wc[j-1]*w[j+ks-1]
-	}
-	ks--
-	for ax := 0; ax < 3; ax++ {
-		sum := 0.0
-		ord := int(k.addr(off + 4*m.Dimension + 8 + ax))
-		for j := ord; j >= 1; j-- {
-			sum += k.addr(off+m.Dimension+7+ax*m.Dimension+j) * w[j+ks-1]
-		}
-		out[ax+3] = k.addr(off+m.Dimension+2+2*ax) + delta*sum
-	}
-	for _, x := range out {
-		if !finite(x) {
-			return out, fmt.Errorf("invalid SPK type 21 state")
-		}
-	}
-	return out, nil
-}
-
 func (k *Kernel) f64(off int) float64 {
 	if off < 0 || int64(off)+8 > k.length() {
 		return math.NaN()

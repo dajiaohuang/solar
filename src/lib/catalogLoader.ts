@@ -177,7 +177,8 @@ export async function loadDatasetProvenance(): Promise<DatasetProvenance | null>
 export function loadAsteroidSearchBucket(bucketKey: string) {
   requireCatalogAccess('search')
   const normalizedBucket = bucketKey || 'misc'
-  const cacheKey = `${activeManifest?.version ?? 'legacy'}:${normalizedBucket}`
+  const releaseRoot = activeReleaseRoot
+  const cacheKey = `${releaseRoot}:${normalizedBucket}`
   const existing = searchBucketCache.get(cacheKey)
   if (existing) {
     searchBucketCache.delete(cacheKey)
@@ -185,19 +186,22 @@ export function loadAsteroidSearchBucket(bucketKey: string) {
     return existing
   }
   const promise = fetchJson<AsteroidIndexEntry[]>(
-    `${activeReleaseRoot}/search/${encodeURIComponent(normalizedBucket)}.json`,
-  ).catch(async () => {
+    `${releaseRoot}/search/${encodeURIComponent(normalizedBucket)}.json`,
+  ).catch(async (error: unknown) => {
     if (normalizedBucket.startsWith('prefix-')) {
       const legacyInitial = normalizedBucket.slice('prefix-'.length)[0]
       if (legacyInitial) {
-        return fetchJson<AsteroidIndexEntry[]>(`${activeReleaseRoot}/search/${encodeURIComponent(legacyInitial)}.json`).catch(() => [])
+        return fetchJson<AsteroidIndexEntry[]>(`${releaseRoot}/search/${encodeURIComponent(legacyInitial)}.json`)
       }
     }
     const legacyBucket = getLegacyNumericBucketKey(normalizedBucket)
-    if (!legacyBucket) return []
+    if (!legacyBucket) throw error
     return fetchJson<AsteroidIndexEntry[]>(
-      `${activeReleaseRoot}/search/${encodeURIComponent(legacyBucket)}.json`,
-    ).catch(() => fetchJson<AsteroidIndexEntry[]>(`${activeReleaseRoot}/search/digit.json`).catch(() => []))
+      `${releaseRoot}/search/${encodeURIComponent(legacyBucket)}.json`,
+    ).catch(() => fetchJson<AsteroidIndexEntry[]>(`${releaseRoot}/search/digit.json`))
+  }).catch((error: unknown) => {
+    if (searchBucketCache.get(cacheKey) === promise) searchBucketCache.delete(cacheKey)
+    throw error
   })
   searchBucketCache.set(cacheKey, promise)
   while (searchBucketCache.size > MAX_SEARCH_BUCKET_CACHE_ENTRIES) {
@@ -206,6 +210,19 @@ export function loadAsteroidSearchBucket(bucketKey: string) {
     searchBucketCache.delete(oldestKey)
   }
   return promise
+}
+
+function validateBinaryElements(buffer: ArrayBuffer) {
+  if (buffer.byteLength % 64 !== 0) throw new Error('Invalid binary asteroid element stride')
+  const values = new Float64Array(buffer)
+  for (let offset = 0; offset < values.length; offset += 8) {
+    for (let field = 0; field < 8; field++) {
+      if (!Number.isFinite(values[offset + field])) throw new Error(`Non-finite asteroid element in row ${offset / 8}`)
+    }
+    if (values[offset + 1] <= 0 || values[offset + 2] < 0 || values[offset + 2] >= 1 || values[offset + 7] <= 0) {
+      throw new Error(`Invalid bound elliptic asteroid elements in row ${offset / 8}`)
+    }
+  }
 }
 
 function decodeBinaryChunk(metadata: AsteroidIndexEntry[], buffer: ArrayBuffer) {
@@ -232,7 +249,7 @@ function decodeBinaryChunk(metadata: AsteroidIndexEntry[], buffer: ArrayBuffer) 
 
 export function loadAsteroidChunk(chunkId: string) {
   requireCatalogAccess('details')
-  const cacheKey = `${activeManifest?.version ?? 'legacy'}:${chunkId}`
+  const cacheKey = `${activeReleaseRoot}:${chunkId}`
   const existing = chunkCache.get(cacheKey)
   if (existing) {
     chunkCache.delete(cacheKey)
@@ -242,7 +259,7 @@ export function loadAsteroidChunk(chunkId: string) {
   const request = activeManifest?.format === 'binary-v1'
     ? Promise.all([
         fetchJson<AsteroidIndexEntry[]>(`${activeReleaseRoot}/meta/${encodeURIComponent(chunkId)}.json`),
-        fetchImmutableArrayBuffer(`${activeReleaseRoot}/binary/${encodeURIComponent(chunkId)}.bin`),
+        fetchImmutableArrayBuffer(`${activeReleaseRoot}/binary/${encodeURIComponent(chunkId)}.bin`, validateBinaryElements),
       ]).then(([metadata, buffer]) => decodeBinaryChunk(metadata, buffer))
     : fetchJson<AsteroidRecord[]>(`${activeReleaseRoot}/chunks/${encodeURIComponent(chunkId)}.json`)
   const promise = request.catch((error: unknown) => {
@@ -338,32 +355,22 @@ export function loadAsteroidSample(manifest: AsteroidManifest, size: CatalogSamp
   }
   const artifact = manifest.precomputedSamples?.[size]
   if (!artifact) return Promise.resolve<AsteroidRecord[]>([])
-  const cacheKey = `${manifest.version}:${size}`
+  const root = manifest.releasePath ?? activeReleaseRoot
+  const cacheKey = `${root}:${manifest.version}:${size}:${artifact.metadataPath}:${artifact.binaryPath}:${artifact.count}`
   let promise = sampleCache.get(cacheKey)
   if (!promise) {
-    const root = manifest.releasePath ?? activeReleaseRoot
     promise = Promise.all([
       fetchJson<AsteroidIndexEntry[]>(`${root}/${artifact.metadataPath}`),
-      fetchImmutableArrayBuffer(`${root}/${artifact.binaryPath}`),
+      fetchImmutableArrayBuffer(`${root}/${artifact.binaryPath}`, validateBinaryElements),
     ]).then(([metadata, buffer]) => {
       const values = new Float64Array(buffer)
       if (metadata.length !== artifact.count || values.length !== artifact.count * 8) {
         throw new Error(`Precomputed ${size} sample does not match its manifest count`)
       }
-      return metadata.map((entry, index) => {
-        const offset = index * 8
-        return {
-          ...entry,
-          epochJd: values[offset],
-          semiMajorAxisAU: values[offset + 1],
-          eccentricity: values[offset + 2],
-          inclinationDeg: values[offset + 3],
-          ascendingNodeDeg: values[offset + 4],
-          argPeriapsisDeg: values[offset + 5],
-          meanAnomalyDeg: values[offset + 6],
-          meanMotionDegPerDay: values[offset + 7],
-        }
-      })
+      return decodeBinaryChunk(metadata, buffer)
+    }).catch((error: unknown) => {
+      if (sampleCache.get(cacheKey) === promise) sampleCache.delete(cacheKey)
+      throw error
     })
     sampleCache.set(cacheKey, promise)
   }
@@ -372,11 +379,14 @@ export function loadAsteroidSample(manifest: AsteroidManifest, size: CatalogSamp
 
 export function loadCatalogSummary(manifest: AsteroidManifest) {
   if (!manifest.summaryPath) return Promise.resolve<CatalogSummary | null>(null)
-  const cacheKey = `${manifest.version}:${manifest.summaryPath}`
+  const root = manifest.releasePath ?? activeReleaseRoot
+  const cacheKey = `${root}:${manifest.version}:${manifest.summaryPath}`
   let promise = summaryCache.get(cacheKey)
   if (!promise) {
-    const root = manifest.releasePath ?? activeReleaseRoot
-    promise = fetchJson<CatalogSummary>(`${root}/${manifest.summaryPath}`).catch(() => null)
+    promise = fetchJson<CatalogSummary>(`${root}/${manifest.summaryPath}`).catch(() => {
+      if (summaryCache.get(cacheKey) === promise) summaryCache.delete(cacheKey)
+      return null
+    })
     summaryCache.set(cacheKey, promise)
   }
   return promise

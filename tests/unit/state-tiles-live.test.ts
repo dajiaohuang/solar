@@ -38,11 +38,19 @@ describe.skipIf(!base)('live Go → Web state-tile integration', () => {
       if (ids.length > 32768) throw new Error('Unexpected catalog size; paginate plans explicitly')
     } while (pageToken)
     expect(ids.length).toBeGreaterThan(510)
-    const { tiles } = await load([...ids, 'test:unknown-identity'])
+    const { tiles, plan } = await load([...ids, 'test:unknown-identity'])
     expect(tiles.flatMap(tile => Array.from({ length: tile.recordCount }, (_, row) => tile.metadata.idAt(row)))).toEqual([...ids, 'test:unknown-identity'])
     const tile = tiles[0]
     expect(tile.metadata.rowAt(tile.recordCount - 1).missingReason).toBe('unknown-identity')
-    for (let row = 0; row < ids.length; row++) expect(tile.exactBitmap[row >> 3] & (1 << (row % 8))).not.toBe(0)
+    expect(plan.exactCount).toBeGreaterThan(510)
+    expect(plan.exactCount + plan.missingCount).toBe(ids.length + 1)
+    // Catalog membership is not coverage at this epoch. Both partitions must
+    // carry auditable evidence instead of assuming every catalog ID is exact.
+    for (const part of tiles) for (let row = 0; row < part.recordCount; row++) {
+      const metadata = part.metadata.rowAt(row)
+      if (part.exactBitmap[row >> 3] & (1 << (row % 8))) expect(metadata.kernelSha256).toMatch(/^[a-f0-9]{64}$/)
+      else expect(metadata.missingReason.length).toBeGreaterThan(0)
+    }
     const selected = ['sun', 'naif:10', 'earth', 'naif:399', 'naif:301', 'naif:599', 'naif:501']
     const trajectory = await json('trajectory', { bodyIds: selected, startJd: epochJd, endJd: epochJd + 0.01, samples: 2, frame: 'ECLIPJ2000', precision: 'exact' }) as { bodies: { id: string; states: number[]; availability: string }[] }
     for (const body of trajectory.bodies) {
@@ -57,8 +65,10 @@ describe.skipIf(!base)('live Go → Web state-tile integration', () => {
     }
   }, 90_000)
 
-  it('binds a real source-inventory state to its inventory and selected kernel identities', async () => {
-    const id = 'sb:asteroid:1'
+  // This extra gate requires a separately staged audited inventory containing
+  // Ceres and a backend started with -inventory-dir. Never infer that from URL.
+  it.skipIf(!process.env.SOLAR_TEST_INVENTORY_ID)('binds a real source-inventory state to its inventory and selected kernel identities', async () => {
+    const id = process.env.SOLAR_TEST_INVENTORY_ID!
     const { manifest, tiles } = await load([id, 'naif:2000001'])
     expect(manifest.inventoryManifestSha256).toMatch(/^[a-f0-9]{64}$/)
     const tile = tiles[0]
