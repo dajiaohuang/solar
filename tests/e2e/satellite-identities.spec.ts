@@ -8,10 +8,10 @@ test('keeps source-backed fallback identities selectable with an explicit diagno
   // Outside the shipped satellite window: the explicit fallback seed remains a
   // diagnostic two-body position, while the source coverage boundary is shown
   // in the body evidence rather than being presented as a precise SPK state.
-  await page.goto('?v=4&lang=en&ref=jupiter&bodies=jupiter,naif:541&focused=naif:541&jd=2466154.5&history=1')
+  await page.goto('?v=4&lang=en&ref=jupiter&bodies=jupiter,naif:545&focused=naif:545&jd=2466154.5&history=1')
   await expect(page.locator('.segmented-control').getByRole('button', { name: '3D', exact: true })).toHaveClass(/active/)
   await page.getByRole('button', { name: /Show body details/ }).click()
-  await expect(page.getByTestId('satellite-identity')).toContainText('NAIF 541')
+  await expect(page.getByTestId('satellite-identity')).toContainText('NAIF 545')
   await expect(page.getByTestId('body-model')).toContainText('Elliptic two-body Kepler propagation')
   await page.getByRole('tab', { name: 'Sources', exact: true }).click()
   await expect(page.locator('.inspector-panel a[href="https://ssd.jpl.nasa.gov/sats/discovery.html"]')).toBeVisible()
@@ -22,7 +22,7 @@ test('does not draw a misleading origin when a fallback satellite is used as ref
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  await page.goto('?v=4&lang=en&ref=naif:541&bodies=jupiter,naif:541&jd=2466154.5&history=1')
+  await page.goto('?v=4&lang=en&ref=naif:545&bodies=jupiter,naif:545&jd=2466154.5&history=1')
   await expect(page.locator('.frame-overlays .canvas-error[role="status"]')).toContainText('reference')
   await expect(page.locator('.frame-view canvas')).toHaveCount(0)
   expect(errors).toEqual([])
