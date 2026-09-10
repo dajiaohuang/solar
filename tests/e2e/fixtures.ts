@@ -39,6 +39,41 @@ async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: b
   await page.route('**/solar-test-api/v1/catalog/manifest', route => route.fulfill({
     json: { apiVersion: 'solar.api/v1', catalogVersion: datasetVersion, catalogManifestSha256: catalogHash },
   }))
+  await page.route('**/solar-test-api/v1/state/window*', async route => {
+    const { ids, epochsJd } = route.request().postDataJSON() as { ids: string[]; epochsJd: number[] }
+    const frames: Buffer[] = []
+    const append = (bytes: Buffer) => { const length = Buffer.alloc(4); length.writeUInt32LE(bytes.length); frames.push(length, bytes) }
+    const json = (value: unknown) => append(Buffer.from(JSON.stringify(value)))
+    const idsHash = await digestStateTileRequestIds(ids)
+    json({ kind: 'window', version: 1, epochCount: epochsJd.length, bodyCount: ids.length, requestIdsSha256: idsHash, catalogManifestSha256: catalogHash })
+    let totalExact = 0, totalMissing = 0
+    activity.active++; activity.peak = Math.max(activity.peak, activity.active)
+    try {
+      slowStateTiles ||= page.url().includes('slow-state-tiles=1')
+      if (slowStateTiles) await new Promise(resolve => setTimeout(resolve, 1_200))
+      for (const [epochIndex, epochJd] of epochsJd.entries()) {
+        const unavailable = new Set([...unavailableIdsAt(epochJd), ...missingStateTileIds])
+        const present = ids.map(id => knownBackendIds.has(id) && !unavailable.has(id))
+        const exactCount = present.filter(Boolean).length
+        const planId = createHash('sha256').update(JSON.stringify([epochJd, ids])).digest('hex')
+        const declaredExact = mismatchedStateTileCounts ? (exactCount ? exactCount - 1 : 1) : exactCount
+        json({ kind: 'epoch', epochIndex, plan: { apiVersion: 'solar.api/v1', catalogVersion: datasetVersion, planId, requestIdsSha256: idsHash, catalogManifestSha256: catalogHash,
+          epochJd, timeScale: 'TDB', frame: 'ECLIPJ2000', precision: 'exact', stateOriginId: 'naif:0', distanceUnit: 'km', velocityUnit: 'km/s', stride: 6,
+          fieldMask: ['position', 'velocity'], tileCount: 1, bodyCount: ids.length, exactCount: declaredExact, approximateCount: 0, missingCount: ids.length - declaredExact,
+          tiles: [{ sequence: 0, ordinalStart: 0, ordinalCount: ids.length }] } })
+        const metadata: StateTileMetadata[] = ids.map((id, index) => ({ id, source: knownBackendIds.has(id) ? source : '', datasetVersion: knownBackendIds.has(id) ? datasetVersion : '', datasetSha256: catalogHash,
+          kernelSha256: 'b'.repeat(64), model: present[index] ? 'spk-original' : '', centerId: 'naif:0', validityStartEt: -1e12, validityEndEt: 1e12, validityPresent: true,
+          stateEvidence: present[index] ? 'fixture-kernel' : '', evidenceWindowStartEt: 0, evidenceWindowEndEt: 0, evidenceWindowPresent: false,
+          missingReason: present[index] ? '' : unavailable.has(id) ? 'kernel-coverage-gap' : 'unknown-identity', identityStatus: '', sourceRecord: false }))
+        const states = new Float64Array(ids.length * 6); ids.forEach((id, index) => { if (present[index]) states.set(fixtureState(id), index * 6) })
+        append(Buffer.from(await encodeStateTile({ sequence: 0, tileCount: 1, ordinalStart: 0, epochJd, metadata, exact: present.flatMap((value, index) => value ? [index] : []), states, planHash: planId, catalogManifestSha256: catalogHash })))
+        totalExact += exactCount; totalMissing += ids.length - exactCount
+      }
+      json({ kind: 'complete', epochCount: epochsJd.length, bodyCount: ids.length, exactCount: totalExact, missingCount: totalMissing })
+      activity.completed++
+      return route.fulfill({ headers: { 'content-type': 'application/vnd.solar.state-window+binary' }, body: Buffer.concat(frames) })
+    } finally { activity.active-- }
+  })
   await page.route('**/solar-test-api/v1/state/plan*', async route => {
     const request = route.request()
     if (request.method() !== 'POST') return route.fulfill({ status: 405 })

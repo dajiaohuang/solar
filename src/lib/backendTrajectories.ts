@@ -1,7 +1,7 @@
 import { utcJulianDayToTdb } from '../engine/ephemeris/timeScales'
 import { backendBodyId } from './currentStateIdentity'
-import { fetchStateTilePlan } from './stateTileClient'
-import { buildBackendFrame, fetchStateTiles, StateTileSnapshot, type StateTileMetadata, type StateTileManifest } from './stateTiles'
+import { fetchStateWindow } from './stateWindowClient'
+import { buildBackendFrame, StateTileSnapshot, type StateTileMetadata } from './stateTiles'
 import { createTrajectoryAccumulator } from './trajectorySamples'
 import type { CelestialBody, PackedTrajectoryData } from '../types'
 
@@ -83,31 +83,28 @@ export async function loadBackendTrajectories(params: {
     sourceOrdinals: new Uint32Array(params.sampleCount * bodyIds.length), sources: [], planHashes: [], tiles: [], gaps: [],
   }
   const sourceIndexes = new Map<string, number>(), gaps = new Set<string>()
-  let auditTextBytes = 0, manifest: StateTileManifest | undefined
+  let auditTextBytes = 0
   const charge = (text: string) => {
     auditTextBytes += new TextEncoder().encode(text).byteLength
     if (auditTextBytes > TRAJECTORY_AUDIT_TEXT_BYTES) throw new Error('Backend trajectory provenance budget exceeded')
   }
   try {
-    for (let epochIndex = 0; epochIndex < params.sampleCount; epochIndex++) {
+    const epochsTdbJd = Array.from({ length: params.sampleCount }, (_, index) => utcJulianDayToTdb(audit.startUtcJd + index / (params.sampleCount - 1) * params.historyDays))
+    for await (const { epochIndex, manifest, plan, tiles } of fetchStateWindow({
+      base: params.base, bodyIds: uniqueBackendIds, epochsTdbJd, signal: controller.signal, fetcher,
+      acquireTile: params.acquireTile, expectedCatalogManifestSha256: params.expectedCatalogManifestSha256,
+      expectedInventoryManifestSha256: params.expectedInventoryManifestSha256,
+    })) {
       check()
-      const epochUtcJd = audit.startUtcJd + epochIndex / (params.sampleCount - 1) * params.historyDays
-      const epochTdbJd = utcJulianDayToTdb(epochUtcJd)
-      const planned = await fetchStateTilePlan({ base: params.base, bodyIds: uniqueBackendIds, epochTdbJd, signal: controller.signal, fetcher, manifest })
-      check()
-      manifest = planned.manifest
-      if (params.expectedCatalogManifestSha256 && manifest.catalogManifestSha256 !== params.expectedCatalogManifestSha256 ||
-          params.expectedInventoryManifestSha256 && manifest.inventoryManifestSha256 !== params.expectedInventoryManifestSha256) throw new Error('Backend trajectory source snapshot changed')
+      const epochTdbJd = epochsTdbJd[epochIndex]
       audit.catalogManifestSha256 = manifest.catalogManifestSha256
       audit.inventoryManifestSha256 = manifest.inventoryManifestSha256
-      const tiles = await fetchStateTiles({ base: params.base, plan: planned.plan, signal: controller.signal, fetcher, acquireTile: params.acquireTile })
-      check()
       const snapshot = new StateTileSnapshot(tiles, requested)
       const referenceIndex = snapshot.indexOf(params.referenceBody.id)
       const referenceAvailable = referenceIndex >= 0 && snapshot.statusAt(referenceIndex) === 'exact'
       audit.epochsTdbJd[epochIndex] = epochTdbJd
-      audit.planHashes.push(planned.plan.planHash)
-      charge(planned.plan.planHash)
+      audit.planHashes.push(plan.planHash)
+      charge(plan.planHash)
       for (const tile of tiles) {
         const entry = { epochIndex, sequence: tile.sequence, ordinalStart: tile.ordinalStart, recordCount: tile.recordCount, payloadSha256: tile.payloadSha256 }
         charge(JSON.stringify(entry)); audit.tiles.push(entry)

@@ -4,6 +4,9 @@ State tiles are the current high-volume exact-position transport shared by the
 Go backend, full Web client and independent Android/iOS clients. They replace the removed columnar JSON
 current-state endpoint; no old-wire compatibility is promised.
 
+The [multi-epoch window protocol](./shared-compute-refactor.md#multi-epoch-protocol)
+embeds these unchanged binary tiles in one progressively consumed response.
+
 ## Request sequence
 
 1. `GET /v1/catalog/manifest` pins `apiVersion`, catalog version, catalog

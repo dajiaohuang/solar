@@ -1,7 +1,5 @@
-import modelEvidence from '../../data/modelEvidence.json'
+import { earthMoonMassPartition as evidence } from '../../data/modelEvidence.json'
 import type { Vector3 } from '../../types'
-
-const evidence = modelEvidence.earthMoonMassPartition
 
 function parsePositiveParameter(value: string, label: string) {
   const parameter = Number(value)

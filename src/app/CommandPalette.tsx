@@ -35,6 +35,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const focusFrame = window.requestAnimationFrame(() => inputRef.current?.focus())
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || event.keyCode === 229) return
       if (event.key === 'Escape') { event.preventDefault(); onClose(); return }
       if (event.key !== 'Tab' || !dialogRef.current) return
       const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), [href], [tabindex]:not([tabindex="-1"])')]
@@ -115,6 +116,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   }
 
   function openResultFromInput(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return
     if (!['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) return
     const buttons = [...(resultsRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])]
     if (!buttons.length) return

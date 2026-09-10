@@ -4,6 +4,10 @@ The implementation in `cmd/solar-backend` is a local service shared by Web,
 Android and iOS. See [`docs/backend-api-v1.md`](../docs/backend-api-v1.md) for
 the versioned scientific contract.
 
+Full Web histories now submit one multi-epoch stream. See the
+[shared-compute update](../docs/shared-compute-refactor.md) for its bounded
+protocol, CPU scheduling, numerical reuse, shutdown behavior and validation.
+
 Run from the repository root with `go run ./cmd/solar-backend`. Before starting
 the service, run the normal build/data preparation so that
 `public/data/ephemerides` contains the selected Web profile, then stage that
@@ -30,9 +34,9 @@ unvalidated elements are missing unless `precision=approximate` is explicitly
 requested. Manifest-valid kernel paths are admitted to the catalog at startup,
 while their full-byte manifest read and SPK parse are deferred until exact
 evaluation needs them; cancellation is retryable and integrity/parse failure is
-terminal for that kernel. The service uses a bounded scientific worker pool.
-When all slots are in use it returns `429 overloaded` with `Retry-After: 1`;
-it does not accumulate an unbounded work queue. Reproduce the measured
+terminal for that kernel. HTTP admission and CPU evaluation blocks have
+separate bounded queues. Queue exhaustion/timeout returns `429 overloaded`
+with `Retry-After: 1`; no unbounded work queue is created. Reproduce the measured
 cold/warm, batch, long-trajectory, binary state-tile transport, mixed-load, RSS
 and profile evidence with the commands in
 [`BENCHMARKS.md`](../BENCHMARKS.md).

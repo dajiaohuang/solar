@@ -1,6 +1,21 @@
 import { expect, test } from './fixtures'
 import satelliteCatalog from '../../src/data/satelliteCatalog.json' with { type: 'json' }
 
+test('keeps the last verified frame and its epoch when a new time request fails', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('?v=4&lang=en&view=3d&bodies=earth,mars&ref=sun&jd=2461287.5&history=1&samples=32&speed=0')
+  const canvas = page.getByTestId('trajectory-canvas-3d')
+  await expect(canvas).toHaveAttribute('data-position-count', '2')
+  await page.route('**/solar-test-api/v1/state/plan*', route => route.fulfill({ status: 503, body: 'offline' }))
+  await page.locator('.simulation-bar input[type="date"]').fill('2026-09-15')
+  const status = page.getByTestId('ephemeris-status')
+  await expect(status.locator(':scope > summary')).toContainText('rendered JD 2461287.500000')
+  await status.locator(':scope > summary').click()
+  await expect(status.getByRole('alert')).toContainText('503')
+  await expect(canvas).toHaveAttribute('data-position-count', '2')
+  await expect(status).toContainText('requested JD')
+})
+
 test.describe('shared current/history tile admission', () => {
   test.use({ stateTileRowsPerTile: 1 })
   test('keeps both real workers progressing with at most two numeric tile responses preparing combined', async ({ page, stateTileActivity }) => {
@@ -10,7 +25,7 @@ test.describe('shared current/history tile admission', () => {
     page.on('worker', worker => workers.push(worker.url()))
     page.on('pageerror', error => errors.push(error.message))
     page.on('request', request => {
-      if (!request.url().includes('/v1/state/tiles')) return
+      if (!request.url().includes('/v1/state/tiles') && !request.url().includes('/v1/state/window')) return
       active.add(request)
     })
     page.on('requestfinished', request => {
@@ -23,14 +38,13 @@ test.describe('shared current/history tile admission', () => {
     await page.goto('?v=4&lang=en&view=3d&bodies=earth,mars&ref=sun&jd=2461287.5&history=1&samples=32&speed=0&slow-state-tiles=1')
     const canvas = page.getByTestId('trajectory-canvas-3d')
     await expect(canvas).toHaveAttribute('data-position-count', '2')
-    // Start the clock while the deliberately slow historical job is still
-    // loading. Each job has three one-row tiles, not a single fixture response.
+    // One history stream shares admission with current-state tile transfers.
     await expect.poll(() => historyCompleted).toBeGreaterThan(0)
     const initialCurrent = currentCompleted
     await page.locator('.simulation-bar .primary-button').click()
     await expect.poll(() => currentCompleted, { timeout: 15_000 }).toBeGreaterThan(initialCurrent + 2)
-    await expect.poll(() => historyCompleted, { timeout: 15_000 }).toBeGreaterThan(5)
-    expect(stateTileActivity.completed).toBeGreaterThanOrEqual(12)
+    expect(historyCompleted).toBe(1)
+    expect(stateTileActivity.completed).toBeGreaterThanOrEqual(7)
     expect(stateTileActivity.peak).toBe(2)
     expect(workers.filter(url => url.includes('current-states.worker'))).toHaveLength(1)
     expect(workers.filter(url => url.includes('backend-trajectories.worker'))).toHaveLength(1)

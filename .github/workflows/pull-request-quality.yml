@@ -127,6 +127,9 @@ jobs:
           NODE
           npm run validate:data
       - name: Verify the same frontend with curated assets and blocked full-only actions
+        env:
+          # Prove the preview ignores a full-client endpoint inherited from env.
+          VITE_SOLAR_API_BASE_URL: https://preview-must-not-call.invalid/v1
         run: npm run test:preview
       - name: Upload browser diagnostics
         if: always()

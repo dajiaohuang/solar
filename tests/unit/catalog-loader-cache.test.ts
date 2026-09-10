@@ -3,6 +3,7 @@ import {
   MAX_CHUNK_CACHE_ENTRIES,
   loadAsteroidChunk,
   loadAsteroidManifest,
+  loadAsteroidSearchBucket,
   loadAsteroidSample,
   resetDatasetLoader,
   searchAsteroidCatalogPage,
@@ -34,6 +35,31 @@ afterEach(() => {
 })
 
 describe('catalog loader cache isolation', () => {
+  it('retries a failed search instead of caching a network error as zero matches', async () => {
+    let fail = true
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/manifest.json')) return json(manifest)
+      return fail ? new Response(null, { status: 503 }) : json([])
+    }))
+    await loadAsteroidManifest('mpcorb-current-full')
+    await expect(loadAsteroidSearchBucket('a')).rejects.toThrow('503')
+    fail = false
+    await expect(loadAsteroidSearchBucket('a')).resolves.toEqual([])
+  })
+
+  it('rejects non-finite binary elements and permits retry after recovery', async () => {
+    let corrupt = true
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/manifest.json')) return json(manifest)
+      if (url.endsWith('.json')) return json([{ id: 'asteroid:bad' }])
+      return new Response(new Float64Array([2451545, 2, .1, corrupt ? NaN : 0, 0, 0, 0, 1]))
+    }))
+    await loadAsteroidManifest('mpcorb-current-full')
+    await expect(loadAsteroidChunk('bad')).rejects.toThrow('Non-finite')
+    corrupt = false
+    await expect(loadAsteroidChunk('bad')).resolves.toHaveLength(1)
+  })
   it('does not let a missing requested version poison the current manifest promise', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)

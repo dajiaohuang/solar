@@ -322,6 +322,29 @@ func (s *Server) statePlan(w http.ResponseWriter, r *http.Request) {
 		s.error(w, http.StatusBadRequest, "invalid_plan", err.Error())
 		return
 	}
+	plan, err := s.buildStatePlan(r.Context(), req, ids)
+	if err != nil {
+		s.stateWorkError(w, r, err)
+		return
+	}
+	s.jsonLimited(w, http.StatusOK, plan.response, maxStatePlanBytes)
+}
+
+func (s *Server) stateWorkError(w http.ResponseWriter, r *http.Request, err error) {
+	var failure *stateTileBuildError
+	if r.Context().Err() != nil {
+		s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
+	} else if errors.Is(err, errRequestQueueFull) || errors.Is(err, errRequestQueueTimeout) {
+		w.Header().Set("Retry-After", "1")
+		s.error(w, http.StatusTooManyRequests, "overloaded", "compute queue unavailable; retry later")
+	} else if errors.As(err, &failure) {
+		s.error(w, failure.status, failure.code, failure.message)
+	} else {
+		s.error(w, http.StatusUnprocessableEntity, "state_unavailable", err.Error())
+	}
+}
+
+func (s *Server) buildStatePlan(ctx context.Context, req statePlanRequest, ids []string) (*statePlan, error) {
 	canonical := struct {
 		IDs       []string `json:"ids"`
 		EpochJD   float64  `json:"epochJd"`
@@ -340,8 +363,7 @@ func (s *Server) statePlan(w http.ResponseWriter, r *http.Request) {
 	planHash := sha256.Sum256(canonicalBytes)
 	planID := fmt.Sprintf("%x", planHash[:])
 	if plan, ok := s.plans.get(planID); ok {
-		s.json(w, http.StatusOK, plan.response)
-		return
+		return plan, nil
 	}
 	// This estimate is deliberately conservative and is checked before any
 	// inventory read or SPK/Kepler calculation occurs.
@@ -351,18 +373,12 @@ func (s *Server) statePlan(w http.ResponseWriter, r *http.Request) {
 	}
 	tiles, estimated, err := estimateStateTileBudget(len(ids), req.TileSize, maxStatePlanBytes, maxTileBytes)
 	if err != nil {
-		s.error(w, http.StatusRequestEntityTooLarge, "plan_too_large", "estimated state tile response exceeds the configured budget")
-		return
+		return nil, &stateTileBuildError{http.StatusRequestEntityTooLarge, "plan_too_large", "estimated state tile response exceeds the configured budget"}
 	}
 	tileCount := len(tiles)
-	rows, exact, missing, err := s.preparePlanRows(r.Context(), ids, req.EpochJD, planHash)
+	rows, exact, missing, err := s.preparePlanRows(ctx, ids, req.EpochJD, planHash)
 	if err != nil {
-		if r.Context().Err() != nil {
-			s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
-		} else {
-			s.error(w, http.StatusUnprocessableEntity, "state_unavailable", err.Error())
-		}
-		return
+		return nil, err
 	}
 	response := statePlanResponse{APIVersion: catalog.APIVersion, CatalogVersion: s.catalog.Version(), CatalogManifestSHA256: s.catalog.ManifestHash(), PlanID: planID, EpochJD: req.EpochJD, TimeScale: req.TimeScale, Frame: req.Frame, Precision: req.Precision, StateOriginID: "naif:0", DistanceUnit: "km", VelocityUnit: "km/s", FieldMask: append([]string(nil), req.FieldMask...), BodyCount: len(ids), Stride: statewire.Stride, TileSize: req.TileSize, TileCount: tileCount, ExactCount: exact, ApproximateCount: 0, MissingCount: missing, EstimatedBytes: estimated, Tiles: tiles}
 	response.RequestIDsSHA256 = requestIDsHash(ids)
@@ -371,7 +387,7 @@ func (s *Server) statePlan(w http.ResponseWriter, r *http.Request) {
 	}
 	plan := &statePlan{response: response, rows: rows, hash: planHash, created: time.Now()}
 	s.plans.put(planID, plan)
-	s.jsonLimited(w, http.StatusOK, response, maxStatePlanBytes)
+	return plan, nil
 }
 
 func requestIDsHash(ids []string) string {
@@ -430,6 +446,66 @@ func normalizePlanRequest(req *statePlanRequest) ([]string, error) {
 }
 
 func (s *Server) preparePlanRows(ctx context.Context, ids []string, epoch float64, _ [32]byte) ([]statePlanRow, int, int, error) {
+	const blockSize = 1024
+	if len(ids) <= blockSize {
+		return s.preparePlanBlock(ctx, ids, epoch)
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	rows := make([]statePlanRow, len(ids))
+	blocks := (len(ids) + blockSize - 1) / blockSize
+	jobs := make(chan int)
+	var workers sync.WaitGroup
+	var failure error
+	var once sync.Once
+	for worker := 0; worker < min(4, blocks); worker++ {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for block := range jobs {
+				start := block * blockSize
+				end := min(start+blockSize, len(ids))
+				resolved, _, _, err := s.preparePlanBlock(ctx, ids[start:end], epoch)
+				if err != nil {
+					once.Do(func() { failure = err; cancel() })
+					return
+				}
+				copy(rows[start:end], resolved)
+			}
+		}()
+	}
+dispatch:
+	for block := 0; block < blocks; block++ {
+		select {
+		case <-ctx.Done():
+			break dispatch
+		case jobs <- block:
+		}
+	}
+	close(jobs)
+	workers.Wait()
+	if failure != nil {
+		return nil, 0, 0, failure
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, 0, 0, err
+	}
+	exact := 0
+	for _, row := range rows {
+		if row.exact {
+			exact++
+		}
+	}
+	return rows, exact, len(rows) - exact, nil
+}
+
+func (s *Server) preparePlanBlock(ctx context.Context, ids []string, epoch float64) ([]statePlanRow, int, int, error) {
+	release, err := s.compute.acquire(ctx, computeClass(ctx))
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	defer release()
+
 	rows := make([]statePlanRow, len(ids))
 	unknown := make([]string, 0)
 	for n, id := range ids {
@@ -513,7 +589,7 @@ func (s *Server) resolvePlanRows(ctx context.Context, rows []statePlanRow, epoch
 	if err := ctx.Err(); err != nil {
 		return nil, 0, 0, err
 	}
-	operational, found, err := s.catalogOperationalStates(ctx, operationalIDs, epoch)
+	operational, found, evidence, err := s.catalog.EvalBatchContext(ctx, operationalIDs, epoch)
 	if err != nil {
 		return nil, 0, 0, err
 	}
@@ -527,10 +603,7 @@ func (s *Server) resolvePlanRows(ctx context.Context, rows []statePlanRow, epoch
 			if row.catalogBody.Availability == catalog.AvailableOperational {
 				state, ok := operational[row.catalogBody.ID]
 				if found[row.catalogBody.ID] && ok && finiteState(state) {
-					provenance, provenanceOK, provenanceErr := s.catalog.OperationalProvenance(row.catalogBody.ID, epoch)
-					if provenanceErr != nil {
-						return nil, 0, 0, provenanceErr
-					}
+					provenance, provenanceOK := evidence[row.catalogBody.ID]
 					if !provenanceOK {
 						row.metadata.MissingReason = "kernel-provenance-unavailable"
 						missing++
@@ -560,17 +633,14 @@ func (s *Server) resolvePlanRows(ctx context.Context, rows []statePlanRow, epoch
 			continue
 		}
 		if row.record != nil {
-			result, resolveErr := s.resolveInventoryStateWithOperational(ctx, *row.record, epoch, false, operational, found)
+			result, resolveErr := s.resolveInventoryStateWithOperational(ctx, *row.record, epoch, false, operational, found, evidence)
 			if resolveErr != nil {
 				return nil, 0, 0, resolveErr
 			}
 			if result.State != nil && (result.Availability == catalog.AvailableOperational || result.Availability == catalog.AvailableSnapshot) && finiteState(*result.State) {
 				if result.Model == "spk-original" {
 					catalogID := "naif:" + strconv.Itoa(row.record.NAIFID)
-					provenance, provenanceOK, provenanceErr := s.catalog.OperationalProvenance(catalogID, epoch)
-					if provenanceErr != nil {
-						return nil, 0, 0, provenanceErr
-					}
+					provenance, provenanceOK := evidence[catalogID]
 					if !provenanceOK {
 						row.metadata.MissingReason = "kernel-provenance-unavailable"
 						missing++
@@ -678,12 +748,27 @@ func (s *Server) stateTiles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) encodeStateTile(ctx context.Context, plan *statePlan, sequence uint32) (stateTileCacheValue, error) {
+	return s.encodeStateTileWithWait(ctx, plan, sequence, false)
+}
+
+func (s *Server) encodeStateTileWithWait(ctx context.Context, plan *statePlan, sequence uint32, wait bool) (stateTileCacheValue, error) {
 	select {
 	case s.tileSlots <- struct{}{}:
-		defer func() { <-s.tileSlots }()
 	default:
-		return stateTileCacheValue{}, &stateTileBuildError{http.StatusTooManyRequests, "overloaded", "tile calculation limit reached; retry later"}
+		if !wait {
+			return stateTileCacheValue{}, &stateTileBuildError{http.StatusTooManyRequests, "overloaded", "tile calculation limit reached; retry later"}
+		}
+		timer := time.NewTimer(requestQueueTimeout)
+		defer timer.Stop()
+		select {
+		case s.tileSlots <- struct{}{}:
+		case <-ctx.Done():
+			return stateTileCacheValue{}, ctx.Err()
+		case <-timer.C:
+			return stateTileCacheValue{}, errRequestQueueTimeout
+		}
 	}
+	defer func() { <-s.tileSlots }()
 	if err := ctx.Err(); err != nil {
 		return stateTileCacheValue{}, err
 	}
@@ -770,7 +855,9 @@ func estimateStateTileBudget(bodyCount, tileSize int, maxPlanBytes, maxTileBytes
 }
 
 func decodeOneJSON(r *http.Request, out any) error {
-	dec := json.NewDecoder(io.LimitReader(r.Body, maxBodyBytes))
+	// LimitReader fabricates EOF at the limit, accepting a valid prefix even
+	// when another JSON value or oversized whitespace follows it.
+	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, maxBodyBytes))
 	if err := dec.Decode(out); err != nil {
 		return fmt.Errorf("request body is not valid JSON")
 	}

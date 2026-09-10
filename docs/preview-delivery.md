@@ -4,6 +4,8 @@ The preview is a build-time product profile of the same Web frontend, not a sepa
 
 ## Build and verify / 构建与验证
 
+GitHub Pages delivers static files and a fixed data snapshot. Positions and trajectories are computed in the browser. The preview build clears `VITE_SOLAR_API_BASE_URL`, including values inherited from `.env`; it cannot be turned into a backend-dependent client by deployment configuration. Every desktop/mobile preview test rejects live scientific API requests. / GitHub Pages 交付静态文件和固定数据快照，位置与轨迹在浏览器内计算。预览构建会清除 `VITE_SOLAR_API_BASE_URL`（包括 `.env` 中的值），部署配置不会将它变成依赖后端的客户端。所有桌面／手机预览测试均检查没有在线科学 API 请求。
+
 Install dependencies with `npm ci`. Install the exact immutable dataset archive referenced by `.github/asteroid-dataset.json`, verify its `assetSha256` before extraction into `public/data/asteroids`, and run `npm run validate:data`. Do not substitute a newly generated dataset with a different identity. The existing deploy workflow and pull-request preview check perform this download and verification. / 先运行 `npm ci`。获取 `.github/asteroid-dataset.json` 指定的不可变数据归档，解压到 `public/data/asteroids` 前核对 `assetSha256`，然后运行 `npm run validate:data`。不要替换成身份不同的新生成数据。现有部署流程和 PR 预览检查会执行下载及校验。
 
 ```bash
@@ -38,6 +40,10 @@ Preview catalogs live under `data/asteroids/preview/<availability-sha256>/releas
 IndexedDB keys retain complete URLs. Preview versions include both the availability hash and source release. Stale-version eviction is product-scoped, while full and preview records share one global LRU budget: at most 256 MiB, further reduced by reported storage quota. This is a bounded, best-effort cache, not a persistent offline download guarantee. / IndexedDB 键保留完整 URL；预览版本同时包含可用性哈希和源发布身份。同一产品内清理旧版本，完整与预览记录共用一个全局 LRU 预算：最多 256 MiB，并根据浏览器存储配额进一步降低。这是有界、尽力而为的缓存，不是永久离线下载保证。
 
 ## Pages publication and full clients / Pages 发布与完整版客户端
+
+The preview overview explains the fixed 8,000-record sample, selected scenes, three lessons and scientific limits in English and Chinese. Its project link leads to the actual repository and setup instructions, not an unshipped client. / 预览说明以中英文介绍固定的 8,000 条样本、精选场景、三组课程和科学限制；项目链接指向真实源码仓库与部署说明，不冒充尚未发布的客户端。
+
+Local validation on 2026-09-10 installed the exact pinned archive (SHA-256 `bcf692808b7b9ba8ab8c556efff7d4f0ec1b4034b2d45fb027070059dca955f2`) and validated its 1,561,171 source records. All 16 preview browser tests passed with real packaged data and an intentionally invalid inherited backend URL. The artifact was about 92.4 MiB, of which the delivered catalog was 917,710 bytes; only its fixed display sample is included. These are local artifact results, not proof of publication. / 2026-09-10 本地验证安装了上述固定哈希的数据包，并校验 1,561,171 条源记录。使用真实打包数据并故意注入无效后端地址时，16 项预览浏览器测试全部通过。产物约 92.4 MiB，其中交付目录为 917,710 字节，只含固定展示样本。这是本地产物验证，不代表已上线。
 
 Full-Web current positions require the deployer-provided `VITE_SOLAR_API_BASE_URL`. Pages intentionally has no backend configuration and remains a curated static preview; no official public full-Web backend URL is claimed.
 

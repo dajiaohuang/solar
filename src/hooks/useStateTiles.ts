@@ -21,7 +21,7 @@ export function sampleStateTileEpoch(epochUtcJd: number, isPlaying: boolean) { i
 export function shouldStartStateTileSample(params: { isPlaying: boolean; requestActive: boolean; latestSample: number; requestedSample: number }) { return params.isPlaying && !params.requestActive && params.latestSample > params.requestedSample }
 
 function apiBase() { const configured = import.meta.env.VITE_SOLAR_API_BASE_URL; return typeof configured === 'string' && configured.trim() ? configured.trim().replace(/\/+$/, '') : null }
-export type StateTileFrameSnapshot = { frames: ReadonlyMap<BodyId, BackendFrame>; publishedEpochUtcJd: number }
+export type StateTileFrameSnapshot = { frames: ReadonlyMap<BodyId, BackendFrame>; publishedEpochUtcJd: number; identityKey?: string }
 
 export function useStateTiles(params: { bodies: CelestialBody[]; resolutionBodies: CelestialBody[]; referenceIds: BodyId[]; epochUtcJd: number; isPlaying?: boolean; seekRevision?: number; sourcePin?: SourceScenePin }) {
   const [snapshot, setSnapshot] = useState<StateTileFrameSnapshot>({ frames: new Map(), publishedEpochUtcJd: NaN }); const [error, setError] = useState<string | null>(null); const [loading, setLoading] = useState(false); const [playingSample, setPlayingSample] = useState(0)
@@ -31,6 +31,7 @@ export function useStateTiles(params: { bodies: CelestialBody[]; resolutionBodie
   const latestParamsRef = useRef({ bodies: params.bodies, referenceIds: params.referenceIds, requested, sourcePin: params.sourcePin }); const isPlaying = params.isPlaying === true
   useEffect(() => { latestEpochRef.current = params.epochUtcJd }, [params.epochUtcJd]); useEffect(() => { latestParamsRef.current = { bodies: params.bodies, referenceIds: params.referenceIds, requested, sourcePin: params.sourcePin } }, [params.bodies, params.referenceIds, params.resolutionBodies, requested, params.sourcePin]); useEffect(() => { playingSampleRef.current = playingSample }, [playingSample])
   useEffect(() => { if (!isPlaying) return undefined; const timer = window.setInterval(() => { if (activeRequestRef.current) { playingSampleRef.current += 1; return } setPlayingSample(value => { const next = value + 1; playingSampleRef.current = next; return next }) }, STATE_TILE_PLAYING_SAMPLE_MS); return () => window.clearInterval(timer) }, [isPlaying])
+  const identityKey = JSON.stringify([base, params.referenceIds, [...requested], params.sourcePin ?? null])
   const requestToken = stateTileRequestToken({ isPlaying, sample: playingSample, epochUtcJd: params.epochUtcJd, seekRevision: params.seekRevision ?? 0 }); const requestKey = `${base ?? 'none'}|${requestToken}|refs:${params.referenceIds.join(',')}|bodies:${[...requested].map(([id, backend]) => `${id}:${backend}`).join(',')}|source:${params.sourcePin ? `${params.sourcePin.catalogVersion}:${params.sourcePin.catalogManifestSha256}:${params.sourcePin.inventoryManifestSha256}:${params.sourcePin.base}` : 'none'}`
   useEffect(() => { const request = gate.current!.begin(); activeRequestRef.current = request; const controller = request.controller; const latest = latestParamsRef.current
     if (PRODUCT_PROFILE === 'preview' || !base || latest.requested.size === 0) { clientRef.current?.dispose(); clientRef.current = null; queueMicrotask(() => { if (!gate.current!.isCurrent(request)) return; setSnapshot({ frames: new Map(), publishedEpochUtcJd: NaN }); setError(null); setLoading(false); activeRequestRef.current = null }); return () => { if (activeRequestRef.current === request) activeRequestRef.current = null; gate.current!.cancel(request) } }
@@ -42,11 +43,11 @@ export function useStateTiles(params: { bodies: CelestialBody[]; resolutionBodie
     }).then(value => {
       if (!gate.current!.isCurrent(request)) return
       const frames = framesFromCurrentStateObservation(value, latest.bodies, latest.referenceIds)
-      setSnapshot({ frames, publishedEpochUtcJd: value.epochUtcJd }); setLoading(false); activeRequestRef.current = null
+      setSnapshot({ frames, publishedEpochUtcJd: value.epochUtcJd, identityKey }); setLoading(false); activeRequestRef.current = null
       if (shouldStartStateTileSample({ isPlaying, requestActive: false, latestSample: playingSampleRef.current, requestedSample: requestSample })) setPlayingSample(value => Math.max(value, playingSampleRef.current))
-    }).catch((reason: unknown) => { if (!gate.current!.isCurrent(request)) return; activeRequestRef.current = null; setSnapshot({ frames: new Map(), publishedEpochUtcJd: NaN }); setError(reason instanceof Error ? reason.message : String(reason)); setLoading(false) })
+    }).catch((reason: unknown) => { if (!gate.current!.isCurrent(request)) return; activeRequestRef.current = null; setError(reason instanceof Error ? reason.message : String(reason)); setLoading(false) })
     return () => { if (activeRequestRef.current === request) activeRequestRef.current = null; gate.current!.cancel(request) }
-  }, [base, requestKey, isPlaying, params.seekRevision])
+  }, [base, requestKey, identityKey, isPlaying, params.seekRevision])
   useEffect(() => () => { clientRef.current?.dispose(); clientRef.current = null }, [])
-  return { configured: PRODUCT_PROFILE === 'full' && base !== null, frames: snapshot.frames, error, loading, publishedEpochUtcJd: Number.isFinite(snapshot.publishedEpochUtcJd) ? snapshot.publishedEpochUtcJd : null }
+  return { configured: PRODUCT_PROFILE === 'full' && base !== null, frames: snapshot.identityKey === identityKey ? snapshot.frames : new Map<BodyId, BackendFrame>(), error, loading, publishedEpochUtcJd: snapshot.identityKey === identityKey && Number.isFinite(snapshot.publishedEpochUtcJd) ? snapshot.publishedEpochUtcJd : null }
 }

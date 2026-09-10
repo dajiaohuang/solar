@@ -4,15 +4,9 @@ import { SpkKernel } from './spk'
 import { createKernelResolver, kernelsCoveringInterval, type LoadedKernel } from './kernelPool'
 import { utcJulianDayToEt } from './timeScales'
 import type { CelestialBody } from '../../types'
+import type { RuntimeKernelFile } from './runtimeManifest'
 
-export type KernelFile = {
-  id: string; path: string; sha256: string; bytes: number; targets: number[];
-  startEt: number; endEt: number; source: string; sourceIdentity?: unknown;
-  core?: boolean;
-  solutionKernelIds?: string[];
-  dependencyOnly?: boolean;
-  solution?: string;
-}
+export type KernelFile = RuntimeKernelFile & { sourceIdentity?: unknown }
 export const EPHEMERIS_MANIFEST = manifestData as { schemaVersion: number; id: string; profile?: string; files: KernelFile[] }
 const installed = new Map<string, LoadedKernel>()
 let orderedSnapshot: { ids: readonly string[]; kernels: LoadedKernel[] } | null = null

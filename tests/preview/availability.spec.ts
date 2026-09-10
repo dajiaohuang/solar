@@ -1,5 +1,35 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 
+const backendRequests = new WeakMap<Page, string[]>()
+test.beforeEach(async ({ context, page }) => {
+  const requests: string[] = []
+  backendRequests.set(page, requests)
+  context.on('request', request => {
+    const url = new URL(request.url())
+    if (/\/v1\//.test(url.pathname) || /^(ssd-api|horizons)\.jpl\.nasa\.gov$/.test(url.hostname)) requests.push(url.href)
+  })
+})
+test.afterEach(async ({ page }) => {
+  expect(backendRequests.get(page), 'Every preview flow must use static data without live scientific APIs').toEqual([])
+})
+
+test('explains the static preview and links to the real full-version project in both languages', async ({ page }, info) => {
+  await page.goto('?v=4&lang=en&page=about')
+  await page.locator('.preview-profile-button').click()
+  const dialog = page.locator('dialog.preview-availability')
+  await expect(dialog).toContainText('Calculations run in your browser')
+  await expect(dialog).toContainText('8,000 fixed asteroid sample records')
+  await expect(dialog.locator('.preview-project-link')).toHaveAttribute('href', 'https://github.com/dajiaohuang/solar#readme')
+  await page.screenshot({ path: info.outputPath('static-preview-overview-en.png') })
+  await dialog.getByRole('button', { name: 'Dismiss', exact: true }).click()
+  await page.getByRole('button', { name: '切换为中文', exact: true }).click()
+  await page.locator('.preview-profile-button').click()
+  await expect(dialog).toContainText('计算在浏览器内完成')
+  await expect(dialog).toContainText('8,000 条固定小行星样本')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
+  await page.screenshot({ path: info.outputPath('static-preview-overview-zh.png') })
+})
+
 test('preview rejects the full catalog route before requesting identities or states', async ({ page }) => {
   const requests: string[] = []
   page.on('request', request => { if (/\/v1\/(identities|state\/|catalog\/manifest)/.test(request.url())) requests.push(request.url()) })

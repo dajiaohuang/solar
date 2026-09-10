@@ -6,6 +6,7 @@ import react from '@vitejs/plugin-react'
 import { ephemerisProfile } from './src/data/ephemerisProfile.ts'
 import { productProfile } from './src/data/productProfile.ts'
 import { productDelivery } from './scripts/lib/product-delivery.ts'
+import { runtimeEphemerisManifest } from './src/engine/ephemeris/runtimeManifest.ts'
 
 type BuildInfo = {
   version: string
@@ -32,18 +33,33 @@ function loadBuildInfo(): BuildInfo {
 
 export default defineConfig(({ command }) => {
   const delivery = productDelivery(process.env.SOLAR_ATLAS_PRODUCT_PROFILE, process.env.SOLAR_ATLAS_EPHEMERIS_PROFILE)
+  const manifestModule = resolve('src/data/selectedEphemerisManifest.ts').replace(/\\/g, '/')
+  const manifestPlugin = () => ({
+    name: 'solar-selected-runtime-manifest',
+    load(id: string) {
+      // Replace before import traversal: eager fallback initialization cannot
+      // be eliminated by substituting a conditional constant alone.
+      if (id.replace(/\\/g, '/') === manifestModule) {
+        return 'export const selectedEphemerisManifest = __SOLAR_EPHEMERIS_MANIFEST__'
+      }
+    },
+  })
 
   return {
-    plugins: [react()],
+    plugins: [manifestPlugin(), react()],
+    worker: { plugins: () => [manifestPlugin()] },
     base: '/solar/',
     publicDir: command === 'serve' ? 'public' : false,
     // Dataset pipeline tests publish temporary directories atomically. Watching
     // those generated files can hold Windows handles across their rename.
     server: { watch: { ignored: ['**/.dataset-test-*/**', '**/test-results/**', '**/test-results-preview/**'] } },
     define: {
+      // Pages is a static snapshot even when a developer's .env contains the
+      // full client's backend URL. Never carry that endpoint into this build.
+      ...(delivery.product === 'preview' ? { 'import.meta.env.VITE_SOLAR_API_BASE_URL': JSON.stringify('') } : {}),
       __SOLAR_BUILD_INFO__: JSON.stringify(loadBuildInfo()),
       __SOLAR_PRODUCT_PROFILE__: JSON.stringify(productProfile(process.env.SOLAR_ATLAS_PRODUCT_PROFILE)),
-      __SOLAR_EPHEMERIS_MANIFEST__: JSON.stringify(delivery.manifest),
+      __SOLAR_EPHEMERIS_MANIFEST__: JSON.stringify(runtimeEphemerisManifest(delivery.manifest)),
       __SOLAR_EPHEMERIS_PROFILE__: JSON.stringify(ephemerisProfile(process.env.SOLAR_ATLAS_EPHEMERIS_PROFILE)),
       __SOLAR_DATA_ROOT__: JSON.stringify(delivery.product === 'preview' ? `/solar/${delivery.catalogDirectory}` : ''),
     },

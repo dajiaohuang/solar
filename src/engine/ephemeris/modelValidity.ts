@@ -1,9 +1,9 @@
 import { julianDayToDate } from '../../lib/julianDate'
-import modelEvidence from '../../data/modelEvidence.json'
+import { planetaryApproximation, earthMoonMassPartition, satelliteOrbits } from '../../data/modelEvidence.json'
 
-export const JPL_APPROX_MODEL_EVIDENCE = modelEvidence.planetaryApproximation
-export const EARTH_MOON_MASS_PARTITION_EVIDENCE = modelEvidence.earthMoonMassPartition
-export const SATELLITE_ORBIT_MODEL_EVIDENCE = modelEvidence.satelliteOrbits
+export const JPL_APPROX_MODEL_EVIDENCE = planetaryApproximation
+export const EARTH_MOON_MASS_PARTITION_EVIDENCE = earthMoonMassPartition
+export const SATELLITE_ORBIT_MODEL_EVIDENCE = satelliteOrbits
 export const JPL_APPROX_VALID_FROM_YEAR = Number(JPL_APPROX_MODEL_EVIDENCE.validFrom.slice(0, 4))
 export const JPL_APPROX_VALID_TO_YEAR = Number(JPL_APPROX_MODEL_EVIDENCE.validTo.slice(0, 4))
 export const JPL_APPROX_VALIDITY_LABEL = `${JPL_APPROX_VALID_FROM_YEAR}–${JPL_APPROX_VALID_TO_YEAR}`

@@ -240,7 +240,7 @@ func TestHTTPSchedulerQueuedCancellationAndRecovery(t *testing.T) {
 	// With no unread body, net/http observes the peer close while admission is
 	// waiting. HTTP/1 POST bodies can delay that notification until read; the
 	// scheduler's independent wait expiry bounds that case instead.
-	r, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/v1/catalog/manifest", nil)
+	r, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/v1/capabilities", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -336,7 +336,7 @@ func TestHTTPSchedulerFullClassDoesNotFillOtherQueues(t *testing.T) {
 	if response.StatusCode != http.StatusTooManyRequests || response.Header.Get("Retry-After") != "1" {
 		t.Fatalf("33rd bulk status=%d retry=%q", response.StatusCode, response.Header.Get("Retry-After"))
 	}
-	start("/v1/catalog/manifest")
+	start("/v1/capabilities")
 	awaitScheduler(t, s.scheduler, func(v map[string]uint64) bool {
 		return v["interactiveQueued"] == 1 && v["bulkQueued"] == requestQueueCapacity
 	})

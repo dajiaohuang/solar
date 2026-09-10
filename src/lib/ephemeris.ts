@@ -136,15 +136,19 @@ export function orbitToHeliocentricVector(orbit: OrbitDefinition, julianDay: num
     )
   }
 
+  if (![julianDay, inclinationDeg, ascendingNodeDeg, argPeriapsisDeg, meanAnomalyDeg].every(Number.isFinite)) {
+    throw new UnsupportedOrbitError('Orbital epoch and angles must be finite')
+  }
+
   const eccentricAnomalyDeg = solveKeplerEquation(meanAnomalyDeg, eccentricity)
   const eccentricAnomalyRad = toRadians(eccentricAnomalyDeg)
   const ascendingNodeRad = toRadians(ascendingNodeDeg)
   const inclinationRad = toRadians(inclinationDeg)
   const argPeriapsisRad = toRadians(argPeriapsisDeg)
 
-  const orbitalX = semiMajorAxisAU * (Math.cos(eccentricAnomalyRad) - eccentricity)
+  const orbitalX = semiMajorAxisAU * ((1 - eccentricity) - 2 * Math.sin(eccentricAnomalyRad / 2) ** 2)
   const orbitalY =
-    semiMajorAxisAU * Math.sqrt(1 - eccentricity ** 2) * Math.sin(eccentricAnomalyRad)
+    semiMajorAxisAU * Math.sqrt((1 - eccentricity) * (1 + eccentricity)) * Math.sin(eccentricAnomalyRad)
 
   return {
     x:

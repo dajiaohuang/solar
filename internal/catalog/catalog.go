@@ -86,6 +86,7 @@ type State struct {
 }
 
 type Catalog struct {
+	evaluations       evaluationCache
 	bodies            []Body
 	byID              map[string]Body
 	version           string
@@ -558,6 +559,7 @@ func (c *Catalog) ManifestHash() string     { return c.manifestHash }
 func (c *Catalog) ManifestProfile() string  { return c.manifestProfile }
 func (c *Catalog) ManifestContract() string { return c.manifestContract }
 func (c *Catalog) Close() error {
+	c.evaluations.close()
 	// Mark every binding before waiting on any one loader. This prevents a
 	// second binding from publishing a kernel while Close is waiting on the
 	// first one.
@@ -769,35 +771,8 @@ type OperationalProvenance struct {
 }
 
 func (c *Catalog) OperationalProvenance(id string, jd float64) (OperationalProvenance, bool, error) {
-	b, ok := c.byID[id]
-	if !ok || b.NAIFID == 0 || !validFloat(jd) {
-		return OperationalProvenance{}, false, nil
-	}
-	et := (jd - 2451545.0) * 86400
-	root, err := c.operationalRoot(context.Background(), b.NAIFID, et)
-	if err != nil || root == nil {
-		return OperationalProvenance{}, false, err
-	}
-	state, found, err := root.kernel.Evaluate(b.NAIFID, et)
-	if err != nil || !found || root.id == "" || root.sha256 == "" {
-		return OperationalProvenance{}, false, err
-	}
-	start, end := root.startET, root.endET
-	for n := len(root.kernel.Segments) - 1; n >= 0; n-- {
-		segment := root.kernel.Segments[n]
-		if segment.Target == b.NAIFID && et >= segment.StartET && et <= segment.EndET {
-			start, end = segment.StartET, segment.EndET
-			break
-		}
-	}
-	return OperationalProvenance{
-		Source:          root.id,
-		KernelSHA256:    root.sha256,
-		CenterID:        "naif:" + strconv.Itoa(state.Center),
-		ValidityStartET: start,
-		ValidityEndET:   end,
-		ValidityPresent: validFloat(start) && validFloat(end) && end >= start,
-	}, true, nil
+	_, found, evidence, err := c.EvalBatchContext(context.Background(), []string{id}, jd)
+	return evidence[id], found[id], err
 }
 
 func (c *Catalog) Page(query string, offset, limit int) []Body {
@@ -836,45 +811,63 @@ func (c *Catalog) OperationalStates(ids []string, jd float64) (map[string]State,
 }
 
 func (c *Catalog) OperationalStatesContext(ctx context.Context, ids []string, jd float64) (map[string]State, map[string]bool, error) {
+	states, found, _, err := c.EvalBatchContext(ctx, ids, jd)
+	return states, found, err
+}
+
+// EvalBatchContext returns numerical states and the evidence from the same
+// evaluation. Its caches are epoch-local and never share mutable scratch with
+// another request. Aliases reuse both coefficient work and center chains.
+func (c *Catalog) EvalBatchContext(ctx context.Context, ids []string, jd float64) (map[string]State, map[string]bool, map[string]OperationalProvenance, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	states := make(map[string]State, len(ids))
 	found := make(map[string]bool, len(ids))
+	evidence := make(map[string]OperationalProvenance, len(ids))
 	if !validFloat(jd) || len(c.byTarget) == 0 {
-		return states, found, nil
+		return states, found, evidence, nil
 	}
 	et := (jd - 2451545.0) * 86400
 	cache := make(map[operationalCacheKey]operationalCacheEntry, len(ids)*2)
+	raw := make(map[rawEvaluationKey]operationalCacheEntry)
 	for _, id := range ids {
 		if err := ctx.Err(); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		b, ok := c.byID[id]
 		if !ok || b.NAIFID == 0 {
 			continue
 		}
-		root, err := c.operationalRoot(ctx, b.NAIFID, et)
+		if cached, ok := c.evaluations.get(b.NAIFID, jd); ok {
+			states[id], found[id], evidence[id] = cached.state, true, cached.provenance
+			continue
+		}
+		root, err := c.operationalRootCached(ctx, b.NAIFID, et, raw)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if root == nil {
 			continue
 		}
 		allowed, pool := operationalPool(root)
-		st, ok, err := c.resolveOperationalCached(ctx, b.NAIFID, et, allowed, pool, cache, map[int]bool{})
+		st, ok, err := c.resolveOperationalSession(ctx, b.NAIFID, et, allowed, pool, cache, map[int]bool{}, raw)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if ok {
 			states[id] = State{Position: toEcliptic(st.Position, st.Frame), Velocity: toEcliptic(st.Velocity, st.Frame)}
 			found[id] = true
+			evidence[id] = cache[operationalCacheKey{target: b.NAIFID, pool: pool}].provenance
+			if ctx.Err() == nil {
+				c.evaluations.put(b.NAIFID, jd, evaluationValue{states[id], evidence[id]})
+			}
 		}
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return states, found, nil
+	return states, found, evidence, nil
 }
 
 type operationalCacheKey struct {
@@ -883,12 +876,49 @@ type operationalCacheKey struct {
 }
 
 type operationalCacheEntry struct {
-	state spk.State
-	found bool
-	err   error
+	provenance OperationalProvenance
+	state      spk.State
+	found      bool
+	err        error
 }
 
 func (c *Catalog) operationalRoot(ctx context.Context, target int, et float64) (*kernelBinding, error) {
+	return c.operationalRootCached(ctx, target, et, nil)
+}
+
+type rawEvaluationKey struct {
+	binding *kernelBinding
+	target  int
+}
+
+func evaluateBinding(ctx context.Context, binding *kernelBinding, kernel *spk.Kernel, target int, et float64, raw map[rawEvaluationKey]operationalCacheEntry) (spk.State, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return spk.State{}, false, err
+	}
+	key := rawEvaluationKey{binding, target}
+	if cached, ok := raw[key]; ok {
+		return cached.state, cached.found, cached.err
+	}
+	state, found, err := kernel.EvaluateContext(ctx, target, et)
+	if raw != nil {
+		raw[key] = operationalCacheEntry{state: state, found: found, err: err}
+	}
+	return state, found, err
+}
+
+func bindingProvenance(binding *kernelBinding, target int, et float64, center int) OperationalProvenance {
+	start, end := binding.startET, binding.endET
+	for n := len(binding.kernel.Segments) - 1; n >= 0; n-- {
+		segment := binding.kernel.Segments[n]
+		if segment.Target == target && et >= segment.StartET && et <= segment.EndET {
+			start, end = segment.StartET, segment.EndET
+			break
+		}
+	}
+	return OperationalProvenance{Source: binding.id, KernelSHA256: binding.sha256, CenterID: "naif:" + strconv.Itoa(center), ValidityStartET: start, ValidityEndET: end, ValidityPresent: validFloat(start) && validFloat(end) && end >= start}
+}
+
+func (c *Catalog) operationalRootCached(ctx context.Context, target int, et float64, raw map[rawEvaluationKey]operationalCacheEntry) (*kernelBinding, error) {
 	for n := len(c.byTarget[target]) - 1; n >= 0; n-- {
 		candidate := c.byTarget[target][n]
 		if candidate.dependencyOnly {
@@ -904,7 +934,7 @@ func (c *Catalog) operationalRoot(ctx context.Context, target int, et float64) (
 			// if none exists, the caller will report a missing state.
 			continue
 		}
-		if _, found, err := kernel.EvaluateContext(ctx, target, et); err != nil {
+		if _, found, err := evaluateBinding(ctx, candidate, kernel, target, et, raw); err != nil {
 			return nil, err
 		} else if found {
 			return candidate, nil
@@ -926,6 +956,10 @@ func operationalPool(root *kernelBinding) (map[string]bool, string) {
 }
 
 func (c *Catalog) resolveOperationalCached(ctx context.Context, target int, et float64, allowed map[string]bool, pool string, cache map[operationalCacheKey]operationalCacheEntry, visiting map[int]bool) (spk.State, bool, error) {
+	return c.resolveOperationalSession(ctx, target, et, allowed, pool, cache, visiting, nil)
+}
+
+func (c *Catalog) resolveOperationalSession(ctx context.Context, target int, et float64, allowed map[string]bool, pool string, cache map[operationalCacheKey]operationalCacheEntry, visiting map[int]bool, raw map[rawEvaluationKey]operationalCacheEntry) (spk.State, bool, error) {
 	if err := ctx.Err(); err != nil {
 		return spk.State{}, false, err
 	}
@@ -970,7 +1004,7 @@ func (c *Catalog) resolveOperationalCached(ctx context.Context, target int, et f
 			}
 			return spk.State{}, false, err
 		}
-		st, found, err := kernel.EvaluateContext(ctx, target, et)
+		st, found, err := evaluateBinding(ctx, binding, kernel, target, et, raw)
 		if err != nil {
 			if cache != nil {
 				cache[key] = operationalCacheEntry{err: err}
@@ -980,7 +1014,7 @@ func (c *Catalog) resolveOperationalCached(ctx context.Context, target int, et f
 		if !found {
 			continue
 		}
-		center, centerFound, err := c.resolveOperationalCached(ctx, st.Center, et, allowed, pool, cache, visiting)
+		center, centerFound, err := c.resolveOperationalSession(ctx, st.Center, et, allowed, pool, cache, visiting, raw)
 		if err != nil {
 			if cache != nil {
 				cache[key] = operationalCacheEntry{err: err}
@@ -997,7 +1031,7 @@ func (c *Catalog) resolveOperationalCached(ctx context.Context, target int, et f
 		st.Velocity = addSPK(center.Velocity, convertFrame(st.Velocity, st.Frame))
 		st.Frame = 17
 		if cache != nil {
-			cache[key] = operationalCacheEntry{state: st, found: true}
+			cache[key] = operationalCacheEntry{state: st, found: true, provenance: bindingProvenance(binding, target, et, st.Center)}
 		}
 		return st, true, nil
 	}
