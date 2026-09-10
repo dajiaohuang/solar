@@ -33,7 +33,7 @@ describe('optional SPK body seed artifact', () => {
       expect(ids).toContain(`naif:${naifId}`)
       expect(bodies.bodies.find((body) => body.id === `naif:${naifId}`)).toMatchObject({ name, parentId: 'saturn', source: 'jpl-spk-osculating-fallback' })
     }
-    for (const [naifId, name] of [[55505, 'S/2003 J12'], [55506, 'S/2003 J16'], [55507, 'S/2003 J23'], [55508, 'S/2003 J24']] as const) {
+    for (const [naifId, name] of [[55505, 'S/2003 J12'], [55506, 'S/2003 J16'], [55507, 'S/2003 J23'], [55508, 'S/2003 J24'], [55509, 'S/2011 J3'], [55510, 'S/2018 J2'], [55511, 'S/2018 J3'], [55512, 'S/2021 J1']] as const) {
       expect(ids).toContain(`naif:${naifId}`)
       expect(bodies.bodies.find((body) => body.id === `naif:${naifId}`)).toMatchObject({ name, parentId: 'jupiter', source: 'jpl-spk-osculating-fallback' })
     }
