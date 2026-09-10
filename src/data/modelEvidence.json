@@ -67,8 +67,8 @@
     ],
     "spkDelivery": {
       "stateBoundary": "geometric-spk-six-vector-when-kernel-and-center-chain-cover-epoch",
-        "ephemerisBodyCount": 179,
-        "planetarySatelliteBodyCount": 83,
+        "ephemerisBodyCount": 183,
+        "planetarySatelliteBodyCount": 87,
         "smallBodyBodyCount": 96,
       "satelliteIdentityCount": 472,
       "satelliteIdentityDelivery": {
@@ -98,7 +98,7 @@
       },
       "sourceBackedSatelliteBatches": {
         "mars": ["naif:401", "naif:402"],
-        "jupiter": ["naif:505", "naif:506", "naif:507", "naif:508", "naif:509", "naif:510", "naif:511", "naif:512", "naif:513", "naif:514", "naif:515", "naif:516", "naif:517", "naif:518", "naif:519", "naif:520", "naif:521", "naif:522", "naif:523", "naif:524", "naif:525", "naif:526", "naif:527", "naif:528", "naif:529", "naif:530", "naif:531", "naif:532", "naif:533", "naif:534", "naif:535", "naif:536", "naif:537", "naif:538", "naif:539", "naif:540", "naif:541", "naif:542", "naif:543", "naif:544", "naif:545", "naif:546", "naif:547", "naif:548", "naif:549", "naif:550", "naif:551", "naif:552", "naif:553", "naif:554", "naif:555", "naif:556", "naif:557", "naif:558", "naif:559", "naif:560"],
+        "jupiter": ["naif:505", "naif:506", "naif:507", "naif:508", "naif:509", "naif:510", "naif:511", "naif:512", "naif:513", "naif:514", "naif:515", "naif:516", "naif:517", "naif:518", "naif:519", "naif:520", "naif:521", "naif:522", "naif:523", "naif:524", "naif:525", "naif:526", "naif:527", "naif:528", "naif:529", "naif:530", "naif:531", "naif:532", "naif:533", "naif:534", "naif:535", "naif:536", "naif:537", "naif:538", "naif:539", "naif:540", "naif:541", "naif:542", "naif:543", "naif:544", "naif:545", "naif:546", "naif:547", "naif:548", "naif:549", "naif:550", "naif:551", "naif:552", "naif:553", "naif:554", "naif:555", "naif:556", "naif:557", "naif:558", "naif:559", "naif:560", "naif:561", "naif:562", "naif:563", "naif:564"],
         "saturn": ["naif:601", "naif:602", "naif:603", "naif:604", "naif:605", "naif:607", "naif:608", "naif:609", "naif:612", "naif:613", "naif:614", "naif:632", "naif:634"],
         "uranus": ["naif:701", "naif:702", "naif:703", "naif:704", "naif:705"],
         "neptune": ["naif:801", "naif:802"],
