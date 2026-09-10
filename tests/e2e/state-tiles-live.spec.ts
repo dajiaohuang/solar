@@ -31,7 +31,7 @@ test('renders a real Go exact-state response in both Web views', async ({ page }
   await page.getByRole('button', { name: '2D', exact: true }).click()
   await expect(page.locator('canvas.trajectory-canvas')).toHaveAttribute('data-position-count', '3')
   await expect(page.locator('canvas.trajectory-canvas')).toHaveAttribute('data-trail-count', '3')
-  expect(requests.filter(url => url.includes('workload=trajectory')).length).toBeGreaterThanOrEqual(64)
+  expect(requests.filter(url => url.includes('/v1/state/window'))).toHaveLength(1)
   expect(requests.filter(url => url.endsWith('/v1/current-states'))).toEqual([])
   expect(errors).toEqual([])
   await page.screenshot({ path: test.info().outputPath('real-go-state-tiles-2d.png') })

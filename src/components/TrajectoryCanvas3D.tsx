@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
+import { createFrameInvalidator } from '../lib/frameInvalidation'
+import { ScreenPointIndex } from '../lib/screenPointIndex'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { PREPARE_CANVAS_CAPTURE_EVENT } from '../lib/canvasCapture'
 import { cameraDistanceForFit, cameraRangeForFit, clamp3dZoom, sceneFramingForRadius } from '../lib/camera3d'
@@ -39,6 +41,7 @@ type Props = {
 }
 
 type SceneResources = {
+  invalidate: () => void
   scene: THREE.Scene
   renderer: THREE.WebGLRenderer
   camera: THREE.PerspectiveCamera
@@ -167,6 +170,7 @@ export function TrajectoryCanvas3D({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const resourcesRef = useRef<SceneResources | null>(null)
   const raycasterRef = useRef(new THREE.Raycaster())
+  const pickingRef = useRef<{ key: string; positions: unknown; index: ScreenPointIndex } | null>(null)
   const positionsRef = useRef(currentPositions)
   const lastTouchTapRef = useRef<{ bodyId: string; timestamp: number } | null>(null)
   const touchGestureRef = useRef<{ pointerId: number; startX: number; startY: number; moved: boolean } | null>(null)
@@ -259,6 +263,7 @@ export function TrajectoryCanvas3D({
     scene.add(currentPoints)
 
     const resources: SceneResources = {
+      invalidate: () => undefined,
       scene,
       renderer,
       camera,
@@ -283,12 +288,14 @@ export function TrajectoryCanvas3D({
       grid,
     }
     resourcesRef.current = resources
-    const render = () => {
+    const invalidator = createFrameInvalidator(() => {
       updateCameraData(container, resources, appliedZoomRef.current, fitGenerationRef.current)
       renderer.render(scene, camera)
-    }
+    })
+    const render = invalidator.invalidate
+    resources.invalidate = render
     controls.addEventListener('change', render)
-    renderer.domElement.addEventListener(PREPARE_CANVAS_CAPTURE_EVENT, render)
+    renderer.domElement.addEventListener(PREPARE_CANVAS_CAPTURE_EVENT, invalidator.flush)
     render()
     const observer = new ResizeObserver(() => {
       const width = Math.max(container.clientWidth, 1)
@@ -308,9 +315,10 @@ export function TrajectoryCanvas3D({
     observer.observe(container)
 
     return () => {
+      invalidator.dispose()
       observer.disconnect()
       renderer.domElement.removeEventListener('webglcontextlost', handleContextLost)
-      renderer.domElement.removeEventListener(PREPARE_CANVAS_CAPTURE_EVENT, render)
+      renderer.domElement.removeEventListener(PREPARE_CANVAS_CAPTURE_EVENT, invalidator.flush)
       controls.removeEventListener('change', render)
       controls.dispose()
       for (const line of resources.trajectoryLines.values()) disposeObject(line)
@@ -337,7 +345,7 @@ export function TrajectoryCanvas3D({
     if (!resources || !container) return
     resources.renderer.setPixelRatio(Math.min(window.devicePixelRatio, pixelRatioLimit))
     resources.renderer.setSize(Math.max(container.clientWidth, 1), Math.max(container.clientHeight, 1))
-    resources.renderer.render(resources.scene, resources.camera)
+    resources.invalidate()
   }, [pixelRatioLimit])
 
   useEffect(() => {
@@ -348,7 +356,7 @@ export function TrajectoryCanvas3D({
       const resources = resourcesRef.current
       if (!resources) return
       if (!document.hidden) {
-        resources.renderer.render(resources.scene, resources.camera)
+        resources.invalidate()
         onFrameDuration?.(timestamp - previous)
       }
       previous = timestamp
@@ -373,7 +381,7 @@ export function TrajectoryCanvas3D({
     })
     resources.catalogPoints.geometry.setDrawRange(0, Math.min(catalogDrawCount, count))
     resources.catalogPoints.visible = count > 0
-    resources.renderer.render(resources.scene, resources.camera)
+    resources.invalidate()
   }, [catalogPositions3D, catalogRecords, catalogDrawCount])
 
   useEffect(() => {
@@ -382,14 +390,14 @@ export function TrajectoryCanvas3D({
     const available = Math.min(catalogRecords.length, Math.floor(catalogPositions3D.length / 3))
     resources.catalogPoints.geometry.setDrawRange(0, Math.min(catalogDrawCount, available))
     resources.catalogPoints.visible = catalogDrawCount > 0 && available > 0
-    resources.renderer.render(resources.scene, resources.camera)
+    resources.invalidate()
   }, [catalogDrawCount, catalogPositions3D.length, catalogRecords.length])
 
   useEffect(() => {
     const resources = resourcesRef.current
     if (!resources) return
     resources.catalogPoints.position.copy(toThree({ x: -catalogOrigin.x, y: -catalogOrigin.y, z: -catalogOrigin.z }))
-    resources.renderer.render(resources.scene, resources.camera)
+    resources.invalidate()
   }, [catalogOrigin])
 
   useEffect(() => {
@@ -539,7 +547,7 @@ export function TrajectoryCanvas3D({
     }
     const container = containerRef.current
     if (container) updateCameraData(container, resources, appliedZoomRef.current, fitGenerationRef.current)
-    resources.renderer.render(resources.scene, resources.camera)
+    resources.invalidate()
   }, [catalogDrawCount, catalogFitKey, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z, catalogPositions3D, catalogRecords.length, currentPositions, detailBodyIds, lagrangePoints, referenceBody, resetViewKey, showEcliptic, showGlow, showSaturnRings, stateFitKey, stateFitRadius, trajectories, zoomLevel])
 
   useEffect(() => {
@@ -556,7 +564,7 @@ export function TrajectoryCanvas3D({
     appliedZoomRef.current = nextZoom
     resources.controls.update()
     updateCameraData(container, resources, appliedZoomRef.current, fitGenerationRef.current)
-    resources.renderer.render(resources.scene, resources.camera)
+    resources.invalidate()
   }, [zoomLevel])
 
   useEffect(() => {
@@ -567,7 +575,7 @@ export function TrajectoryCanvas3D({
     appliedZoomRef.current = clamp3dZoom(zoomLevel)
     resetCameraToFit(resources, zoomLevel)
     updateCameraData(container, resources, appliedZoomRef.current, fitGenerationRef.current)
-    resources.renderer.render(resources.scene, resources.camera)
+    resources.invalidate()
   }, [resetViewKey, zoomLevel])
 
   const intersectBody = useCallback((event: { clientX: number; clientY: number }) => {
@@ -579,20 +587,27 @@ export function TrajectoryCanvas3D({
       (event.clientX - rect.left) / rect.width * 2 - 1,
       -(event.clientY - rect.top) / rect.height * 2 + 1,
     )
+    resources.camera.updateMatrixWorld()
     raycasterRef.current.setFromCamera(pointer, resources.camera)
     const hits = raycasterRef.current.intersectObjects([...resources.bodyMeshes.values()], false)
     if (hits[0]) return hits[0].object.userData.bodyId as string
     // Pixel-distance picking matches the fixed-pixel points at every zoom.
     const positions = resources.currentPoints.geometry.getAttribute('position')
-    const projected = new THREE.Vector3()
-    let nearestId: string | undefined, nearestDistance = 9
-    for (let index = 0; index < resources.pointBodyOrdinals.length; index++) {
-      projected.fromBufferAttribute(positions, index).project(resources.camera)
-      if (projected.z < -1 || projected.z > 1) continue
-      const distance = Math.hypot((projected.x - pointer.x) * rect.width / 2, (projected.y - pointer.y) * rect.height / 2)
-      if (distance < nearestDistance) { nearestDistance = distance; nearestId = positionsRef.current.bodyAt(resources.pointBodyOrdinals[index]).id }
+    const version = positions instanceof THREE.BufferAttribute ? positions.version : positions.data.version
+    const key = `${rect.width}:${rect.height}:${version}:${resources.pointBodyOrdinals.length}:${resources.camera.matrixWorld.elements.join(',')}:${resources.camera.projectionMatrix.elements.join(',')}`
+    let picking = pickingRef.current
+    if (!picking || picking.key !== key || picking.positions !== positions) {
+      const index = new ScreenPointIndex(rect.width, rect.height, resources.pointBodyOrdinals.length)
+      const projected = new THREE.Vector3()
+      for (let ordinal = 0; ordinal < resources.pointBodyOrdinals.length; ordinal++) {
+        projected.fromBufferAttribute(positions, ordinal).project(resources.camera)
+        if (projected.z < -1 || projected.z > 1) continue
+        index.add(ordinal, (projected.x + 1) * rect.width / 2, (1 - projected.y) * rect.height / 2)
+      }
+      picking = { key, positions, index }; pickingRef.current = picking
     }
-    return nearestId
+    const nearest = picking.index.nearest(event.clientX - rect.left, event.clientY - rect.top)
+    return nearest < 0 ? undefined : positionsRef.current.bodyAt(resources.pointBodyOrdinals[nearest]).id
   }, [])
 
   return (

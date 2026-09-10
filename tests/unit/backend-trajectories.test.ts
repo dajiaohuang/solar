@@ -17,11 +17,11 @@ const hash = 'a'.repeat(64)
 const input = { base: 'https://fixture.invalid', bodies, referenceBody, centerUtcJd: 2461287.5, historyDays: 1, sampleCount: 3 }
 const json = (data: unknown) => { const text = JSON.stringify(data); return new Response(text, { headers: { 'content-type': 'application/json', 'content-length': String(Buffer.byteLength(text)) } }) }
 
-function fixture(options: { missing?: (epochIndex: number, id: string) => boolean; corruptEpoch?: number; changedManifestEpoch?: number; failEpoch?: number; abortEpoch?: number; controller?: AbortController } = {}) {
+function fixture(options: { missing?: (epochIndex: number, id: string) => boolean; corruptEpoch?: number; changedManifestEpoch?: number; failEpoch?: number; abortEpoch?: number; controller?: AbortController; missingComplete?: boolean; badComplete?: boolean; trailing?: boolean; fragmented?: boolean } = {}) {
   let epochIndex = -1, activeTiles = 0, maxActiveTiles = 0
   const seen: { epochIndex: number; epoch: number; ids: string[]; hash: string }[] = []
   const sourceValues = (epoch: number, id: string) => [1e12 + epoch / 7 + id.charCodeAt(0), -0, 1 / 3 + id.length, epoch / 100, -0, -1 / 7]
-  const fetcher = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+  const tileFixture = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
     init?.signal?.throwIfAborted()
     const path = new URL(String(url))
     if (path.pathname.endsWith('/catalog/manifest')) return json({ apiVersion: 'solar.api/v1', catalogVersion: 'fixture', catalogManifestSha256: hash })
@@ -61,10 +61,60 @@ function fixture(options: { missing?: (epochIndex: number, id: string) => boolea
     activeTiles--
     return new Response(bytes, { headers: { 'content-type': 'application/vnd.solar.state-tile+binary', 'content-length': String(bytes.length), etag: `"${etag}"` } })
   })
+  const fetcher = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    if (String(url).endsWith('/catalog/manifest')) return tileFixture(url, init)
+    expect(new URL(String(url)).pathname).toBe('/v1/state/window')
+    const request = JSON.parse(String(init?.body)) as { ids: string[]; epochsJd: number[] }
+    const framed = (raw: Uint8Array) => {
+      const result = new Uint8Array(raw.length + 4)
+      new DataView(result.buffer).setUint32(0, raw.length, true); result.set(raw, 4); return result
+    }
+    const metadata = (value: unknown) => framed(new TextEncoder().encode(JSON.stringify(value)))
+    async function* frames() {
+      yield metadata({ kind: 'window', version: 1, epochCount: request.epochsJd.length, bodyCount: request.ids.length,
+        requestIdsSha256: await digestStateTileRequestIds(request.ids), catalogManifestSha256: hash })
+      let exactCount = 0, missingCount = 0
+      for (const [index, epochJd] of request.epochsJd.entries()) {
+        const response = await tileFixture('https://fixture.invalid/v1/state/plan?workload=trajectory', { ...init, body: JSON.stringify({ ids: request.ids, epochJd, precision: 'exact', fieldMask: ['position', 'velocity'] }) })
+        const plan = await response.json()
+        yield metadata({ kind: 'epoch', epochIndex: index, plan })
+        for (const tile of plan.tiles ?? []) {
+          const response = await tileFixture('https://fixture.invalid/v1/state/tiles?workload=trajectory', { ...init, body: JSON.stringify({ planId: plan.planId, sequence: tile.sequence }) })
+          yield framed(new Uint8Array(await response.arrayBuffer()))
+        }
+        exactCount += plan.exactCount; missingCount += plan.missingCount
+      }
+      if (!options.missingComplete) yield metadata({ kind: 'complete', epochCount: request.epochsJd.length, bodyCount: request.ids.length, exactCount: exactCount + (options.badComplete ? 1 : 0), missingCount })
+      if (options.trailing) yield new Uint8Array([1])
+    }
+    async function* transport() {
+      for await (const bytes of frames()) {
+        if (!options.fragmented) yield bytes
+        else for (let offset = 0; offset < bytes.length; offset += 7) yield bytes.slice(offset, offset + 7)
+      }
+    }
+    const iterator = transport()
+    const stream = new ReadableStream<Uint8Array>({
+      async pull(controller) { try { const next = await iterator.next(); if (next.done) controller.close(); else controller.enqueue(next.value) } catch (err) { controller.error(err) } },
+      async cancel() { await iterator.return() },
+    }, { highWaterMark: 0 })
+    return new Response(stream, { headers: { 'content-type': 'application/vnd.solar.state-window+binary' } })
+  })
   return { fetcher, seen, sourceValues, concurrency: () => maxActiveTiles }
 }
 
 describe('backend historical state tiles', () => {
+  it.each(['missingComplete', 'badComplete', 'trailing'] as const)('rejects a stream with %s even after all epochs arrive', async mode => {
+    const runtime = fixture({ [mode]: true })
+    await expect(loadBackendTrajectories({ ...input, signal: new AbortController().signal, fetcher: runtime.fetcher })).rejects.toThrow()
+  })
+  it('decodes length prefixes, metadata and Float64 payloads split across transport chunks', async () => {
+    const runtime = fixture({ fragmented: true })
+    const result = await loadBackendTrajectories({ ...input, signal: new AbortController().signal, fetcher: runtime.fetcher })
+    expect(result.packed.bodyIds).toEqual(['a', 'b', 'c'])
+    expect(result.audit.epochsTdbJd).toHaveLength(3)
+  })
+
   it('aborts a stalled transport at the whole-job deadline', async () => {
     vi.useFakeTimers()
     const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
@@ -105,7 +155,8 @@ describe('backend historical state tiles', () => {
       }
     }
     expect(Buffer.from(result.packed.coordinates.buffer).equals(Buffer.from(expected.buffer))).toBe(true)
-    expect(runtime.concurrency()).toBe(2)
+    expect(runtime.concurrency()).toBe(1)
+    expect(runtime.fetcher).toHaveBeenCalledTimes(2)
     expect(runtime.fetcher.mock.calls.filter(([url]) => String(url).endsWith('/catalog/manifest'))).toHaveLength(1)
     expect(progress).toEqual([1 / 3, 2 / 3, 1])
     expect(result.audit).toMatchObject({ precision: 'exact-samples', referenceId: 'reference', sourceOriginId: 'naif:0', frame: 'ECLIPJ2000', timeScale: 'TDB', coordinateUnit: 'AU', catalogManifestSha256: hash, gaps: [] })
@@ -135,7 +186,7 @@ describe('backend historical state tiles', () => {
   it.each(['corruptEpoch', 'changedManifestEpoch', 'failEpoch', 'abortEpoch'] as const)('rejects %s without returning a partial history or continuing later epochs', async mode => {
     const controller = new AbortController(), runtime = fixture({ [mode]: 1, controller })
     await expect(loadBackendTrajectories({ ...input, signal: controller.signal, fetcher: runtime.fetcher })).rejects.toThrow()
-    expect(runtime.fetcher.mock.calls.filter(([url]) => String(url).includes('/state/plan'))).toHaveLength(2)
+    expect(runtime.fetcher.mock.calls.filter(([url]) => String(url).includes('/state/window'))).toHaveLength(1)
     expect(runtime.seen.length).toBeLessThanOrEqual(2)
   })
 

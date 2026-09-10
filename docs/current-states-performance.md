@@ -1,5 +1,9 @@
 # Exact state-tile Web performance contract
 
+See the [shared-compute update](./shared-compute-refactor.md) for multi-epoch
+history delivery, last-valid-frame retention, indexed picking and coalesced
+render submission. Current scientific snapshots remain atomic and exact.
+
 The separate Evidence coverage-summary action is on demand, not part of the
 frame loop. It fetches a fresh catalog manifest and a maximum 64 KiB summary,
 binds both catalog and inventory hashes, validates count partitions and finite

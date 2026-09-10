@@ -10,6 +10,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -27,6 +28,7 @@ type Server struct {
 	catalog             *catalog.Catalog
 	inventory           *inventory.Inventory
 	scheduler           *requestScheduler
+	compute             *requestScheduler
 	tileSlots           chan struct{}
 	plans               *statePlanCache
 	tiles               *stateTileCache
@@ -54,8 +56,19 @@ func newServer(c *catalog.Catalog, maxConcurrent int, inv *inventory.Inventory, 
 	if maxConcurrent < 1 {
 		maxConcurrent = 1
 	}
-	return &Server{catalog: c, inventory: inv, coverage: ledger, scheduler: newRequestScheduler(maxConcurrent, requestQueueCapacity, requestQueueTimeout), tileSlots: make(chan struct{}, 2), plans: newStatePlanCache(statePlanCacheItems), tiles: newStateTileCache(stateTileCacheBytes), stateTileByteBudget: maxStateTileBytes}
+	return &Server{catalog: c, inventory: inv, coverage: ledger, scheduler: newRequestScheduler(maxConcurrent, requestQueueCapacity, requestQueueTimeout), compute: newRequestScheduler(runtime.GOMAXPROCS(0), requestQueueCapacity, requestQueueTimeout), tileSlots: make(chan struct{}, 2), plans: newStatePlanCache(statePlanCacheItems), tiles: newStateTileCache(stateTileCacheBytes), stateTileByteBudget: maxStateTileBytes}
 }
+
+// ConfigureComputeWorkers sets the CPU block budget before serving requests.
+// Zero follows GOMAXPROCS; request admission remains independent.
+func (s *Server) ConfigureComputeWorkers(workers int) {
+	if workers <= 0 {
+		workers = runtime.GOMAXPROCS(0)
+	}
+	s.compute = newRequestScheduler(workers, requestQueueCapacity, requestQueueTimeout)
+}
+
+func (s *Server) ComputeStats() map[string]uint64 { return s.compute.stats() }
 
 // SchedulerStats is local benchmark evidence, not a public metrics endpoint.
 func (s *Server) SchedulerStats() map[string]uint64 { return s.scheduler.stats() }
@@ -104,6 +117,20 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.error(w, http.StatusNotFound, "not_found", "unknown endpoint")
 		return
 	}
+	// These immutable metadata/liveness routes must remain responsive while
+	// expensive work is admitted. Directory and identity-state GETs still use
+	// bounded admission: a GET method alone is not evidence of cheap work.
+	if r.Method == http.MethodGet {
+		switch r.URL.Path {
+		case "/v1/health/live", "/v1/health/ready":
+			s.json(w, http.StatusOK, map[string]any{"status": "ok", "catalogManifestSha256": s.catalog.ManifestHash()})
+			return
+		case "/v1/catalog/manifest":
+			s.catalogManifest(w, r)
+			return
+		}
+	}
+	r = r.WithContext(context.WithValue(r.Context(), computeClassKey{}, classifyRequest(r)))
 	// Admission precedes JSON decoding and scientific work. Waiting is bounded
 	// separately per class, so directory scans cannot consume every queue slot.
 	if err := r.Context().Err(); err != nil {
@@ -147,6 +174,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.coverageSummary(w, r)
 	case r.Method == "GET" && path == "coverage/targets":
 		s.coverageTargets(w, r)
+	case r.Method == "POST" && path == "state/window":
+		s.stateWindow(w, r)
 	case r.Method == "POST" && path == "state/plan":
 		s.statePlan(w, r)
 	case r.Method == "POST" && path == "state/tiles":
@@ -381,10 +410,15 @@ func precisionMode(value string) (bool, error) {
 }
 
 func (s *Server) resolveInventoryState(ctx context.Context, record inventory.Record, jd float64, allowApproximate bool) (sourceStateResult, error) {
-	return s.resolveInventoryStateWithOperational(ctx, record, jd, allowApproximate, nil, nil)
+	release, err := s.compute.acquire(ctx, computeClass(ctx))
+	if err != nil {
+		return sourceStateResult{}, err
+	}
+	defer release()
+	return s.resolveInventoryStateWithOperational(ctx, record, jd, allowApproximate, nil, nil, nil)
 }
 
-func (s *Server) resolveInventoryStateWithOperational(ctx context.Context, record inventory.Record, jd float64, allowApproximate bool, operational map[string]catalog.State, operationalFound map[string]bool) (sourceStateResult, error) {
+func (s *Server) resolveInventoryStateWithOperational(ctx context.Context, record inventory.Record, jd float64, allowApproximate bool, operational map[string]catalog.State, operationalFound map[string]bool, evidence map[string]catalog.OperationalProvenance) (sourceStateResult, error) {
 	if !finite(jd) {
 		return sourceStateResult{Availability: catalog.Missing, MissingReason: "invalid-epoch"}, nil
 	}
@@ -398,16 +432,17 @@ func (s *Server) resolveInventoryStateWithOperational(ctx context.Context, recor
 				state, found = operational[catalogID]
 				found = operationalFound[catalogID]
 			} else {
-				state, found, err = s.catalog.OperationalState(catalogID, jd)
+				var states map[string]catalog.State
+				var available map[string]bool
+				states, available, evidence, err = s.catalog.EvalBatchContext(ctx, []string{catalogID}, jd)
+				state, found = states[catalogID], available[catalogID]
 			}
 			if err != nil {
 				return sourceStateResult{}, err
 			}
 			if found && finiteState(state) {
 				var window map[string]float64
-				if provenance, provenanceOK, provenanceErr := s.catalog.OperationalProvenance(catalogID, jd); provenanceErr != nil {
-					return sourceStateResult{}, provenanceErr
-				} else if provenanceOK && provenance.ValidityPresent {
+				if provenance, provenanceOK := evidence[catalogID]; provenanceOK && provenance.ValidityPresent {
 					window = map[string]float64{"startEt": provenance.ValidityStartET, "endEt": provenance.ValidityEndET}
 				}
 				return sourceStateResult{Availability: catalog.AvailableOperational, Model: "spk-original", State: &state, Evidence: "catalog-kernel", EvidenceWindow: window}, nil
@@ -563,7 +598,7 @@ func (s *Server) identityState(w http.ResponseWriter, r *http.Request, id string
 	}
 	result, err := s.resolveInventoryState(r.Context(), record, epoch, allowApproximate)
 	if err != nil {
-		s.error(w, http.StatusUnprocessableEntity, "state_unavailable", err.Error())
+		s.stateWorkError(w, r, err)
 		return
 	}
 	response := map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "inventoryManifestSha256": s.inventory.ManifestHash(), "identity": s.inventory.Summary(record), "epochJd": epoch, "timeScale": "TDB", "frame": frame, "distanceUnit": "km", "velocityUnit": "km/s", "precision": map[bool]string{true: "approximate", false: "exact"}[allowApproximate], "availability": result.Availability, "model": result.Model, "missingReason": result.MissingReason, "stateEvidence": result.Evidence, "evidenceWindowEt": result.EvidenceWindow}
@@ -678,7 +713,7 @@ func (s *Server) trajectory(w http.ResponseWriter, r *http.Request) {
 					}
 					resolved, stateErr := s.resolveInventoryState(r.Context(), record, req.StartJD+float64(sample)*step, allowApproximate)
 					if stateErr != nil {
-						s.error(w, http.StatusUnprocessableEntity, "state_unavailable", stateErr.Error())
+						s.stateWorkError(w, r, stateErr)
 						return
 					}
 					if resolved.State == nil {
@@ -715,9 +750,9 @@ func (s *Server) trajectory(w http.ResponseWriter, r *http.Request) {
 					s.error(w, 408, "cancelled", "request cancelled")
 					return
 				}
-				st, found, err := s.catalog.OperationalState(id, req.StartJD+float64(i)*step)
+				st, found, err := s.scheduledOperationalState(r.Context(), id, req.StartJD+float64(i)*step)
 				if err != nil {
-					s.error(w, 422, "state_unavailable", err.Error())
+					s.stateWorkError(w, r, err)
 					return
 				}
 				if !found {
@@ -771,6 +806,16 @@ func (s *Server) trajectory(w http.ResponseWriter, r *http.Request) {
 		out = append(out, tb)
 	}
 	s.json(w, 200, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "frame": req.Frame, "timeScale": "TDB", "startJd": req.StartJD, "endJd": req.EndJD, "distanceUnit": "km", "velocityUnit": "km/s", "precision": map[bool]string{true: "approximate", false: "exact"}[allowApproximate], "stateLayout": "row-major-[x,y,z,vx,vy,vz]", "modelBoundary": "Exact requests use only verified SPK coefficients or source state evidence; approximate source-element propagation is explicit opt-in.", "bodies": out})
+}
+
+func (s *Server) scheduledOperationalState(ctx context.Context, id string, jd float64) (catalog.State, bool, error) {
+	release, err := s.compute.acquire(ctx, computeClass(ctx))
+	if err != nil {
+		return catalog.State{}, false, err
+	}
+	defer release()
+	states, found, _, err := s.catalog.EvalBatchContext(ctx, []string{id}, jd)
+	return states[id], found[id], err
 }
 
 func appendFlatState(dst []float64, state catalog.State) []float64 {

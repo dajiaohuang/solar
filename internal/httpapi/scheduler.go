@@ -33,7 +33,7 @@ func classifyRequest(r *http.Request) requestClass {
 	if r.Method == http.MethodPost && (r.URL.Path == "/v1/state/plan" || r.URL.Path == "/v1/state/tiles") && r.URL.Query().Get("workload") == "trajectory" {
 		return trajectoryWork
 	}
-	if r.Method == http.MethodPost && r.URL.Path == "/v1/trajectory" {
+	if r.Method == http.MethodPost && (r.URL.Path == "/v1/trajectory" || r.URL.Path == "/v1/state/window") {
 		return trajectoryWork
 	}
 	if r.Method == http.MethodGet && (r.URL.Path == "/v1/catalog" || r.URL.Path == "/v1/inventory" || r.URL.Path == "/v1/identities") {
@@ -190,4 +190,13 @@ func (s *requestScheduler) stats() map[string]uint64 {
 		result[name+"WaitNs"] = s.waitNs[n]
 	}
 	return result
+}
+
+type computeClassKey struct{}
+
+func computeClass(ctx context.Context) requestClass {
+	if class, ok := ctx.Value(computeClassKey{}).(requestClass); ok {
+		return class
+	}
+	return interactiveRequest
 }
