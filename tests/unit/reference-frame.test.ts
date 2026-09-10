@@ -3,9 +3,14 @@ import { majorBodiesById } from '../../src/data/majorBodies'
 import { getSuggestedViewRadius } from '../../src/lib/referenceFrame'
 
 describe('reference-frame view radius', () => {
-  it('includes actual SPK-only satellite positions without inventing a seed orbit', () => {
-    expect(majorBodiesById.get('naif:506')!.orbit).toBeUndefined()
-    expect(getSuggestedViewRadius(['jupiter', 'naif:506'], 'jupiter', majorBodiesById, .08)).toBeCloseTo(.08 * 1.18, 12)
+  it('includes source-backed satellite fallback seeds in the local framing extent', () => {
+    const himalia = majorBodiesById.get('naif:506')!
+    expect(himalia.source).toBe('jpl-spk-osculating-fallback')
+    expect(himalia.orbit?.model).toBe('keplerian')
+    const orbit = himalia.orbit!
+    if (orbit.model !== 'keplerian') throw new Error('Expected a generated Keplerian Himalia fallback seed')
+    const expected = Math.max(.08, orbit.semiMajorAxisAU * (1 + orbit.eccentricity)) * 1.18
+    expect(getSuggestedViewRadius(['jupiter', 'naif:506'], 'jupiter', majorBodiesById, .08)).toBeCloseTo(expected, 12)
     expect(getSuggestedViewRadius(['jupiter', 'naif:506'], 'jupiter', majorBodiesById, NaN)).toBeGreaterThan(0)
   })
   it('fits Jupiter-centered moons to their local parent-body scale', () => {
