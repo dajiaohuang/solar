@@ -31,7 +31,7 @@ public final class MainActivity extends Activity {
             new Preset("planets", "Solar system - Sun reference", "naif:10", "naif:10,naif:199,naif:299,naif:399,naif:499,naif:599,naif:699,naif:799,naif:899"),
             new Preset("earth", "Earth - Moon, TNO and source gaps", "naif:399", "naif:399,naif:301,naif:10,naif:120050000,naif:920000617,naif:120000617"),
             new Preset("mars", "Mars - Phobos - Deimos", "naif:499", "naif:499,naif:401,naif:402"),
-            new Preset("jupiter", "Jupiter - all bundled moons", "naif:599", "naif:599,naif:501,naif:502,naif:503,naif:504,naif:505,naif:514,naif:515,naif:516"),
+            new Preset("jupiter", "Jupiter - all bundled moons", "naif:599", "naif:599,naif:501,naif:502,naif:503,naif:504,naif:505,naif:506,naif:507,naif:508,naif:509,naif:510,naif:511,naif:512,naif:513,naif:514,naif:515,naif:516,naif:517,naif:518,naif:519,naif:520,naif:521,naif:522,naif:523,naif:524,naif:525,naif:526,naif:527,naif:528,naif:529,naif:530,naif:531,naif:532,naif:533,naif:534,naif:535,naif:536,naif:537,naif:538,naif:539,naif:540"),
             new Preset("saturn", "Saturn - all bundled moons", "naif:699", "naif:699,naif:601,naif:602,naif:603,naif:604,naif:605,naif:606,naif:607,naif:608,naif:609,naif:612,naif:613,naif:614,naif:632,naif:634"),
             new Preset("uranus", "Uranus - all bundled moons", "naif:799", "naif:799,naif:701,naif:702,naif:703,naif:704,naif:705"),
             new Preset("neptune", "Neptune - Triton and Nereid", "naif:899", "naif:899,naif:801,naif:802"),

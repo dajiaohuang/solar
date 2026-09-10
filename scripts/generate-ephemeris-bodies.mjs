@@ -15,6 +15,10 @@ const DEFAULT_EPOCH_ISO = '2026-09-04T00:00:00Z'
 const GM_URL = 'https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc'
 const NAMES = {
   401: 'Phobos', 402: 'Deimos', 501: 'Io', 502: 'Europa', 503: 'Ganymede', 504: 'Callisto',
+  506: 'Himalia', 507: 'Elara', 508: 'Pasiphae', 509: 'Sinope', 510: 'Lysithea', 511: 'Carme',
+  512: 'Ananke', 513: 'Leda', 517: 'Callirrhoe', 518: 'Themisto', 519: 'Megaclite', 520: 'Taygete',
+  521: 'Chaldene', 522: 'Harpalyke', 523: 'Kalyke', 524: 'Iocaste', 525: 'Erinome', 526: 'Isonoe', 527: 'Praxidike', 528: 'Autonoe',
+  529: 'Thyone', 530: 'Hermippe', 531: 'Aitne', 532: 'Eurydome', 533: 'Euanthe', 534: 'Euporie', 535: 'Orthosie', 536: 'Sponde', 537: 'Kale', 538: 'Pasithee', 539: 'Hegemone', 540: 'Mneme',
   505: 'Amalthea', 514: 'Thebe', 515: 'Adrastea', 516: 'Metis', 601: 'Mimas', 602: 'Enceladus',
   603: 'Tethys', 604: 'Dione', 605: 'Rhea', 606: 'Titan', 607: 'Hyperion', 608: 'Iapetus',
   609: 'Phoebe', 612: 'Helene', 613: 'Telesto', 614: 'Calypso', 632: 'Methone', 634: 'Polydeuces',

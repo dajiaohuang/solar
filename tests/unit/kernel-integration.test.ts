@@ -48,11 +48,14 @@ describe('shared physical ephemeris integration', () => {
   })
 
   it('retains frozen fallback seeds against their original packaged source pool, not newly selected solutions', () => {
-    const originalSources = loadedKernels().filter(kernel => kernel.solutionKernelIds === undefined && !kernel.dependencyOnly)
+    const seededSourceKernelIds = new Set(seeds.bodies.map((entry) => entry.sourceKernelId))
+    const seededDependencyKernelIds = new Set(loadedKernels().filter((kernel) => seededSourceKernelIds.has(kernel.id)).flatMap((kernel) => kernel.solutionKernelIds ?? []))
+    const originalSources = loadedKernels().filter(kernel => (!kernel.dependencyOnly && kernel.solutionKernelIds === undefined) || seededSourceKernelIds.has(kernel.id) || seededDependencyKernelIds.has(kernel.id))
     const pool = createKernelResolver(originalSources, (seeds.epochJd - 2451545) * SECONDS_PER_DAY)
     for (const entry of seeds.bodies) {
       const parentId = bodyNaifId(body(entry.parentId))!
       const actual = pool.relative(entry.naifId, parentId)!
+      expect(actual, `${entry.id} (${entry.sourceKernelId})`).not.toBeNull()
       const expected = entry.parentRelativeStateKm
       expect(Math.hypot(actual.position.x - expected.position.x, actual.position.y - expected.position.y, actual.position.z - expected.position.z), entry.id).toBeLessThan(1e-4)
     }
