@@ -33,7 +33,7 @@ describe('optional SPK body seed artifact', () => {
       expect(ids).toContain(`naif:${naifId}`)
       expect(bodies.bodies.find((body) => body.id === `naif:${naifId}`)).toMatchObject({ name, parentId: 'saturn', source: 'jpl-spk-osculating-fallback' })
     }
-    for (const [naifId, name] of [[55505, 'S/2003 J12'], [55506, 'S/2003 J16'], [55507, 'S/2003 J23'], [55508, 'S/2003 J24'], [55509, 'S/2011 J3'], [55510, 'S/2018 J2'], [55511, 'S/2018 J3'], [55512, 'S/2021 J1'], [55513, 'S/2021 J2'], [55514, 'S/2021 J3'], [55515, 'S/2021 J4'], [55516, 'S/2021 J5']] as const) {
+    for (const [naifId, name] of [[55505, 'S/2003 J12'], [55506, 'S/2003 J16'], [55507, 'S/2003 J23'], [55508, 'S/2003 J24'], [55509, 'S/2011 J3'], [55510, 'S/2018 J2'], [55511, 'S/2018 J3'], [55512, 'S/2021 J1'], [55513, 'S/2021 J2'], [55514, 'S/2021 J3'], [55515, 'S/2021 J4'], [55516, 'S/2021 J5'], [55517, 'S/2021 J6'], [55518, 'S/2016 J3'], [55519, 'S/2016 J4'], [55520, 'S/2018 J4']] as const) {
       expect(ids).toContain(`naif:${naifId}`)
       expect(bodies.bodies.find((body) => body.id === `naif:${naifId}`)).toMatchObject({ name, parentId: 'jupiter', source: 'jpl-spk-osculating-fallback' })
     }
