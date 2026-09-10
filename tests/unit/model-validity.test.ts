@@ -113,8 +113,8 @@ describe('JPL approximate element validity', () => {
     const spkDelivery = modelEvidence.coverage.spkDelivery
     expect(spkDelivery).toMatchObject({
       stateBoundary: 'geometric-spk-six-vector-when-kernel-and-center-chain-cover-epoch',
-      ephemerisBodyCount: 159,
-      planetarySatelliteBodyCount: 63,
+      ephemerisBodyCount: 167,
+      planetarySatelliteBodyCount: 71,
       smallBodyBodyCount: 96,
       satelliteIdentityCount: 472,
       pagesManifest: {
@@ -165,7 +165,7 @@ describe('JPL approximate element validity', () => {
 
     const ephemerisById = new Map(ephemerisBodies.bodies.map((body) => [body.id, body]))
     const fullTargetStrings = new Set([...fullTargets].map(String))
-    const expectedBatchLengths = { mars: 2, jupiter: 36, saturn: 13, uranus: 5, neptune: 2, pluto: 5 }
+    const expectedBatchLengths = { mars: 2, jupiter: 44, saturn: 13, uranus: 5, neptune: 2, pluto: 5 }
     const sourceBackedIds = new Set<string>()
     for (const [parent, bodyIds] of Object.entries(spkDelivery.sourceBackedSatelliteBatches)) {
       expect(bodyIds).toHaveLength(expectedBatchLengths[parent as keyof typeof expectedBatchLengths])
