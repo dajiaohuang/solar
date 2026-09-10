@@ -17,6 +17,7 @@ const NAMES = {
   401: 'Phobos', 402: 'Deimos', 501: 'Io', 502: 'Europa', 503: 'Ganymede', 504: 'Callisto',
   506: 'Himalia', 507: 'Elara', 508: 'Pasiphae', 509: 'Sinope', 510: 'Lysithea', 511: 'Carme',
   512: 'Ananke', 513: 'Leda', 517: 'Callirrhoe', 518: 'Themisto', 519: 'Megaclite', 520: 'Taygete',
+  521: 'Chaldene', 522: 'Harpalyke', 523: 'Kalyke', 524: 'Iocaste',
   505: 'Amalthea', 514: 'Thebe', 515: 'Adrastea', 516: 'Metis', 601: 'Mimas', 602: 'Enceladus',
   603: 'Tethys', 604: 'Dione', 605: 'Rhea', 606: 'Titan', 607: 'Hyperion', 608: 'Iapetus',
   609: 'Phoebe', 612: 'Helene', 613: 'Telesto', 614: 'Calypso', 632: 'Methone', 634: 'Polydeuces',
