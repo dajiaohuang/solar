@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useI18n } from '../i18n/context'
 import type { TranslationKey } from '../i18n/en'
-import { PRODUCT_PROFILE, type AvailabilityReason } from '../lib/productAvailability'
+import { PREVIEW_PROFILE, PRODUCT_PROFILE, type AvailabilityReason } from '../lib/productAvailability'
 import { availabilityActions, availabilityStore } from '../state/availability-store'
 import { uiActions } from '../state/ui-store'
 
@@ -26,7 +26,18 @@ export function PreviewAvailability() {
       <h2 id="preview-title">{state.denial ? t('fullVersion') : t('previewVersion')}</h2>
       <p id="preview-description">{state.denial ? t('previewRestriction') : t('previewExplanation')}</p>
       {state.denial && <p>{t(reasons[state.denial.reason])}</p>}
+      <section className="preview-included" aria-label={t('previewIncluded')}>
+        <h3>{t('previewIncluded')}</h3>
+        <p>{t('previewStatic')}</p>
+        <ul>
+          <li>{t('previewScenes')}</li>
+          <li>{PREVIEW_PROFILE.catalog.sampleCount.toLocaleString()} {t('previewSampleDescription')}</li>
+          <li>{PREVIEW_PROFILE.storyIds.length} {t('previewLessons')}</li>
+        </ul>
+        <p>{t('previewScientificBoundary')}</p>
+      </section>
       <p>{t('previewDestinations')}</p>
+      <a className="preview-project-link" href="https://github.com/dajiaohuang/solar#readme" target="_blank" rel="noreferrer">{t('previewProject')}</a>
       {state.requestedSceneUrl && <div className="preview-retained-scene">
         <label htmlFor="preview-requested-scene">{t('previewRetainedScene')}</label>
         <textarea id="preview-requested-scene" readOnly value={state.requestedSceneUrl} />

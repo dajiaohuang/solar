@@ -102,6 +102,11 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .preview-availability::backdrop { background: rgba(0, 0, 0, .65); }
 .preview-availability h2 { margin-top: 0; font-size: 22px; font-weight: 500; }
 .preview-availability p { font-size: 14px; line-height: 1.65; }
+.preview-included { margin: 18px 0; padding: 14px; border: 1px solid var(--line); border-radius: 4px; }
+.preview-included h3 { margin: 0; font-size: 15px; }
+.preview-included ul { padding-left: 20px; font-size: 13px; line-height: 1.65; }
+.preview-included li + li { margin-top: 6px; }
+.preview-project-link { display: inline-flex; align-items: center; min-height: 44px; margin-bottom: 12px; color: var(--accent); font-size: 14px; }
 .preview-retained-scene { display: grid; gap: 10px; font-size: 13px; }
 .preview-retained-scene textarea { width: 100%; min-height: 76px; resize: vertical; overflow-wrap: anywhere; background: var(--bg); color: var(--text); border: 1px solid var(--line-strong); padding: 10px; font: 12px var(--font-display); }
 .preview-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }

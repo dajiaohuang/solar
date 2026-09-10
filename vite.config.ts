@@ -54,6 +54,9 @@ export default defineConfig(({ command }) => {
     // those generated files can hold Windows handles across their rename.
     server: { watch: { ignored: ['**/.dataset-test-*/**', '**/test-results/**', '**/test-results-preview/**'] } },
     define: {
+      // Pages is a static snapshot even when a developer's .env contains the
+      // full client's backend URL. Never carry that endpoint into this build.
+      ...(delivery.product === 'preview' ? { 'import.meta.env.VITE_SOLAR_API_BASE_URL': JSON.stringify('') } : {}),
       __SOLAR_BUILD_INFO__: JSON.stringify(loadBuildInfo()),
       __SOLAR_PRODUCT_PROFILE__: JSON.stringify(productProfile(process.env.SOLAR_ATLAS_PRODUCT_PROFILE)),
       __SOLAR_EPHEMERIS_MANIFEST__: JSON.stringify(runtimeEphemerisManifest(delivery.manifest)),
