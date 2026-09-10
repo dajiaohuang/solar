@@ -4,14 +4,14 @@ import { getSuggestedViewRadius } from '../../src/lib/referenceFrame'
 
 describe('reference-frame view radius', () => {
   it('includes source-backed satellite fallback seeds in the local framing extent', () => {
-    const helike = majorBodiesById.get('naif:545')!
-    expect(helike.source).toBe('jpl-spk-osculating-fallback')
-    expect(helike.orbit?.model).toBe('keplerian')
-    const orbit = helike.orbit!
-    if (orbit.model !== 'keplerian') throw new Error('Expected a generated Keplerian Helike fallback seed')
+    const kore = majorBodiesById.get('naif:549')!
+    expect(kore.source).toBe('jpl-spk-osculating-fallback')
+    expect(kore.orbit?.model).toBe('keplerian')
+    const orbit = kore.orbit!
+    if (orbit.model !== 'keplerian') throw new Error('Expected a generated Keplerian Kore fallback seed')
     const expected = Math.max(.08, orbit.semiMajorAxisAU * (1 + orbit.eccentricity)) * 1.18
-    expect(getSuggestedViewRadius(['jupiter', 'naif:545'], 'jupiter', majorBodiesById, .08)).toBeCloseTo(expected, 12)
-    expect(getSuggestedViewRadius(['jupiter', 'naif:545'], 'jupiter', majorBodiesById, NaN)).toBeGreaterThan(0)
+    expect(getSuggestedViewRadius(['jupiter', 'naif:549'], 'jupiter', majorBodiesById, .08)).toBeCloseTo(expected, 12)
+    expect(getSuggestedViewRadius(['jupiter', 'naif:549'], 'jupiter', majorBodiesById, NaN)).toBeGreaterThan(0)
   })
   it('fits Jupiter-centered moons to their local parent-body scale', () => {
     const radius = getSuggestedViewRadius(
