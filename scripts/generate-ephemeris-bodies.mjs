@@ -18,7 +18,7 @@ const NAMES = {
   506: 'Himalia', 507: 'Elara', 508: 'Pasiphae', 509: 'Sinope', 510: 'Lysithea', 511: 'Carme',
   512: 'Ananke', 513: 'Leda', 517: 'Callirrhoe', 518: 'Themisto', 519: 'Megaclite', 520: 'Taygete',
   521: 'Chaldene', 522: 'Harpalyke', 523: 'Kalyke', 524: 'Iocaste', 525: 'Erinome', 526: 'Isonoe', 527: 'Praxidike', 528: 'Autonoe',
-  529: 'Thyone', 530: 'Hermippe', 531: 'Aitne', 532: 'Eurydome', 533: 'Euanthe', 534: 'Euporie', 535: 'Orthosie', 536: 'Sponde', 537: 'Kale', 538: 'Pasithee', 539: 'Hegemone', 540: 'Mneme', 541: 'Aoede', 542: 'Thelxinoe', 543: 'Arche', 544: 'Kallichore', 545: 'Helike', 546: 'Carpo', 547: 'Eukelade', 548: 'Cyllene', 549: 'Kore', 550: 'Herse', 551: 'S/2010 J1', 552: 'S/2010 J2', 553: 'Dia', 554: 'S/2016 J1', 555: 'S/2003 J18', 556: 'S/2011 J2', 557: 'Eirene', 558: 'Philophrosyne', 559: 'S/2017 J1', 560: 'Eupheme',
+  529: 'Thyone', 530: 'Hermippe', 531: 'Aitne', 532: 'Eurydome', 533: 'Euanthe', 534: 'Euporie', 535: 'Orthosie', 536: 'Sponde', 537: 'Kale', 538: 'Pasithee', 539: 'Hegemone', 540: 'Mneme', 541: 'Aoede', 542: 'Thelxinoe', 543: 'Arche', 544: 'Kallichore', 545: 'Helike', 546: 'Carpo', 547: 'Eukelade', 548: 'Cyllene', 549: 'Kore', 550: 'Herse', 551: 'S/2010 J1', 552: 'S/2010 J2', 553: 'Dia', 554: 'S/2016 J1', 555: 'S/2003 J18', 556: 'S/2011 J2', 557: 'Eirene', 558: 'Philophrosyne', 559: 'S/2017 J1', 560: 'Eupheme', 561: 'S/2003 J19', 562: 'Valetudo', 563: 'S/2017 J2', 564: 'S/2017 J3',
   505: 'Amalthea', 514: 'Thebe', 515: 'Adrastea', 516: 'Metis', 601: 'Mimas', 602: 'Enceladus',
   603: 'Tethys', 604: 'Dione', 605: 'Rhea', 606: 'Titan', 607: 'Hyperion', 608: 'Iapetus',
   609: 'Phoebe', 612: 'Helene', 613: 'Telesto', 614: 'Calypso', 632: 'Methone', 634: 'Polydeuces',

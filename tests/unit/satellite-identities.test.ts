@@ -18,9 +18,9 @@ describe('selectable satellite identity catalog', () => {
 
   it('does not invent orbital or physical data, or automatically select the expanded inventory', () => {
     const additions = majorBodies.filter(body => body.source === 'jpl-satellite-inventory')
-    // Four JUP347 identities now have explicit local diagnostic seeds, so they
-    // no longer belong to this no-orbit inventory-only partition.
-    expect(additions.length).toBeGreaterThan(390)
+    // Source-backed JUP347 fallback seeds are represented separately from the
+    // inventory-only partition, which remains stable as batches are expanded.
+    expect(additions.length).toBe(390)
     for (const body of additions) {
       expect(body.orbit).toBeUndefined()
       expect(body.radiusKm).toBeUndefined()
