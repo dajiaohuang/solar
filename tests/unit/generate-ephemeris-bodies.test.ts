@@ -33,6 +33,10 @@ describe('optional SPK body seed artifact', () => {
       expect(ids).toContain(`naif:${naifId}`)
       expect(bodies.bodies.find((body) => body.id === `naif:${naifId}`)).toMatchObject({ name, parentId: 'saturn', source: 'jpl-spk-osculating-fallback' })
     }
+    for (const [naifId, name] of [[55505, 'S/2003 J12'], [55506, 'S/2003 J16'], [55507, 'S/2003 J23'], [55508, 'S/2003 J24']] as const) {
+      expect(ids).toContain(`naif:${naifId}`)
+      expect(bodies.bodies.find((body) => body.id === `naif:${naifId}`)).toMatchObject({ name, parentId: 'jupiter', source: 'jpl-spk-osculating-fallback' })
+    }
     for (const number of [2, 3, 4, 7, 10, 15, 16, 31, 52, 65, 87, 88, 107, 511, 704, 17, 23, 26, 28, 32, 51, 2060, 5145, 10199, 20000]) expect(ids).toContain(`asteroid:${number}`)
     expect(ids).not.toContain('asteroid:1')
     for (const designation of ['243', '433', '951', '25143', '99942', '162173', '3200', '3122', '65803', '4179', '1036', '1580', '2867', '52768', '29075', '231937', '486958', '132524', '152830', '341843', '469219', '162421', '6', '9', '14', '18', '19', '90', '216', '11', '13', '21', '24', '29', '39', '44', '3753', '6489', '6178', '46610', '98943', '5', '8', '12', '20', '40', '22', '45', '93', '121', '130', '25', '27', '30', '34', '37']) expect(ids).toContain(`asteroid:${designation}`)

@@ -24,6 +24,7 @@ const NAMES = {
   609: 'Phoebe', 610: 'Janus', 611: 'Epimetheus', 612: 'Helene', 613: 'Telesto', 614: 'Calypso',
   615: 'Atlas', 616: 'Prometheus', 617: 'Pandora', 618: 'Pan', 632: 'Methone', 633: 'Pallene',
   634: 'Polydeuces', 649: 'Anthe', 653: 'Aegaeon',
+  55505: 'S/2003 J12', 55506: 'S/2003 J16', 55507: 'S/2003 J23', 55508: 'S/2003 J24',
   701: 'Ariel', 702: 'Umbriel', 703: 'Titania', 704: 'Oberon', 705: 'Miranda',
   801: 'Triton', 802: 'Nereid', 901: 'Charon', 902: 'Nix', 903: 'Hydra', 904: 'Kerberos', 905: 'Styx',
   20000243: 'Ida', 20000433: 'Eros', 20000951: 'Gaspra', 20025143: 'Itokawa',
