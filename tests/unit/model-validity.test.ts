@@ -119,14 +119,14 @@ describe('JPL approximate element validity', () => {
       satelliteIdentityCount: 472,
       pagesManifest: {
         id: ephemerisManifest.id,
-        sha256: '785150b7d039f048dc3a115cfb1c6c8c7cecf0dec7adae516b38a1c03df1207b',
-        bytes: 272951296,
+        sha256: 'b326ba67ab67ad6a00908f6f5f03cb7742346ab48fc7375b8fc5c66dc2354943',
+        bytes: 272921600,
         fileCount: 602,
       },
       fullManifest: {
         id: ephemerisManifestFull.id,
-        sha256: '7f922d388ac241e2cd91be3e0fe51f630f39ebef98a49477cfb923a3e2c99ae1',
-        bytes: 1167155200,
+        sha256: 'f6c06e2c31afb87e184d3dde4060ca18177130198e5b2edf2c18f5f0fb15c5d4',
+        bytes: 1167867904,
         fileCount: 602,
       },
     })
