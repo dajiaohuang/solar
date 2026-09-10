@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-10T16:26:14.328Z",
+  "generatedAt": "2026-09-10T17:13:20.532Z",
   "epochJd": 2461287.5,
   "epochTimeScale": "TDB",
   "source": {
@@ -2768,6 +2768,166 @@
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
       "sourceKernelId": "satellite-jup347-568-2020-2031"
+    },
+    {
+      "id": "naif:569",
+      "name": "S/2017 J8",
+      "shortName": "S/2017 J8",
+      "kind": "moon",
+      "naifId": 569,
+      "parentId": "jupiter",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 0.15863971734842214,
+        "eccentricity": 0.18410618035001092,
+        "inclinationDeg": 165.2092580778963,
+        "ascendingNodeDeg": 204.895436001915,
+        "argPeriapsisDeg": 111.19961630574471,
+        "meanAnomalyDeg": 153.8285847165946,
+        "meanMotionDegPerDay": 0.4819429030508333
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": 10101885.491355836,
+          "y": -24887469.29256606,
+          "z": -7083464.989312568
+        },
+        "velocity": {
+          "x": -1.7453776463411916,
+          "y": -0.8583393081535258,
+          "z": -0.011575430942407094
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 126686531.9003704,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 599
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
+      "sourceKernelId": "satellite-jup347-569-2020-2031"
+    },
+    {
+      "id": "naif:570",
+      "name": "S/2017 J9",
+      "shortName": "S/2017 J9",
+      "kind": "moon",
+      "naifId": 570,
+      "parentId": "jupiter",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 0.1413754315718423,
+        "eccentricity": 0.22317469832485926,
+        "inclinationDeg": 154.55038446971602,
+        "ascendingNodeDeg": 336.74613656918507,
+        "argPeriapsisDeg": 316.6251664842145,
+        "meanAnomalyDeg": 159.5164955578831,
+        "meanMotionDegPerDay": 0.5728653636843734
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -20572714.629453897,
+          "y": -12266127.162058234,
+          "z": 9228543.275875144
+        },
+        "velocity": {
+          "x": -1.2314364165863552,
+          "y": 1.4803982970801082,
+          "z": -0.41591420599788853
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 126686531.9003704,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 599
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
+      "sourceKernelId": "satellite-jup347-570-2020-2031"
+    },
+    {
+      "id": "naif:571",
+      "name": "Ersa",
+      "shortName": "Ersa",
+      "kind": "moon",
+      "naifId": 571,
+      "parentId": "jupiter",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 0.07631346779062645,
+        "eccentricity": 0.1022218497084198,
+        "inclinationDeg": 30.655380527330284,
+        "ascendingNodeDeg": 85.806661305555,
+        "argPeriapsisDeg": 24.692299484021078,
+        "meanAnomalyDeg": 245.91641218931318,
+        "meanMotionDegPerDay": 1.4444805454157166
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": 9997236.708929777,
+          "y": -2716918.927500367,
+          "z": -6027287.918689926
+        },
+        "velocity": {
+          "x": 0.4385104273426652,
+          "y": 3.1361350886104864,
+          "z": -0.12329143465715864
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 126686531.9003704,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 599
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
+      "sourceKernelId": "satellite-jup347-571-2020-2031"
+    },
+    {
+      "id": "naif:572",
+      "name": "S/2011 J1",
+      "shortName": "S/2011 J1",
+      "kind": "moon",
+      "naifId": 572,
+      "parentId": "jupiter",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 0.15227603269859172,
+        "eccentricity": 0.2749614964770589,
+        "inclinationDeg": 163.8309572381297,
+        "ascendingNodeDeg": 2.731843653430019,
+        "argPeriapsisDeg": 146.40650108263918,
+        "meanAnomalyDeg": 347.2396976613172,
+        "meanMotionDegPerDay": 0.5124672900193884
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -8583405.06883806,
+          "y": -13910051.08540535,
+          "z": 3909896.6550442483
+        },
+        "velocity": {
+          "x": -2.506952657582122,
+          "y": 1.716729856030275,
+          "z": -0.5318284786410735
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 126686531.9003704,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 599
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
+      "sourceKernelId": "satellite-jup347-572-2020-2031"
     },
     {
       "id": "naif:601",
