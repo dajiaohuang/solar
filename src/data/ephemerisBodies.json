@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-11T04:40:32.174Z",
+  "generatedAt": "2026-09-11T06:07:03.365Z",
   "epochJd": 2461287.5,
   "epochTimeScale": "TDB",
   "source": {
@@ -3608,6 +3608,166 @@
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
       "sourceKernelId": "satellite-naif-sat415-618-2026-2027"
+    },
+    {
+      "id": "naif:619",
+      "name": "Ymir",
+      "shortName": "Ymir",
+      "kind": "moon",
+      "naifId": 619,
+      "parentId": "saturn",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 0.1527362093566992,
+        "eccentricity": 0.3046756888890677,
+        "inclinationDeg": 172.3868476164004,
+        "ascendingNodeDeg": 242.33791925448193,
+        "argPeriapsisDeg": 87.23667888740039,
+        "meanAnomalyDeg": 1.0498771069854342,
+        "meanMotionDegPerDay": 0.2791473900817624
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -14038121.929136276,
+          "y": 7140638.598463833,
+          "z": 2105000.004790239
+        },
+        "velocity": {
+          "x": 0.7872465802239637,
+          "y": 1.5793655151178392,
+          "z": 0.004807123836367264
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 37931206.23436167,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 699
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/sat456.bsp",
+      "sourceKernelId": "satellite-sat456-619-2020-2031"
+    },
+    {
+      "id": "naif:620",
+      "name": "Paaliaq",
+      "shortName": "Paaliaq",
+      "kind": "moon",
+      "naifId": 620,
+      "parentId": "saturn",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 0.09984680808985384,
+        "eccentricity": 0.569721059530612,
+        "inclinationDeg": 43.37356399492377,
+        "ascendingNodeDeg": 331.7730531378261,
+        "argPeriapsisDeg": 243.9594095352916,
+        "meanAnomalyDeg": 26.853437923609704,
+        "meanMotionDegPerDay": 0.5281354321203237
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": 5921195.376945257,
+          "y": -7097200.030328453,
+          "z": -3262029.824787669
+        },
+        "velocity": {
+          "x": 2.118827928625232,
+          "y": -0.13819067197171542,
+          "z": 0.8317598389400089
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 37931206.23436167,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 699
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/sat456.bsp",
+      "sourceKernelId": "satellite-sat456-620-2020-2031"
+    },
+    {
+      "id": "naif:621",
+      "name": "Tarvos",
+      "shortName": "Tarvos",
+      "kind": "moon",
+      "naifId": 621,
+      "parentId": "saturn",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 0.12187154461794676,
+        "eccentricity": 0.5620516139085856,
+        "inclinationDeg": 40.88743884958355,
+        "ascendingNodeDeg": 57.55337100281844,
+        "argPeriapsisDeg": 316.3813514459737,
+        "meanAnomalyDeg": 97.38023317568019,
+        "meanMotionDegPerDay": 0.39164547258489596
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -18095926.610641003,
+          "y": 4166999.1610299647,
+          "z": 15158021.345786832
+        },
+        "velocity": {
+          "x": -0.706396844464821,
+          "y": -0.7460152412914933,
+          "z": 0.169597015957623
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 37931206.23436167,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 699
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/sat456.bsp",
+      "sourceKernelId": "satellite-sat456-621-2020-2031"
+    },
+    {
+      "id": "naif:622",
+      "name": "Ijiraq",
+      "shortName": "Ijiraq",
+      "kind": "moon",
+      "naifId": 622,
+      "parentId": "saturn",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 0.07571888866086446,
+        "eccentricity": 0.43016872292356934,
+        "inclinationDeg": 48.851464969482116,
+        "ascendingNodeDeg": 142.0139261419149,
+        "argPeriapsisDeg": 68.24899779037645,
+        "meanAnomalyDeg": 248.03564876902726,
+        "meanMotionDegPerDay": 0.7997241978793411
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": 3673666.6883342266,
+          "y": 9032825.333113939,
+          "z": -10734523.124475524
+        },
+        "velocity": {
+          "x": -1.213799698604451,
+          "y": 0.3672028023145515,
+          "z": 0.5237092499200592
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 37931206.23436167,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 699
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/sat456.bsp",
+      "sourceKernelId": "satellite-sat456-622-2020-2031"
     },
     {
       "id": "naif:632",

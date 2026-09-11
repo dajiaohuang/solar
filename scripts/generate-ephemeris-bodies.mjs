@@ -22,7 +22,7 @@ const NAMES = {
   505: 'Amalthea', 514: 'Thebe', 515: 'Adrastea', 516: 'Metis', 601: 'Mimas', 602: 'Enceladus',
   603: 'Tethys', 604: 'Dione', 605: 'Rhea', 606: 'Titan', 607: 'Hyperion', 608: 'Iapetus',
   609: 'Phoebe', 610: 'Janus', 611: 'Epimetheus', 612: 'Helene', 613: 'Telesto', 614: 'Calypso',
-  615: 'Atlas', 616: 'Prometheus', 617: 'Pandora', 618: 'Pan', 632: 'Methone', 633: 'Pallene',
+  615: 'Atlas', 616: 'Prometheus', 617: 'Pandora', 618: 'Pan', 619: 'Ymir', 620: 'Paaliaq', 621: 'Tarvos', 622: 'Ijiraq', 632: 'Methone', 633: 'Pallene',
   634: 'Polydeuces', 649: 'Anthe', 653: 'Aegaeon',
   55505: 'S/2003 J12', 55506: 'S/2003 J16', 55507: 'S/2003 J23', 55508: 'S/2003 J24',
   55509: 'S/2011 J3', 55510: 'S/2018 J2', 55511: 'S/2018 J3', 55512: 'S/2021 J1',
