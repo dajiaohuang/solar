@@ -29,7 +29,7 @@ describe('optional SPK body seed artifact', () => {
       expect(ids).toContain(`naif:${naifId}`)
       expect(bodies.bodies.find((body) => body.id === `naif:${naifId}`)).toMatchObject({ name, parentId: 'jupiter', sourceKernelId: `satellite-jup347-${naifId}-2020-2031` })
     }
-    for (const [naifId, name] of [[610, 'Janus'], [611, 'Epimetheus'], [615, 'Atlas'], [616, 'Prometheus'], [617, 'Pandora'], [618, 'Pan'], [633, 'Pallene'], [649, 'Anthe'], [653, 'Aegaeon']] as const) {
+    for (const [naifId, name] of [[610, 'Janus'], [611, 'Epimetheus'], [615, 'Atlas'], [616, 'Prometheus'], [617, 'Pandora'], [618, 'Pan'], [619, 'Ymir'], [620, 'Paaliaq'], [621, 'Tarvos'], [622, 'Ijiraq'], [633, 'Pallene'], [649, 'Anthe'], [653, 'Aegaeon']] as const) {
       expect(ids).toContain(`naif:${naifId}`)
       expect(bodies.bodies.find((body) => body.id === `naif:${naifId}`)).toMatchObject({ name, parentId: 'saturn', source: 'jpl-spk-osculating-fallback' })
     }
