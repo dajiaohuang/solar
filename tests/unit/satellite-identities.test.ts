@@ -20,7 +20,7 @@ describe('selectable satellite identity catalog', () => {
     const additions = majorBodies.filter(body => body.source === 'jpl-satellite-inventory')
     // Source-backed JUP347 fallback seeds are represented separately from the
     // inventory-only partition, which remains stable as batches are expanded.
-    expect(additions.length).toBe(347)
+    expect(additions.length).toBe(343)
     for (const body of additions) {
       expect(body.orbit).toBeUndefined()
       expect(body.radiusKm).toBeUndefined()

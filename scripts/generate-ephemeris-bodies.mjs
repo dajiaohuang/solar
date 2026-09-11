@@ -30,6 +30,7 @@ const NAMES = {
   55517: 'S/2021 J6', 55518: 'S/2016 J3', 55519: 'S/2016 J4', 55520: 'S/2018 J4',
   55521: 'S/2022 J1', 55522: 'S/2022 J2', 55523: 'S/2022 J3', 55524: 'S2025_j_1',
   55525: 'S/2017 J10', 55526: 'S/2017 J11',
+  55527: 'S/2011 J4', 55528: 'S/2018 J5', 55529: 'S/2024 J1', 55530: 'S/2011 J5',
   701: 'Ariel', 702: 'Umbriel', 703: 'Titania', 704: 'Oberon', 705: 'Miranda',
   801: 'Triton', 802: 'Nereid', 901: 'Charon', 902: 'Nix', 903: 'Hydra', 904: 'Kerberos', 905: 'Styx',
   20000243: 'Ida', 20000433: 'Eros', 20000951: 'Gaspra', 20025143: 'Itokawa',
@@ -112,7 +113,7 @@ const [kernelPoolModule, osculatingModule] = await Promise.all([
 ])
 const et = (epochJd - 2451545) * DAY_SECONDS
 const resolver = kernelPoolModule.createKernelResolver(kernels, et)
-const parentFor = (target) => target >= 55501 && target < 55527 ? 599 : target >= 2000000 ? 10 : target >= 601 && target < 700 ? 699 : target >= 701 && target < 800 ? 799 : target >= 801 && target < 900 ? 899 : target >= 901 ? 999 : target >= 501 && target < 600 ? 599 : target >= 401 && target < 500 ? 499 : 10
+const parentFor = (target) => target >= 55501 && target < 55531 ? 599 : target >= 2000000 ? 10 : target >= 601 && target < 700 ? 699 : target >= 701 && target < 800 ? 799 : target >= 801 && target < 900 ? 899 : target >= 901 ? 999 : target >= 501 && target < 600 ? 599 : target >= 401 && target < 500 ? 499 : 10
 const bodies = []
 for (const target of [...new Set(manifest.files.flatMap((f) => f.targets))].sort((a, b) => a - b)) {
   if (MAJOR.has(target)) continue
