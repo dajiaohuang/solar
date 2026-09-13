@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-13T20:17:38.497Z",
+  "generatedAt": "2026-09-13T21:33:31.158Z",
   "epochJd": 2461287.5,
   "epochTimeScale": "TDB",
   "source": {
     "manifestPath": "src/data/ephemeris-manifest.json",
     "manifestId": "jpl-satellite-expansion-20260904-pages",
-    "manifestSha256": "69554f58f7fea3eefdf1ff450dc1cbbf1331936225b74d73d1d0d99a3ab3bb62",
+    "manifestSha256": "7db55c8608daa69f3db0846d5dc473f8dc11a89faecd7675090aec25757bb2d6",
     "gmUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
     "gmFile": "src/data/gm_de440.tpc",
     "gmSha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
@@ -9490,6 +9490,86 @@
       "sourceKernelId": "horizons-asteroids-followup-20260909-or2-1998-2026-01-01-2027-01-01"
     },
     {
+      "id": "asteroid:55565",
+      "name": "2002 AW197",
+      "shortName": "2002 AW197",
+      "kind": "asteroid",
+      "naifId": 20055565,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 47.38927165811034,
+        "eccentricity": 0.12905077111154017,
+        "inclinationDeg": 24.341140754374976,
+        "ascendingNodeDeg": 297.3717472750956,
+        "argPeriapsisDeg": 294.0397747705006,
+        "meanAnomalyDeg": 304.6998444196421,
+        "meanMotionDegPerDay": 0.0030212316315179587
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -5986560158.955889,
+          "y": 2157017490.6418276,
+          "z": -1956372878.3643425
+        },
+        "velocity": {
+          "x": -0.6230474789436398,
+          "y": -4.404688965061446,
+          "z": -1.1664221728756696
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2755565%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch21-20260914-aw197-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:55636",
+      "name": "2002 TX300",
+      "shortName": "2002 TX300",
+      "kind": "asteroid",
+      "naifId": 20055636,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 43.38861733431958,
+        "eccentricity": 0.1210824768203912,
+        "inclinationDeg": 25.859872680261713,
+        "ascendingNodeDeg": 324.70525678400304,
+        "argPeriapsisDeg": 341.69372891777545,
+        "meanAnomalyDeg": 84.59753051019163,
+        "meanMotionDegPerDay": 0.003448580418385553
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": 4243603665.1433787,
+          "y": 4069917454.6070843,
+          "z": 2798567267.8714933
+        },
+        "velocity": {
+          "x": -2.8452187028795404,
+          "y": 3.4491360219837435,
+          "z": 0.567707404053557
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2755636%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch21-20260914-tx300-2026-01-01-2027-01-01"
+    },
+    {
       "id": "asteroid:55637",
       "name": "2002 UX25",
       "shortName": "2002 UX25",
@@ -9728,6 +9808,46 @@
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2799942%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
       "sourceKernelId": "horizons-apophis-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:120132",
+      "name": "2004 GV9",
+      "shortName": "2004 GV9",
+      "kind": "asteroid",
+      "naifId": 20120132,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 49.412946193058545,
+        "eccentricity": 0.25211534038563843,
+        "inclinationDeg": 11.767926177763302,
+        "ascendingNodeDeg": 341.6751144326784,
+        "argPeriapsisDeg": 174.18048541744372,
+        "meanAnomalyDeg": 40.24192966597872,
+        "meanMotionDegPerDay": 0.002837546259469215
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -4750017585.832928,
+          "y": -3889071150.2727795,
+          "z": -1080232580.9471684
+        },
+        "velocity": {
+          "x": 2.3770697588923557,
+          "y": -4.3005789934712855,
+          "z": -0.6947967690810033
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27120132%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch21-20260914-gv9-2026-01-01-2027-01-01"
     },
     {
       "id": "asteroid:132524",
@@ -10130,6 +10250,46 @@
       "sourceKernelId": "horizons-asteroids-batch19-20260914-varda-2026-01-01-2027-01-01"
     },
     {
+      "id": "asteroid:208996",
+      "name": "2003 AZ84",
+      "shortName": "2003 AZ84",
+      "kind": "asteroid",
+      "naifId": 20208996,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 39.66228198012636,
+        "eccentricity": 0.17511371847755433,
+        "inclinationDeg": 13.55017284887159,
+        "ascendingNodeDeg": 251.91200765168526,
+        "argPeriapsisDeg": 13.977586372865687,
+        "meanAnomalyDeg": 244.44563137732462,
+        "meanMotionDegPerDay": 0.003945822338358609
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -4373262519.902027,
+          "y": 4633627235.758992,
+          "z": -1348610399.968612
+        },
+        "velocity": {
+          "x": -2.5774841929618146,
+          "y": -3.410625919541099,
+          "z": -0.33528278325605543
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27208996%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch21-20260914-az84-2026-01-01-2027-01-01"
+    },
+    {
       "id": "asteroid:225088",
       "name": "Gonggong",
       "shortName": "Gonggong",
@@ -10208,6 +10368,46 @@
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27231937%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
       "sourceKernelId": "horizons-asteroids-followup-20260909-fo32-2001-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:307261",
+      "name": "2002 MS4",
+      "shortName": "2002 MS4",
+      "kind": "asteroid",
+      "naifId": 20307261,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 41.592029557251244,
+        "eccentricity": 0.14800721028107935,
+        "inclinationDeg": 17.698425427814687,
+        "ascendingNodeDeg": 216.12289066225813,
+        "argPeriapsisDeg": 215.53784287018908,
+        "meanAnomalyDeg": 230.55342180394774,
+        "meanMotionDegPerDay": 0.00367442091388717
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": 2232598334.9074116,
+          "y": -6185610927.850292,
+          "z": 2014420961.801668
+        },
+        "velocity": {
+          "x": 3.6965375162272536,
+          "y": 1.8852008866064476,
+          "z": 0.2094641404616795
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27307261%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-asteroids-batch21-20260914-ms4-2026-01-01-2027-01-01"
     },
     {
       "id": "asteroid:308635",
