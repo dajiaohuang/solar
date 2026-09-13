@@ -16,8 +16,8 @@ describe('preview scientific delivery closure', () => {
   it('retains original coefficients, order, source pools and explicit gaps without changing full manifests', () => {
     const before = JSON.stringify([pages, full])
     const selected = previewEphemerisManifest(pages)
-    expect(selected.files).toHaveLength(36)
-    expect(selected.files.reduce((sum, file) => sum + file.bytes, 0)).toBe(90687488)
+    expect(selected.files).toHaveLength(41)
+    expect(selected.files.reduce((sum, file) => sum + file.bytes, 0)).toBe(92071936)
     const ids = new Set(selected.files.map(file => file.id))
     expect(ids.has('de442-satellite-2020-2031')).toBe(true)
     for (const file of selected.files) {
