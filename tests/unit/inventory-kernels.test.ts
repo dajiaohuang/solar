@@ -92,7 +92,7 @@ describe('inventory does not confuse source membership with SPK coverage', () =>
     expect(kernels.attach({ id: 'sb:asteroid:1', designation: '1', category: 'dwarf-planet' })).toMatchObject({ naifId: 2000001, ephemerisStatus: 'state-available-at-audit-epoch' })
     expect(kernels.attach({ id: 'sb:asteroid:136199', designation: '136199', category: 'dwarf-planet' })).toMatchObject({ naifId: 920136199, ephemerisStatus: 'state-available-at-audit-epoch' })
     expect(kernels.attach({ id: 'sb:asteroid:136108', designation: '136108', category: 'dwarf-planet' })).toMatchObject({ naifId: 920136108, ephemerisStatus: 'state-available-at-audit-epoch' })
-    expect(kernels.attach({ id: 'sb:asteroid:136472', designation: '136472', category: 'dwarf-planet' }).ephemerisStatus).toBe('not-mapped-to-bundled-kernel')
+    expect(kernels.attach({ id: 'sb:asteroid:136472', designation: '136472', category: 'dwarf-planet' })).toMatchObject({ naifId: 20136472, ephemerisStatus: 'state-available-at-audit-epoch' })
   })
   it('labels an explicit ID outside its time window as unavailable', async () => {
     const kernels = await inventoryKernels(process.cwd(), -1e10)
