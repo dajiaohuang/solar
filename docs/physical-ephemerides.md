@@ -1,6 +1,6 @@
 # Physical ephemeris contract
 
-Solar Atlas uses immutable SPK files for Web/backend focus-body geometry. The two source profiles each contain 602 SHA-256-pinned files: the short-window `pages` source profile totals 272,921,600 bytes (260.3 MiB), and the full Web/backend source profile totals 1,167,867,904 bytes (1113.8 MiB). These source-profile totals are not deployed preview totals: the current curated Pages product selects a dependency closure of 36 files / 90,687,488 SPK bytes, as described in [preview delivery](./preview-delivery.md). Static Web files load on demand after the explorer's first-visit choice (or directly on analysis routes); native clients do not package SPK files, and the full-Web backend current-state path requests binary state tiles instead. Requesting a static body may load its file outside its interval, while calculation still uses only covered epochs. A documented existing static-Web approximation may be used outside coverage; bodies without one remain unavailable. Exact backend state requests never substitute an approximate fallback.
+Solar Atlas uses immutable SPK files for Web/backend focus-body geometry. The two source profiles each contain 602 SHA-256-pinned files: the short-window `pages` source profile totals 272,921,600 bytes (260.3 MiB), and the full Web/backend source profile totals 1,167,867,904 bytes (1113.8 MiB). These source-profile totals are not deployed preview totals: the curated Pages product selects a dependency closure of 41 files / 92,071,936 SPK bytes after adding SAT456 identities 619–622, as described in [preview delivery](./preview-delivery.md). Static Web files load on demand after the explorer's first-visit choice (or directly on analysis routes); native clients do not package SPK files, and the full-Web backend current-state path requests binary state tiles instead. Requesting a static body may load its file outside its interval, while calculation still uses only covered epochs. A documented existing static-Web approximation may be used outside coverage; bodies without one remain unavailable. Exact backend state requests never substitute an approximate fallback.
 
 ## Coverage
 
@@ -167,10 +167,9 @@ The Web build and Pages preview publish their selected, validated SPK assets acc
 An earlier expanded Pages candidate with the pinned 1,561,171-object asteroid dataset
 measured approximately 698.3 MiB (433.5 MiB catalog data, 258.5 MiB SPK assets and about
 6.4 MiB application shell). That is historical candidate evidence, not the current
-published preview. The live Pages build at commit `2d2b99ca17b9a287024cb661a658c5922127e9fc`
-reports a curated closure of 36 SPK files totaling 90,800,128 bytes and 93.2 MiB total
-capacity. Further source additions require a fresh deployment measurement; Web delivery
-profiles must not silently change their validated source selection.
+published preview. The last verified live Pages build reported a curated closure of 36 SPK
+files totaling 90,687,488 bytes and 93.2 MiB total capacity. The SAT456 preview expansion requires a fresh deployment measurement; Web
+delivery profiles must not silently change their validated source selection.
 
 ## Primary sources
 

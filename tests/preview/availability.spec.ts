@@ -210,3 +210,15 @@ test('real preview artifacts support curated 3D and the pinned belt sample witho
   expect(errors).toEqual([])
   await page.screenshot({ path: info.outputPath('real-curated-belt.png') })
 })
+
+test('loads the four newly curated SAT456 identities inside the Pages window', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  for (const naifId of [619, 620, 621, 622]) {
+    await page.goto(`?v=4&lang=en&view=3d&ref=saturn&bodies=saturn,naif:${naifId}&focused=naif:${naifId}&jd=2461287.5&history=1&speed=0`)
+    await expect(page.getByTestId('local-ephemeris-evidence').locator(':scope > summary')).toContainText('2/2', { timeout: 30_000 })
+    await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
+  }
+  expect(errors).toEqual([])
+})
