@@ -239,8 +239,10 @@ export async function nativeSmoke() {
     // Use the IPv4 URL in the app and certificate to keep the listener local
     // without depending on the simulator's localhost resolution order.
     await new Promise((resolvePromise, reject) => { proxy.once('error', reject); proxy.listen(18791, '127.0.0.1', resolvePromise) })
-    await command('xcodebuild', testArguments(device, join(artifact, 'Observation.xcresult')),
-      { log: join(artifact, 'xcode-test.log'), timeout: 12 * 60_000 })
+      await command('xcodebuild', testArguments(device, join(artifact, 'Observation.xcresult')),
+        // macOS hosted runners can spend several minutes draining XCTest and
+        // simulator processes after the final test has already succeeded.
+        { log: join(artifact, 'xcode-test.log'), timeout: 20 * 60_000 })
     report.pointGeometry = verifyPointPixelEvidence(await readFile(join(artifact, 'xcode-test.log'), 'utf8'))
     verifyTraffic(traffic.filter(row => !row.path.startsWith('/coverage-fixture/') && !row.path.startsWith('/identity-fixture/')))
     report.coverageUi = verifyNativeCoverageTraffic(traffic)
