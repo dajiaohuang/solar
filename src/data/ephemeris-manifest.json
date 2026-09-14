@@ -20218,6 +20218,129 @@
         },
         "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
       }
+    },
+    {
+      "id": "horizons-centaur-batch26-20260914-hidalgo-2026-01-01-2027-01-01",
+      "path": "horizons-centaur-batch26-20260914-hidalgo-2026-01-01-2027-01-01.bsp",
+      "sha256": "16b994e3b946cf4154bf33195f94686f86e256fed812c878d249960fb0760008",
+      "bytes": 21504,
+      "targets": [
+        20000944
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27944%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27944%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T03:28:59.515Z",
+        "bytes": 264192,
+        "sha256": "d97ead23af50b7a86cf30d2cc609a2ad6c712c131a6f6d2d12d085aeb46c62de",
+        "responseSha256": "589a2a9ad108549bf5a403d25677e1ccf0839296bffed5c001d314804576ef98",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20000944,
+        "designation": "944",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS                944 Hidalgo (A920 UB)          2026-Sep-13 20:29:00\nRec #:     944 (+COV) Soln.date: 2026-Mar-11_22:28:59   # obs: 2657 (1920-2024)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458068.5 ! 2017-Nov-11.00 (TDB)         Residual RMS= .23117\n   EC= .6609083603344837   QR= 1.947116203592788   TP= 2458418.0271953875\n   OM= 21.42221229518301   W=  56.67586027731016   IN= 42.52342871725593\n   A= 5.742153376336394    MA= 334.9635434071799   ADIST= 9.53719054908\n   PER= 13.76006           N= .071629495           ANGMOM= .030935007\n   DAN= 2.37254            DDN= 5.07758            L= 69.6859781\n   B= 34.3855441           MOID= 1.15023994        TP= 2018-Oct-26.5271953875\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 19.                ROTPER= 10.063\n   H= 10.55                G= .150                 B-V= .743\n                           ALBEDO= .060            STYP= D\n\nASTEROID comments: \n1: soln ref.= JPL#64, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20000944'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-centaur-batch26-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "944 Hidalgo (A920 UB) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "589a2a9ad108549bf5a403d25677e1ccf0839296bffed5c001d314804576ef98",
+          "binarySha256": "d97ead23af50b7a86cf30d2cc609a2ad6c712c131a6f6d2d12d085aeb46c62de",
+          "retrievedAt": "2026-09-14T03:28:59.515Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-centaur-batch26-20260914-echeclus-2026-01-01-2027-01-01",
+      "path": "horizons-centaur-batch26-20260914-echeclus-2026-01-01-2027-01-01.bsp",
+      "sha256": "f49d7db7b8b5335066afad74ba6b0125ee5cd27996b680a27b43b60cc2c6b4de",
+      "bytes": 23552,
+      "targets": [
+        20060558
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2760558%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2760558%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T03:29:01.013Z",
+        "bytes": 268288,
+        "sha256": "8ba6f35ad0c77d78143cd184cce89ec610b4de5b5eb181b78f78d05fd655c3f3",
+        "responseSha256": "0c987b3a246932457fc7b546ce2beb75b4a2243dbd27eeb5ad6e1099b34dea57",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20060558,
+        "designation": "60558",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS             60558 Echeclus (2000 EC98)        2026-Sep-13 20:29:01\nRec #:   60558 (+COV) Soln.date: 2026-Jun-06_07:48:54   # obs: 5211 (1979-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458010.5 ! 2017-Sep-14.00 (TDB)         Residual RMS= .30549\n   EC= .4556728759936455   QR= 5.814368317548331   TP= 2457133.6734108948\n   OM= 173.33315893649     W=  162.8032095746185   IN= 4.344450097601288\n   A= 10.68175378576294    MA= 24.75448753210896   ADIST= 15.54913925397755\n   PER= 34.91178           N= .028231908           ANGMOM= .050045451\n   DAN= 14.98822           DDN= 5.89689            L= 336.1828778\n   B= 1.2833332            MOID= 4.80486012        TP= 2015-Apr-21.1734108948\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 29.5               ROTPER= 26.802\n   H= 9.21                 G= .150                 B-V= n.a.\n                           ALBEDO= .077            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#123, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20060558'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-centaur-batch26-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "60558 Echeclus (2000 EC98) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "0c987b3a246932457fc7b546ce2beb75b4a2243dbd27eeb5ad6e1099b34dea57",
+          "binarySha256": "8ba6f35ad0c77d78143cd184cce89ec610b4de5b5eb181b78f78d05fd655c3f3",
+          "retrievedAt": "2026-09-14T03:29:01.013Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-centaur-batch26-20260914-bienor-2026-01-01-2027-01-01",
+      "path": "horizons-centaur-batch26-20260914-bienor-2026-01-01-2027-01-01.bsp",
+      "sha256": "833c939e204d99a07a7b8940267c40b4417eef989c009694acb828f4eb0df131",
+      "bytes": 22528,
+      "targets": [
+        20054598
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2754598%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2754598%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T03:29:01.534Z",
+        "bytes": 276480,
+        "sha256": "a828f35a64ce23184dc7d6d040e8fd322bb9d683a6a2391af9545f4f6e158ec4",
+        "responseSha256": "9e8d5b5d3c930b59c77bd2eea29df91de786ea748a3ef94826d61766cd2ac102",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20054598,
+        "designation": "54598",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS              54598 Bienor (2000 QC243)        2026-Sep-13 20:29:02\nRec #:   54598 (+COV) Soln.date: 2026-Jun-06_06:17:35   # obs: 2171 (1953-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458803.5 ! 2019-Nov-16.00 (TDB)         Residual RMS= .16391\n   EC= .1989963520633937   QR= 13.16609397803556   TP= 2461816.3385739033\n   OM= 337.7498908730308   W=  153.5133475679012   IN= 20.74429860120314\n   A= 16.43699627579918    MA= 315.4398902496351   ADIST= 19.70789857356281\n   PER= 66.64106           N= .014790075           ANGMOM= .068346904\n   DAN= 19.20705           DDN= 13.39952           L= 132.7649925\n   B= 9.0890013            MOID= 12.19349957       TP= 2028-Feb-14.8385739033\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 93.75              ROTPER= 9.14\n   H= 7.49                 G= .150                 B-V= n.a.\n                           ALBEDO= .050            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#83, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20054598'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-centaur-batch26-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "54598 Bienor (2000 QC243) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "9e8d5b5d3c930b59c77bd2eea29df91de786ea748a3ef94826d61766cd2ac102",
+          "binarySha256": "a828f35a64ce23184dc7d6d040e8fd322bb9d683a6a2391af9545f4f6e158ec4",
+          "retrievedAt": "2026-09-14T03:29:01.534Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
     }
   ]
 }
