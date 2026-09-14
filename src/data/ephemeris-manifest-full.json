@@ -20587,6 +20587,47 @@
         },
         "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
       }
+    },
+    {
+      "id": "horizons-centaur-batch29-20260914-amycus-2020-01-01-2031-01-01",
+      "path": "horizons-centaur-batch29-20260914-amycus-2020-01-01-2031-01-01.bsp",
+      "sha256": "d99ec1113e600d0e3241430c49248d777860d8a585aca2bcb138203ae14e0cb2",
+      "bytes": 257024,
+      "targets": [
+        20055576
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2755576%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2755576%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T06:55:07.686Z",
+        "bytes": 318464,
+        "sha256": "0f1a50e5262dd613d173383fda66856fa95badb6e5ac7da0beeb27fdd942d78c",
+        "responseSha256": "f3beeef2a2bbcf2270506eb5fd86aef84ff4a4e1e05b2e57c8fba7fdd747a2c0",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20055576,
+        "designation": "55576",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS              55576 Amycus (2002 GB10)         2026-Sep-13 23:55:09\nRec #:   55576 (+COV) Soln.date: 2026-Aug-20_09:29:53    # obs: 158 (1987-2025)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458896.5 ! 2020-Feb-17.00 (TDB)         Residual RMS= .176\n   EC= .394237318053169    QR= 15.27004270998994   TP= 2452699.9657605393\n   OM= 315.5642765894613   W=  239.8585164945571   IN= 13.31576291295395\n   A= 25.20796207008708    MA= 48.25544474371119   ADIST= 35.14588143018422\n   PER= 126.56535          N= .007787489           ANGMOM= .079372474\n   DAN= 26.54493           DDN= 17.77191           L= 194.7402092\n   B= -11.4887662          MOID= 14.29080009       TP= 2003-Mar-01.4657605393\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 50.45              ROTPER= 9.76\n   H= 7.56                 G= .150                 B-V= n.a.\n                           ALBEDO= .180            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#17, OCC=1\n2: source=ORB\n*******************************************************************************\n\nID= '20055576'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-centaur-batch29-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "55576 Amycus frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "f3beeef2a2bbcf2270506eb5fd86aef84ff4a4e1e05b2e57c8fba7fdd747a2c0",
+          "binarySha256": "0f1a50e5262dd613d173383fda66856fa95badb6e5ac7da0beeb27fdd942d78c",
+          "retrievedAt": "2026-09-14T06:55:07.686Z"
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
+      }
     }
   ]
 }
