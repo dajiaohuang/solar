@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-14T06:56:24.034Z",
+  "generatedAt": "2026-09-14T08:16:11.489Z",
   "epochJd": 2461287.5,
   "epochTimeScale": "TDB",
   "source": {
     "manifestPath": "src/data/ephemeris-manifest.json",
     "manifestId": "jpl-satellite-expansion-20260904-pages",
-    "manifestSha256": "165f1d6fcb972ee7184bceb1652f96ecc44b1c887a6370e6792f19e0988a022f",
+    "manifestSha256": "4f0c0e721bfd74b68ea234c4be71afd0b599a749e8e6dd9baa0cec51e35ad557",
     "gmUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
     "gmFile": "src/data/gm_de440.tpc",
     "gmSha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
@@ -9890,6 +9890,46 @@
       "sourceKernelId": "horizons-centaur-batch27-20260914-thereus-2026-01-01-2027-01-01"
     },
     {
+      "id": "asteroid:37117",
+      "name": "37117 Narcissus",
+      "shortName": "37117 Narcissus",
+      "kind": "asteroid",
+      "naifId": 20037117,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 6.8859572759954055,
+        "eccentricity": 0.5537921251898609,
+        "inclinationDeg": 13.816327921684936,
+        "ascendingNodeDeg": 248.40823925338196,
+        "argPeriapsisDeg": 180.2833034632469,
+        "meanAnomalyDeg": 152.10706945797142,
+        "meanMotionDegPerDay": 0.05454533183664948
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -803954435.6077743,
+          "y": -1350042448.619064,
+          "z": -61662738.42376715
+        },
+        "velocity": {
+          "x": 4.4876565808135265,
+          "y": -4.223438279064428,
+          "z": 1.4084024259037236
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2737117%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-centaur-batch30-20260914-narcissus-2026-01-01-2027-01-01"
+    },
+    {
       "id": "asteroid:38083",
       "name": "Asteroid 18038083",
       "shortName": "Asteroid 18038083",
@@ -10568,6 +10608,46 @@
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2779360%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
       "sourceKernelId": "horizons-asteroids-batch24-20260914-silanunam-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:83982",
+      "name": "83982 Crantor",
+      "shortName": "83982 Crantor",
+      "kind": "asteroid",
+      "naifId": 20083982,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 19.36344831740492,
+        "eccentricity": 0.27602575389022704,
+        "inclinationDeg": 12.78876456376339,
+        "ascendingNodeDeg": 117.48534108186698,
+        "argPeriapsisDeg": 92.38437796862763,
+        "meanAnomalyDeg": 102.91274550826796,
+        "meanMotionDegPerDay": 0.011567247359951594
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": 3020558379.2877445,
+          "y": -1123252056.6605477,
+          "z": -490571385.6535809
+        },
+        "velocity": {
+          "x": 3.2244518879796593,
+          "y": 4.885139066313903,
+          "z": -1.1610679040049532
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2783982%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-centaur-batch30-20260914-crantor-2026-01-01-2027-01-01"
     },
     {
       "id": "asteroid:84522",
@@ -11528,6 +11608,46 @@
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27341843%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
       "sourceKernelId": "horizons-asteroids-batch5-20260909-ev5-2008-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:346889",
+      "name": "346889 Rhiphonos",
+      "shortName": "346889 Rhiphonos",
+      "kind": "asteroid",
+      "naifId": 20346889,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 10.78383687877304,
+        "eccentricity": 0.44244877455726095,
+        "inclinationDeg": 19.896664972712546,
+        "ascendingNodeDeg": 11.432046098692695,
+        "argPeriapsisDeg": 13.397676322234531,
+        "meanAnomalyDeg": 167.83391995236764,
+        "meanMotionDegPerDay": 0.02783198034493774
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -2189127933.161589,
+          "y": -757806873.8829229,
+          "z": -111790840.0184376
+        },
+        "velocity": {
+          "x": 1.442378056939757,
+          "y": -5.137028373511189,
+          "z": -1.9258246407685702
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27346889%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-centaur-batch30-20260914-rhiphonos-2026-01-01-2027-01-01"
     },
     {
       "id": "asteroid:357439",
