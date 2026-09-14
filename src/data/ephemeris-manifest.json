@@ -20464,6 +20464,129 @@
         },
         "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
       }
+    },
+    {
+      "id": "horizons-centaur-batch28-20260914-29981-2026-01-01-2027-01-01",
+      "path": "horizons-centaur-batch28-20260914-29981-2026-01-01-2027-01-01.bsp",
+      "sha256": "faa2f0f00212da070753431a757555f9f7bd0f08732643fef577edee1fea0031",
+      "bytes": 21504,
+      "targets": [
+        20029981
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2729981%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2729981%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T05:51:47.720Z",
+        "bytes": 266240,
+        "sha256": "b16d2f5d98fa7eeb78b4d9e2376e3113680509d9b8fbe2637b288c34ccddd802",
+        "responseSha256": "323613d4872b5e0349fcdc83e1819f2fed5d53d233b76b74daf653dfa5042476",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20029981,
+        "designation": "29981",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS                  29981 (1999 TD10)            2026-Sep-13 22:51:49\nRec #:   29981 (+COV) Soln.date: 2021-Apr-13_06:30:08    # obs: 238 (1997-2016)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2454853.5 ! 2009-Jan-22.00 (TDB)         Residual RMS= .25274\n   EC= .8735563215095178   QR= 12.27092188798834   TP= 2451479.9528274727\n   OM= 184.6260406291401   W=  172.5336542418796   IN= 5.959406581835228\n   A= 97.04654304969472    MA= 3.4779293579781     ADIST= 181.8221642114011\n   PER= 956.04494          N= .001030941           ANGMOM= .08248090399999999\n   DAN= 171.76108          DDN= 12.31962           L= 357.1995936\n   B= .773016              MOID= 11.26589966       TP= 1999-Oct-28.4528274727\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= 15.382\n   H= 8.8                  G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#17, OCC=1\n2: source=ORB\n*******************************************************************************\n\nID= '20029981'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-centaur-batch28-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "29981 (1999 TD10) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "323613d4872b5e0349fcdc83e1819f2fed5d53d233b76b74daf653dfa5042476",
+          "binarySha256": "b16d2f5d98fa7eeb78b4d9e2376e3113680509d9b8fbe2637b288c34ccddd802",
+          "retrievedAt": "2026-09-14T05:51:47.720Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-centaur-batch28-20260914-okyrhoe-2026-01-01-2027-01-01",
+      "path": "horizons-centaur-batch28-20260914-okyrhoe-2026-01-01-2027-01-01.bsp",
+      "sha256": "dc29aa6b81a57714cb1614a0957cca25ce575cd37d17903ba8cf564e374d9563",
+      "bytes": 21504,
+      "targets": [
+        20052872
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2752872%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2752872%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T05:51:49.497Z",
+        "bytes": 261120,
+        "sha256": "d0297a16aa4a296d32f463c5076ad28d27208289ff1bbedfe8b10a6893702b09",
+        "responseSha256": "6c52463ecafa93d8037993b02261c23bb649c8d499d511b8d1d4c66c3084ba41",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20052872,
+        "designation": "52872",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS              52872 Okyrhoe (1998 SG35)        2026-Sep-13 22:51:50\nRec #:   52872 (+COV) Soln.date: 2026-Mar-13_03:38:27    # obs: 948 (1998-2025)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458478.5 ! 2018-Dec-26.00 (TDB)         Residual RMS= .14936\n   EC= .3044075897276079   QR= 5.818816720405199   TP= 2454483.8230563547\n   OM= 173.0525456659806   W=  337.966595436708    IN= 15.65643686171494\n   A= 8.365267697683139    MA= 162.7293807218265   ADIST= 10.91171867496108\n   PER= 24.19513           N= .040736556           ANGMOM= .047392044\n   DAN= 5.91971            DDN= 10.57376           L= 151.7622348\n   B= -5.8105999           MOID= 4.83549976        TP= 2008-Jan-18.3230563547\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 18.                ROTPER= 9.72\n   H= 10.93                G= .150                 B-V= n.a.\n                           ALBEDO= .058            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#75, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20052872'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-centaur-batch28-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "52872 Okyrhoe frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "6c52463ecafa93d8037993b02261c23bb649c8d499d511b8d1d4c66c3084ba41",
+          "binarySha256": "d0297a16aa4a296d32f463c5076ad28d27208289ff1bbedfe8b10a6893702b09",
+          "retrievedAt": "2026-09-14T05:51:49.497Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-centaur-batch28-20260914-cyllarus-2026-01-01-2027-01-01",
+      "path": "horizons-centaur-batch28-20260914-cyllarus-2026-01-01-2027-01-01.bsp",
+      "sha256": "99abfaab8af46daccb714e519fc2bf6aa837ee5a1f00a22dab618d5497da85c2",
+      "bytes": 21504,
+      "targets": [
+        20052975
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2752975%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2752975%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T05:51:50.135Z",
+        "bytes": 269312,
+        "sha256": "f8c9de91b237779a2c5c09dd50e66043d568318b7348fd08082281c7bc9596d7",
+        "responseSha256": "c49f381ef90be4b1ba41a87210634263e33de6c577f9fd23571c0c4c1754c4d2",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20052975,
+        "designation": "52975",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS             52975 Cyllarus (1998 TF35)        2026-Sep-13 22:51:51\nRec #:   52975 (+COV) Soln.date: 2025-Feb-12_08:38:45     # obs: 87 (1998-2024)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2457541.5 ! 2016-Jun-02.00 (TDB)         Residual RMS= .1651\n   EC= .3770520979595834   QR= 16.31118804874076   TP= 2447768.3912838539\n   OM= 52.04028486762902   W=  301.1995856835405   IN= 12.64647223347203\n   A= 26.18387187004684    MA= 71.89290011616711   ADIST= 36.05655569135293\n   PER= 133.98587          N= .007356196           ANGMOM= .081526618\n   DAN= 18.79107           DDN= 27.91343           L= 353.8668932\n   B= -10.7934934          MOID= 15.32369995       TP= 1989-Aug-29.8912838539\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= n.a.\n   H= 8.9                  G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#12, OCC=2\n2: source=ORB\n*******************************************************************************\n\nID= '20052975'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-centaur-batch28-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "52975 Cyllarus frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "c49f381ef90be4b1ba41a87210634263e33de6c577f9fd23571c0c4c1754c4d2",
+          "binarySha256": "f8c9de91b237779a2c5c09dd50e66043d568318b7348fd08082281c7bc9596d7",
+          "retrievedAt": "2026-09-14T05:51:50.135Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
     }
   ]
 }
