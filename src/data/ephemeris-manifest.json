@@ -20751,6 +20751,129 @@
         },
         "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
       }
+    },
+    {
+      "id": "horizons-centaur-batch31-20260914-typhon-2026-01-01-2027-01-01",
+      "path": "horizons-centaur-batch31-20260914-typhon-2026-01-01-2027-01-01.bsp",
+      "sha256": "5d6dee5a63814261e979dc108706ca318d9ae8ec4bd011ebb178e6d56d9f69df",
+      "bytes": 22528,
+      "targets": [
+        20042355
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2742355%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2742355%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T10:12:54.389Z",
+        "bytes": 268288,
+        "sha256": "1229ed6b87db87e23a25f775381e3d00a231c126f2d446bf2b1269747bf0e229",
+        "responseSha256": "96b47af7b9b16f25590c88c8368e0ac6f7919aed5063f438db6dc820759ea372",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20042355,
+        "designation": "42355",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS              42355 Typhon (2002 CR46)         2026-Sep-14 03:12:56\nRec #:   42355 (+COV) Soln.date: 2026-Jun-06_01:55:29    # obs: 515 (1989-2025)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2457583.5 ! 2016-Jul-14.00 (TDB)         Residual RMS= .12338\n   EC= .5413695978740637   QR= 17.55344795973376   TP= 2453893.3380396264\n   OM= 351.9164777600749   W=  159.3883177259507   IN= 2.425654270180185\n   A= 38.27362485863665    MA= 15.3603144992639    ADIST= 58.99380175753954\n   PER= 236.78686          N= .004162504           ANGMOM= .089477956\n   DAN= 54.84936           DDN= 17.95718           L= 151.3217132\n   B= .8536857             MOID= 16.56509972       TP= 2006-Jun-06.8380396264\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 96.                ROTPER= 5.\n   H= 7.63                 G= .150                 B-V= n.a.\n                           ALBEDO= .050            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#41, OCC=1\n2: source=ORB\n*******************************************************************************\n\nID= '20042355'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-centaur-batch31-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "42355 Typhon frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "96b47af7b9b16f25590c88c8368e0ac6f7919aed5063f438db6dc820759ea372",
+          "binarySha256": "1229ed6b87db87e23a25f775381e3d00a231c126f2d446bf2b1269747bf0e229",
+          "retrievedAt": "2026-09-14T10:12:54.389Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-centaur-batch31-20260914-orius-2026-01-01-2027-01-01",
+      "path": "horizons-centaur-batch31-20260914-orius-2026-01-01-2027-01-01.bsp",
+      "sha256": "c0e15401920b5fc212b4a457d2e91737db68abca49396ee6255b0c90b0eaf694",
+      "bytes": 20480,
+      "targets": [
+        20330836
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27330836%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27330836%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T10:12:56.001Z",
+        "bytes": 263168,
+        "sha256": "9fb6000c1bdde73f04ced210c6d46ed0af66ae1d6d7ca0fe00d65dc855c0ef4a",
+        "responseSha256": "69d084e9a320b7127643a72dea3be98e9e6af8df2caec4507fdd6f901bd5b26b",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20330836,
+        "designation": "330836",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS              330836 Orius (2009 HW77)         2026-Sep-14 03:12:57\nRec #:  330836 (+COV) Soln.date: 2021-Apr-14_07:41:17     # obs: 84 (2002-2012)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2455276.5 ! 2010-Mar-21.00 (TDB)         Residual RMS= .30072\n   EC= .4189218802068329   QR= 12.46796055141874   TP= 2454126.5415981966\n   OM= 50.42409096014613   W=  140.6878718440388   IN= 17.88586364679045\n   A= 21.45659959775575    MA= 11.4036757239605    ADIST= 30.44523864409277\n   PER= 99.39157           N= .009916598           ANGMOM= .07235330800000001\n   DAN= 26.17495           DDN= 13.36059           L= 192.4958919\n   B= 11.2199203           MOID= 11.48849964       TP= 2007-Jan-26.0415981966\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= n.a.\n   H= 9.73                 G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#5, OCC=3\n2: source=ORB\n*******************************************************************************\n\nID= '20330836'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-centaur-batch31-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "330836 Orius frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "69d084e9a320b7127643a72dea3be98e9e6af8df2caec4507fdd6f901bd5b26b",
+          "binarySha256": "9fb6000c1bdde73f04ced210c6d46ed0af66ae1d6d7ca0fe00d65dc855c0ef4a",
+          "retrievedAt": "2026-09-14T10:12:56.001Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-centaur-batch31-20260914-eurytus-2026-01-01-2027-01-01",
+      "path": "horizons-centaur-batch31-20260914-eurytus-2026-01-01-2027-01-01.bsp",
+      "sha256": "3ba942779eb347ee852e1cbe24415307d383bccdefd486b4f19c6ce7939922e7",
+      "bytes": 24576,
+      "targets": [
+        20463368
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27463368%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27463368%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T10:12:56.662Z",
+        "bytes": 267264,
+        "sha256": "a7668a422dae860429d7efe6c96b573b3b28bad635317dc9dc2ae2698d4d95f9",
+        "responseSha256": "26105a8900bc115b87fe33c0fa85259a659e5b05bd41884248ebf5313f3dc8c1",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20463368,
+        "designation": "463368",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS             463368 Eurytus (2012 VU85)        2026-Sep-14 03:12:58\nRec #:  463368 (+COV) Soln.date: 2025-Apr-10_00:51:23    # obs: 127 (2012-2025)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2456790.5 ! 2014-May-13.00 (TDB)         Residual RMS= .24798\n   EC= .3129355733252603   QR= 20.19369145813758   TP= 2465016.3743535089\n   OM= 252.5813992081975   W=  264.457718594192    IN= 15.04680488392028\n   A= 29.39126328497486    MA= 309.1186335873812   ADIST= 38.58883511181214\n   PER= 159.34395          N= .006185527           ANGMOM= .088574969\n   DAN= 27.3393            DDN= 25.73521           L= 156.8436398\n   B= -14.9748132          MOID= 19.23940086       TP= 2036-Nov-18.8743535089\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= 56.24\n   H= 7.32                 G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#13, OCC=3\n2: source=ORB\n*******************************************************************************\n\nID= '20463368'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-centaur-batch31-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "463368 Eurytus frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "26105a8900bc115b87fe33c0fa85259a659e5b05bd41884248ebf5313f3dc8c1",
+          "binarySha256": "a7668a422dae860429d7efe6c96b573b3b28bad635317dc9dc2ae2698d4d95f9",
+          "retrievedAt": "2026-09-14T10:12:56.662Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
     }
   ]
 }
