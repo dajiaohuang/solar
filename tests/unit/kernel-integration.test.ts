@@ -33,8 +33,8 @@ describe('shared physical ephemeris integration', () => {
     const late = 2463000.5
     expect(kernelCoverage(body('haumea'), late).model).toBe('approximate-fallback')
   })
-  it('covers 637 exact body centers and accounts for every remaining identity gap', () => {
-    expect(majorBodies.filter((entry) => kernelCoverage(entry, jd).model === 'jpl-spk')).toHaveLength(637)
+  it('covers 638 exact body centers and accounts for every remaining identity gap', () => {
+    expect(majorBodies.filter((entry) => kernelCoverage(entry, jd).model === 'jpl-spk')).toHaveLength(638)
     expect(majorBodies.filter(entry => kernelCoverage(entry, jd).model !== 'jpl-spk').map(entry => entry.id).sort()).toEqual([
       'makemake', 'naif:120000617', 'naif:920000617', 'sat:planet:saturn:provisional:S/2009 S1',
     ].sort())
@@ -143,6 +143,14 @@ describe('shared physical ephemeris integration', () => {
       expect(kernelStateForBody(entry, jd)).not.toBeNull()
       expect(entry.source).toBe('jpl-spk-osculating-fallback')
     }
+  })
+
+  it('resolves the batch-29 direct Horizons primary without inventing companion states', () => {
+    const entry = body('asteroid:55576')
+    expect(entry.naifId).toBe(20055576)
+    expect(kernelCoverage(entry, jd).model).toBe('jpl-spk')
+    expect(kernelStateForBody(entry, jd)).not.toBeNull()
+    expect(entry.source).toBe('jpl-spk-osculating-fallback')
   })
 
   it('retains frozen fallback seeds against their original packaged source pool, not newly selected solutions', () => {
