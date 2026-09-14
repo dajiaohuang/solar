@@ -76,9 +76,17 @@ describe('shared physical ephemeris integration', () => {
   })
 
   it('resolves the batch-22 direct Horizons TNO centers without inventing companion states', () => {
-    for (const [id, naifId] of [['asteroid:15760', 20015760], ['asteroid:19521', 20019521], ['asteroid:38083', 20038083], ['asteroid:38628', 20038628], ['asteroid:53311', 20053311]] as const) {
+    for (const [id, naifId, name] of [
+      ['asteroid:15760', 20015760, '15760 Albion'],
+      ['asteroid:19521', 20019521, '19521 Chaos'],
+      ['asteroid:38083', 20038083, '38083 Rhadamanthus'],
+      ['asteroid:38628', 20038628, '38628 Huya'],
+      ['asteroid:53311', 20053311, '53311 Deucalion'],
+    ] as const) {
       const entry = body(id)
       expect(entry.naifId).toBe(naifId)
+      expect(entry.shortName).toBe(name)
+      expect(seeds.bodies.find((seed) => seed.id === id)).toMatchObject({ name, shortName: name })
       expect(kernelCoverage(entry, jd).model).toBe('jpl-spk')
       expect(kernelStateForBody(entry, jd)).not.toBeNull()
       expect(entry.source).toBe('jpl-spk-osculating-fallback')
