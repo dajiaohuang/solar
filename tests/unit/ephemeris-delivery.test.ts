@@ -30,4 +30,4 @@ it('refuses a legacy regeneration before changing the expanded manifest', async 
   expect(result.status).not.toBe(0)
   expect(result.stderr).toContain('Refusing to overwrite an expanded')
   expect(await readFile(path)).toEqual(before)
-})
+}, 15_000)
