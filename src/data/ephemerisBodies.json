@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-14T09:11:54.077Z",
+  "generatedAt": "2026-09-14T10:14:56.688Z",
   "epochJd": 2461287.5,
   "epochTimeScale": "TDB",
   "source": {
     "manifestPath": "src/data/ephemeris-manifest.json",
     "manifestId": "jpl-satellite-expansion-20260904-pages",
-    "manifestSha256": "4f0c0e721bfd74b68ea234c4be71afd0b599a749e8e6dd9baa0cec51e35ad557",
+    "manifestSha256": "673b0d0dc30fba34cf39f7383736aa9a6eda17491995b7c67e07bc90a559f6c8",
     "gmUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
     "gmFile": "src/data/gm_de440.tpc",
     "gmSha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
@@ -10050,6 +10050,46 @@
       "sourceKernelId": "horizons-asteroids-batch24-20260914-ur163-2026-01-01-2027-01-01"
     },
     {
+      "id": "asteroid:42355",
+      "name": "42355 Typhon",
+      "shortName": "42355 Typhon",
+      "kind": "asteroid",
+      "naifId": 20042355,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 37.805674604438195,
+        "eccentricity": 0.537526916274857,
+        "inclinationDeg": 2.427534729535994,
+        "ascendingNodeDeg": 351.8253460876629,
+        "argPeriapsisDeg": 158.92302646316205,
+        "meanAnomalyDeg": 31.462849762148323,
+        "meanMotionDegPerDay": 0.0042400266459054915
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -1968293188.9767299,
+          "y": -3499623236.685621,
+          "z": -158719925.69356656
+        },
+        "velocity": {
+          "x": 3.4996090448925625,
+          "y": -5.50429330140106,
+          "z": -0.20988141836302843
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2742355%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-centaur-batch31-20260914-typhon-2026-01-01-2027-01-01"
+    },
+    {
       "id": "asteroid:46610",
       "name": "Besixdouze",
       "shortName": "Besixdouze",
@@ -11570,6 +11610,46 @@
       "sourceKernelId": "horizons-asteroids-batch6-20260909-yu55-2005-2026-01-01-2027-01-01"
     },
     {
+      "id": "asteroid:330836",
+      "name": "330836 Orius",
+      "shortName": "330836 Orius",
+      "kind": "asteroid",
+      "naifId": 20330836,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 21.36295595477545,
+        "eccentricity": 0.4184688238594073,
+        "inclinationDeg": 17.876972115897935,
+        "ascendingNodeDeg": 50.42521504905022,
+        "argPeriapsisDeg": 140.16829904208726,
+        "meanAnomalyDeg": 71.65219129689734,
+        "meanMotionDegPerDay": 0.009981873373862341
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": 2025983437.1266634,
+          "y": -2436880910.720098,
+          "z": -1004449785.3934907
+        },
+        "velocity": {
+          "x": 5.830065916140298,
+          "y": 1.7740566859953026,
+          "z": -1.084905457719672
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27330836%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-centaur-batch31-20260914-orius-2026-01-01-2027-01-01"
+    },
+    {
       "id": "asteroid:341843",
       "name": "2008 EV5",
       "shortName": "2008 EV5",
@@ -11728,6 +11808,46 @@
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27367943%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
       "sourceKernelId": "horizons-asteroids-batch6-20260909-duende-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:463368",
+      "name": "463368 Eurytus",
+      "shortName": "463368 Eurytus",
+      "kind": "asteroid",
+      "naifId": 20463368,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 29.470642611902065,
+        "eccentricity": 0.31511881449572954,
+        "inclinationDeg": 15.050282879945602,
+        "ascendingNodeDeg": 252.52117266346977,
+        "argPeriapsisDeg": 264.5301391727837,
+        "meanAnomalyDeg": 337.00900484398306,
+        "meanMotionDegPerDay": 0.00616055253138971
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -1183440408.1051579,
+          "y": 2967320059.436697,
+          "z": -543169445.3852702
+        },
+        "velocity": {
+          "x": -5.8923987687409385,
+          "y": -3.9582104200997508,
+          "z": -1.1915789415247744
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27463368%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-centaur-batch31-20260914-eurytus-2026-01-01-2027-01-01"
     },
     {
       "id": "asteroid:469219",

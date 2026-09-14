@@ -33,8 +33,8 @@ describe('shared physical ephemeris integration', () => {
     const late = 2463000.5
     expect(kernelCoverage(body('haumea'), late).model).toBe('approximate-fallback')
   })
-  it('covers 641 exact body centers and accounts for every remaining identity gap', () => {
-    expect(majorBodies.filter((entry) => kernelCoverage(entry, jd).model === 'jpl-spk')).toHaveLength(641)
+  it('covers 644 exact body centers and accounts for every remaining identity gap', () => {
+    expect(majorBodies.filter((entry) => kernelCoverage(entry, jd).model === 'jpl-spk')).toHaveLength(644)
     expect(majorBodies.filter(entry => kernelCoverage(entry, jd).model !== 'jpl-spk').map(entry => entry.id).sort()).toEqual([
       'makemake', 'naif:120000617', 'naif:920000617', 'sat:planet:saturn:provisional:S/2009 S1',
     ].sort())
@@ -165,6 +165,21 @@ describe('shared physical ephemeris integration', () => {
     for (const [id, naifId] of [['asteroid:37117', 20037117], ['asteroid:83982', 20083982], ['asteroid:346889', 20346889]] as const) {
       const entry = body(id)
       expect(entry.naifId).toBe(naifId)
+      expect(kernelCoverage(entry, jd).model).toBe('jpl-spk')
+      expect(kernelStateForBody(entry, jd)).not.toBeNull()
+      expect(entry.source).toBe('jpl-spk-osculating-fallback')
+    }
+  })
+
+  it('resolves the batch-31 direct Horizons primaries without inventing Typhon companion states', () => {
+    for (const [id, naifId, name] of [
+      ['asteroid:42355', 20042355, '42355 Typhon'],
+      ['asteroid:330836', 20330836, '330836 Orius'],
+      ['asteroid:463368', 20463368, '463368 Eurytus'],
+    ] as const) {
+      const entry = body(id)
+      expect(entry.naifId).toBe(naifId)
+      expect(entry.shortName).toBe(name)
       expect(kernelCoverage(entry, jd).model).toBe('jpl-spk')
       expect(kernelStateForBody(entry, jd)).not.toBeNull()
       expect(entry.source).toBe('jpl-spk-osculating-fallback')
