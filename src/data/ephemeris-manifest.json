@@ -20628,6 +20628,129 @@
         },
         "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
       }
+    },
+    {
+      "id": "horizons-centaur-batch30-20260914-narcissus-2026-01-01-2027-01-01",
+      "path": "horizons-centaur-batch30-20260914-narcissus-2026-01-01-2027-01-01.bsp",
+      "sha256": "ea5d833bf3c7462a1cb62aa8d0551d3e88d641b0bb23510124d27bde9ecd5214",
+      "bytes": 21504,
+      "targets": [
+        20037117
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2737117%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2737117%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T08:15:13.157Z",
+        "bytes": 264192,
+        "sha256": "dbae5e261964dcefb92cf47c9d01d29e60b1ec8d0de113e87a87f9c960d32d64",
+        "responseSha256": "1b14da65c8d046599b7addd5e1d632ab2ba54511b1a2d0d332aba9df05191c4f",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20037117,
+        "designation": "37117",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS             37117 Narcissus (2000 VU2)        2026-Sep-14 01:15:14\nRec #:   37117 (+COV) Soln.date: 2026-Jun-06_00:11:51    # obs: 637 (1984-2022)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458162.5 ! 2018-Feb-13.00 (TDB)         Residual RMS= .18066\n   EC= .5535536641128604   QR= 3.071385208236771   TP= 2458497.1189729241\n   OM= 248.5194785004702   W=  180.2045327023598   IN= 13.8043290386995\n   A= 6.879629109585097    MA= 341.7229080138271   ADIST= 10.68787301093342\n   PER= 18.04495           N= .054620609           ANGMOM= .037576101\n   DAN= 10.68779           DDN= 3.07139            L= 68.71810360000001\n   B= -.0488028            MOID= 2.08484006        TP= 2019-Jan-13.6189729241\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 5.6                ROTPER= n.a.\n   H= 13.39                G= .150                 B-V= n.a.\n                           ALBEDO= .088            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#21, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20037117'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-centaur-batch30-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "37117 Narcissus frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "1b14da65c8d046599b7addd5e1d632ab2ba54511b1a2d0d332aba9df05191c4f",
+          "binarySha256": "dbae5e261964dcefb92cf47c9d01d29e60b1ec8d0de113e87a87f9c960d32d64",
+          "retrievedAt": "2026-09-14T08:15:13.157Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-centaur-batch30-20260914-crantor-2026-01-01-2027-01-01",
+      "path": "horizons-centaur-batch30-20260914-crantor-2026-01-01-2027-01-01.bsp",
+      "sha256": "4d0fe83ee421441b722ce2c2c6459837952727cafff146786110acec4bfb685c",
+      "bytes": 21504,
+      "targets": [
+        20083982
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2783982%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2783982%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T08:15:14.681Z",
+        "bytes": 259072,
+        "sha256": "e17c7502b14d8052b8b1ec60786a3ef14ed7a0c03cb967196d39ab5639b8ac8f",
+        "responseSha256": "037f9cf83834018cf57c5a8f81f82e4cabd42d9a692fb79cae159aef06ed5211",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20083982,
+        "designation": "83982",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS              83982 Crantor (2002 GO9)         2026-Sep-14 01:15:16\nRec #:   83982 (+COV) Soln.date: 2026-Aug-20_09:42:40    # obs: 319 (2001-2025)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2457647.5 ! 2016-Sep-16.00 (TDB)         Residual RMS= .12014\n   EC= .2777738866060062   QR= 14.02715059003967   TP= 2452424.4947996279\n   OM= 117.4020895350334   W=  92.88228935351651   IN= 12.77942253243157\n   A= 19.4221038673348     MA= 60.14231259785608   ADIST= 24.81705714462993\n   PER= 85.59583000000001  N= .011514887           ANGMOM= .07282712700000001\n   DAN= 18.17742           DDN= 17.67663           L= 210.3574618\n   B= 12.7629829           MOID= 13.05049992       TP= 2002-May-29.9947996279\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= 13.94\n   H= 8.89                 G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#28, OCC=1\n2: source=ORB\n*******************************************************************************\n\nID= '20083982'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-centaur-batch30-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "83982 Crantor frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "037f9cf83834018cf57c5a8f81f82e4cabd42d9a692fb79cae159aef06ed5211",
+          "binarySha256": "e17c7502b14d8052b8b1ec60786a3ef14ed7a0c03cb967196d39ab5639b8ac8f",
+          "retrievedAt": "2026-09-14T08:15:14.681Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-centaur-batch30-20260914-rhiphonos-2026-01-01-2027-01-01",
+      "path": "horizons-centaur-batch30-20260914-rhiphonos-2026-01-01-2027-01-01.bsp",
+      "sha256": "60659739736fab9092e740904834d820e9d6b43b00b8c9db679aadea633035bf",
+      "bytes": 22528,
+      "targets": [
+        20346889
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27346889%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27346889%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T08:15:15.280Z",
+        "bytes": 263168,
+        "sha256": "7998eb4aecd0a9ed207d7407335c044bd70368674d129530861173754c3b40f5",
+        "responseSha256": "145aab009df841053a5cb117e190dee65ed2d711ca77764bf003a2a1fcd2f4e5",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20346889,
+        "designation": "346889",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS            346889 Rhiphonos (2009 QV38)       2026-Sep-14 01:15:16\nRec #:  346889 (+COV) Soln.date: 2021-Apr-14_08:41:24    # obs: 228 (2009-2015)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2456442.5 ! 2013-May-30.00 (TDB)         Residual RMS= .22112\n   EC= .4462928063160826   QR= 6.012844006364044   TP= 2455261.6313079456\n   OM= 11.58408170412939   W=  13.60855760483408   IN= 19.88307232113213\n   A= 10.85924848900638    MA= 32.52415527246289   ADIST= 15.70565297164872\n   PER= 35.78556           N= .027542567           ANGMOM= .050728208\n   DAN= 6.06539            DDN= 15.35813           L= 24.4090442\n   B= 4.589808             MOID= 5.02000999        TP= 2010-Mar-06.1313079456\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 11.6               ROTPER= n.a.\n   H= 12.                  G= .150                 B-V= n.a.\n                           ALBEDO= .062            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#6, OCC=2\n2: source=ORB\n*******************************************************************************\n\nID= '20346889'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-centaur-batch30-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "346889 Rhiphonos frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "145aab009df841053a5cb117e190dee65ed2d711ca77764bf003a2a1fcd2f4e5",
+          "binarySha256": "7998eb4aecd0a9ed207d7407335c044bd70368674d129530861173754c3b40f5",
+          "retrievedAt": "2026-09-14T08:15:15.280Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
     }
   ]
 }
