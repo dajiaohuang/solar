@@ -20874,6 +20874,129 @@
         },
         "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
       }
+    },
+    {
+      "id": "horizons-centaur-batch32-20260914-petraios-2020-01-01-2031-01-01",
+      "path": "horizons-centaur-batch32-20260914-petraios-2020-01-01-2031-01-01.bsp",
+      "sha256": "04b5b1d8097a9ffc8a05746bf2e203ed71f5eb404423b812dfbb2576c38df781",
+      "bytes": 202752,
+      "targets": [
+        20696315
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27696315%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27696315%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T11:18:08.163Z",
+        "bytes": 264192,
+        "sha256": "3763faf33c7d72317c512dd9c4b6717b99ca1fd49225006daad903abe5b5866b",
+        "responseSha256": "989c8292164aa0bad8aeb0ec2cb6650a36b3f2fcd47489e0c4422133a3368fc3",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20696315,
+        "designation": "696315",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS            696315 Petraios (2016 GR206)       2026-Sep-14 04:18:10\nRec #:  696315 (+COV) Soln.date: 2025-Jul-02_07:46:24    # obs: 159 (2010-2025)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458145.5 ! 2018-Jan-27.00 (TDB)         Residual RMS= .14537\n   EC= .08249221166337577  QR= 18.6265329028273    TP= 2456655.6274805339\n   OM= 93.44384896464139   W=  73.32357514227634   IN= 14.23288139625236\n   A= 20.30122592920532    MA= 16.05350201803417   ADIST= 21.97591895558333\n   PER= 91.47272           N= .010775084           ANGMOM= .077243126\n   DAN= 19.6968            DDN= 20.65196           L= 166.2699551\n   B= 13.6224439           MOID= 17.66390038       TP= 2013-Dec-29.1274805339\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= n.a.\n   H= 9.24                 G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#21, OCC=2\n2: source=ORB\n*******************************************************************************\n\nID= '20696315'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-centaur-batch32-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "696315 Petraios frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "989c8292164aa0bad8aeb0ec2cb6650a36b3f2fcd47489e0c4422133a3368fc3",
+          "binarySha256": "3763faf33c7d72317c512dd9c4b6717b99ca1fd49225006daad903abe5b5866b",
+          "retrievedAt": "2026-09-14T11:18:08.163Z"
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-centaur-batch32-20260914-xewioso-2020-01-01-2031-01-01",
+      "path": "horizons-centaur-batch32-20260914-xewioso-2020-01-01-2031-01-01.bsp",
+      "sha256": "7c4e45df1b5d0b8bfd1540e4df470f4692f81f47a652fcc3f97f1eb66ca75c1c",
+      "bytes": 202752,
+      "targets": [
+        20078799
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2778799%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2778799%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T11:18:09.772Z",
+        "bytes": 264192,
+        "sha256": "e32bd320aa7ff1aa1ec27455e9b167832c16252b61672f55511e80d9862dc922",
+        "responseSha256": "8ca86abd0d941c0bf6ac56ab9dc176c3ce3a9093e8a69aa5d33d0ee97fe18f28",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20078799,
+        "designation": "78799",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS              78799 Xewioso (2002 XW93)        2026-Sep-14 04:18:11\nRec #:   78799 (+COV) Soln.date: 2026-Mar-13_10:30:55    # obs: 109 (1989-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2457549.5 ! 2016-Jun-10.00 (TDB)         Residual RMS= .1155\n   EC= .2477023055009602   QR= 28.20539412618768   TP= 2424687.1299192128\n   OM= 46.92117409018719   W=  247.258339767936    IN= 14.38088124455542\n   A= 37.49233093817979    MA= 141.0877453683012   ADIST= 46.7792677501719\n   PER= 229.57356          N= .004293292           ANGMOM= .102047652\n   DAN= 38.91863           DDN= 32.11658           L= 293.5219507\n   B= -13.2416165          MOID= 27.21699905       TP= 1926-Jun-20.6299192128\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= n.a.\n   H= 4.84                 G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#10, OCC=2\n2: source=ORB\n*******************************************************************************\n\nID= '20078799'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-centaur-batch32-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "78799 Xewioso frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "8ca86abd0d941c0bf6ac56ab9dc176c3ce3a9093e8a69aa5d33d0ee97fe18f28",
+          "binarySha256": "e32bd320aa7ff1aa1ec27455e9b167832c16252b61672f55511e80d9862dc922",
+          "retrievedAt": "2026-09-14T11:18:09.772Z"
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-centaur-batch32-20260914-goibniu-2020-01-01-2031-01-01",
+      "path": "horizons-centaur-batch32-20260914-goibniu-2020-01-01-2031-01-01.bsp",
+      "sha256": "75e1d4477a7a108f43dfd03e5da8f0fa85baaeb18559662e5d17b2ff90321645",
+      "bytes": 203776,
+      "targets": [
+        20090568
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2790568%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2790568%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T11:18:10.438Z",
+        "bytes": 265216,
+        "sha256": "87e4892678069efe2ba91874ac415fa01b83bbe2c242c3c2c341322986d9c3ff",
+        "responseSha256": "34282d9f43fe8f57ded9cd86d981a3c8b6545be9a5183239a8e93cc0c8193b99",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20090568,
+        "designation": "90568",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS              90568 Goibniu (2004 GV9)         2026-Sep-14 04:18:12\nRec #:   90568 (+COV) Soln.date: 2025-Aug-02_05:40:45   # obs: 1098 (1954-2025)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458186.5 ! 2018-Mar-09.00 (TDB)         Residual RMS= .094974\n   EC= .08176903225395735  QR= 38.80644434077048   TP= 2448321.5580008202\n   OM= 250.6682664772548   W=  295.464267897557    IN= 21.92860124861248\n   A= 42.26218206953708    MA= 35.38919917448128   ADIST= 45.71791979830367\n   PER= 274.74897          N= .00358737            ANGMOM= .111455278\n   DAN= 40.55388           DDN= 43.50924           L= 187.8420188\n   B= -19.7046391          MOID= 37.8669014        TP= 1991-Mar-06.0580008202\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= 5.86\n   H= 3.96                 G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#24, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20090568'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-centaur-batch32-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "90568 Goibniu frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "34282d9f43fe8f57ded9cd86d981a3c8b6545be9a5183239a8e93cc0c8193b99",
+          "binarySha256": "87e4892678069efe2ba91874ac415fa01b83bbe2c242c3c2c341322986d9c3ff",
+          "retrievedAt": "2026-09-14T11:18:10.438Z"
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
+      }
     }
   ]
 }
