@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-14T12:14:08.309Z",
+  "generatedAt": "2026-09-14T14:51:42.677Z",
   "epochJd": 2461287.5,
   "epochTimeScale": "TDB",
   "source": {
     "manifestPath": "src/data/ephemeris-manifest.json",
     "manifestId": "jpl-satellite-expansion-20260904-pages",
-    "manifestSha256": "9628a9d9811fc2edfc77b8dce11b1c1def03ebd5e2a4f10aa04667ba42ce6cf6",
+    "manifestSha256": "7aa97c5f4be7b3884418f0ed598faaac96665d0f96dda0f1fb642edbb80c7e16",
     "gmUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
     "gmFile": "src/data/gm_de440.tpc",
     "gmSha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
@@ -10930,6 +10930,46 @@
       "sourceKernelId": "horizons-asteroids-batch24-20260914-vs2-2026-01-01-2027-01-01"
     },
     {
+      "id": "asteroid:88611",
+      "name": "88611 Teharonhiawako",
+      "shortName": "88611 Teharonhiawako",
+      "kind": "asteroid",
+      "naifId": 20088611,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 43.971310896771854,
+        "eccentricity": 0.028486859219415486,
+        "inclinationDeg": 2.58427664541262,
+        "ascendingNodeDeg": 304.8724543324371,
+        "argPeriapsisDeg": 233.14875424570783,
+        "meanAnomalyDeg": 175.1149285186225,
+        "meanMotionDegPerDay": 0.003380258815217745
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": 6715758890.943066,
+          "y": -779932066.8154265,
+          "z": 228556112.9286546
+        },
+        "velocity": {
+          "x": 0.5092742733964577,
+          "y": 4.334146284353418,
+          "z": 0.1307046756572523
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2788611%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-tno-batch34-20260914-teharonhiawako-2026-01-01-2027-01-01"
+    },
+    {
       "id": "asteroid:90377",
       "name": "Sedna",
       "shortName": "Sedna",
@@ -11848,6 +11888,46 @@
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27330836%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
       "sourceKernelId": "horizons-centaur-batch31-20260914-orius-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:341520",
+      "name": "341520 Mors-Somnus",
+      "shortName": "341520 Mors-Somnus",
+      "kind": "asteroid",
+      "naifId": 20341520,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 39.47840543561725,
+        "eccentricity": 0.26861132282216443,
+        "inclinationDeg": 11.28026870642578,
+        "ascendingNodeDeg": 196.70431662840915,
+        "argPeriapsisDeg": 206.05259952542366,
+        "meanAnomalyDeg": 13.136746816978416,
+        "meanMotionDegPerDay": 0.003973421794818647
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": 1797017273.1077514,
+          "y": 3958297243.0091534,
+          "z": -653184721.6273167
+        },
+        "velocity": {
+          "x": -5.37356086254178,
+          "y": 2.880413046538923,
+          "z": -0.8583629285064036
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27341520%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-tno-batch34-20260914-mors-somnus-2026-01-01-2027-01-01"
     },
     {
       "id": "asteroid:341843",
