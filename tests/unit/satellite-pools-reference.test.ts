@@ -114,7 +114,7 @@ describe('integrated satellite source pools and delivery profiles', () => {
     // The independent CSPICE fixture predates the latest Horizons batch; the
     // new roots have their own source/hash/state checks below and are not
     // silently treated as CSPICE oracle coverage.
-    const oracleRoots = full.files.filter(file => !['horizons-asteroids-batch7-20260909', 'horizons-asteroids-batch8-20260909', 'horizons-asteroids-batch9-20260909', 'horizons-asteroids-batch10-20260909', 'horizons-asteroids-batch11-20260909', 'horizons-asteroids-batch12-20260909', 'horizons-asteroids-batch13-20260909', 'horizons-asteroids-batch14-20260909', 'horizons-asteroids-batch15-20260909', 'horizons-asteroids-batch16-20260910', 'horizons-asteroids-batch17-20260910', 'horizons-asteroids-batch18-20260910', 'horizons-asteroids-batch19-20260914', 'horizons-asteroids-batch20-20260914', 'horizons-asteroids-batch21-20260914', 'horizons-asteroids-batch22-20260914', 'horizons-asteroids-batch23-20260914', 'horizons-asteroids-batch24-20260914', 'horizons-asteroids-batch25-20260914', 'horizons-centaur-batch26-20260914', 'horizons-centaur-batch27-20260914', 'horizons-centaur-batch28-20260914', 'horizons-centaur-batch29-20260914', 'horizons-centaur-batch30-20260914', 'horizons-centaur-batch31-20260914', 'horizons-centaur-batch32-20260914', 'horizons-tno-batch33-20260914', 'horizons-tno-batch34-20260914', 'horizons-tno-batch35-20260914'].includes(file.integrationBatch ?? '') && ((file.solutionKernelIds && !file.dependencyOnly) || file.id === 'de440s-2000-01-01-2051-01-01'))
+    const oracleRoots = full.files.filter(file => !['horizons-asteroids-batch7-20260909', 'horizons-asteroids-batch8-20260909', 'horizons-asteroids-batch9-20260909', 'horizons-asteroids-batch10-20260909', 'horizons-asteroids-batch11-20260909', 'horizons-asteroids-batch12-20260909', 'horizons-asteroids-batch13-20260909', 'horizons-asteroids-batch14-20260909', 'horizons-asteroids-batch15-20260909', 'horizons-asteroids-batch16-20260910', 'horizons-asteroids-batch17-20260910', 'horizons-asteroids-batch18-20260910', 'horizons-asteroids-batch19-20260914', 'horizons-asteroids-batch20-20260914', 'horizons-asteroids-batch21-20260914', 'horizons-asteroids-batch22-20260914', 'horizons-asteroids-batch23-20260914', 'horizons-asteroids-batch24-20260914', 'horizons-asteroids-batch25-20260914', 'horizons-centaur-batch26-20260914', 'horizons-centaur-batch27-20260914', 'horizons-centaur-batch28-20260914', 'horizons-centaur-batch29-20260914', 'horizons-centaur-batch30-20260914', 'horizons-centaur-batch31-20260914', 'horizons-centaur-batch32-20260914', 'horizons-tno-batch33-20260914', 'horizons-tno-batch34-20260914', 'horizons-tno-batch35-20260914', 'horizons-tno-batch36-20260915'].includes(file.integrationBatch ?? '') && ((file.solutionKernelIds && !file.dependencyOnly) || file.id === 'de440s-2000-01-01-2051-01-01'))
     expect(fixture.contexts.map(context => context.rootId)).toEqual(oracleRoots.map(file => file.id))
     expect(fixture.contexts).toHaveLength(445)
     expect(fixture.samples).toHaveLength(1422)
@@ -181,8 +181,8 @@ describe('integrated satellite source pools and delivery profiles', () => {
         expect(kernel.evaluate(target, file.endEt + 1)).toBeNull()
       }
     }
-    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(1181386752)
-    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(274358272)
+    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(1181799424)
+    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(274401280)
   })
 
   it('pins the bounded Horizons asteroid snapshots without treating the API as immutable', () => {
@@ -700,6 +700,21 @@ describe('integrated satellite source pools and delivery profiles', () => {
     const roots = full.files.filter(file => file.integrationBatch === 'horizons-tno-batch35-20260914')
     expect(roots).toHaveLength(3)
     expect(roots.map(root => root.targets[0])).toEqual([20015789, 20127546, 20762135])
+    for (const root of roots) {
+      expect(root.targets).toHaveLength(1)
+      const bytes = readFileSync(`public/data/ephemerides/${root.path}`)
+      expect(bytes.length).toBe(root.bytes)
+      expect(digest(bytes)).toBe(root.sha256)
+      const kernel = new SpkKernel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
+      const target = root.targets[0]
+      for (const et of [root.startEt, (root.startEt + root.endEt) / 2, root.endEt]) expect(kernel.evaluate(target, et), `${root.id}/${et}`).not.toBeNull()
+    }
+  })
+
+  it('evaluates the batch-36 Horizons TNO roots at both delivery profiles', () => {
+    const roots = full.files.filter(file => file.integrationBatch === 'horizons-tno-batch36-20260915')
+    expect(roots).toHaveLength(2)
+    expect(roots.map(root => root.targets[0])).toEqual([20148780, 20184314])
     for (const root of roots) {
       expect(root.targets).toHaveLength(1)
       const bytes = readFileSync(`public/data/ephemerides/${root.path}`)

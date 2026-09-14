@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-14T15:45:27.115Z",
+  "generatedAt": "2026-09-14T17:03:15.642Z",
   "epochJd": 2461287.5,
   "epochTimeScale": "TDB",
   "source": {
     "manifestPath": "src/data/ephemeris-manifest.json",
     "manifestId": "jpl-satellite-expansion-20260904-pages",
-    "manifestSha256": "b96ab54de5210d9e4b0ec262133a07f3ded3bb264614f130f359ab366a5efcbe",
+    "manifestSha256": "93e3733dd2d4b673e85bae5f55c1aa4eb8d4af3e95ccc3cc1cc8a3a54d064d1c",
     "gmUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
     "gmFile": "src/data/gm_de440.tpc",
     "gmSha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
@@ -11450,6 +11450,46 @@
       "sourceKernelId": "horizons-asteroids-batch24-20260914-rr43-2026-01-01-2027-01-01"
     },
     {
+      "id": "asteroid:148780",
+      "name": "148780 Altjira",
+      "shortName": "148780 Altjira",
+      "kind": "asteroid",
+      "naifId": 20148780,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 44.48765655722404,
+        "eccentricity": 0.05703460611046232,
+        "inclinationDeg": 5.199971020893569,
+        "ascendingNodeDeg": 1.9416441313720725,
+        "argPeriapsisDeg": 302.29152888952615,
+        "meanAnomalyDeg": 132.62968880126,
+        "meanMotionDegPerDay": 0.0033215804820103784
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": 1030894854.6739758,
+          "y": 6818355584.01797,
+          "z": 616980511.9393382
+        },
+        "velocity": {
+          "x": -4.2120025296704044,
+          "y": 0.8049900253038272,
+          "z": 0.086204856735482
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27148780%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-tno-batch36-20260915-altjira-2026-01-01-2027-01-01"
+    },
+    {
       "id": "asteroid:152830",
       "name": "Dinkinesh",
       "shortName": "Dinkinesh",
@@ -11688,6 +11728,46 @@
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27174567%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
       "sourceKernelId": "horizons-asteroids-batch19-20260914-varda-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:184314",
+      "name": "184314 Mbabamwanawaresa",
+      "shortName": "184314 Mbabamwanawaresa",
+      "kind": "asteroid",
+      "naifId": 20184314,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 45.05733531842616,
+        "eccentricity": 0.13721996401841904,
+        "inclinationDeg": 5.7656358755279,
+        "ascendingNodeDeg": 0.3628541689762983,
+        "argPeriapsisDeg": 269.20732528332866,
+        "meanAnomalyDeg": 328.49123186031727,
+        "meanMotionDegPerDay": 0.003258785819356606
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -3972176396.4432893,
+          "y": -4465857198.89464,
+          "z": -448370270.9535439
+        },
+        "velocity": {
+          "x": 3.9692172670454564,
+          "y": -2.95812774797273,
+          "z": -0.3012153659375434
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27184314%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-tno-batch36-20260915-mbabamwanawaresa-2026-01-01-2027-01-01"
     },
     {
       "id": "asteroid:208996",
