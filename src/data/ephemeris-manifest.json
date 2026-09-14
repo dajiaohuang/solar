@@ -20095,6 +20095,129 @@
         },
         "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
       }
+    },
+    {
+      "id": "horizons-asteroids-batch25-20260914-nessus-2026-01-01-2027-01-01",
+      "path": "horizons-asteroids-batch25-20260914-nessus-2026-01-01-2027-01-01.bsp",
+      "sha256": "d20db371d3a1f643710bc782994b3025e80f37d6ee852b594acc48892888fe16",
+      "bytes": 21504,
+      "targets": [
+        20007066
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%277066%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%277066%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T02:35:40.021Z",
+        "bytes": 264192,
+        "sha256": "9e1c08a51dd3a354b6488284752d5b39d13f364757b40c7ff55fb9f667055408",
+        "responseSha256": "83505fe6a382453c785992b42fde096944512d13e357deb3be7a67aded986f94",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20007066,
+        "designation": "7066",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS               7066 Nessus (1993 HA2)          2026-Sep-13 19:35:41\nRec #:    7066 (+COV) Soln.date: 2024-Apr-16_19:34:06    # obs: 111 (1993-2009)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2450029.5 ! 1995-Nov-08.00 (TDB)         Residual RMS= .49559\n   EC= .5225246912494513   QR= 11.82165723999703   TP= 2448663.7764372812\n   OM= 31.34143113725469   W=  170.733342538254    IN= 15.63959472428881\n   A= 24.75867761818259    MA= 10.92636511573772   ADIST= 37.69569799636815\n   PER= 123.19678          N= .008000422           ANGMOM= .072979821\n   DAN= 37.16492           DDN= 11.87484           L= 202.4122262\n   B= 2.4880603            MOID= 10.82159996       TP= 1992-Feb-11.2764372812\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= n.a.\n   H= 9.57                 G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#10, OCC=2\n2: source=ORB\n*******************************************************************************\n\nID= '20007066'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch25-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "7066 Nessus (1993 HA2) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "83505fe6a382453c785992b42fde096944512d13e357deb3be7a67aded986f94",
+          "binarySha256": "9e1c08a51dd3a354b6488284752d5b39d13f364757b40c7ff55fb9f667055408",
+          "retrievedAt": "2026-09-14T02:35:40.021Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-asteroids-batch25-20260914-asbolus-2026-01-01-2027-01-01",
+      "path": "horizons-asteroids-batch25-20260914-asbolus-2026-01-01-2027-01-01.bsp",
+      "sha256": "b650135329ba097db30508c8a93e4aea74e51661745535898ba8499a43d2d9bd",
+      "bytes": 22528,
+      "targets": [
+        20008405
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%278405%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%278405%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T02:35:41.676Z",
+        "bytes": 272384,
+        "sha256": "0dba549a4a2d1599501a1f4394d4cbfb9350512acc78e68319a3b5f6278aa703",
+        "responseSha256": "324cf236bd7f014834eb36b5d229fd7f28272b2d1ff7a52058a023fa5a932b8b",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20008405,
+        "designation": "8405",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS               8405 Asbolus (1995 GO)          2026-Sep-13 19:35:42\nRec #:    8405 (+COV) Soln.date: 2026-Jun-05_11:29:00    # obs: 507 (1995-2025)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2454859.5 ! 2009-Jan-28.00 (TDB)         Residual RMS= .24155\n   EC= .6214764071920599   QR= 6.845064583446439   TP= 2452487.2236106317\n   OM= 5.998347189376092   W=  290.4931736879296   IN= 17.6141482076609\n   A= 18.08358769044964    MA= 30.40482202776625   ADIST= 29.32211079745284\n   PER= 76.90155           N= .012816728           ANGMOM= .057309357\n   DAN= 9.115740000000001  DDN= 14.18555           L= 297.4101662\n   B= -16.4664918          MOID= 5.8758502         TP= 2002-Jul-31.7236106317\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 33.                ROTPER= 8.9351\n   H= 9.2                  G= .150                 B-V= n.a.\n                           ALBEDO= .130            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#49, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20008405'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch25-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "8405 Asbolus (1995 GO) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "324cf236bd7f014834eb36b5d229fd7f28272b2d1ff7a52058a023fa5a932b8b",
+          "binarySha256": "0dba549a4a2d1599501a1f4394d4cbfb9350512acc78e68319a3b5f6278aa703",
+          "retrievedAt": "2026-09-14T02:35:41.676Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-asteroids-batch25-20260914-hylonome-2026-01-01-2027-01-01",
+      "path": "horizons-asteroids-batch25-20260914-hylonome-2026-01-01-2027-01-01.bsp",
+      "sha256": "ec480297dbb81f5d8252abf229fa767b8dd6c8d5e25437ebc94da590cb5d1724",
+      "bytes": 20480,
+      "targets": [
+        20010370
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2710370%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2710370%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T02:35:42.283Z",
+        "bytes": 263168,
+        "sha256": "0be70cbe059c97e6aa965973208afbe7e9e5cbdf6994578048b51110c8eab813",
+        "responseSha256": "a12fe79d5d3d46cac57e325ce4ba48788238bb11dffb5c9d796e2ebf1b7cd166",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20010370,
+        "designation": "10370",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS              10370 Hylonome (1995 DW2)        2026-Sep-13 19:35:42\nRec #:   10370 (+COV) Soln.date: 2021-Apr-12_22:03:05     # obs: 78 (1995-2010)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2450658.5 ! 1997-Jul-29.00 (TDB)         Residual RMS= .46584\n   EC= .243937160740084    QR= 18.86312946527498   TP= 2449851.6173758949\n   OM= 178.2322317024546   W=  6.235244339264821   IN= 4.148104170756789\n   A= 24.94915565978544    MA= 6.38161585689193    ADIST= 31.03518185429589\n   PER= 124.62122          N= .007908976999999999  ANGMOM= .083327343\n   DAN= 18.88504           DDN= 30.97606           L= 184.4512704\n   B= .4501404             MOID= 17.86540031       TP= 1995-May-14.1173758949\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= n.a.\n   H= 8.2                  G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#9, OCC=3\n2: source=ORB\n*******************************************************************************\n\nID= '20010370'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-asteroids-batch25-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "10370 Hylonome (1995 DW2) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "a12fe79d5d3d46cac57e325ce4ba48788238bb11dffb5c9d796e2ebf1b7cd166",
+          "binarySha256": "0be70cbe059c97e6aa965973208afbe7e9e5cbdf6994578048b51110c8eab813",
+          "retrievedAt": "2026-09-14T02:35:42.283Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
     }
   ]
 }
