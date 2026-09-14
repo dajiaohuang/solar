@@ -5,11 +5,11 @@ const android = readFileSync(new URL('../../android/app/src/main/java/io/github/
 const ios = readFileSync(new URL('../../ios/App/App/NativeObservationDeck.swift', import.meta.url), 'utf8')
 const ephemerisBodies = JSON.parse(readFileSync(new URL('../../src/data/ephemerisBodies.json', import.meta.url), 'utf8')) as { bodies: Array<{ id: string }> }
 
-const presetIds = ['planets', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto-moons', 'spk-asteroids']
+const presetIds = ['planets', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto-moons', 'spk-asteroids', 'spk-tno-batch35']
 const sourceIds = ephemerisBodies.bodies.map(body => body.id)
 const asteroidIds = sourceIds.filter(id => id.startsWith('asteroid:'))
-const asteroidPresetLine = (source: string) => source.split('\n').find(line => line.includes('spk-asteroids')) ?? ''
-const asteroidPresetIds = (source: string) => asteroidPresetLine(source).match(/asteroid:\d+/g) ?? []
+const asteroidPresetLines = (source: string) => source.split('\n').filter(line => line.includes('spk-asteroids') || line.includes('spk-tno-batch35')).join('\n')
+const asteroidPresetIds = (source: string) => asteroidPresetLines(source).match(/asteroid:\d+/g) ?? []
 
 describe('native preset parity', () => {
   it('keeps Android and iOS preset identities aligned with the packaged source targets', () => {
@@ -26,8 +26,8 @@ describe('native preset parity', () => {
     // The asteroid preset is the native entry point for every packaged
     // asteroid identity; keep its static lists aligned with the source file.
     for (const id of asteroidIds) {
-      expect(asteroidPresetLine(android)).toContain(id)
-      expect(asteroidPresetLine(ios)).toContain(id)
+      expect(asteroidPresetLines(android)).toContain(id)
+      expect(asteroidPresetLines(ios)).toContain(id)
     }
     // Native preset ordering is presentation-only; identity parity is set-based
     // so a new source target can be appended without changing existing order.

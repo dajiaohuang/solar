@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-14T14:51:42.677Z",
+  "generatedAt": "2026-09-14T15:45:27.115Z",
   "epochJd": 2461287.5,
   "epochTimeScale": "TDB",
   "source": {
     "manifestPath": "src/data/ephemeris-manifest.json",
     "manifestId": "jpl-satellite-expansion-20260904-pages",
-    "manifestSha256": "7aa97c5f4be7b3884418f0ed598faaac96665d0f96dda0f1fb642edbb80c7e16",
+    "manifestSha256": "b96ab54de5210d9e4b0ec262133a07f3ded3bb264614f130f359ab366a5efcbe",
     "gmUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
     "gmFile": "src/data/gm_de440.tpc",
     "gmSha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
@@ -9450,6 +9450,46 @@
       "sourceKernelId": "horizons-asteroids-batch22-20260914-albion-2026-01-01-2027-01-01"
     },
     {
+      "id": "asteroid:15789",
+      "name": "15789 (1993 SB)",
+      "shortName": "15789 (1993 SB)",
+      "kind": "asteroid",
+      "naifId": 20015789,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 39.66200488061842,
+        "eccentricity": 0.18348973178864775,
+        "inclinationDeg": 5.160345946743206,
+        "ascendingNodeDeg": 354.7352232016211,
+        "argPeriapsisDeg": 318.02935205994754,
+        "meanAnomalyDeg": 79.85709675443945,
+        "meanMotionDegPerDay": 0.00394586368979841
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": 3514788955.4745054,
+          "y": 4767054973.138072,
+          "z": 457819236.7622709
+        },
+        "velocity": {
+          "x": -3.2305187790946337,
+          "y": 3.434879735776131,
+          "z": 0.2821229362469819
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2715789%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-tno-batch35-20260914-1993-sb-2026-01-01-2027-01-01"
+    },
+    {
       "id": "asteroid:15810",
       "name": "Arawn",
       "shortName": "Arawn",
@@ -11170,6 +11210,46 @@
       "sourceKernelId": "horizons-asteroids-batch21-20260914-gv9-2026-01-01-2027-01-01"
     },
     {
+      "id": "asteroid:127546",
+      "name": "127546 (2002 XU93)",
+      "shortName": "127546 (2002 XU93)",
+      "kind": "asteroid",
+      "naifId": 20127546,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 67.17262928931909,
+        "eccentricity": 0.6872529319398262,
+        "inclinationDeg": 77.94596385832918,
+        "ascendingNodeDeg": 90.2228479125452,
+        "argPeriapsisDeg": 28.1364057070204,
+        "meanAnomalyDeg": 11.72449734336476,
+        "meanMotionDegPerDay": 0.001790257707059233
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -883786039.2622048,
+          "y": -590677641.7882612,
+          "z": 4149416807.9829626
+        },
+        "velocity": {
+          "x": -0.4643436512463022,
+          "y": -6.578729066325069,
+          "z": 2.2942862879705084
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27127546%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-tno-batch35-20260914-2002-xu93-2026-01-01-2027-01-01"
+    },
+    {
       "id": "asteroid:132524",
       "name": "APL",
       "shortName": "APL",
@@ -12448,6 +12528,46 @@
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27696315%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
       "sourceKernelId": "horizons-centaur-batch32-20260914-petraios-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:762135",
+      "name": "762135 (2010 WG9)",
+      "shortName": "762135 (2010 WG9)",
+      "kind": "asteroid",
+      "naifId": 20762135,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 53.43709267459943,
+        "eccentricity": 0.6480774182621426,
+        "inclinationDeg": 70.16991666323446,
+        "ascendingNodeDeg": 92.03428581504619,
+        "argPeriapsisDeg": 293.2445586828866,
+        "meanAnomalyDeg": 18.92213544275944,
+        "meanMotionDegPerDay": 0.002523131243373743
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -589781794.6007959,
+          "y": 4133182232.3009644,
+          "z": 1227602538.1587794
+        },
+        "velocity": {
+          "x": -2.250341299701279,
+          "y": 1.5025394541021673,
+          "z": 6.088444308343299
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27762135%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-tno-batch35-20260914-2010-wg9-2026-01-01-2027-01-01"
     },
     {
       "id": "asteroid:50666516",
