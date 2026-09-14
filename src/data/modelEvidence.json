@@ -98,9 +98,9 @@
     ],
     "spkDelivery": {
       "stateBoundary": "geometric-spk-six-vector-when-kernel-and-center-chain-cover-epoch",
-      "ephemerisBodyCount": 309,
+      "ephemerisBodyCount": 311,
       "planetarySatelliteBodyCount": 152,
-      "smallBodyBodyCount": 157,
+      "smallBodyBodyCount": 159,
       "satelliteIdentityCount": 472,
       "satelliteIdentityDelivery": {
         "catalogBodies": 472,
@@ -122,15 +122,15 @@
       },
       "pagesManifest": {
         "id": "jpl-satellite-expansion-20260904-pages",
-        "sha256": "9628a9d9811fc2edfc77b8dce11b1c1def03ebd5e2a4f10aa04667ba42ce6cf6",
-        "bytes": 274250752,
-        "fileCount": 663
+        "sha256": "7aa97c5f4be7b3884418f0ed598faaac96665d0f96dda0f1fb642edbb80c7e16",
+        "bytes": 274293760,
+        "fileCount": 665
       },
       "fullManifest": {
         "id": "jpl-satellite-expansion-20260904-full",
-        "sha256": "c2712bcfa885a6d6a3d091c7fa862dd749aedbebdca8c313c7470055f5bd105e",
-        "bytes": 1180372992,
-        "fileCount": 663
+        "sha256": "dd12249e45653f4e65f0fc1af8a82df319f9e4e0dc88bb356431625991022c1a",
+        "bytes": 1180781568,
+        "fileCount": 665
       },
       "sourceBackedSatelliteBatches": {
         "mars": [
@@ -465,7 +465,9 @@
         "90568",
         "58534",
         "65489",
-        "66652"
+        "66652",
+        "88611",
+        "341520"
       ],
       "frozenHorizonsPrimaryOnly": [
         "33",
@@ -542,7 +544,9 @@
         "90568",
         "58534",
         "65489",
-        "66652"
+        "66652",
+        "88611",
+        "341520"
       ],
       "frozenHorizonsPrimaryOnlyBoundary": "All frozen Horizons asteroid entries are direct primary heliocentric states only; no companion or system-center state is delivered, and no binary coverage is implied."
     }

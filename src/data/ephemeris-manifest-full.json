@@ -21120,6 +21120,88 @@
         },
         "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
       }
+    },
+    {
+      "id": "horizons-tno-batch34-20260914-teharonhiawako-2020-01-01-2031-01-01",
+      "path": "horizons-tno-batch34-20260914-teharonhiawako-2020-01-01-2031-01-01.bsp",
+      "sha256": "b800166dfbd3f2121d4b0b90c96c5bac2a3968eb3d39ce594ddc23ef1914cce0",
+      "bytes": 202752,
+      "targets": [
+        20088611
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2788611%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2788611%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T14:49:26.623Z",
+        "bytes": 264192,
+        "sha256": "6f26c21f24a5a5e21e402a47f14d25512818384a3d1d080588810ede2978dc9c",
+        "responseSha256": "1c916517b91bf4014ba60eb99dc11d38c062c1320fe8db83a12bf8dff7ee6c46",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20088611,
+        "designation": "88611",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS          88611 Teharonhiawako (2001 QT297)    2026-Sep-14 07:49:29\nRec #:   88611 (+COV) Soln.date: 2026-Aug-20_09:44:08    # obs: 198 (2000-2025)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2457328.5 ! 2015-Nov-02.00 (TDB)         Residual RMS= .1964\n   EC= .03159630295926888  QR= 42.45523139959221   TP= 2410494.5656159394\n   OM= 304.7903384760265   W=  235.6519008307206   IN= 2.583881156127706\n   A= 43.84042680684493    MA= 159.0202957043379   ADIST= 45.22562221409765\n   PER= 290.28217          N= .003395408           ANGMOM= .113841848\n   DAN= 44.59161           DDN= 43.02956           L= 180.4150843\n   B= -2.1330864           MOID= 41.45999908       TP= 1887-Aug-11.0656159394\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= n.a.\n   H= 5.96                 G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#20, OCC=2\n2: source=ORB\n*******************************************************************************\n\nID= '20088611'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-tno-batch34-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "88611 Teharonhiawako frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "1c916517b91bf4014ba60eb99dc11d38c062c1320fe8db83a12bf8dff7ee6c46",
+          "binarySha256": "6f26c21f24a5a5e21e402a47f14d25512818384a3d1d080588810ede2978dc9c",
+          "retrievedAt": "2026-09-14T14:49:26.623Z"
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-tno-batch34-20260914-mors-somnus-2020-01-01-2031-01-01",
+      "path": "horizons-tno-batch34-20260914-mors-somnus-2020-01-01-2031-01-01.bsp",
+      "sha256": "b96be7150da339988343d0440dab372eb2031e7b6d48360cc8dabfcff0023b9e",
+      "bytes": 205824,
+      "targets": [
+        20341520
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27341520%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27341520%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T14:49:28.119Z",
+        "bytes": 267264,
+        "sha256": "44b592d8a588375e8631975e2d1f8ce7f19813da8ac0b7a3186608dd48969c9c",
+        "responseSha256": "47ca66451f9893a9b965383325eb1c4a08cea13b2a1ca42811c8dbfb73587d2c",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20341520,
+        "designation": "341520",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS           341520 Mors-Somnus (2007 TY430)     2026-Sep-14 07:49:30\nRec #:  341520 (+COV) Soln.date: 2026-Jun-07_10:37:52    # obs: 365 (2007-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458314.5 ! 2018-Jul-15.00 (TDB)         Residual RMS= .12572\n   EC= .2607176656380508   QR= 28.83840629433794   TP= 2457851.6798783662\n   OM= 196.7418868385388   W=  205.0926715205615   IN= 11.30105516439666\n   A= 39.00865062497055    MA= 1.872297746775117   ADIST= 49.17889495560316\n   PER= 243.64056          N= .004045411           ANGMOM= .10372322\n   DAN= 47.59478           DDN= 29.41246           L= 41.4064193\n   B= -4.7670755           MOID= 27.84900093       TP= 2017-Apr-08.1798783662\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= 9.28\n   H= 6.79                 G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#23, OCC=2\n2: source=ORB\n*******************************************************************************\n\nID= '20341520'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-tno-batch34-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "341520 Mors-Somnus frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "47ca66451f9893a9b965383325eb1c4a08cea13b2a1ca42811c8dbfb73587d2c",
+          "binarySha256": "44b592d8a588375e8631975e2d1f8ce7f19813da8ac0b7a3186608dd48969c9c",
+          "retrievedAt": "2026-09-14T14:49:28.119Z"
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
+      }
     }
   ]
 }
