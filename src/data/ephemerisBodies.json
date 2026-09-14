@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-14T05:02:07.647Z",
+  "generatedAt": "2026-09-14T05:53:26.017Z",
   "epochJd": 2461287.5,
   "epochTimeScale": "TDB",
   "source": {
     "manifestPath": "src/data/ephemeris-manifest.json",
     "manifestId": "jpl-satellite-expansion-20260904-pages",
-    "manifestSha256": "ecfd7964aee2a526f80bb0791d75edcefb35049511bdab233a37a5e574183791",
+    "manifestSha256": "b81157346e0966f040d7c94ed777ffdbad827881b161a71b588e067faff2f601",
     "gmUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
     "gmFile": "src/data/gm_de440.tpc",
     "gmSha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
@@ -9770,6 +9770,46 @@
       "sourceKernelId": "horizons-asteroids-followup-20260909-da-1950-2026-01-01-2027-01-01"
     },
     {
+      "id": "asteroid:29981",
+      "name": "29981 (1999 TD10)",
+      "shortName": "29981 (1999 TD10)",
+      "kind": "asteroid",
+      "naifId": 20029981,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 97.94597628094049,
+        "eccentricity": 0.8736206183478805,
+        "inclinationDeg": 5.957868674109013,
+        "ascendingNodeDeg": 184.67426382398435,
+        "argPeriapsisDeg": 172.94281975482113,
+        "meanAnomalyDeg": 9.976097890464473,
+        "meanMotionDegPerDay": 0.0010167733969461466
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -2396321251.4039702,
+          "y": 5200198849.79775,
+          "z": -561271552.1179612
+        },
+        "velocity": {
+          "x": -5.395454386283762,
+          "y": 2.802323119145295,
+          "z": -0.3373655004272518
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2729981%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-centaur-batch28-20260914-29981-2026-01-01-2027-01-01"
+    },
+    {
       "id": "asteroid:31824",
       "name": "31824 Elatus (1999 UG5)",
       "shortName": "31824 Elatus (1999 UG5)",
@@ -10088,6 +10128,86 @@
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2752768%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
       "sourceKernelId": "horizons-asteroids-followup-20260909-or2-1998-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:52872",
+      "name": "52872 Okyrhoe (1998 SG35)",
+      "shortName": "52872 Okyrhoe (1998 SG35)",
+      "kind": "asteroid",
+      "naifId": 20052872,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 8.351289531431165,
+        "eccentricity": 0.30800130185939795,
+        "inclinationDeg": 15.674828039182966,
+        "ascendingNodeDeg": 173.12167211130418,
+        "argPeriapsisDeg": 337.5979692973852,
+        "meanAnomalyDeg": 278.24444391926824,
+        "meanMotionDegPerDay": 0.04083887435612843
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": 1079468410.4493458,
+          "y": 705989092.0908055,
+          "z": -232961388.734209
+        },
+        "velocity": {
+          "x": -7.752802231623284,
+          "y": 5.856093502522258,
+          "z": -1.3709251412389616
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2752872%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-centaur-batch28-20260914-okyrhoe-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:52975",
+      "name": "52975 Cyllarus (1998 TF35)",
+      "shortName": "52975 Cyllarus (1998 TF35)",
+      "kind": "asteroid",
+      "naifId": 20052975,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 26.28239845131019,
+        "eccentricity": 0.37658224321539113,
+        "inclinationDeg": 12.631653927716657,
+        "ascendingNodeDeg": 51.902830210290745,
+        "argPeriapsisDeg": 301.77049178699264,
+        "meanAnomalyDeg": 98.78926121501917,
+        "meanMotionDegPerDay": 0.0073148694783998795
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -2857196264.0797386,
+          "y": 3498648807.9279623,
+          "z": 987676147.2130365
+        },
+        "velocity": {
+          "x": -4.527326295132904,
+          "y": -1.6833138039287927,
+          "z": 0.5657011509793367
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2752975%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-centaur-batch28-20260914-cyllarus-2026-01-01-2027-01-01"
     },
     {
       "id": "asteroid:53311",
