@@ -20341,6 +20341,129 @@
         },
         "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
       }
+    },
+    {
+      "id": "horizons-centaur-batch27-20260914-damocles-2020-01-01-2031-01-01",
+      "path": "horizons-centaur-batch27-20260914-damocles-2020-01-01-2031-01-01.bsp",
+      "sha256": "5f40773e5e04226d3ce985c1f870312e8d0d792816eb876538fc7ac51af62609",
+      "bytes": 221184,
+      "targets": [
+        20005335
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%275335%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%275335%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T04:49:20.308Z",
+        "bytes": 282624,
+        "sha256": "21c23ed2fe747c2b3077fecb3a74a97b2dad1b919efc5be19a8f3ae67ceb4e04",
+        "responseSha256": "d6a85237295610dd32eae20f36e4cdba32936da8a59c850ff69a41021a49684a",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20005335,
+        "designation": "5335",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS               5335 Damocles (1991 DA)         2026-Sep-13 21:49:21\nRec #:    5335 (+COV) Soln.date: 2021-Apr-12_17:25:25     # obs: 49 (1991-1992)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2448587.5 ! 1991-Nov-27.00 (TDB)         Residual RMS= .6614\n   EC= .8670084403659819   QR= 1.578641615831195   TP= 2448228.9926472181\n   OM= 314.1041259807831   W=  191.2443807339965   IN= 61.88963566871037\n   A= 11.87023913529165    MA= 8.639984010484307   ADIST= 22.16183665475211\n   PER= 40.89756           N= .02409988            ANGMOM= .029532238\n   DAN= 19.69694           DDN= 1.59284            L= 139.4556225\n   B= -9.9037133           MOID= .60306799         TP= 1990-Dec-03.4926472181\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= n.a.\n   H= 13.23                G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#4, OCC=4\n2: source=ORB\n*******************************************************************************\n\nID= '20005335'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-centaur-batch27-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "Damocles (5335) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "d6a85237295610dd32eae20f36e4cdba32936da8a59c850ff69a41021a49684a",
+          "binarySha256": "21c23ed2fe747c2b3077fecb3a74a97b2dad1b919efc5be19a8f3ae67ceb4e04",
+          "retrievedAt": "2026-09-14T04:49:20.308Z"
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-centaur-batch27-20260914-elatus-2020-01-01-2031-01-01",
+      "path": "horizons-centaur-batch27-20260914-elatus-2020-01-01-2031-01-01.bsp",
+      "sha256": "ea140d710b55a57398c4364699f00110378657c975b755cb4f61363a3fa603d8",
+      "bytes": 209920,
+      "targets": [
+        20031824
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2731824%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2731824%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T04:49:21.920Z",
+        "bytes": 271360,
+        "sha256": "9e34101b6c481ae4bb0338e6d2e2b030b5efc910d0facb6dbd9909123a7f18c8",
+        "responseSha256": "1d6380ac0fc39c6fe1a1f410821e4e42303cde31a05c98d07ec66020a3cfaa7f",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20031824,
+        "designation": "31824",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS               31824 Elatus (1999 UG5)         2026-Sep-13 21:49:22\nRec #:   31824 (+COV) Soln.date: 2025-Aug-02_11:13:28    # obs: 490 (1998-2025)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2457294.5 ! 2015-Sep-29.00 (TDB)         Residual RMS= .21505\n   EC= .3798955097402314   QR= 7.326846486596135   TP= 2450985.0050442973\n   OM= 87.08682741193411   W=  281.9248044113812   IN= 5.24503366384668\n   A= 11.81550303486246    MA= 153.1159196812918   ADIST= 16.30415958312879\n   PER= 40.61501           N= .02426754            ANGMOM= .054696947\n   DAN= 9.374420000000001  DDN= 10.97151           L= 9.0603284\n   B= -5.1315369           MOID= 6.33049011        TP= 1998-Jun-20.5050442973\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 28.5               ROTPER= 26.82\n   H= 10.26                G= .150                 B-V= n.a.\n                           ALBEDO= .050            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#33, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20031824'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-centaur-batch27-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "Elatus (31824) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "1d6380ac0fc39c6fe1a1f410821e4e42303cde31a05c98d07ec66020a3cfaa7f",
+          "binarySha256": "9e34101b6c481ae4bb0338e6d2e2b030b5efc910d0facb6dbd9909123a7f18c8",
+          "retrievedAt": "2026-09-14T04:49:21.920Z"
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-centaur-batch27-20260914-thereus-2020-01-01-2031-01-01",
+      "path": "horizons-centaur-batch27-20260914-thereus-2020-01-01-2031-01-01.bsp",
+      "sha256": "ab705a2476e591a98f77cfd682179f6b52c826e5aea150c3e54832441eeb8f3a",
+      "bytes": 211968,
+      "targets": [
+        20032532
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2732532%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2732532%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T04:49:22.562Z",
+        "bytes": 273408,
+        "sha256": "218675a8e666812810ff8ce98a794b2f43dbae309d33c62dac9a7f10f13e91bc",
+        "responseSha256": "5b7a8059408637ef54488739885554a1be552d3f7d1c10a12a97c080a2671bc3",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20032532,
+        "designation": "32532",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS              32532 Thereus (2001 PT13)        2026-Sep-13 21:49:23\nRec #:   32532 (+COV) Soln.date: 2026-Jun-05_22:32:36   # obs: 1052 (1983-2026)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2457937.5 ! 2017-Jul-03.00 (TDB)         Residual RMS= .16495\n   EC= .1976656719244861   QR= 8.537782919942661   TP= 2463885.0781322224\n   OM= 205.3281981957597   W=  86.31486960743997   IN= 20.35293856009391\n   A= 10.64117864733703    MA= 191.1272294984301   ADIST= 12.7445743747314\n   PER= 34.71305           N= .028393535           ANGMOM= .055007486\n   DAN= 10.09713           DDN= 10.35699           L= 291.3984224\n   B= 20.3089974           MOID= 7.59266996        TP= 2033-Oct-14.5781322224\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= 43.25              ROTPER= 8.335\n   H= 9.17                 G= .150                 B-V= n.a.\n                           ALBEDO= .059            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#64, OCC=0\n2: source=ORB\n*******************************************************************************\n\nID= '20032532'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-centaur-batch27-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "Thereus (32532) frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "5b7a8059408637ef54488739885554a1be552d3f7d1c10a12a97c080a2671bc3",
+          "binarySha256": "218675a8e666812810ff8ce98a794b2f43dbae309d33c62dac9a7f10f13e91bc",
+          "retrievedAt": "2026-09-14T04:49:22.562Z"
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
+      }
     }
   ]
 }
