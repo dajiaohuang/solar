@@ -65,6 +65,8 @@ const NAMES = {
   20015810: 'Arawn', 20090377: 'Sedna', 20028978: 'Ixion', 20225088: 'Gonggong', 20174567: 'Varda',
   20136472: 'Makemake', 20055637: '2002 UX25', 20084522: '2002 TC302', 20145451: '2005 RM43', 20145452: '2005 RN43',
   20055565: '2002 AW197', 20307261: '2002 MS4', 20208996: '2003 AZ84', 20120132: '2004 GV9', 20055636: '2002 TX300',
+  20015760: '15760 Albion', 20019521: '19521 Chaos', 20038083: '38083 Rhadamanthus', 20038628: '38628 Huya',
+  20053311: '53311 Deucalion',
   20523794: '523794 2015 RR245', 50666516: '2012 VP113', 50760674: '2014 UZ224',
   20532037: '532037 Chiminigagua', 20541132: '541132 Leleakuhonua', 50773852: '2013 SY99',
   20612911: '612911 2004 XR190', 20471143: '471143 Dziewanna',
@@ -197,7 +199,10 @@ for (const target of [...new Set(manifest.files.flatMap((f) => f.targets))].sort
   const previous = previousById.get(generated.id)
   const replacesFallback = generated.sourceKernelId?.startsWith('horizons-asteroids-') === true
     && previous?.sourceKernelId?.startsWith('sb441-') === true
-  const selected = previous?.naifId === generated.naifId && !replacesFallback ? previous : generated
+  const preservesBody = previous?.naifId === generated.naifId && !replacesFallback
+  const selected = preservesBody && previous.name !== generated.name
+    ? { ...previous, name: generated.name, shortName: generated.shortName }
+    : preservesBody ? previous : generated
   const existingIndex = bodyIndexById.get(selected.id)
   if (existingIndex === undefined) {
     bodyIndexById.set(selected.id, bodies.length)

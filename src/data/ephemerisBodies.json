@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-14T08:16:11.489Z",
+  "generatedAt": "2026-09-14T09:11:54.077Z",
   "epochJd": 2461287.5,
   "epochTimeScale": "TDB",
   "source": {
@@ -9411,8 +9411,8 @@
     },
     {
       "id": "asteroid:15760",
-      "name": "Asteroid 18015760",
-      "shortName": "Asteroid 18015760",
+      "name": "15760 Albion",
+      "shortName": "15760 Albion",
       "kind": "asteroid",
       "naifId": 20015760,
       "parentId": "sun",
@@ -9571,8 +9571,8 @@
     },
     {
       "id": "asteroid:19521",
-      "name": "Asteroid 18019521",
-      "shortName": "Asteroid 18019521",
+      "name": "19521 Chaos",
+      "shortName": "19521 Chaos",
       "kind": "asteroid",
       "naifId": 20019521,
       "parentId": "sun",
@@ -9931,8 +9931,8 @@
     },
     {
       "id": "asteroid:38083",
-      "name": "Asteroid 18038083",
-      "shortName": "Asteroid 18038083",
+      "name": "38083 Rhadamanthus",
+      "shortName": "38083 Rhadamanthus",
       "kind": "asteroid",
       "naifId": 20038083,
       "parentId": "sun",
@@ -9971,8 +9971,8 @@
     },
     {
       "id": "asteroid:38628",
-      "name": "Asteroid 18038628",
-      "shortName": "Asteroid 18038628",
+      "name": "38628 Huya",
+      "shortName": "38628 Huya",
       "kind": "asteroid",
       "naifId": 20038628,
       "parentId": "sun",
@@ -10251,8 +10251,8 @@
     },
     {
       "id": "asteroid:53311",
-      "name": "Asteroid 18053311",
-      "shortName": "Asteroid 18053311",
+      "name": "53311 Deucalion",
+      "shortName": "53311 Deucalion",
       "kind": "asteroid",
       "naifId": 20053311,
       "parentId": "sun",
