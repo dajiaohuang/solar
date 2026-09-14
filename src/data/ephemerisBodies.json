@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-14T10:14:56.688Z",
+  "generatedAt": "2026-09-14T11:19:00.481Z",
   "epochJd": 2461287.5,
   "epochTimeScale": "TDB",
   "source": {
     "manifestPath": "src/data/ephemeris-manifest.json",
     "manifestId": "jpl-satellite-expansion-20260904-pages",
-    "manifestSha256": "673b0d0dc30fba34cf39f7383736aa9a6eda17491995b7c67e07bc90a559f6c8",
+    "manifestSha256": "48b3e0e270119ec9d957f1e0c210338afef5889284a2c32328cd790b125dff9b",
     "gmUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
     "gmFile": "src/data/gm_de440.tpc",
     "gmSha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
@@ -10610,6 +10610,46 @@
       "sourceKernelId": "horizons-didymos-2026-01-01-2027-01-01"
     },
     {
+      "id": "asteroid:78799",
+      "name": "78799 Xewioso",
+      "shortName": "78799 Xewioso",
+      "kind": "asteroid",
+      "naifId": 20078799,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 37.66847916616525,
+        "eccentricity": 0.2436726438210367,
+        "inclinationDeg": 14.34615665963947,
+        "ascendingNodeDeg": 46.7813169192317,
+        "argPeriapsisDeg": 248.0849647021641,
+        "meanAnomalyDeg": 156.20859122088564,
+        "meanMotionDegPerDay": 0.004263212145342827
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -1058564883.8490862,
+          "y": 6711620403.85445,
+          "z": 1372749042.046968
+        },
+        "velocity": {
+          "x": -3.765925456040607,
+          "y": -0.3967958738418488,
+          "z": 0.6324002906944676
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2778799%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-centaur-batch32-20260914-xewioso-2026-01-01-2027-01-01"
+    },
+    {
       "id": "asteroid:79360",
       "name": "79360 Sila-Nunam (1997 CS29)",
       "shortName": "79360 Sila-Nunam (1997 CS29)",
@@ -10808,6 +10848,46 @@
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2790377%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
       "sourceKernelId": "horizons-asteroids-batch19-20260914-sedna-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:90568",
+      "name": "90568 Goibniu",
+      "shortName": "90568 Goibniu",
+      "kind": "asteroid",
+      "naifId": 20090568,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 41.88169317829726,
+        "eccentricity": 0.07737836782192643,
+        "inclinationDeg": 22.02406055815674,
+        "ascendingNodeDeg": 250.58390995836228,
+        "argPeriapsisDeg": 290.4286236302099,
+        "meanAnomalyDeg": 51.51874461166523,
+        "meanMotionDegPerDay": 0.0036363671649986204
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -2927253119.773699,
+          "y": -5207591282.967026,
+          "z": -416504440.9178245
+        },
+        "velocity": {
+          "x": 3.6790630932502166,
+          "y": -2.5594856583832626,
+          "z": 1.74777571502318
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2790568%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-centaur-batch32-20260914-goibniu-2026-01-01-2027-01-01"
     },
     {
       "id": "asteroid:98943",
@@ -12128,6 +12208,46 @@
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27DES%3D20612911%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
       "sourceKernelId": "horizons-asteroids-batch23-20260914-xr190-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:696315",
+      "name": "696315 Petraios",
+      "shortName": "696315 Petraios",
+      "kind": "asteroid",
+      "naifId": 20696315,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 20.19778187126964,
+        "eccentricity": 0.0797222467187709,
+        "inclinationDeg": 14.249535965994557,
+        "ascendingNodeDeg": 93.30564655206098,
+        "argPeriapsisDeg": 71.1091741609967,
+        "meanAnomalyDeg": 52.236325596573295,
+        "meanMotionDegPerDay": 0.010857968000095839
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -1998605537.6148567,
+          "y": -2013063631.6314707,
+          "z": 536198481.55350494
+        },
+        "velocity": {
+          "x": 4.373795542191726,
+          "y": -5.274821551925033,
+          "z": -1.0316727845284541
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27696315%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-centaur-batch32-20260914-petraios-2026-01-01-2027-01-01"
     },
     {
       "id": "asteroid:50666516",
