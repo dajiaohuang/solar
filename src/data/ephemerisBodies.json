@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-14T11:19:00.481Z",
+  "generatedAt": "2026-09-14T12:14:08.309Z",
   "epochJd": 2461287.5,
   "epochTimeScale": "TDB",
   "source": {
     "manifestPath": "src/data/ephemeris-manifest.json",
     "manifestId": "jpl-satellite-expansion-20260904-pages",
-    "manifestSha256": "48b3e0e270119ec9d957f1e0c210338afef5889284a2c32328cd790b125dff9b",
+    "manifestSha256": "9628a9d9811fc2edfc77b8dce11b1c1def03ebd5e2a4f10aa04667ba42ce6cf6",
     "gmUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
     "gmFile": "src/data/gm_de440.tpc",
     "gmSha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
@@ -10530,6 +10530,46 @@
       "sourceKernelId": "horizons-asteroids-batch20-20260914-ux25-2026-01-01-2027-01-01"
     },
     {
+      "id": "asteroid:58534",
+      "name": "58534 Logos",
+      "shortName": "58534 Logos",
+      "kind": "asteroid",
+      "naifId": 20058534,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 45.32961417638807,
+        "eccentricity": 0.12285626509326442,
+        "inclinationDeg": 2.896160916742733,
+        "ascendingNodeDeg": 132.49436319419158,
+        "argPeriapsisDeg": 337.0731305397561,
+        "meanAnomalyDeg": 70.97528794039363,
+        "meanMotionDegPerDay": 0.0032294684049394102
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -6392526407.411249,
+          "y": -1639408921.3038948,
+          "z": 294485039.51740164
+        },
+        "velocity": {
+          "x": 0.5960799156190941,
+          "y": -4.498485240532735,
+          "z": 0.13149976247883544
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2758534%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-tno-batch33-20260914-logos-2026-01-01-2027-01-01"
+    },
+    {
       "id": "asteroid:60558",
       "name": "60558 Echeclus (2000 EC98)",
       "shortName": "60558 Echeclus (2000 EC98)",
@@ -10570,6 +10610,46 @@
       "sourceKernelId": "horizons-centaur-batch26-20260914-echeclus-2026-01-01-2027-01-01"
     },
     {
+      "id": "asteroid:65489",
+      "name": "65489 Ceto",
+      "shortName": "65489 Ceto",
+      "kind": "asteroid",
+      "naifId": 20065489,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 101.03133838772861,
+        "eccentricity": 0.8244355447399742,
+        "inclinationDeg": 22.287487643827646,
+        "ascendingNodeDeg": 171.89417395031933,
+        "argPeriapsisDeg": 319.64105327320067,
+        "meanAnomalyDeg": 13.138924893318006,
+        "meanMotionDegPerDay": 0.0009705544709296417
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -3103540775.166675,
+          "y": -5608017579.553028,
+          "z": 2454983973.693033
+        },
+        "velocity": {
+          "x": 1.4650410804558611,
+          "y": -4.909731938212057,
+          "z": 1.9076010918802377
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2765489%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-tno-batch33-20260914-ceto-2026-01-01-2027-01-01"
+    },
+    {
       "id": "asteroid:65803",
       "name": "Didymos",
       "shortName": "Didymos",
@@ -10608,6 +10688,46 @@
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2765803%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
       "sourceKernelId": "horizons-didymos-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:66652",
+      "name": "66652 Borasisi",
+      "shortName": "66652 Borasisi",
+      "kind": "asteroid",
+      "naifId": 20066652,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 43.7052534637453,
+        "eccentricity": 0.08476370132159007,
+        "inclinationDeg": 0.5637523921126025,
+        "ascendingNodeDeg": 84.63766601542369,
+        "argPeriapsisDeg": 197.62337077731246,
+        "meanAnomalyDeg": 71.03939902103184,
+        "meanMotionDegPerDay": 0.0034111719282699034
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": 6393974691.296172,
+          "y": 309425909.56522983,
+          "z": -62354620.35992307
+        },
+        "velocity": {
+          "x": 0.15600949130329872,
+          "y": 4.597707445179309,
+          "z": 0.0026994749888342717
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2766652%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-tno-batch33-20260914-borasisi-2026-01-01-2027-01-01"
     },
     {
       "id": "asteroid:78799",

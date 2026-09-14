@@ -98,9 +98,9 @@
     ],
     "spkDelivery": {
       "stateBoundary": "geometric-spk-six-vector-when-kernel-and-center-chain-cover-epoch",
-      "ephemerisBodyCount": 306,
+      "ephemerisBodyCount": 309,
       "planetarySatelliteBodyCount": 152,
-      "smallBodyBodyCount": 154,
+      "smallBodyBodyCount": 157,
       "satelliteIdentityCount": 472,
       "satelliteIdentityDelivery": {
         "catalogBodies": 472,
@@ -122,15 +122,15 @@
       },
       "pagesManifest": {
         "id": "jpl-satellite-expansion-20260904-pages",
-        "sha256": "48b3e0e270119ec9d957f1e0c210338afef5889284a2c32328cd790b125dff9b",
-        "bytes": 274185216,
-        "fileCount": 660
+        "sha256": "9628a9d9811fc2edfc77b8dce11b1c1def03ebd5e2a4f10aa04667ba42ce6cf6",
+        "bytes": 274250752,
+        "fileCount": 663
       },
       "fullManifest": {
         "id": "jpl-satellite-expansion-20260904-full",
-        "sha256": "cd4b194d15d7ff3a146a5c674934c28cb3d4b9956795c704d396deaf30f7e1f5",
-        "bytes": 1179769856,
-        "fileCount": 660
+        "sha256": "c2712bcfa885a6d6a3d091c7fa862dd749aedbebdca8c313c7470055f5bd105e",
+        "bytes": 1180372992,
+        "fileCount": 663
       },
       "sourceBackedSatelliteBatches": {
         "mars": [
@@ -446,23 +446,26 @@
         "10370",
         "944",
         "60558",
-        "54598"
-        ,"5335"
-        ,"31824"
-        ,"32532"
-        ,"29981"
-        ,"52872"
-        ,"52975"
-        ,"55576"
-        ,"37117"
-        ,"83982"
-        ,"346889"
-        ,"42355"
-        ,"330836"
-        ,"463368"
-        ,"696315"
-        ,"78799"
-        ,"90568"
+        "54598",
+        "5335",
+        "31824",
+        "32532",
+        "29981",
+        "52872",
+        "52975",
+        "55576",
+        "37117",
+        "83982",
+        "346889",
+        "42355",
+        "330836",
+        "463368",
+        "696315",
+        "78799",
+        "90568",
+        "58534",
+        "65489",
+        "66652"
       ],
       "frozenHorizonsPrimaryOnly": [
         "33",
@@ -520,23 +523,26 @@
         "10370",
         "944",
         "60558",
-        "54598"
-        ,"5335"
-        ,"31824"
-        ,"32532"
-        ,"29981"
-        ,"52872"
-        ,"52975"
-        ,"55576"
-        ,"37117"
-        ,"83982"
-        ,"346889"
-        ,"42355"
-        ,"330836"
-        ,"463368"
-        ,"696315"
-        ,"78799"
-        ,"90568"
+        "54598",
+        "5335",
+        "31824",
+        "32532",
+        "29981",
+        "52872",
+        "52975",
+        "55576",
+        "37117",
+        "83982",
+        "346889",
+        "42355",
+        "330836",
+        "463368",
+        "696315",
+        "78799",
+        "90568",
+        "58534",
+        "65489",
+        "66652"
       ],
       "frozenHorizonsPrimaryOnlyBoundary": "All frozen Horizons asteroid entries are direct primary heliocentric states only; no companion or system-center state is delivered, and no binary coverage is implied."
     }

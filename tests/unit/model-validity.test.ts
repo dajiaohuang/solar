@@ -113,21 +113,21 @@ describe('JPL approximate element validity', () => {
     const spkDelivery = modelEvidence.coverage.spkDelivery
     expect(spkDelivery).toMatchObject({
       stateBoundary: 'geometric-spk-six-vector-when-kernel-and-center-chain-cover-epoch',
-      ephemerisBodyCount: 306,
+      ephemerisBodyCount: 309,
       planetarySatelliteBodyCount: 152,
-      smallBodyBodyCount: 154,
+      smallBodyBodyCount: 157,
       satelliteIdentityCount: 472,
       pagesManifest: {
         id: ephemerisManifest.id,
-        sha256: '48b3e0e270119ec9d957f1e0c210338afef5889284a2c32328cd790b125dff9b',
-        bytes: 274185216,
-        fileCount: 660,
+        sha256: '9628a9d9811fc2edfc77b8dce11b1c1def03ebd5e2a4f10aa04667ba42ce6cf6',
+        bytes: 274250752,
+        fileCount: 663,
       },
       fullManifest: {
         id: ephemerisManifestFull.id,
-        sha256: 'cd4b194d15d7ff3a146a5c674934c28cb3d4b9956795c704d396deaf30f7e1f5',
-        bytes: 1179769856,
-        fileCount: 660,
+        sha256: 'c2712bcfa885a6d6a3d091c7fa862dd749aedbebdca8c313c7470055f5bd105e',
+        bytes: 1180372992,
+        fileCount: 663,
       },
     })
     expect(ephemerisBodies.bodies).toHaveLength(spkDelivery.ephemerisBodyCount)

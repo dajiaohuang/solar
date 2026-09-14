@@ -20997,6 +20997,129 @@
         },
         "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
       }
+    },
+    {
+      "id": "horizons-tno-batch33-20260914-logos-2026-01-01-2027-01-01",
+      "path": "horizons-tno-batch33-20260914-logos-2026-01-01-2027-01-01.bsp",
+      "sha256": "626231eb9e77dda2fa5c022b6cef0a7b4c9553e5a8f33223a265ea7033b9f4e5",
+      "bytes": 21504,
+      "targets": [
+        20058534
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2758534%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2758534%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T12:13:09.762Z",
+        "bytes": 265216,
+        "sha256": "6505fbe31bf678e25efeeaac8dc3797c80e7f582b532d447807762854e34b249",
+        "responseSha256": "6c5b4fba34f640ac379abd8a719d222bc0a383a36750e4537764886d63645301",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20058534,
+        "designation": "58534",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS               58534 Logos (1997 CQ29)         2026-Sep-14 05:13:12\nRec #:   58534 (+COV) Soln.date: 2024-Jun-04_08:33:35    # obs: 115 (1997-2024)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2456698.5 ! 2014-Feb-10.00 (TDB)         Residual RMS= .24027\n   EC= .1237573151409189   QR= 39.80086368036839   TP= 2439403.1243419359\n   OM= 132.5091420103192   W=  337.5035420772433   IN= 2.895362234339929\n   A= 45.42219223977799    MA= 55.68419386030521   ADIST= 51.0435207991876\n   PER= 306.13313          N= .0032196             ANGMOM= .115043995\n   DAN= 40.13723           DDN= 50.50076           L= 110.038545\n   B= -1.1074393           MOID= 38.81750107       TP= 1966-Oct-04.6243419359\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= 1.1\n   H= 6.87                 G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#17, OCC=3\n2: source=ORB\n*******************************************************************************\n\nID= '20058534'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-tno-batch33-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "58534 Logos frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "6c5b4fba34f640ac379abd8a719d222bc0a383a36750e4537764886d63645301",
+          "binarySha256": "6505fbe31bf678e25efeeaac8dc3797c80e7f582b532d447807762854e34b249",
+          "retrievedAt": "2026-09-14T12:13:09.762Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-tno-batch33-20260914-ceto-2026-01-01-2027-01-01",
+      "path": "horizons-tno-batch33-20260914-ceto-2026-01-01-2027-01-01.bsp",
+      "sha256": "652ab8b6ac3b4d00b0843af8c52b7b192045bb4a5f8de585323388bbf585c455",
+      "bytes": 21504,
+      "targets": [
+        20065489
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2765489%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2765489%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T12:13:11.452Z",
+        "bytes": 258048,
+        "sha256": "4c7d71fd6d5fe49f13efabc2356b07fedd0ea141099d0763e4a41655ec46ca53",
+        "responseSha256": "980ffc901ca3ee13b1d887991cf0d0d8736f7c7878a14551c69b2b8c1d8be1cb",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20065489,
+        "designation": "65489",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS               65489 Ceto (2003 FX128)         2026-Sep-14 05:13:13\nRec #:   65489 (+COV) Soln.date: 2026-Jun-06_08:54:33    # obs: 277 (1987-2025)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2457051.5 ! 2015-Jan-29.00 (TDB)         Residual RMS= .15137\n   EC= .8260180443876143   QR= 17.81087858789072   TP= 2447751.4222197467\n   OM= 171.876135903132    W=  319.9134449249498   IN= 22.27096166166874\n   A= 102.3719875155994    MA= 8.8495044521003     ADIST= 186.9330964433081\n   PER= 1035.80954         N= .000951552           ANGMOM= .098101725\n   DAN= 19.92874           DDN= 88.36897           L= 133.9614781\n   B= -14.1254965          MOID= 16.85639954       TP= 1989-Aug-12.9222197467\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= 4.43\n   H= 6.47                 G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#13, OCC=1\n2: source=ORB\n*******************************************************************************\n\nID= '20065489'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-tno-batch33-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "65489 Ceto frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "980ffc901ca3ee13b1d887991cf0d0d8736f7c7878a14551c69b2b8c1d8be1cb",
+          "binarySha256": "4c7d71fd6d5fe49f13efabc2356b07fedd0ea141099d0763e4a41655ec46ca53",
+          "retrievedAt": "2026-09-14T12:13:11.452Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-tno-batch33-20260914-borasisi-2026-01-01-2027-01-01",
+      "path": "horizons-tno-batch33-20260914-borasisi-2026-01-01-2027-01-01.bsp",
+      "sha256": "30c38059062b96c36883cbca11c5c4935ce0a707d5277b7bca33709fb707494f",
+      "bytes": 22528,
+      "targets": [
+        20066652
+      ],
+      "startEt": 820497600,
+      "endEt": 852033600,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2766652%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2766652%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T12:13:12.037Z",
+        "bytes": 264192,
+        "sha256": "986ec65387f9de7c1bd1f2e1d0a5f197b1d49e4df957a4d82418a86cbd061379",
+        "responseSha256": "5b19ae0ed5e20e51b37adfdf81058b2ea3a5ff2f5f235f43d05b6112650a2574",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20066652,
+        "designation": "66652",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS             66652 Borasisi (1999 RZ253)       2026-Sep-14 05:13:14\nRec #:   66652 (+COV) Soln.date: 2026-Aug-11_13:13:12    # obs: 347 (1999-2025)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2457660.5 ! 2016-Sep-29.00 (TDB)         Residual RMS= .13994\n   EC= .08671054655560405  QR= 39.793903533423     TP= 2439905.6263562362\n   OM= 84.80306980673656   W=  194.8765097820998   IN= .5632773627190607\n   A= 43.5720607342432     MA= 60.84284443148488   ADIST= 47.35021793506341\n   PER= 287.62084          N= .003426825           ANGMOM= .11312189\n   DAN= 47.20001           DDN= 39.90062           L= 279.6788926\n   B= -.1446117            MOID= 38.77659988       TP= 1968-Feb-19.1263562362\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= n.a.\n   H= 5.85                 G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#23, OCC=2\n2: source=ORB\n*******************************************************************************\n\nID= '20066652'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-tno-batch33-20260914",
+      "selectionEvidence": {
+        "sourceSelection": "66652 Borasisi frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "5b19ae0ed5e20e51b37adfdf81058b2ea3a5ff2f5f235f43d05b6112650a2574",
+          "binarySha256": "986ec65387f9de7c1bd1f2e1d0a5f197b1d49e4df957a4d82418a86cbd061379",
+          "retrievedAt": "2026-09-14T12:13:12.037Z"
+        },
+        "windowPolicy": "2026-01-01 to 2027-01-01 TDB"
+      }
     }
   ]
 }
