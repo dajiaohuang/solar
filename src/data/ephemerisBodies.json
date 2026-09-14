@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-14T03:29:30.316Z",
+  "generatedAt": "2026-09-14T05:02:07.647Z",
   "epochJd": 2461287.5,
   "epochTimeScale": "TDB",
   "source": {
     "manifestPath": "src/data/ephemeris-manifest.json",
     "manifestId": "jpl-satellite-expansion-20260904-pages",
-    "manifestSha256": "f065388cc3ea9a216eec74c74a13c1607fd3e51fb02b29d235e10702f1c5bedf",
+    "manifestSha256": "ecfd7964aee2a526f80bb0791d75edcefb35049511bdab233a37a5e574183791",
     "gmUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
     "gmFile": "src/data/gm_de440.tpc",
     "gmSha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
@@ -9130,6 +9130,46 @@
       "sourceKernelId": "horizons-asteroids-batch14-20260909-pholus-2026-01-01-2027-01-01"
     },
     {
+      "id": "asteroid:5335",
+      "name": "5335 Damocles (1991 DA)",
+      "shortName": "5335 Damocles (1991 DA)",
+      "kind": "asteroid",
+      "naifId": 20005335,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 11.85801044400977,
+        "eccentricity": 0.8667860838730257,
+        "inclinationDeg": 61.900444338435236,
+        "ascendingNodeDeg": 314.22159110266796,
+        "argPeriapsisDeg": 191.14153403130436,
+        "meanAnomalyDeg": 316.38649549016736,
+        "meanMotionDegPerDay": 0.02413716899441856
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": 1400156624.3087225,
+          "y": -639903281.5281987,
+          "z": 1043427762.9717057
+        },
+        "velocity": {
+          "x": -6.129003934963817,
+          "y": 5.375015968289461,
+          "z": -1.2054007287932929
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%275335%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-centaur-batch27-20260914-damocles-2026-01-01-2027-01-01"
+    },
+    {
       "id": "asteroid:6178",
       "name": "1986 DA",
       "shortName": "1986 DA",
@@ -9728,6 +9768,86 @@
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2729075%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
       "sourceKernelId": "horizons-asteroids-followup-20260909-da-1950-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:31824",
+      "name": "31824 Elatus (1999 UG5)",
+      "shortName": "31824 Elatus (1999 UG5)",
+      "kind": "asteroid",
+      "naifId": 20031824,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 11.76891051313873,
+        "eccentricity": 0.3830031943024349,
+        "inclinationDeg": 5.251104875939534,
+        "ascendingNodeDeg": 87.03281216486062,
+        "argPeriapsisDeg": 281.88437579177264,
+        "meanAnomalyDeg": 250.53330089508745,
+        "meanMotionDegPerDay": 0.024411793239019146
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -1505428568.3371499,
+          "y": -1552318403.940687,
+          "z": 130788151.94580388
+        },
+        "velocity": {
+          "x": 6.148927642292602,
+          "y": -2.9996834724368844,
+          "z": -0.5786398710400025
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2731824%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-centaur-batch27-20260914-elatus-2026-01-01-2027-01-01"
+    },
+    {
+      "id": "asteroid:32532",
+      "name": "32532 Thereus (2001 PT13)",
+      "shortName": "32532 Thereus (2001 PT13)",
+      "kind": "asteroid",
+      "naifId": 20032532,
+      "parentId": "sun",
+      "source": "jpl-spk-osculating-fallback",
+      "orbit": {
+        "model": "keplerian",
+        "epochJd": 2461287.5,
+        "semiMajorAxisAU": 10.648217582188048,
+        "eccentricity": 0.19775947445399208,
+        "inclinationDeg": 20.35833006319337,
+        "ascendingNodeDeg": 205.183156335659,
+        "argPeriapsisDeg": 86.23624674105895,
+        "meanAnomalyDeg": 286.3633394782126,
+        "meanMotionDegPerDay": 0.028365386054529405
+      },
+      "parentRelativeStateKm": {
+        "position": {
+          "x": -1504171869.707074,
+          "y": -421563768.42985576,
+          "z": -95939913.12451956
+        },
+        "velocity": {
+          "x": 3.8827709229975116,
+          "y": -7.79530538326642,
+          "z": 3.2307307179295313
+        }
+      },
+      "fallback": {
+        "label": "instantaneous two-body osculating ellipse; not an operational ephemeris",
+        "gmKm3S2": 132712440041.27942,
+        "gmApproximation": "parent-only (satellite GM unavailable)",
+        "centerNaifId": 10
+      },
+      "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2732532%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceKernelId": "horizons-centaur-batch27-20260914-thereus-2026-01-01-2027-01-01"
     },
     {
       "id": "asteroid:38083",
