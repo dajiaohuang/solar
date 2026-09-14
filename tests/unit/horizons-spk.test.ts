@@ -20,6 +20,16 @@ describe('explicit Horizons SPK retrieval', () => {
     expect(url.searchParams.get('COMMAND')).toBe("'136199;'")
     expect(url.searchParams.get('EPHEM_TYPE')).toBe('SPK')
   })
+  it('accepts an explicit Horizons DES target for provisional SPK identities', async () => {
+    const provisional = { ...request, designation: 'DES=50666516', target: 50666516 }
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ ...payload, spk_file_id: String(provisional.target) })))
+    vi.stubGlobal('fetch', fetcher)
+    const result = await fetchHorizonsSpk(provisional)
+    expect(result.buffer).toEqual(bytes)
+    const url = new URL(fetcher.mock.calls[0][0])
+    expect(url.searchParams.get('COMMAND')).toBe("'DES=50666516;'")
+    expect(result.source).toMatchObject({ target: provisional.target, designation: provisional.designation })
+  })
   it.each(['2020-02-31', '2021-02-29', 'not-a-date', '2020-1-1'])('rejects invalid date %s without contacting the API', async (from) => {
     const fetcher = vi.fn(); vi.stubGlobal('fetch', fetcher)
     await expect(fetchHorizonsSpk({ ...request, from })).rejects.toThrow(/calendar/)

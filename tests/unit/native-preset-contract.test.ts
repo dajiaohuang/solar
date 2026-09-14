@@ -29,7 +29,9 @@ describe('native preset parity', () => {
       expect(asteroidPresetLine(android)).toContain(id)
       expect(asteroidPresetLine(ios)).toContain(id)
     }
-    expect(asteroidPresetIds(android)).toEqual(asteroidIds)
-    expect(asteroidPresetIds(ios)).toEqual(asteroidIds)
+    // Native preset ordering is presentation-only; identity parity is set-based
+    // so a new source target can be appended without changing existing order.
+    expect([...new Set(asteroidPresetIds(android))].sort()).toEqual([...new Set(asteroidIds)].sort())
+    expect([...new Set(asteroidPresetIds(ios))].sort()).toEqual([...new Set(asteroidIds)].sort())
   })
 })

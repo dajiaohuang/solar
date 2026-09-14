@@ -3,7 +3,7 @@ const digest = (bytes) => createHash('sha256').update(bytes).digest('hex')
 
 /** Official small-body SPK API; caller must await requests serially. */
 export async function fetchHorizonsSpk({ designation, target, from, to }) {
-  if (!/^[1-9]\d*$/.test(designation) || !Number.isSafeInteger(target)) throw new Error('Explicit numbered designation and target required')
+  if (!/^(?:[1-9]\d*|DES=[1-9]\d*)$/.test(designation) || !Number.isSafeInteger(target)) throw new Error('Explicit numbered designation or DES target required')
   for (const date of [from, to]) if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) throw new Error('Invalid TDB calendar bound')
   if (from >= to) throw new Error('Invalid SPK interval')
   const url = new URL('https://ssd.jpl.nasa.gov/api/horizons.api')
