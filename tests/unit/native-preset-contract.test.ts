@@ -5,10 +5,10 @@ const android = readFileSync(new URL('../../android/app/src/main/java/io/github/
 const ios = readFileSync(new URL('../../ios/App/App/NativeObservationDeck.swift', import.meta.url), 'utf8')
 const ephemerisBodies = JSON.parse(readFileSync(new URL('../../src/data/ephemerisBodies.json', import.meta.url), 'utf8')) as { bodies: Array<{ id: string }> }
 
-const presetIds = ['planets', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto-moons', 'spk-asteroids', 'spk-tno-batch35']
+const presetIds = ['planets', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune', 'pluto-moons', 'spk-asteroids', 'spk-tno-batch35', 'spk-tno-batch36']
 const sourceIds = ephemerisBodies.bodies.map(body => body.id)
 const asteroidIds = sourceIds.filter(id => id.startsWith('asteroid:'))
-const asteroidPresetLines = (source: string) => source.split('\n').filter(line => line.includes('spk-asteroids') || line.includes('spk-tno-batch35')).join('\n')
+const asteroidPresetLines = (source: string) => source.split('\n').filter(line => line.includes('spk-asteroids') || line.includes('spk-tno-batch35') || line.includes('spk-tno-batch36')).join('\n')
 const asteroidPresetIds = (source: string) => asteroidPresetLines(source).match(/asteroid:\d+/g) ?? []
 
 describe('native preset parity', () => {
