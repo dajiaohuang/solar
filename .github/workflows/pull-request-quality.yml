@@ -127,7 +127,18 @@ jobs:
               pin.asset !== 'asteroid-dataset.tar.gz' || !/^[a-f0-9]{64}$/.test(pin.assetSha256)) {
             throw new Error('Invalid immutable dataset pin')
           }
-          execFileSync('gh', ['release', 'download', pin.tag, '--pattern', pin.asset], { stdio: 'inherit' })
+          // A transient GitHub asset error must not require repeating completed
+          // application checks. Retry transport only; integrity stays mandatory.
+          for (let attempt = 1; ; attempt++) {
+            try {
+              execFileSync('gh', ['release', 'download', pin.tag, '--pattern', pin.asset, '--clobber'], { stdio: 'inherit' })
+              break
+            } catch (error) {
+              if (attempt === 3) throw error
+              console.warn(`Dataset transport attempt ${attempt} failed; retrying.`)
+              await new Promise(resolve => setTimeout(resolve, attempt * 2000))
+            }
+          }
           if (createHash('sha256').update(readFileSync(pin.asset)).digest('hex') !== pin.assetSha256) {
             throw new Error('Dataset archive checksum mismatch')
           }

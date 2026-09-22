@@ -17,7 +17,7 @@ test('keeps the last verified frame and its epoch when a new time request fails'
 })
 
 test.describe('shared current/history tile admission', () => {
-  test.use({ stateTileRowsPerTile: 1 })
+  test.use({ stateTileRowsPerTile: 1, stateTileDelayMs: 1_200 })
   test('keeps both real workers progressing with at most two numeric tile responses preparing combined', async ({ page, stateTileActivity }) => {
     test.setTimeout(45_000)
     const active = new Set<object>(), errors: string[] = [], workers: string[] = []
@@ -35,7 +35,7 @@ test.describe('shared current/history tile admission', () => {
     })
     page.on('requestfailed', request => { active.delete(request) })
     await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-    await page.goto('?v=4&lang=en&view=3d&bodies=earth,mars&ref=sun&jd=2461287.5&history=1&samples=32&speed=0&slow-state-tiles=1')
+    await page.goto('?v=4&lang=en&view=3d&bodies=earth,mars&ref=sun&jd=2461287.5&history=1&samples=32&speed=0')
     const canvas = page.getByTestId('trajectory-canvas-3d')
     await expect(canvas).toHaveAttribute('data-position-count', '2')
     // One history stream shares admission with current-state tile transfers.
@@ -152,27 +152,30 @@ test('full-Web fixture preflights manifest/plan and preserves unknown identities
   expect(result.noInventoryTile.metadata[0].id).toBe('sat:planet:saturn:provisional:S/2009 S1'); expect(result.noInventoryTile.statuses).toEqual(['missing'])
 })
 
-test('keeps a slow 294-body playing tile request alive, coalesces samples, and never calls the legacy endpoint', async ({ page }) => {
-  test.setTimeout(30_000)
-  const currentWorkers: string[] = [], errors: string[] = []
-  page.on('worker', worker => { if (worker.url().includes('current-states.worker')) currentWorkers.push(worker.url()) })
-  page.on('pageerror', error => errors.push(error.message))
-  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  const ids = ['saturn', ...satelliteCatalog.bodies.filter(body => body.parentId === 'saturn').map(body => body.naifId === 606 ? 'titan' : body.id)]
-  const legacyRequests: string[] = []; const planRequests: number[] = []; const tileRequests: number[] = []; let completedTiles = 0; const requestTimes: number[] = []; const responseTimes: number[] = []
-  page.on('request', request => { if (request.url().endsWith('/solar-test-api/v1/current-states')) legacyRequests.push(request.url()); if (request.url().endsWith('/solar-test-api/v1/state/plan')) planRequests.push(Date.now()); if (request.url().endsWith('/solar-test-api/v1/state/tiles')) { tileRequests.push(Date.now()); requestTimes.push(Date.now()) } })
-  page.on('response', response => { if (response.url().endsWith('/solar-test-api/v1/state/tiles') && response.ok() && response.headers()['x-solar-fixture-state-tile'] === 'complete') { completedTiles += 1; responseTimes.push(Date.now()) } })
-  const query = new URLSearchParams({ v: '4', lang: 'en', speed: '30', view: '3d', ref: 'saturn', bodies: ids.join(','), jd: '2461287.5', history: '1', samples: '24', 'slow-state-tiles': '1' })
-  await page.goto(`?${query}`)
-  const summary = page.getByTestId('ephemeris-status').locator(':scope > summary')
-  await expect.poll(() => completedTiles, { timeout: 15_000 }).toBeGreaterThan(0); await expect.poll(() => tileRequests.length - completedTiles).toBe(0); expect(legacyRequests).toHaveLength(0); expect(planRequests.length).toBeGreaterThan(0)
-  await expect(summary).not.toContainText('Loading audited full-Web current states')
-  const baselineTiles = tileRequests.length; const baselineCompleted = completedTiles; expect(responseTimes[0] - requestTimes[0]).toBeGreaterThanOrEqual(1_000)
-  await page.locator('.simulation-bar .primary-button').click()
-  await expect.poll(() => completedTiles, { timeout: 5_000 }).toBeGreaterThan(baselineCompleted)
-  await expect.poll(() => tileRequests.length, { timeout: 3_000 }).toBeLessThanOrEqual(baselineTiles + 3)
-  expect(legacyRequests).toHaveLength(0); expect(responseTimes.length).toBe(completedTiles)
-  await page.locator('.simulation-bar .primary-button').click(); await expect(summary).not.toContainText('Loading audited full-Web current states', { timeout: 10_000 })
-  expect(currentWorkers).toHaveLength(1)
-  expect(errors).toEqual([])
+test.describe('slow current-state delivery', () => {
+  test.use({ stateTileDelayMs: 1_200 })
+  test('keeps a slow 294-body playing tile request alive, coalesces samples, and never calls the legacy endpoint', async ({ page }) => {
+    test.setTimeout(30_000)
+    const currentWorkers: string[] = [], errors: string[] = []
+    page.on('worker', worker => { if (worker.url().includes('current-states.worker')) currentWorkers.push(worker.url()) })
+    page.on('pageerror', error => errors.push(error.message))
+    await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+    const ids = ['saturn', ...satelliteCatalog.bodies.filter(body => body.parentId === 'saturn').map(body => body.naifId === 606 ? 'titan' : body.id)]
+    const legacyRequests: string[] = []; const planRequests: number[] = []; const tileRequests: number[] = []; let completedTiles = 0; const requestTimes: number[] = []; const responseTimes: number[] = []
+    page.on('request', request => { if (request.url().endsWith('/solar-test-api/v1/current-states')) legacyRequests.push(request.url()); if (request.url().endsWith('/solar-test-api/v1/state/plan')) planRequests.push(Date.now()); if (request.url().endsWith('/solar-test-api/v1/state/tiles')) { tileRequests.push(Date.now()); requestTimes.push(Date.now()) } })
+    page.on('response', response => { if (response.url().endsWith('/solar-test-api/v1/state/tiles') && response.ok() && response.headers()['x-solar-fixture-state-tile'] === 'complete') { completedTiles += 1; responseTimes.push(Date.now()) } })
+    const query = new URLSearchParams({ v: '4', lang: 'en', speed: '30', view: '3d', ref: 'saturn', bodies: ids.join(','), jd: '2461287.5', history: '1', samples: '24' })
+    await page.goto(`?${query}`)
+    const summary = page.getByTestId('ephemeris-status').locator(':scope > summary')
+    await expect.poll(() => completedTiles, { timeout: 15_000 }).toBeGreaterThan(0); await expect.poll(() => tileRequests.length - completedTiles).toBe(0); expect(legacyRequests).toHaveLength(0); expect(planRequests.length).toBeGreaterThan(0)
+    await expect(summary).not.toContainText('Loading audited full-Web current states')
+    const baselineTiles = tileRequests.length; const baselineCompleted = completedTiles; expect(responseTimes[0] - requestTimes[0]).toBeGreaterThanOrEqual(1_000)
+    await page.locator('.simulation-bar .primary-button').click()
+    await expect.poll(() => completedTiles, { timeout: 5_000 }).toBeGreaterThan(baselineCompleted)
+    await expect.poll(() => tileRequests.length, { timeout: 3_000 }).toBeLessThanOrEqual(baselineTiles + 3)
+    expect(legacyRequests).toHaveLength(0); expect(responseTimes.length).toBe(completedTiles)
+    await page.locator('.simulation-bar .primary-button').click(); await expect(summary).not.toContainText('Loading audited full-Web current states', { timeout: 10_000 })
+    expect(currentWorkers).toHaveLength(1)
+    expect(errors).toEqual([])
+  })
 })

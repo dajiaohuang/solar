@@ -32,9 +32,9 @@ function unavailableIdsAt(epochJd: number) {
 
 type StateTileActivity = { active: number; peak: number; completed: number }
 
-async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: boolean, missingStateTileIds: string[], stateTileRowsPerTile: number, activity: StateTileActivity) {
+async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: boolean, missingStateTileIds: string[], stateTileRowsPerTile: number, stateTileDelayMs: number, activity: StateTileActivity) {
   if (!Number.isInteger(stateTileRowsPerTile) || stateTileRowsPerTile < 1 || stateTileRowsPerTile > 32768) throw new Error('Invalid fixture tile size')
-  let slowStateTiles = false
+  if (!Number.isFinite(stateTileDelayMs) || stateTileDelayMs < 0) throw new Error('Invalid fixture tile delay')
   const cancellations = new Map<Request, () => void>()
   page.on('requestfailed', request => cancellations.get(request)?.())
   const beginWork = (request: Request) => {
@@ -54,8 +54,8 @@ async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: b
       finish,
       cancelled: () => cancelled,
       async ready() {
-        if (!cancelled && slowStateTiles) await new Promise<void>(resolve => {
-          const timer = setTimeout(resolve, 1_200)
+        if (!cancelled && stateTileDelayMs > 0) await new Promise<void>(resolve => {
+          const timer = setTimeout(resolve, stateTileDelayMs)
           releaseDelay = () => { clearTimeout(timer); resolve() }
         })
         return !cancelled
@@ -76,7 +76,6 @@ async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: b
     let totalExact = 0, totalMissing = 0
     const work = beginWork(route.request())
     try {
-      slowStateTiles ||= page.url().includes('slow-state-tiles=1')
       if (!await work.ready()) return
       for (const [epochIndex, epochJd] of epochsJd.entries()) {
         const unavailable = new Set([...unavailableIdsAt(epochJd), ...missingStateTileIds])
@@ -130,10 +129,6 @@ async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: b
     if (!plan || !Number.isInteger(body.sequence) || body.sequence! < 0 || body.sequence! >= Math.ceil(plan.bodyIds.length / stateTileRowsPerTile)) return route.fulfill({ status: 400, json: { error: 'invalid state tile request' } })
     const sequence = body.sequence!, ordinalStart = sequence * stateTileRowsPerTile
     const tileIds = plan.bodyIds.slice(ordinalStart, ordinalStart + stateTileRowsPerTile)
-    // The app canonicalizes its URL after boot and may remove test-only query
-    // parameters. Capture the opt-in on the first request so every later
-    // response in this page keeps the intended slow-backend behavior.
-    slowStateTiles ||= page.url().includes('slow-state-tiles=1')
     const work = beginWork(request)
     try {
       if (!await work.ready()) return
@@ -153,13 +148,16 @@ async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: b
   })
 }
 
-export const test = base.extend<{ stateTilesBackend: void; stateTileActivity: StateTileActivity; mismatchedStateTileCounts: boolean; missingStateTileIds: string[]; stateTileRowsPerTile: number }>({
+export const test = base.extend<{ stateTilesBackend: void; stateTileActivity: StateTileActivity; mismatchedStateTileCounts: boolean; missingStateTileIds: string[]; stateTileRowsPerTile: number; stateTileDelayMs: number }>({
   mismatchedStateTileCounts: [false, { option: true }],
   missingStateTileIds: [[], { option: true }],
   stateTileRowsPerTile: [32768, { option: true }],
+  // Test conditions must exist before navigation; canonical URL updates must
+  // not silently disable slow-network acceptance before the first request.
+  stateTileDelayMs: [0, { option: true }],
   stateTileActivity: async ({ page }, provide) => { void page; await provide({ active: 0, peak: 0, completed: 0 }) },
-  stateTilesBackend: [async ({ page, mismatchedStateTileCounts, missingStateTileIds, stateTileRowsPerTile, stateTileActivity }, use) => {
-    await installStateTilesBackend(page, mismatchedStateTileCounts, missingStateTileIds, stateTileRowsPerTile, stateTileActivity)
+  stateTilesBackend: [async ({ page, mismatchedStateTileCounts, missingStateTileIds, stateTileRowsPerTile, stateTileDelayMs, stateTileActivity }, use) => {
+    await installStateTilesBackend(page, mismatchedStateTileCounts, missingStateTileIds, stateTileRowsPerTile, stateTileDelayMs, stateTileActivity)
     await use()
   }, { auto: true }],
 })
