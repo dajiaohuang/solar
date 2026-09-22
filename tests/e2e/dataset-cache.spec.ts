@@ -1,17 +1,29 @@
-import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { expect, test } from './fixtures'
 import type { Page } from '@playwright/test'
-import ts from 'typescript'
+import { build } from 'vite'
 
 // Exercise the actual cache module against browser IndexedDB, not a storage
 // mock. A blank same-origin document isolates persistence from app startup.
-const cacheScript = ts.transpileModule(readFileSync(resolve('src/data/cache/indexedDb.ts'), 'utf8'), {
-  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
-}).outputText
-const streamScript = ts.transpileModule(readFileSync(resolve('src/data/cache/boundedStream.ts'), 'utf8'), {
-  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
-}).outputText
+let cacheScript: string
+test.beforeAll(async () => {
+  // Bundle the actual dependency graph so new production imports cannot leave
+  // this browser contract running an incomplete hand-maintained module graph.
+  const result = await build({
+    configFile: false,
+    logLevel: 'silent',
+    build: {
+      write: false,
+      minify: false,
+      lib: { entry: resolve('src/data/cache/indexedDb.ts'), formats: ['iife'], name: 'cacheUnderTest' },
+    },
+  })
+  const output = (Array.isArray(result) ? result[0] : result)
+  if (!('output' in output)) throw new Error('Cache test bundle unexpectedly started a watcher')
+  const entry = output.output.find(chunk => chunk.type === 'chunk' && chunk.isEntry)
+  if (!entry || entry.type !== 'chunk') throw new Error('Cache test bundle has no entry')
+  cacheScript = entry.code
+})
 type CacheWindow = Window & {
   cacheUnderTest: { fetchImmutableArrayBuffer(url: string): Promise<ArrayBuffer> }
   completedCacheWrites?: number
@@ -71,8 +83,8 @@ test.beforeEach(async ({ page }) => {
     contentType: 'text/html', body: '<!doctype html><title>IndexedDB contract</title>',
   }))
   await page.goto('/solar/__cache-test.html')
-  await page.addScriptTag({ content: `(function(){const stream=(function(){const exports={};${streamScript}\nreturn exports;})();const require=(name)=>{if(name==='./boundedStream')return stream;throw new Error('Unexpected cache dependency: '+name)};const exports={};${cacheScript}\nwindow.cacheUnderTest=exports;})()` })
-  await expect.poll(() => page.evaluate(() => typeof (window as CacheWindow).cacheUnderTest?.fetchImmutableArrayBuffer)).toBe('function')
+  await page.addScriptTag({ content: cacheScript })
+  expect(await page.evaluate(() => typeof (window as CacheWindow).cacheUnderTest?.fetchImmutableArrayBuffer)).toBe('function')
   // Cache hits must work offline. A missed record fails the test immediately.
   await page.route('**/data/asteroids/**', (route) => route.fulfill({ status: 503, body: 'unexpected network access' }))
 })
