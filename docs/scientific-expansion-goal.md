@@ -380,6 +380,16 @@ buffer bytes are not measured process memory. Hardware/native evidence and
 combined compute/render/streaming measurements remain required. The current
 8k/30k product sample ceilings remain unchanged.
 
+Hardware follow-up: a second report used new-headless Chromium with D3D11 and
+verified the unmasked NVIDIA GeForce RTX 5070 Ti against the Windows device
+inventory. All five synthetic tiers completed 180 callbacks near 60 Hz. At
+1,561,171 points P95/P99 callback intervals were 16.8 ms and upload submission
+P95 was 1.0 ms, with the same buffer/pixel/error checks passing. This closes one
+standalone desktop GPU evidence gap only; combined full-product streaming,
+native hardware, other devices and total memory measurements remain open. The
+software/hardware runs also used different browser modes, precluding a causal
+GPU-only speedup claim.
+
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),
 [JPL SBDB](https://ssd-api.jpl.nasa.gov/doc/sbdb.html),

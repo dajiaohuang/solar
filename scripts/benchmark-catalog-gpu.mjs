@@ -10,6 +10,9 @@ import { resolve, dirname } from 'node:path'
 const args = process.argv.slice(2)
 const option = (name, fallback) => { const index = args.indexOf(name); return index < 0 ? fallback : args[index + 1] }
 const output = resolve(option('--output', '.cache/catalog-gpu-synthetic.json'))
+const graphicsMode = option('--graphics', 'default')
+if (!['default', 'd3d11'].includes(graphicsMode) || (graphicsMode === 'd3d11' && process.platform !== 'win32')) throw new Error('Supported graphics modes: default, or d3d11 on Windows')
+const launchOptions = graphicsMode === 'd3d11' ? { channel: 'chromium', args: ['--use-angle=d3d11'] } : {}
 const width = 1280, height = 720, sha = value => createHash('sha256').update(value).digest('hex')
 const source = readFileSync('src/lib/catalogPointRenderer.ts', 'utf8')
 // This renderer has no runtime imports. Transpile syntax only, keeping its
@@ -24,7 +27,7 @@ const server = createServer((request, response) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
 let browser
 try {
-  browser = await chromium.launch()
+  browser = await chromium.launch(launchOptions)
   const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 })
   await page.goto(`http://127.0.0.1:${server.address().port}`)
   const result = await page.evaluate(async ({ width, height }) => {
@@ -104,7 +107,10 @@ try {
     }
     return { graphics, cases, userAgent: navigator.userAgent }
   }, { width, height })
-  const report = { schemaVersion: 1, generatedAt: new Date().toISOString(),
+  if (graphicsMode === 'd3d11' && (!result.graphics.unmaskedRenderer || !/Direct3D11/i.test(result.graphics.unmaskedRenderer) || /SwiftShader|llvmpipe|software|basic render/i.test(result.graphics.unmaskedRenderer))) {
+    throw new Error(`Requested hardware D3D11 was not established: ${result.graphics.unmaskedRenderer}`)
+  }
+  const report = { schemaVersion: 1, generatedAt: new Date().toISOString(), graphicsMode, launchOptions,
     measurement: 'isolated-actual-2D-renderer-synthetic-dense-disk-not-application-streaming-or-display-FPS',
     rendererSourceSha256: sha(source), servedJavaScriptSha256: sha(javascript), browser: browser.version(),
     viewport: { width, height, pixelRatio: 1 }, requestedPositionUploadIntervalMs: 200,

@@ -277,7 +277,7 @@ memory ceiling is established.
 
 This software path loses callback cadence above 300k in this workload. It is
 evidence for adaptive draw budgets and spatial LOD, not a universal 300k limit.
-Hardware GPU, native device, high pixel-ratio, three-dimensional comparison,
+Other hardware GPUs, native devices, high pixel-ratio, three-dimensional comparison,
 real full-inventory streaming and simultaneous orbital computation remain open.
 The current production sample limits have not been raised from this harness.
 
@@ -285,4 +285,33 @@ Reproduce with a new report path (existing reports are never overwritten):
 
 ```sh
 rtk proxy node scripts/benchmark-catalog-gpu.mjs --output .cache/catalog-gpu-new.json
+```
+
+### Verified NVIDIA D3D11 rendering (2026-09-23)
+
+A separate [hardware report](benchmarks/catalog-gpu-rtx5070ti-chromium-20260923.json)
+used the same renderer and synthetic workload with the
+[Chromium channel's new headless mode](https://playwright.dev/docs/browsers#chromium-new-headless-mode)
+and `--use-angle=d3d11`. Its unmasked renderer identified the NVIDIA GeForce
+RTX 5070 Ti through Direct3D11, matching the local Windows video-controller
+inventory (driver 32.0.16.1088). Hardware mode rejects missing renderer identity
+or recognized software fallback instead of labeling that result hardware.
+
+All five tiers completed 180 measured callbacks near 60 Hz. At 1,561,171 points,
+callback P95/P99 were 16.8 ms and position-upload CPU submission P95 was 1.0 ms.
+The first upload/draw/finish took 16.3 ms, excluding program creation. Buffer
+counts, non-background pixels and WebGL error checks passed. This establishes
+one discrete-GPU result for the standalone synthetic two-dimensional renderer.
+It does not establish full-product FPS, native/device coverage, real catalog
+streaming, total memory use or simultaneous worker computation. The earlier
+software run used a different Chromium mode, so their ratio is not a controlled
+GPU-only speedup measurement.
+
+Together with the real-input worker's 281.6 ms full-count computation, these
+separate measurements motivate keeping scientific updates and render cadence
+independent while exposing the displayed epoch. They are not a combined-system
+benchmark and do not justify silently presenting stale positions as current.
+
+```sh
+rtk proxy node scripts/benchmark-catalog-gpu.mjs --graphics d3d11 --output .cache/catalog-gpu-hardware-new.json
 ```
