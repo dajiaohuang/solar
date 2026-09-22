@@ -38,6 +38,14 @@ NumPy 2.4.2 independently evaluated its normalized matrix eigenvalues; all six
 agree with the TypeScript audit within `2e-14`. This validates that calculation
 for this source, not the accuracy of the orbit or of future propagated events.
 
+A second real acquisition pins Bennu solution 118 (13,850 bytes, 2026-09-22 UTC).
+Its eight axes include estimated bulk density `RHO` and radiation-pressure
+area-to-mass ratio `AMRAT`. The model-parameter list orders those fields differently
+from the covariance labels; the importer maps by name and retains all cross
+correlations. NumPy independently checked all eight eigenvalues within `2e-14`.
+These source parameters cannot be replaced with invented A1/A2 defaults or
+discarded to force a six-dimensional propagation model.
+
 Remaining work includes model-aware propagation, singular/poorly conditioned
 cases, source validity limits and force-model metadata in consumer contracts,
 independent trajectory/covariance references, reproducible sampling, user-facing

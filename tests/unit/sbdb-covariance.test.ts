@@ -2,12 +2,28 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import fixture from '../fixtures/sbdb-eros-covariance.json'
+import bennu from '../fixtures/sbdb-bennu-covariance.json'
 import { parseSbdbCovariance } from '../../src/data/loaders/sbdbCovariance'
 
 const clone = () => structuredClone(fixture)
 const identity = (n: number) => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => String(i === j ? 1 : 0)))
 
 describe('SBDB solution-epoch covariance', () => {
+  it('retains the real Bennu density and radiation-pressure axes in covariance label order', () => {
+    const bytes = readFileSync(new URL('../fixtures/sbdb-bennu-covariance.json', import.meta.url))
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe('8cc7ff03d7fec9e15016d7ab0e78edc7a0e4d69227a322cde7190518a24ccb90')
+    const result = parseSbdbCovariance(bennu)
+    expect(result).toMatchObject({ designation: '101955', solutionId: '118', solutionEpochTdb: 2455562.5,
+      additionalParameters: ['RHO', 'AMRAT'], positiveDefinite: true })
+    // Source model_pars is ordered AMRAT, RHO; matrix labels say RHO, AMRAT.
+    expect(result.nominal.slice(6)).toEqual([1191.534909615045, 2.635943157e-6])
+    expect(result.units.slice(6)).toEqual(['kg/m^3', 'm^2/kg'])
+    const reference = [0.00037979939641585424, 0.004625266334356518, 0.06429749689020275,
+      0.29700898943633025, 0.6702390826376546, 1.021045063767839, 1.7852505347521974, 4.157153766785008]
+    result.correlationEigenvalues.forEach((value, i) => expect(Math.abs(value - reference[i])).toBeLessThan(2e-14))
+    result.matrix.forEach((row, i) => row.forEach((value, j) => expect(value).toBe(Number(bennu.orbit.covariance.data[i][j]))))
+  })
+
   it('retains the pinned response and agrees with independent NumPy correlation eigenvalues', () => {
     const bytes = readFileSync(new URL('../fixtures/sbdb-eros-covariance.json', import.meta.url))
     expect(createHash('sha256').update(bytes).digest('hex')).toBe('2557ca13a0942cdeab300a7268b9ba41fd9f2980c20b66e78cf49f36794c6590')

@@ -303,6 +303,15 @@ retrieval at 2026-09-22T19:14:29.441Z saved 14,735 bytes with SHA-256
 its audited values matched the earlier pinned fixture. Different response byte
 ordering can produce different hashes even when the audited values agree.
 
+A second live acquisition pinned Bennu solution 118 at 2026-09-22T19:20:33.434Z
+(13,850 bytes, SHA-256
+`8cc7ff03d7fec9e15016d7ab0e78edc7a0e4d69227a322cde7190518a24ccb90`).
+Its eight-dimensional matrix includes density and area-to-mass ratio in a
+different order from the source model-parameter list. The parser preserves
+matrix-axis identity and cross correlations; all eight eigenvalues agree with
+independent NumPy 2.4.2 evaluation within 2e-14. The additional source regression
+passes without changing the parser. Both raw fixtures retain retrieval metadata.
+
 This is source ingestion and mathematical validation only. Propagation,
 sampling, independent dynamical references, user-facing access and ellipsoids
 remain unfinished, as do the other outstanding ledger rows. No event probability,
