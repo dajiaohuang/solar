@@ -30,7 +30,12 @@ export default defineConfig({
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile-chromium', use: { ...devices['Pixel 7'] } },
     ...(fullBrowserMatrix ? [
-      { name: 'desktop-firefox', use: { ...devices['Desktop Firefox'], channel: undefined } },
+      { name: 'desktop-firefox', use: {
+        ...devices['Desktop Firefox'], channel: undefined,
+        // Linux CI uses Xvfb/Mesa: headless Firefox cannot create WebGL2 on
+        // that runner. Keep actual 3D assertions enabled in a virtual display.
+        headless: process.env.PLAYWRIGHT_FIREFOX_HEADED !== '1',
+      } },
       { name: 'desktop-webkit', use: { ...devices['Desktop Safari'], channel: undefined } },
     ] : []),
   ],

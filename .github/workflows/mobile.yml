@@ -53,6 +53,11 @@ jobs:
           distribution: temurin
           java-version: 21
           cache: gradle
+      - name: Set up the patched Go toolchain
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: false
       - run: npm ci
       - name: Verify independent native projects
         run: npm run native:check
@@ -60,6 +65,7 @@ jobs:
         run: |
           go vet ./cmd/... ./internal/...
           go test -race ./cmd/... ./internal/...
+          go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./cmd/... ./internal/...
       - name: Generate Go handler tiles and verify Web numeric parity
         env:
           SOLAR_STATE_TILE_FIXTURE_DIR: ${{ runner.temp }}/solar-state-tile-fixture
@@ -113,24 +119,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Activate runner-cached Go
-        run: |
-          if command -v go >/dev/null 2>&1; then
-            go version
-            exit 0
-          fi
-          # macOS ARM64 images cache Go without adding it to PATH.
-          # Reuse that existing toolchain; never skip the golden generator.
-          go_arch="$(printf '%s' "$RUNNER_ARCH" | tr '[:upper:]' '[:lower:]')"
-          for go_bin in "$RUNNER_TOOL_CACHE"/go/*/"$go_arch"/bin; do
-            if [ -x "$go_bin/go" ]; then
-              "$go_bin/go" version
-              printf '%s\n' "$go_bin" >> "$GITHUB_PATH"
-              exit 0
-            fi
-          done
-          echo "::error::Go is required but no executable runner-cached toolchain was found."
-          exit 1
+      - name: Set up the patched Go toolchain
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: false
       - name: Verify Xcode toolchain
         run: |
           xcodebuild -version

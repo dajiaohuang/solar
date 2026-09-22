@@ -86,6 +86,7 @@ describe('repository contract', () => {
       'repository_contract',
       'web_quality',
       'mobile_quality',
+      'browser_quality',
     ])
   })
 
@@ -141,26 +142,43 @@ describe('repository contract', () => {
     }
   })
 
-  it('activates the cached macOS Go toolchain before generating native fixtures', () => {
+  it('selects the patched project Go toolchain before generating native fixtures', () => {
     const mobile = parse(readFileSync(new URL('../../.github/workflows/mobile.yml', import.meta.url), 'utf8'))
-    const steps: { name?: string; run?: string }[] = mobile.jobs.ios.steps
-    const activate = steps.findIndex(step => step.name === 'Activate runner-cached Go')
-    const generate = steps.findIndex(step => step.run?.includes('go run ./cmd/state-tile-fixture'))
-    expect(activate).toBeGreaterThan(-1)
-    expect(activate).toBeLessThan(generate)
-    expect(steps[activate].run).toContain('"$RUNNER_TOOL_CACHE"/go/*/"$go_arch"/bin')
-    expect(steps[activate].run).toContain('"$GITHUB_PATH"')
-    expect(steps[activate].run).toContain('"$go_bin/go" version')
-    expect(steps[activate].run).toContain('exit 1')
+    for (const job of ['android', 'ios']) {
+      const steps: { name?: string; run?: string; with?: Record<string, unknown> }[] = mobile.jobs[job].steps
+      const activate = steps.findIndex(step => step.name === 'Set up the patched Go toolchain')
+      const generate = steps.findIndex(step => step.run?.includes('go run ./cmd/state-tile-fixture'))
+      expect(activate).toBeGreaterThan(-1)
+      expect(activate).toBeLessThan(generate)
+      expect(steps[activate].with).toMatchObject({ 'go-version-file': 'go.mod', cache: false })
+    }
   })
 
   it('passes the stable summary only for successful required work', () => {
-    expect(pullRequestQualityPasses('success', 'success', 'success')).toBe(true)
-    expect(pullRequestQualityPasses('success', 'skipped', 'skipped')).toBe(true)
-    expect(pullRequestQualityPasses('failure', 'skipped', 'skipped')).toBe(false)
-    expect(pullRequestQualityPasses('success', 'failure', 'success')).toBe(false)
-    expect(pullRequestQualityPasses('success', 'cancelled', 'success')).toBe(false)
-    expect(pullRequestQualityPasses('success', 'success', 'failure')).toBe(false)
-    expect(pullRequestQualityPasses('success', 'success', 'cancelled')).toBe(false)
+    expect(pullRequestQualityPasses('success', 'success', 'success', 'success')).toBe(true)
+    expect(pullRequestQualityPasses('success', 'skipped', 'skipped', 'skipped')).toBe(true)
+    expect(pullRequestQualityPasses('failure', 'skipped', 'skipped', 'skipped')).toBe(false)
+    expect(pullRequestQualityPasses('success', 'failure', 'success', 'success')).toBe(false)
+    expect(pullRequestQualityPasses('success', 'cancelled', 'success', 'success')).toBe(false)
+    expect(pullRequestQualityPasses('success', 'success', 'failure', 'success')).toBe(false)
+    expect(pullRequestQualityPasses('success', 'success', 'cancelled', 'success')).toBe(false)
+    for (const browserResult of ['failure', 'cancelled', undefined]) {
+      expect(pullRequestQualityPasses('success', 'success', 'success', browserResult)).toBe(false)
+    }
+  })
+
+  it('runs each browser independently and pins reusable runs to the reviewed commit', () => {
+    const root = new URL('../../', import.meta.url)
+    const browser = parse(readFileSync(new URL('.github/workflows/browser-quality.yml', root), 'utf8'))
+    const quality = parse(readFileSync(new URL('.github/workflows/pull-request-quality.yml', root), 'utf8'))
+    expect(browser.on).toHaveProperty('workflow_call')
+    expect(quality.jobs.browser_quality.uses).toBe('./.github/workflows/browser-quality.yml')
+    expect(quality.jobs.browser_quality.with.checkout_ref).toBe('${{ inputs.head_sha || github.sha }}')
+    const matrix = browser.jobs['browser-matrix']
+    expect(matrix.strategy['fail-fast']).toBe(false)
+    expect(matrix.strategy.matrix.include.map((entry: { project: string }) => entry.project)).toEqual([
+      'desktop-chromium', 'mobile-chromium', 'desktop-firefox', 'desktop-webkit',
+    ])
+    expect(matrix.steps[0].with.ref).toBe('${{ inputs.checkout_ref || github.sha }}')
   })
 })

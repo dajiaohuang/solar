@@ -33,8 +33,16 @@ Scientific changes should add a unit fixture or a reproducible scene, cite a pri
 
 Renderer changes must keep the focus layer and catalog cloud separate. Named focus bodies may carry trajectories, labels, picking, and analysis; bulk catalog objects belong in shared typed arrays and a bounded GPU point buffer. Preserve the default zero-sample-request Observation Deck, the 3D-to-2D fallback, and both mobile and desktop Playwright coverage. Treat memory and CPU APIs as conservative hints only; require measured real-device evidence before claiming that a hardware tier is guaranteed smooth.
 
+The same required summary also includes the Chromium desktop/mobile, Firefox
+and WebKit browser matrix for code changes. Browser jobs run independently so
+one failure does not cancel the other evidence. Linux Firefox runs under Xvfb
+with Mesa software graphics to exercise actual WebGL2; these checks are not
+physical-device GPU or performance measurements. Run the complete matrix locally
+with `FULL_BROWSER_MATRIX=1 npm run test:e2e` (use `cross-env` on Windows).
+
 ## Native applications
 
+Use Go 1.26.8 or a newer supported patched release, as required by `go.mod`.
 Validate the shared Go backend with `go vet ./cmd/... ./internal/...` and
 `go test ./cmd/... ./internal/...`. The Linux native quality job also runs
 `go test -race ./cmd/... ./internal/...`; local race detection requires a
@@ -42,6 +50,11 @@ supported C compiler and CGO. Cancellation tests cover request isolation,
 descriptor scans and coefficient reads without changing state arithmetic.
 Cancellation cannot interrupt an OS file read already in progress or kernel
 opening/parsing; do not claim a hard cancellation-latency bound.
+
+Code changes also run `npm audit --audit-level=moderate` and the pinned
+`go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./cmd/... ./internal/...` scanner.
+Keep the Go runtime patched; application dependency scans alone do not cover
+standard-library vulnerabilities.
 
 Android and iOS are independent platform-native projects. The current scope is the first vertical slice for exact current-state binary tiles (`manifest → plan → tile`), not a full-feature app. There is no Capacitor Web shell or native SPK packaging. Native 3D is the default, native 2D is independent, and the iOS slice accepts an HTTPS backend, TDB Julian date, preset/custom IDs and a reference ID. iOS keeps a bounded 256 MiB verified-tile cache; manifest and plan loading remains online, so complete offline plan recovery is not implemented.
 

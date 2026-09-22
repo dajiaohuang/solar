@@ -1,6 +1,12 @@
 name: Browser quality matrix
 
 on:
+  workflow_call:
+    inputs:
+      checkout_ref:
+        description: Exact commit validated by the calling quality workflow
+        required: false
+        type: string
   schedule:
     - cron: '17 4 * * 2'
   workflow_dispatch:
@@ -9,31 +15,49 @@ permissions:
   contents: read
 
 concurrency:
-  group: browser-quality
+  group: browser-quality-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   browser-matrix:
+    name: Browser quality / ${{ matrix.project }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: desktop-chromium
+            browser: chromium
+          - project: mobile-chromium
+            browser: chromium
+          - project: desktop-firefox
+            browser: firefox
+          - project: desktop-webkit
+            browser: webkit
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.sha }}
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium firefox webkit
-      - name: Run Chromium, Firefox, and WebKit accessibility and interaction checks
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Run accessibility and interaction checks with real graphics
         env:
           CI: 1
           FULL_BROWSER_MATRIX: 1
-        run: npm run test:e2e
+          PLAYWRIGHT_FIREFOX_HEADED: ${{ matrix.browser == 'firefox' && '1' || '0' }}
+          LIBGL_ALWAYS_SOFTWARE: 1
+          BROWSER_PROJECT: ${{ matrix.project }}
+        run: xvfb-run --auto-servernum npm run test:e2e -- --project="$BROWSER_PROJECT" --workers=2
       - name: Upload browser diagnostics
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: browser-quality-report
+          name: browser-quality-report-${{ matrix.project }}
           path: |
             playwright-report
             test-results

@@ -276,9 +276,20 @@ async function openElements(page: Page) {
 }
 
 async function openExplorer(page: Page) {
-  const desktop = page.locator('.primary-navigation').getByRole('button', { name: 'Observation Deck' })
-  if (await desktop.isVisible()) await desktop.click()
-  else await page.locator('.mobile-navigation').getByRole('button', { name: 'Observation Deck' }).click()
+  // Navigation may still be mounting after a route handoff. Wait for the
+  // responsive control instead of interpreting "not mounted" as "mobile".
+  await page.locator('.primary-navigation, .mobile-navigation')
+    .getByRole('button', { name: 'Observation Deck' }).filter({ visible: true }).click()
+}
+
+async function capture3dScene(page: Page) {
+  // WebGL's default drawing buffer may be discarded after compositing (e.g.
+  // WebKit scrolls to a control). Use the same synchronous draw-and-read
+  // contract as PNG export, without retaining a second GPU drawing buffer.
+  return page.getByTestId('trajectory-canvas-3d').locator('canvas').evaluate(canvas => {
+    canvas.dispatchEvent(new Event('solar-atlas-prepare-canvas-capture'))
+    return canvas.toDataURL('image/png')
+  })
 }
 
 async function installMockCatalog(page: Page, options: {
@@ -735,12 +746,13 @@ test('replays 3D zoom and labels unsupported 2D-only controls truthfully', async
   await expect(page.getByText(/Free orbit, pan, wheel, and pinch gestures stay in this session/)).toBeVisible()
 
   const ecliptic = page.getByRole('checkbox', { name: 'Ecliptic plane' })
+  const initialEcliptic = await capture3dScene(page)
   await ecliptic.uncheck()
-  const withoutEcliptic = await page.getByTestId('trajectory-canvas-3d').screenshot()
+  await expect.poll(() => capture3dScene(page)).not.toBe(initialEcliptic)
+  const withoutEcliptic = await capture3dScene(page)
   await ecliptic.check()
   await expect(page).toHaveURL(/[?&]layers=ecliptic(?:&|$)/)
-  const withEcliptic = await page.getByTestId('trajectory-canvas-3d').screenshot()
-  expect(Buffer.compare(withoutEcliptic, withEcliptic)).not.toBe(0)
+  await expect.poll(() => capture3dScene(page)).not.toBe(withoutEcliptic)
 
   const camera = page.getByTestId('trajectory-canvas-3d')
   const zoomedDistance = Number(await camera.getAttribute('data-camera-distance'))
@@ -783,7 +795,10 @@ test('exports rendered scene pixels from both WebGL views', async ({ page }) => 
     await page.goto(`./?v=4&page=explorer&view=${view}&lang=en`)
     await expect(page.locator(view === '3d' ? '[data-testid="trajectory-canvas-3d"]' : '.trajectory-canvas')).toBeVisible({ timeout: 15_000 })
     await page.locator('.advanced-controls > summary').click()
+    const downloadPromise = page.waitForEvent('download')
     await page.getByRole('button', { name: 'Export annotated PNG' }).click()
+    const download = await downloadPromise
+    expect(await download.failure()).toBeNull()
     await expect.poll(() => page.evaluate(() =>
       (window as Window & { __solarExportRenderedPixels?: number }).__solarExportRenderedPixels ?? 0,
     )).toBeGreaterThan(0)
@@ -809,7 +824,7 @@ test('loads and replays both pinned main-belt presets on desktop and mobile', as
   await expect(page).toHaveURL(/[?&]filter=MBA(?:&|$)/)
   await expect(page).toHaveURL(/[?&]plot=a-e(?:&|$)/)
   await expect(page).toHaveURL(/[?&]bodies=mars%2Cceres%2Cjupiter(?:&|$)/)
-  expect(sampleRequests.length).toBeGreaterThanOrEqual(2)
+  await expect.poll(() => sampleRequests.length).toBeGreaterThanOrEqual(2)
   expect(sampleRequests.every((url) => url.includes('catalog-sample-mobile.'))).toBe(true)
 
   const replayUrl = page.url()

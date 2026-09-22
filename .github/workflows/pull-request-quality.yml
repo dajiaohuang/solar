@@ -81,6 +81,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - run: npm audit --audit-level=moderate
       - run: npm run test:unit
       - run: npm run test:scientific
       - name: Build the production application
@@ -153,9 +154,19 @@ jobs:
     permissions:
       contents: read
 
+  browser_quality:
+    name: Cross-browser quality
+    needs: repository_contract
+    if: needs.repository_contract.outputs.full_web_quality == 'true'
+    uses: ./.github/workflows/browser-quality.yml
+    with:
+      checkout_ref: ${{ inputs.head_sha || github.sha }}
+    permissions:
+      contents: read
+
   pull_request_quality_gate:
     name: Pull request quality gate
-    needs: [repository_contract, web_quality, mobile_quality]
+    needs: [repository_contract, web_quality, mobile_quality, browser_quality]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -169,4 +180,5 @@ jobs:
           REPOSITORY_CONTRACT_RESULT: ${{ needs.repository_contract.result }}
           WEB_QUALITY_RESULT: ${{ needs.web_quality.result }}
           MOBILE_QUALITY_RESULT: ${{ needs.mobile_quality.result }}
+          BROWSER_QUALITY_RESULT: ${{ needs.browser_quality.result }}
         run: node scripts/pr-quality-contract.mjs gate
