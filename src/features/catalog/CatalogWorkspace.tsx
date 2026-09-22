@@ -27,6 +27,7 @@ import { bodyDisplayName } from '../../lib/bodyNames'
 import { catalogSampleErrorMessage } from '../../lib/catalogSampleProfile'
 import { CATALOG_ORBIT_CLASS_FILTERS } from '../../lib/catalogFilters'
 import { DatasetCard } from './DatasetCard'
+import { julianDayToDate } from '../../lib/julianDate'
 import { SourceIdentityBrowser } from './SourceIdentityBrowser'
 
 export function CatalogWorkspace() {
@@ -275,9 +276,13 @@ export function CatalogWorkspace() {
             positions={pointCloud.positions}
             viewRadiusAU={catalog.filters.semiMajorAxis[1] || 50}
             ariaLabel={t('catalogPointAria')}
+            unavailableLabel={t('catalogRenderUnavailable')}
           /> : <div className="empty-state"><span>◎</span><p>{catalog.manifest ? t('loading') : t('unavailable')}</p></div>}
           {pointCloud.progress > 0 && pointCloud.progress < 1 && <div className="compute-progress"><i style={{ width: `${pointCloud.progress * 100}%` }} /></div>}
           {pointCloud.error && <div className="error-banner">{pointCloud.error}</div>}
+          {pointCloud.readyCount > 0 && <p className="catalog-point-epoch" data-testid="catalog-point-epoch" data-utc-jd={pointCloud.computedJulianDay}>
+            {t('catalogPointModel')} <time dateTime={julianDayToDate(pointCloud.computedJulianDay).toISOString()}>{julianDayToDate(pointCloud.computedJulianDay).toISOString().replace('T', ' ')}</time>
+          </p>}
         </section>
 
         <section className="catalog-results glass-panel">

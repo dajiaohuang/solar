@@ -1,4 +1,6 @@
 export const en = {
+  catalogRenderUnavailable: 'Catalog rendering is unavailable. The table remains usable; the map will return when graphics recover.',
+  catalogPointModel: 'Approximate heliocentric two-body positions, projected on the ecliptic. Snapshot UTC:',
   sourceIdentityTitle: 'All-source directory and state inspection',
   sourceIdentityCancel: 'Cancel request',
   sourceIdentityBoundary: 'Browse 50 source records at a time, including bodies outside the built-in registry. Records may be aliases, not unique bodies. Source assertions are not exact-state proof. Inspection is explicit; the Observation Deck changes only when you choose a page, and no action claims all-source exact coverage.',

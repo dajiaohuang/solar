@@ -366,6 +366,8 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 .catalog-map .viz-canvas { top: 38px; }
 .map-caption { height: 38px; padding: 0 12px; border-bottom: 1px solid var(--line); font: 9px var(--font-mono); color: var(--muted); letter-spacing: .08em; }
 .map-caption strong { color: var(--accent); }
+.catalog-point-epoch { position: absolute; z-index: 1; bottom: 0; left: 0; right: 0; margin: 0; padding: 8px 12px; color: var(--muted); background: var(--panel-solid); font: 10px/1.5 var(--font-mono); pointer-events: none; }
+.catalog-render-status { position: absolute; z-index: 2; inset: 38px 0 0; padding: 24px; background: var(--panel-solid); }
 .catalog-results { min-width: 0; display: flex; flex-direction: column; }
 .catalog-result-note { margin: 8px 0 0; color: var(--muted); font: 9px var(--font-mono); line-height: 1.5; }
 .catalog-table { margin: 12px 0 0; padding: 0; overflow-y: auto; flex: 1; max-height: 600px; list-style: none; }

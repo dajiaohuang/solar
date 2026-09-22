@@ -454,6 +454,76 @@ test('renders an explicitly enabled reproducible catalog cloud without reloading
   expect(errors).toEqual([])
 })
 
+test('reuses catalog GPU resources across epochs and resize, and recovers actual context loss', async ({ page }, info) => {
+  type Audit = { programs: number; buffers: number; allocations: number; updates: number; deletedPrograms: number; deletedBuffers: number; draws: number; brightPixels: number; errors: number[] }
+  type AuditWindow = Window & { catalogGpuAudit: Audit; catalogGpuExtension?: WEBGL_lose_context }
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await installMockCatalog(page, { precomputed: true })
+  await page.addInitScript(() => {
+    localStorage.setItem('solar-atlas-first-run-v1', 'complete')
+    const audit: Audit = { programs: 0, buffers: 0, allocations: 0, updates: 0, deletedPrograms: 0, deletedBuffers: 0, draws: 0, brightPixels: 0, errors: [] }
+    ;(window as AuditWindow).catalogGpuAudit = audit
+    const proto = WebGLRenderingContext.prototype as unknown as Record<string, (...args: unknown[]) => unknown>
+    for (const [name, field] of [['createProgram', 'programs'], ['createBuffer', 'buffers'], ['bufferData', 'allocations'], ['bufferSubData', 'updates'], ['deleteProgram', 'deletedPrograms'], ['deleteBuffer', 'deletedBuffers'], ['drawArrays', 'draws']] as const) {
+      const original = proto[name]
+      proto[name] = function (this: WebGLRenderingContext, ...args: unknown[]) {
+        const result = Reflect.apply(original, this, args)
+        if (!(this.canvas instanceof HTMLCanvasElement) || !this.canvas.classList.contains('catalog-point-canvas')) return result
+        audit[field]++
+        if (name === 'drawArrays') {
+          const pixels = new Uint8Array(this.drawingBufferWidth * this.drawingBufferHeight * 4)
+          this.readPixels(0, 0, this.drawingBufferWidth, this.drawingBufferHeight, this.RGBA, this.UNSIGNED_BYTE, pixels)
+          let bright = 0
+          for (let offset = 0; offset < pixels.length; offset += 4) if (pixels[offset] > 40 || pixels[offset + 1] > 40 || pixels[offset + 2] > 40) bright++
+          audit.brightPixels = bright
+          const error = this.getError()
+          if (error !== this.NO_ERROR) audit.errors.push(error)
+        }
+        return result
+      }
+    }
+  })
+  await page.goto('./?v=4&page=explorer&lang=en&jd=2461287.5')
+  await page.getByRole('button', { name: '▶ Play', exact: true }).click()
+  await openCatalog(page)
+  const canvas = page.locator('canvas.catalog-point-canvas')
+  const snapshot = () => page.evaluate(() => (window as AuditWindow).catalogGpuAudit)
+  await expect(canvas).toBeVisible()
+  await expect.poll(async () => (await snapshot()).updates, { timeout: 15_000 }).toBeGreaterThan(0)
+  const beforeResize = await snapshot()
+  expect(beforeResize).toMatchObject({ programs: 1, buffers: 3, allocations: 3, deletedPrograms: 0, deletedBuffers: 0, errors: [] })
+  expect(beforeResize.brightPixels).toBeGreaterThan(0)
+  await expect(page.getByTestId('catalog-point-epoch')).toContainText('Approximate heliocentric two-body positions')
+  await expect.poll(async () => Number(await page.getByTestId('catalog-point-epoch').getAttribute('data-utc-jd'))).toBeGreaterThan(2461287.5)
+  await canvas.evaluate(element => { element.style.width = '83%' })
+  await expect.poll(async () => (await snapshot()).draws).toBeGreaterThan(beforeResize.draws)
+  expect(await snapshot()).toMatchObject({ programs: 1, buffers: 3, allocations: 3, errors: [] })
+  await canvas.evaluate(element => {
+    const gl = (element as HTMLCanvasElement).getContext('webgl')!
+    const extension = gl.getExtension('WEBGL_lose_context')
+    if (!extension) throw new Error('The test browser lacks WEBGL_lose_context')
+    ;(window as AuditWindow).catalogGpuExtension = extension
+    extension.loseContext()
+  })
+  await expect(page.locator('.catalog-render-status')).toContainText('The table remains usable')
+  await expect(page.locator('.catalog-render-status')).toBeVisible()
+  await page.locator('.catalog-map').screenshot({ path: info.outputPath('catalog-gpu-unavailable.png') })
+  await expect(page.locator('.catalog-table')).toContainText('Alpha')
+  await page.evaluate(() => (window as AuditWindow).catalogGpuExtension!.restoreContext())
+  await expect(page.locator('.catalog-render-status')).toHaveCount(0)
+  await expect.poll(async () => (await snapshot()).programs).toBe(2)
+  const restored = await snapshot()
+  expect(restored).toMatchObject({ buffers: 6, allocations: 6, errors: [] })
+  expect(restored.brightPixels).toBeGreaterThan(0)
+  await page.locator('.catalog-map').screenshot({ path: info.outputPath('catalog-gpu-restored.png') })
+  await openExplorer(page)
+  const disposed = await snapshot()
+  expect(disposed).toMatchObject({ deletedPrograms: 2, deletedBuffers: 6, errors: [] })
+  await info.attach('catalog-gpu-lifecycle.json', { body: JSON.stringify({ input: 'three-record synthetic fixture; actual browser WebGL', beforeResize, restored, disposed }, null, 2), contentType: 'application/json' })
+  expect(errors).toEqual([])
+})
+
 test('fails closed visibly when an enabled catalog cloud has an invalid sample tuple', async ({ page }) => {
   const sampleRequests: string[] = []
   page.on('request', (request) => {

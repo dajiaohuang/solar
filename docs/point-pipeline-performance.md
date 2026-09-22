@@ -162,3 +162,31 @@ Full React/GPU allocation and frame-time comparisons, large catalog selection
 stress and actual Android/iOS device tests must be
 reported separately. A passing CPU harness or browser correctness test does not
 establish those outcomes.
+
+### Two-dimensional catalog GPU reuse (2026-09-23)
+
+The catalog page previously recompiled shaders and recreated its three GPU
+buffers on every position/appearance/radius change. Resize callbacks uploaded
+positions, colors and sizes again. It now owns one renderer per mounted canvas
+and live WebGL context: changed positions use `bufferSubData` at the same count,
+while unchanged attributes and uniform-only changes require no attribute upload.
+Count changes replace the backing stores at their exact sizes; smaller selections
+do not retain a former large allocation. Context restoration deliberately creates
+new resources and reuploads the latest snapshot because former WebGL resources
+are invalid after loss. See the [WebGL update API](https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/bufferSubData)
+and [context restoration requirements](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/webglcontextrestored_event).
+
+Colors retain their Float32 RGB values. Opacity is one uniform instead of a
+duplicated fourth component, reducing appearance attributes from 20 to 16 bytes
+per point. Including the two-dimensional position buffer, that is 24 bytes per
+point instead of 28, before driver overhead. These are array byte counts, not
+measured total GPU/process memory. No frame-rate claim is made for this change.
+
+The focused production-build browser test instruments actual WebGL calls with
+three synthetic input records. Desktop/mobile Chromium, Firefox and WebKit retained one program,
+three buffers and three initial uploads across an epoch update and resize; the
+epoch update made one position upload. Actual `WEBGL_lose_context` restoration
+created exactly one replacement set, rendered non-background point pixels and
+recorded no WebGL errors. Navigation released both sets. The CI test attaches
+`catalog-gpu-lifecycle.json` with the counts and scope. Resource-failure/shrink
+unit tests are mock contract evidence. Neither proves million-body rendering.

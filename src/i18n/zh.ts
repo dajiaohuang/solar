@@ -1,6 +1,8 @@
 import type { TranslationKey } from './en'
 
 export const zh: Record<TranslationKey, string> = {
+  catalogRenderUnavailable: '星表绘图暂不可用，仍可使用表格；图形恢复后地图会重新显示。',
+  catalogPointModel: '日心二体近似位置，投影到黄道平面。快照 UTC：',
   sourceIdentityTitle: '全来源目录与状态检查',
   sourceIdentityCancel: '取消请求',
   sourceIdentityBoundary: '每页浏览 50 条来源记录，包括内置列表之外的天体。记录可能是别名，不等于独立天体；来源声明不代表精确状态证明。检查由你主动触发；只有明确选择来源页时才会改变综合观测台，也不声称全目录已有精确星历。',

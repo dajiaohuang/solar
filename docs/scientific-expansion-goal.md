@@ -155,9 +155,33 @@ measurement limitations are recorded in
 
 Twenty-one targeted numerical/worker/scheduler tests, TypeScript, changed-file
 ESLint, production build and four desktop/mobile Chromium sample/mode-switch
-checks passed. This slice still requires exact-head remote checks before main
-promotion. Production streaming, relative GPU coordinates, LOD, app frame and
+checks passed. Remote run 35764210075 passed Web, all four browser profiles and
+Android on `69bbbaa`, but iOS coverage UI timed out waiting for its success label;
+the captured hierarchy then contained that exact label. The failed run remains
+evidence, and main promotion is pending successful checks of the next combined
+head. No assertion was weakened or failed result treated as success.
+Production streaming, relative GPU coordinates, LOD, app frame and
 memory evidence and all other uncompleted rows remain part of the active goal.
+
+### Checkpoint 5: persistent catalog GPU resources (2026-09-23)
+
+The two-dimensional catalog canvas retains its WebGL program and three buffers.
+Epoch changes upload only positions; viewport/radius/opacity changes reuse all
+attributes. Exact-sized backing stores release excess capacity after selection
+shrink. RGB appearance and a shared opacity uniform reduce static attributes
+from 20 to 16 bytes per point, with the original Float32 color precision.
+Lost contexts show a bilingual unavailable state, and restoration reconstructs
+the latest frame. Failed initialization and unmount release owned resources.
+The map now states its approximate heliocentric two-body/ecliptic model and the
+actual completed UTC epoch, including during the existing five-second playback
+sampling. No interpolation or simultaneous-epoch accuracy is implied.
+
+Five resource lifecycle unit checks, TypeScript, changed-file lint and the
+production build passed. Actual desktop/mobile Chromium, Firefox and WebKit exercised changing
+epochs, resize, WEBGL_lose_context loss/restoration, non-background point pixels,
+no WebGL errors and balanced disposal. This UI test uses three synthetic records;
+it establishes lifecycle correctness, not large-inventory FPS or device capacity.
+Exact-head remote validation and main promotion remain pending.
 
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),
