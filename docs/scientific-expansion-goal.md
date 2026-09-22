@@ -360,6 +360,26 @@ staging head is not promoted; the corrected head requires a fresh quality gate.
 The same WebKit run also recorded a retried Saturn access-control error before
 that test passed; it remains separate evidence, not a weakened assertion.
 
+### Checkpoint 12: separately labeled synthetic renderer capacity (2026-09-23)
+
+Added a standalone harness using the actual two-dimensional catalog renderer
+with deterministic synthetic dense-disk inputs at 30k, 100k, 300k, 1m and the
+full catalog's point count. It records renderer identity, source hashes,
+headless animation-frame intervals, CPU submission timing, upload/allocation
+counts, explicit attribute bytes and rendered-pixel/error checks. Reports are
+write-once. The local browser used SwiftShader software rendering: callback
+cadence was about 60 Hz through 300k, 21.4 Hz at 1m and 14.0 Hz at 1,561,171.
+Full-count P95/P99 callback intervals were 83.4 ms. All tiers retained three
+attribute allocations and updated only positions; no WebGL error occurred.
+
+The report and measurement limits are linked from
+[point-pipeline-performance.md](point-pipeline-performance.md). This is not a
+physical GPU or display-FPS result, nor actual full-inventory application
+streaming. Renderer submission time is not GPU execution time, and explicit
+buffer bytes are not measured process memory. Hardware/native evidence and
+combined compute/render/streaming measurements remain required. The current
+8k/30k product sample ceilings remain unchanged.
+
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),
 [JPL SBDB](https://ssd-api.jpl.nasa.gov/doc/sbdb.html),

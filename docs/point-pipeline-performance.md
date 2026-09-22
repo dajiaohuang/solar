@@ -242,3 +242,47 @@ Eight targeted production-browser checks passed across desktop/mobile Chromium,
 Firefox and WebKit, covering the new result byte counts, 2D/3D switching,
 persistent catalog GPU resources and context restoration. The checks use
 synthetic records. The required broader capacity/rendering work remains open.
+
+### Isolated software-renderer capacity (2026-09-23)
+
+The [synthetic WebGL report](benchmarks/catalog-gpu-swiftshader-chromium-20260923.json)
+uses the actual `createCatalogPointRenderer` implementation, with syntax-only
+TypeScript transpilation. It draws a deterministic dense disk at 1280×720,
+pixel ratio 1 and 1.7-pixel point size. Two position snapshots alternate at a
+requested 200 ms interval; colors and sizes stay resident. Each tier warms up
+for eight frames, then measures up to 180 animation-frame callbacks or eight
+seconds. The renderer reported **ANGLE SwiftShader**, a software implementation,
+not a physical GPU. These are isolated headless callback timings, not displayed
+FPS or full application capacity.
+
+| Synthetic points | Callback interval P95 / P99 ms | Observed callback rate Hz | Position upload submission P95 ms |
+| ---: | ---: | ---: | ---: |
+| 30,000 | 16.8 / 16.8 | 60.0 | 0.4 |
+| 100,000 | 16.7 / 16.8 | 60.0 | 0.3 |
+| 300,000 | 16.7 / 16.8 | 60.0 | 0.4 |
+| 1,000,000 | 50.1 / 50.1 | 21.4 | 0.6 |
+| 1,561,171 | 83.4 / 83.4 | 14.0 | 1.0 |
+
+Upload timings measure CPU submission, not GPU execution. `gl.finish` is used
+only for separate first-draw and final-drain wall times; shader/program creation
+is outside the first-draw timer. Those synchronized times must not replace the
+callback intervals or be presented as GPU timer-query measurements.
+
+Every tier retained exactly three GPU buffer allocations and updated only the
+position buffer. Non-background probe pixels and no WebGL errors were verified.
+The full-count attributes occupy 37,468,104 bytes; the two synthetic position
+arrays plus appearance occupy 49,957,472 CPU bytes. Neither includes driver,
+browser, transient, source-element or React memory. No total RSS measurement or
+memory ceiling is established.
+
+This software path loses callback cadence above 300k in this workload. It is
+evidence for adaptive draw budgets and spatial LOD, not a universal 300k limit.
+Hardware GPU, native device, high pixel-ratio, three-dimensional comparison,
+real full-inventory streaming and simultaneous orbital computation remain open.
+The current production sample limits have not been raised from this harness.
+
+Reproduce with a new report path (existing reports are never overwritten):
+
+```sh
+rtk proxy node scripts/benchmark-catalog-gpu.mjs --output .cache/catalog-gpu-new.json
+```
