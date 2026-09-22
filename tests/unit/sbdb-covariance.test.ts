@@ -1,0 +1,101 @@
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { describe, expect, it } from 'vitest'
+import fixture from '../fixtures/sbdb-eros-covariance.json'
+import { parseSbdbCovariance } from '../../src/data/loaders/sbdbCovariance'
+
+const clone = () => structuredClone(fixture)
+const identity = (n: number) => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => String(i === j ? 1 : 0)))
+
+describe('SBDB solution-epoch covariance', () => {
+  it('retains the pinned response and agrees with independent NumPy correlation eigenvalues', () => {
+    const bytes = readFileSync(new URL('../fixtures/sbdb-eros-covariance.json', import.meta.url))
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe('2557ca13a0942cdeab300a7268b9ba41fd9f2980c20b66e78cf49f36794c6590')
+    const before = JSON.stringify(fixture), result = parseSbdbCovariance(fixture)
+    expect(JSON.stringify(fixture)).toBe(before)
+    expect(result).toMatchObject({ designation: '433', spkId: '20000433', solutionId: '659',
+      solutionEpochTdb: 2453311.5, standardElementEpochTdb: 2461200.5,
+      frame: 'heliocentric-IAU76/80-ecliptic-J2000', positiveDefinite: true,
+      labels: ['e', 'q', 'tp', 'node', 'peri', 'i'], units: [null, 'au', 'd', 'deg', 'deg', 'deg'],
+      planetaryEphemeris: 'DE441', smallBodyEphemeris: 'SB441-N16' })
+    expect(result.nominal[0]).toBe(0.2228078944584026)
+    expect(result.nominal[2]).toBe(Number('2453371.585994305078'))
+    // NumPy 2.4.2 eigvalsh(C / sqrt(diag(C))[:,None] / sqrt(diag(C))[None,:]).
+    const reference = [0.00003032523369826969, 0.012648358279915064, 0.520686805562325,
+      1.065462290998513, 1.6271347576840387, 2.77403746224151]
+    result.correlationEigenvalues.forEach((value, index) => expect(Math.abs(value - reference[index])).toBeLessThan(2e-14))
+    result.matrix.forEach((row, i) => row.forEach((value, j) => expect(value).toBe(Number(fixture.orbit.covariance.data[i][j]))))
+  })
+
+  it('cannot pair covariance with ordinary elements from a different epoch', () => {
+    const source = clone()
+    Reflect.deleteProperty(source.orbit.covariance, 'elements')
+    expect(() => parseSbdbCovariance(source)).toThrow(/standard-epoch elements cannot be substituted/)
+    source.orbit.epoch = source.orbit.covariance.epoch
+    expect(parseSbdbCovariance(source).nominal[0]).toBe(Number(source.orbit.elements.find(element => element.name === 'e')!.value))
+  })
+
+  it('uses labels rather than assuming a matrix axis order', () => {
+    const source = clone(), order = [5, 3, 1, 0, 2, 4]
+    source.orbit.covariance.labels = order.map(i => fixture.orbit.covariance.labels[i])
+    source.orbit.covariance.data = order.map(i => order.map(j => fixture.orbit.covariance.data[i][j]))
+    const reference = parseSbdbCovariance(fixture), result = parseSbdbCovariance(source)
+    expect(result.nominal).toEqual(order.map(i => reference.nominal[i]))
+    expect(result.units).toEqual(order.map(i => reference.units[i]))
+    result.correlationEigenvalues.forEach((value, i) => expect(Math.abs(value - reference.correlationEigenvalues[i])).toBeLessThan(2e-14))
+  })
+
+  it('retains additional estimated parameters and their correlations', () => {
+    const source = clone()
+    source.orbit.covariance.labels.push('A2')
+    source.orbit.covariance.data = identity(7)
+    source.orbit.covariance.data[1][6] = source.orbit.covariance.data[6][1] = '0.25'
+    Reflect.set(source.orbit, 'model_pars', [{ name: 'A2', kind: 'EST', value: '-2e-14', units: 'au/d^2' }])
+    const result = parseSbdbCovariance(source)
+    expect(result.additionalParameters).toEqual(['A2'])
+    expect(result.nominal[6]).toBe(-2e-14)
+    expect(result.units[6]).toBe('au/d^2')
+    expect(result.matrix[1][6]).toBe(0.25)
+    Reflect.set(source.orbit, 'model_pars', [{ name: 'A2', kind: 'SET', value: '-2e-14', units: 'au/d^2' }])
+    expect(() => parseSbdbCovariance(source)).toThrow(/not estimated or considered/)
+  })
+
+  it('rejects a globally indefinite matrix even when all pairwise correlations are allowed', () => {
+    const source = clone()
+    source.orbit.covariance.data = identity(6)
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) if (i !== j) source.orbit.covariance.data[i][j] = '-0.75'
+    expect(() => parseSbdbCovariance(source)).toThrow(/not positive semidefinite/)
+  })
+
+  it('reports rank deficiency without adding noise or modifying source values', () => {
+    const source = clone()
+    source.orbit.covariance.data = identity(6)
+    source.orbit.covariance.data[0][1] = source.orbit.covariance.data[1][0] = '1'
+    const result = parseSbdbCovariance(source)
+    expect(result.positiveDefinite).toBe(false)
+    expect(result.correlationEigenvalues[0]).toBe(0)
+    expect(result.matrix[0][1]).toBe(1)
+  })
+
+  it.each([
+    ['unknown signature', (source: typeof fixture) => { source.signature.version = '2.0' }, /signature/],
+    ['conflicting solution', (source: typeof fixture) => { source.object.orbit_id = 'wrong' }, /solution identifiers/],
+    ['conflicting epoch', (source: typeof fixture) => { source.orbit.cov_epoch = '2453312.5' }, /epochs/],
+    ['wrong equinox', (source: typeof fixture) => { source.orbit.equinox = 'B1950' }, /equinox/],
+    ['duplicate label', (source: typeof fixture) => { source.orbit.covariance.labels[1] = 'e' }, /uniquely label/],
+    ['unknown label', (source: typeof fixture) => { source.orbit.covariance.labels[0] = 'a' }, /uniquely label/],
+    ['wrong units', (source: typeof fixture) => { source.orbit.covariance.elements.find(element => element.name === 'om')!.units = 'rad' }, /units/],
+    ['missing covariance', (source: typeof fixture) => { Reflect.set(source.orbit, 'covariance', null) }, /covariance object/],
+    ['nonfinite element', (source: typeof fixture) => { source.orbit.covariance.elements[0].value = 'Infinity' }, /Nonfinite/],
+    ['negative eccentricity', (source: typeof fixture) => { source.orbit.covariance.elements.find(element => element.name === 'e')!.value = '-0.1' }, /invalid conic/],
+    ['zero variance', (source: typeof fixture) => { source.orbit.covariance.data[0][0] = '0' }, /positive marginal/],
+    ['nonnumeric covariance', (source: typeof fixture) => { Reflect.set(source.orbit.covariance.data[0], 0, null) }, /Nonfinite/],
+    ['asymmetric covariance', (source: typeof fixture) => { source.orbit.covariance.data[0][1] = '1' }, /asymmetric/],
+    ['incorrect dimensions', (source: typeof fixture) => { source.orbit.covariance.data[0].pop() }, /dimensions/],
+    ['vector format', (source: typeof fixture) => { Reflect.set(source.orbit.covariance, 'data', ['1', '0', '1']) }, /full square/],
+  ] as const)('rejects %s', (_name, mutate, expected) => {
+    const source = clone()
+    mutate(source)
+    expect(() => parseSbdbCovariance(source)).toThrow(expected)
+  })
+})

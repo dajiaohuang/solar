@@ -10,7 +10,7 @@ remain paused. Changes may go directly to main after the required checks.
 | --- | --- | --- |
 | Shared analysis ephemeris | Events, curves and mission endpoints use a frozen source contract, expose actual per-body models, offer strict SPK coverage, and export time/frame/source evidence; shared backend integration follows | In progress |
 | Ground observer | Geodetic station, SOFA-compatible celestial/terrestrial transforms, versioned IERS EOP, vacuum/apparent altitude-azimuth, rise/set and visibility windows; source expiry and uncertainty remain visible | In progress |
-| Orbit uncertainty | Pinned SBDB covariance with labels, units and solution epoch; validated covariance propagation and sampling; uncertainty ellipsoids and event distributions, independent of numerical tolerance | Pending |
+| Orbit uncertainty | Pinned SBDB covariance with labels, units and solution epoch; validated covariance propagation and sampling; uncertainty ellipsoids and event distributions, independent of numerical tolerance | In progress: source ingestion only |
 | Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | Pending |
 | Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | Pending |
 | Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | Pending |
@@ -282,6 +282,32 @@ GPU attribute bytes remain Float32. No total memory-capacity claim is made.
 Arbitrary camera-focus recentering, budgeted full-inventory streaming, LOD and
 the other pending workstreams remain open. Remote validation/main promotion
 of this precision change remain pending; deployment/publication stay paused.
+
+### Checkpoint 9: immutable SBDB covariance source ingestion (2026-09-23)
+
+Added an explicit single-request ingestion tool and a solution-epoch matrix
+parser. Original responses and acquisition receipts are content-addressed;
+existing bytes are never overwritten. The parser checks API identity, solution
+and epoch consistency, units, labels, dimensions, symmetry and positive
+semidefiniteness using a normalized correlation matrix. It retains extra
+estimated parameters and correlations, without fabricating missing covariance,
+substituting standard-epoch elements or repairing eigenvalues. Limits and
+remaining work are documented in [orbit-uncertainty.md](orbit-uncertainty.md).
+
+The pinned real Eros solution 659 has covariance and standard-element epochs
+separated by 7,889 days. Its matrix audit agrees with independent NumPy 2.4.2
+eigenvalues within 2e-14. Thirty-six targeted parser/ingestion/existing SBDB tests,
+TypeScript, changed-file lint and the repository contract passed. A real CLI
+retrieval at 2026-09-22T19:14:29.441Z saved 14,735 bytes with SHA-256
+`39728661c62669f2876f4048aa55d43d1058df97c12e1d9c3e87e4e971400ac4`;
+its audited values matched the earlier pinned fixture. Different response byte
+ordering can produce different hashes even when the audited values agree.
+
+This is source ingestion and mathematical validation only. Propagation,
+sampling, independent dynamical references, user-facing access and ellipsoids
+remain unfinished, as do the other outstanding ledger rows. No event probability,
+physical accuracy or production publication is claimed. The combined corrected
+head still requires remote validation before main promotion.
 
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),

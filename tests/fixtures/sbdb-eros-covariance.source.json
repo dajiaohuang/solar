@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "source": "NASA/JPL Small-Body Database (SBDB) API",
+  "apiVersion": "1.3",
+  "url": "https://ssd-api.jpl.nasa.gov/sbdb.api?des=433&cov=mat&full-prec=1&phys-par=1&orbit-defs=1&nv-fmt=jd",
+  "retrievedAt": "2026-09-22T18:58:53.178Z",
+  "path": "sbdb-eros-covariance.json",
+  "sha256": "2557ca13a0942cdeab300a7268b9ba41fd9f2980c20b66e78cf49f36794c6590",
+  "bytes": 14735,
+  "designation": "433",
+  "solutionId": "659",
+  "boundary": "Historical source fixture for parser and matrix validation; not a current-orbit guarantee or propagated uncertainty."
+}
