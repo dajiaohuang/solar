@@ -14,6 +14,7 @@ import (
 
 	"github.com/dajiaohuang/solar/backend/internal/catalog"
 	"github.com/dajiaohuang/solar/backend/internal/coverage"
+	"github.com/dajiaohuang/solar/backend/internal/earthorientation"
 	"github.com/dajiaohuang/solar/backend/internal/httpapi"
 	"github.com/dajiaohuang/solar/backend/internal/inventory"
 )
@@ -32,6 +33,7 @@ func run() error {
 	computeWorkers := flag.Int("compute-workers", 0, "maximum concurrent evaluation blocks; 0 follows GOMAXPROCS")
 	inventoryDir := flag.String("inventory-dir", "", "optional audited source-inventory directory containing manifest.json and JSONL shards")
 	coverageReport := flag.String("coverage-report", "", "optional pinned coverage audit report; requires matching full catalog and inventory")
+	eopManifest := flag.String("earth-orientation", "", "optional SHA-256-pinned IERS manifest for ground observations")
 	flag.Parse()
 
 	cat, inv, err := loadData(*dataDir, *inventoryDir)
@@ -43,17 +45,23 @@ func run() error {
 			log.Printf("catalog close warning: %v", closeErr)
 		}
 	}()
-	if *coverageReport == "" {
-		server := httpapi.New(cat, *maxConcurrent, inv)
-		server.ConfigureComputeWorkers(*computeWorkers)
-		return runServer(server, *listen, cat)
+	var eop *earthorientation.Table
+	if *eopManifest != "" {
+		eop, err = earthorientation.Load(*eopManifest)
+		if err != nil {
+			return fmt.Errorf("Earth orientation configuration failed: %w", err)
+		}
 	}
-	ledger, coverageErr := coverage.Load(*coverageReport, cat, inv)
-	if coverageErr != nil {
-		return fmt.Errorf("coverage report validation failed: %w", coverageErr)
+	var ledger *coverage.Ledger
+	if *coverageReport != "" {
+		ledger, err = coverage.Load(*coverageReport, cat, inv)
+		if err != nil {
+			return fmt.Errorf("coverage report validation failed: %w", err)
+		}
 	}
 	server := httpapi.NewWithCoverage(cat, *maxConcurrent, inv, ledger)
 	server.ConfigureComputeWorkers(*computeWorkers)
+	server.ConfigureEarthOrientation(eop)
 	return runServer(server, *listen, cat)
 }
 

@@ -17,6 +17,7 @@ import (
 
 	"github.com/dajiaohuang/solar/backend/internal/catalog"
 	"github.com/dajiaohuang/solar/backend/internal/coverage"
+	"github.com/dajiaohuang/solar/backend/internal/earthorientation"
 	"github.com/dajiaohuang/solar/backend/internal/inventory"
 	"github.com/dajiaohuang/solar/backend/internal/science"
 )
@@ -33,6 +34,7 @@ type Server struct {
 	tiles               *stateTileCache
 	stateTileByteBudget int64
 	coverage            *coverage.Ledger
+	earthOrientation    *earthorientation.Table
 	inFlight            atomic.Int64
 	cancelled           atomic.Uint64
 }
@@ -127,6 +129,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case "/v1/catalog/manifest":
 			s.catalogManifest(w, r)
 			return
+		case "/v1/observation/metadata":
+			s.json(w, http.StatusOK, s.observationMetadata())
+			return
 		}
 	}
 	r = r.WithContext(context.WithValue(r.Context(), computeClassKey{}, classifyRequest(r)))
@@ -167,6 +172,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.body(w, r, strings.TrimPrefix(path, "bodies/"))
 	case r.Method == "POST" && path == "trajectory":
 		s.trajectory(w, r)
+	case r.Method == "POST" && path == "observation":
+		s.observation(w, r)
 	case r.Method == "GET" && path == "catalog/manifest":
 		s.catalogManifest(w, r)
 	case r.Method == "GET" && path == "coverage":

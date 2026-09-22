@@ -266,7 +266,7 @@ function contentLength(response: Response, limit: number) {
   return value
 }
 
-async function readBounded(response: Response, expectedType: string, limit: number) {
+export async function readBounded(response: Response, expectedType: string, limit: number) {
   if (normalizedContentType(response) !== expectedType) throw new StateTileProtocolError('State tile content type is invalid')
   const expectedLength = contentLength(response, limit)
   if (!response.body) {

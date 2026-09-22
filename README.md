@@ -16,7 +16,7 @@ Application version: **v0.11.0** · [Live build identity](https://dajiaohuang.gi
 
 ![The Solar Atlas Observation Deck with its 3D scene and preset switchboard](./docs/screenshots/observation-deck.png)
 
-Solar Atlas connects a spatial workbench, orbital-element space, event analysis, mission geometry, guided stories, and data evidence in one client-side application. It is built for exploration and teaching. It is **not** an operational ephemeris, a collision-warning service, an N-body integrator, or a navigation product.
+Solar Atlas connects a spatial workbench, orbital-element space, event analysis, mission geometry, guided stories, and data evidence in one Web application with optional source-backed Go services. It is built for exploration and teaching. It is **not** an operational ephemeris, a collision-warning service, an N-body integrator, or a navigation product.
 
 ## Start in seconds
 
@@ -173,7 +173,7 @@ The SHA-256-pinned, on-demand Web/backend **source profiles** now contain 670 fi
 
 This is not universal coverage: S/2009 S1 has no corroborated SPK target or state in the source pack. Daphnis uses original historical SAT393 records. Makemake has a direct Horizons target-center SPK in batch 20, and batch 21 adds five more direct primary states; none imply a companion-system solution. Eris/Haumea primary centers and their moons end at 2030-01-02 TDB. Missing states never receive invented orbits. Native clients do not package these SPK profiles; they receive exact current states through the manifest/plan/binary-tile protocol. Manifest and plan loading remains online, while already verified tiles may be reused from the native cache. See the [profile and regeneration contract](./docs/physical-ephemerides.md) and [satellite evidence workflow](./scripts/reference/SATELLITE-SURVEY.md).
 
-SPK output is geometric, center-resolved state in its declared frame. It is not an N-body client, and the app does not add a second general-relativistic or J2 correction. Focus trajectories may use SPK states while the GPU catalog cloud remains Keplerian. Geometric, reception light-time, and stellar-aberration readouts are separate; no gravitational light deflection, atmosphere, surface-observer model, or covariance is provided.
+SPK output is geometric, center-resolved state in its declared frame. It is not an N-body client, and the app does not add a second general-relativistic or J2 correction to source trajectories. Focus trajectories may use SPK states while the GPU catalog cloud remains Keplerian. Geometric, reception light-time, and stellar-aberration readouts are separate. A configured full backend also provides [ground observations](./docs/ground-observation.md) with WGS84 stations, pinned IERS/SOFA-derived transforms, finite-distance solar light deflection and optional refraction. Those corrections affect observed directions, not the SPK trajectory. Covariance propagation and rise/set searches remain pending.
 
 ## Data and publication
 

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "sourceUrl": "https://data.iers.org/products/eop/rapid/standard/finals2000A.all",
+  "retrievedAt": "2026-09-22T16:38:44.484Z",
+  "sha256": "c672540e026d3cd4840c0858d4ce2bc4a18c3bc9751f9636c3285e11950d58a1",
+  "bytes": 3767520,
+  "path": "finals2000A-c672540e026d3cd4840c0858d4ce2bc4a18c3bc9751f9636c3285e11950d58a1.all",
+  "fixture": "iers-finals2000a-sample.txt",
+  "fixtureSha256": "d2add177524d29ccecd31bafce647237836d3c9d84e6d0b7b1195c552feded20",
+  "note": "Six original records for parser and leap-second interpolation regression; not operational EOP coverage."
+}

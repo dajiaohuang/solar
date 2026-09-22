@@ -8,6 +8,7 @@ import { kernelCoverage, EPHEMERIS_MANIFEST } from '../../engine/ephemeris/kerne
 import { useEphemerides } from '../../hooks/useEphemerides'
 import { currentOsculatingElements } from '../../engine/ephemeris/diagnostics'
 import { ObservationReadout } from './ObservationReadout'
+import { GroundObserverReadout } from './GroundObserverReadout'
 import { SatelliteIdentityReadout } from './SatelliteIdentityReadout'
 import { simulationStore } from '../../state/simulation-store'
 import { useI18n } from '../../i18n/context'
@@ -126,6 +127,7 @@ export function BodyInspector({ body, currentPositions, bodiesById }: Props) {
       {hasEphemeris && <p className="fine-print">{t('ephemerisBoundary')}</p>}
       {tab === 'orbit' && <p className="fine-print">{t(details?.isOsculating ? 'osculatingElements' : 'seedElementsOnly')}</p>}
       {tab === 'orbit' && observer && <ObservationReadout body={body} observer={observer} julianDay={clock.julianDay} />}
+      {tab === 'orbit' && <GroundObserverReadout key={body.id} body={body} julianDay={clock.julianDay} />}
       {tab === 'context' && hasEphemeris && <p className="fine-print">{t('fallbackModelDetails')}</p>}
       {tab === 'sources' && hasEphemeris && <div className="source-list">{EPHEMERIS_MANIFEST.files.filter((file) => file.targets.includes(kernelCoverage(body, clock.julianDay).target ?? -1)).map((file) => <a key={file.id} href={file.source} target="_blank" rel="noreferrer">{file.id} · SHA-256 {file.sha256}</a>)}</div>}
       <div className="inspector-tabs" role="tablist" aria-label={t('bodyProfileSections')}>{TABS.map((item, index) => <button id={`${profileId}-tab-${item}`} role="tab" aria-controls={`${profileId}-panel-${item}`} aria-selected={tab === item} tabIndex={tab === item ? 0 : -1} className={tab === item ? 'active' : ''} key={item} onClick={() => setTab(item)} onKeyDown={(event) => handleTabKey(event, index)}>{t(({ overview: 'profileOverview', orbit: 'profileOrbit', physical: 'profilePhysical', context: 'profileContext', sources: 'profileSources' } as const)[item])}</button>)}</div>

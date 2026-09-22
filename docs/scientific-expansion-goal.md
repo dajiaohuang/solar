@@ -9,7 +9,7 @@ remain paused. Changes may go directly to main after the required checks.
 | Workstream | Required observable outcome | Status |
 | --- | --- | --- |
 | Shared analysis ephemeris | Events, curves and mission endpoints use a frozen source contract, expose actual per-body models, offer strict SPK coverage, and export time/frame/source evidence; shared backend integration follows | In progress |
-| Ground observer | Geodetic station, SOFA-compatible celestial/terrestrial transforms, versioned IERS EOP, vacuum/apparent altitude-azimuth, rise/set and visibility windows; source expiry and uncertainty remain visible | Pending |
+| Ground observer | Geodetic station, SOFA-compatible celestial/terrestrial transforms, versioned IERS EOP, vacuum/apparent altitude-azimuth, rise/set and visibility windows; source expiry and uncertainty remain visible | In progress |
 | Orbit uncertainty | Pinned SBDB covariance with labels, units and solution epoch; validated covariance propagation and sampling; uncertainty ellipsoids and event distributions, independent of numerical tolerance | Pending |
 | Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | Pending |
 | Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | Pending |
@@ -59,12 +59,41 @@ and changed-file ESLint, production build, and six desktop/mobile Chromium
 checks covering strict missing-state errors, approximate exports and the existing
 Earth-to-Mars mission flow. The SPK contract test reads the checksum-pinned real
 DE440 core; it checks resolver consistency, not independent physical accuracy.
-No new capacity/FPS claim is made. Broad CI is required before main promotion.
+No new capacity/FPS claim is made. Full Web, four browser profiles, Android,
+iOS and the required gate passed on exact head `e00da30`; it was fast-forwarded
+to main. Deployment and data publication remained disabled.
 
 Still outstanding in this workstream: backend-owned analysis jobs, automatic
 bounded source preflight instead of relying on the loaded browser pool, native
 consumption, and independent event-oracle validation. The other ledger rows
 remain pending; this checkpoint does not complete the overall goal.
+
+### Checkpoint 2: source-backed ground directions (2026-09-23)
+
+Implemented immutable IERS ingestion/validation, leap-aware EOP interpolation,
+GoFA/SOFA coordinate transforms with real SPK states, bounded/cancellable ground
+observation API, bilingual inspector form and full source-bearing JSON export.
+The initial slice calculates one observation instant. Mathematical directions
+below the horizon are not labeled visible. Unavailable EOP/SPK, missing celestial
+pole corrections, predictions, future leap-second assumptions and excluded
+physics remain explicit. GoFA is pinned with its attribution/license notices.
+
+Recorded reference results and the unresolved Horizons model-chain difference
+are documented in [ground-observation.md](ground-observation.md). No empirical
+calibration or physical uncertainty claim is substituted for that investigation.
+Rise/set and visibility searches, native consumption, source-refresh UI and
+physical uncertainty propagation remain outstanding. All other pending ledger
+rows and the remaining shared-analysis work remain part of the active goal.
+
+Local checks: the Go suite passed once, followed by a targeted observation
+rerun after adding solution-consistency rejection; changed-package `go vet`,
+TypeScript, changed-file ESLint and repository checks passed. Thirty-three
+client/transport tests passed. Six desktop/mobile Chromium checks passed,
+including actual requests to the local Go service with the full pinned IERS
+snapshot and original DE440 SPK, export, cancel/error behavior and existing
+observer diagnostics. Error/cancel cases deliberately inject service responses.
+No remote deployment or new capacity claim is implied. Required remote CI must
+pass on the committed head before this slice is promoted to main.
 
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),

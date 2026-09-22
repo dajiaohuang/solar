@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "sourceUrl": "https://data.iers.org/products/eop/rapid/standard/finals2000A.all",
+  "retrievedAt": "2026-09-22T16:38:44.484Z",
+  "sha256": "c672540e026d3cd4840c0858d4ce2bc4a18c3bc9751f9636c3285e11950d58a1",
+  "bytes": 3767520,
+  "path": "finals2000A-c672540e026d3cd4840c0858d4ce2bc4a18c3bc9751f9636c3285e11950d58a1.all",
+  "fixtureFile": "observer-iers-sample.txt",
+  "fixtureSha256": "552d7189f7d77ea2cfa48fad3ba74c4edb39620160c9e1277e64b1d87e9da0ec",
+  "note": "Unmodified selected rows for tests only; not operational full coverage."
+}

@@ -28,6 +28,24 @@ explicit precision/status fields.
 
 ## Endpoints
 
+`GET /v1/observation/metadata` exposes optional pinned IERS availability,
+manifest identity, outer MJD UTC bounds and record count without computation.
+`POST /v1/observation` accepts explicit ISO `utc` (with `Z`), 1–32 distinct
+`bodyIds`, and required WGS84 `station` fields `longitudeDeg`, `latitudeDeg`,
+`heightMeters`. Its optional `atmosphere` requires all of `pressureHPa`,
+`temperatureC`, `relativeHumidity` (0–1), `wavelengthMicrometers`. Unlike state
+and trajectory endpoints, this request's time is UTC and returned directions
+are degrees in a local horizon frame; source states remain TDB/ECLIPJ2000.
+
+The endpoint uses request admission, a single bounded compute slot, a 16 KiB
+request limit, at most 16 light-time iterations per body and a 20-second job
+deadline. No IERS configuration returns `503 earth_orientation_unavailable`;
+an EOP coverage gap or missing Earth/Sun state returns an explicit `422`.
+Missing target states return per-body `missing` records with reasons and no
+invented directions. Computed directions and physical uncertainty are separate.
+Read [ground-observation.md](ground-observation.md) for setup, numerical model,
+reference results, remaining differences and limitations.
+
 `GET /v1/capabilities` returns API/catalog versions, scientific contract,
 resource limits and full/Pages-preview profiles. Its `contract.auditIdentities`
 array contains exact allowed `{source,datasetVersion,model}` tuples from the

@@ -1,0 +1,123 @@
+{
+  "apiVersion": "solar.api/v1",
+  "catalogManifestSha256": "4d600f46c1b0d35ee440d416b19489e3de145058c3aa7f5744d64c480251a1c2",
+  "catalogVersion": "jpl-satellite-expansion-20260904-full",
+  "earthOrientation": {
+    "schemaVersion": 1,
+    "sourceUrl": "https://data.iers.org/products/eop/rapid/standard/finals2000A.all",
+    "retrievedAt": "2026-09-22T16:38:44.484Z",
+    "sha256": "c672540e026d3cd4840c0858d4ce2bc4a18c3bc9751f9636c3285e11950d58a1",
+    "bytes": 3767520,
+    "path": "finals2000A-c672540e026d3cd4840c0858d4ce2bc4a18c3bc9751f9636c3285e11950d58a1.all"
+  },
+  "result": {
+    "model": "earth-station-iau2006-2000a-spk-v1",
+    "request": {
+      "utc": "2026-09-23T04:00:00Z",
+      "station": {
+        "longitudeDeg": 103.851959,
+        "latitudeDeg": 1.29027,
+        "heightMeters": 0
+      },
+      "bodyIds": [
+        "sun"
+      ]
+    },
+    "jdTdb": 2461306.667467389,
+    "jdTt": 2461306.6674674074,
+    "jdUt1": 2461306.666666518,
+    "tdbMinusTtSeconds": -0.0015951313026174292,
+    "earthOrientation": {
+      "mjdUtc": 61306.16666666651,
+      "xpArcsec": 0.18342033333350719,
+      "ypArcsec": 0.32736466666674147,
+      "ut1MinusUtcSeconds": -0.012841133333154175,
+      "xpErrorArcsec": 0.00182,
+      "ypErrorArcsec": 0.001627,
+      "ut1ErrorSeconds": 0.0007012,
+      "dXMas": 0.12016666666651145,
+      "dYMas": 0.22333333333395422,
+      "dXErrorMas": 0.128,
+      "dYErrorMas": 0.16,
+      "poleFlag": "P",
+      "ut1Flag": "P",
+      "cpoFlag": "P",
+      "bracketMjdUtc": [
+        61306,
+        61307
+      ],
+      "predicted": true,
+      "celestialPoleCorrectionAvailable": true,
+      "sourceSha256": "c672540e026d3cd4840c0858d4ce2bc4a18c3bc9751f9636c3285e11950d58a1",
+      "retrievedAt": "2026-09-22T16:38:44.484Z"
+    },
+    "bodies": [
+      {
+        "bodyId": "sun",
+        "status": "available",
+        "geometric": {
+          "azimuthDeg": 95.32104858444669,
+          "altitudeDeg": 75.66062181796714
+        },
+        "apparentAirless": {
+          "azimuthDeg": 95.31395316006189,
+          "altitudeDeg": 75.66592935550534
+        },
+        "lightTimeRangeKm": 150119880.1167802,
+        "lightTimeSeconds": 500.74601982408853,
+        "emissionJdTdb": 2461306.6616717177,
+        "lightTimeIterations": 1,
+        "warnings": []
+      }
+    ],
+    "sources": [
+      {
+        "bodyId": "naif:10",
+        "source": "de440s-2000-01-01-2051-01-01",
+        "kernelSha256": "8724d2d1bac115a75ad1f984c5b474ca778c96ee8be2df83e624cef61c001069",
+        "startJdTdb": 2461306.667467389,
+        "endJdTdb": 2461306.667467389
+      },
+      {
+        "bodyId": "naif:399",
+        "source": "de440s-2000-01-01-2051-01-01",
+        "kernelSha256": "8724d2d1bac115a75ad1f984c5b474ca778c96ee8be2df83e624cef61c001069",
+        "startJdTdb": 2461306.667467389,
+        "endJdTdb": 2461306.667467389
+      },
+      {
+        "bodyId": "sun",
+        "source": "de440s-2000-01-01-2051-01-01",
+        "kernelSha256": "8724d2d1bac115a75ad1f984c5b474ca778c96ee8be2df83e624cef61c001069",
+        "startJdTdb": 2461306.6616717177,
+        "endJdTdb": 2461306.667467389
+      }
+    ],
+    "warnings": [
+      "no-leap-seconds-after-2017-assumed",
+      "iers-predicted-earth-orientation"
+    ],
+    "contract": {
+      "angleUnit": "deg",
+      "astrometryLibrary": "github.com/hebl/gofa@v1.19.1",
+      "azimuthConvention": "north-zero-east-positive",
+      "excludedEffects": [
+        "planetary-light-deflection",
+        "Shapiro-light-time",
+        "station-tectonic-motion",
+        "solid-earth-and-ocean-tides",
+        "terrain-horizon",
+        "finite-target-limb"
+      ],
+      "leapSecondTableLastEffectiveUTC": "2017-01-01",
+      "lightDeflection": "finite-distance-solar-monopole",
+      "lightTimeToleranceSeconds": 0.00005,
+      "physicalUncertainty": "not-propagated",
+      "precessionNutation": "IAU-2006/2000A",
+      "sourceFrame": "ECLIPJ2000",
+      "sourceOrigin": "solar-system-barycenter",
+      "stationDatum": "WGS84-ellipsoidal-height",
+      "timeConversion": "SOFA-UTC-TAI-TT-UT1; Fairhead-Bretagnon-topocentric-TDB"
+    }
+  }
+}

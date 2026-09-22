@@ -23,7 +23,7 @@ test('loads moon-center SPK and distinct osculating/observation diagnostics', as
   await expect(page.getByTestId('body-model')).toContainText('JPL')
   await page.getByRole('tab', { name: 'Orbit', exact: true }).click()
   await expect(page.locator('.inspector-panel')).toContainText('osculating')
-  const observation = page.locator('.inspector-panel details')
+  const observation = page.locator('.inspector-panel details').filter({ has: page.locator('select') })
   await observation.locator('summary').click()
   await expect(observation).toContainText('Light-time correction:')
   await observation.getByRole('combobox').selectOption('geometric')

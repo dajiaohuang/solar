@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "software": {
+    "pyerfa": "2.0.1.5",
+    "erfa": "2.0.1",
+    "numpy": "2.4.2",
+    "jplephem": "2.24"
+  },
+  "spkSha256": "8724d2d1bac115a75ad1f984c5b474ca778c96ee8be2df83e624cef61c001069",
+  "iersFixtureSha256": "552d7189f7d77ea2cfa48fad3ba74c4edb39620160c9e1277e64b1d87e9da0ec",
+  "boundary": "Numerical cross-implementation reference, not a physical uncertainty estimate. Direct Horizons angular residuals are retained separately.",
+  "cases": [
+    {
+      "name": "moon-singapore",
+      "utc": "2026-09-23T00:00:00Z",
+      "bodyId": "naif:301",
+      "station": {
+        "longitudeDeg": 103.851959,
+        "latitudeDeg": 1.29027,
+        "heightMeters": 0.0
+      },
+      "azimuthDeg": 241.58655627520744,
+      "altitudeDeg": -54.50895289609252,
+      "lightTimeRangeKm": 400690.02432709624,
+      "horizonsAngularResidualArcsec": 0.36117206710299316,
+      "horizonsResponseSha256": "57d9b786431bc410c43641d4c90c93785a1547c01aaa1bce73063ee4b02d6822"
+    },
+    {
+      "name": "moon-singapore",
+      "utc": "2026-09-23T00:01:00Z",
+      "bodyId": "naif:301",
+      "station": {
+        "longitudeDeg": 103.851959,
+        "latitudeDeg": 1.29027,
+        "heightMeters": 0.0
+      },
+      "azimuthDeg": 241.43766723390036,
+      "altitudeDeg": -54.720391237851324,
+      "lightTimeRangeKm": 400701.03008082195,
+      "horizonsAngularResidualArcsec": 0.3615897620543851,
+      "horizonsResponseSha256": "57d9b786431bc410c43641d4c90c93785a1547c01aaa1bce73063ee4b02d6822"
+    },
+    {
+      "name": "venus-greenwich",
+      "utc": "2026-09-23T12:00:00Z",
+      "bodyId": "naif:299",
+      "station": {
+        "longitudeDeg": 0.0,
+        "latitudeDeg": 51.477811,
+        "heightMeters": 46.0
+      },
+      "azimuthDeg": 151.0676833306238,
+      "altitudeDeg": 14.174921449647664,
+      "lightTimeRangeKm": 58758232.709477484,
+      "horizonsAngularResidualArcsec": 0.5042610250889463,
+      "horizonsResponseSha256": "92c55d1df3a7b81c8e2e7e69926f2b46ce995b666b132e12fe70793d10152ca6"
+    },
+    {
+      "name": "venus-greenwich",
+      "utc": "2026-09-23T12:01:00Z",
+      "bodyId": "naif:299",
+      "station": {
+        "longitudeDeg": 0.0,
+        "latitudeDeg": 51.477811,
+        "heightMeters": 46.0
+      },
+      "azimuthDeg": 151.29833381215053,
+      "altitudeDeg": 14.249969358832727,
+      "lightTimeRangeKm": 58757556.3376181,
+      "horizonsAngularResidualArcsec": 0.5042510911374135,
+      "horizonsResponseSha256": "92c55d1df3a7b81c8e2e7e69926f2b46ce995b666b132e12fe70793d10152ca6"
+    },
+    {
+      "name": "sun-singapore",
+      "utc": "2026-09-23T04:00:00Z",
+      "bodyId": "naif:10",
+      "station": {
+        "longitudeDeg": 103.851959,
+        "latitudeDeg": 1.29027,
+        "heightMeters": 0.0
+      },
+      "azimuthDeg": 95.31395316006194,
+      "altitudeDeg": 75.66592935550528,
+      "lightTimeRangeKm": 150119880.11678064,
+      "horizonsAngularResidualArcsec": 0.37563065925499806,
+      "horizonsResponseSha256": "b20dc4ff7e17e52ecc56085e111a4abd51a463c95cae1bf6362d2da094c22d7b"
+    },
+    {
+      "name": "sun-singapore",
+      "utc": "2026-09-23T04:01:00Z",
+      "bodyId": "naif:10",
+      "station": {
+        "longitudeDeg": 103.851959,
+        "latitudeDeg": 1.29027,
+        "heightMeters": 0.0
+      },
+      "azimuthDeg": 95.41296857691775,
+      "altitudeDeg": 75.91481684520036,
+      "lightTimeRangeKm": 150119843.9270139,
+      "horizonsAngularResidualArcsec": 0.37559394493815945,
+      "horizonsResponseSha256": "b20dc4ff7e17e52ecc56085e111a4abd51a463c95cae1bf6362d2da094c22d7b"
+    }
+  ]
+}
