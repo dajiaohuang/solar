@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CatalogPointCanvas } from '../../components/CatalogPointCanvas'
+import { CatalogStreamCanvas } from '../../components/CatalogStreamCanvas'
+import { planCatalogStream } from '../../lib/catalogStreaming'
+import { requireCatalogAccess } from '../../lib/productAccess'
 import { simulationClock } from '../../engine/clock/SimulationClock'
 import { useSimulationClock } from '../../engine/clock/useSimulationClock'
 import { useI18n } from '../../i18n/context'
@@ -23,13 +26,15 @@ import { catalogActions, catalogDisplayRecords, catalogStore, filterCatalogRecor
 import { selectionActions, selectionStore } from '../../state/selection-store'
 import { uiActions } from '../../state/ui-store'
 import { simulationStore } from '../../state/simulation-store'
-import type { AsteroidSectionCursor, MagnitudeStatus } from '../../types'
+import type { AsteroidRecord, AsteroidSectionCursor, MagnitudeStatus } from '../../types'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { catalogSampleErrorMessage } from '../../lib/catalogSampleProfile'
 import { CATALOG_ORBIT_CLASS_FILTERS } from '../../lib/catalogFilters'
 import { DatasetCard } from './DatasetCard'
 import { julianDayToDate } from '../../lib/julianDate'
 import { SourceIdentityBrowser } from './SourceIdentityBrowser'
+
+const EMPTY_RECORDS: AsteroidRecord[] = []
 
 export function CatalogWorkspace() {
   useCatalogSample()
@@ -48,6 +53,18 @@ export function CatalogWorkspace() {
   const currentScanKey = useRef(catalog.activeResultScanKey ?? '')
   const [playingEpoch, setPlayingEpoch] = useState(clock.julianDay)
   const catalogEpoch = clock.isPlaying ? playingEpoch : clock.julianDay
+  const [streamBudget] = useState(() => {
+    const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory
+    return (memory !== undefined && memory <= 4 ? 64 : window.innerWidth <= 800 ? 128 : 256) * 1024 * 1024
+  })
+  const [streamLimit, setStreamLimit] = useState(() => window.innerWidth <= 800 ? 30_000 : 100_000)
+  const [streamRadius, setStreamRadius] = useState(8)
+  const [streamRequest, setStreamRequest] = useState<{ key: string; epoch: number; id: number } | null>(null)
+  const streamKey = JSON.stringify([catalog.manifest?.releasePath, catalog.manifest?.version, catalog.filters, streamLimit])
+  const streaming = streamRequest?.key === streamKey
+  let streamCapacity = 0
+  try { if (catalog.manifest) streamCapacity = planCatalogStream(catalog.manifest, streamLimit, streamBudget).capacity }
+  catch { /* Older dataset formats retain their existing sample renderer. */ }
 
   useEffect(() => {
     if (!clock.isPlaying) return
@@ -161,7 +178,7 @@ export function CatalogWorkspace() {
   const pointRecords = useMemo(() => exactResultIsPartial && !catalog.filters.query.trim()
     ? filterCatalogRecords(catalog.baseSampleRecords, catalog.filters)
     : filtered, [catalog.baseSampleRecords, catalog.filters, exactResultIsPartial, filtered])
-  const pointCloud = useCatalogPointWorker(pointRecords, catalogEpoch, '2d')
+  const pointCloud = useCatalogPointWorker(streaming ? EMPTY_RECORDS : pointRecords, catalogEpoch, '2d')
 
   async function scanEntireCatalog() {
     if (!catalog.manifest) return null
@@ -301,6 +318,22 @@ export function CatalogWorkspace() {
             <option value="unknown">{t('magnitudeUnknown')}</option>
           </select></label>
           <RangeFields label="q (AU)" minimumLabel={t('minimum')} maximumLabel={t('maximum')} value={catalog.filters.perihelion} onChange={(value) => catalogActions.patchFilters({ perihelion: value })} step="0.1" />
+          {catalog.manifest?.compactIndex && <div className="catalog-stream-controls">
+            <label className="field"><span>{t('catalogStreamLimit')}</span><select value={streamLimit} onChange={event => setStreamLimit(Number(event.target.value))}>
+              {[...new Set([30_000, 100_000, 300_000, 1_000_000, catalog.manifest.totalCount])].sort((a, b) => a - b).map(limit => <option key={limit} value={limit}>{limit === catalog.manifest!.totalCount ? t('catalogStreamAll') : limit.toLocaleString()}</option>)}
+            </select></label>
+            <label className="field"><span>{t('catalogStreamRadius')}</span><input type="number" min="0.001" max="1000000" step="1" value={streamRadius} onChange={event => {
+              const radius = Number(event.target.value)
+              if (Number.isFinite(radius) && radius > 0 && radius <= 1_000_000) setStreamRadius(radius)
+            }} /></label>
+            <p className="catalog-result-note">{t('catalogStreamExplanation')}</p>
+            <button className="secondary-button full-width" disabled={!streamCapacity || nameSearchTooShort} onClick={() => {
+              requireCatalogAccess('scan')
+              setStreamRequest({ key: streamKey, epoch: simulationClock.getJulianDay(), id: (streamRequest?.id ?? 0) + 1 })
+            }}>{streaming ? t('catalogStreamRefresh') : t('catalogStreamStart')} · {streamCapacity.toLocaleString()}</button>
+            {!streamCapacity && <p className="catalog-result-note">{t('catalogStreamNoBudget')}</p>}
+            {streaming && <button className="text-button full-width" onClick={() => setStreamRequest(null)}>{t('catalogStreamSample')}</button>}
+          </div>}
           <button className="primary-button full-width" disabled={!filtered.length} onClick={() => selectionActions.addCatalogBodies(filtered.slice(0, focusBodyLimit).map(asteroidRecordToBody), true)}>{t('addSelection')} · {Math.min(filtered.length, focusBodyLimit)}</button>
           <button className="secondary-button full-width" disabled={!catalog.manifest || isLoading || nameSearchTooShort} onClick={() => {
             if (catalog.activeResultScanKey === scanKey) selectAllFiltered()
@@ -310,8 +343,8 @@ export function CatalogWorkspace() {
         </aside>
 
         <section className="catalog-map glass-panel">
-          <div className="map-caption"><span>{t('catalogModeCaption')}</span><strong>{Math.floor(pointCloud.positions.length / 2).toLocaleString()} / {resultTotal.toLocaleString()}</strong></div>
-          {pointCloud.positions.length === pointRecords.length * 2 && pointRecords.length ? <CatalogPointCanvas
+          <div className="map-caption"><span>{t('catalogModeCaption')}</span><strong>{streaming ? t('catalogStreamSnapshot') : `${Math.floor(pointCloud.positions.length / 2).toLocaleString()} / ${resultTotal.toLocaleString()}`}</strong></div>
+          {streaming && catalog.manifest ? <CatalogStreamCanvas key={streamRequest.id} manifest={catalog.manifest} filters={catalog.filters} julianDay={streamRequest.epoch} requestedRows={streamLimit} budgetBytes={streamBudget} viewRadiusAU={streamRadius} /> : pointCloud.positions.length === pointRecords.length * 2 && pointRecords.length ? <CatalogPointCanvas
             records={pointRecords}
             positions={pointCloud.positions}
             viewRadiusAU={catalog.filters.semiMajorAxis[1] || 50}

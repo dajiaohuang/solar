@@ -2,6 +2,7 @@ import { expect, test } from './fixtures'
 import type { Page } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
+import { createHash } from 'node:crypto'
 import datasetPin from '../../.github/asteroid-dataset.json' with { type: 'json' }
 import satelliteCatalog from '../../src/data/satelliteCatalog.json' with { type: 'json' }
 import { coverageSummaryFixture } from '../fixtures/coverageReport'
@@ -367,10 +368,17 @@ async function installMockCatalog(page: Page | null, options: {
     compact.writeUInt32LE(Math.round(numeric[index * 8 + 3] * 1_000_000), offset + 12)
     compact.writeInt16LE(entry.absoluteMagnitude === undefined ? 0x7fff : Math.round(entry.absoluteMagnitude * 100), offset + 16)
     compact.writeUInt8(['MBA', 'APO', 'TNO'].indexOf(entry.orbitClassCode), offset + 18)
+    compact.writeUInt8((entry.isNeo ? 1 : 0) | (entry.isPha ? 2 : 0) | (entry.absoluteMagnitude === undefined ? 0 : 4), offset + 19)
     compact.writeUInt16LE(0, offset + 20)
     compact.writeUInt16LE(index, offset + 22)
   })
   await register(`**/data/asteroids/releases/${manifest.version}/catalog-index.bin`, { body: compact, contentType: 'application/octet-stream' })
+  await register(`**/data/asteroids/releases/${manifest.version}/checksums.json`, { json: {
+    schemaVersion: 1, algorithm: 'sha256', files: {
+      'catalog-index.bin': createHash('sha256').update(compact).digest('hex'),
+      'binary/chunk-0000.bin': createHash('sha256').update(Buffer.from(numeric.buffer)).digest('hex'),
+    },
+  } })
   for (const size of ['desktop', 'mobile'] as const) {
     const profileEntries = sampleIndexes[size].map((index) => entries[index])
     const profileNumeric = new Float64Array(profileEntries.length * 8)
@@ -530,6 +538,88 @@ test('reuses catalog GPU resources across epochs and resize, and recovers actual
   expect(disposed).toMatchObject({ deletedPrograms: 2, deletedBuffers: 6, errors: [] })
   await info.attach('catalog-gpu-lifecycle.json', { body: JSON.stringify({ input: 'three-record synthetic fixture; actual browser WebGL', beforeResize, restored, disposed }, null, 2), contentType: 'application/json' })
   expect(errors).toEqual([])
+})
+
+test('streams an expanded source snapshot beyond the sample and restores its actual GPU context', async ({ page }, info) => {
+  const errors: string[] = [], requests: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('request', request => { if (request.url().includes('/data/asteroids/')) requests.push(request.url()) })
+  await installMockCatalog(page, { precomputed: true, sampleCount: 1 })
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&page=catalog&lang=en&jd=2461287.5')
+  await expect(page.locator('canvas.catalog-point-canvas')).toHaveAttribute('aria-label', /: 1$/)
+  const before = requests.length
+  await page.getByRole('button', { name: /Load expanded snapshot/ }).click()
+  const stream = page.getByTestId('catalog-stream-canvas')
+  await expect(stream).toHaveAttribute('data-phase', 'complete')
+  await expect(stream).toHaveAttribute('data-drawn-rows', '3')
+  await expect(stream).toHaveAttribute('data-source-rows', '3')
+  await expect(page.getByTestId('catalog-point-epoch')).toHaveAttribute('data-utc-jd', '2461287.5')
+  expect(requests.slice(before).some(url => /\/meta\/|catalog-sample-/.test(url))).toBe(false)
+  expect(requests.slice(before).filter(url => url.endsWith('/binary/chunk-0000.bin'))).toHaveLength(1)
+  const afterLoad = requests.length
+  await page.getByRole('spinbutton', { name: 'Map radius (AU)', exact: true }).fill('6')
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+  expect(requests.length).toBe(afterLoad)
+  const readPixels = () => stream.evaluate(element => {
+    const gl = (element as HTMLCanvasElement).getContext('webgl')!
+    // ResizeObserver draws after this width change; capture uses a later task.
+    return { error: gl.getError(), lost: gl.isContextLost() }
+  })
+  expect(await readPixels()).toEqual({ error: 0, lost: false })
+  await stream.evaluate(element => {
+    const extension = (element as HTMLCanvasElement).getContext('webgl')!.getExtension('WEBGL_lose_context')!
+    ;(window as Window & { streamContext: WEBGL_lose_context }).streamContext = extension
+    extension.loseContext()
+  })
+  await expect(page.locator('.catalog-render-status')).toBeVisible()
+  await page.evaluate(() => (window as Window & { streamContext: WEBGL_lose_context }).streamContext.restoreContext())
+  await expect(page.locator('.catalog-render-status')).toHaveCount(0)
+  await expect(stream).toHaveAttribute('data-drawn-rows', '3')
+  expect(await readPixels()).toEqual({ error: 0, lost: false })
+  await page.locator('.catalog-map').screenshot({ path: info.outputPath('expanded-source-snapshot.png') })
+  // Changing a scientific filter invalidates the entire old snapshot immediately.
+  await page.getByRole('combobox', { name: 'H status', exact: true }).selectOption('unknown')
+  await expect(stream).toHaveCount(0)
+  await page.getByRole('button', { name: /Load expanded snapshot/ }).click()
+  await expect(stream).toHaveAttribute('data-phase', 'complete')
+  await expect(stream).toHaveAttribute('data-drawn-rows', '1')
+  await page.getByRole('button', { name: 'Return to sample map' }).click()
+  await expect(stream).toHaveCount(0)
+  expect(errors).toEqual([])
+})
+
+test('stops expanded source loading without installing a late tile and permits refresh', async ({ page }) => {
+  await installMockCatalog(page, { precomputed: true, sampleCount: 1 })
+  let release!: () => void, arrived!: () => void
+  const held = new Promise<void>(resolve => { release = resolve }), started = new Promise<void>(resolve => { arrived = resolve })
+  await page.route('**/checksums.json', async route => { arrived(); await held; await route.fallback() })
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&page=catalog&lang=en&jd=2461287.5')
+  await page.getByRole('button', { name: /Load expanded snapshot/ }).click()
+  await started
+  await page.getByRole('button', { name: 'Stop expanded loading' }).click()
+  const stream = page.getByTestId('catalog-stream-canvas')
+  await expect(stream).toHaveAttribute('data-phase', 'cancelled')
+  release()
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+  await expect(stream).toHaveAttribute('data-drawn-rows', '0')
+  await page.getByRole('button', { name: /Refresh expanded snapshot/ }).click()
+  await expect(stream).toHaveAttribute('data-phase', 'complete')
+  await expect(stream).toHaveAttribute('data-drawn-rows', '3')
+})
+
+test('rejects a corrupt expanded source before drawing and retains the independent sample map', async ({ page }) => {
+  await installMockCatalog(page, { precomputed: true, sampleCount: 1 })
+  await page.route('**/checksums.json', route => route.fulfill({ json: { schemaVersion: 1, algorithm: 'sha256', files: { 'catalog-index.bin': '0'.repeat(64) } } }))
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&page=catalog&lang=en&jd=2461287.5')
+  await page.getByRole('button', { name: /Load expanded snapshot/ }).click()
+  await expect(page.getByTestId('catalog-stream-canvas')).toHaveAttribute('data-phase', 'error')
+  await expect(page.getByTestId('catalog-stream-canvas')).toHaveAttribute('data-drawn-rows', '0')
+  await expect(page.getByRole('alert')).toContainText('SHA-256 mismatch')
+  await page.getByRole('button', { name: 'Return to sample map' }).click()
+  await expect(page.locator('canvas.catalog-point-canvas')).toHaveAttribute('aria-label', /: 1$/)
 })
 
 test('fails closed visibly when an enabled catalog cloud has an invalid sample tuple', async ({ page }) => {

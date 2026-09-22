@@ -20,6 +20,19 @@ function context() {
 const frame = (count = 3): CatalogPointFrame => ({ positions: new Float32Array(count * 2), colors: new Float32Array(count * 3), sizes: new Float32Array(count), radius: 10, opacity: 0.82 })
 
 describe('persistent catalog GPU ownership', () => {
+  it('allocates streaming capacity once, uploads only the new ranges, and rejects overflow without a partial upload', () => {
+    const { gl, calls } = context(), renderer = createCatalogPointRenderer(gl, 5)
+    expect(calls.bufferData.mock.calls.map(call => call[1])).toEqual([40, 60, 20])
+    renderer.append(frame(3)); renderer.append(frame(2))
+    expect(calls.bufferData).toHaveBeenCalledTimes(3)
+    expect(calls.bufferSubData.mock.calls.map(call => call[1])).toEqual([0, 0, 0, 24, 36, 12])
+    renderer.drawRetained(50, .82, 800, 600, 1)
+    expect(calls.drawArrays).toHaveBeenLastCalledWith(gl.POINTS, 0, 5)
+    expect(() => renderer.append(frame(1))).toThrow('capacity')
+    expect(calls.bufferSubData).toHaveBeenCalledTimes(6)
+    renderer.dispose()
+    expect(calls.deleteBuffer).toHaveBeenCalledTimes(3)
+  })
   it('resizes and changes uniforms without uploading or recompiling unchanged data', () => {
     const { gl, calls } = context(), renderer = createCatalogPointRenderer(gl), original = frame()
     renderer.draw(original, 800, 600, 1)

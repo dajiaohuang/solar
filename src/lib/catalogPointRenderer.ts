@@ -56,10 +56,12 @@ function createProgram(gl: WebGLRenderingContext) {
 }
 
 /** One canvas owns these resources. Input arrays are immutable snapshots. */
-export function createCatalogPointRenderer(gl: WebGLRenderingContext) {
+export function createCatalogPointRenderer(gl: WebGLRenderingContext, capacity?: number) {
+  if (capacity !== undefined && (!Number.isSafeInteger(capacity) || capacity < 0)) throw new Error('Invalid catalog GPU capacity')
   const program = createProgram(gl)
   const buffers: { handle: WebGLBuffer; data: Float32Array | null }[] = []
   let disposed = false
+  let retainedCount = 0
   const dispose = () => {
     if (disposed) return
     disposed = true
@@ -75,11 +77,40 @@ export function createCatalogPointRenderer(gl: WebGLRenderingContext) {
       const location = gl.getAttribLocation(program, name)
       gl.bindBuffer(gl.ARRAY_BUFFER, handle)
       gl.enableVertexAttribArray(location); gl.vertexAttribPointer(location, size, gl.FLOAT, false, 0, 0)
+      if (capacity !== undefined) gl.bufferData(gl.ARRAY_BUFFER, capacity * size * 4, gl.STATIC_DRAW)
     }
     const uniforms = ['u_radius', 'u_aspect', 'u_pixel_ratio', 'u_opacity'].map(name => gl.getUniformLocation(program, name))
+    const drawRetained = (radius: number, opacity: number, width: number, height: number, pixelRatio: number, count: number) => {
+      gl.useProgram(program)
+      gl.viewport(0, 0, width, height)
+      gl.clearColor(0.018, 0.028, 0.043, 1); gl.clear(gl.COLOR_BUFFER_BIT)
+      gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+      gl.uniform1f(uniforms[0], Math.max(radius, 0.001))
+      gl.uniform1f(uniforms[1], width / Math.max(height, 1))
+      gl.uniform1f(uniforms[2], pixelRatio)
+      gl.uniform1f(uniforms[3], opacity)
+      gl.drawArrays(gl.POINTS, 0, count)
+    }
     return {
+      /** Fixed-capacity streaming: append only the newly computed shard. */
+      append(attributes: Pick<CatalogPointFrame, 'positions' | 'colors' | 'sizes'>) {
+        if (disposed) throw new Error('Catalog GPU renderer is disposed')
+        const count = attributes.sizes.length
+        if (capacity === undefined || retainedCount + count > capacity) throw new Error('Catalog GPU capacity exceeded')
+        if (attributes.positions.length !== count * 2 || attributes.colors.length !== count * 3) throw new Error('Mismatched catalog point attributes')
+        for (const [index, data] of [attributes.positions, attributes.colors, attributes.sizes].entries()) {
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffers[index].handle)
+          gl.bufferSubData(gl.ARRAY_BUFFER, retainedCount * [2, 3, 1][index] * 4, data as Float32Array<ArrayBuffer>)
+        }
+        retainedCount += count
+        return retainedCount
+      },
+      drawRetained(radius: number, opacity: number, width: number, height: number, pixelRatio: number) {
+        if (!disposed) drawRetained(radius, opacity, width, height, pixelRatio, retainedCount)
+      },
       draw(frame: CatalogPointFrame, width: number, height: number, pixelRatio: number) {
         if (disposed) return
+        if (capacity !== undefined) throw new Error('Use append for a fixed-capacity catalog renderer')
         const count = frame.sizes.length
         if (frame.positions.length !== count * 2 || frame.colors.length !== count * 3) throw new Error('Mismatched catalog point attributes')
         gl.useProgram(program)
@@ -94,14 +125,7 @@ export function createCatalogPointRenderer(gl: WebGLRenderingContext) {
           else gl.bufferSubData(gl.ARRAY_BUFFER, 0, data as Float32Array<ArrayBuffer>)
           buffer.data = data
         })
-        gl.viewport(0, 0, width, height)
-        gl.clearColor(0.018, 0.028, 0.043, 1); gl.clear(gl.COLOR_BUFFER_BIT)
-        gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-        gl.uniform1f(uniforms[0], Math.max(frame.radius, 0.001))
-        gl.uniform1f(uniforms[1], width / Math.max(height, 1))
-        gl.uniform1f(uniforms[2], pixelRatio)
-        gl.uniform1f(uniforms[3], frame.opacity)
-        gl.drawArrays(gl.POINTS, 0, count)
+        drawRetained(frame.radius, frame.opacity, width, height, pixelRatio, count)
       },
       dispose,
     }

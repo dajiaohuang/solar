@@ -14,7 +14,7 @@ remain paused. Changes may go directly to main after the required checks.
 | Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | Pending |
 | Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | Pending |
 | Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | Pending |
-| Catalog streaming | Replace the fixed 8k/30k-only cloud path with cancellable binary chunk loading, priority scheduling and independent byte/decode/compute/upload limits | In progress: cancellation and acquisition admission; full-inventory path pending |
+| Catalog streaming | Replace the fixed 8k/30k-only cloud path with cancellable binary chunk loading, priority scheduling and independent byte/decode/compute/upload limits | In progress: full-inventory 2D snapshot now available; continuous/3D streaming, priority and spatial scheduling pending |
 | Rendering and time | Moving spatial bounds, visibility/LOD, selected-body retention, time/error-budgeted updates, reusable buffers and Float64-relative GPU coordinates; WebGL fallback and native contracts retained | In progress |
 | Capacity evidence | Real catalog runs at 30k/100k/300k/1m/full inventory, real SPK coverage and separately labeled synthetic GPU stress; P95/P99 frames, memory, first-visible time, upload and cancellation measurements | In progress |
 
@@ -389,6 +389,39 @@ standalone desktop GPU evidence gap only; combined full-product streaming,
 native hardware, other devices and total memory measurements remain open. The
 software/hardware runs also used different browser modes, precluding a causal
 GPU-only speedup claim.
+
+### Checkpoint 13: full-source 2D snapshot in the application (2026-09-23)
+
+The Catalog workspace now loads beyond immutable display samples through a
+source-backed expanded snapshot. It exposes requested/actual point capacity,
+source coverage, a fixed UTC epoch, refresh, stop, sample fallback and independent
+view radius. Changing filters invalidates the old snapshot; capped source-order
+coverage is explicitly partial. The worker checks SHA-256, source/index row
+identity, flags and exact Float64 orbital fields. Four binary shards are admitted
+at once; upload acknowledgements prevent a backlog of computed snapshots.
+Context restoration reuses retained attributes without refetching the source.
+
+Both actual built-application runs completed all 313 shards and 1,561,171 rows.
+NVIDIA RTX 5070 Ti / D3D11 took 5.44 s with callback P95/P99 16.8 ms and no
+observed main-thread long tasks. SwiftShader took 13.26 s with P95 66.7 ms,
+P99 83.4 ms and 112 long tasks. Both observed four active binary responses,
+three GPU allocations, 37,468,104 uploaded attribute bytes, actual rendered
+pixels and no page/WebGL error. These are local HTTP static snapshots, not
+continuous full-catalog simulation or display-FPS evidence. Reports, assumptions
+and remaining capacity work are in [point-pipeline-performance.md](point-pipeline-performance.md).
+
+Twenty-three focused numerical/streaming/GPU unit checks passed. The previous
+four-browser GPU lifecycle checks passed, and the new source snapshot,
+cancellation/refresh and corrupt-source rejection contracts are verified in all
+four browser profiles. Real browser IndexedDB checks now bundle the production
+dependency graph: run 35774626604 exposed a stale hand-maintained test loader
+after admission was introduced. That run passed Web, Android and iOS but failed
+the three cache tests in every browser. It is not eligible for main promotion.
+The corrected dependency bundle passes all twelve focused cache checks.
+
+The combined head still requires its remote gate. Continuous/3D streaming,
+priority/spatial scheduling, total memory evidence and the unfinished scientific
+ledger rows remain open. Deployment and publication remain paused.
 
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),

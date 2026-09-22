@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-22T19:58:43.815Z",
+  "measurement": "built-application-full-MPC-source-static-2D-snapshot-local-HTTP",
+  "graphicsMode": "default",
+  "launchOptions": {},
+  "browser": "151.0.7922.34",
+  "viewport": {
+    "width": 1600,
+    "height": 1000,
+    "pixelRatio": 1
+  },
+  "source": {
+    "version": "mpcorb-26bbcb75e45b7cbb-full",
+    "rows": 1561171,
+    "shards": 313,
+    "sourceSha256": "4a506b526777ae86cc2b04adbb1f82ca6570e5960cfa10eb9c215c6f90a9afb3",
+    "contentSha256": "6befc193f2a6bd35fa04f4e83e339784a3c988dbdd974afcdd0f871cb07f9b61",
+    "manifestSha256": "bd8cf38a15c7e5a312ac7f9f8167af1916f6bfa0c7c34f30fb5b36725d68d894",
+    "checksumsSha256": "744893f440a95c126d57fa7c6d7da17adfb8f127d0a4ccafa1a07e4365ef55ae"
+  },
+  "implementationSha256": {
+    "src/lib/catalogStreaming.ts": "fbe9d534d42ce7157ad76075f6e884d71f18731eb4bca8e5c02ded941f6bd139",
+    "src/lib/catalogPointRenderer.ts": "e436e97bef878d0ba52b53d1585dc709945ec0035b998054750a206bc6f1b7de",
+    "src/workers/catalog-stream.worker.ts": "ab1d1928c54fd09fe830b47a8ff0dcd67350806695da6b725df47a6b6a374eef",
+    "src/components/CatalogStreamCanvas.tsx": "ca363af84858425a4368fa148265e6bd117a8dad26783ff3411e2c00a8fe7a98"
+  },
+  "phase": "complete",
+  "drawnRows": 1561171,
+  "checkedRows": 1561171,
+  "loadMs": 13255.800000000745,
+  "graphics": {
+    "version": "WebGL 1.0 (OpenGL ES 2.0 Chromium)",
+    "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)"
+  },
+  "frameIntervals": {
+    "count": 326,
+    "p50Ms": 33.40000000000009,
+    "p95Ms": 66.70000000000073,
+    "p99Ms": 83.39999999999964,
+    "maxMs": 83.40000000000146
+  },
+  "uploadSubmission": {
+    "count": 939,
+    "p50Ms": 0,
+    "p95Ms": 0,
+    "p99Ms": 0.09999999962747097,
+    "maxMs": 0.10000000149011612
+  },
+  "drawSubmission": {
+    "count": 315,
+    "p50Ms": 0,
+    "p95Ms": 0,
+    "p99Ms": 0.09999999962747097,
+    "maxMs": 0.09999999962747097
+  },
+  "longTasks": {
+    "count": 112,
+    "p50Ms": 62,
+    "p95Ms": 73,
+    "p99Ms": 75,
+    "maxMs": 76
+  },
+  "allocations": 3,
+  "gpuAttributeBytes": 37468104,
+  "uploadBytes": 37468104,
+  "litPixels": 297975,
+  "glErrors": [],
+  "pageErrors": [],
+  "serverAudit": {
+    "binaryRequests": 313,
+    "binaryBytes": 99914944,
+    "active": 0,
+    "peak": 4
+  },
+  "expandedArtifactRequests": 315,
+  "limits": [
+    "Local filesystem/HTTP, not public network throughput.",
+    "One fixed UTC epoch; not continuous full-catalog simulation or physical display FPS.",
+    "Headless animation callbacks and CPU GL submission times, not GPU execution timers.",
+    "Explicit attribute bytes are not total browser/process/driver memory.",
+    "Two-dimensional ecliptic projection; offscreen points count as submitted, not visible.",
+    "This desktop result does not establish native or mobile hardware capacity."
+  ]
+}

@@ -315,3 +315,67 @@ benchmark and do not justify silently presenting stale positions as current.
 ```sh
 rtk proxy node scripts/benchmark-catalog-gpu.mjs --graphics d3d11 --output .cache/catalog-gpu-hardware-new.json
 ```
+
+### Full-source application snapshot (2026-09-23)
+
+The Catalog workspace now offers an expanded map with a requested point limit,
+a separate map radius, explicit refresh time, cancellation and partial-coverage
+status. The default sample remains available. Unlike the earlier isolated
+harnesses, this path reads the real release from inside the built application:
+the worker loads checksums, the compact index and binary orbital shards without
+hydrating metadata objects for every body. Name filters use the existing exact
+search locators; unsupported locator contracts fail visibly.
+
+Four source shards may be in flight. An upload acknowledgement gates the next
+shard, keeping at most one computed tile awaiting the main thread. The main
+thread uploads only its new ranges into three fixed-capacity GPU buffers. It
+retains Float32 attributes for context restoration; the worker discards a
+shard's prepared Float64 orbit coefficients after its fixed-epoch computation.
+UTC converts to TT once per scan; pre-1972 requests fail explicitly. The source
+precision and two-body model are unchanged. Hashes are checked against the
+release's same-origin checksum list, whose identity is recorded in benchmarks;
+that list is not an independently signed trust anchor.
+
+The admission plan reserves index/transfer scratch and 48 bytes per requested
+point for CPU/GPU attributes. Conservative device hints select a 64/128/256 MiB
+explicit-buffer budget. A source index that does not fit is rejected before
+starting a worker. This is not a measured process-memory bound: browser/driver
+allocations, optional name-search metadata, garbage-collector timing and the
+rest of the application have separate lifetimes. Names and full metadata are
+not needed by the unfiltered cloud. Oversized requested clouds are capped and
+the actual capacity is visible. Source-order truncation is labeled partial,
+never a representative sample. Spatial LOD is still pending.
+
+The [NVIDIA application report](benchmarks/catalog-stream-app-rtx5070ti-20260923.json)
+and [SwiftShader application report](benchmarks/catalog-stream-app-swiftshader-20260923.json)
+both loaded all **1,561,171 rows in 313 shards** at UTC JD 2461306.5. The
+benchmark explicitly widens scientific filters to include the complete source,
+then uses an independent 8 AU map radius. Offscreen points count as submitted,
+not visible. The reports pin the manifest, checksum list and implementation
+hashes and verify actual rendered pixels and absence of page/WebGL errors.
+
+| Actual application renderer | Complete snapshot ms | Callback P95 / P99 ms | Main-thread long tasks |
+| --- | ---: | ---: | ---: |
+| NVIDIA RTX 5070 Ti / D3D11 | 5,443.1 | 16.8 / 16.8 | 0 |
+| ANGLE SwiftShader | 13,255.8 | 66.7 / 83.4 | 112, maximum 76 ms |
+
+Both runs used local HTTP with caches disabled and observed at most four active
+binary responses. Exactly 99,914,944 orbital bytes were served; there were 315
+expanded artifact requests including index/checksums and no metadata/sample
+requests. Each allocated and uploaded 37,468,104 GPU attribute bytes through
+three buffers and 939 incremental uploads. GPU resource loss, restoration,
+cancellation, refresh, filter invalidation and view-radius changes are also
+covered by focused tests in all four supported browser profiles.
+
+These results establish the first full-inventory **static 2D application
+snapshot**, not continuous simulation, physical-display FPS or public-network
+throughput. The two browser modes differ, so their ratio is not a controlled
+GPU-only speedup. The software result demonstrates a real loading-cadence limit
+and does not justify enabling full inventory by default. Continuous clock
+updates, 3D integration, spatial/time/error budgets, upload batching, prepared
+state reuse, process memory and native/mobile hardware evidence remain open.
+
+```sh
+rtk npm run build
+rtk proxy node scripts/benchmark-catalog-stream.mjs --graphics d3d11 --output .cache/catalog-stream-new.json
+```
