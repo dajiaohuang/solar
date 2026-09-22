@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "measurement": "isolated-production-browser-worker-real-MPC-input-not-GPU-or-app-streaming",
+  "generatedAt": "2026-09-22T17:58:34.358Z",
+  "browser": "151.0.7922.34",
+  "workerAsset": "catalog-points.worker-BiDnVTaf.js",
+  "workerSha256": "0be6d5ff756fbdc1f5e9d3e5f91b8722212f1f802ac382d9e109ee72a66a3d03",
+  "release": {
+    "version": "mpcorb-26bbcb75e45b7cbb-full",
+    "count": 1561171,
+    "manifestSha256": "bd8cf38a15c7e5a312ac7f9f8167af1916f6bfa0c7c34f30fb5b36725d68d894",
+    "checksumsSha256": "744893f440a95c126d57fa7c6d7da17adfb8f127d0a4ccafa1a07e4365ef55ae",
+    "validatedBinaryShards": 313
+  },
+  "inputScale": "UTC-converted-to-TT-by-worker",
+  "finalOutputReference": "all-final-components-hash-match-legacy-propagator-at-same-TT-epoch",
+  "cases": [
+    {
+      "count": 30000,
+      "initializeMs": 8.200000000186265,
+      "milliseconds": [
+        6.900000000372529,
+        5.3999999994412065,
+        5.400000000372529,
+        5.599999999627471,
+        5.2999999998137355,
+        5.5,
+        5.400000000372529
+      ],
+      "medianMs": 5.400000000372529,
+      "maxMs": 6.900000000372529,
+      "finalOutputSha256": "3f53f6bc7f9988059601681d2a4e81a78fd08a4d279e2d8587995a7e0aaddfb7"
+    },
+    {
+      "count": 100000,
+      "initializeMs": 11.699999999254942,
+      "milliseconds": [
+        18.700000000186265,
+        17.700000000186265,
+        17.700000000186265,
+        17.5,
+        17.5,
+        17.5,
+        17.399999999441206
+      ],
+      "medianMs": 17.5,
+      "maxMs": 18.700000000186265,
+      "finalOutputSha256": "5f177078688749f7bfb9659f816074764750231c1aac2ce6269bb8dc81109a82"
+    },
+    {
+      "count": 300000,
+      "initializeMs": 28.40000000037253,
+      "milliseconds": [
+        52.799999999813735,
+        52.5,
+        52.39999999944121,
+        53.10000000055879,
+        52.5,
+        52.799999999813735,
+        53.200000000186265
+      ],
+      "medianMs": 52.799999999813735,
+      "maxMs": 53.200000000186265,
+      "finalOutputSha256": "1b8039c62ab6ae1ced417943cb146bad6047a93465f6110c4d1516a35dc744f6"
+    },
+    {
+      "count": 1000000,
+      "initializeMs": 90.1000000005588,
+      "milliseconds": [
+        176.5,
+        174,
+        169.29999999981374,
+        172.79999999981374,
+        173.40000000037253,
+        173.3999999994412,
+        171.1000000005588
+      ],
+      "medianMs": 173.3999999994412,
+      "maxMs": 176.5,
+      "finalOutputSha256": "39a9cbae686f43a5a57f2db50b9c201309983cec544f002d667e061207fcf20b"
+    },
+    {
+      "count": 1561171,
+      "initializeMs": 138.90000000037253,
+      "milliseconds": [
+        275.19999999925494,
+        266.5,
+        269.20000000018626,
+        275.20000000018626,
+        276.30000000074506,
+        267.79999999981374,
+        276.5
+      ],
+      "medianMs": 275.19999999925494,
+      "maxMs": 276.5,
+      "finalOutputSha256": "6e7fc6266d8817410f0b84b866773a40820724d3bfb001ac1e2b3d9d96bf6dca"
+    }
+  ],
+  "cancellation": {
+    "firstProgressMs": 3.6000000005587935,
+    "resetAndEmptyResultMs": 3.599999999627471,
+    "staleResults": 0
+  },
+  "heartbeat": {
+    "metric": "16ms main-thread timer intervals; not rendered frames",
+    "samples": 252,
+    "p95Ms": 17.09999999962747,
+    "p99Ms": 17.799999999813735,
+    "maxMs": 36.09999999962747
+  },
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36"
+}

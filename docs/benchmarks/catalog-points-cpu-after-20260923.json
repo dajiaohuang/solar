@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "measurement": "real-MPC-CPU-propagation-only-not-rendering-or-physical-accuracy",
+  "generatedAt": "2026-09-22T17:53:39.245Z",
+  "runtime": {
+    "node": "v24.14.1",
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "Intel(R) Core(TM) i9-14900KF",
+    "logicalCpus": 32,
+    "totalMemoryBytes": 34181726208
+  },
+  "release": {
+    "version": "mpcorb-26bbcb75e45b7cbb-full",
+    "count": 1561171,
+    "sourceSha256": "4a506b526777ae86cc2b04adbb1f82ca6570e5960cfa10eb9c215c6f90a9afb3",
+    "manifestSha256": "bd8cf38a15c7e5a312ac7f9f8167af1916f6bfa0c7c34f30fb5b36725d68d894",
+    "checksumsSha256": "744893f440a95c126d57fa7c6d7da17adfb8f127d0a4ccafa1a07e4365ef55ae",
+    "validatedBinaryShards": 313
+  },
+  "implementationSha256": "dafc71b26dfd6231a73e0efa93394e977a51ca4690f526768205e1f67ae6c3a1",
+  "mode": "3d",
+  "inputScale": "TT",
+  "results": [
+    {
+      "count": 30000,
+      "prepareMs": 8.31819999999999,
+      "retainedElementBytes": 2400000,
+      "outputBytes": 360000,
+      "milliseconds": [
+        3.6747000000000014,
+        3.61069999999998,
+        3.636599999999987,
+        3.5819999999999936,
+        3.5153999999999996,
+        3.6309000000000253,
+        3.5638000000000147
+      ],
+      "medianMs": 3.61069999999998,
+      "maxMs": 3.6747000000000014,
+      "finalOutputSha256": "021d726cf0d4fbab926d8de4cccb4df8743326a1684309416d34454220ded56c"
+    },
+    {
+      "count": 100000,
+      "prepareMs": 6.284800000000018,
+      "retainedElementBytes": 8000000,
+      "outputBytes": 1200000,
+      "milliseconds": [
+        11.864500000000021,
+        11.896000000000015,
+        11.92289999999997,
+        11.8947,
+        11.964300000000037,
+        11.890500000000031,
+        11.889200000000017
+      ],
+      "medianMs": 11.8947,
+      "maxMs": 11.964300000000037,
+      "finalOutputSha256": "a57789e3915e201293035fe8f8b00ecae5d2142733120cc602bcb679ac81e89b"
+    },
+    {
+      "count": 300000,
+      "prepareMs": 18.701700000000017,
+      "retainedElementBytes": 24000000,
+      "outputBytes": 3600000,
+      "milliseconds": [
+        35.79989999999998,
+        34.75110000000001,
+        34.76529999999997,
+        34.697799999999916,
+        35.84820000000002,
+        35.03049999999996,
+        35.760599999999954
+      ],
+      "medianMs": 35.03049999999996,
+      "maxMs": 35.84820000000002,
+      "finalOutputSha256": "2c164cd7693ab7893248cb8d2cc5e6764c8afee0b5bcf795df27e20edeb5715c"
+    },
+    {
+      "count": 1000000,
+      "prepareMs": 63.95130000000006,
+      "retainedElementBytes": 80000000,
+      "outputBytes": 12000000,
+      "milliseconds": [
+        116.03740000000005,
+        119.53180000000009,
+        116.35530000000017,
+        119.27920000000017,
+        124.35099999999989,
+        122.85939999999982,
+        119.92380000000003
+      ],
+      "medianMs": 119.53180000000009,
+      "maxMs": 124.35099999999989,
+      "finalOutputSha256": "88d98adcf569dc7115e3a435fb272fb4de545484a2ba66ffbf42f65cbdd2e33a"
+    },
+    {
+      "count": 1561171,
+      "prepareMs": 98.97800000000007,
+      "retainedElementBytes": 124893680,
+      "outputBytes": 18734052,
+      "milliseconds": [
+        187.76369999999997,
+        189.39260000000013,
+        196.1489999999999,
+        184.57560000000012,
+        182.45600000000013,
+        185.51679999999988,
+        186.01869999999963
+      ],
+      "medianMs": 186.01869999999963,
+      "maxMs": 196.1489999999999,
+      "finalOutputSha256": "dd27f8d53b6fadab53090eca42a4454f8977927fee472702f59a97ac7e3f8f86"
+    }
+  ]
+}

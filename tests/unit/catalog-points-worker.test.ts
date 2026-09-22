@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CatalogPointWorkerRequest, CatalogPointWorkerResponse } from '../../src/workers/catalog-points.protocol'
 import { utcJulianDayToTt } from '../../src/engine/ephemeris/timeScales'
 
 afterEach(() => vi.unstubAllGlobals())
+beforeEach(() => vi.resetModules())
 
 describe('catalog point worker mode transport', () => {
   it('transfers only the requested dimension and keeps elements available until reset', async () => {
@@ -39,5 +40,35 @@ describe('catalog point worker mode transport', () => {
     const result = messages.at(-1)!
     if (result.type !== 'result') throw new Error('Expected an empty point cloud after reset')
     expect(result.positions).toHaveLength(0)
+  })
+
+  it('yields during large initialization and computation so a reset cannot publish stale work', async () => {
+    const continuations: (() => void)[] = [], messages: CatalogPointWorkerResponse[] = []
+    class YieldChannel {
+      port1 = { onmessage: null as (() => void) | null }
+      port2 = { postMessage: () => { continuations.push(() => this.port1.onmessage?.()) } }
+    }
+    const scope = { onmessage: null as ((event: MessageEvent<CatalogPointWorkerRequest>) => Promise<void>) | null,
+      postMessage: (message: CatalogPointWorkerResponse) => messages.push(message) }
+    vi.stubGlobal('self', scope); vi.stubGlobal('MessageChannel', YieldChannel)
+    await import('../../src/workers/catalog-points.worker')
+    const send = (data: CatalogPointWorkerRequest) => scope.onmessage!({ data } as MessageEvent<CatalogPointWorkerRequest>)
+    const elements = new Float64Array(30_000 * 8)
+    for (let i = 0; i < 30_000; i++) elements.set([2451545, 1, .2, 0, 0, 0, 0, 1], i * 8)
+    const first = send({ type: 'initialize', requestId: 1, elements })
+    expect(continuations).toHaveLength(1)
+    await send({ type: 'reset', requestId: 2 })
+    continuations.shift()!(); await first
+    expect(messages).toHaveLength(0)
+    const second = send({ type: 'initialize', requestId: 3, elements })
+    continuations.shift()!(); await second
+    expect(messages.at(-1)).toEqual({ type: 'initialized', requestId: 3 })
+    const compute = send({ type: 'compute', requestId: 4, julianDay: 2451545, mode: '3d' })
+    expect(messages.at(-1)).toMatchObject({ type: 'progress', requestId: 4 })
+    await send({ type: 'reset', requestId: 5 })
+    continuations.shift()!(); await compute
+    expect(messages.some(message => message.type === 'result' && message.requestId === 4)).toBe(false)
+    await send({ type: 'compute', requestId: 6, julianDay: 2451545, mode: '3d' })
+    expect(messages.at(-1)).toMatchObject({ type: 'result', requestId: 6, positions: new Float32Array() })
   })
 })

@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { describe, expect, it } from 'vitest'
-import { propagateCatalogElementPositions } from '../../src/engine/ephemeris/catalogPoints'
+import { prepareCatalogElements, propagateCatalogElementPositions, propagatePreparedCatalogPositions } from '../../src/engine/ephemeris/catalogPoints'
 import { orbitToHeliocentricVector } from '../../src/lib/ephemeris'
 
 describe('catalog point propagation', () => {
@@ -18,6 +18,11 @@ describe('catalog point propagation', () => {
     const before = Buffer.from(new Uint8Array(elements.buffer))
     const planar = propagateCatalogElementPositions(elements, 2461287.5, '2d')
     const spatial = propagateCatalogElementPositions(elements, 2461287.5, '3d')
+    const prepared = prepareCatalogElements(elements)
+    const reused = new Float32Array(count * 3)
+    expect(propagatePreparedCatalogPositions(prepared, 2461287.5, '3d', reused, 0, 256)).toBe(reused)
+    propagatePreparedCatalogPositions(prepared, 2461287.5, '3d', reused, 256, count)
+    expect(Buffer.from(reused.buffer).equals(Buffer.from(expected.buffer))).toBe(true)
     expect(Buffer.from(spatial.buffer).equals(Buffer.from(expected.buffer))).toBe(true)
     for (let index = 0; index < count; index++) {
       expect(Object.is(planar[index * 2], expected[index * 3])).toBe(true)
@@ -83,6 +88,24 @@ describe('catalog point propagation', () => {
     expect(spatial[0]).toBeCloseTo(expected.x, 12)
     expect(spatial[1]).toBeCloseTo(expected.y, 12)
     expect(spatial[2]).toBeCloseTo(expected.z, 12)
+    const elements = new Float64Array([orbit.epochJd, orbit.semiMajorAxisAU, orbit.eccentricity, orbit.inclinationDeg, orbit.ascendingNodeDeg, orbit.argPeriapsisDeg, orbit.meanAnomalyDeg, orbit.meanMotionDegPerDay])
+    expect(propagatePreparedCatalogPositions(prepareCatalogElements(elements), orbit.epochJd, '3d')).toEqual(spatial)
+  })
+
+  it('validates source once, preserves it and rejects invalid reuse contracts', () => {
+    const source = new Float64Array([2451545, 2, .2, 23, 90, 10, 20, .5]), copy = source.slice()
+    const prepared = prepareCatalogElements(source)
+    for (const epoch of [2441317.5, 2451545, 2461306.5]) {
+      const old = propagateCatalogElementPositions(source, epoch, '3d'), actual = propagatePreparedCatalogPositions(prepared, epoch, '3d')
+      for (let i = 0; i < 3; i++) expect(actual[i]).toBeCloseTo(old[i], 6)
+    }
+    expect(source).toEqual(copy)
+    expect(() => propagatePreparedCatalogPositions(prepared, NaN, '3d')).toThrow(/epoch/)
+    expect(() => propagatePreparedCatalogPositions(prepared, 2451545, '3d', new Float32Array(2))).toThrow(/capacity/)
+    expect(() => propagatePreparedCatalogPositions(prepared, 2451545, '3d', undefined, 0, 2)).toThrow(/range/)
+    for (const motion of [0, -1, NaN]) { const bad = source.slice(); bad[7] = motion; expect(() => prepareCatalogElements(bad)).toThrow() }
+    const huge = source.slice(); huge[1] = 1e100
+    expect(() => propagatePreparedCatalogPositions(prepareCatalogElements(huge), 2451545, '3d')).toThrow(/finite display/)
   })
 
   it.each(['2d', '3d'] as const)('keeps million-row propagation to one %s buffer', (mode) => {

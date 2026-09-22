@@ -15,8 +15,8 @@ remain paused. Changes may go directly to main after the required checks.
 | Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | Pending |
 | Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | Pending |
 | Catalog streaming | Replace the fixed 8k/30k-only cloud path with cancellable binary chunk loading, priority scheduling and independent byte/decode/compute/upload limits | Pending |
-| Rendering and time | Moving spatial bounds, visibility/LOD, selected-body retention, time/error-budgeted updates, reusable buffers and Float64-relative GPU coordinates; WebGL fallback and native contracts retained | Pending |
-| Capacity evidence | Real catalog runs at 30k/100k/300k/1m/full inventory, real SPK coverage and separately labeled synthetic GPU stress; P95/P99 frames, memory, first-visible time, upload and cancellation measurements | Pending |
+| Rendering and time | Moving spatial bounds, visibility/LOD, selected-body retention, time/error-budgeted updates, reusable buffers and Float64-relative GPU coordinates; WebGL fallback and native contracts retained | In progress |
+| Capacity evidence | Real catalog runs at 30k/100k/300k/1m/full inventory, real SPK coverage and separately labeled synthetic GPU stress; P95/P99 frames, memory, first-visible time, upload and cancellation measurements | In progress |
 
 Full completion requires implementation, user-facing access, source ingestion,
 scientific references and appropriate integration evidence for each row. A model
@@ -116,11 +116,38 @@ Successful local UI requests used the actual Go backend with pinned full IERS
 and DE440; cancellation tests deliberately delayed fixture responses. Five
 independent ERFA/jplephem full-day cases passed, with all crossing residuals
 within their numeric brackets (largest absolute difference 0.108 seconds).
-No repeated full local suite or production deployment was used. Required
-remote checks must pass on the committed head before main promotion.
+No repeated full local suite or production deployment was used. All required
+remote checks passed on `b11b6aa`, including four browser profiles, Android,
+iOS and the stable gate; that exact head was fast-forwarded to main. Deployment
+and dataset-publication workflows remained disabled.
 
 Native observer consumption, source-refresh UI, physical uncertainty and the
 other ledger rows remain outstanding. The overall goal is still active.
+
+### Checkpoint 4: prepared point computation and real input tiers (2026-09-23)
+
+The production worker prepares invariant Float64 rotation/scale coefficients
+once per element set and yields in 20,000-row blocks during preparation and
+propagation. Generation invalidation prevents reset/replacement from publishing
+stale output. The prepared range API accepts caller-owned destination buffers;
+the existing worker still transfers one newly allocated dimension-specific
+output per completed job. No unsupported buffer-recycling claim is made.
+
+All 313 binary shards of the 1,561,171-row MPC release were checksum-verified
+for CPU and isolated production Chromium worker measurements at 30k, 100k,
+300k, 1m and the complete count. This is real catalog input, not a claim that
+the product now loads or renders the full inventory. CPU median full-count
+time changed from 261.14 to 186.02 ms; retained prepared data costs 80 rather
+than 64 bytes per record. Browser worker cancellation completed a fresh empty
+job in 3.6 ms without stale publication. Numerical output, runtime, hashes and
+measurement limitations are recorded in
+[point-pipeline-performance.md](point-pipeline-performance.md).
+
+Twenty-one targeted numerical/worker/scheduler tests, TypeScript, changed-file
+ESLint, production build and four desktop/mobile Chromium sample/mode-switch
+checks passed. This slice still requires exact-head remote checks before main
+promotion. Production streaming, relative GPU coordinates, LOD, app frame and
+memory evidence and all other uncompleted rows remain part of the active goal.
 
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),

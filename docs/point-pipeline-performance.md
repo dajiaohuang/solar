@@ -98,6 +98,66 @@ network counts are not used to claim a network-throughput improvement.
 
 ## Remaining measurement boundaries
 
+### Prepared catalog propagation and cooperative work (2026-09-23)
+
+The production point worker now validates each source element set once and
+retains Float64 rotation/scale coefficients. It yields through a message channel
+between 20,000-row preparation/compute blocks. Reset or replacement invalidates
+the old generation before it can publish a result. This does not change the MPC
+two-body model, the UTC-to-TT conversion or the current fixed display samples.
+
+The local benchmark verified all 313 binary shards against the immutable MPC
+release checksums, covering 1,561,171 actual records. No replicated synthetic
+orbit was substituted. Seven measured runs followed a warm-up at each size;
+both CPU implementations allocated one new Float32 output per run. Input and
+implementation digests, host information, every timing and output digests are
+retained in the [before](benchmarks/catalog-points-cpu-before-20260923.json) and
+[after](benchmarks/catalog-points-cpu-after-20260923.json) reports.
+
+| Actual records | Before CPU median ms | Prepared CPU median ms | Production Chromium worker median ms |
+| ---: | ---: | ---: | ---: |
+| 30,000 | 5.14 | 3.61 | 5.40 |
+| 100,000 | 16.70 | 11.89 | 17.50 |
+| 300,000 | 49.59 | 35.03 | 52.80 |
+| 1,000,000 | 169.53 | 119.53 | 173.40 |
+| 1,561,171 | 261.14 | 186.02 | 275.20 |
+
+The CPU reduction in this run is approximately 29%. Final Float32 output hashes
+match at every measured size. This agreement checks numerical equivalence of
+the visualization path, not physical accuracy. The independent browser column
+includes worker message/transfer/cooperative scheduling and uses UTC inputs
+converted to TT; it is not a before/after causal comparison with the Node rows.
+Seven samples support a median/range, not a reliable latency-tail estimate.
+
+The [isolated Chromium worker report](benchmarks/catalog-worker-chromium-20260923.json)
+records production-bundle measurements with the same complete source inventory.
+At the full count, reset after the first progress message produced an empty new
+job in 3.6 ms and no stale full result. Every final browser output hash matched
+the original propagator evaluated independently at the same TT epoch. A 16 ms
+main-thread heartbeat had P95 17.1 ms and P99 17.8 ms over 252 observations.
+Those are timer intervals, **not
+rendered frames**. The harness loads source bytes separately from production
+catalog loading; it does not establish streaming, first-visible time, GPU
+upload costs, app peak memory, mobile hardware throughput or million-body FPS.
+
+The preparation tradeoff is explicit: retained worker elements increase from
+64 to 80 bytes per record (124,893,680 bytes at the full count), replacing six
+per-epoch trigonometric rotations with prepared coefficients. Initialization
+temporarily also holds the original input. Prepared data is a display-compute
+cache, not a replacement scientific source. Each 3D result is still a new
+12-byte-per-record transferable buffer; inter-frame buffer recycling remains
+future work. Range-based evaluation also accepts caller-owned output without
+allocating another result buffer, tested separately.
+
+Reproduce CPU measurements with
+`rtk proxy node --experimental-strip-types scripts/benchmark-catalog-points.mjs`.
+For a baseline, retain the earlier `catalogPoints.ts` and `kepler.ts` together
+and pass `--module <baseline-directory>/catalogPoints.ts`. Run the isolated
+browser measurement after a production build with
+`rtk proxy node --experimental-strip-types scripts/benchmark-catalog-worker.mjs`.
+Both write local reports;
+neither publishes data nor deploys the application.
+
 Full React/GPU allocation and frame-time comparisons, large catalog selection
 stress and actual Android/iOS device tests must be
 reported separately. A passing CPU harness or browser correctness test does not
