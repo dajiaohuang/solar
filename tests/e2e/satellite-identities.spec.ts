@@ -18,12 +18,17 @@ test('keeps source-backed fallback identities selectable with an explicit diagno
   expect(errors).toEqual([])
 })
 
-test('does not draw a misleading origin when a fallback satellite is used as reference', async ({ page }) => {
-  const errors: string[] = []
-  page.on('pageerror', error => errors.push(error.message))
-  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  await page.goto('?v=4&lang=en&ref=naif:619&bodies=saturn,naif:619&jd=2466154.5&history=1')
-  await expect(page.locator('.frame-overlays .canvas-error[role="status"]')).toContainText('reference')
-  await expect(page.locator('.frame-view canvas')).toHaveCount(0)
-  expect(errors).toEqual([])
+test.describe('missing exact reference', () => {
+  test.use({ missingStateTileIds: ['naif:619'] })
+
+  test('does not draw a misleading origin when a fallback satellite is used as reference', async ({ page }) => {
+    const errors: string[] = []
+    page.on('pageerror', error => errors.push(error.message))
+    await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+    await page.goto('?v=4&lang=en&ref=naif:619&bodies=saturn,naif:619&jd=2466154.5&history=1')
+    await expect(page.getByTestId('backend-coverage-ledger')).toContainText('TDB JD')
+    await expect(page.locator('.frame-overlays .canvas-error[role="status"]')).toContainText('reference')
+    await expect(page.locator('.frame-view canvas')).toHaveCount(0)
+    expect(errors).toEqual([])
+  })
 })

@@ -3,7 +3,6 @@ const DATABASE_VERSION = 2
 const STORE_NAME = 'immutable-responses'
 const MAX_DATASET_CACHE_BYTES = 256 * 1024 * 1024
 const MIN_FREE_STORAGE_BYTES = 16 * 1024 * 1024
-const PRUNE_INTERVAL = 32
 
 type CacheRecord = {
   buffer: ArrayBuffer
@@ -14,7 +13,6 @@ type CacheRecord = {
 
 let preparedVersion: string | null = null
 let preparePromise: Promise<void> | null = null
-let writesSincePrune = 0
 const inFlight = new Map<string, Promise<{ buffer: ArrayBuffer; cached: boolean }>>()
 
 export function datasetVersionFromUrl(url: string) {
@@ -98,7 +96,7 @@ async function hasCapacityFor(byteLength: number) {
   }
 }
 
-async function pruneDatasetCache(activeVersion: string, maximumBytes: number) {
+async function pruneDatasetCache(activeVersion: string, maximumBytes: number, incoming?: { key: string; record: CacheRecord }) {
   const database = await openDatabase()
   if (!database) return
   await new Promise<void>((resolve) => {
@@ -118,14 +116,20 @@ async function pruneDatasetCache(activeVersion: string, maximumBytes: number) {
         const cursor = cursorRequest.result
         if (!cursor) {
           activeEntries.sort((left, right) => right.lastAccessed - left.lastAccessed)
-          let retainedBytes = 0
+          // Reserve the new record and replace the old key in this same
+          // transaction. Concurrent writers (including other tabs) serialize
+          // here, so a burst cannot exceed the budget between periodic prunes.
+          let retainedBytes = incoming?.record.byteLength ?? 0
           for (const entry of activeEntries) {
             if (retainedBytes + entry.byteLength > maximumBytes) store.delete(entry.key)
             else retainedBytes += entry.byteLength
           }
+          if (incoming) store.put(incoming.record, incoming.key)
           return
         }
-        if (!isCacheRecord(cursor.value) || isObsoleteDatasetVersion(cursor.value.datasetVersion, activeVersion)) {
+        if (incoming && cursor.primaryKey === incoming.key) {
+          // Replacement bytes were reserved above; do not count the old copy.
+        } else if (!isCacheRecord(cursor.value) || isObsoleteDatasetVersion(cursor.value.datasetVersion, activeVersion)) {
           cursor.delete()
         } else {
           // Retain only metadata. Keeping each record also retains every large
@@ -196,40 +200,13 @@ async function readCache(key: string) {
 async function writeCache(key: string, value: ArrayBuffer) {
   const datasetVersion = datasetVersionFromUrl(key)
   await prepareDatasetCache(datasetVersion)
-  if (value.byteLength > await storageBudget()) return
+  const budget = await storageBudget()
+  if (value.byteLength > budget) return
   if (!await hasCapacityFor(value.byteLength)) return
-  const database = await openDatabase()
-  if (!database) return
-  await new Promise<void>((resolve) => {
-    let settled = false
-    const finish = () => {
-      if (settled) return
-      settled = true
-      database.close()
-      resolve()
-    }
-    try {
-      const transaction = database.transaction(STORE_NAME, 'readwrite')
-      const record: CacheRecord = {
-        buffer: value,
-        datasetVersion,
-        byteLength: value.byteLength,
-        lastAccessed: Date.now(),
-      }
-      transaction.objectStore(STORE_NAME).put(record, key)
-      transaction.oncomplete = finish
-      transaction.onerror = finish
-      transaction.onabort = finish
-    } catch {
-      finish()
-    }
+  await pruneDatasetCache(datasetVersion, budget, {
+    key,
+    record: { buffer: value, datasetVersion, byteLength: value.byteLength, lastAccessed: Date.now() },
   })
-  writesSincePrune += 1
-  if (writesSincePrune >= PRUNE_INTERVAL) {
-    writesSincePrune = 0
-    const budget = await storageBudget()
-    await pruneDatasetCache(datasetVersion, budget)
-  }
 }
 
 async function invalidateCache(key: string) {

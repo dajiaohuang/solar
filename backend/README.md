@@ -27,6 +27,11 @@ directory. The inventory endpoint is deliberately separate from the
 deduplicated catalog and preserves source-record identity, parent, geometry and
 ephemeris status.
 
+Missing or invalid configured catalog/inventory metadata stops startup with a
+nonzero exit status before the service listens. An omitted inventory remains
+optional. A valid catalog manifest may still describe unbundled kernels, which
+remain explicit missing states; that is distinct from a broken configuration.
+
 The service builds a bounded startup index for the audited source inventory, so
 identity search and detail requests do not rescan all gzip shards. Exact state
 requests use verified SPK data or a validated source snapshot; rounded or

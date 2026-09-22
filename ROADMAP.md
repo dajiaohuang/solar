@@ -11,11 +11,18 @@ The roadmap records intent, not a promise of dates. Scientific correctness, repr
 
 See the bilingual [product direction and acceptance criteria](./docs/product-direction.md). This is the accepted development target, not a claim that a backend or independent native interfaces already ship.
 
-## Current status (2026-09-05)
+## Current status (2026-09-22)
 
-- **Live:** GitHub Pages publishes the curated Web preview. Its health/capacity evidence reports commit `2d2b99ca17b9a287024cb661a658c5922127e9fc`, 36 SPK files / 90,800,128 SPK bytes and 93.2 MiB total capacity.
-- **In development:** the Go backend, full-Web state-tile path and source-profile delivery are locally runnable and contract-tested, but there is no public full-Web backend endpoint. The native projects are first-slice prototypes; Android now uses a GLES point renderer validated in an empty-scene emulator smoke test and iOS has passed macOS CI protocol tests and an unsigned simulator build (runtime/device validation remains pending).
-- **Planned:** measured backend/full-client throughput, multi-plan memory/render limits, broader all-body runtime delivery, and native build/device/release evidence. None of these is implied by the Pages publication.
+- **Live:** GitHub Pages publishes the curated Web preview. The audited deployment at commit `6525dfc6babf4f0e6d1c650fa84028dd4104a88a` contains 41 SPK files / 92,071,936 SPK bytes and 98,532,265 total bytes. Its scientific report passes 158/158 cases. These are dated deployment measurements, not limits on the full product.
+- **In development:** the Go backend serves exact current states and sampled histories from staged original SPKs, with live loopback HTTP checks against the Web decoder. There is no public full-Web backend endpoint. Android and iOS remain first-slice prototypes; both have CI simulator/emulator evidence for rendering responses from a real SPK-backed Go HTTPS server. Physical devices, full feature parity and signed releases remain unverified.
+- **Audit improvements:** startup rejects invalid configured catalogs/inventories; concurrent browser cache writes obey the global byte budget; narrow viewports fit their actual available width. Patched JavaScript and Go dependencies and the Chromium/Firefox/WebKit matrix are enforced by the pull-request gate. See [the September 22 audit](./docs/audit-20260922.md) for evidence and limits.
+
+## Next delivery priorities
+
+1. Deploy the full backend with its pinned source inventory and explicit operating limits. Measure public HTTPS delivery, cold startup, memory and concurrent client load before claiming production readiness.
+2. Move the remaining expensive client analyses behind bounded, cancellable backend contracts, retaining the current scientific tolerances and source evidence.
+3. Extend independent native clients beyond the current-state slice, then verify offline/reconnect behavior, physical devices and signed release delivery.
+4. Expand original-source body coverage with explicit identity, dependency and validity evidence. Preserve missing-state diagnostics wherever an exact source is unavailable; N-body integration remains outside scope.
 
 ## 0.11.0 — geocentrism as the core guide
 

@@ -34,23 +34,15 @@ func run() error {
 	coverageReport := flag.String("coverage-report", "", "optional pinned coverage audit report; requires matching full catalog and inventory")
 	flag.Parse()
 
-	cat, err := catalog.Load(*dataDir)
+	cat, inv, err := loadData(*dataDir, *inventoryDir)
 	if err != nil {
-		log.Printf("catalog warning: %v", err)
+		return err
 	}
 	defer func() {
 		if closeErr := cat.Close(); closeErr != nil {
 			log.Printf("catalog close warning: %v", closeErr)
 		}
 	}()
-	var inv *inventory.Inventory
-	if *inventoryDir != "" {
-		var inventoryErr error
-		inv, inventoryErr = inventory.Load(*inventoryDir)
-		if inventoryErr != nil {
-			log.Printf("inventory warning: %v", inventoryErr)
-		}
-	}
 	if *coverageReport == "" {
 		server := httpapi.New(cat, *maxConcurrent, inv)
 		server.ConfigureComputeWorkers(*computeWorkers)
@@ -63,6 +55,27 @@ func run() error {
 	server := httpapi.NewWithCoverage(cat, *maxConcurrent, inv, ledger)
 	server.ConfigureComputeWorkers(*computeWorkers)
 	return runServer(server, *listen, cat)
+}
+
+// Configured data failures must stop startup before a healthy HTTP endpoint
+// exists. A valid manifest can still describe explicitly missing SPK files.
+func loadData(dataDir, inventoryDir string) (*catalog.Catalog, *inventory.Inventory, error) {
+	cat, err := catalog.Load(dataDir)
+	if err != nil {
+		if cat != nil {
+			_ = cat.Close()
+		}
+		return nil, nil, fmt.Errorf("catalog configuration failed: %w", err)
+	}
+	var inv *inventory.Inventory
+	if inventoryDir != "" {
+		inv, err = inventory.Load(inventoryDir)
+		if err != nil {
+			_ = cat.Close()
+			return nil, nil, fmt.Errorf("inventory configuration failed: %w", err)
+		}
+	}
+	return cat, inv, nil
 }
 
 func runServer(server http.Handler, listen string, cat *catalog.Catalog) error {

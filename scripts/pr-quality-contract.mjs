@@ -39,10 +39,11 @@ function applicableJobPassed(result) {
   return result === 'success' || result === 'skipped'
 }
 
-export function pullRequestQualityPasses(repositoryContract, webQuality, mobileQuality) {
+export function pullRequestQualityPasses(repositoryContract, webQuality, mobileQuality, browserQuality) {
   return repositoryContract === 'success' &&
     applicableJobPassed(webQuality) &&
-    applicableJobPassed(mobileQuality)
+    applicableJobPassed(mobileQuality) &&
+    applicableJobPassed(browserQuality)
 }
 
 export function changedPaths(baseSha, headSha, cwd = process.cwd()) {
@@ -65,10 +66,11 @@ function gate() {
   const repositoryContract = process.env.REPOSITORY_CONTRACT_RESULT
   const webQuality = process.env.WEB_QUALITY_RESULT
   const mobileQuality = process.env.MOBILE_QUALITY_RESULT
-  if (!pullRequestQualityPasses(repositoryContract, webQuality, mobileQuality)) {
-    throw new Error(`Pull request quality failed: repository-contract=${repositoryContract}, web-quality=${webQuality}, mobile-quality=${mobileQuality}`)
+  const browserQuality = process.env.BROWSER_QUALITY_RESULT
+  if (!pullRequestQualityPasses(repositoryContract, webQuality, mobileQuality, browserQuality)) {
+    throw new Error(`Pull request quality failed: repository-contract=${repositoryContract}, web-quality=${webQuality}, mobile-quality=${mobileQuality}, browser-quality=${browserQuality}`)
   }
-  process.stdout.write(`Pull request quality passed: repository-contract=${repositoryContract}, web-quality=${webQuality}, mobile-quality=${mobileQuality}.\n`)
+  process.stdout.write(`Pull request quality passed: repository-contract=${repositoryContract}, web-quality=${webQuality}, mobile-quality=${mobileQuality}, browser-quality=${browserQuality}.\n`)
 }
 
 try {

@@ -11,6 +11,7 @@ const cacheScript = ts.transpileModule(readFileSync(resolve('src/data/cache/inde
 }).outputText
 type CacheWindow = Window & {
   cacheUnderTest: { fetchImmutableArrayBuffer(url: string): Promise<ArrayBuffer> }
+  completedCacheWrites?: number
 }
 const fullRoot = '/solar/data/asteroids/releases/'
 const previewRoot = `/solar/data/asteroids/preview/${'a'.repeat(64)}/releases/`
@@ -97,7 +98,12 @@ test('preview and full caches coexist while stale releases are removed per produ
 test('full and preview records share one global LRU byte budget', async ({ page }) => {
   await page.evaluate(() => {
     // The implementation reserves at most 25% of quota: 256 bytes here.
-    Object.defineProperty(navigator.storage, 'estimate', { value: async () => ({ quota: 1024, usage: 0 }) })
+    // WebKit may omit StorageManager. Supply the capability at the navigator
+    // boundary while retaining the browser's real IndexedDB implementation.
+    Object.defineProperty(navigator, 'storage', {
+      configurable: true,
+      value: { estimate: async () => ({ quota: 1024, usage: 0 }) },
+    })
   })
   const oldPreview = `${previewRoot}v1/old.bin`
   const preview = `${previewRoot}v1/sample.bin`
@@ -111,4 +117,34 @@ test('full and preview records share one global LRU byte budget', async ({ page 
   expect(await keys(page)).toEqual([full, preview].sort())
   await read(page, full)
   expect(await keys(page)).toEqual([full, preview].sort())
+})
+
+test('enforces the byte budget after concurrent cache writes', async ({ page }) => {
+  const recordBytes = 6 * 1024 * 1024
+  await page.evaluate((recordBytes) => {
+    Object.defineProperty(navigator, 'storage', {
+      configurable: true, value: { estimate: async () => ({ quota: 64 * 1024 * 1024, usage: 0 }) },
+    })
+    // Observe completed native IndexedDB transactions, including the optional
+    // background writes after the public network request has already returned.
+    const put = IDBObjectStore.prototype.put
+    IDBObjectStore.prototype.put = function (value, key) {
+      if (value.byteLength === recordBytes) {
+        this.transaction.addEventListener('complete', () => {
+          const target = window as CacheWindow
+          target.completedCacheWrites = (target.completedCacheWrites ?? 0) + 1
+        }, { once: true })
+      }
+      return put.call(this, value, key!)
+    }
+  }, recordBytes)
+  await page.route('**/burst-*.bin', route => route.fulfill({ body: Buffer.alloc(recordBytes, 42) }))
+  await page.evaluate(async (root) => {
+    await Promise.all([1, 2, 3].map(index =>
+      (window as CacheWindow).cacheUnderTest.fetchImmutableArrayBuffer(`${root}v1/burst-${index}.bin`)))
+  }, fullRoot)
+  await expect.poll(() => page.evaluate(() => (window as CacheWindow).completedCacheWrites)).toBe(3)
+  // Three 6 MiB records must fit into the 16 MiB quota-derived cap by evicting
+  // one record immediately, not after another 29 downloads.
+  expect(await keys(page)).toHaveLength(2)
 })
