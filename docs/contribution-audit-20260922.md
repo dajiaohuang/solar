@@ -64,4 +64,3 @@ No existing contribution was reopened, deleted, or described as freshly implemen
 ## Current acceptance
 
 The [follow-up audit](./deep-audit-20260922.md) records this pass's specific repairs, benchmarks and tests. The [roadmap](../ROADMAP.md) preserves deployment/release pause, physical-device and full-native boundaries, heavy-analysis migration and broader authoritative-source delivery. Successive code-review passes converged without an additional concrete defect requiring a speculative rewrite. This does not assert that every possible optimization or future feature has been exhausted.
-
