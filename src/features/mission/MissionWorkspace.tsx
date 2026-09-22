@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { majorBodiesWithPhysicalData, useBodyRegistry } from '../../app/bodyRegistry'
 import { computeHohmann, type HohmannResult } from '../../engine/mission/hohmann'
-import { solveBodyToBodyLambert, type LambertSolution, type PorkchopPoint } from '../../engine/mission/lambert'
+import { solveBodyToBodyLambert, type LambertSolution, type PorkchopPoint, type computePorkchopGrid } from '../../engine/mission/lambert'
 import { createPorkchopWindow } from '../../engine/mission/porkchopWindow'
 import { useI18n } from '../../i18n/context'
 import { createBodyPositionResolver, crossVector3, dotVector3 } from '../../lib/ephemeris'
@@ -12,6 +12,11 @@ import type { PorkchopWorkerRequest, PorkchopWorkerResponse } from '../../worker
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { missionActions, missionStore } from '../../state/mission-store'
 import { jplApproxWindowWarning } from '../../engine/ephemeris/modelValidity'
+import type { AnalysisEphemerisPolicy } from '../../engine/ephemeris/analysisEphemeris'
+import { AnalysisPolicySelect, AnalysisSourceSummary } from '../../components/AnalysisSourceSummary'
+import { saveTextExport } from '../../lib/platform'
+import { uiActions } from '../../state/ui-store'
+import { BUILD_INFO } from '../../lib/buildInfo'
 
 function orbitRadius(body: CelestialBody) {
   if (!body.orbit) return null
@@ -73,7 +78,8 @@ export function MissionWorkspace() {
   const [hohmann, setHohmann] = useState<HohmannResult | null>(null)
   const [lambert, setLambert] = useState<LambertSolution | null>(null)
   const [transferError, setTransferError] = useState<string | null>(null)
-  const [porkchop, setPorkchop] = useState<{ columns: number; rows: number; points: PorkchopPoint[]; ephemerisFiles: string[] } | null>(null)
+  const [porkchop, setPorkchop] = useState<ReturnType<typeof computePorkchopGrid> | null>(null)
+  const [ephemerisPolicy, setEphemerisPolicy] = useState<AnalysisEphemerisPolicy>('prefer-spk')
   const [porkchopStatus, setPorkchopStatus] = useState<'idle' | 'running' | 'error'>('idle')
   const [selectedPorkchopIndex, setSelectedPorkchopIndex] = useState(-1)
   const workerRef = useRef<Worker | null>(null)
@@ -119,7 +125,7 @@ export function MissionWorkspace() {
       const departureRadius = orbitRadius(departureBody), arrivalRadius = orbitRadius(arrivalBody)
       if (!departureRadius || !arrivalRadius) throw new Error(t('endpointsRequireElliptic'))
       setHohmann(computeHohmann(departureRadius, arrivalRadius))
-      setLambert(solveBodyToBodyLambert({ departureBodyId: departureId, arrivalBodyId: arrivalId, bodiesById, departureJulianDay: departureJd, arrivalJulianDay: arrivalJd }))
+      setLambert(solveBodyToBodyLambert({ ephemerisPolicy, departureBodyId: departureId, arrivalBodyId: arrivalId, bodiesById, departureJulianDay: departureJd, arrivalJulianDay: arrivalJd }))
     } catch (error) {
       setLambert(null); setTransferError(error instanceof Error ? error.message : String(error))
     }
@@ -132,7 +138,7 @@ export function MissionWorkspace() {
     const requestId = requestIdRef.current + 1; requestIdRef.current = requestId
     setTransferError(null); setSelectedPorkchopIndex(-1); setPorkchopStatus('running'); setPorkchop(null)
     worker.onmessage = (event: MessageEvent<PorkchopWorkerResponse>) => {
-      if (event.data.requestId !== requestId) return
+      if (event.data.requestId !== requestId || requestIdRef.current !== requestId || workerRef.current !== worker) return
       if (event.data.result) {
         setPorkchop(event.data.result)
         let best = -1
@@ -146,9 +152,10 @@ export function MissionWorkspace() {
       worker.terminate()
       if (workerRef.current === worker) workerRef.current = null
     }
-    worker.onerror = (event) => { setTransferError(event.message || t('porkchopFailed')); setPorkchopStatus('error'); worker.terminate(); if (workerRef.current === worker) workerRef.current = null }
+    worker.onerror = (event) => { if (requestIdRef.current !== requestId || workerRef.current !== worker) return; setTransferError(event.message || t('porkchopFailed')); setPorkchopStatus('error'); worker.terminate(); if (workerRef.current === worker) workerRef.current = null }
     const request: PorkchopWorkerRequest = {
       ephemerisFiles: loadedKernelIds(),
+      ephemerisPolicy,
       requestId,
       departureBodyId: departureId,
       arrivalBodyId: arrivalId,
@@ -170,6 +177,7 @@ export function MissionWorkspace() {
         <label className="field"><span>{t('arrive')}</span><select value={arrivalId} onChange={(event) => missionActions.patch({ arrivalId: event.target.value })}>{candidates.map((body) => <option key={body.id} value={body.id}>{bodyDisplayName(body, language)}</option>)}</select></label>
         <label className="field"><span>{t('departureDate')}</span><input type="date" value={departureDate} onChange={(event) => missionActions.patch({ departureDate: event.target.value })} /></label>
         <label className="field"><span>{t('arrivalDate')}</span><input type="date" value={arrivalDate} onChange={(event) => missionActions.patch({ arrivalDate: event.target.value })} /></label>
+        <AnalysisPolicySelect value={ephemerisPolicy} onChange={setEphemerisPolicy} />
         <button className="primary-button full-width" disabled={departureId === arrivalId || arrivalJd <= departureJd} onClick={computeTransfer}>{t('computeTransfer')}</button>
         {transferError && <div className="error-banner">{transferError}</div>}
         {(usesDerivedEarthGeocenter || modelValidityWarning) && <div className="mission-model-boundary" aria-label={t('missionModelBoundary')}>
@@ -189,22 +197,26 @@ export function MissionWorkspace() {
           <article className="result-module glass-panel"><div className="module-heading"><span>{t('lambert')}</span><em>{t('level').toUpperCase()} 2</em></div>{lambert ? <>
             <div className="hero-metric"><strong>{lambert.departureVInfinityKmS.toFixed(3)}</strong><span>km/s · {t('departureVInfinity')}</span></div>
             <div className="metric-grid"><Metric label={t('arrivalVInfinity')} value={`${lambert.arrivalVInfinityKmS.toFixed(3)} km/s`} /><Metric label="C3" value={`${lambert.c3Km2S2.toFixed(2)} km²/s²`} /><Metric label={t('timeOfFlight')} value={`${lambert.timeOfFlightDays.toFixed(1)} d`} /><Metric label={t('solver')} value={`${lambert.iterations} iter · |r| ${Math.abs(lambert.residual).toExponential(1)}`} /></div>
+            <AnalysisSourceSummary evidence={lambert.ephemeris} />
+            <button onClick={() => void saveTextExport(JSON.stringify({ build: BUILD_INFO, solution: lambert }, null, 2), 'solar-atlas-transfer.json', 'application/json').catch(error => uiActions.toast(String(error)))}>{t('exportJson')}</button>
           </> : <EmptyResult label={t('configureEndpoints')} />}</article>
         </div>
         <article className="porkchop-module glass-panel"><div className="module-heading"><span>{t('porkchop')}</span><button disabled={!hohmann || porkchopStatus === 'running'} onClick={computePorkchop}>{porkchopStatus === 'running' ? t('loading') : t('computePorkchop')}</button></div>{porkchop ? <><PorkchopCanvas {...porkchop} selectedIndex={selectedPorkchopIndex} onSelect={setSelectedPorkchopIndex} ariaLabel={t('porkchopAria')} />{selectedPorkchopPoint && <div className={`porkchop-selection ${selectedPorkchopPoint.feasible ? '' : 'infeasible'}`}><div><span>{t('selectedOpportunity')}</span><strong>{selectedPorkchopPoint.feasible ? `${selectedPorkchopPoint.totalVInfinityKmS.toFixed(3)} km/s · Σv∞` : selectedPorkchopPoint.failureCode}</strong><small>{julianDayToDate(selectedPorkchopPoint.departureJulianDay).toISOString().slice(0, 10)} → {julianDayToDate(selectedPorkchopPoint.arrivalJulianDay).toISOString().slice(0, 10)} · {(selectedPorkchopPoint.arrivalJulianDay - selectedPorkchopPoint.departureJulianDay).toFixed(1)} d</small></div><button disabled={!selectedPorkchopPoint.feasible} onClick={() => {
             const nextDepartureDate = julianDayToDate(selectedPorkchopPoint.departureJulianDay).toISOString().slice(0, 10)
             const nextArrivalDate = julianDayToDate(selectedPorkchopPoint.arrivalJulianDay).toISOString().slice(0, 10)
-            missionActions.patch({ departureDate: nextDepartureDate, arrivalDate: nextArrivalDate })
+            const { departureBodyId, arrivalBodyId } = porkchop.endpoints
+            missionActions.patch({ departureId: departureBodyId, arrivalId: arrivalBodyId, departureDate: nextDepartureDate, arrivalDate: nextArrivalDate })
             try {
-              const departureRadius = orbitRadius(departureBody), arrivalRadius = orbitRadius(arrivalBody)
+              const departureRadius = orbitRadius(bodiesById.get(departureBodyId)!), arrivalRadius = orbitRadius(bodiesById.get(arrivalBodyId)!)
               if (departureRadius && arrivalRadius) setHohmann(computeHohmann(departureRadius, arrivalRadius))
-              setLambert(solveBodyToBodyLambert({ kernels: kernelsForWindow(selectedPorkchopPoint.departureJulianDay - 0.01, selectedPorkchopPoint.arrivalJulianDay + 0.01, porkchop.ephemerisFiles), departureBodyId: departureId, arrivalBodyId: arrivalId, bodiesById, departureJulianDay: selectedPorkchopPoint.departureJulianDay, arrivalJulianDay: selectedPorkchopPoint.arrivalJulianDay }))
+              setLambert(solveBodyToBodyLambert({ ephemerisPolicy: porkchop.ephemeris.policy, kernels: kernelsForWindow(porkchop.ephemeris.startJulianDay, porkchop.ephemeris.endJulianDay, porkchop.ephemerisFiles), departureBodyId, arrivalBodyId, bodiesById, departureJulianDay: selectedPorkchopPoint.departureJulianDay, arrivalJulianDay: selectedPorkchopPoint.arrivalJulianDay }))
               setTransferError(null)
             } catch (error) { setTransferError(error instanceof Error ? error.message : String(error)) }
           }}>{t('applyOpportunity')}</button></div>}{porkchopFailures.length > 0 && <p className="fine-print">{t('solverFailures')}: {porkchopFailures.map(([code, count]) => `${code} ${count}`).join(' · ')}</p>}</> : <div className="porkchop-placeholder"><div className="contours" /><p>{t('porkchopDescription')}</p></div>}</article>
       </section>
 
       <aside className="mission-evidence glass-panel">
+        <AnalysisSourceSummary evidence={porkchop?.ephemeris} />
         <div className="section-kicker">{t('assumptions').toUpperCase()}</div>
         <ol className="model-ladder"><li className="active"><i>1</i><div><strong>{t('circularHohmann')}</strong><span>{t('circularHohmannDescription')}</span></div></li><li className="active"><i>2</i><div><strong>{t('lambertTwoBody')}</strong><span>{t('lambertDescription')}</span></div></li><li><i>3</i><div><strong>{t('patchedConics')}</strong><span>{t('patchedConicsDescription')}</span></div></li><li><i>4</i><div><strong>{t('nBodyValidation')}</strong><span>{t('nBodyOutOfScope')}</span></div></li></ol>
         <div className="assist-diagram"><span className="sun-node">☉</span><span className="planet-node earth-node">{language === 'zh' ? '地球' : 'Earth'}</span><span className="planet-node jupiter-node">{language === 'zh' ? '木星' : 'Jupiter'}</span><span className="planet-node target-node">{t('target')}</span><svg viewBox="0 0 260 160"><path d="M35 125 C78 62 116 45 150 78 S214 76 236 30" /><circle cx="150" cy="78" r="16" /></svg><small>{t('gravityAssistTeaching')}</small></div>

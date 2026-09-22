@@ -149,8 +149,8 @@ These are bounded policies, not RAM-based performance promises. A device with 12
 | Hill sphere | `a(1-e)(m/3M)^(1/3)` |
 | Laplace SOI | `a(m/M)^(2/5)`; never labeled as a Hill sphere |
 | Hohmann | Coplanar circular endpoints, impulsive solar two-body model; signed burns and km/s conversion |
-| Lambert | Zero-revolution universal-variable solar two-body solution using approximate endpoint positions; only residual-converged solutions are returned |
-| Event search | Adaptive non-endpoint candidates followed by bounded local refinement and fresh two-body propagation. The exported numerical refinement half-width is not physical uncertainty, which is not estimated |
+| Lambert | Zero-revolution universal-variable solar two-body solution using frozen SPK or explicitly reported approximate endpoint states and TDB flight time for supported UTC dates; only residual-converged solutions are returned. Strict SPK mode rejects missing coverage |
+| Event search | Adaptive non-endpoint candidates followed by bounded refinement using one frozen source window. Strict SPK and labeled approximate modes share per-body source evidence with curves and exports. Numerical refinement half-width is not physical uncertainty, which is not estimated |
 | Spacecraft overlays | Milestone-dated schematic tracks labeled separately from Horizons and propagated ephemerides |
 
 JPL SBDB values are read from the documented `orbit.elements[]` records (`name`, `value`, and `units`), not invented flat properties. The object-level `orbit.condition_code` is exposed as an orbit condition code; per-element sigma and covariance are not currently modeled. Absolute-magnitude filters have explicit all/known/unknown states; an unknown H is never fabricated as a number and is excluded from numeric `a–H` plots.

@@ -3,9 +3,11 @@
 import { computePorkchopGrid } from '../engine/mission/lambert'
 import type { BodyId, CelestialBody } from '../types'
 import { ensureKernelFiles } from '../engine/ephemeris/kernelStore'
+import type { AnalysisEphemerisPolicy } from '../engine/ephemeris/analysisEphemeris'
 
 export type PorkchopWorkerRequest = {
   ephemerisFiles?: string[]
+  ephemerisPolicy?: AnalysisEphemerisPolicy
   requestId: number
   departureBodyId: BodyId
   arrivalBodyId: BodyId
@@ -30,6 +32,7 @@ workerScope.onmessage = async (event: MessageEvent<PorkchopWorkerRequest>) => {
     const bodiesById = new Map<BodyId, CelestialBody>(request.bodies.map((body) => [body.id, body]))
     const result = computePorkchopGrid({
       ephemerisFiles: request.ephemerisFiles ?? [],
+      ephemerisPolicy: request.ephemerisPolicy,
       departureBodyId: request.departureBodyId,
       arrivalBodyId: request.arrivalBodyId,
       bodiesById,

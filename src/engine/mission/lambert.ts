@@ -1,6 +1,4 @@
 import {
-  createBodyPositionResolver,
-  createBodyVelocityResolver,
   crossVector3,
   dotVector3,
   scaleVector3,
@@ -9,8 +7,9 @@ import {
 } from '../../lib/ephemeris'
 import type { BodyId, CelestialBody, Vector3 } from '../../types'
 import { SOLAR_GM_AU3_PER_DAY2, auPerDayToKmPerSecond } from '../units'
-import { kernelsForWindow } from '../ephemeris/kernelStore'
+import { loadedKernels } from '../ephemeris/kernelStore'
 import type { LoadedKernel } from '../ephemeris/kernelPool'
+import { createAnalysisEphemeris, MissingPreciseStateError, type AnalysisEphemerisEvidence, type AnalysisEphemerisPolicy } from '../ephemeris/analysisEphemeris'
 
 const FIRST_POSITIVE_STUMPFF_SINGULARITY_Z = 4 * Math.PI ** 2
 // Keep the zero-revolution search strictly on the continuous side of C(z) = 0.
@@ -30,9 +29,11 @@ export type LambertSolution = {
   residual: number
   bracketWidth: number
   converged: boolean
+  ephemeris?: AnalysisEphemerisEvidence
+  endpoints?: { departureBodyId: BodyId; arrivalBodyId: BodyId; departureJulianDay: number; arrivalJulianDay: number }
 }
 
-export type LambertFailureCode = 'invalid-input' | 'singular-geometry' | 'no-solution' | 'non-convergence' | 'singular-coefficient' | 'unknown'
+export type LambertFailureCode = 'invalid-input' | 'singular-geometry' | 'no-solution' | 'non-convergence' | 'singular-coefficient' | 'missing-ephemeris' | 'unknown'
 
 export class LambertError extends RangeError {
   readonly code: Exclude<LambertFailureCode, 'unknown'>
@@ -45,7 +46,7 @@ export class LambertError extends RangeError {
 }
 
 export function classifyLambertFailure(error: unknown): LambertFailureCode {
-  return error instanceof LambertError ? error.code : 'unknown'
+  return error instanceof LambertError ? error.code : error instanceof MissingPreciseStateError ? 'missing-ephemeris' : 'unknown'
 }
 
 function stumpffC(z: number) {
@@ -222,6 +223,7 @@ export function solveLambertUniversal(params: {
 
 export function solveBodyToBodyLambert(params: {
   kernels?: readonly LoadedKernel[]
+  ephemerisPolicy?: AnalysisEphemerisPolicy
   departureBodyId: BodyId
   arrivalBodyId: BodyId
   bodiesById: Map<BodyId, CelestialBody>
@@ -237,18 +239,28 @@ export function solveBodyToBodyLambert(params: {
     arrivalJulianDay,
     prograde = true,
   } = params
-  const timeOfFlightDays = arrivalJulianDay - departureJulianDay
-  const kernels = params.kernels ?? kernelsForWindow(departureJulianDay - 0.01, arrivalJulianDay + 0.01)
-  const departurePositions = createBodyPositionResolver(bodiesById, departureJulianDay, kernels)
-  const arrivalPositions = createBodyPositionResolver(bodiesById, arrivalJulianDay, kernels)
+  const ephemeris = createAnalysisEphemeris({ bodiesById, kernels: params.kernels ?? loadedKernels(),
+    startJulianDay: departureJulianDay, endJulianDay: arrivalJulianDay, policy: params.ephemerisPolicy, needsVelocity: true })
+  return {
+    ...solveTransfer(ephemeris, departureBodyId, arrivalBodyId, departureJulianDay, arrivalJulianDay, prograde),
+    ephemeris: ephemeris.evidence(),
+    endpoints: { departureBodyId, arrivalBodyId, departureJulianDay, arrivalJulianDay },
+  }
+}
+
+function solveTransfer(ephemeris: ReturnType<typeof createAnalysisEphemeris>, departureBodyId: BodyId,
+  arrivalBodyId: BodyId, departureJulianDay: number, arrivalJulianDay: number, prograde = true): LambertSolution {
+  const timeOfFlightDays = ephemeris.elapsedDays(departureJulianDay, arrivalJulianDay)
+  const departure = ephemeris.at(departureJulianDay)
+  const arrival = ephemeris.at(arrivalJulianDay)
   const solution = solveLambertUniversal({
-    departurePositionAU: departurePositions(departureBodyId),
-    arrivalPositionAU: arrivalPositions(arrivalBodyId),
+    departurePositionAU: departure.position(departureBodyId),
+    arrivalPositionAU: arrival.position(arrivalBodyId),
     timeOfFlightDays,
     prograde,
   })
-  const departureBodyVelocity = createBodyVelocityResolver(bodiesById, departureJulianDay, 0.01, kernels)(departureBodyId)
-  const arrivalBodyVelocity = createBodyVelocityResolver(bodiesById, arrivalJulianDay, 0.01, kernels)(arrivalBodyId)
+  const departureBodyVelocity = departure.velocity(departureBodyId)
+  const arrivalBodyVelocity = arrival.velocity(arrivalBodyId)
   const departureVInfinityKmS = auPerDayToKmPerSecond(vector3Magnitude(
     subtractVector3(solution.departureVelocityAUPerDay, departureBodyVelocity),
   ))
@@ -276,6 +288,7 @@ export type PorkchopPoint = {
 
 export function computePorkchopGrid(params: {
   ephemerisFiles?: string[]
+  ephemerisPolicy?: AnalysisEphemerisPolicy
   departureBodyId: BodyId
   arrivalBodyId: BodyId
   bodiesById: Map<BodyId, CelestialBody>
@@ -297,7 +310,17 @@ export function computePorkchopGrid(params: {
     throw new RangeError('Porkchop dates and flight window must be finite and ordered')
   }
   const points: PorkchopPoint[] = []
-  const kernels = kernelsForWindow(params.departureStartJd - 0.01, params.departureStartJd + params.departureSpanDays + params.maxFlightDays + 0.01, params.ephemerisFiles)
+  const ephemeris = createAnalysisEphemeris({ bodiesById: params.bodiesById,
+    kernels: loadedKernels().filter(kernel => !params.ephemerisFiles || params.ephemerisFiles.includes(kernel.id)),
+    startJulianDay: params.departureStartJd,
+    endJulianDay: params.departureStartJd + params.departureSpanDays + params.maxFlightDays,
+    policy: params.ephemerisPolicy, needsVelocity: true })
+  if (params.ephemerisPolicy === 'require-spk') {
+    for (const jd of [params.departureStartJd, params.departureStartJd + params.departureSpanDays + params.maxFlightDays]) {
+      ephemeris.at(jd).position(params.departureBodyId)
+      ephemeris.at(jd).position(params.arrivalBodyId)
+    }
+  }
   for (let row = 0; row < rows; row += 1) {
     const flightDays = params.minFlightDays + row / (rows - 1) *
       (params.maxFlightDays - params.minFlightDays)
@@ -305,14 +328,7 @@ export function computePorkchopGrid(params: {
       const departureJulianDay = params.departureStartJd + column / (columns - 1) * params.departureSpanDays
       const arrivalJulianDay = departureJulianDay + flightDays
       try {
-        const solution = solveBodyToBodyLambert({
-          kernels,
-          departureBodyId: params.departureBodyId,
-          arrivalBodyId: params.arrivalBodyId,
-          bodiesById: params.bodiesById,
-          departureJulianDay,
-          arrivalJulianDay,
-        })
+        const solution = solveTransfer(ephemeris, params.departureBodyId, params.arrivalBodyId, departureJulianDay, arrivalJulianDay)
         points.push({
           departureJulianDay,
           arrivalJulianDay,
@@ -334,5 +350,6 @@ export function computePorkchopGrid(params: {
       }
     }
   }
-  return { columns, rows, points, ephemerisFiles: kernels.map((kernel) => kernel.id) }
+  return { columns, rows, points, ephemerisFiles: ephemeris.kernels.map((kernel) => kernel.id), ephemeris: ephemeris.evidence(),
+    endpoints: { departureBodyId: params.departureBodyId, arrivalBodyId: params.arrivalBodyId } }
 }

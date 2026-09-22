@@ -1,7 +1,6 @@
 /// <reference lib="webworker" />
 
 import {
-  createBodyPositionResolver as createResolver,
   dotVector3,
   subtractVector3,
   vector3Magnitude,
@@ -10,12 +9,14 @@ import { findSampledExtrema, refineBracketedExtremum, type ExtremumMode } from '
 import { adaptiveEventSampleCount } from '../engine/events/eventSampling'
 import type { BodyId, CelestialBody, Vector3 } from '../types'
 import { ensureKernelFiles, kernelsForWindow } from '../engine/ephemeris/kernelStore'
+import { createAnalysisEphemeris, type AnalysisEphemerisEvidence, type AnalysisEphemerisPolicy } from '../engine/ephemeris/analysisEphemeris'
 
 export type EventKind = 'close-approach' | 'conjunction' | 'opposition' | 'perihelion' | 'aphelion' | 'periapsis' | 'apoapsis'
 
 export type EventAnalysisRequest = {
   type: 'run'
   ephemerisFiles?: string[]
+  ephemerisPolicy?: AnalysisEphemerisPolicy
   requestId: number
   bodies: CelestialBody[]
   resolutionBodies: CelestialBody[]
@@ -40,8 +41,9 @@ export type AnalysisEvent = {
   value: number
   unit: 'AU' | 'deg'
   julianDay: number
-  model: 'sampled-ephemeris-local-refinement-v4'
+  model: 'sampled-ephemeris-local-refinement-v5'
   ephemerisFiles: string[]
+  ephemeris: Pick<AnalysisEphemerisEvidence, 'policy' | 'bodies'>
   sampleIntervalDays: number
   numericalRefinementHalfWidthDays: number
   physicalPredictionUncertainty: 'not-estimated'
@@ -53,6 +55,7 @@ export type EventAnalysisResponse = {
   requestId: number
   progress?: number
   events?: AnalysisEvent[]
+  ephemeris?: AnalysisEphemerisEvidence
   error?: string
 }
 
@@ -80,8 +83,11 @@ async function runAnalysis(request: EventAnalysisRequest) {
   activeRequestId = request.requestId
   await ensureKernelFiles(request.ephemerisFiles ?? [])
   const kernels = kernelsForWindow(request.centerJulianDay - request.windowDays / 2, request.centerJulianDay + request.windowDays / 2, request.ephemerisFiles ?? [])
-  const createBodyPositionResolver = (bodies: Map<BodyId, CelestialBody>, jd: number) => createResolver(bodies, jd, kernels)
   const bodiesById = new Map<BodyId, CelestialBody>(request.resolutionBodies.map((body) => [body.id, body]))
+  const ephemeris = createAnalysisEphemeris({ bodiesById, kernels, policy: request.ephemerisPolicy,
+    startJulianDay: request.centerJulianDay - request.windowDays / 2,
+    endJulianDay: request.centerJulianDay + request.windowDays / 2 })
+  const createBodyPositionResolver = (_bodies: Map<BodyId, CelestialBody>, jd: number) => ephemeris.at(jd).position
   const sampleCount = adaptiveEventSampleCount(request.bodies, request.windowDays, request.sampleCount)
   const needsDistances = request.eventKinds.includes('close-approach')
   const needsAngles = request.eventKinds.some(kind => kind === 'conjunction' || kind === 'opposition')
@@ -162,8 +168,9 @@ async function runAnalysis(request: EventAnalysisRequest) {
         bodyAName: bodyA.name,
         bodyBId: bodyB.id,
         bodyBName: bodyB.name,
-        model: 'sampled-ephemeris-local-refinement-v4' as const,
+        model: 'sampled-ephemeris-local-refinement-v5' as const,
         ephemerisFiles: kernels.map((kernel) => kernel.id),
+        ephemeris: { policy: request.ephemerisPolicy ?? 'prefer-spk', bodies: ephemeris.bodyModels([bodyA.id, bodyB.id, ...(needsAngles ? [request.referenceId] : [])]) },
       }
       if (request.eventKinds.includes('close-approach')) {
         for (const extremum of findSampledExtrema(distances, 'minimum')) {
@@ -230,8 +237,9 @@ async function runAnalysis(request: EventAnalysisRequest) {
       }
       const base = {
         bodyAId: body.id, bodyAName: body.name, centralBodyId, centralBodyName: centralBody?.name ?? centralBodyId,
-        model: 'sampled-ephemeris-local-refinement-v4' as const,
+        model: 'sampled-ephemeris-local-refinement-v5' as const,
         ephemerisFiles: kernels.map((kernel) => kernel.id),
+        ephemeris: { policy: request.ephemerisPolicy ?? 'prefer-spk', bodies: ephemeris.bodyModels([body.id, centralBodyId]) },
       }
       if (request.eventKinds.includes('perihelion') || request.eventKinds.includes('periapsis')) {
         for (const extremum of findSampledExtrema(radii, 'minimum')) {
@@ -260,7 +268,7 @@ async function runAnalysis(request: EventAnalysisRequest) {
     return
   }
   events.sort((a, b) => a.julianDay - b.julianDay)
-  workerScope.postMessage({ type: 'result', requestId: request.requestId, progress: 1, events } satisfies EventAnalysisResponse)
+  workerScope.postMessage({ type: 'result', requestId: request.requestId, progress: 1, events, ephemeris: ephemeris.evidence() } satisfies EventAnalysisResponse)
 }
 
 workerScope.onmessage = (event: MessageEvent<EventAnalysisRequest | EventAnalysisCancel>) => {

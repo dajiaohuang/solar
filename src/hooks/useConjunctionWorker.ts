@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CelestialBody } from '../types'
 import { loadedKernelIds, EPHEMERIS_MANIFEST } from '../engine/ephemeris/kernelStore'
 import { adaptiveEventSampleCount } from '../engine/events/eventSampling'
+import type { AnalysisEphemerisEvidence, AnalysisEphemerisPolicy } from '../engine/ephemeris/analysisEphemeris'
 import type {
   AnalysisEvent,
   EventAnalysisRequest,
@@ -10,6 +11,7 @@ import type {
 } from '../workers/conjunction.worker'
 
 export type RunEventAnalysisParams = {
+  ephemerisPolicy?: AnalysisEphemerisPolicy
   bodies: CelestialBody[]
   resolutionBodies: CelestialBody[]
   referenceId: string
@@ -23,6 +25,7 @@ export type RunEventAnalysisParams = {
 type CachedEventAnalysis = {
   events: AnalysisEvent[]
   params: RunEventAnalysisParams
+  ephemeris: AnalysisEphemerisEvidence | null
 }
 
 const EVENT_CACHE_LIMIT = 8
@@ -40,8 +43,9 @@ function cloneParams(params: RunEventAnalysisParams): RunEventAnalysisParams {
 export function eventAnalysisCacheKey(params: RunEventAnalysisParams) {
   return JSON.stringify({
     ephemeris: [EPHEMERIS_MANIFEST.id, loadedKernelIds()],
-    bodies: params.bodies.map((body) => [body.id, body.parentId, body.orbit]),
-    resolution: params.resolutionBodies.map((body) => [body.id, body.parentId, body.orbit]),
+    ephemerisPolicy: params.ephemerisPolicy ?? 'prefer-spk',
+    bodies: params.bodies.map((body) => [body.id, body.naifId, body.source, body.parentId, body.orbitRepresents, body.orbit]),
+    resolution: params.resolutionBodies.map((body) => [body.id, body.naifId, body.source, body.parentId, body.orbitRepresents, body.orbit]),
     referenceId: params.referenceId,
     centerJulianDay: params.centerJulianDay,
     windowDays: params.windowDays,
@@ -69,6 +73,7 @@ export function useConjunctionWorker() {
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [lastRun, setLastRun] = useState<RunEventAnalysisParams | null>(null)
+  const [ephemeris, setEphemeris] = useState<AnalysisEphemerisEvidence | null>(null)
 
   const cancel = useCallback(() => {
     latestRequestId.current += 1
@@ -89,6 +94,7 @@ export function useConjunctionWorker() {
       eventAnalysisCache.delete(cacheKey)
       eventAnalysisCache.set(cacheKey, cached)
       setEvents([...cached.events])
+      setEphemeris(cached.ephemeris)
       setLastRun(cloneParams(cached.params))
       setProgress(1)
       setError(null)
@@ -101,6 +107,7 @@ export function useConjunctionWorker() {
     setProgress(0)
     setError(null)
     setEvents([])
+    setEphemeris(null)
     const storedParams = cloneParams(params)
     setLastRun(storedParams)
     worker.onmessage = (event: MessageEvent<EventAnalysisResponse>) => {
@@ -110,7 +117,8 @@ export function useConjunctionWorker() {
       if (response.type === 'result') {
         const resultEvents = response.events ?? []
         setEvents(resultEvents)
-        cacheEventAnalysis(cacheKey, { events: [...resultEvents], params: storedParams })
+        setEphemeris(response.ephemeris ?? null)
+        cacheEventAnalysis(cacheKey, { events: [...resultEvents], params: storedParams, ephemeris: response.ephemeris ?? null })
         setProgress(1)
         setStatus('complete')
         worker.terminate()
@@ -145,5 +153,5 @@ export function useConjunctionWorker() {
     workerRef.current = null
   }, [])
 
-  return { events, status, progress, error, lastRun, run, cancel }
+  return { events, status, progress, error, lastRun, ephemeris, run, cancel }
 }

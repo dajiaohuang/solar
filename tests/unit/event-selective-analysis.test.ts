@@ -34,6 +34,17 @@ describe('only requested event geometry is required', () => {
     expect(result.events).toHaveLength(1)
     expect(result.events![0].kind).toBe('perihelion')
     expect(result.events![0].value).toBeCloseTo(.8, 8)
+    expect(result.ephemeris?.bodies).toEqual(expect.arrayContaining([
+      expect.objectContaining({ bodyId: 'test', model: 'approximate-fallback' }),
+      expect.objectContaining({ bodyId: 'sun', model: 'heliocentric-origin' }),
+    ]))
+    expect(result.events![0].ephemeris.policy).toBe('prefer-spk')
+  })
+  it('reports missing SPK as an error instead of publishing an approximate event', async () => {
+    const result = await run({ ephemerisPolicy: 'require-spk' })
+    expect(result.type).toBe('error')
+    expect(result.error).toContain('Strict SPK')
+    expect(result.events).toBeUndefined()
   })
   it('measures pair distances without resolving an angular observer', async () => {
     const result = await run({ bodies: [sun, body], eventKinds: ['close-approach'] })

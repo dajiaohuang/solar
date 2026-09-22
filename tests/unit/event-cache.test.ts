@@ -19,6 +19,12 @@ function params(): RunEventAnalysisParams {
 }
 
 describe('event analysis cache identity', () => {
+  it('separates strict policy and target/source identity from approximate cached results', () => {
+    const initial = params()
+    expect(eventAnalysisCacheKey({ ...initial, ephemerisPolicy: 'require-spk' })).not.toBe(eventAnalysisCacheKey(initial))
+    expect(eventAnalysisCacheKey({ ...initial, bodies: [{ ...earth, naifId: 399 }] })).not.toBe(eventAnalysisCacheKey(initial))
+    expect(eventAnalysisCacheKey({ ...initial, resolutionBodies: [{ ...earth, source: 'source-inventory' }] })).not.toBe(eventAnalysisCacheKey(initial))
+  })
   it('is order-stable for event kinds and changes with orbit inputs', () => {
     const first = params()
     const reordered = { ...params(), eventKinds: ['conjunction', 'opposition'] as const }
