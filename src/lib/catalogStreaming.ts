@@ -66,8 +66,8 @@ type StreamOptions = {
   budgetBytes: number
   candidateLocators?: Uint32Array
   signal: AbortSignal
-  // Awaiting this callback is the backpressure boundary: the next shard is
-  // admitted only once this tile has been consumed (or discarded) by the UI.
+  // Awaiting this callback is the backpressure boundary: the worker's bounded
+  // transfer window admits further work only while upload credits remain.
   onTile: (tile: CatalogStreamTile) => Promise<void>
 }
 

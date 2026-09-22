@@ -48,8 +48,22 @@ try {
   page.on('request', request => { if (request.url().includes('/data/asteroids/')) requests.push(new URL(request.url()).pathname) })
   await page.addInitScript(() => {
     localStorage.setItem('solar-atlas-first-run-v1', 'complete')
-    const audit = { active: false, intervals: [], longTasks: [], uploads: [], draws: [], allocations: 0, allocationBytes: 0, uploadBytes: 0, glErrors: [], graphics: null, litPixels: null }
+    const audit = { active: false, intervals: [], longTasks: [], uploads: [], draws: [], allocations: 0, allocationBytes: 0, uploadBytes: 0, glErrors: [], graphics: null, litPixels: null, submittedPoints: 0, firstVisibleMs: null, pendingTiles: 0, peakPendingTiles: 0 }
     window.streamAudit = audit
+    const NativeWorker = window.Worker
+    window.Worker = class extends NativeWorker {
+      constructor(url, options) {
+        super(url, options)
+        this.isCatalogStream = String(url).includes('catalog-stream.worker')
+        if (this.isCatalogStream) this.addEventListener('message', event => {
+          if (event.data.type === 'tile') { audit.pendingTiles++; audit.peakPendingTiles = Math.max(audit.peakPendingTiles, audit.pendingTiles) }
+        })
+      }
+      postMessage(data, options) {
+        if (this.isCatalogStream && data.type === 'ack') audit.pendingTiles--
+        super.postMessage(data, options)
+      }
+    }
     let previous = 0
     const frame = now => { if (audit.active && previous) audit.intervals.push(now - previous); previous = audit.active ? now : 0; requestAnimationFrame(frame) }
     requestAnimationFrame(frame)
@@ -65,6 +79,8 @@ try {
         if (method === 'bufferSubData') { audit.uploads.push(elapsed); audit.uploadBytes += parameters[2].byteLength }
         if (method === 'drawArrays') {
           audit.draws.push(elapsed)
+          audit.submittedPoints += parameters[2]
+          if (parameters[2] > 0 && audit.firstVisibleMs === null) audit.firstVisibleMs = performance.now() - window.streamStart
           if (!audit.graphics) {
             const debug = this.getExtension('WEBGL_debug_renderer_info')
             audit.graphics = { version: this.getParameter(this.VERSION), renderer: debug ? this.getParameter(debug.UNMASKED_RENDERER_WEBGL) : null }
@@ -106,7 +122,7 @@ try {
   if (graphicsMode === 'd3d11' && (!/Direct3D11/i.test(result.audit.graphics?.renderer ?? '') || /SwiftShader|software|llvmpipe|basic render/i.test(result.audit.graphics.renderer))) throw new Error('Hardware D3D11 renderer was not established')
   const expandedRequests = requests.slice(requestStart)
   if (expandedRequests.some(path => path.includes('/meta/') || path.includes('catalog-sample-'))) throw new Error('Expanded loading hydrated per-object metadata')
-  if (serverAudit.binaryRequests !== manifest.chunkCount || result.audit.allocations !== 3 || result.audit.allocationBytes !== manifest.totalCount * 24 || result.audit.uploadBytes !== manifest.totalCount * 24) throw new Error('Source count or GPU allocation contract mismatch')
+  if (serverAudit.binaryRequests !== manifest.chunkCount || result.audit.allocations !== 3 || result.audit.allocationBytes !== manifest.totalCount * 24 || result.audit.uploadBytes !== manifest.totalCount * 24 || result.audit.pendingTiles !== 0 || result.audit.peakPendingTiles > 4) throw new Error('Source count, GPU allocation or transfer contract mismatch')
   const summary = values => {
     const sorted = [...values].sort((a, b) => a - b), q = p => sorted[Math.max(0, Math.ceil(sorted.length * p) - 1)] ?? null
     return { count: sorted.length, p50Ms: q(.5), p95Ms: q(.95), p99Ms: q(.99), maxMs: sorted.at(-1) ?? null }
@@ -114,10 +130,11 @@ try {
   const report = { schemaVersion: 1, generatedAt: new Date().toISOString(), measurement: 'built-application-full-MPC-source-static-2D-snapshot-local-HTTP',
     graphicsMode, launchOptions, browser: browser.version(), viewport: { width: 1600, height: 1000, pixelRatio: 1 },
     source: { version: manifest.version, rows: manifest.totalCount, shards: manifest.chunkCount, sourceSha256: manifest.sourceSha256, contentSha256: manifest.contentSha256, manifestSha256: sha(readFileSync(manifestFile)), checksumsSha256: sha(checksums) },
-    implementationSha256: Object.fromEntries(['src/lib/catalogStreaming.ts', 'src/lib/catalogPointRenderer.ts', 'src/workers/catalog-stream.worker.ts', 'src/components/CatalogStreamCanvas.tsx'].map(path => [path, sha(readFileSync(path))])),
+    implementationSha256: Object.fromEntries(['src/lib/catalogStreaming.ts', 'src/lib/catalogPointRenderer.ts', 'src/lib/catalogTransferWindow.ts', 'src/workers/catalog-stream.worker.ts', 'src/components/CatalogStreamCanvas.tsx'].map(path => [path, sha(readFileSync(path))])),
     phase: result.phase, drawnRows: result.drawnRows, checkedRows: result.checkedRows, loadMs: result.loadMs, graphics: result.audit.graphics,
     frameIntervals: summary(result.audit.intervals), uploadSubmission: summary(result.audit.uploads), drawSubmission: summary(result.audit.draws), longTasks: summary(result.audit.longTasks),
     allocations: result.audit.allocations, gpuAttributeBytes: result.audit.allocationBytes, uploadBytes: result.audit.uploadBytes, litPixels: result.audit.litPixels, glErrors: result.audit.glErrors, pageErrors: errors,
+    firstNonemptyDrawMs: result.audit.firstVisibleMs, submittedPointsAcrossDraws: result.audit.submittedPoints, peakUnacknowledgedTiles: result.audit.peakPendingTiles,
     serverAudit, expandedArtifactRequests: expandedRequests.length,
     limits: ['Local filesystem/HTTP, not public network throughput.', 'One fixed UTC epoch; not continuous full-catalog simulation or physical display FPS.', 'Headless animation callbacks and CPU GL submission times, not GPU execution timers.', 'Explicit attribute bytes are not total browser/process/driver memory.', 'Two-dimensional ecliptic projection; offscreen points count as submitted, not visible.', 'This desktop result does not establish native or mobile hardware capacity.'] }
   mkdirSync(dirname(output), { recursive: true })

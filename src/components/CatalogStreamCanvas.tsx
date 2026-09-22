@@ -6,6 +6,7 @@ import { planCatalogStream } from '../lib/catalogStreaming'
 import { julianDayToDate } from '../lib/julianDate'
 import type { AsteroidManifest, CatalogFilters } from '../types'
 import type { CatalogStreamRequest, CatalogStreamResponse } from '../workers/catalog-stream.protocol'
+import { CATALOG_TRANSFER_WINDOW } from '../lib/catalogTransferWindow'
 
 type Props = {
   manifest: AsteroidManifest
@@ -37,6 +38,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
     let renderer: ReturnType<typeof createCatalogPointRenderer> | null = null
     let gl: WebGLRenderingContext | null = null
     const retained: Attributes[] = []
+    const pendingTiles: Extract<CatalogStreamResponse, { type: 'tile' }>[] = []
     const count = { drawnRows: 0, sourceRows: 0 }
     const post = (request: CatalogStreamRequest) => worker?.postMessage(request)
     const cancel = () => {
@@ -44,12 +46,16 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
       // worker is terminated after reporting cancellation; cleanup also has a
       // hard termination boundary for navigation and changed filters.
       acceptingTiles = false
+      pendingTiles.length = 0
       post({ type: 'cancel' })
       if (frameId) { cancelAnimationFrame(frameId); frameId = 0 }
       setStatus({ ...count, phase: 'cancelled' })
     }
     cancelRef.current = cancel
     const fail = (error: unknown) => {
+      acceptingTiles = false
+      pendingTiles.length = 0
+      if (frameId) { cancelAnimationFrame(frameId); frameId = 0 }
       worker?.terminate(); worker = null
       if (active) setStatus({ ...count, phase: 'error', error: error instanceof Error ? error.message : String(error) })
     }
@@ -61,6 +67,38 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
       renderer.drawRetained(radiusRef.current, 0.82, width, height, ratio)
     }
     const checkGl = () => { if (gl?.getError() !== gl?.NO_ERROR) throw new Error('Catalog GPU allocation or upload failed') }
+    const flushTiles = () => {
+      frameId = 0
+      if (!active || !acceptingTiles) return
+      try {
+        if (!renderer) throw new Error('Catalog GPU context is unavailable')
+        const started = performance.now(), acknowledgements: number[] = []
+        let changed = false
+        // The 3 ms budget is checked between tiles. A single source shard may
+        // exceed it on slow hardware; neither compute nor upload is unbounded.
+        while (pendingTiles.length && (!acknowledgements.length || performance.now() - started < 3)) {
+          const response = pendingTiles.shift()!
+          const points = response.positions.length / 2
+          if (!Number.isSafeInteger(points) || points > manifest.chunkSize || response.appearance.length !== points * 2 || response.drawnRows !== count.drawnRows + points || response.drawnRows > plan.capacity || response.sourceRows < count.sourceRows || response.sourceRows > manifest.totalCount) throw new Error('Invalid catalog streaming tile')
+          const tile: Attributes = { positions: new Float32Array(response.positions), colors: new Float32Array(points * 3), sizes: new Float32Array(points) }
+          for (let row = 0; row < points; row++) {
+            if (!Number.isFinite(tile.positions[row * 2]) || !Number.isFinite(tile.positions[row * 2 + 1])) throw new Error('Catalog position exceeds GPU coordinates')
+            const orbitClass = manifest.compactIndex!.classCodes[response.appearance[row * 2]], flags = response.appearance[row * 2 + 1]
+            if (!orbitClass || flags > 7) throw new Error('Invalid catalog appearance')
+            tile.colors.set(catalogPointColor(orbitClass, flags), row * 3)
+            tile.sizes[row] = catalogPointSize(flags)
+          }
+          if (points) { renderer.append(tile); retained.push(tile); changed = true }
+          count.drawnRows = response.drawnRows; count.sourceRows = response.sourceRows
+          acknowledgements.push(response.tileId)
+        }
+        if (changed) { checkGl(); draw() }
+        setStatus({ ...count, phase: 'loading' })
+        // Acknowledge only after the batch has actually reached the renderer.
+        for (const tileId of acknowledgements) post({ type: 'ack', tileId })
+        if (pendingTiles.length) frameId = requestAnimationFrame(flushTiles)
+      } catch (error) { fail(error) }
+    }
     const initialize = () => {
       renderer?.dispose(); renderer = null
       try {
@@ -96,34 +134,14 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
         const response = event.data
         if (response.type === 'tile') {
           if (!acceptingTiles) return
-          // At most one unacknowledged tile crosses the worker boundary. One
-          // rAF per upload gives interaction/compositing a chance between shards.
-          frameId = requestAnimationFrame(() => {
-            frameId = 0
-            try {
-              if (!renderer) throw new Error('Catalog GPU context is unavailable')
-              const points = response.positions.length / 2
-              if (!Number.isSafeInteger(points) || response.appearance.length !== points * 2 || response.drawnRows !== count.drawnRows + points || response.drawnRows > plan.capacity) throw new Error('Invalid catalog streaming tile')
-              const tile: Attributes = { positions: new Float32Array(response.positions), colors: new Float32Array(points * 3), sizes: new Float32Array(points) }
-              for (let row = 0; row < points; row++) {
-                if (!Number.isFinite(tile.positions[row * 2]) || !Number.isFinite(tile.positions[row * 2 + 1])) throw new Error('Catalog position exceeds GPU coordinates')
-                const orbitClass = manifest.compactIndex!.classCodes[response.appearance[row * 2]], flags = response.appearance[row * 2 + 1]
-                if (!orbitClass || flags > 7) throw new Error('Invalid catalog appearance')
-                tile.colors.set(catalogPointColor(orbitClass, flags), row * 3)
-                tile.sizes[row] = catalogPointSize(flags)
-              }
-              renderer.append(tile); checkGl()
-              if (points) retained.push(tile)
-              count.drawnRows = response.drawnRows; count.sourceRows = response.sourceRows
-              draw()
-              setStatus({ ...count, phase: 'loading' })
-              post({ type: 'ack', tileId: response.tileId })
-            } catch (error) { fail(error) }
-          })
+          if (pendingTiles.length >= CATALOG_TRANSFER_WINDOW) { fail(new Error('Catalog transfer window exceeded')); return }
+          pendingTiles.push(response)
+          if (!frameId) frameId = requestAnimationFrame(flushTiles)
         } else {
           worker?.terminate(); worker = null
           if (response.type === 'error') fail(new Error(response.error))
           else if (response.type === 'cancelled') setStatus({ ...count, phase: 'cancelled' })
+          else if (pendingTiles.length || response.drawnRows !== count.drawnRows || response.sourceRows !== count.sourceRows) fail(new Error('Catalog completed before all tiles were uploaded'))
           else setStatus({ ...count, phase: response.complete ? 'complete' : 'limited' })
         }
       }
@@ -139,16 +157,17 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
       canvas.removeEventListener('webglcontextlost', lost)
       canvas.removeEventListener('webglcontextrestored', initialize)
       renderer?.dispose()
+      pendingTiles.length = 0
       retained.length = 0
     }
   }, [manifest, filters, julianDay, requestedRows, budgetBytes, plan.capacity])
 
   return <>
     <canvas ref={canvasRef} className="viz-canvas catalog-point-canvas" role="img" aria-label={`${t('catalogPointAria')}: ${status.drawnRows.toLocaleString()}`} data-testid="catalog-stream-canvas" data-drawn-rows={status.drawnRows} data-source-rows={status.sourceRows} data-phase={status.phase} data-capacity={plan.capacity} />
-    <div className="catalog-stream-status" role="status">
+    <div className="catalog-stream-status">
       <strong>{status.drawnRows.toLocaleString()} / {plan.capacity.toLocaleString()} · {t('catalogStreamDrawn')}</strong>
       <span>{t('catalogStreamScanned')}: {status.sourceRows.toLocaleString()} / {manifest.totalCount.toLocaleString()}</span>
-      <span>{t(status.phase === 'loading' ? 'catalogStreamLoading' : status.phase === 'complete' ? 'catalogStreamComplete' : status.phase === 'limited' ? 'catalogStreamLimited' : status.phase === 'cancelled' ? 'catalogStreamCancelled' : 'catalogStreamFailed')}</span>
+      <span role="status">{t(status.phase === 'loading' ? 'catalogStreamLoading' : status.phase === 'complete' ? 'catalogStreamComplete' : status.phase === 'limited' ? 'catalogStreamLimited' : status.phase === 'cancelled' ? 'catalogStreamCancelled' : 'catalogStreamFailed')}</span>
       {status.phase === 'loading' && <button className="secondary-button" onClick={() => cancelRef.current?.()}>{t('catalogStreamCancel')}</button>}
       {status.error && <span role="alert">{status.error}</span>}
     </div>

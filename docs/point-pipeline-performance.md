@@ -326,8 +326,8 @@ the worker loads checksums, the compact index and binary orbital shards without
 hydrating metadata objects for every body. Name filters use the existing exact
 search locators; unsupported locator contracts fail visibly.
 
-Four source shards may be in flight. An upload acknowledgement gates the next
-shard, keeping at most one computed tile awaiting the main thread. The main
+Four source shards may be in flight. Initially an upload acknowledgement gated
+each next shard, keeping one computed tile awaiting the main thread. The main
 thread uploads only its new ranges into three fixed-capacity GPU buffers. It
 retains Float32 attributes for context restoration; the worker discards a
 shard's prepared Float64 orbit coefficients after its fixed-epoch computation.
@@ -379,3 +379,43 @@ state reuse, process memory and native/mobile hardware evidence remain open.
 rtk npm run build
 rtk proxy node scripts/benchmark-catalog-stream.mjs --graphics d3d11 --output .cache/catalog-stream-new.json
 ```
+
+### Bounded upload batching (2026-09-23)
+
+The producer now has four independent transfer credits. It stops computing
+when all four are waiting for upload and cannot declare completion until the
+last acknowledgement returns. The main thread consumes ready tiles within a
+3 ms budget, checked between source tiles, and draws the cumulative cloud once
+per batch. A slow individual tile or GPU draw can exceed this budget; it is not
+a guaranteed frame deadline. Network admission remains four shards. Duplicate
+or unknown acknowledgements cannot add credits. Cancellation releases blocked
+producers and discards pending main-thread tiles. Screen-reader announcements
+now follow status changes rather than every progress-count update.
+
+The [batched NVIDIA report](benchmarks/catalog-stream-batched-rtx5070ti-20260923.json)
+and [batched SwiftShader report](benchmarks/catalog-stream-batched-swiftshader-20260923.json)
+use the same complete MPC input, fixed UTC epoch, view radius and viewport as
+the preceding application runs:
+
+| Renderer | Earlier / batched load ms | Earlier / batched draw calls | Batched callback P95 / P99 ms | Earlier / batched long tasks |
+| --- | ---: | ---: | ---: | ---: |
+| NVIDIA RTX 5070 Ti / D3D11 | 5,443.1 / 1,518.8 | 315 / 81 | 16.8 / 16.8 | 0 / 0 |
+| ANGLE SwiftShader | 13,255.8 / 3,738.9 | 315 / 81 | 83.3 / 83.4 | 112 / 32 |
+
+These are separate local runs, not repeated-run statistical estimates. Both
+new runs establish a peak of four unacknowledged tiles and four active binary
+responses. The first nonempty draw was submitted after 200.1 ms on D3D11 and
+229.1 ms on SwiftShader; this is not first physical-display presentation.
+The exact source count, three allocations, 37,468,104 uploaded bytes, final
+rendered pixels and absence of page/WebGL errors are preserved. Incremental
+attribute uploads remain 939: the optimization removes redundant cumulative
+draws rather than skipping source records or reducing numeric precision.
+
+Software long tasks fell in number but the worst observed task was 81 ms and
+callback P95 did not improve. The full software-rendered cloud is still unsuitable
+for an assumed 60 Hz continuous view. Spatial LOD and measured adaptive draw
+budgets remain required. A four-browser test withholds real worker upload
+acknowledgements and verifies four-tile saturation, no early completion and
+complete eight-shard recovery after acknowledgements resume. Unit checks also
+cover duplicate/out-of-order acknowledgements, concurrent producers, send
+failure, cancellation and the final partial window.

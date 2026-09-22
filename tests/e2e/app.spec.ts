@@ -300,6 +300,7 @@ async function installMockCatalog(page: Page | null, options: {
   sampleCount?: number
   profileSamples?: { desktop: number[]; mobile: number[] }
   presetDataset?: boolean
+  chunkSize?: number
 } = {}) {
   const responses = new Map<string, MockCatalogResponse>()
   const register = async (pattern: string, response: MockCatalogResponse) => {
@@ -332,6 +333,9 @@ async function installMockCatalog(page: Page | null, options: {
       }
     })
     : fixtureEntries
+  const chunkSize = options.chunkSize ?? 10_000
+  const chunkId = (index: number) => `chunk-${String(Math.floor(index / chunkSize)).padStart(4, '0')}`
+  entries.forEach((entry, index) => { entry.chunkId = chunkId(index) })
   const numeric = new Float64Array(entries.length * 8)
   entries.forEach((_, index) => numeric.set([2451545, 2.1 + index % 600 / 500, 0.05 + index % 20 / 100, index % 30, 20, 40, 60, 0.25], index * 8))
   const defaultSampleIndexes = entries.slice(0, options.sampleCount ?? entries.length).map((_, index) => index)
@@ -342,7 +346,7 @@ async function installMockCatalog(page: Page | null, options: {
     datasetMode: options.presetDataset ? 'full' : 'lite',
     source: 'fixture', generatedAt: '2026-08-18T00:00:00Z',
     sourceSha256: 'a'.repeat(64), contentSha256: 'b'.repeat(64), parserVersion: 'test', totalCount: entries.length,
-    chunkCount: 1, chunkSize: 10_000, format: 'binary-v1', bucketCounts: { 'digit-1': entries.length }, categoryCounts: options.presetDataset ? { MBA: entries.length } : { MBA: 1, APO: 1, TNO: 1 }, featured: [],
+    chunkCount: Math.ceil(entries.length / chunkSize), chunkSize, format: 'binary-v1', bucketCounts: { 'digit-1': entries.length }, categoryCounts: options.presetDataset ? { MBA: entries.length } : { MBA: 1, APO: 1, TNO: 1 }, featured: [],
     selectionPolicy: { type: 'permanent-number-through-plus-featured', maxPermanentNumber: 30000, requiredFeaturedNames: [] },
   }
   if (precomputed) Object.assign(manifest, {
@@ -358,8 +362,13 @@ async function installMockCatalog(page: Page | null, options: {
   await register('**/data/asteroids/dataset-version.json', { json: { schemaVersion: 1, activeVersion: manifest.version, mode: manifest.datasetMode, manifestPath: `releases/${manifest.version}/manifest.json`, generatedAt: manifest.generatedAt, sourceSha256: manifest.sourceSha256, contentSha256: manifest.contentSha256 } })
   await register(`**/data/asteroids/releases/${manifest.version}/manifest.json`, { json: manifest })
   await register(`**/data/asteroids/releases/${manifest.version}/provenance.json`, { json: { datasetVersion: manifest.version, downloadedAt: manifest.generatedAt, mode: manifest.datasetMode, totalObjects: entries.length, orbitModel: 'fixture', precision: 'fixture', parserVersion: 'test', ...manifest } })
-  await register(`**/data/asteroids/releases/${manifest.version}/meta/chunk-0000.json`, { json: entries })
-  await register(`**/data/asteroids/releases/${manifest.version}/binary/chunk-0000.bin`, { body: Buffer.from(numeric.buffer), contentType: 'application/octet-stream' })
+  const binaryChecksums: Record<string, string> = {}
+  for (let start = 0; start < entries.length; start += chunkSize) {
+    const end = Math.min(entries.length, start + chunkSize), binary = Buffer.from(numeric.slice(start * 8, end * 8).buffer)
+    await register(`**/data/asteroids/releases/${manifest.version}/meta/${chunkId(start)}.json`, { json: entries.slice(start, end) })
+    await register(`**/data/asteroids/releases/${manifest.version}/binary/${chunkId(start)}.bin`, { body: binary, contentType: 'application/octet-stream' })
+    binaryChecksums[`binary/${chunkId(start)}.bin`] = createHash('sha256').update(binary).digest('hex')
+  }
   const compact = Buffer.alloc(entries.length * 24)
   entries.forEach((entry, index) => {
     const offset = index * 24
@@ -369,14 +378,14 @@ async function installMockCatalog(page: Page | null, options: {
     compact.writeInt16LE(entry.absoluteMagnitude === undefined ? 0x7fff : Math.round(entry.absoluteMagnitude * 100), offset + 16)
     compact.writeUInt8(['MBA', 'APO', 'TNO'].indexOf(entry.orbitClassCode), offset + 18)
     compact.writeUInt8((entry.isNeo ? 1 : 0) | (entry.isPha ? 2 : 0) | (entry.absoluteMagnitude === undefined ? 0 : 4), offset + 19)
-    compact.writeUInt16LE(0, offset + 20)
-    compact.writeUInt16LE(index, offset + 22)
+    compact.writeUInt16LE(Math.floor(index / chunkSize), offset + 20)
+    compact.writeUInt16LE(index % chunkSize, offset + 22)
   })
   await register(`**/data/asteroids/releases/${manifest.version}/catalog-index.bin`, { body: compact, contentType: 'application/octet-stream' })
   await register(`**/data/asteroids/releases/${manifest.version}/checksums.json`, { json: {
     schemaVersion: 1, algorithm: 'sha256', files: {
       'catalog-index.bin': createHash('sha256').update(compact).digest('hex'),
-      'binary/chunk-0000.bin': createHash('sha256').update(Buffer.from(numeric.buffer)).digest('hex'),
+      ...binaryChecksums,
     },
   } })
   for (const size of ['desktop', 'mobile'] as const) {
@@ -587,6 +596,59 @@ test('streams an expanded source snapshot beyond the sample and restores its act
   await page.getByRole('button', { name: 'Return to sample map' }).click()
   await expect(stream).toHaveCount(0)
   expect(errors).toEqual([])
+})
+
+test('bounds expanded source transfers and waits for the last upload acknowledgement before completion', async ({ page }) => {
+  type FlowWindow = Window & { streamFlow: { received: number; acknowledged: number; peak: number; finished: boolean; release: () => void } }
+  await installMockCatalog(page, { precomputed: true, presetDataset: true, sampleCount: 1, chunkSize: 1000 })
+  await page.addInitScript(() => {
+    localStorage.setItem('solar-atlas-first-run-v1', 'complete')
+    const NativeWorker = window.Worker, held: (() => void)[] = []
+    let holding = true
+    const flow = { received: 0, acknowledged: 0, peak: 0, finished: false, release: () => {
+      holding = false
+      for (const acknowledge of held.splice(0)) acknowledge()
+    } }
+    ;(window as FlowWindow).streamFlow = flow
+    window.Worker = class extends NativeWorker {
+      private stream: boolean
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(url, options)
+        this.stream = String(url).includes('catalog-stream.worker')
+        if (!this.stream) return
+        this.addEventListener('message', event => {
+          if (event.data.type === 'tile') { flow.received++; flow.peak = Math.max(flow.peak, flow.received - flow.acknowledged) }
+          if (event.data.type === 'done') flow.finished = true
+        })
+      }
+      override postMessage(data: unknown, options?: Transferable[] | StructuredSerializeOptions) {
+        const acknowledge = this.stream && (data as { type: string }).type === 'ack'
+        const send = () => {
+          if (acknowledge) flow.acknowledged++
+          if (Array.isArray(options)) super.postMessage(data, options)
+          else super.postMessage(data, options)
+        }
+        if (acknowledge && holding) held.push(send)
+        else send()
+      }
+    }
+  })
+  await page.goto('./?v=4&page=catalog&lang=en&jd=2461287.5')
+  await page.getByRole('button', { name: /Load expanded snapshot/ }).click()
+  const canvas = page.getByTestId('catalog-stream-canvas')
+  await expect(canvas).toHaveAttribute('data-drawn-rows', '4000')
+  await expect(canvas).toHaveAttribute('data-phase', 'loading')
+  expect(await page.evaluate(() => {
+    const { received, acknowledged, peak, finished } = (window as FlowWindow).streamFlow
+    return { received, acknowledged, peak, finished }
+  })).toEqual({ received: 4, acknowledged: 0, peak: 4, finished: false })
+  await page.evaluate(() => (window as FlowWindow).streamFlow.release())
+  await expect(canvas).toHaveAttribute('data-phase', 'complete')
+  await expect(canvas).toHaveAttribute('data-drawn-rows', '8000')
+  expect(await page.evaluate(() => {
+    const { received, acknowledged, peak, finished } = (window as FlowWindow).streamFlow
+    return { received, acknowledged, peak, finished }
+  })).toEqual({ received: 8, acknowledged: 8, peak: 4, finished: true })
 })
 
 test('stops expanded source loading without installing a late tile and permits refresh', async ({ page }) => {

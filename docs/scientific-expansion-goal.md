@@ -423,6 +423,31 @@ The combined head still requires its remote gate. Continuous/3D streaming,
 priority/spatial scheduling, total memory evidence and the unfinished scientific
 ledger rows remain open. Deployment and publication remain paused.
 
+### Checkpoint 14: bounded transfer windows and batched uploads (2026-09-23)
+
+The worker/main boundary now permits four computed tiles, with individual upload
+credits and an explicit final drain. The main thread uploads ready tiles within
+a 3 ms between-tile budget, then draws once per batch. Duplicate acknowledgements
+cannot increase capacity; cancellation and failed transfers release waiters.
+This retains complete source coverage and precision while reducing repeated
+draws. Progress counters no longer cause repeated live-region announcements.
+
+Twenty-one focused transfer/stream/GPU unit checks and sixteen four-browser
+checks passed. The browser test uses the real worker, holds acknowledgements
+until four tiles are pending, verifies that completion is still withheld, then
+releases credits and verifies all eight source shards. Two new actual full-source
+application benchmarks retained all 1,561,171 rows, four network requests and
+four transfer credits at peak, three GPU allocations and the same total upload
+bytes. D3D11 snapshot time fell from 5.44 to 1.52 s and SwiftShader from 13.26 to
+3.74 s in separate local runs. Draw calls fell from 315 to 81. SwiftShader still
+had P95/P99 callback intervals of 83.3/83.4 ms and 32 long tasks, so this is not a
+claim of smooth continuous rendering on software. Details and immutable reports
+are linked from [point-pipeline-performance.md](point-pipeline-performance.md).
+
+Spatial/time/error budgets, continuous/3D streaming, measured total memory and
+the unfinished scientific ledger rows remain required. The new optimization
+must pass its remote gate; a local benchmark does not authorize main promotion.
+
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),
 [JPL SBDB](https://ssd-api.jpl.nasa.gov/doc/sbdb.html),
