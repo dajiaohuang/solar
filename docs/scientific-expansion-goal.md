@@ -92,8 +92,35 @@ client/transport tests passed. Six desktop/mobile Chromium checks passed,
 including actual requests to the local Go service with the full pinned IERS
 snapshot and original DE440 SPK, export, cancel/error behavior and existing
 observer diagnostics. Error/cancel cases deliberately inject service responses.
-No remote deployment or new capacity claim is implied. Required remote CI must
-pass on the committed head before this slice is promoted to main.
+No remote deployment or new capacity claim is implied. All required remote
+checks, including native iOS/Android and four browser profiles, passed on
+`e042628`; that exact head was fast-forwarded to main with deployment and
+data-publication workflows still disabled.
+
+### Checkpoint 3: bounded rise/set and visibility search (2026-09-23)
+
+Added a backend search and bilingual inspector access for target-center
+airless altitude plus optional Sun-altitude limits. Window jobs retain a single
+SPK source identity, use leap-aware TAI elapsed time, and report missing or
+unresolved intervals separately. They are cancellable, deadline/evaluation
+bounded and scheduled with trajectory work. JSON exports include the original
+request, crossing brackets, windows, gaps, actual kernels and IERS snapshot.
+Thirty-second sampling and 0.25-second root brackets are explicit numerical
+limits; sub-step/tangent events are not guaranteed and physical uncertainty is
+not propagated. This is not conventional refracted upper-limb sunrise/sunset.
+
+Validation: targeted Go observation/API suites and vet, 42 transport/client
+tests, production build and four desktop/mobile Chromium window checks passed.
+Existing point-observation and Moon diagnostic browser checks also passed.
+Successful local UI requests used the actual Go backend with pinned full IERS
+and DE440; cancellation tests deliberately delayed fixture responses. Five
+independent ERFA/jplephem full-day cases passed, with all crossing residuals
+within their numeric brackets (largest absolute difference 0.108 seconds).
+No repeated full local suite or production deployment was used. Required
+remote checks must pass on the committed head before main promotion.
+
+Native observer consumption, source-refresh UI, physical uncertainty and the
+other ledger rows remain outstanding. The overall goal is still active.
 
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),

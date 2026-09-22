@@ -6,8 +6,8 @@ the simulation clock does not continuously query the backend. Editing the form
 invalidates the previous result. JSON exports retain the original request,
 catalog identity, actual SPK hashes, IERS snapshot and model limitations.
 
-This first slice provides directions at a requested instant. Rise/set searches,
-visibility windows, native UI and propagated physical uncertainty remain pending.
+The form provides directions at one instant and bounded rise/set/visibility
+searches. Native UI and propagated physical uncertainty remain pending.
 No deployment or data publication is performed by the following local commands.
 
 ## Local data and service
@@ -43,7 +43,7 @@ height. The calculation uses exact available SPK states, IAU 2006/2000A
 precession-nutation with available IERS dX/dY, Earth rotation and polar motion.
 Reception Earth/Sun states, retarded target states and solar deflector states
 share the catalog's numerical/provenance path. A target changing SPK solution
-within light-time iteration fails explicitly.
+within light-time iteration or across an entire window fails explicitly.
 
 Results distinguish simultaneous geometric directions, apparent airless
 directions with light time, finite-distance solar monopole deflection and
@@ -60,6 +60,55 @@ Float64 JD resolution and is **not** a physical uncertainty estimate. SPK center
 chains and different source solution sets retain their existing limitations.
 Library attribution and license notices are in
 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+
+## Rise, set and visibility windows
+
+**Orbit → Ground observer → Rise, set and visibility windows** reuses the
+station and UTC start above. Enter an explicit UTC end (1–86401 SI seconds
+later), target-center minimum altitude and an optional maximum Sun altitude.
+The model intersects target altitude >= minimum with Sun altitude <= maximum.
+Changing the station, start, thresholds or target invalidates and cancels the
+old request. Export retains the completed request, crossings, windows, gaps,
+source hashes, IERS manifest and numerical/physical limitations.
+
+This is **apparent airless center** altitude. A zero-degree solar crossing is
+not conventional upper-limb refracted sunrise/sunset. The weather option for
+single-instant observations does not apply to window searches. Terrain,
+extinction and finite target size are excluded. A qualifying window is not a
+claim that an object can be seen through clouds or with a particular instrument.
+
+The backend searches along elapsed TAI seconds, preserving UTC leap seconds
+and an 86401-second UTC day. Output UTC epochs have microsecond formatting;
+the bracketed boundary tolerance is 0.25 seconds. A 30-second grid detects
+sign changes; extra midpoint checks conservatively mark unresolved intervals
+when they reveal sub-step variation. Bisection refines bracketed crossings.
+Sub-step pairs of events, tangent contacts and unsampled source gaps can still
+be missed. `sampled-complete` means that all queried points were available,
+**not** proven continuous coverage or exhaustive event detection. Short-period
+spacecraft passes need a separately validated search cadence.
+
+Missing Earth/Sun/target states or EOP intervals remain explicit gaps, never
+zero altitude or a window bridged across missing data. Searches share one
+source-identity session. A kernel change aborts the job. Work has a limit of
+8192 direction evaluations, a 20-second server deadline, normal admission and
+the trajectory compute class. Cancellation, budget exhaustion and source
+changes return errors instead of a partially completed success.
+
+The [independent window fixture](../tests/fixtures/visibility-erfa-reference.json)
+uses ERFA/jplephem with a separate 120-second grid and 0.001-second root
+brackets. Five 24-hour cases cover Singapore Sun crossings, Moon altitude plus
+darkness, Greenwich Venus, an Arctic empty window and contradictory solar
+constraints. All returned boundaries lie within the Go numerical brackets
+(plus the oracle's 0.001-second tolerance). Reproduce with
+[verify-visibility-erfa.py](../scripts/verify-visibility-erfa.py). This comparison
+does not propagate physical uncertainty or resolve the Horizons model-chain
+difference below. Additional tests exercise leap seconds, gaps, source changes,
+unresolved short events, cancellation and evaluation budgets.
+
+The [SPICE geometry-finder guide](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/gf.html)
+explains the distinction between search cadence, root convergence and events
+that a sampled search can miss. This implementation uses its own bounded
+search, not the SPICE GF runtime.
 
 ## Independent evidence, 2026-09-23
 

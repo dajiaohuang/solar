@@ -1,0 +1,169 @@
+{
+  "schemaVersion": 1,
+  "software": {
+    "pyerfa": "2.0.1.5",
+    "erfa": "2.0.1",
+    "numpy": "2.4.2",
+    "jplephem": "2.24"
+  },
+  "spkSha256": "8724d2d1bac115a75ad1f984c5b474ca778c96ee8be2df83e624cef61c001069",
+  "iersFixtureSha256": "552d7189f7d77ea2cfa48fad3ba74c4edb39620160c9e1277e64b1d87e9da0ec",
+  "stepSeconds": 120,
+  "boundaryToleranceSeconds": 0.001,
+  "boundary": "Independent numerical reference for airless centers; not physical uncertainty or a proof of search completeness.",
+  "cases": [
+    {
+      "name": "sun-singapore",
+      "request": {
+        "startUtc": "2026-09-23T00:00:00Z",
+        "endUtc": "2026-09-24T00:00:00Z",
+        "station": {
+          "longitudeDeg": 103.851959,
+          "latitudeDeg": 1.29027,
+          "heightMeters": 0
+        },
+        "bodyId": "naif:10",
+        "minAltitudeDeg": 0
+      },
+      "crossings": [
+        {
+          "kind": "set",
+          "seconds": 39417.262115478516
+        },
+        {
+          "kind": "rise",
+          "seconds": 82610.84976196289
+        }
+      ],
+      "windows": [
+        {
+          "startSeconds": 0,
+          "endSeconds": 39417.262115478516
+        },
+        {
+          "startSeconds": 82610.84976196289,
+          "endSeconds": 86400
+        }
+      ]
+    },
+    {
+      "name": "moon-singapore-darkness",
+      "request": {
+        "startUtc": "2026-09-23T00:00:00Z",
+        "endUtc": "2026-09-24T00:00:00Z",
+        "station": {
+          "longitudeDeg": 103.851959,
+          "latitudeDeg": 1.29027,
+          "heightMeters": 0
+        },
+        "bodyId": "naif:301",
+        "minAltitudeDeg": 10,
+        "maxSunAltitudeDeg": -6
+      },
+      "crossings": [
+        {
+          "kind": "rise",
+          "seconds": 33299.327545166016
+        },
+        {
+          "kind": "darkness-begins",
+          "seconds": 40857.244720458984
+        },
+        {
+          "kind": "set",
+          "seconds": 72097.89779663086
+        },
+        {
+          "kind": "darkness-ends",
+          "seconds": 81170.7746887207
+        }
+      ],
+      "windows": [
+        {
+          "startSeconds": 40857.244720458984,
+          "endSeconds": 72097.89779663086
+        }
+      ]
+    },
+    {
+      "name": "venus-greenwich",
+      "request": {
+        "startUtc": "2026-09-23T00:00:00Z",
+        "endUtc": "2026-09-24T00:00:00Z",
+        "station": {
+          "longitudeDeg": 0,
+          "latitudeDeg": 51.4779,
+          "heightMeters": 46
+        },
+        "bodyId": "naif:299",
+        "minAltitudeDeg": 5
+      },
+      "crossings": [
+        {
+          "kind": "rise",
+          "seconds": 37591.61911010742
+        },
+        {
+          "kind": "set",
+          "seconds": 63092.46505737305
+        }
+      ],
+      "windows": [
+        {
+          "startSeconds": 37591.61911010742,
+          "endSeconds": 63092.46505737305
+        }
+      ]
+    },
+    {
+      "name": "sun-arctic-below-threshold",
+      "request": {
+        "startUtc": "2026-09-23T00:00:00Z",
+        "endUtc": "2026-09-24T00:00:00Z",
+        "station": {
+          "longitudeDeg": 0,
+          "latitudeDeg": 80,
+          "heightMeters": 0
+        },
+        "bodyId": "naif:10",
+        "minAltitudeDeg": 20
+      },
+      "crossings": [],
+      "windows": []
+    },
+    {
+      "name": "sun-contradictory-constraints",
+      "request": {
+        "startUtc": "2026-09-23T00:00:00Z",
+        "endUtc": "2026-09-24T00:00:00Z",
+        "station": {
+          "longitudeDeg": 103.851959,
+          "latitudeDeg": 1.29027,
+          "heightMeters": 0
+        },
+        "bodyId": "naif:10",
+        "minAltitudeDeg": 0,
+        "maxSunAltitudeDeg": -6
+      },
+      "crossings": [
+        {
+          "kind": "set",
+          "seconds": 39417.262115478516
+        },
+        {
+          "kind": "darkness-begins",
+          "seconds": 40857.244720458984
+        },
+        {
+          "kind": "darkness-ends",
+          "seconds": 81170.7746887207
+        },
+        {
+          "kind": "rise",
+          "seconds": 82610.84976196289
+        }
+      ],
+      "windows": []
+    }
+  ]
+}

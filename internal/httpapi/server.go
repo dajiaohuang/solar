@@ -174,6 +174,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.trajectory(w, r)
 	case r.Method == "POST" && path == "observation":
 		s.observation(w, r)
+	case r.Method == "POST" && path == "observation/windows":
+		s.observationWindows(w, r)
 	case r.Method == "GET" && path == "catalog/manifest":
 		s.catalogManifest(w, r)
 	case r.Method == "GET" && path == "coverage":

@@ -163,7 +163,7 @@ func (s *session) states(ids []string, jd float64) (map[string]catalog.State, ma
 		}
 		key := id + "\x00" + e.Source + "\x00" + e.KernelSHA256
 		if previous, exists := s.identities[id]; exists && previous != key {
-			return nil, nil, fail("ephemeris_source_changed", "SPK solution changed within the observation light-time calculation")
+			return nil, nil, fail("ephemeris_source_changed", "SPK solution changed within the observation job")
 		}
 		s.identities[id] = key
 		if old := s.sources[key]; old != nil {
@@ -204,6 +204,13 @@ func direction(p [3]float64, astrom gofa.ASTROM) Direction {
 }
 
 func Evaluate(ctx context.Context, req Request, eop *earthorientation.Table, evaluate Evaluator) (*Result, error) {
+	sess := &session{ctx: ctx, evaluate: evaluate, sources: map[string]*Source{}, identities: map[string]string{}}
+	return evaluateSession(ctx, req, eop, sess)
+}
+
+// A window shares this session so even disjoint observation instants cannot
+// silently switch kernels. The immutable EOP table is shared as well.
+func evaluateSession(ctx context.Context, req Request, eop *earthorientation.Table, sess *session) (*Result, error) {
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
@@ -233,7 +240,6 @@ func Evaluate(ctx context.Context, req Request, eop *earthorientation.Table, eva
 	dtr := gofa.Dtdb(tt1, tt2, utFraction, lon, math.Hypot(stationXYZ[0], stationXYZ[1])/1000, stationXYZ[2]/1000)
 	gofa.Tttdb(tt1, tt2, dtr, &tdb1, &tdb2)
 	jd := tdb1 + tdb2
-	sess := session{ctx: ctx, evaluate: evaluate, sources: map[string]*Source{}, identities: map[string]string{}}
 	ids := append([]string{"naif:399", "naif:10"}, req.BodyIDs...)
 	states, found, err := sess.states(ids, jd)
 	if err != nil {

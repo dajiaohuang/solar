@@ -46,6 +46,24 @@ invented directions. Computed directions and physical uncertainty are separate.
 Read [ground-observation.md](ground-observation.md) for setup, numerical model,
 reference results, remaining differences and limitations.
 
+`POST /v1/observation/windows` accepts `startUtc`, `endUtc`, a single `bodyId`,
+the same required `station`, required `minAltitudeDeg` and optional
+`maxSunAltitudeDeg`. It searches apparent airless target-center altitude, with
+an optional Sun-altitude conjunction. No atmosphere/refraction is applied.
+The span is 1–86401 elapsed SI seconds on TAI. Thresholds lie in [-90,90] degrees.
+Work uses the trajectory admission/compute class, a 16 KiB request bound,
+8192-evaluation limit and 20-second deadline. The search uses a 30-second grid,
+midpoint consistency checks and bisection to a 0.25-second bracket. Numerical
+tolerance is separate from physical uncertainty, which is not propagated.
+Response `result` contains UTC/TAI-offset windows, `rise`/`set` and optional
+`darkness-begins`/`darkness-ends` crossings, missing/unresolved intervals,
+actual SPK hashes, warning flags and the search contract. Its `coverage` is
+`sampled-complete`, `partial` or `unavailable`. Available samples do not prove
+continuous coverage; sub-step events and tangent contacts may be missed.
+Missing intervals cannot be bridged by output windows. Source changes or
+evaluation-budget exhaustion return `422` errors, cancellation/deadline `408`;
+unconfigured IERS remains `503`. The metadata endpoint advertises these limits.
+
 `GET /v1/capabilities` returns API/catalog versions, scientific contract,
 resource limits and full/Pages-preview profiles. Its `contract.auditIdentities`
 array contains exact allowed `{source,datasetVersion,model}` tuples from the

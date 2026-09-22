@@ -9,7 +9,7 @@ export function ObservationReadout({ body, observer, julianDay }: { body: Celest
   const [mode, setMode] = useState<ApparentMode>('light-time+stellar-aberration')
   const { t, language } = useI18n()
   const result = currentObservation(body, observer, julianDay, mode)
-  return <details className="model-note">
+  return <details className="model-note" data-testid="observation-correction">
     <summary>{t('observationCorrection')} · {bodyDisplayName(observer, language)}</summary>
     <label>{t('model')} <select value={mode} onChange={(event) => setMode(event.target.value as ApparentMode)}>
       <option value="geometric">Geometric</option><option value="light-time">Light time</option><option value="light-time+stellar-aberration">Light time + stellar aberration</option>

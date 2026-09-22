@@ -68,6 +68,10 @@ export function validateGroundObservation(raw: unknown, request: GroundObservati
 }
 
 export async function loadGroundObservation(base: string | null, profile: 'full' | 'preview', request: GroundObservationRequest, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<GroundObservation> {
+  return loadGroundPayload(base, profile, '/v1/observation', request, signal, raw => validateGroundObservation(raw, request), fetcher)
+}
+
+export async function loadGroundPayload<T>(base: string | null, profile: 'full' | 'preview', path: string, request: unknown, signal: AbortSignal, validate: (raw: unknown) => T, fetcher: typeof fetch = fetch): Promise<T> {
   if (profile !== 'full' || !base?.trim()) throw new GroundObservationError('backend_unavailable', 'Ground observations require a configured full backend')
   const controller = new AbortController(), cancel = () => controller.abort(signal.reason)
   signal.addEventListener('abort', cancel, { once: true })
@@ -76,14 +80,14 @@ export async function loadGroundObservation(base: string | null, profile: 'full'
   let response: Response | undefined
   try {
     if (controller.signal.aborted) throw controller.signal.reason
-    response = await fetcher(`${base.trim().replace(/\/+$/, '')}/v1/observation`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request), signal: controller.signal, cache: 'no-store' })
+    response = await fetcher(`${base.trim().replace(/\/+$/, '')}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request), signal: controller.signal, cache: 'no-store' })
     const raw: unknown = JSON.parse(new TextDecoder().decode(await readBounded(response, 'application/json', 1024 * 1024)))
     if (controller.signal.aborted) throw controller.signal.reason
     if (!response.ok) {
       const error = object(object(raw).error)
       throw new GroundObservationError(typeof error.code === 'string' ? error.code : 'failed', typeof error.message === 'string' ? error.message : `Observation HTTP ${response.status}`)
     }
-    return validateGroundObservation(raw, request)
+    return validate(raw)
   } catch (error) {
     if (!response?.body?.locked) await response?.body?.cancel().catch(() => undefined)
     throw error

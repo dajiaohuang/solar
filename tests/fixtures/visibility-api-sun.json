@@ -1,0 +1,116 @@
+{
+  "apiVersion": "solar.api/v1",
+  "catalogManifestSha256": "4d600f46c1b0d35ee440d416b19489e3de145058c3aa7f5744d64c480251a1c2",
+  "catalogVersion": "jpl-satellite-expansion-20260904-full",
+  "earthOrientation": {
+    "schemaVersion": 1,
+    "sourceUrl": "https://data.iers.org/products/eop/rapid/standard/finals2000A.all",
+    "retrievedAt": "2026-09-22T16:38:44.484Z",
+    "sha256": "c672540e026d3cd4840c0858d4ce2bc4a18c3bc9751f9636c3285e11950d58a1",
+    "bytes": 3767520,
+    "path": "finals2000A-c672540e026d3cd4840c0858d4ce2bc4a18c3bc9751f9636c3285e11950d58a1.all"
+  },
+  "result": {
+    "model": "earth-station-airless-windows-v1",
+    "request": {
+      "startUtc": "2026-09-23T00:00:00Z",
+      "endUtc": "2026-09-24T00:00:00Z",
+      "station": {
+        "longitudeDeg": 103.851959,
+        "latitudeDeg": 1.29027,
+        "heightMeters": 0
+      },
+      "bodyId": "sun",
+      "minAltitudeDeg": 0
+    },
+    "durationSeconds": 86400,
+    "coverage": "sampled-complete",
+    "windows": [
+      {
+        "startUtc": "2026-09-23T00:00:00.000000Z",
+        "endUtc": "2026-09-23T10:56:57.304688Z",
+        "startSeconds": 0,
+        "endSeconds": 39417.3046875,
+        "durationSeconds": 39417.3046875,
+        "startBoundary": "search-boundary",
+        "endBoundary": "threshold"
+      },
+      {
+        "startUtc": "2026-09-23T22:56:50.742188Z",
+        "endUtc": "2026-09-24T00:00:00.000000Z",
+        "startSeconds": 82610.7421875,
+        "endSeconds": 86400,
+        "durationSeconds": 3789.2578125,
+        "startBoundary": "threshold",
+        "endBoundary": "search-boundary"
+      }
+    ],
+    "crossings": [
+      {
+        "kind": "set",
+        "utc": "2026-09-23T10:56:57.304688Z",
+        "seconds": 39417.3046875,
+        "lowerUtc": "2026-09-23T10:56:57.187500Z",
+        "upperUtc": "2026-09-23T10:56:57.421875Z",
+        "bracketSeconds": 0.234375
+      },
+      {
+        "kind": "rise",
+        "utc": "2026-09-23T22:56:50.742188Z",
+        "seconds": 82610.7421875,
+        "lowerUtc": "2026-09-23T22:56:50.625000Z",
+        "upperUtc": "2026-09-23T22:56:50.859375Z",
+        "bracketSeconds": 0.234375
+      }
+    ],
+    "missing": [],
+    "evaluations": 5777,
+    "sources": [
+      {
+        "bodyId": "naif:10",
+        "source": "de440s-2000-01-01-2051-01-01",
+        "kernelSha256": "8724d2d1bac115a75ad1f984c5b474ca778c96ee8be2df83e624cef61c001069",
+        "startJdTdb": 2461306.5008007223,
+        "endJdTdb": 2461307.5008007223
+      },
+      {
+        "bodyId": "naif:399",
+        "source": "de440s-2000-01-01-2051-01-01",
+        "kernelSha256": "8724d2d1bac115a75ad1f984c5b474ca778c96ee8be2df83e624cef61c001069",
+        "startJdTdb": 2461306.5008007223,
+        "endJdTdb": 2461307.5008007223
+      },
+      {
+        "bodyId": "sun",
+        "source": "de440s-2000-01-01-2051-01-01",
+        "kernelSha256": "8724d2d1bac115a75ad1f984c5b474ca778c96ee8be2df83e624cef61c001069",
+        "startJdTdb": 2461306.495004607,
+        "endJdTdb": 2461307.5008007223
+      }
+    ],
+    "warnings": [
+      "iers-predicted-earth-orientation",
+      "no-leap-seconds-after-2017-assumed",
+      "sub-step-events-and-tangent-contacts-may-be-missed"
+    ],
+    "contract": {
+      "angleUnit": "deg",
+      "boundaryToleranceSeconds": 0.25,
+      "continuousCoverageProven": false,
+      "direction": "apparent-airless-target-center",
+      "excludedEffects": [
+        "refraction",
+        "terrain-horizon",
+        "finite-target-limb",
+        "atmospheric-extinction"
+      ],
+      "maxEvaluations": 8192,
+      "observationModel": "earth-station-iau2006-2000a-spk-v1",
+      "physicalUncertainty": "not-propagated",
+      "searchCompleteness": "sign-changes-only-sub-step-and-tangent-events-not-guaranteed",
+      "stationDatum": "WGS84-ellipsoidal-height",
+      "stepSeconds": 30,
+      "timeAxis": "TAI-elapsed-SI-seconds"
+    }
+  }
+}

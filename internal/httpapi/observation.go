@@ -19,6 +19,7 @@ func (s *Server) ConfigureEarthOrientation(table *earthorientation.Table) { s.ea
 
 func (s *Server) observationMetadata() map[string]any {
 	data := map[string]any{"available": s.earthOrientation != nil, "model": observation.Model, "bodyLimit": observation.MaxBodies, "inputTime": "ISO-8601-UTC-Z", "earthOrientationSourceUrl": earthorientation.SourceURL}
+	data["visibility"] = map[string]any{"model": observation.VisibilityModel, "maxWindowSeconds": observation.MaxWindowSeconds, "stepSeconds": observation.SearchStepSeconds, "boundaryToleranceSeconds": observation.BoundaryToleranceSeconds, "maxEvaluations": observation.MaxWindowEvaluations}
 	if s.earthOrientation != nil {
 		data["earthOrientation"] = s.earthOrientation.Manifest
 		data["coverageMjdUtc"] = s.earthOrientation.CoverageMJD()

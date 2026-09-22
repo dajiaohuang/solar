@@ -33,7 +33,7 @@ func classifyRequest(r *http.Request) requestClass {
 	if r.Method == http.MethodPost && (r.URL.Path == "/v1/state/plan" || r.URL.Path == "/v1/state/tiles") && r.URL.Query().Get("workload") == "trajectory" {
 		return trajectoryWork
 	}
-	if r.Method == http.MethodPost && (r.URL.Path == "/v1/trajectory" || r.URL.Path == "/v1/state/window") {
+	if r.Method == http.MethodPost && (r.URL.Path == "/v1/trajectory" || r.URL.Path == "/v1/state/window" || r.URL.Path == "/v1/observation/windows") {
 		return trajectoryWork
 	}
 	if r.Method == http.MethodGet && (r.URL.Path == "/v1/catalog" || r.URL.Path == "/v1/inventory" || r.URL.Path == "/v1/identities") {
