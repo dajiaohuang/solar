@@ -3,6 +3,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); vi.resetModules() })
 
 describe('optional immutable persistence', () => {
+  it('keeps a shared response available while another consumer is still validating it', async () => {
+    const fetcher = vi.fn(async () => new Response(new Uint8Array([8, 9])))
+    vi.stubGlobal('fetch', fetcher)
+    const { fetchImmutableArrayBuffer } = await import('../../src/data/cache/indexedDb')
+    let finish!: () => void
+    const pending = fetchImmutableArrayBuffer('/shared-validation.bin', () => new Promise<void>(resolve => { finish = resolve }))
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    const second = await fetchImmutableArrayBuffer('/shared-validation.bin')
+    structuredClone(second, { transfer: [second] })
+    finish()
+    expect(new Uint8Array(await pending)).toEqual(new Uint8Array([8, 9]))
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
   it('cancels one consumer promptly without aborting a sibling shared download', async () => {
     let finish!: (response: Response) => void
     let networkSignal!: AbortSignal

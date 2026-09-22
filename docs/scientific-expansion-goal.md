@@ -196,7 +196,7 @@ the two-entry worker cache, so a new scan cannot inherit an aborted promise.
 Changing filters clears the cancelled scan's busy state and permits immediate
 retry; cancelled generations cannot publish old progress or results.
 
-Thirty-one targeted cache, bounded-stream, loader and worker tests passed,
+Thirty-two targeted cache, bounded-stream, loader and worker tests passed,
 alongside TypeScript, changed-file lint and the production build. The actual
 Chromium desktop/mobile, Firefox and WebKit production worker was exercised
 against a same-origin local HTTP server with a deliberately unfinished response:

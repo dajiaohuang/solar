@@ -29,27 +29,26 @@ function withSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   })
 }
 
-async function acquirePayload(url: string, signal?: AbortSignal) {
+function acquireRequest(url: string, signal?: AbortSignal) {
   signal?.throwIfAborted()
   let pending = inFlight.get(url)
   if (!pending) {
     const controller = new AbortController()
     const created: SharedRequest = { controller, consumers: 0, settled: false, promise: loadImmutableArrayBuffer(url, controller.signal).finally(() => {
       created.settled = true
-      if (inFlight.get(url) === created) inFlight.delete(url)
+      if (!created.consumers && inFlight.get(url) === created) inFlight.delete(url)
     }) }
     pending = created
     inFlight.set(url, pending)
   }
   pending.consumers++
-  try { return await withSignal(pending.promise, signal) }
-  finally {
-    pending.consumers--
-    if (!pending.consumers && !pending.settled) {
-      if (inFlight.get(url) === pending) inFlight.delete(url)
-      pending.controller.abort()
-    }
-  }
+  const entry = pending
+  return { promise: entry.promise, release: () => {
+    entry.consumers--
+    if (entry.consumers) return
+    if (inFlight.get(url) === entry) inFlight.delete(url)
+    if (!entry.settled) entry.controller.abort()
+  } }
 }
 
 export function datasetVersionFromUrl(url: string) {
@@ -262,18 +261,21 @@ async function invalidateCache(key: string) {
 export async function fetchImmutableArrayBuffer(url: string, validate?: (buffer: ArrayBuffer) => void | Promise<void>, signal?: AbortSignal) {
   // Callers may transfer or modify their buffer without detaching a sibling
   // consumer's result. Only active requests, not completed data, live here.
-  const { buffer, cached } = await acquirePayload(url, signal)
-  signal?.throwIfAborted()
-  try { await withSignal(Promise.resolve(validate?.(buffer)), signal) }
-  catch (error) {
-    // Cancellation says nothing about the validity of a shared artifact.
-    if (cached && !signal?.aborted) await invalidateCache(url)
-    throw error
-  }
-  signal?.throwIfAborted()
-  // Never persist a network payload before its caller's format validation.
-  if (!cached) void writeCache(url, buffer).catch(() => undefined)
-  return buffer.slice(0)
+  const request = acquireRequest(url, signal)
+  try {
+    const { buffer, cached } = await withSignal(request.promise, signal)
+    signal?.throwIfAborted()
+    try { await withSignal(Promise.resolve(validate?.(buffer)), signal) }
+    catch (error) {
+      // Cancellation says nothing about the validity of a shared artifact.
+      if (cached && !signal?.aborted) await invalidateCache(url)
+      throw error
+    }
+    signal?.throwIfAborted()
+    // Never persist a network payload before its caller's format validation.
+    if (!cached) void writeCache(url, buffer).catch(() => undefined)
+    return buffer.slice(0)
+  } finally { request.release() }
 }
 
 async function loadImmutableArrayBuffer(url: string, signal: AbortSignal) {
