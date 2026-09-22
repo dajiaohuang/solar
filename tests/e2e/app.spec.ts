@@ -691,6 +691,45 @@ test(`stops a cancelled ${phase} download and immediately permits a new request`
 })
 }
 
+test('bounds parallel shard hydration while preserving all search matches', async ({ page }) => {
+  const responses = await installMockCatalog(page, { precomputed: true })
+  const root = '/data/asteroids/releases/mock-content-lite'
+  const base = (responses.get(`${root}/meta/chunk-0000.json`)!.json as Array<Record<string, unknown>>)[0]
+  const entries = Array.from({ length: 8 }, (_, index) => ({ ...base,
+    id: `asteroid:mpc:${index + 2000}`, permanentNumber: index + 2000,
+    label: `${index + 2000} Alpha ${index}`, shortLabel: `Alpha ${index}`, searchKey: `alpha ${index}`,
+    chunkId: `chunk-${String(index + 1).padStart(4, '0')}`,
+  }))
+  const numeric = Buffer.from(new Float64Array([2451545, 2.4, 0.1, 5, 20, 40, 60, 0.25]).buffer)
+  let started = 0, active = 0, peak = 0, allowResponses = false
+  const waiting: Array<() => void> = []
+  await page.route(`**${root}/search/a.json`, route => route.fulfill({ json: entries }))
+  for (const entry of entries) for (const type of ['meta', 'binary']) {
+    await page.route(`**${root}/${type}/${entry.chunkId}.${type === 'meta' ? 'json' : 'bin'}`, async route => {
+      started++; active++; peak = Math.max(peak, active)
+      if (!allowResponses) await new Promise<void>(resolve => waiting.push(resolve))
+      try {
+        await route.fulfill(type === 'meta' ? { json: [entry] } : { body: numeric, contentType: 'application/octet-stream' })
+      } finally { active-- }
+    })
+  }
+  try {
+    await page.goto('./?v=4&page=catalog&lang=en')
+    await expect(page.locator('.catalog-table > li > button')).toHaveCount(3)
+    await page.getByRole('searchbox', { name: /Search name/ }).fill('Alpha')
+    await expect.poll(() => started).toBe(4)
+    allowResponses = true
+    for (const release of waiting) release()
+    await expect(page.locator('.catalog-table > li > button')).toHaveCount(8)
+    expect(started).toBe(16)
+    expect(peak).toBeLessThanOrEqual(4)
+    for (const entry of entries) await expect(page.locator('.catalog-table')).toContainText(entry.label)
+  } finally {
+    allowResponses = true
+    for (const release of waiting) release()
+  }
+})
+
 test('hydrates an exact compact-index match that is absent from the precomputed sample', async ({ page }) => {
   await installMockCatalog(page, { precomputed: true, sampleCount: 2 })
   await page.goto('./?v=4&page=catalog')

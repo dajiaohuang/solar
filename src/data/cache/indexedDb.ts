@@ -1,4 +1,5 @@
 import { MAX_CATALOG_ARTIFACT_BYTES, readBoundedStream } from './boundedStream'
+import { catalogAdmission } from './catalogAdmission'
 
 const DATABASE_NAME = 'solar-atlas-data-v1'
 const DATABASE_VERSION = 2
@@ -16,7 +17,7 @@ type CacheRecord = {
 let preparedVersion: string | null = null
 let preparePromise: Promise<void> | null = null
 type Payload = { buffer: ArrayBuffer; cached: boolean }
-type SharedRequest = { promise: Promise<Payload>; controller: AbortController; consumers: number; settled: boolean }
+type SharedRequest = { promise: Promise<Payload>; controller: AbortController; consumers: number; settled: boolean; releaseAdmission?: () => void }
 const inFlight = new Map<string, SharedRequest>()
 
 function withSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
@@ -34,9 +35,16 @@ function acquireRequest(url: string, signal?: AbortSignal) {
   let pending = inFlight.get(url)
   if (!pending) {
     const controller = new AbortController()
-    const created: SharedRequest = { controller, consumers: 0, settled: false, promise: loadImmutableArrayBuffer(url, controller.signal).finally(() => {
+    const created: SharedRequest = { controller, consumers: 0, settled: false, promise: catalogAdmission.acquire(controller.signal).then(release => {
+      created.releaseAdmission = release
+      controller.signal.throwIfAborted()
+      return loadImmutableArrayBuffer(url, controller.signal)
+    }).finally(() => {
       created.settled = true
-      if (!created.consumers && inFlight.get(url) === created) inFlight.delete(url)
+      if (!created.consumers) {
+        if (inFlight.get(url) === created) inFlight.delete(url)
+        created.releaseAdmission?.()
+      }
     }) }
     pending = created
     inFlight.set(url, pending)
@@ -48,6 +56,7 @@ function acquireRequest(url: string, signal?: AbortSignal) {
     if (entry.consumers) return
     if (inFlight.get(url) === entry) inFlight.delete(url)
     if (!entry.settled) entry.controller.abort()
+    else entry.releaseAdmission?.()
   } }
 }
 

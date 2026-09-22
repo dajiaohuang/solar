@@ -3,6 +3,51 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); vi.resetModules() })
 
 describe('optional immutable persistence', () => {
+  it('bounds distinct acquisitions through validation while shared consumers bypass the queue', async () => {
+    const fetcher = vi.fn(async () => new Response(new Uint8Array([42])))
+    vi.stubGlobal('fetch', fetcher)
+    const { fetchImmutableArrayBuffer } = await import('../../src/data/cache/indexedDb')
+    const { MAX_ACTIVE_CATALOG_ACQUISITIONS: limit } = await import('../../src/data/cache/catalogAdmission')
+    const finishes = new Map<number, () => void>()
+    const active = Array.from({ length: limit }, (_, i) => fetchImmutableArrayBuffer(`/limited-${i}.bin`,
+      () => new Promise<void>(resolve => { finishes.set(i, resolve) })))
+    const controller = new AbortController()
+    const cancelled = expect(fetchImmutableArrayBuffer('/cancel-before-admission.bin', undefined, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    const next = fetchImmutableArrayBuffer('/admitted-later.bin')
+    await vi.waitFor(() => expect(finishes.size).toBe(limit))
+    expect(fetcher).toHaveBeenCalledTimes(limit)
+    expect(new Uint8Array(await fetchImmutableArrayBuffer('/limited-0.bin'))).toEqual(new Uint8Array([42]))
+    expect(fetcher).toHaveBeenCalledTimes(limit)
+    controller.abort()
+    await cancelled
+    finishes.get(0)!()
+    expect(new Uint8Array(await next)).toEqual(new Uint8Array([42]))
+    expect(fetcher).toHaveBeenCalledTimes(limit + 1)
+    expect(fetcher.mock.calls.some(call => String(call[0]).includes('cancel-before-admission'))).toBe(false)
+    for (const finish of finishes.values()) finish()
+    await Promise.all(active)
+  })
+
+  it('does not oversubscribe a cancelled producer that has not settled yet', async () => {
+    const responses = new Map<string, (response: Response) => void>()
+    const fetcher = vi.fn((url: string) => new Promise<Response>(resolve => { responses.set(url, resolve) }))
+    vi.stubGlobal('fetch', fetcher)
+    const { fetchImmutableArrayBuffer } = await import('../../src/data/cache/indexedDb')
+    const { MAX_ACTIVE_CATALOG_ACQUISITIONS: limit } = await import('../../src/data/cache/catalogAdmission')
+    const controller = new AbortController()
+    const cancelled = expect(fetchImmutableArrayBuffer('/slow-abort.bin', undefined, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    const active = Array.from({ length: limit - 1 }, (_, i) => fetchImmutableArrayBuffer(`/occupied-${i}.bin`))
+    const next = fetchImmutableArrayBuffer('/after-slow-abort.bin')
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(limit))
+    controller.abort()
+    await cancelled
+    expect(fetcher).toHaveBeenCalledTimes(limit)
+    responses.get('/slow-abort.bin')!(new Response('cancelled bytes'))
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(limit + 1))
+    for (const [url, finish] of responses) if (url !== '/slow-abort.bin') finish(new Response('ok'))
+    await Promise.all([...active, next])
+  })
+
   it('keeps a shared response available while another consumer is still validating it', async () => {
     const fetcher = vi.fn(async () => new Response(new Uint8Array([8, 9])))
     vi.stubGlobal('fetch', fetcher)

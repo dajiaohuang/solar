@@ -14,7 +14,7 @@ remain paused. Changes may go directly to main after the required checks.
 | Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | Pending |
 | Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | Pending |
 | Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | Pending |
-| Catalog streaming | Replace the fixed 8k/30k-only cloud path with cancellable binary chunk loading, priority scheduling and independent byte/decode/compute/upload limits | Pending |
+| Catalog streaming | Replace the fixed 8k/30k-only cloud path with cancellable binary chunk loading, priority scheduling and independent byte/decode/compute/upload limits | In progress: cancellation and acquisition admission; full-inventory path pending |
 | Rendering and time | Moving spatial bounds, visibility/LOD, selected-body retention, time/error-budgeted updates, reusable buffers and Float64-relative GPU coordinates; WebGL fallback and native contracts retained | In progress |
 | Capacity evidence | Real catalog runs at 30k/100k/300k/1m/full inventory, real SPK coverage and separately labeled synthetic GPU stress; P95/P99 frames, memory, first-visible time, upload and cancellation measurements | In progress |
 
@@ -308,6 +308,29 @@ sampling, independent dynamical references, user-facing access and ellipsoids
 remain unfinished, as do the other outstanding ledger rows. No event probability,
 physical accuracy or production publication is claimed. The combined corrected
 head still requires remote validation before main promotion.
+
+### Checkpoint 10: bounded shared artifact acquisition (2026-09-23)
+
+Immutable catalog delivery admits four distinct artifacts per JavaScript realm.
+The lease covers source/cache loading and active consumer validation, so a burst
+of paired shard requests cannot all start together or outrun slow validation.
+An existing shared artifact does not require another slot. Queued cancellations
+leave immediately without starting I/O; the last consumer cancels its producer,
+but an unsettled producer retains its slot until it actually settles. Leases
+release once on success, failure and cancellation.
+
+Thirty-six targeted admission/cache/loader tests passed. TypeScript, changed-file
+lint and the production build passed. Twenty focused browser checks passed
+across desktop/mobile Chromium, Firefox and WebKit, including eight-shard search
+hydration with at most four admitted responses, all matches retained, actual
+same-origin cancellation and exact paging after navigation. Route-controlled
+response tests establish admission behavior; they are not throughput benchmarks.
+
+This per-realm acquisition bound is not a total memory bound: main-thread and
+worker budgets are separate, completed decoded values and persistence writes
+have other lifetimes, and consumer-owned buffers are outside the admission
+count. Priority, byte/decode/compute/upload budgets, cross-realm coordination and
+the full-inventory display path remain unfinished. Main promotion is pending.
 
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),
