@@ -19,9 +19,13 @@ See the bilingual [product direction and acceptance criteria](./docs/product-dir
 
 ## Next delivery priorities
 
-1. Deploy the full backend with its pinned source inventory and explicit operating limits. Measure public HTTPS delivery, cold startup, memory and concurrent client load before claiming production readiness.
+Actual deployment and release are paused by owner direction on 2026-09-22. The application deployment and asteroid dataset publication workflows are manually disabled; PR quality, security, browser and native checks remain active. Resume publication only after a new explicit owner instruction. The [follow-up audit](./docs/deep-audit-20260922.md) records non-deployment correctness and performance work.
+
+Owner changes can go directly to `main` without a new PR. Push the candidate commit to a `codex/*` staging branch, let the required quality gate validate that exact commit, then fast-forward `main` to the same SHA. Keep branch protection, required checks and the prohibition on force pushes intact. Use focused regressions during successive review passes and consolidate full validation at the final candidate.
+
+1. Continue local/CI audits of full-backend source inventory, operating limits, cold startup, memory and concurrent client load. Public HTTPS deployment and production-readiness acceptance stay deferred.
 2. Move the remaining expensive client analyses behind bounded, cancellable backend contracts, retaining the current scientific tolerances and source evidence.
-3. Extend independent native clients beyond the current-state slice, then verify offline/reconnect behavior, physical devices and signed release delivery.
+3. Extend independent native clients beyond the current-state slice and verify offline/reconnect behavior. Physical-device acceptance remains outstanding; signed releases are deferred.
 4. Expand original-source body coverage with explicit identity, dependency and validity evidence. Preserve missing-state diagnostics wherever an exact source is unavailable; N-body integration remains outside scope.
 
 ## 0.11.0 — geocentrism as the core guide

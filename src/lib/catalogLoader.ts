@@ -25,14 +25,15 @@ const summaryCache = new Map<string, Promise<CatalogSummary | null>>()
 const PERMANENT_NUMBER_BUCKET_SIZE = 10_000
 const MAX_SEARCH_BUCKET_CACHE_ENTRIES = 4
 export const MAX_CHUNK_CACHE_ENTRIES = 8
+export const MAX_LOOKUP_CACHE_ENTRIES = 8
 let activeManifest: AsteroidManifest | null = null
 let activeReleaseRoot = dataRoot
 let manifestRequestGeneration = 0
 const manifestPromises = new Map<string, Promise<{ manifest: AsteroidManifest; releaseRoot: string } | null>>()
 
-async function fetchJson<T>(url: string, immutable = true) {
+async function fetchJson<T>(url: string, immutable = true, manifest = activeManifest) {
   if (immutable) {
-    const compressed = activeManifest?.capabilities?.includes('gzip-json-v1') && (
+    const compressed = manifest?.capabilities?.includes('gzip-json-v1') && (
       /\/(search|lookup|meta|chunks)\/.+\.json$/.test(url) || /\/catalog-sample-(desktop|mobile)\.json$/.test(url)
     )
     return compressed ? fetchImmutableGzipJson<T>(`${url}.gz`) : fetchImmutableJson<T>(url)
@@ -151,33 +152,34 @@ export async function loadAsteroidManifest(requestedVersion?: string) {
 
 export async function loadDatasetProvenance(): Promise<DatasetProvenance | null> {
   if (!activeManifest) await loadAsteroidManifest()
-  if (!activeManifest) return null
+  const manifest = activeManifest
+  if (!manifest) return null
   try {
-    return await fetchJson<DatasetProvenance>(`${activeReleaseRoot}/provenance.json`)
+    return await fetchJson<DatasetProvenance>(`${manifest.releasePath ?? activeReleaseRoot}/provenance.json`, true, manifest)
   } catch {
     return {
-      datasetVersion: activeManifest.version,
-      source: activeManifest.source,
-      sourceLastModifiedAt: activeManifest.sourceLastModifiedAt ?? activeManifest.sourceDownloadedAt ?? activeManifest.generatedAt,
-      downloadedAt: activeManifest.sourceDownloadedAt,
-      generatedAt: activeManifest.generatedAt,
-      sourceSha256: activeManifest.sourceSha256 ?? 'not recorded (legacy dataset)',
-      contentSha256: activeManifest.contentSha256,
-      parserVersion: activeManifest.parserVersion ?? 'legacy-v1',
-      parserCommit: activeManifest.parserCommit,
-      selectionPolicy: activeManifest.selectionPolicy,
-      totalObjects: activeManifest.totalCount,
-      mode: activeManifest.datasetMode ?? 'lite',
-      orbitModel: activeManifest.orbitModel ?? 'two-body osculating elements',
-      precision: activeManifest.precision ?? 'educational',
+      datasetVersion: manifest.version,
+      source: manifest.source,
+      sourceLastModifiedAt: manifest.sourceLastModifiedAt ?? manifest.sourceDownloadedAt ?? manifest.generatedAt,
+      downloadedAt: manifest.sourceDownloadedAt,
+      generatedAt: manifest.generatedAt,
+      sourceSha256: manifest.sourceSha256 ?? 'not recorded (legacy dataset)',
+      contentSha256: manifest.contentSha256,
+      parserVersion: manifest.parserVersion ?? 'legacy-v1',
+      parserCommit: manifest.parserCommit,
+      selectionPolicy: manifest.selectionPolicy,
+      totalObjects: manifest.totalCount,
+      mode: manifest.datasetMode ?? 'lite',
+      orbitModel: manifest.orbitModel ?? 'two-body osculating elements',
+      precision: manifest.precision ?? 'educational',
     }
   }
 }
 
-export function loadAsteroidSearchBucket(bucketKey: string) {
+export function loadAsteroidSearchBucket(bucketKey: string, manifest = activeManifest) {
   requireCatalogAccess('search')
   const normalizedBucket = bucketKey || 'misc'
-  const releaseRoot = activeReleaseRoot
+  const releaseRoot = manifest?.releasePath ?? activeReleaseRoot
   const cacheKey = `${releaseRoot}:${normalizedBucket}`
   const existing = searchBucketCache.get(cacheKey)
   if (existing) {
@@ -187,18 +189,20 @@ export function loadAsteroidSearchBucket(bucketKey: string) {
   }
   const promise = fetchJson<AsteroidIndexEntry[]>(
     `${releaseRoot}/search/${encodeURIComponent(normalizedBucket)}.json`,
+    true, manifest,
   ).catch(async (error: unknown) => {
     if (normalizedBucket.startsWith('prefix-')) {
       const legacyInitial = normalizedBucket.slice('prefix-'.length)[0]
       if (legacyInitial) {
-        return fetchJson<AsteroidIndexEntry[]>(`${releaseRoot}/search/${encodeURIComponent(legacyInitial)}.json`)
+        return fetchJson<AsteroidIndexEntry[]>(`${releaseRoot}/search/${encodeURIComponent(legacyInitial)}.json`, true, manifest)
       }
     }
     const legacyBucket = getLegacyNumericBucketKey(normalizedBucket)
     if (!legacyBucket) throw error
     return fetchJson<AsteroidIndexEntry[]>(
       `${releaseRoot}/search/${encodeURIComponent(legacyBucket)}.json`,
-    ).catch(() => fetchJson<AsteroidIndexEntry[]>(`${releaseRoot}/search/digit.json`))
+      true, manifest,
+    ).catch(() => fetchJson<AsteroidIndexEntry[]>(`${releaseRoot}/search/digit.json`, true, manifest))
   }).catch((error: unknown) => {
     if (searchBucketCache.get(cacheKey) === promise) searchBucketCache.delete(cacheKey)
     throw error
@@ -212,7 +216,7 @@ export function loadAsteroidSearchBucket(bucketKey: string) {
   return promise
 }
 
-function validateBinaryElements(buffer: ArrayBuffer) {
+export function validateBinaryElements(buffer: ArrayBuffer) {
   if (buffer.byteLength % 64 !== 0) throw new Error('Invalid binary asteroid element stride')
   const values = new Float64Array(buffer)
   for (let offset = 0; offset < values.length; offset += 8) {
@@ -247,21 +251,22 @@ function decodeBinaryChunk(metadata: AsteroidIndexEntry[], buffer: ArrayBuffer) 
   })
 }
 
-export function loadAsteroidChunk(chunkId: string) {
+export function loadAsteroidChunk(chunkId: string, manifest = activeManifest) {
   requireCatalogAccess('details')
-  const cacheKey = `${activeReleaseRoot}:${chunkId}`
+  const root = manifest?.releasePath ?? activeReleaseRoot
+  const cacheKey = `${root}:${chunkId}`
   const existing = chunkCache.get(cacheKey)
   if (existing) {
     chunkCache.delete(cacheKey)
     chunkCache.set(cacheKey, existing)
     return existing
   }
-  const request = activeManifest?.format === 'binary-v1'
+  const request = manifest?.format === 'binary-v1'
     ? Promise.all([
-        fetchJson<AsteroidIndexEntry[]>(`${activeReleaseRoot}/meta/${encodeURIComponent(chunkId)}.json`),
-        fetchImmutableArrayBuffer(`${activeReleaseRoot}/binary/${encodeURIComponent(chunkId)}.bin`, validateBinaryElements),
+        fetchJson<AsteroidIndexEntry[]>(`${root}/meta/${encodeURIComponent(chunkId)}.json`, true, manifest),
+        fetchImmutableArrayBuffer(`${root}/binary/${encodeURIComponent(chunkId)}.bin`, validateBinaryElements),
       ]).then(([metadata, buffer]) => decodeBinaryChunk(metadata, buffer))
-    : fetchJson<AsteroidRecord[]>(`${activeReleaseRoot}/chunks/${encodeURIComponent(chunkId)}.json`)
+    : fetchJson<AsteroidRecord[]>(`${root}/chunks/${encodeURIComponent(chunkId)}.json`, true, manifest)
   const promise = request.catch((error: unknown) => {
     if (chunkCache.get(cacheKey) === promise) chunkCache.delete(cacheKey)
     throw error
@@ -281,10 +286,11 @@ export async function searchAsteroidCatalogPage(params: {
   pageSize?: number
   maximumChunks?: number
 }) {
+  const manifest = activeManifest
   const normalized = normalizeSearchText(params.query)
   if (!normalized) return { records: [], total: 0, nextCursor: null as number | null }
-  if (isNameSearchTooShort(params.query)) return { records: [], total: 0, nextCursor: null as number | null }
-  const entries = await loadAsteroidSearchBucket(getSearchBucketKey(params.query))
+  if (isNameSearchTooShort(params.query, manifest)) return { records: [], total: 0, nextCursor: null as number | null }
+  const entries = await loadAsteroidSearchBucket(getSearchBucketKey(params.query, manifest?.searchIndex?.tokenPrefixLength), manifest)
   const cursor = Math.max(0, params.cursor ?? 0)
   const pageSize = Math.max(1, params.pageSize ?? 1_200)
   const maximumChunks = Math.max(1, params.maximumChunks ?? 30)
@@ -307,7 +313,7 @@ export async function searchAsteroidCatalogPage(params: {
     total += 1
   }
   if (nextCursor === null && cursor + selected.length < total) nextCursor = cursor + selected.length
-  const chunks = await Promise.all([...chunkIds].map(loadAsteroidChunk))
+  const chunks = await Promise.all([...chunkIds].map(id => loadAsteroidChunk(id, manifest)))
   const recordsById = new Map(chunks.flat().map((record) => [record.id, record]))
   const records = selected.map((entry) => recordsById.get(entry.id)).filter((record): record is AsteroidRecord => Boolean(record))
   return { records, total, nextCursor }
@@ -325,27 +331,38 @@ function idLookupBucket(id: string) {
 export async function loadAsteroidBodiesByIds(ids: BodyId[]) {
   if (ids.length) requireCatalogAccess('details')
   const asteroidIds = [...new Set(ids.filter((id) => id.startsWith('asteroid:')))]
-  if (!asteroidIds.length || !activeManifest || (activeManifest.schemaVersion ?? 1) < 2) return []
+  const manifest = activeManifest
+  if (!asteroidIds.length || !manifest || (manifest.schemaVersion ?? 1) < 2) return []
+  const root = manifest.releasePath ?? activeReleaseRoot
   const groups = new Map<string, BodyId[]>()
   for (const id of asteroidIds) {
     const bucket = idLookupBucket(id)
-    groups.set(bucket, [...(groups.get(bucket) ?? []), id])
+    const group = groups.get(bucket) ?? []
+    if (!groups.has(bucket)) groups.set(bucket, group)
+    group.push(id)
   }
   const matchedEntries: AsteroidIndexEntry[] = []
   await Promise.all([...groups].map(async ([bucket, bucketIds]) => {
-    const cacheKey = `${activeManifest?.version}:${bucket}`
+    const cacheKey = `${root}:${bucket}`
     let promise = lookupCache.get(cacheKey)
     if (!promise) {
-      promise = fetchJson<AsteroidIndexEntry[]>(`${activeReleaseRoot}/lookup/${bucket}.json`).catch(() => [])
+      promise = fetchJson<AsteroidIndexEntry[]>(`${root}/lookup/${bucket}.json`, true, manifest).catch((error: unknown) => {
+        if (lookupCache.get(cacheKey) === promise) lookupCache.delete(cacheKey)
+        throw error
+      })
+      lookupCache.set(cacheKey, promise)
+      while (lookupCache.size > MAX_LOOKUP_CACHE_ENTRIES) lookupCache.delete(lookupCache.keys().next().value!)
+    } else {
+      lookupCache.delete(cacheKey)
       lookupCache.set(cacheKey, promise)
     }
     const entries = await promise
     const wanted = new Set(bucketIds)
     matchedEntries.push(...entries.filter((entry) => wanted.has(entry.id)))
   }))
-  const chunks = await Promise.all([...new Set(matchedEntries.map((entry) => entry.chunkId))].map(loadAsteroidChunk))
-  const wanted = new Set(asteroidIds)
-  return chunks.flat().filter((record) => wanted.has(record.id)).map(asteroidRecordToBody)
+  const chunks = await Promise.all([...new Set(matchedEntries.map((entry) => entry.chunkId))].map(id => loadAsteroidChunk(id, manifest)))
+  const records = new Map(chunks.flat().map(record => [record.id, record]))
+  return asteroidIds.flatMap(id => { const record = records.get(id); return record ? [asteroidRecordToBody(record)] : [] })
 }
 
 export function loadAsteroidSample(manifest: AsteroidManifest, size: CatalogSampleProfile) {
@@ -360,7 +377,7 @@ export function loadAsteroidSample(manifest: AsteroidManifest, size: CatalogSamp
   let promise = sampleCache.get(cacheKey)
   if (!promise) {
     promise = Promise.all([
-      fetchJson<AsteroidIndexEntry[]>(`${root}/${artifact.metadataPath}`),
+      fetchJson<AsteroidIndexEntry[]>(`${root}/${artifact.metadataPath}`, true, manifest),
       fetchImmutableArrayBuffer(`${root}/${artifact.binaryPath}`, validateBinaryElements),
     ]).then(([metadata, buffer]) => {
       const values = new Float64Array(buffer)
@@ -383,7 +400,7 @@ export function loadCatalogSummary(manifest: AsteroidManifest) {
   const cacheKey = `${root}:${manifest.version}:${manifest.summaryPath}`
   let promise = summaryCache.get(cacheKey)
   if (!promise) {
-    promise = fetchJson<CatalogSummary>(`${root}/${manifest.summaryPath}`).catch(() => {
+    promise = fetchJson<CatalogSummary>(`${root}/${manifest.summaryPath}`, true, manifest).catch(() => {
       if (summaryCache.get(cacheKey) === promise) summaryCache.delete(cacheKey)
       return null
     })
@@ -402,7 +419,9 @@ export async function loadAsteroidRecordsByLocators(manifest: AsteroidManifest, 
     if (chunkIndex >= manifest.chunkCount || rowIndex >= manifest.chunkSize) {
       throw new Error(`Catalog locator is outside the declared dataset: ${chunkIndex}:${rowIndex}`)
     }
-    groups.set(chunkIndex, [...(groups.get(chunkIndex) ?? []), { rowIndex, outputIndex: index / 2 }])
+    const group = groups.get(chunkIndex) ?? []
+    if (!groups.has(chunkIndex)) groups.set(chunkIndex, group)
+    group.push({ rowIndex, outputIndex: index / 2 })
   }
   const records = new Array<AsteroidRecord>(locators.length / 2)
   const queue = [...groups.entries()]
@@ -411,7 +430,7 @@ export async function loadAsteroidRecordsByLocators(manifest: AsteroidManifest, 
     while (queueIndex < queue.length) {
       const [chunkIndex, requestedRows] = queue[queueIndex]
       queueIndex += 1
-      const chunk = await loadAsteroidChunk(getChunkIdFromIndex(chunkIndex))
+      const chunk = await loadAsteroidChunk(getChunkIdFromIndex(chunkIndex), manifest)
       for (const { rowIndex, outputIndex } of requestedRows) {
         const record = chunk[rowIndex]
         if (!record) throw new Error(`Catalog locator does not resolve to a record: ${chunkIndex}:${rowIndex}`)
@@ -428,7 +447,7 @@ export async function loadAsteroidSearchLocators(query: string, manifest: Astero
   const normalized = normalizeSearchText(query)
   if (!normalized) return null
   if (isNameSearchTooShort(query, manifest)) return new Uint32Array(0)
-  const entries = await loadAsteroidSearchBucket(getSearchBucketKey(query, manifest.searchIndex.tokenPrefixLength))
+  const entries = await loadAsteroidSearchBucket(getSearchBucketKey(query, manifest.searchIndex.tokenPrefixLength), manifest)
   const matched = entries.filter((entry) => entry.searchKey.includes(normalized))
   if (matched.some((entry) => !Number.isSafeInteger(entry.chunkIndex) || !Number.isSafeInteger(entry.rowIndex))) return null
   const locators = new Uint32Array(matched.length * 2)
@@ -502,7 +521,7 @@ export async function loadAsteroidSectionPage(params: {
   const records: AsteroidRecord[] = []
   const startCursor = params.cursor ?? { chunkIndex: 0, recordOffset: 0 }
   while (chunkIndex < manifest.chunkCount && records.length < pageSize) {
-    const chunk = await loadAsteroidChunk(getChunkIdFromIndex(chunkIndex))
+    const chunk = await loadAsteroidChunk(getChunkIdFromIndex(chunkIndex), manifest)
     const filtered = filterChunkByOrbitClass(chunk, orbitClassCode)
     const slice = filtered.slice(recordOffset, recordOffset + pageSize - records.length)
     records.push(...slice)
@@ -523,20 +542,21 @@ export async function loadAsteroidSectionPreviousPage(params: {
 }) {
   const { manifest, orbitClassCode, cursor, pageSize } = params
   const records: AsteroidRecord[] = []
+  if (manifest.chunkCount === 0) return { records, startCursor: { chunkIndex: 0, recordOffset: 0 }, endCursor: cursor }
   let chunkIndex = Math.min(cursor.chunkIndex, manifest.chunkCount - 1)
   let recordOffset = cursor.chunkIndex >= manifest.chunkCount ? 0 : cursor.recordOffset
   if (cursor.chunkIndex >= manifest.chunkCount) {
-    recordOffset = filterChunkByOrbitClass(await loadAsteroidChunk(getChunkIdFromIndex(chunkIndex)), orbitClassCode).length
+    recordOffset = filterChunkByOrbitClass(await loadAsteroidChunk(getChunkIdFromIndex(chunkIndex), manifest), orbitClassCode).length
   }
   while (chunkIndex >= 0 && records.length < pageSize) {
-    const filtered = filterChunkByOrbitClass(await loadAsteroidChunk(getChunkIdFromIndex(chunkIndex)), orbitClassCode)
+    const filtered = filterChunkByOrbitClass(await loadAsteroidChunk(getChunkIdFromIndex(chunkIndex), manifest), orbitClassCode)
     const available = filtered.slice(0, recordOffset)
     const sliceStart = Math.max(available.length - (pageSize - records.length), 0)
     records.unshift(...available.slice(sliceStart))
     if (sliceStart > 0) return { records, startCursor: { chunkIndex, recordOffset: sliceStart }, endCursor: cursor }
     chunkIndex -= 1
     if (chunkIndex >= 0) {
-      recordOffset = filterChunkByOrbitClass(await loadAsteroidChunk(getChunkIdFromIndex(chunkIndex)), orbitClassCode).length
+      recordOffset = filterChunkByOrbitClass(await loadAsteroidChunk(getChunkIdFromIndex(chunkIndex), manifest), orbitClassCode).length
     }
   }
   return { records, startCursor: { chunkIndex: 0, recordOffset: 0 }, endCursor: cursor }

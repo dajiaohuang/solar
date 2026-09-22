@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   MAX_CHUNK_CACHE_ENTRIES,
+  MAX_LOOKUP_CACHE_ENTRIES,
+  loadAsteroidBodiesByIds,
+  loadAsteroidRecordsByLocators,
+  loadAsteroidSectionPage,
+  loadAsteroidSectionPreviousPage,
+  loadDatasetProvenance,
   loadAsteroidChunk,
   loadAsteroidManifest,
   loadAsteroidSearchBucket,
@@ -35,6 +41,82 @@ afterEach(() => {
 })
 
 describe('catalog loader cache isolation', () => {
+  const entry: AsteroidIndexEntry = {
+    id: 'asteroid:1', label: 'Alpha', shortLabel: 'Alpha', searchKey: 'alpha', chunkId: 'chunk-0000',
+    orbitClassCode: 'MBA', orbitClassName: 'Main-belt Asteroid', isNeo: false, isPha: false,
+  }
+
+  it('keeps pending search and provenance bound to the release where they began', async () => {
+    let finishSearch!: (response: Response) => void
+    let finishProvenance!: (response: Response) => void
+    const requests: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      requests.push(url)
+      if (url.endsWith('/manifest.json')) return json({ ...manifest, version: url.includes('/old/') ? 'old' : 'new' })
+      if (url.endsWith('/search/a.json')) return new Promise<Response>(resolve => { finishSearch = resolve })
+      if (url.endsWith('/provenance.json')) return new Promise<Response>(resolve => { finishProvenance = resolve })
+      if (url.includes('/meta/')) return json([entry])
+      if (url.includes('/binary/')) return new Response(new Float64Array([2451545, 2.5, .1, 5, 10, 20, 30, .25]))
+      return new Response(null, { status: 404 })
+    }))
+    await loadAsteroidManifest('old')
+    const search = searchAsteroidCatalogPage({ query: 'alpha' })
+    const provenance = loadDatasetProvenance()
+    await vi.waitFor(() => expect(finishSearch && finishProvenance).toBeTypeOf('function'))
+    await loadAsteroidManifest('new')
+    finishSearch(json([entry]))
+    finishProvenance(new Response(null, { status: 404 }))
+    expect((await search).records[0].id).toBe(entry.id)
+    expect((await provenance)?.datasetVersion).toBe('old')
+    expect(requests.filter(url => /\/(meta|binary)\//.test(url)).every(url => url.includes('/old/'))).toBe(true)
+  })
+
+  it('hydrates explicit locators and both page directions from their own manifest', async () => {
+    const requests: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      requests.push(url)
+      if (url.endsWith('/manifest.json')) return json(manifest)
+      if (url.includes('/meta/')) return json([entry])
+      if (url.includes('/binary/')) return new Response(new Float64Array([2451545, 2.5, .1, 5, 10, 20, 30, .25]))
+      return new Response(null, { status: 404 })
+    }))
+    await loadAsteroidManifest('new')
+    const old = { ...manifest, releasePath: '/old', chunkCount: 1 }
+    expect((await loadAsteroidRecordsByLocators(old, new Uint32Array([0, 0])))[0].id).toBe(entry.id)
+    expect((await loadAsteroidSectionPage({ manifest: old, orbitClassCode: 'all', pageSize: 1 })).records).toHaveLength(1)
+    expect((await loadAsteroidSectionPreviousPage({ manifest: old, orbitClassCode: 'all', pageSize: 1, cursor: { chunkIndex: 1, recordOffset: 0 } })).records).toHaveLength(1)
+    expect(requests.filter(url => /\/(meta|binary)\//.test(url)).every(url => url.startsWith('/old/'))).toBe(true)
+    expect((await loadAsteroidSectionPreviousPage({ manifest: { ...old, chunkCount: 0 }, orbitClassCode: 'all', pageSize: 1, cursor: { chunkIndex: 0, recordOffset: 0 } })).records).toEqual([])
+    expect(requests.some(url => url.includes('chunk-00-1'))).toBe(false)
+  })
+
+  it('retries failed ID lookup and bounds lookup buckets while preserving requested order', async () => {
+    let fail = true
+    const lookups: string[] = []
+    const entries = Array.from({ length: 20 }, (_, index) => ({ ...entry, id: `asteroid:${index}` }))
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/manifest.json')) return json(manifest)
+      if (url.includes('/lookup/')) {
+        lookups.push(url)
+        return fail ? new Response(null, { status: 503 }) : json(entries)
+      }
+      if (url.includes('/meta/')) return json(entries)
+      if (url.includes('/binary/')) return new Response(new Float64Array(entries.flatMap(() => [2451545, 2.5, .1, 5, 10, 20, 30, .25])))
+      return new Response(null, { status: 404 })
+    }))
+    await loadAsteroidManifest('mpcorb-current-full')
+    await expect(loadAsteroidBodiesByIds(['asteroid:0'])).rejects.toThrow('503')
+    fail = false
+    expect((await loadAsteroidBodiesByIds(['asteroid:0']))[0].id).toBe('asteroid:0')
+    for (let index = 1; index <= MAX_LOOKUP_CACHE_ENTRIES + 1; index++) await loadAsteroidBodiesByIds([`asteroid:${index}`])
+    await loadAsteroidBodiesByIds(['asteroid:0'])
+    expect(lookups.filter(url => url === lookups[0])).toHaveLength(3)
+    expect((await loadAsteroidBodiesByIds(['asteroid:9', 'asteroid:2', 'asteroid:1'])).map(body => body.id)).toEqual(['asteroid:9', 'asteroid:2', 'asteroid:1'])
+  })
+
   it('retries a failed search instead of caching a network error as zero matches', async () => {
     let fail = true
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {

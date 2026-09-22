@@ -1,11 +1,9 @@
 import { createBodyPositionResolver } from './ephemeris'
-import { kernelsForWindow, loadedKernelIds } from '../engine/ephemeris/kernelStore'
+import { kernelsForWindow } from '../engine/ephemeris/kernelStore'
 import { getRelativePositions } from './referenceFrame'
 import { packedCurrentPositions } from './currentPositions'
 import { createTrajectoryAccumulator, trajectoryViews } from './trajectorySamples'
-import type { BodyId, CelestialBody, TrajectoryFrameData, TrajectorySample, Vector3 } from '../types'
-
-const trajectoryCache = new Map<string, TrajectorySample[]>()
+import type { BodyId, CelestialBody, TrajectoryFrameData, Vector3 } from '../types'
 
 export function getRecommendedSampleCount(displayCount: number, historyDays: number) {
   let base: number
@@ -41,24 +39,6 @@ export function buildTrajectories(params: {
   sampleCount: number
 }) {
   const { bodies, bodiesById, referenceId, centerJulianDay, historyDays, sampleCount } = params
-  const roundedCenter = Math.round(centerJulianDay * 4) / 4
-  const cacheKey = [
-    loadedKernelIds().join(','),
-    referenceId,
-    historyDays,
-    sampleCount,
-    roundedCenter,
-    bodies
-      .map((body) => body.id)
-      .sort()
-      .join(','),
-  ].join('|')
-
-  const cached = trajectoryCache.get(cacheKey)
-  if (cached) {
-    return cached
-  }
-
   const accumulator = createTrajectoryAccumulator(bodies, sampleCount)
 
   // One resolver per sample shares the same parent-body and reference-frame cache
@@ -72,17 +52,9 @@ export function buildTrajectories(params: {
     accumulator.append(positions)
   }
 
-  const trajectories = trajectoryViews(accumulator.finish(), bodiesById)
-  trajectoryCache.set(cacheKey, trajectories)
-
-  if (trajectoryCache.size > 40) {
-    const oldestKey = trajectoryCache.keys().next().value
-    if (oldestKey) {
-      trajectoryCache.delete(oldestKey)
-    }
-  }
-
-  return trajectories
+  // Callers own transferable result buffers. A process-wide cache keyed only
+  // by body IDs and rounded epochs can reuse detached or scientifically stale data.
+  return trajectoryViews(accumulator.finish(), bodiesById)
 }
 
 export function buildCurrentPositions(params: {

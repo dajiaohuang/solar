@@ -7,12 +7,46 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestCancelledLookupReturnsCancellationEvenWithoutMatches(t *testing.T) {
+	i := &Inventory{idx: &sourceIndex{}}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, _, err := i.Get(ctx, "missing"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Get: %v", err)
+	}
+	if _, err := i.GetMany(ctx, []string{"missing"}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("GetMany: %v", err)
+	}
+	if _, _, err := i.Page(ctx, "", "missing", 1); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Page: %v", err)
+	}
+}
+
+func TestRepeatedIDsPreserveSourceBytesAndOrdinals(t *testing.T) {
+	d := t.TempDir()
+	raw := `{"id":"sb:one","source":"fixture","name":"Original source"}`
+	writeAddressableInventory(t, d, [][]string{{raw}})
+	i, err := Load(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := make([]string, 32768)
+	for n := range ids {
+		ids[n] = " sb:one "
+	}
+	rows, ordinals, err := i.GetManyWithOrdinals(context.Background(), ids)
+	if err != nil || len(rows) != 1 || string(rows["sb:one"]) != raw || len(ordinals) != 1 || ordinals["sb:one"] != 0 {
+		t.Fatalf("rows=%d ordinals=%v err=%v", len(rows), ordinals, err)
+	}
+}
 
 func writeAddressableInventory(t testing.TB, dir string, shardRows [][]string) {
 	t.Helper()

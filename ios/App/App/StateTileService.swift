@@ -138,9 +138,9 @@ actor StateTileService {
         return result
     }
 
-    /// A tile request is idempotent. Retry one interrupted transport or
-    /// checksum response after cancellation has been checked, so a transient
-    /// disconnect does not discard the complete observation.
+    /// A tile request is idempotent. Retry one interrupted transport after
+    /// cancellation has been checked. Checksum/ETag validation happens after
+    /// receipt and fails closed without retrying an invalid payload.
     private func receiveTileWithRetry(planId: String, sequence: Int) async throws -> (Data, HTTPURLResponse) {
         var failure: Error?
         for attempt in 0..<2 {

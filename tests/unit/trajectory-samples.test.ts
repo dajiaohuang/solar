@@ -16,6 +16,23 @@ const body = (id: string): CelestialBody => ({ id, name: id, kind: 'planet', siz
 const bytes = (values: Float64Array | Float32Array) => Buffer.from(values.buffer, values.byteOffset, values.byteLength)
 
 describe('packed historical trajectory samples', () => {
+  it('honors exact epochs, replacement body data, order, and transferred buffer ownership', () => {
+    const sun = body('sun'), planet: CelestialBody = { ...body('cache-orbiter'), orbit: {
+      model: 'keplerian', epochJd: 2451545, semiMajorAxisAU: 2, eccentricity: .12,
+      inclinationDeg: 7, ascendingNodeDeg: 30, argPeriapsisDeg: 40, meanAnomalyDeg: 50, meanMotionDegPerDay: .4,
+    } }
+    const params = { bodies: [sun, planet], bodiesById: new Map([[sun.id, sun], [planet.id, planet]]), referenceId: 'sun', sampleCount: 3, centerJulianDay: 2451545, historyDays: 1 }
+    const first = buildTrajectories(params)
+    const later = buildTrajectories({ ...params, centerJulianDay: params.centerJulianDay + .01 })
+    expect(bytes(first[1].coordinates).equals(bytes(later[1].coordinates))).toBe(false)
+    const replacement = { ...planet, name: 'updated source' }
+    const revised = buildTrajectories({ ...params, bodies: [replacement, sun], bodiesById: new Map([[sun.id, sun], [planet.id, replacement]]) })
+    expect(revised[0].body).toBe(replacement)
+    const expected = Buffer.from(bytes(first[1].coordinates))
+    structuredClone(first[1].coordinates.buffer, { transfer: [first[1].coordinates.buffer] })
+    expect(bytes(buildTrajectories(params)[1].coordinates).equals(expected)).toBe(true)
+  })
+
   it('retains exactly one xyz allocation at the maximum detail/sample budget and shares it after transfer', () => {
     const bodies = Array.from({ length: 320 }, (_, index) => body(`synthetic:${index}`)), count = 600
     const accumulator = createTrajectoryAccumulator(bodies, count)

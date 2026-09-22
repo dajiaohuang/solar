@@ -26,6 +26,7 @@
     "package:data": "node ./scripts/package-dataset.mjs ./public/data/asteroids ./asteroid-dataset.tar.gz",
     "validate:data": "node --max-old-space-size=4096 ./scripts/validate-dataset.mjs",
     "benchmark:catalog": "node ./scripts/benchmark-catalog-index.mjs",
+    "benchmark:runtime-json": "node ./scripts/benchmark-runtime-json.mjs",
     "check:capacity": "node ./scripts/check-capacity.mjs",
     "check:repository": "node ./scripts/validate-yaml.mjs && node ./scripts/validate-repository.mjs"
   },

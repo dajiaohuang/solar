@@ -81,6 +81,9 @@ if (!capacity.withinBudget) throw new Error('Generated artifact exceeds its decl
 // narratives or fallback preview identity tables. Check the emitted artifact,
 // since ordinary unit imports do not exercise the separate worker bundler.
 for (const name of await readdir(join(dist, 'assets'))) {
+  if (name.endsWith('.js') && (await stat(join(dist, 'assets', name))).size > 600 * 1024) {
+    throw new Error(`${name} exceeds the 600 KiB JavaScript chunk budget; inspect registry duplication`)
+  }
   if (!/^(trajectory|conjunction|porkchop)\.worker-.*\.js$/.test(name)) continue
   if ((await stat(join(dist, 'assets', name))).size > 512 * 1024) {
     throw new Error(`${name} exceeds the 512 KiB scientific worker budget; inspect embedded manifests`)

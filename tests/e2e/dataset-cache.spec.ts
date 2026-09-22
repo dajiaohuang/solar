@@ -9,6 +9,9 @@ import ts from 'typescript'
 const cacheScript = ts.transpileModule(readFileSync(resolve('src/data/cache/indexedDb.ts'), 'utf8'), {
   compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
 }).outputText
+const streamScript = ts.transpileModule(readFileSync(resolve('src/data/cache/boundedStream.ts'), 'utf8'), {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+}).outputText
 type CacheWindow = Window & {
   cacheUnderTest: { fetchImmutableArrayBuffer(url: string): Promise<ArrayBuffer> }
   completedCacheWrites?: number
@@ -68,7 +71,8 @@ test.beforeEach(async ({ page }) => {
     contentType: 'text/html', body: '<!doctype html><title>IndexedDB contract</title>',
   }))
   await page.goto('/solar/__cache-test.html')
-  await page.addScriptTag({ content: `(function(){const exports={};${cacheScript}\nwindow.cacheUnderTest=exports;})()` })
+  await page.addScriptTag({ content: `(function(){const stream=(function(){const exports={};${streamScript}\nreturn exports;})();const require=(name)=>{if(name==='./boundedStream')return stream;throw new Error('Unexpected cache dependency: '+name)};const exports={};${cacheScript}\nwindow.cacheUnderTest=exports;})()` })
+  await expect.poll(() => page.evaluate(() => typeof (window as CacheWindow).cacheUnderTest?.fetchImmutableArrayBuffer)).toBe('function')
   // Cache hits must work offline. A missed record fails the test immediately.
   await page.route('**/data/asteroids/**', (route) => route.fulfill({ status: 503, body: 'unexpected network access' }))
 })

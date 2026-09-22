@@ -294,6 +294,14 @@ export function computePorkchopGrid(params: {
 }) {
   const columns = Math.max(2, Math.min(params.columns ?? 24, 60))
   const rows = Math.max(2, Math.min(params.rows ?? 20, 60))
+  if (![params.columns ?? 24, params.rows ?? 20].every(value => Number.isSafeInteger(value) && value > 0)) {
+    throw new RangeError('Porkchop dimensions must be positive integers')
+  }
+  if (![params.departureStartJd, params.departureSpanDays, params.minFlightDays, params.maxFlightDays,
+    params.departureStartJd + params.departureSpanDays + params.maxFlightDays].every(Number.isFinite) ||
+    params.departureSpanDays < 0 || params.minFlightDays <= 0 || params.maxFlightDays < params.minFlightDays) {
+    throw new RangeError('Porkchop dates and flight window must be finite and ordered')
+  }
   const points: PorkchopPoint[] = []
   const kernels = kernelsForWindow(params.departureStartJd - 0.01, params.departureStartJd + params.departureSpanDays + params.maxFlightDays + 0.01, params.ephemerisFiles)
   for (let row = 0; row < rows; row += 1) {

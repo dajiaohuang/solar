@@ -1,10 +1,8 @@
 package io.github.dajiaohuang.solaratlas;
 
-import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -147,7 +145,10 @@ public final class StateTileService implements Closeable {
                 int descriptorCount = integer(descriptor, "ordinalCount");
                 require(descriptorSequence == sequence && descriptorStart == ordinal && descriptorCount > 0 && descriptorCount <= chunk.size() - ordinal, "plan tile ordering is invalid");
                 String requestKey = sha256((planId + ":" + sequence).getBytes(StandardCharsets.UTF_8));
-                byte[] cached = cache.getByRequestKey(requestKey);
+                byte[] cached;
+                try { cached = cache.getByRequestKey(requestKey); }
+                catch (IOException unavailable) { cached = null; }
+                checkLoadCancelled();
                 StateTileDecoder.DecodedTile tile;
                 if (cached != null) {
                     try {
@@ -162,13 +163,17 @@ public final class StateTileService implements Closeable {
                 } else {
                     tile = fetchTileWithRetry(planId, sequence, tileCount, catalogHash, inventoryHash, requestKey);
                 }
+                checkLoadCancelled();
                 require(tile.recordCount == descriptorCount && tile.ordinalStart == descriptorStart && tile.epochJd == epochJd, "tile descriptor mismatch");
                 decodedExact += accumulator.append(tile, ids, start + ordinal);
                 ordinal += descriptorCount;
             }
             require(ordinal == chunk.size() && decodedExact == exactCount, "incomplete plan or precision count mismatch");
         }
-        return accumulator.finish(epochJd, catalogHash, inventoryHash);
+        checkLoadCancelled();
+        Frame frame = accumulator.finish(epochJd, catalogHash, inventoryHash);
+        checkLoadCancelled();
+        return frame;
     }
 
     private StateTileDecoder.DecodedTile fetchTileWithRetry(String planId, int sequence, int tileCount,
@@ -275,7 +280,7 @@ public final class StateTileService implements Closeable {
             if (declared <= 0 || declared > limit) throw new StateTileDecoder.ProtocolException("backend response length is invalid");
             String type = connection.getHeaderField("Content-Type"); String expected = binary ? "application/vnd.solar.state-tile+binary" : "application/json";
             if (type == null || !type.split(";", 2)[0].trim().equalsIgnoreCase(expected)) throw new StateTileDecoder.ProtocolException("backend response type is invalid");
-            byte[] response = readBounded(connection.getInputStream(), limit);
+            byte[] response = StateTileClient.readExact(connection.getInputStream(), (int) declared, requestControl);
             requestControl.check();
             return response;
         } finally {
@@ -284,7 +289,6 @@ public final class StateTileService implements Closeable {
         }
     }
 
-    private static byte[] readBounded(InputStream input, int limit) throws IOException { try (InputStream source = input; ByteArrayOutputStream output = new ByteArrayOutputStream(Math.min(limit, 64 * 1024))) { byte[] buffer = new byte[16 * 1024]; int total = 0, count; while ((count = source.read(buffer)) != -1) { checkCancelled(); if (count > limit - total) throw new StateTileDecoder.ProtocolException("backend response exceeds limit"); output.write(buffer, 0, count); total += count; } return output.toByteArray(); } }
     private static List<String> normalizeIds(List<String> input) throws StateTileDecoder.ProtocolException { List<String> result = new ArrayList<>(input.size()); Set<String> seen = new HashSet<>(); for (String raw : input) { if (raw == null) throw new StateTileDecoder.ProtocolException("body ID is null"); String id = raw.trim(); if (id.isEmpty() || id.getBytes(StandardCharsets.UTF_8).length > 1024 || !seen.add(id)) throw new StateTileDecoder.ProtocolException("body IDs must be unique and bounded"); result.add(id); } return result; }
     private static String stringsJson(List<String> values) { StringBuilder out = new StringBuilder("["); for (int i = 0; i < values.size(); i++) { if (i > 0) out.append(','); out.append(jsonString(values.get(i))); } return out.append(']').toString(); }
     private static String jsonString(String value) { StringBuilder out = new StringBuilder("\""); for (int i = 0; i < value.length(); i++) { char c = value.charAt(i); if (c == '"' || c == '\\') out.append('\\').append(c); else if (c == '\b') out.append("\\b"); else if (c == '\f') out.append("\\f"); else if (c == '\n') out.append("\\n"); else if (c == '\r') out.append("\\r"); else if (c == '\t') out.append("\\t"); else if (c < 0x20) out.append(String.format("\\u%04x", (int) c)); else out.append(c); } return out.append('"').toString(); }

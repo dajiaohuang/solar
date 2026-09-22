@@ -6,6 +6,16 @@ import { findSampledExtrema, refineBracketedExtremum } from '../../src/engine/ev
 import { createBodyPositionResolver, subtractVector3, vector3Magnitude } from '../../src/lib/ephemeris'
 
 describe('JPL Horizons event fixture', () => {
+  it('handles large body sets without quadratic pair comparisons or spread argument overflow', () => {
+    const moon = majorBodies.find(body => body.id === 'moon')!
+    expect(eventSamplingPlan(Array(150_000).fill(moon), 365)).toEqual(eventSamplingPlan([moon], 365))
+  })
+
+  it('rejects non-finite windows and invalid sample counts before presenting a sampling plan', () => {
+    for (const days of [NaN, Infinity, -1]) expect(() => eventSamplingPlan([], days)).toThrow(RangeError)
+    for (const count of [NaN, Infinity, 0, 1.5]) expect(() => eventSamplingPlan([], 365, count)).toThrow(RangeError)
+  })
+
   it('keeps the exploratory Earth perihelion within the declared model tolerance', () => {
     const expected = fixture.events[0]
     const bodiesById = new Map(majorBodies.map((body) => [body.id, body]))

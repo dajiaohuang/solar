@@ -6,6 +6,22 @@ import (
 	"testing"
 )
 
+func BenchmarkGetManyRepeatedIDs(b *testing.B) {
+	i, ids := benchmarkInventory(b, 1)
+	repeated := make([]string, 32768)
+	for n := range repeated {
+		repeated[n] = ids[0]
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		rows, err := i.GetMany(context.Background(), repeated)
+		if err != nil || len(rows) != 1 {
+			b.Fatalf("rows=%d err=%v", len(rows), err)
+		}
+	}
+}
+
 func BenchmarkGetManyVsIndividualGet(b *testing.B) {
 	for _, count := range []int{510, 16384, 32768} {
 		b.Run(strconv.Itoa(count), func(b *testing.B) {

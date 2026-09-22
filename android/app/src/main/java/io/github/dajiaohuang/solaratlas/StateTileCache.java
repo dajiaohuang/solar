@@ -68,6 +68,7 @@ public final class StateTileCache {
     }
 
     private void putInternal(String key, byte[] bytes) throws IOException {
+        if (bytes.length > maxBytes) return;
         File temporary = File.createTempFile(".tile-", ".tmp", directory);
         try {
             try (FileOutputStream output = new FileOutputStream(temporary)) {
@@ -123,6 +124,13 @@ public final class StateTileCache {
     }
 
     private File file(String key) { return new File(directory, key + ".tile"); }
-    private static byte[] read(File file) throws IOException { byte[] result = new byte[(int) file.length()]; try (FileInputStream input = new FileInputStream(file)) { int offset = 0; while (offset < result.length) { int n = input.read(result, offset, result.length - offset); if (n < 0) throw new IOException("truncated cached tile"); offset += n; } } return result; }
+    private static byte[] read(File file) throws IOException {
+        try (FileInputStream input = new FileInputStream(file)) {
+            // Bind the length to the opened file, not a second path lookup.
+            long length = input.getChannel().size();
+            if (length < StateTileDecoder.HEADER_BYTES || length > StateTileDecoder.MAX_TILE_BYTES) throw new IOException("invalid cached tile size");
+            return StateTileClient.readExact(input, (int) length, null);
+        }
+    }
     private static void validateKey(String key) { if (key == null || key.length() != 64 || !key.matches("[0-9a-f]{64}")) throw new IllegalArgumentException("cache key must be lowercase SHA-256"); }
 }

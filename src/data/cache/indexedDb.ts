@@ -1,3 +1,5 @@
+import { MAX_CATALOG_ARTIFACT_BYTES, readBoundedStream } from './boundedStream'
+
 const DATABASE_NAME = 'solar-atlas-data-v1'
 const DATABASE_VERSION = 2
 const STORE_NAME = 'immutable-responses'
@@ -248,10 +250,15 @@ export async function fetchImmutableArrayBuffer(url: string, validate?: (buffer:
 async function loadImmutableArrayBuffer(url: string) {
   await prepareDatasetCache(datasetVersionFromUrl(url))
   const cached = await readCache(url)
-  if (cached) return { buffer: cached, cached: true }
+  if (cached && cached.byteLength <= MAX_CATALOG_ARTIFACT_BYTES) return { buffer: cached, cached: true }
+  if (cached) await invalidateCache(url)
   const response = await fetch(url)
   if (!response.ok) throw new Error(`Failed to load ${url}: ${response.status}`)
-  const buffer = await response.arrayBuffer()
+  if (Number(response.headers.get('content-length')) > MAX_CATALOG_ARTIFACT_BYTES) {
+    void response.body?.cancel().catch(() => undefined)
+    throw new Error(`Catalog artifact exceeds ${MAX_CATALOG_ARTIFACT_BYTES} bytes`)
+  }
+  const buffer = response.body ? await readBoundedStream(response.body) : new ArrayBuffer(0)
   return { buffer, cached: false }
 }
 
@@ -261,16 +268,17 @@ export async function fetchImmutableJson<T>(url: string): Promise<T> {
   return parsed
 }
 
-export async function parseMaybeGzipJson<T>(buffer: ArrayBuffer): Promise<T> {
+export async function parseMaybeGzipJson<T>(buffer: ArrayBuffer, maximumBytes = MAX_CATALOG_ARTIFACT_BYTES): Promise<T> {
+  if (buffer.byteLength > maximumBytes) throw new Error(`Catalog artifact exceeds ${maximumBytes} bytes`)
   const header = new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 2))
   const isGzip = header[0] === 0x1f && header[1] === 0x8b
-  if (!isGzip) return JSON.parse(new TextDecoder().decode(buffer)) as T
+  if (!isGzip) return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(buffer)) as T
   if (typeof DecompressionStream === 'undefined') {
     throw new Error('This browser does not support streamed gzip dataset delivery.')
   }
   const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'))
-  const decompressed = await new Response(stream).arrayBuffer()
-  return JSON.parse(new TextDecoder().decode(decompressed)) as T
+  const decompressed = await readBoundedStream(stream, maximumBytes)
+  return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(decompressed)) as T
 }
 
 export async function fetchImmutableGzipJson<T>(url: string): Promise<T> {

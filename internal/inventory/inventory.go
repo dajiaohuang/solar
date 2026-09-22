@@ -448,6 +448,9 @@ func (i *Inventory) SourceIdentityModels() map[string][]string {
 // prebuilt exact normalized identity/alias index. Rows are never silently
 // deduplicated or promoted.
 func (i *Inventory) Page(ctx context.Context, cursor, query string, limit int) ([]json.RawMessage, string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, "", err
+	}
 	refs, next, err := i.pageRefs(cursor, query, limit)
 	if err != nil {
 		return nil, "", err
@@ -463,11 +466,17 @@ func (i *Inventory) Page(ctx context.Context, cursor, query string, limit int) (
 // verified against the raw ID before returning, so a hash collision cannot
 // select the wrong record.
 func (i *Inventory) Get(ctx context.Context, id string) (json.RawMessage, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
 	id = strings.TrimSpace(id)
 	if id == "" || i.idx == nil {
 		return nil, false, nil
 	}
 	for _, encodedOrdinal := range i.postings(hashText(normalize(id))) {
+		if encodedOrdinal&idPostingBit == 0 {
+			continue
+		}
 		ordinal := encodedOrdinal &^ idPostingBit
 		ref := i.idx.records[ordinal]
 		row, err := i.readRef(ctx, ref)
@@ -497,23 +506,36 @@ func (i *Inventory) GetMany(ctx context.Context, ids []string) (map[string]json.
 // GetManyWithOrdinals binds evidence references to the actual indexed row,
 // using the same grouped reads as GetMany rather than scanning the inventory.
 func (i *Inventory) GetManyWithOrdinals(ctx context.Context, ids []string) (map[string]json.RawMessage, map[string]int, error) {
-	ordinals := make(map[string]int, len(ids))
+	ordinals := make(map[string]int)
 	rows, err := i.getMany(ctx, ids, ordinals)
 	return rows, ordinals, err
 }
 
 func (i *Inventory) getMany(ctx context.Context, ids []string, ordinals map[string]int) (map[string]json.RawMessage, error) {
-	out := make(map[string]json.RawMessage, len(ids))
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	// Result size follows unique identities, not the number of repeated inputs.
+	out := make(map[string]json.RawMessage)
 	if i == nil || i.idx == nil || len(ids) == 0 {
 		return out, nil
 	}
 	refsByKey := make(map[uint64]recordRef)
-	wanted := make(map[uint64][]string)
-	for _, rawID := range ids {
+	seen := make(map[string]struct{})
+	for n, rawID := range ids {
+		if n%256 == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
 		id := strings.TrimSpace(rawID)
 		if id == "" {
 			continue
 		}
+		if _, exists := seen[id]; exists {
+			continue
+		}
+		seen[id] = struct{}{}
 		for _, encodedOrdinal := range i.postings(hashText(normalize(id))) {
 			if encodedOrdinal&idPostingBit == 0 {
 				continue
@@ -525,12 +547,12 @@ func (i *Inventory) getMany(ctx context.Context, ids []string, ordinals map[stri
 			ref := i.idx.records[ordinal]
 			key := refKey(ref)
 			refsByKey[key] = ref
-			wanted[key] = append(wanted[key], id)
 		}
 	}
 	if len(refsByKey) == 0 {
 		return out, nil
 	}
+	out = make(map[string]json.RawMessage, len(refsByKey))
 	refs := make([]recordRef, 0, len(refsByKey))
 	for _, ref := range refsByKey {
 		refs = append(refs, ref)
@@ -546,6 +568,11 @@ func (i *Inventory) getMany(ctx context.Context, ids []string, ordinals map[stri
 		return nil, err
 	}
 	for n, ref := range refs {
+		if n%256 == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
 		if rows[n] == nil {
 			continue
 		}
@@ -553,12 +580,12 @@ func (i *Inventory) getMany(ctx context.Context, ids []string, ordinals map[stri
 		if err := json.Unmarshal(rows[n], &fields); err != nil {
 			return nil, fmt.Errorf("parse inventory row: %w", err)
 		}
-		for _, id := range wanted[refKey(ref)] {
-			if fields.ID == id {
-				out[id] = append(json.RawMessage(nil), rows[n]...)
-				if ordinals != nil {
-					ordinals[id] = int(ref.Ordinal)
-				}
+		// Verify the actual source identity, including hash-collision candidates.
+		// The unique ID set also replaces a per-row slice of repeated query IDs.
+		if _, wanted := seen[fields.ID]; wanted {
+			out[fields.ID] = append(json.RawMessage(nil), rows[n]...)
+			if ordinals != nil {
+				ordinals[fields.ID] = int(ref.Ordinal)
 			}
 		}
 	}

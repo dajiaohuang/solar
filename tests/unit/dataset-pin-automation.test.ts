@@ -298,7 +298,7 @@ describe('protected dataset pin automation', () => {
       head_sha: { required: true },
       request_id: { required: true },
     })
-    expect(quality['run-name']).toBe("${{ inputs.request_id || format('Pull request #{0}', github.event.pull_request.number) }}")
+    expect(quality['run-name']).toBe("${{ inputs.request_id || (github.event_name == 'push' && format('Branch quality: {0}', github.ref_name)) || format('Pull request #{0}', github.event.pull_request.number) }}")
     expect(quality.permissions).toEqual({ contents: 'read', 'pull-requests': 'read' })
     expect(quality.jobs.mobile_quality.uses).toBe('./.github/workflows/mobile.yml')
     expect(mobile.on.workflow_call.inputs.checkout_ref.type).toBe('string')

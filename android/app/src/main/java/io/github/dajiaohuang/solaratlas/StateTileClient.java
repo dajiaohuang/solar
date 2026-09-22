@@ -1,6 +1,5 @@
 package io.github.dajiaohuang.solaratlas;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -71,15 +70,17 @@ public final class StateTileClient {
             if (contentType == null || !contentType.split(";", 2)[0].trim().equals(CONTENT_TYPE)) throw new StateTileDecoder.ProtocolException("state tile content type mismatch");
             long declared = connection.getContentLengthLong();
             if (declared <= 0 || declared > StateTileDecoder.MAX_TILE_BYTES) throw new StateTileDecoder.ProtocolException("state tile Content-Length is invalid");
-            byte[] raw = readBounded(connection.getInputStream(), StateTileDecoder.MAX_TILE_BYTES);
+            byte[] raw = readExact(connection.getInputStream(), (int) declared, cancellation);
             if (cancellation != null) cancellation.check();
             StateTileDecoder.DecodedTile decoded = StateTileDecoder.decode(raw, planHash, catalogHash, inventoryHash, sequence, tileCount);
             String etag = connection.getHeaderField("ETag");
-            if (etag == null || !stripQuotes(etag).equals(decoded.payloadSha256)) throw new StateTileDecoder.ProtocolException("state tile ETag mismatch");
+            requireStrongEtag(etag, decoded.payloadSha256);
+            if (cancellation != null) cancellation.check();
             if (cache != null) {
                 try { cache.putByRequestKey(cacheKey == null ? decoded.payloadSha256 : cacheKey, raw); }
                 catch (IOException ignored) { /* A full cache never discards a verified live observation. */ }
             }
+            if (cancellation != null) cancellation.check();
             return decoded;
         } finally {
             if (cancellation != null && connection != null) cancellation.unregister(connection);
@@ -96,26 +97,31 @@ public final class StateTileClient {
         return StateTileDecoder.decode(raw, planHash, catalogHash, inventoryHash, sequence, tileCount);
     }
 
-    private static byte[] readBounded(InputStream input, int maxBytes) throws IOException {
-        try (InputStream source = input; ByteArrayOutputStream output = new ByteArrayOutputStream(Math.min(maxBytes, 64 * 1024))) {
-            byte[] buffer = new byte[16 * 1024];
-            int total = 0;
-            int count;
-            while ((count = source.read(buffer)) != -1) {
+    static byte[] readExact(InputStream input, int declaredBytes, Cancellation cancellation) throws IOException {
+        try (InputStream source = input) {
+            if (declaredBytes <= 0 || declaredBytes > StateTileDecoder.MAX_TILE_BYTES) throw new StateTileDecoder.ProtocolException("invalid response byte count");
+            if (Thread.currentThread().isInterrupted()) throw new IOException("state tile fetch cancelled");
+            if (cancellation != null) cancellation.check();
+            // One final allocation, without geometric buffer growth and a second
+            // full-size toByteArray copy on memory-constrained devices.
+            byte[] result = new byte[declaredBytes];
+            int offset = 0;
+            while (offset < result.length) {
                 if (Thread.currentThread().isInterrupted()) throw new IOException("state tile fetch cancelled");
-                if (count > maxBytes - total) throw new StateTileDecoder.ProtocolException("state tile exceeds 64 MiB");
-                output.write(buffer, 0, count);
-                total += count;
+                if (cancellation != null) cancellation.check();
+                int count = source.read(result, offset, Math.min(16 * 1024, result.length - offset));
+                if (count < 0) throw new StateTileDecoder.ProtocolException("truncated response Content-Length");
+                if (count == 0) throw new IOException("response stream made no progress");
+                offset += count;
             }
-            return output.toByteArray();
+            if (cancellation != null) cancellation.check();
+            if (source.read() != -1) throw new StateTileDecoder.ProtocolException("response exceeds Content-Length");
+            return result;
         }
     }
 
-    private static String stripQuotes(String value) {
-        String trimmed = value.trim();
-        if (trimmed.startsWith("W/")) trimmed = trimmed.substring(2).trim();
-        if (trimmed.length() >= 2 && trimmed.charAt(0) == '"' && trimmed.charAt(trimmed.length() - 1) == '"') return trimmed.substring(1, trimmed.length() - 1);
-        return trimmed;
+    static void requireStrongEtag(String value, String payloadHash) throws StateTileDecoder.ProtocolException {
+        if (value == null || !value.trim().equals("\"" + payloadHash + "\"")) throw new StateTileDecoder.ProtocolException("state tile ETag mismatch");
     }
 
     private static boolean isHash(String value) {

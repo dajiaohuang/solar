@@ -1,6 +1,6 @@
 import { test as base, expect } from '@playwright/test'
 import { createHash } from 'node:crypto'
-import type { Page } from '@playwright/test'
+import type { Page, Request } from '@playwright/test'
 import ephemerisBodies from '../../src/data/ephemerisBodies.json' with { type: 'json' }
 import satelliteCatalog from '../../src/data/satelliteCatalog.json' with { type: 'json' }
 import { BODY_NAIF_IDS } from '../../src/data/ephemerisTargets'
@@ -35,6 +35,33 @@ type StateTileActivity = { active: number; peak: number; completed: number }
 async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: boolean, missingStateTileIds: string[], stateTileRowsPerTile: number, activity: StateTileActivity) {
   if (!Number.isInteger(stateTileRowsPerTile) || stateTileRowsPerTile < 1 || stateTileRowsPerTile > 32768) throw new Error('Invalid fixture tile size')
   let slowStateTiles = false
+  const cancellations = new Map<Request, () => void>()
+  page.on('requestfailed', request => cancellations.get(request)?.())
+  const beginWork = (request: Request) => {
+    let finished = false, cancelled = Boolean(request.failure())
+    let releaseDelay: (() => void) | undefined
+    const finish = () => {
+      if (finished) return
+      finished = true
+      cancellations.delete(request)
+      activity.active--
+    }
+    activity.active++
+    cancellations.set(request, () => { cancelled = true; finish(); releaseDelay?.() })
+    if (cancelled) finish()
+    else activity.peak = Math.max(activity.peak, activity.active)
+    return {
+      finish,
+      cancelled: () => cancelled,
+      async ready() {
+        if (!cancelled && slowStateTiles) await new Promise<void>(resolve => {
+          const timer = setTimeout(resolve, 1_200)
+          releaseDelay = () => { clearTimeout(timer); resolve() }
+        })
+        return !cancelled
+      },
+    }
+  }
   const plans = new Map<string, { bodyIds: string[]; epochJd: number }>()
   await page.route('**/solar-test-api/v1/catalog/manifest', route => route.fulfill({
     json: { apiVersion: 'solar.api/v1', catalogVersion: datasetVersion, catalogManifestSha256: catalogHash },
@@ -47,10 +74,10 @@ async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: b
     const idsHash = await digestStateTileRequestIds(ids)
     json({ kind: 'window', version: 1, epochCount: epochsJd.length, bodyCount: ids.length, requestIdsSha256: idsHash, catalogManifestSha256: catalogHash })
     let totalExact = 0, totalMissing = 0
-    activity.active++; activity.peak = Math.max(activity.peak, activity.active)
+    const work = beginWork(route.request())
     try {
       slowStateTiles ||= page.url().includes('slow-state-tiles=1')
-      if (slowStateTiles) await new Promise(resolve => setTimeout(resolve, 1_200))
+      if (!await work.ready()) return
       for (const [epochIndex, epochJd] of epochsJd.entries()) {
         const unavailable = new Set([...unavailableIdsAt(epochJd), ...missingStateTileIds])
         const present = ids.map(id => knownBackendIds.has(id) && !unavailable.has(id))
@@ -70,9 +97,10 @@ async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: b
         totalExact += exactCount; totalMissing += ids.length - exactCount
       }
       json({ kind: 'complete', epochCount: epochsJd.length, bodyCount: ids.length, exactCount: totalExact, missingCount: totalMissing })
+      if (work.cancelled()) return
       activity.completed++
       return route.fulfill({ headers: { 'content-type': 'application/vnd.solar.state-window+binary' }, body: Buffer.concat(frames) })
-    } finally { activity.active-- }
+    } finally { work.finish() }
   })
   await page.route('**/solar-test-api/v1/state/plan*', async route => {
     const request = route.request()
@@ -106,21 +134,22 @@ async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: b
     // parameters. Capture the opt-in on the first request so every later
     // response in this page keeps the intended slow-backend behavior.
     slowStateTiles ||= page.url().includes('slow-state-tiles=1')
-    activity.active++; activity.peak = Math.max(activity.peak, activity.active)
+    const work = beginWork(request)
     try {
-      if (slowStateTiles) await new Promise(resolve => setTimeout(resolve, 1_200))
+      if (!await work.ready()) return
       const unavailableByEpoch = new Set([...unavailableIdsAt(plan.epochJd), ...missingStateTileIds])
       const present = tileIds.map(id => knownBackendIds.has(id) && !unavailableByEpoch.has(id))
       const metadata: StateTileMetadata[] = tileIds.map((id, index) => ({ id, availability: present[index] ? 'operational' : 'missing', precision: 'exact', source: knownBackendIds.has(id) ? source : '', datasetVersion: knownBackendIds.has(id) ? datasetVersion : '', datasetSha256: catalogHash, kernelSha256: 'b'.repeat(64), model: present[index] || unavailableByEpoch.has(id) ? 'spk-original' : '', centerId: knownBackendIds.has(id) ? 'naif:0' : '', validityStartEt: -1e12, validityEndEt: 1e12, validityPresent: true, stateEvidence: present[index] ? 'fixture-kernel' : '', evidenceWindowStartEt: -1e12, evidenceWindowEndEt: 1e12, evidenceWindowPresent: false, missingReason: present[index] ? '' : unavailableByEpoch.has(id) ? 'kernel-coverage-gap' : 'unknown-identity', identityStatus: '', sourceRecord: false }))
       const states = new Float64Array(tileIds.length * 6); tileIds.forEach((id, index) => { if (present[index]) states.set(fixtureState(id), index * 6) })
       const tile = await encodeStateTile({ sequence, tileCount: Math.ceil(plan.bodyIds.length / stateTileRowsPerTile), ordinalStart, epochJd: plan.epochJd, metadata, exact: present.flatMap((value, index) => value ? [index] : []), states, planHash: body.planId!, catalogManifestSha256: catalogHash })
       const tileBytes = Buffer.from(tile); const payloadHash = tileBytes.subarray(168, 200).toString('hex')
+      if (work.cancelled()) return
       activity.completed++
       // Measure backend work on this one event loop. Cross-worker browser
       // requestfinished callbacks can arrive after a later worker's request.
       // Body consumption/integrity lifetime is separately tested at the loader.
       return route.fulfill({ headers: { 'content-type': 'application/vnd.solar.state-tile+binary', 'content-length': String(tileBytes.length), etag: `"${payloadHash}"`, 'x-solar-fixture-state-tile': 'complete' }, body: tileBytes })
-    } finally { activity.active-- }
+    } finally { work.finish() }
   })
 }
 

@@ -7,6 +7,7 @@ import { ephemerisProfile } from './src/data/ephemerisProfile.ts'
 import { productProfile } from './src/data/productProfile.ts'
 import { productDelivery } from './scripts/lib/product-delivery.ts'
 import { runtimeEphemerisManifest } from './src/engine/ephemeris/runtimeManifest.ts'
+import { packRuntimeJson } from './scripts/lib/pack-runtime-json.ts'
 
 type BuildInfo = {
   version: string
@@ -34,14 +35,22 @@ function loadBuildInfo(): BuildInfo {
 export default defineConfig(({ command }) => {
   const delivery = productDelivery(process.env.SOLAR_ATLAS_PRODUCT_PROFILE, process.env.SOLAR_ATLAS_EPHEMERIS_PROFILE)
   const manifestModule = resolve('src/data/selectedEphemerisManifest.ts').replace(/\\/g, '/')
+  const runtimeDecoder = resolve('src/data/runtimeJson.ts').replace(/\\/g, '/')
+  const compactModules = new Set(['ephemerisBodies.json', 'satelliteCatalog.json'].map(name => resolve('src/data', name).replace(/\\/g, '/')))
+  const compact = (value: unknown, declaration: string) => `import { unpackRuntimeJson } from ${JSON.stringify(runtimeDecoder)}; ${declaration} unpackRuntimeJson(${JSON.stringify(packRuntimeJson(JSON.parse(JSON.stringify(value))))})`
   const manifestPlugin = () => ({
     name: 'solar-selected-runtime-manifest',
     load(id: string) {
       // Replace before import traversal: eager fallback initialization cannot
       // be eliminated by substituting a conditional constant alone.
       if (id.replace(/\\/g, '/') === manifestModule) {
-        return 'export const selectedEphemerisManifest = __SOLAR_EPHEMERIS_MANIFEST__'
+        return compact(runtimeEphemerisManifest(delivery.manifest), 'export const selectedEphemerisManifest =')
       }
+    },
+    // JSON has already been parsed by Vite. Replace only these default-import
+    // registries; their checked-in source JSON remains independently auditable.
+    transform(_code: string, id: string) {
+      if (compactModules.has(id.replace(/\\/g, '/'))) return { code: compact(JSON.parse(readFileSync(id, 'utf8')), 'export default'), map: null }
     },
   })
 
@@ -59,7 +68,6 @@ export default defineConfig(({ command }) => {
       ...(delivery.product === 'preview' ? { 'import.meta.env.VITE_SOLAR_API_BASE_URL': JSON.stringify('') } : {}),
       __SOLAR_BUILD_INFO__: JSON.stringify(loadBuildInfo()),
       __SOLAR_PRODUCT_PROFILE__: JSON.stringify(productProfile(process.env.SOLAR_ATLAS_PRODUCT_PROFILE)),
-      __SOLAR_EPHEMERIS_MANIFEST__: JSON.stringify(runtimeEphemerisManifest(delivery.manifest)),
       __SOLAR_EPHEMERIS_PROFILE__: JSON.stringify(ephemerisProfile(process.env.SOLAR_ATLAS_EPHEMERIS_PROFILE)),
       __SOLAR_DATA_ROOT__: JSON.stringify(delivery.product === 'preview' ? `/solar/${delivery.catalogDirectory}` : ''),
     },

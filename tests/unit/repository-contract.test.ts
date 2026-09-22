@@ -167,6 +167,18 @@ describe('repository contract', () => {
     }
   })
 
+  it('validates staging pushes without requiring a PR or weakening the stable gate', () => {
+    const quality = parse(readFileSync(new URL('../../.github/workflows/pull-request-quality.yml', import.meta.url), 'utf8'))
+    expect(quality.on.push.branches).toEqual(['codex/**'])
+    expect(quality.on).toHaveProperty('pull_request')
+    expect(quality.concurrency.group).toContain('github.ref')
+    expect(quality.jobs.pull_request_quality_gate.name).toBe('Pull request quality gate')
+    expect(quality.jobs.pull_request_quality_gate.needs).toEqual(['repository_contract', 'web_quality', 'mobile_quality', 'browser_quality'])
+    const classify = quality.jobs.repository_contract.steps.find((step: { id?: string }) => step.id === 'scope')
+    expect(classify.run).toContain('git merge-base origin/main "$HEAD_SHA"')
+    expect(classify.env.HEAD_SHA).toContain('github.sha')
+  })
+
   it('runs each browser independently and pins reusable runs to the reviewed commit', () => {
     const root = new URL('../../', import.meta.url)
     const browser = parse(readFileSync(new URL('.github/workflows/browser-quality.yml', root), 'utf8'))

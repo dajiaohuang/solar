@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { classifyLambertFailure, solveLambertUniversal } from '../../src/engine/mission/lambert'
+import { classifyLambertFailure, computePorkchopGrid, solveLambertUniversal } from '../../src/engine/mission/lambert'
 import { SOLAR_GM_AU3_PER_DAY2 } from '../../src/engine/units'
 import fixture from '../fixtures/lambert-benchmarks.json'
 
 describe('universal-variable Lambert solver', () => {
+  it('rejects invalid grid inputs instead of returning an empty or extrapolated completed grid', () => {
+    const params = { departureBodyId: 'earth', arrivalBodyId: 'mars', bodiesById: new Map(), departureStartJd: 2451545, departureSpanDays: 10, minFlightDays: 100, maxFlightDays: 300 }
+    for (const invalid of [{ columns: NaN }, { rows: 2.5 }, { columns: 0 }, { departureStartJd: Infinity },
+      { departureSpanDays: -1 }, { minFlightDays: 0 }, { maxFlightDays: 99 }, { minFlightDays: NaN }]) {
+      expect(() => computePorkchopGrid({ ...params, ...invalid })).toThrow(RangeError)
+    }
+    const grid = computePorkchopGrid({ ...params, columns: 2, rows: 2 })
+    expect(grid.points.map(point => [point.departureJulianDay, point.arrivalJulianDay])).toEqual([
+      [2451545, 2451645], [2451555, 2451655], [2451545, 2451845], [2451555, 2451855],
+    ])
+  })
+
   it('recovers a quarter of a circular 1 AU orbit', () => {
     const circularSpeed = Math.sqrt(SOLAR_GM_AU3_PER_DAY2)
     const quarterPeriod = Math.PI / (2 * circularSpeed)

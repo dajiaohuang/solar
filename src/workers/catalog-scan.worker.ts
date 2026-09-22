@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
-import { fetchImmutableArrayBuffer, fetchImmutableJson } from '../data/cache/indexedDb'
+import { fetchImmutableArrayBuffer, fetchImmutableGzipJson, fetchImmutableJson } from '../data/cache/indexedDb'
+import { validateBinaryElements } from '../lib/catalogLoader'
 import { createCatalogFieldMatcher } from '../lib/catalogFilters'
 import { StratifiedCatalogSampler } from '../lib/catalogSampling'
 import type {
@@ -14,7 +15,7 @@ import type {
 
 const workerScope = self as DedicatedWorkerGlobalScope
 const compactIndexCache = new Map<string, Promise<ArrayBuffer>>()
-const cancelledRequests = new Set<number>()
+const MAX_COMPACT_INDEX_ENTRIES = 2
 let activeRequestId = 0
 
 function chunkId(index: number) {
@@ -26,7 +27,7 @@ function yieldToWorker() {
 }
 
 function isCancelled(request: CatalogScanWorkerRequest) {
-  return cancelledRequests.has(request.requestId) || activeRequestId !== request.requestId
+  return activeRequestId !== request.requestId
 }
 
 function binaryValues(metadata: AsteroidIndexEntry[], buffer: ArrayBuffer) {
@@ -42,8 +43,10 @@ async function loadBinaryChunk(request: CatalogScanWorkerRequest, index: number)
   const id = chunkId(index)
   const root = request.manifest.releasePath ?? `${import.meta.env.BASE_URL}data/asteroids`
   const [metadata, buffer] = await Promise.all([
-    fetchImmutableJson<AsteroidIndexEntry[]>(`${root}/meta/${id}.json`),
-    fetchImmutableArrayBuffer(`${root}/binary/${id}.bin`),
+    request.manifest.capabilities?.includes('gzip-json-v1')
+      ? fetchImmutableGzipJson<AsteroidIndexEntry[]>(`${root}/meta/${id}.json.gz`)
+      : fetchImmutableJson<AsteroidIndexEntry[]>(`${root}/meta/${id}.json`),
+    fetchImmutableArrayBuffer(`${root}/binary/${id}.bin`, validateBinaryElements),
   ])
   return { metadata, values: binaryValues(metadata, buffer) }
 }
@@ -51,7 +54,9 @@ async function loadBinaryChunk(request: CatalogScanWorkerRequest, index: number)
 async function loadJsonChunk(request: CatalogScanWorkerRequest, index: number) {
   const id = chunkId(index)
   const root = request.manifest.releasePath ?? `${import.meta.env.BASE_URL}data/asteroids`
-  return fetchImmutableJson<AsteroidRecord[]>(`${root}/chunks/${id}.json`)
+  return request.manifest.capabilities?.includes('gzip-json-v1')
+    ? fetchImmutableGzipJson<AsteroidRecord[]>(`${root}/chunks/${id}.json.gz`)
+    : fetchImmutableJson<AsteroidRecord[]>(`${root}/chunks/${id}.json`)
 }
 
 function postLocatorResult(request: CatalogScanWorkerRequest, total: number, sampled: CatalogLocator[]) {
@@ -69,6 +74,8 @@ function postLocatorResult(request: CatalogScanWorkerRequest, total: number, sam
 async function scanCompactIndex(request: CatalogScanWorkerRequest) {
   const compactIndex = request.manifest.compactIndex
   if (!compactIndex) return false
+  if (compactIndex.format !== 'catalog-index-v1' || compactIndex.strideBytes !== 24 ||
+      !Number.isSafeInteger(compactIndex.count) || compactIndex.count < 0) throw new Error('Invalid compact catalog index contract')
   const root = request.manifest.releasePath ?? `${import.meta.env.BASE_URL}data/asteroids`
   const url = `${root}/${compactIndex.path}`
   let promise = compactIndexCache.get(url)
@@ -78,9 +85,12 @@ async function scanCompactIndex(request: CatalogScanWorkerRequest) {
       if (compactIndexCache.get(url) === promise) compactIndexCache.delete(url)
       throw error
     })
-    compactIndexCache.set(url, promise)
   }
+  compactIndexCache.delete(url)
+  compactIndexCache.set(url, promise)
+  while (compactIndexCache.size > MAX_COMPACT_INDEX_ENTRIES) compactIndexCache.delete(compactIndexCache.keys().next().value!)
   const buffer = await promise
+  if (isCancelled(request)) return true
   if (buffer.byteLength !== compactIndex.count * compactIndex.strideBytes) {
     compactIndexCache.delete(url)
     throw new Error(`Compact catalog index has ${buffer.byteLength} bytes; expected ${compactIndex.count * compactIndex.strideBytes}`)
@@ -102,7 +112,9 @@ async function scanCompactIndex(request: CatalogScanWorkerRequest) {
       ? request.candidateLocators[candidateIndex * 2 + 1]
       : candidateIndex % request.manifest.chunkSize
     const compactRow = chunkIndex * request.manifest.chunkSize + rowIndex
-    if (compactRow >= compactIndex.count) throw new Error(`Search locator is outside compact index: ${chunkIndex}:${rowIndex}`)
+    if (chunkIndex >= request.manifest.chunkCount || rowIndex >= request.manifest.chunkSize || compactRow >= compactIndex.count) {
+      throw new Error(`Search locator is outside compact index: ${chunkIndex}:${rowIndex}`)
+    }
     const offset = compactRow * compactIndex.strideBytes
     const semiMajorAxisAU = view.getFloat64(offset, true)
     const eccentricity = view.getUint32(offset + 8, true) / 1_000_000_000
@@ -133,6 +145,7 @@ async function scanCompactIndex(request: CatalogScanWorkerRequest) {
 
 async function scan(request: CatalogScanWorkerRequest) {
   activeRequestId = request.requestId
+  if (request.candidateLocators && request.candidateLocators.length % 2 !== 0) throw new Error('Catalog locators must contain chunk/row pairs')
   if ((!request.filters.query.trim() || request.candidateLocators) && await scanCompactIndex(request)) return
 
   const matches = createCatalogFieldMatcher(request.filters)
@@ -142,6 +155,7 @@ async function scan(request: CatalogScanWorkerRequest) {
     for (let index = 0; index < request.manifest.chunkCount; index += 1) {
       if (isCancelled(request)) return
       const { metadata, values } = await loadBinaryChunk(request, index)
+      if (isCancelled(request)) return
       for (let recordIndex = 0; recordIndex < metadata.length; recordIndex += 1) {
         const entry = metadata[recordIndex]
         const offset = recordIndex * 8
@@ -169,6 +183,7 @@ async function scan(request: CatalogScanWorkerRequest) {
   for (let index = 0; index < request.manifest.chunkCount; index += 1) {
     if (isCancelled(request)) return
     const records = await loadJsonChunk(request, index)
+    if (isCancelled(request)) return
     for (const record of records) {
       if (!matches(record.searchKey, record.orbitClassCode, record.absoluteMagnitude, record.semiMajorAxisAU, record.eccentricity, record.inclinationDeg)) continue
       total += 1
@@ -188,18 +203,17 @@ async function scan(request: CatalogScanWorkerRequest) {
 
 workerScope.onmessage = (event: MessageEvent<CatalogScanWorkerRequest | CatalogScanWorkerCancelRequest>) => {
   if (event.data.type === 'cancel') {
-    cancelledRequests.add(event.data.requestId)
+    if (activeRequestId === event.data.requestId) activeRequestId = 0
     return
   }
   const request = event.data
-  cancelledRequests.delete(request.requestId)
   void scan(request).catch((error: unknown) => {
     if (isCancelled(request)) return
     workerScope.postMessage({
       type: 'error', requestId: request.requestId, scanKey: request.scanKey,
       error: error instanceof Error ? error.message : String(error),
     } satisfies CatalogScanWorkerResponse)
-  }).finally(() => cancelledRequests.delete(request.requestId))
+  })
 }
 
 export {}

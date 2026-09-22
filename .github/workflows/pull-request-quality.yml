@@ -1,7 +1,11 @@
 name: Pull request quality
-run-name: "${{ inputs.request_id || format('Pull request #{0}', github.event.pull_request.number) }}"
+run-name: "${{ inputs.request_id || (github.event_name == 'push' && format('Branch quality: {0}', github.ref_name)) || format('Pull request #{0}', github.event.pull_request.number) }}"
 
 on:
+  # Validate an exact staging commit before a protected fast-forward to main.
+  # The required status name stays stable; no PR or protection bypass is needed.
+  push:
+    branches: ['codex/**']
   pull_request:
   workflow_dispatch:
     inputs:
@@ -27,7 +31,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: pull-request-quality-${{ inputs.pr_number || github.event.pull_request.number }}
+  group: pull-request-quality-${{ inputs.pr_number || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -62,8 +66,12 @@ jobs:
         id: scope
         env:
           BASE_SHA: ${{ inputs.base_sha || github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ inputs.head_sha || github.event.pull_request.head.sha }}
-        run: node scripts/pr-quality-contract.mjs classify "$BASE_SHA" "$HEAD_SHA"
+          HEAD_SHA: ${{ inputs.head_sha || github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ -z "$BASE_SHA" ]; then
+            BASE_SHA=$(git merge-base origin/main "$HEAD_SHA")
+          fi
+          node scripts/pr-quality-contract.mjs classify "$BASE_SHA" "$HEAD_SHA"
 
   web_quality:
     name: Web quality
