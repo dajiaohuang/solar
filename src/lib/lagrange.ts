@@ -37,7 +37,9 @@ export function computeLagrangePoints(
 
   const rL1 = R * (1 - Math.cbrt(mu / 3))
   const rL2 = R * (1 + Math.cbrt(mu / 3))
-  const rL3 = -R * (1 - (5 * mu) / 12)
+  // Sun-centered, not barycentric: x_L3 = -1 + 7*q/12 + O(q^2).
+  // The barycenter is displaced from the Sun by q/(1+q) orbital radii.
+  const rL3 = -R * (1 - (7 * mu) / 12)
 
   const l1 = { x: ux * rL1, y: uy * rL1 }
   const l2 = { x: ux * rL2, y: uy * rL2 }

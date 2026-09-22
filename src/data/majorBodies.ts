@@ -100,6 +100,7 @@ export const majorBodies: CelestialBody[] = [
     orbit: {
       model: 'keplerian',
       epochJd: J2000,
+      epochTimeScale: 'TDB',
       semiMajorAxisAU: 384400 / 149597870.7,
       eccentricity: 0.0554,
       inclinationDeg: 5.16,

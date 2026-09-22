@@ -80,6 +80,7 @@ export function jplHorizonsGiantSatelliteOrbit(bodyId: GiantSatelliteId): Kepler
   return {
     model: 'keplerian',
     epochJd: J2000,
+    epochTimeScale: 'TDB',
     semiMajorAxisAU: elements.semiMajorAxisAU,
     eccentricity: elements.eccentricity,
     inclinationDeg: elements.inclinationDeg,

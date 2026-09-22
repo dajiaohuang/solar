@@ -49,27 +49,31 @@ export function classifyLambertFailure(error: unknown): LambertFailureCode {
 }
 
 function stumpffC(z: number) {
-  if (z > 1e-8) {
+  if (z > 0.1) {
     const root = Math.sqrt(z)
     return 2 * Math.sin(root / 2) ** 2 / z
   }
-  if (z < -1e-8) {
+  if (z < -0.1) {
     const root = Math.sqrt(-z)
-    return (Math.cosh(root) - 1) / -z
+    return 2 * Math.sinh(root / 2) ** 2 / -z
   }
-  return 1 / 2 - z / 24 + z * z / 720
+  let term = 1 / 2, sum = term
+  for (let k = 1; k <= 7; k++) { term *= -z / ((2 * k + 1) * (2 * k + 2)); sum += term }
+  return sum
 }
 
 function stumpffS(z: number) {
-  if (z > 1e-8) {
+  if (z > 0.1) {
     const root = Math.sqrt(z)
     return (root - Math.sin(root)) / (root ** 3)
   }
-  if (z < -1e-8) {
+  if (z < -0.1) {
     const root = Math.sqrt(-z)
     return (Math.sinh(root) - root) / (root ** 3)
   }
-  return 1 / 6 - z / 120 + z * z / 5040
+  let term = 1 / 6, sum = term
+  for (let k = 1; k <= 7; k++) { term *= -z / ((2 * k + 2) * (2 * k + 3)); sum += term }
+  return sum
 }
 
 function addScaled(a: Vector3, b: Vector3, bScale: number): Vector3 {
@@ -131,47 +135,37 @@ export function solveLambertUniversal(params: {
     }
   }
 
-  let lower = -FIRST_POSITIVE_STUMPFF_SINGULARITY_Z
+  // The positive singularity bounds zero-revolution elliptic arcs only.
+  // Hyperbolic arcs can require z < -4*pi^2. Grow the negative bracket, or
+  // approach y=0 from its valid side for very short short-way transfers.
+  let lower = 0
   let upper = ZERO_REVOLUTION_UPPER_Z
   let lowerEval = evaluate(lower)
   const upperEval = evaluate(upper)
-  for (let expansion = 0; expansion < 24; expansion += 1) {
-    if (Number.isFinite(lowerEval.residual) && Number.isFinite(upperEval.residual) &&
-        lowerEval.residual * upperEval.residual <= 0) {
+  let validLower = 0, invalidLower: number | undefined, candidate = -1
+  for (let expansion = 0; lowerEval.residual > 0 && expansion < 80; expansion++) {
+    const current = evaluate(candidate)
+    if (Number.isFinite(current.residual) && current.residual <= 0) {
+      lower = candidate
+      lowerEval = current
       break
     }
-    if (!Number.isFinite(lowerEval.residual) || lowerEval.residual > 0) {
-      lower /= 2
-      lowerEval = evaluate(lower)
-    }
+    if (current.y < 0) invalidLower = candidate
+    else if (Number.isFinite(current.residual)) validLower = candidate
+    else break
+    candidate = invalidLower === undefined ? candidate * 2 : (invalidLower + validLower) / 2
+  }
+  if (!Number.isFinite(lowerEval.residual) || !Number.isFinite(upperEval.residual) ||
+      lowerEval.residual > 0 || upperEval.residual < 0) {
+    throw new LambertError('no-solution', 'No numerically resolvable zero-revolution Lambert bracket was found')
   }
 
-  if (!Number.isFinite(lowerEval.residual) || !Number.isFinite(upperEval.residual) ||
-      lowerEval.residual * upperEval.residual > 0) {
-    // Scan a broad interval for the first zero-revolution bracket.
-    let previousZ = -FIRST_POSITIVE_STUMPFF_SINGULARITY_Z
-    let previous = evaluate(previousZ)
-    let found = false
-    for (let index = 1; index <= 800; index += 1) {
-      const z = -FIRST_POSITIVE_STUMPFF_SINGULARITY_Z + index * (
-        (ZERO_REVOLUTION_UPPER_Z + FIRST_POSITIVE_STUMPFF_SINGULARITY_Z) / 800
-      )
-      const current = evaluate(z)
-      if (Number.isFinite(previous.residual) && Number.isFinite(current.residual) &&
-          previous.residual * current.residual <= 0) {
-        lower = previousZ
-        upper = z
-        lowerEval = previous
-        found = true
-        break
-      }
-      previousZ = z
-      previous = current
-    }
-    if (!found) {
-      throw new LambertError('no-solution', 'No zero-revolution Lambert solution was found for this geometry and flight time')
-    }
-  }
+  // Residual units are length^(3/2). An absolute AU-scale threshold alone
+  // admits inaccurate small-orbit/short-flight velocities. Scale down with
+  // the problem while retaining a floating-point floor and the old ceiling.
+  const residualTolerance = Math.min(1e-10, Math.max(
+    32 * Number.EPSILON * Math.max(r1, r2) ** 1.5, Math.abs(target) * 1e-13,
+  ))
 
   let y = Number.NaN
   let iterations = 0
@@ -188,7 +182,7 @@ export function solveLambertUniversal(params: {
     y = current.y
     residual = current.residual
     bracketWidth = Math.abs(upper - lower)
-    if (Math.abs(residual) < 1e-10) {
+    if (Math.abs(residual) < residualTolerance) {
       converged = true
       iterations += 1
       break

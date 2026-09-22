@@ -3,7 +3,7 @@ import { partitionEarthMoonBarycenter } from '../engine/ephemeris/earthMoonSyste
 import { solveEllipticKeplerRadians } from '../engine/ephemeris/kepler'
 import { loadedKernels, kernelsForWindow } from '../engine/ephemeris/kernelStore'
 import { createKernelResolver, type LoadedKernel } from '../engine/ephemeris/kernelPool'
-import { utcJulianDayToEt, utcJulianDayToTdb } from '../engine/ephemeris/timeScales'
+import { utcJulianDayToEt, utcJulianDayToTdb, utcJulianDayToTt } from '../engine/ephemeris/timeScales'
 import { bodyNaifId } from '../data/ephemerisTargets'
 import { AU_IN_KM, SECONDS_PER_DAY } from '../engine/units'
 import type {
@@ -65,7 +65,10 @@ export function solveKeplerEquation(meanAnomalyDeg: number, eccentricity: number
 }
 
 function getPlanetaryElementsAtJulianDay(orbit: PlanetaryApproxOrbit, julianDay: number) {
-  const centuries = (julianDay - J2000_JULIAN_DAY) / 36525
+  // JPL's fitted element rates use Julian ephemeris date (JDTDB), while the
+  // application clock is UTC. Historical pre-1972 dates remain a fallback.
+  const epoch = julianDay >= 2441317.5 ? utcJulianDayToTdb(julianDay) : julianDay
+  const centuries = (epoch - J2000_JULIAN_DAY) / 36525
   const applyRate = (base: ElementSet, rates: ElementSet) => ({
     semiMajorAxisAU: base.semiMajorAxisAU + rates.semiMajorAxisAU * centuries,
     eccentricity: base.eccentricity + rates.eccentricity * centuries,
@@ -100,7 +103,9 @@ function getPlanetaryElementsAtJulianDay(orbit: PlanetaryApproxOrbit, julianDay:
 function getKeplerianElementsAtJulianDay(orbit: KeplerianOrbit, julianDay: number) {
   // Before the supported civil-time era this is deliberately only a fallback;
   // no historical leap-second conversion is fabricated.
-  const epoch = orbit.epochTimeScale === 'TDB' && julianDay >= 2441317.5 ? utcJulianDayToTdb(julianDay) : julianDay
+  const epoch = julianDay < 2441317.5 ? julianDay
+    : orbit.epochTimeScale === 'TDB' ? utcJulianDayToTdb(julianDay)
+    : orbit.epochTimeScale === 'TT' ? utcJulianDayToTt(julianDay) : julianDay
   const elapsedDays = epoch - orbit.epochJd
   const meanAnomalyDeg = orbit.meanAnomalyDeg + orbit.meanMotionDegPerDay * elapsedDays
 

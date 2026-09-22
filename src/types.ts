@@ -88,7 +88,7 @@ export type PlanetaryApproxOrbit = {
 export type KeplerianOrbit = {
   model: 'keplerian'
   epochJd: number
-  epochTimeScale?: 'TDB'
+  epochTimeScale?: 'TDB' | 'TT'
   semiMajorAxisAU: number
   eccentricity: number
   inclinationDeg: number

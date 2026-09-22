@@ -17,6 +17,20 @@ const stateFor = (a: number, e: number, i: number, n: number, w: number, nu: num
 }
 
 describe('stateToOsculatingElements', () => {
+  it('preserves elements for small-body moon scales instead of comparing dimensional angular momentum to a fixed epsilon', () => {
+    const original = stateFor(1.7, .31, 23 * Math.PI / 180, 112 * Math.PI / 180, 48 * Math.PI / 180, 137 * Math.PI / 180)
+    const scale = (v: Vector3, factor: number) => ({ x: v.x * factor, y: v.y * factor, z: v.z * factor })
+    for (const factor of [1, 1e-4, 1e-6]) {
+      const elements = stateToOsculatingElements(scale(original.positionAU, factor), scale(original.velocityAUPerDay, factor), mu * factor ** 3)
+      expect(elements).not.toBeNull()
+      expect(elements!.semiMajorAxisAU / factor).toBeCloseTo(1.7, 10)
+      expect(elements!.eccentricity).toBeCloseTo(.31, 10)
+      expect(elements!.inclinationDeg).toBeCloseTo(23, 9)
+      expect(elements!.ascendingNodeDeg).toBeCloseTo(112, 9)
+      expect(elements!.argPeriapsisDeg).toBeCloseTo(48, 9)
+    }
+  })
+
   it('uses stable conventions for circular inclined states', () => {
     const state = stateFor(1, 0, 40 * Math.PI / 180, 70 * Math.PI / 180, 0, 25 * Math.PI / 180)
     const elements = stateToOsculatingElements(state.positionAU, state.velocityAUPerDay, mu)

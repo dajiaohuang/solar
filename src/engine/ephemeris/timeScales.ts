@@ -31,3 +31,8 @@ export function utcJulianDayToEt(jd: number): number {
 export function utcJulianDayToTdb(jd: number): number {
   return J2000_JULIAN_DAY + utcJulianDayToEt(jd) / SECONDS_PER_DAY
 }
+/** MPCORB epochs are TT: TT = TAI + 32.184 seconds, without TDB's periodic term. */
+export function utcJulianDayToTt(jd: number): number {
+  finiteJd(jd)
+  return jd + (leapSecondsAt(jd) + 32.184) / SECONDS_PER_DAY
+}

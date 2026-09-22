@@ -115,6 +115,7 @@ export function parseSbdbBody(response: SbdbResponse, fallbackDesignation: strin
     orbit: {
       model: 'keplerian',
       epochJd,
+      epochTimeScale: 'TDB',
       semiMajorAxisAU: a,
       eccentricity: e,
       inclinationDeg,

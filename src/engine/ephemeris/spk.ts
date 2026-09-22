@@ -130,18 +130,30 @@ export class SpkKernel {
   }
 
   private evaluateSegment(s: SpkSegment, et: number): SpkState {
-    const data = this.getRecordData(s);
-    let index = Math.floor((et - data.metadata.init) / data.metadata.interval);
+    const terminal = this.addressOffset(s.endAddress - 3);
+    const init = this.f64(terminal), interval = this.f64(terminal + 8);
+    if (!Number.isFinite(init) || !Number.isFinite(interval) || interval <= 0 ||
+        this.f64(terminal + 16) !== s.recordSize || this.f64(terminal + 24) !== s.recordCount) fail('invalid segment terminal metadata');
+    let index = Math.floor((et - init) / interval);
     if (index < 0) index = 0; if (index >= s.recordCount) index = s.recordCount - 1;
-    const r = data.readRecord(index), x = (et - r.mid) / r.radius;
+    const offset = this.addressOffset(s.startAddress + index * s.recordSize);
+    const mid = this.f64(offset), radius = this.f64(offset + 8), x = (et - mid) / radius;
     if (!Number.isFinite(x) || Math.abs(x) > 1 + 1e-10) fail('epoch falls outside selected record');
     const pos = [0, 0, 0], vel = [0, 0, 0], c = s.coefficientCount;
     for (let axis = 0; axis < 3; axis++) {
-      const coeff = r.position.subarray(axis * c, (axis + 1) * c);
-      const q = chebyshev(coeff, x); pos[axis] = q.value;
-      vel[axis] = s.type === 2 ? q.derivative / r.radius : chebyshev(r.velocity!.subarray(axis * c, (axis + 1) * c), x).value;
+      const q = this.chebyshev(offset + 16 + axis * c * 8, c, x); pos[axis] = q.value;
+      vel[axis] = s.type === 2 ? q.derivative / radius : this.chebyshev(offset + 16 + (3 + axis) * c * 8, c, x).value;
+      if (!Number.isFinite(pos[axis]) || !Number.isFinite(vel[axis])) fail('nonfinite Chebyshev state');
     }
     return { position: { x: pos[0], y: pos[1], z: pos[2] }, velocity: { x: vel[0], y: vel[1], z: vel[2] }, center: s.center, frame: s.frame };
+  }
+
+  // Evaluate in the original byte buffer: no per-state coefficient copies or
+  // subarrays. Keep the same Clenshaw operation order and explicit endianness.
+  private chebyshev(offset: number, count: number, x: number): { value: number; derivative: number } {
+    let b1 = 0, b2 = 0, d1 = 0, d2 = 0;
+    for (let k = count - 1; k >= 1; k--) { const b = 2 * x * b1 - b2 + this.f64(offset + k * 8); b2 = b1; b1 = b; const d = 2 * x * d1 - d2 + 2 * b2; d2 = d1; d1 = d; }
+    return { value: x * b1 - b2 + this.f64(offset), derivative: x * d1 - d2 + b1 };
   }
 
   private parseSegment(d: number[], i: number[]): SpkSegment {
@@ -184,10 +196,4 @@ export class SpkKernel {
   private f64(offset: number): number { if (offset < 0 || offset + 8 > this.bytes) fail('read out of bounds'); return this.view.getFloat64(offset, this.little); }
   private i32(offset: number): number { if (offset < 0 || offset + 4 > this.bytes) fail('read out of bounds'); return this.view.getInt32(offset, this.little); }
   private controlInt(offset: number): number { const n = this.f64(offset); if (!Number.isInteger(n) || n < 0) fail('invalid DAF control word'); return n; }
-}
-
-function chebyshev(coeff: ArrayLike<number>, x: number): { value: number; derivative: number } {
-  let b1 = 0, b2 = 0, d1 = 0, d2 = 0;
-  for (let k = coeff.length - 1; k >= 1; k--) { const b = 2 * x * b1 - b2 + coeff[k]; b2 = b1; b1 = b; const d = 2 * x * d1 - d2 + 2 * b2; d2 = d1; d1 = d; }
-  return { value: x * b1 - b2 + coeff[0], derivative: x * d1 - d2 + b1 };
 }

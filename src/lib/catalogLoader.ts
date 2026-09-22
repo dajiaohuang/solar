@@ -489,11 +489,12 @@ export function asteroidRecordToBody(record: AsteroidRecord): CelestialBody {
     orbitClassCode: record.orbitClassCode,
     orbitClassName: record.orbitClassName || getOrbitClassName(record.orbitClassCode),
     absoluteMagnitude: record.absoluteMagnitude,
-    dataEpochLabel: `JD ${record.epochJd}`,
+    dataEpochLabel: `JD ${record.epochJd} TT (MPCORB)`,
     isCatalogBody: true,
     orbit: {
       model: 'keplerian',
       epochJd: record.epochJd,
+      epochTimeScale: 'TT',
       semiMajorAxisAU: record.semiMajorAxisAU,
       eccentricity: record.eccentricity,
       inclinationDeg: record.inclinationDeg,

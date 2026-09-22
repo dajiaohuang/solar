@@ -4,6 +4,7 @@ const RAD = Math.PI / 180
 export const CATALOG_ELEMENT_STRIDE = 8
 export type CatalogPointMode = '2d' | '3d'
 
+/** Evaluate at a TT Julian date, matching MPCORB's source element epochs. */
 export function propagateCatalogElementPositions(
   elements: Float64Array,
   julianDay: number,
@@ -37,8 +38,8 @@ export function propagateCatalogElementPositions(
     } catch (error) {
       throw new RangeError(`Catalog record ${index} failed elliptic Kepler propagation`, { cause: error })
     }
-    const orbitalX = semiMajorAxisAU * (Math.cos(eccentricAnomaly) - eccentricity)
-    const orbitalY = semiMajorAxisAU * Math.sqrt(1 - eccentricity ** 2) * Math.sin(eccentricAnomaly)
+    const orbitalX = semiMajorAxisAU * ((1 - eccentricity) - 2 * Math.sin(eccentricAnomaly / 2) ** 2)
+    const orbitalY = semiMajorAxisAU * Math.sqrt((1 - eccentricity) * (1 + eccentricity)) * Math.sin(eccentricAnomaly)
     const cosW = Math.cos(argPeriapsis), sinW = Math.sin(argPeriapsis)
     const cosO = Math.cos(ascendingNode), sinO = Math.sin(ascendingNode), cosI = Math.cos(inclination), sinI = Math.sin(inclination)
     const x = (cosW * cosO - sinW * sinO * cosI) * orbitalX +

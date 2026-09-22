@@ -41,7 +41,7 @@ describe('JPL approximate element validity', () => {
       id: 'jpl-approx-table-1',
       coordinateFrame: 'mean-ecliptic-and-equinox-of-j2000',
       sourceTimeScale: 'JDTDB',
-      applicationTimeHandling: 'utc-derived-numeric-jd-without-tdb-conversion',
+      applicationTimeHandling: 'utc-to-tdb-from-1972-numeric-jd-exploratory-fallback-before-1972',
       validFrom: '1800-01-01',
       validTo: '2050-12-31',
       earthOrbitSeed: 'earth-moon-barycenter',

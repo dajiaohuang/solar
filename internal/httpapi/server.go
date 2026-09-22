@@ -736,7 +736,9 @@ func (s *Server) trajectory(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		tb := trajectoryBody{ID: id, Availability: b.Availability, MissingReason: b.MissingReason, Model: b.Model, Precision: map[bool]string{true: "approximate", false: "exact"}[allowApproximate]}
+		tb.ParentID = b.ParentID
 		if b.Availability == catalog.AvailableOperational {
+			tb.CenterID = "naif:0"
 			tb.States = make([]float64, 0, req.Samples*6)
 			for i := 0; i < req.Samples; i++ {
 				if err := r.Context().Err(); err != nil {
@@ -766,7 +768,7 @@ func (s *Server) trajectory(w http.ResponseWriter, r *http.Request) {
 			out = append(out, tb)
 			continue
 		}
-		if b.Availability == catalog.Missing || b.Elements == nil {
+		if b.Availability == catalog.Missing || (b.Elements == nil && b.Model != "fixed-origin") {
 			if tb.MissingReason == "" {
 				tb.MissingReason = "no-supported-state-model"
 			}
@@ -780,13 +782,33 @@ func (s *Server) trajectory(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		tb.Model = b.Model
+		tb.CenterID = b.ParentID
+		if tb.CenterID == "" {
+			tb.CenterID = "sun"
+		}
+		if strings.HasPrefix(b.Model, "jpl-approx-keplerian-secular") && (req.StartJD < science.PlanetaryStartJD || req.EndJD >= science.PlanetaryEndJD) {
+			tb.Availability = catalog.Missing
+			tb.MissingReason = "outside-approximate-model-validity"
+			out = append(out, tb)
+			continue
+		}
 		tb.States = make([]float64, 0, req.Samples*6)
 		for i := 0; i < req.Samples; i++ {
 			if err := r.Context().Err(); err != nil {
 				s.error(w, 408, "cancelled", "request cancelled")
 				return
 			}
-			st, err := science.PropagateBoundElliptic(r.Context(), science.Elements{SemiMajorAxisAU: b.Elements.SemiMajorAxisAU, Eccentricity: b.Elements.Eccentricity, InclinationDeg: b.Elements.InclinationDeg, AscendingNodeDeg: b.Elements.AscendingNodeDeg, ArgPeriapsisDeg: b.Elements.ArgPeriapsisDeg, MeanAnomalyDeg: b.Elements.MeanAnomalyDeg, MeanMotionDegPerDay: b.Elements.MeanMotionDegPerDay}, b.EpochJD, req.StartJD+float64(i)*step)
+			var st science.State
+			var err error
+			jd := req.StartJD + float64(i)*step
+			switch b.Model {
+			case "fixed-origin":
+				// Heliocentric Sun: exactly zero in this approximate frame.
+			case "jpl-approx-keplerian-secular", "jpl-approx-keplerian-secular-earth-moon-partition":
+				st, err = science.PlanetaryApproxState(r.Context(), b.NAIFID, jd)
+			default:
+				st, err = science.PropagateBoundElliptic(r.Context(), science.Elements{SemiMajorAxisAU: b.Elements.SemiMajorAxisAU, Eccentricity: b.Elements.Eccentricity, InclinationDeg: b.Elements.InclinationDeg, AscendingNodeDeg: b.Elements.AscendingNodeDeg, ArgPeriapsisDeg: b.Elements.ArgPeriapsisDeg, MeanAnomalyDeg: b.Elements.MeanAnomalyDeg, MeanMotionDegPerDay: b.Elements.MeanMotionDegPerDay}, b.EpochJD, jd)
+			}
 			if err != nil {
 				s.error(w, 422, "state_unavailable", err.Error())
 				return

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/dajiaohuang/solar/backend/internal/science"
 	"github.com/dajiaohuang/solar/backend/internal/spk"
 )
 
@@ -1100,22 +1101,40 @@ func fromEphemeris(x struct {
 }
 
 func builtins() []Body {
-	// JPL approximate-position table seeds; the validity and approximation are explicit.
+	// The same JPL coefficients drive both metadata and the secular evaluator.
 	type seed struct {
-		id                       string
-		naif                     int
-		name                     string
-		a, e, i, node, arg, m, n float64
+		id   string
+		naif int
+		name string
 	}
-	ss := []seed{{"sun", 10, "Sun", 0, 0, 0, 0, 0, 0, 0}, {"mercury", 199, "Mercury", .38709927, .20563593, 7.00497902, 48.33076593, 29.12703035, 223.12329315, 4.09233445}, {"venus", 299, "Venus", .72333566, .00677672, 3.39467605, 76.67984255, 54.92262463, 127.056475, 1.60213034}, {"earth", 399, "Earth", 1.00000261, .01671123, -.00001531, 0, 102.93768193, -2.47311027, .98560767}, {"mars", 499, "Mars", 1.52371034, .0933941, 1.84969142, 49.55953891, 73.6160585, 19.373, .52402078}, {"jupiter", 599, "Jupiter", 5.202887, .04838624, 1.30439695, 100.47390909, 14.72847983, 19.667, .0830853}, {"saturn", 699, "Saturn", 9.53667594, .05386179, 2.48599187, 113.66242448, -21.064, 317.02, .0334442}, {"uranus", 799, "Uranus", 19.18916464, .04725744, .77263783, 74.01692503, 96.541318, 142.2386, .0117258}, {"neptune", 899, "Neptune", 30.06992276, .00859048, 1.77004347, 131.78422574, -86.75034, 256.228, .0059811}, {"pluto", 999, "Pluto", 39.482, .2488, 17.14, 110.3, 113.8, 14.5, .00396}}
+	ss := []seed{{"sun", 10, "Sun"}, {"mercury", 199, "Mercury"}, {"venus", 299, "Venus"}, {"earth", 399, "Earth"}, {"mars", 499, "Mars"}, {"jupiter", 599, "Jupiter"}, {"saturn", 699, "Saturn"}, {"uranus", 799, "Uranus"}, {"neptune", 899, "Neptune"}, {"pluto", 999, "Pluto"}}
 	out := make([]Body, 0, len(ss))
 	for _, s := range ss {
-		b := Body{ID: s.id, NAIFID: s.naif, Name: s.name, Kind: map[string]string{"sun": "star"}[s.id], Source: "jpl-approx-table-1", DatasetVersion: "builtin-jpl-approx-table-1", Availability: AvailableFallback, ValidityStartET: -6311390400, ValidityEndET: 1609459200, EpochJD: 2451545, EpochTimeScale: "TDB", ReferenceFrame: "ECLIPJ2000", Model: "jpl-approx-keplerian-secular", Elements: &Elements{SemiMajorAxisAU: s.a, Eccentricity: s.e, InclinationDeg: s.i, AscendingNodeDeg: s.node, ArgPeriapsisDeg: s.arg, MeanAnomalyDeg: s.m, MeanMotionDegPerDay: s.n}}
+		b := Body{ID: s.id, NAIFID: s.naif, Name: s.name, Kind: "planet", ParentID: "sun", Source: "jpl-approx-table-1", DatasetVersion: "builtin-jpl-approx-table-1", Availability: AvailableFallback, ValidityStartET: (science.PlanetaryStartJD - 2451545) * 86400, ValidityEndET: (science.PlanetaryEndJD - 2451545) * 86400, EpochJD: 2451545, EpochTimeScale: "TDB", ReferenceFrame: "ECLIPJ2000", Model: "jpl-approx-keplerian-secular"}
+		if e, ok := science.PlanetaryEpochElements(s.naif); ok {
+			b.Elements = &Elements{e.SemiMajorAxisAU, e.Eccentricity, e.InclinationDeg, e.AscendingNodeDeg, e.ArgPeriapsisDeg, e.MeanAnomalyDeg, e.MeanMotionDegPerDay}
+		}
 		if b.Kind == "" {
 			b.Kind = "planet"
 		}
 		if s.id == "sun" {
 			b.Model = "fixed-origin"
+			b.Kind = "star"
+			b.ParentID = ""
+			b.Source = "heliocentric-origin"
+		}
+		if s.id == "earth" {
+			b.Model = "jpl-approx-keplerian-secular-earth-moon-partition"
+			b.PositionRepresents = "earth-geocenter"
+		}
+		if s.id == "pluto" {
+			// The current cited Table 1 has no Pluto row. Retain its identity,
+			// but require packaged SPK or sourced epoch elements for a state.
+			b.Kind = "dwarfPlanet"
+			b.Availability = Missing
+			b.MissingReason = "no-supported-state-model"
+			b.Model = "exact-only"
+			b.Source = "naif-identity"
 		}
 		out = append(out, b)
 	}

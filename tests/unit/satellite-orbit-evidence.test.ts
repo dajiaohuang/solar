@@ -2,8 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { majorBodiesById } from '../../src/data/majorBodies'
 import { JPL_HORIZONS_GIANT_SATELLITE_ELEMENTS, jplHorizonsEpochQueryUrl } from '../../src/data/satelliteEpochElements'
 import { createBodyPositionResolver, dotVector3, orbitToHeliocentricVector, subtractVector3, vector3Magnitude } from '../../src/lib/ephemeris'
+import { utcJulianDayToTdb } from '../../src/engine/ephemeris/timeScales'
 
 const J2000 = 2451545
+function utcAtTdb(tdb: number) {
+  let utc = tdb
+  for (let i = 0; i < 3; i++) utc += tdb - utcJulianDayToTdb(utc)
+  return utc
+}
 const GIANT_SATELLITES = ['io', 'europa', 'ganymede', 'callisto', 'titan'] as const
 const EXPECTED_HORIZONS = {
   io: { a: 0.002821139295029148, e: 0.004715688921345897, i: 2.212617763556377, node: 336.8524452085695, periapsis: 66.16488500283468, anomaly: 335.153206478952, motion: 203.2295710817172, period: 1.771395757437516, position: [0.00267192463675603, 0.0008640941902565209, 0.00007127946422889783] },
@@ -82,11 +88,12 @@ describe('satellite orbit evidence', () => {
       const expected = EXPECTED_HORIZONS[bodyId]
       const { body, orbit } = requireKeplerianBody(bodyId)
       if (!body.parentId) throw new Error(`Missing parent for ${bodyId}`)
-      const epochVector = orbitToHeliocentricVector(orbit, J2000)
+      expect(orbit.epochTimeScale).toBe('TDB')
+      const epochVector = orbitToHeliocentricVector(orbit, utcAtTdb(J2000))
       expect(epochVector.x).toBeCloseTo(expected.position[0], 11)
       expect(epochVector.y).toBeCloseTo(expected.position[1], 11)
       expect(epochVector.z).toBeCloseTo(expected.position[2], 11)
-      const resolve = createBodyPositionResolver(majorBodiesById, J2000)
+      const resolve = createBodyPositionResolver(majorBodiesById, utcAtTdb(J2000))
       const parentRelative = subtractVector3(resolve(bodyId), resolve(body.parentId))
       expect(parentRelative.x).toBeCloseTo(expected.position[0], 11)
       expect(parentRelative.y).toBeCloseTo(expected.position[1], 11)
@@ -102,7 +109,7 @@ describe('satellite orbit evidence', () => {
         expect(vector3Magnitude(vector)).toBeGreaterThanOrEqual(minDistance - 1e-14)
         expect(vector3Magnitude(vector)).toBeLessThanOrEqual(maxDistance + 1e-14)
       }
-      const replay = orbitToHeliocentricVector(orbit, J2000 + expected.period)
+      const replay = orbitToHeliocentricVector(orbit, utcAtTdb(J2000 + expected.period))
       expect(replay.x).toBeCloseTo(epochVector.x, 11)
       expect(replay.y).toBeCloseTo(epochVector.y, 11)
       expect(replay.z).toBeCloseTo(epochVector.z, 11)

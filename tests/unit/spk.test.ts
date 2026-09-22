@@ -28,6 +28,29 @@ function makeKernel(type: 2 | 3, frame = 1, malformed?: 'endian' | 'bounds' | 'u
 }
 
 describe('SpkKernel', () => {
+  it.each([2, 3] as const)('matches analytic quadratic polynomials and derivatives for type %s', type => {
+    const kernel = new SpkKernel(makeKernel(type, 1, undefined, 3, 3));
+    for (const et of [0, 2.5, 5, 7.5, 10]) {
+      const state = kernel.evaluate(499, et)!;
+      const x = (et - 5) / 5;
+      for (const [axis, name] of (['x', 'y', 'z'] as const).entries()) {
+        const [a, b, c] = [axis * 3 + 1, axis * 3 + 2, axis * 3 + 3];
+        const position = a + b * x + c * (2 * x * x - 1);
+        expect(state.position[name]).toBeCloseTo(position, 13);
+        expect(state.velocity[name]).toBeCloseTo(type === 2 ? (b + 4 * c * x) / 5 : position / 10, 13);
+      }
+    }
+  });
+
+  it('rejects a nonfinite evaluated state instead of returning overflow as science data', () => {
+    const bytes = makeKernel(2);
+    const view = new DataView(bytes);
+    view.setFloat64((385 - 1) * 8 + 16, 1e308, true);
+    view.setFloat64((385 - 1) * 8 + 24, 1e308, true);
+    const kernel = new SpkKernel(bytes);
+    expect(() => kernel.evaluate(499, 10)).toThrow(/nonfinite/);
+  });
+
   it('reads type 2 Chebyshev position and derivative', () => {
     const k = new SpkKernel(makeKernel(2));
     const s = k.segments[0];

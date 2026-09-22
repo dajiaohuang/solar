@@ -83,9 +83,13 @@ async function runAnalysis(request: EventAnalysisRequest) {
   const createBodyPositionResolver = (bodies: Map<BodyId, CelestialBody>, jd: number) => createResolver(bodies, jd, kernels)
   const bodiesById = new Map<BodyId, CelestialBody>(request.resolutionBodies.map((body) => [body.id, body]))
   const sampleCount = adaptiveEventSampleCount(request.bodies, request.windowDays, request.sampleCount)
+  const needsDistances = request.eventKinds.includes('close-approach')
+  const needsAngles = request.eventKinds.some(kind => kind === 'conjunction' || kind === 'opposition')
+  const needsPairs = needsDistances || needsAngles
+  const needsApsides = request.eventKinds.some(kind => ['perihelion', 'aphelion', 'periapsis', 'apoapsis'].includes(kind))
   const startJulianDay = request.centerJulianDay - request.windowDays / 2
   const positions = new Map<BodyId, Vector3[]>(request.bodies.map((body) => [body.id, []]))
-  const centralBodyIds = new Set(request.bodies.filter((body) => body.id !== 'sun').map((body) => body.parentId ?? 'sun'))
+  const centralBodyIds = new Set(needsApsides ? request.bodies.filter((body) => body.id !== 'sun').map((body) => body.parentId ?? 'sun') : [])
   const centralPositions = new Map<BodyId, Vector3[]>([...centralBodyIds].map((bodyId) => [bodyId, []]))
   const referencePositions: Vector3[] = []
   const julianDays: number[] = []
@@ -116,7 +120,7 @@ async function runAnalysis(request: EventAnalysisRequest) {
     const jd = startJulianDay + sample / (sampleCount - 1) * request.windowDays
     const resolve = createBodyPositionResolver(bodiesById, jd)
     julianDays.push(jd)
-    referencePositions.push(resolve(request.referenceId))
+    if (needsAngles) referencePositions.push(resolve(request.referenceId))
     for (const body of request.bodies) positions.get(body.id)?.push(resolve(body.id))
     for (const centralBodyId of centralBodyIds) centralPositions.get(centralBodyId)?.push(resolve(centralBodyId))
     if (sample % 12 === 0) {
@@ -132,7 +136,7 @@ async function runAnalysis(request: EventAnalysisRequest) {
   const events: AnalysisEvent[] = []
   const pairCount = request.bodies.length * Math.max(0, request.bodies.length - 1) / 2
   let processedPairs = 0
-  for (let first = 0; first < request.bodies.length; first += 1) {
+  for (let first = 0; needsPairs && first < request.bodies.length; first += 1) {
     for (let second = first + 1; second < request.bodies.length; second += 1) {
       if (cancelledRequestId === request.requestId || activeRequestId !== request.requestId) {
         workerScope.postMessage({ type: 'cancelled', requestId: request.requestId } satisfies EventAnalysisResponse)
@@ -145,11 +149,12 @@ async function runAnalysis(request: EventAnalysisRequest) {
       const distances: number[] = []
       const angles: number[] = []
       for (let sample = 0; sample < sampleCount; sample += 1) {
-        const distance = vector3Magnitude(subtractVector3(trackA[sample], trackB[sample]))
-        distances.push(distance)
-        const relativeA = subtractVector3(trackA[sample], referencePositions[sample])
-        const relativeB = subtractVector3(trackB[sample], referencePositions[sample])
-        angles.push(angleDeg(relativeA, relativeB))
+        if (needsDistances) distances.push(vector3Magnitude(subtractVector3(trackA[sample], trackB[sample])))
+        if (needsAngles) {
+          const relativeA = subtractVector3(trackA[sample], referencePositions[sample])
+          const relativeB = subtractVector3(trackB[sample], referencePositions[sample])
+          angles.push(angleDeg(relativeA, relativeB))
+        }
       }
 
       const base = {
@@ -208,8 +213,12 @@ async function runAnalysis(request: EventAnalysisRequest) {
     }
   }
 
-  if (request.eventKinds.some((kind) => ['perihelion', 'aphelion', 'periapsis', 'apoapsis'].includes(kind))) {
+  if (needsApsides) {
     for (const body of request.bodies) {
+      if (cancelledRequestId === request.requestId || activeRequestId !== request.requestId) {
+        workerScope.postMessage({ type: 'cancelled', requestId: request.requestId } satisfies EventAnalysisResponse)
+        return
+      }
       if (body.id === 'sun') continue
       const centralBodyId = body.parentId ?? 'sun'
       const centralBody = bodiesById.get(centralBodyId)
@@ -242,9 +251,14 @@ async function runAnalysis(request: EventAnalysisRequest) {
           events.push({ ...base, kind: body.parentId ? 'apoapsis' : 'aphelion', unit: 'AU', ...refined })
         }
       }
+      await yieldToWorker()
     }
   }
 
+  if (cancelledRequestId === request.requestId || activeRequestId !== request.requestId) {
+    workerScope.postMessage({ type: 'cancelled', requestId: request.requestId } satisfies EventAnalysisResponse)
+    return
+  }
   events.sort((a, b) => a.julianDay - b.julianDay)
   workerScope.postMessage({ type: 'result', requestId: request.requestId, progress: 1, events } satisfies EventAnalysisResponse)
 }

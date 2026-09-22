@@ -27,23 +27,28 @@ export function stateToOsculatingElements(positionAU: Vector3, velocityAUPerDay:
   const values = [positionAU.x, positionAU.y, positionAU.z, velocityAUPerDay.x, velocityAUPerDay.y, velocityAUPerDay.z, gmAU3PerDay2]
   if (values.some(value => !Number.isFinite(value)) || gmAU3PerDay2 <= 0) return null
   const radius = magnitude(positionAU)
-  if (radius <= EPS) return null
+  if (radius <= 0) return null
   const speed2 = dot(velocityAUPerDay, velocityAUPerDay)
   const h = cross(positionAU, velocityAUPerDay)
   const hMag = magnitude(h)
-  if (hMag <= EPS || !Number.isFinite(speed2)) return null
+  if (!(hMag > 0) || !Number.isFinite(hMag) || !Number.isFinite(speed2) ||
+      hMag / radius / Math.sqrt(speed2) <= EPS) return null
   const energy = speed2 / 2 - gmAU3PerDay2 / radius
   if (!(energy < 0) || !Number.isFinite(energy)) return null
   const semiMajorAxisAU = -gmAU3PerDay2 / (2 * energy)
+  if (!Number.isFinite(semiMajorAxisAU)) return null
+  const radialProduct = dot(positionAU, velocityAUPerDay)
   const eVector = {
-    x: ((speed2 - gmAU3PerDay2 / radius) * positionAU.x - dot(positionAU, velocityAUPerDay) * velocityAUPerDay.x) / gmAU3PerDay2,
-    y: ((speed2 - gmAU3PerDay2 / radius) * positionAU.y - dot(positionAU, velocityAUPerDay) * velocityAUPerDay.y) / gmAU3PerDay2,
-    z: ((speed2 - gmAU3PerDay2 / radius) * positionAU.z - dot(positionAU, velocityAUPerDay) * velocityAUPerDay.z) / gmAU3PerDay2,
+    x: ((speed2 - gmAU3PerDay2 / radius) * positionAU.x - radialProduct * velocityAUPerDay.x) / gmAU3PerDay2,
+    y: ((speed2 - gmAU3PerDay2 / radius) * positionAU.y - radialProduct * velocityAUPerDay.y) / gmAU3PerDay2,
+    z: ((speed2 - gmAU3PerDay2 / radius) * positionAU.z - radialProduct * velocityAUPerDay.z) / gmAU3PerDay2,
   }
   const eccentricity = magnitude(eVector)
   if (!Number.isFinite(eccentricity) || eccentricity >= 1 - EPS) return null
   const inclination = Math.atan2(Math.hypot(h.x, h.y), h.z)
-  const node = { x: -h.y, y: h.x, z: 0 }
+  const hUnit = { x: h.x / hMag, y: h.y / hMag, z: h.z / hMag }
+  // Equatorial degeneracy is angular, not an AU^2/day magnitude threshold.
+  const node = { x: -hUnit.y, y: hUnit.x, z: 0 }
   const nodeMag = magnitude(node)
   const ascendingNodeDeg = nodeMag > EPS ? angle(Math.atan2(node.y, node.x) * deg) : 0
   let argPeriapsisDeg = 0
@@ -52,7 +57,6 @@ export function stateToOsculatingElements(positionAU: Vector3, velocityAUPerDay:
       ? angle(Math.atan2(dot(cross(node, eVector), h) / hMag, dot(node, eVector)) * deg)
       : angle(Math.atan2(h.z < 0 ? -eVector.y : eVector.y, eVector.x) * deg)
   }
-  const hUnit = { x: h.x / hMag, y: h.y / hMag, z: h.z / hMag }
   let trueAnomaly: number
   if (eccentricity > EPS) {
     trueAnomaly = Math.atan2(dot(cross(eVector, positionAU), h) / (hMag * eccentricity * radius), dot(eVector, positionAU) / (eccentricity * radius))
@@ -64,5 +68,6 @@ export function stateToOsculatingElements(positionAU: Vector3, velocityAUPerDay:
   const eccentricAnomaly = 2 * Math.atan2(Math.sqrt(1 - eccentricity) * Math.sin(trueAnomaly / 2), Math.sqrt(1 + eccentricity) * Math.cos(trueAnomaly / 2))
   const meanAnomaly = eccentricity > EPS ? eccentricAnomaly - eccentricity * Math.sin(eccentricAnomaly) : trueAnomaly
   const meanMotionDegPerDay = Math.sqrt(gmAU3PerDay2 / semiMajorAxisAU ** 3) * deg
+  if (!Number.isFinite(meanMotionDegPerDay) || meanMotionDegPerDay <= 0) return null
   return { semiMajorAxisAU, eccentricity, inclinationDeg: inclination * deg, ascendingNodeDeg, argPeriapsisDeg, meanAnomalyDeg: angle(meanAnomaly * deg), meanMotionDegPerDay }
 }

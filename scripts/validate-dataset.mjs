@@ -263,6 +263,18 @@ for (let chunkIndex = 0; chunkIndex < manifest.chunkCount; chunkIndex += 1) {
     const semiMajorAxisAU = binaryView.getFloat64(numericOffset + 8, true)
     const eccentricity = binaryView.getFloat64(numericOffset + 16, true)
     const inclinationDeg = binaryView.getFloat64(numericOffset + 24, true)
+    // Hashes bind bytes, but cannot establish the orbital meaning of those
+    // bytes. Check all eight fields, including angles and mean motion that
+    // are absent from the compact index, before reporting scientific validity.
+    for (let field = 0; field < 8; field++) {
+      if (!Number.isFinite(binaryView.getFloat64(numericOffset + field * 8, true))) {
+        throw new Error(`Nonfinite orbital element at ${chunkId}:${rowIndex}:${field}`)
+      }
+    }
+    if (epochJd <= 0 || semiMajorAxisAU <= 0 || eccentricity < 0 || eccentricity >= 1 ||
+        inclinationDeg < 0 || inclinationDeg > 180 || binaryView.getFloat64(numericOffset + 56, true) <= 0) {
+      throw new Error(`Unsupported elliptic orbit at ${chunkId}:${rowIndex}`)
+    }
     const classIndex = compactView.getUint8(compactOffset + 18)
     const compactMagnitude = compactView.getInt16(compactOffset + 16, true)
     const compactFlags = compactView.getUint8(compactOffset + 19)
@@ -320,7 +332,9 @@ for (const size of ['desktop', 'mobile']) {
     if (!Number.isSafeInteger(entry.chunkIndex) || !Number.isSafeInteger(entry.rowIndex)) {
       throw new Error(`Precomputed ${size} sample omits locator for ${entry.id}`)
     }
-    grouped.set(entry.chunkIndex, [...(grouped.get(entry.chunkIndex) ?? []), { entry, sampleIndex }])
+    let rows = grouped.get(entry.chunkIndex)
+    if (!rows) { rows = []; grouped.set(entry.chunkIndex, rows) }
+    rows.push({ entry, sampleIndex })
   })
   for (const [chunkIndex, rows] of grouped) {
     const chunkId = `chunk-${String(chunkIndex).padStart(4, '0')}`

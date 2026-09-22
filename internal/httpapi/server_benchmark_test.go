@@ -47,6 +47,7 @@ func BenchmarkTrajectory64Samples(b *testing.B) {
 	}
 	s := New(c, 32)
 	body := `{"bodyIds":["earth"],"startJd":2451545,"endJd":2451910,"samples":64,"frame":"ECLIPJ2000","precision":"approximate"}`
+	verifyBenchmarkTrajectory(b, s, body, 1, 64)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -62,16 +63,23 @@ func BenchmarkTrajectory64BodyBatch(b *testing.B) {
 	}
 	ids := make([]string, 0, 64)
 	for _, body := range c.Page("", 0, 500) {
+		if body.Availability != catalog.AvailableFallback || body.Elements == nil || body.Elements.SemiMajorAxisAU <= 0 || body.Elements.Eccentricity < 0 || body.Elements.Eccentricity >= 1 {
+			continue
+		}
 		ids = append(ids, body.ID)
 		if len(ids) == 64 {
 			break
 		}
+	}
+	if len(ids) != 64 {
+		b.Fatalf("expected 64 bodies with computable approximate states, got %d", len(ids))
 	}
 	bodyBytes, err := json.Marshal(map[string]any{"bodyIds": ids, "startJd": 2451545.0, "endJd": 2451910.0, "samples": 128, "frame": "ECLIPJ2000", "precision": "approximate"})
 	if err != nil {
 		b.Fatal(err)
 	}
 	s := New(c, 32)
+	verifyBenchmarkTrajectory(b, s, string(bodyBytes), 64, 128)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -87,6 +95,7 @@ func BenchmarkTrajectory10000Samples(b *testing.B) {
 	}
 	s := New(c, 32)
 	body := `{"bodyIds":["earth"],"startJd":2451545,"endJd":2451910,"samples":10000,"frame":"ECLIPJ2000","precision":"approximate"}`
+	verifyBenchmarkTrajectory(b, s, body, 1, 10000)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -120,3 +129,22 @@ func BenchmarkStateTileWire(b *testing.B) {
 }
 
 func loadBenchmarkCatalog() (*catalog.Catalog, error) { return catalog.Load("../../src/data") }
+
+// Verify outside the timed loop so a missing-state/error response cannot be
+// mistaken for fast numeric evaluation. This measures explicit approximations.
+func verifyBenchmarkTrajectory(b *testing.B, s *Server, body string, bodies, samples int) {
+	b.Helper()
+	rr := httptest.NewRecorder()
+	s.ServeHTTP(rr, httptest.NewRequest("POST", "/v1/trajectory", strings.NewReader(body)))
+	var response struct {
+		Bodies []trajectoryBody `json:"bodies"`
+	}
+	if rr.Code != 200 || json.Unmarshal(rr.Body.Bytes(), &response) != nil || len(response.Bodies) != bodies {
+		b.Fatalf("invalid benchmark response: %d %s", rr.Code, rr.Body.String())
+	}
+	for _, row := range response.Bodies {
+		if len(row.States) != samples*6 {
+			b.Fatalf("benchmark body %s has %d values, expected %d", row.ID, len(row.States), samples*6)
+		}
+	}
+}

@@ -98,6 +98,21 @@ describe('immutable asteroid dataset publisher', () => {
       const verified = await execFileAsync(process.execPath, [resolve('scripts/validate-dataset.mjs')], { cwd: process.cwd(), env: environment })
       expect(verified.stdout).toContain(`Validated dataset ${pointer.activeVersion}: 3 objects`)
 
+      const binaryArtifact = 'binary/chunk-0000.bin'
+      const originalBinary = await readFile(resolve(releasePath, binaryArtifact))
+      for (const [field, value] of [[4, NaN], [5, Infinity], [6, -Infinity], [7, 0]]) {
+        const corrupt = Buffer.from(originalBinary)
+        corrupt.writeDoubleLE(value, field * 8)
+        checksums.files[binaryArtifact] = createHash('sha256').update(corrupt).digest('hex')
+        await writeFile(resolve(releasePath, binaryArtifact), corrupt)
+        await writeFile(resolve(releasePath, 'checksums.json'), JSON.stringify(checksums))
+        await expect(execFileAsync(process.execPath, [resolve('scripts/validate-dataset.mjs')], { cwd: process.cwd(), env: environment }))
+          .rejects.toThrow(/Nonfinite orbital element|Unsupported elliptic orbit/)
+      }
+      await writeFile(resolve(releasePath, binaryArtifact), originalBinary)
+      checksums.files[binaryArtifact] = createHash('sha256').update(originalBinary).digest('hex')
+      await writeFile(resolve(releasePath, 'checksums.json'), JSON.stringify(checksums))
+
       const originalPointer = structuredClone(pointer)
       pointer.generatedAt = 'not-a-timestamp'
       await writeFile(resolve(outputPath, 'dataset-version.json'), JSON.stringify(pointer))
