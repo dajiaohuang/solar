@@ -49,18 +49,19 @@ export function useCatalogSample(enabled = true) {
       if (catalogStore.getState().sampleError) catalogActions.patch({ sampleError: null })
       return
     }
-    let cancelled = false
+    const controller = new AbortController()
     catalogActions.patch({ isLoading: true, error: null, sampleError: null })
-    void Promise.all([loadAsteroidSample(manifest, profile), loadCatalogSummary(manifest)]).then(([records, summary]) => {
-      if (cancelled || catalogStore.getState().manifest?.version !== manifest.version) return
+    void Promise.all([loadAsteroidSample(manifest, profile, controller.signal), loadCatalogSummary(manifest, controller.signal)]).then(([records, summary]) => {
+      if (controller.signal.aborted || catalogStore.getState().manifest?.version !== manifest.version) return
       catalogActions.setBaseSample(profile, key, records, summary)
       catalogActions.patch({ isLoading: false })
     }).catch((error: unknown) => {
-      if (!cancelled) catalogActions.patch({
+      if (!controller.signal.aborted) catalogActions.patch({
         isLoading: false,
         error: error instanceof Error ? error.message : String(error),
       })
+      controller.abort()
     })
-    return () => { cancelled = true }
+    return () => controller.abort()
   }, [baseSampleKey, enabled, manifest, requestedSampleCount, requestedSampleCountRaw, requestedSampleInvalid, requestedSampleProfile])
 }

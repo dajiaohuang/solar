@@ -53,10 +53,14 @@ export function AppProviders({ children }: { children: ReactNode }) {
   const initialized = useRef(false)
   const restoringHistory = useRef(false)
   const datasetLoadGeneration = useRef(0)
+  const catalogHydration = useRef<AbortController | null>(null)
 
   const applyUrlState = useCallback((initial: AppUrlState) => {
     // Even a rejected history entry invalidates work from the previous scene.
     const loadGeneration = ++datasetLoadGeneration.current
+    catalogHydration.current?.abort()
+    const controller = new AbortController()
+    catalogHydration.current = controller
     if (!availabilityActions.require(sceneAvailability(initial), window.location.href)) {
       if (initial.lang) uiActions.setLanguage(initial.lang)
       return
@@ -168,13 +172,19 @@ export function AppProviders({ children }: { children: ReactNode }) {
       })
       const [datasetBodies, sbdbBodies] = await Promise.all([
         manifest && selectedIds.some((id) => id.startsWith('asteroid:') && !majorBodiesWithPhysicalData.some((body) => body.id === id))
-          ? loadAsteroidBodiesByIds(selectedIds.filter((id) => !majorBodiesWithPhysicalData.some((body) => body.id === id)))
+          ? loadAsteroidBodiesByIds(selectedIds.filter((id) => !majorBodiesWithPhysicalData.some((body) => body.id === id)), controller.signal)
           : Promise.resolve([]),
         Promise.all(selectedIds.filter((id) => id.startsWith('sbdb:')).map((id) =>
           fetchSbdbBody(id.slice('sbdb:'.length).replaceAll('_', ' ')).catch(() => null))),
       ])
       if (datasetLoadGeneration.current !== loadGeneration) return
       selectionActions.addCatalogBodies([...datasetBodies, ...sbdbBodies.filter((body) => body !== null)])
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted && datasetLoadGeneration.current === loadGeneration) {
+        catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
+      }
+    }).finally(() => {
+      if (catalogHydration.current === controller) catalogHydration.current = null
     })
   }, [])
 

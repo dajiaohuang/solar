@@ -1,5 +1,6 @@
 import { loadAsteroidRecordsByLocators, loadAsteroidSearchLocators } from './catalogLoader'
 import { requireCatalogAccess } from './productAccess'
+import { catalogBatch } from '../data/cache/sharedCatalogCache'
 import type {
   AsteroidManifest,
   AsteroidRecord,
@@ -15,7 +16,7 @@ export const EXACT_HYDRATION_RECORD_LIMIT = 480
 export const EXACT_HYDRATION_CHUNK_LIMIT = 32
 
 type LocatorPage = { locators: Uint32Array; remaining: Uint32Array }
-type HydrationQueue = { manifestVersion: string; remaining: Uint32Array }
+type HydrationQueue = { manifestVersion: string; remaining: Uint32Array; controller: AbortController; loading: boolean }
 const hydrationQueues = new Map<string, HydrationQueue>()
 
 export function takeCatalogLocatorPage(
@@ -39,6 +40,8 @@ export function takeCatalogLocatorPage(
 }
 
 type PendingScan = {
+  controller: AbortController
+  hydrating?: boolean
   manifest: AsteroidManifest
   scanKey: string
   onProgress?: (progress: number) => void
@@ -60,23 +63,21 @@ function ensureCatalogWorker() {
     if (!pending || event.data.scanKey !== pending.scanKey) return
     if (event.data.type === 'progress') pending.onProgress?.(event.data.progress ?? 0)
     if (event.data.type === 'result') {
-      pendingScans.delete(event.data.requestId)
+      if (pending.hydrating) return
+      pending.hydrating = true
       const page = event.data.locators ? takeCatalogLocatorPage(event.data.locators) : null
-      if (page?.remaining.length) {
-        hydrationQueues.set(pending.scanKey, { manifestVersion: pending.manifest.version, remaining: page.remaining })
-      } else {
-        hydrationQueues.delete(pending.scanKey)
-      }
       const hydrate = page
-        ? loadAsteroidRecordsByLocators(pending.manifest, page.locators)
+        ? loadAsteroidRecordsByLocators(pending.manifest, page.locators, pending.controller.signal)
         : Promise.resolve(event.data.records ?? [])
-      void hydrate.then((records) => pending.resolve({
-        scanKey: pending.scanKey,
-        total: event.data.total ?? 0,
-        records,
-        hasMore: Boolean(page?.remaining.length),
-      })).catch((error: unknown) => {
-        hydrationQueues.delete(pending.scanKey)
+      void hydrate.then((records) => {
+        pending.controller.signal.throwIfAborted()
+        if (page?.remaining.length) {
+          hydrationQueues.set(pending.scanKey, { manifestVersion: pending.manifest.version, remaining: page.remaining,
+            controller: pending.controller, loading: false })
+        }
+        pending.resolve({ scanKey: pending.scanKey, total: event.data.total ?? 0,
+          records, hasMore: Boolean(page?.remaining.length) })
+      }).catch((error: unknown) => {
         pending.reject(error instanceof Error ? error : new Error(String(error)))
       })
     }
@@ -99,20 +100,31 @@ export function resetCatalogScanWorker() {
   const error = new Error('Catalog worker was reset')
   for (const pending of pendingScans.values()) pending.reject(error)
   pendingScans.clear()
-  hydrationQueues.clear()
+  for (const key of hydrationQueues.keys()) discardCatalogScanPages(key)
   catalogWorker?.terminate()
   catalogWorker = null
 }
 
-export async function loadNextCatalogScanPage(scanKey: string, manifest: AsteroidManifest) {
+export function discardCatalogScanPages(scanKey: string) {
+  hydrationQueues.get(scanKey)?.controller.abort()
+  hydrationQueues.delete(scanKey)
+}
+
+export async function loadNextCatalogScanPage(scanKey: string, manifest: AsteroidManifest, signal?: AbortSignal) {
   requireCatalogAccess('scan')
   const queue = hydrationQueues.get(scanKey)
   if (!queue || queue.manifestVersion !== manifest.version) return { records: [], hasMore: false }
+  if (queue.loading) throw new Error('Catalog page is already loading')
+  queue.loading = true
   const page = takeCatalogLocatorPage(queue.remaining)
-  const records = await loadAsteroidRecordsByLocators(manifest, page.locators)
-  if (page.remaining.length) hydrationQueues.set(scanKey, { ...queue, remaining: page.remaining })
-  else hydrationQueues.delete(scanKey)
-  return { records, hasMore: page.remaining.length > 0 }
+  try {
+    const records = await catalogBatch([queue.controller.signal, ...(signal ? [signal] : [])],
+      batchSignal => loadAsteroidRecordsByLocators(manifest, page.locators, batchSignal))
+    if (hydrationQueues.get(scanKey) !== queue) throw new DOMException('Catalog page was replaced', 'AbortError')
+    queue.remaining = page.remaining
+    if (!page.remaining.length) hydrationQueues.delete(scanKey)
+    return { records, hasMore: page.remaining.length > 0 }
+  } finally { queue.loading = false }
 }
 
 export async function scanAsteroidCatalog(params: {
@@ -126,29 +138,33 @@ export async function scanAsteroidCatalog(params: {
   requireCatalogAccess('scan')
   if (params.signal?.aborted) throw new DOMException('Catalog scan was cancelled', 'AbortError')
   const candidateLocators = params.filters.query.trim()
-    ? await loadAsteroidSearchLocators(params.filters.query, params.manifest)
+    ? await loadAsteroidSearchLocators(params.filters.query, params.manifest, params.signal)
     : null
   if (params.signal?.aborted) throw new DOMException('Catalog scan was cancelled', 'AbortError')
   const requestId = ++nextRequestId
   const worker = ensureCatalogWorker()
 
-  hydrationQueues.delete(scanKey)
+  discardCatalogScanPages(scanKey)
   return new Promise<{ scanKey: string; total: number; records: AsteroidRecord[]; hasMore: boolean }>((resolve, reject) => {
+    const controller = new AbortController()
     const abort = () => {
       worker.postMessage({ type: 'cancel', requestId })
-      pendingScans.delete(requestId)
-      reject(new DOMException('Catalog scan was cancelled', 'AbortError'))
+      pendingScans.get(requestId)?.reject(new DOMException('Catalog scan was cancelled', 'AbortError'))
     }
     params.signal?.addEventListener('abort', abort, { once: true })
     pendingScans.set(requestId, {
+      controller,
       manifest: params.manifest,
       scanKey,
       onProgress: params.onProgress,
       resolve: (result) => {
+        pendingScans.delete(requestId)
         params.signal?.removeEventListener('abort', abort)
         resolve(result)
       },
       reject: (error) => {
+        controller.abort()
+        pendingScans.delete(requestId)
         params.signal?.removeEventListener('abort', abort)
         reject(error)
       },

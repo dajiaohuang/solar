@@ -14,6 +14,7 @@ import {
 import {
   EXACT_CATALOG_LOCATOR_LIMIT,
   createCatalogScanKey,
+  discardCatalogScanPages,
   loadNextCatalogScanPage,
   resetCatalogScanWorker,
   scanAsteroidCatalog,
@@ -56,7 +57,16 @@ export function CatalogWorkspace() {
   useEffect(() => () => {
     loadController.current?.abort()
     activeScanController.current?.abort()
+    if (loadController.current || activeScanController.current) catalogActions.patch({ isLoading: false, loadProgress: 0 })
   }, [])
+
+  useEffect(() => {
+    if (loadController.current) {
+      loadController.current.abort()
+      loadController.current = null
+      catalogActions.patch({ isLoading: false })
+    }
+  }, [catalog.filters.query, catalog.filters.orbitClass, catalog.manifest])
 
   const sampleLimit = EXACT_CATALOG_LOCATOR_LIMIT
   const scanKey = catalog.manifest
@@ -70,15 +80,22 @@ export function CatalogWorkspace() {
       catalogActions.patch({ isLoading: false, loadProgress: 0 })
     }
     activeScanController.current = null
+    return () => discardCatalogScanPages(scanKey)
   }, [scanKey])
+
+  function beginLoad() {
+    loadController.current?.abort()
+    const controller = new AbortController()
+    loadController.current = controller
+    return controller
+  }
 
   useEffect(() => {
     if (!catalog.manifest || catalog.filters.query.trim()) return
     if (catalog.manifest.precomputedSamples) {
       return
     }
-    let cancelled = false
-    loadController.current?.abort()
+    const controller = beginLoad()
     catalogActions.patch({
       isLoading: true, error: null, browseRecords: [],
       activeResultRecords: [], activeResultScanKey: null, exactFilteredTotal: null,
@@ -89,15 +106,18 @@ export function CatalogWorkspace() {
       manifest: catalog.manifest,
       orbitClassCode: catalog.filters.orbitClass,
       pageSize: 400,
+      signal: controller.signal,
     }).then((page) => {
-      if (cancelled) return
+      if (controller.signal.aborted) return
       catalogActions.patch({ browseRecords: page.records, isLoading: false })
       setCursor(page.endCursor)
       setHasMore(page.endCursor.chunkIndex < catalog.manifest!.chunkCount)
     }).catch((error: unknown) => {
-      if (!cancelled) catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
+      if (!controller.signal.aborted) catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
+    }).finally(() => {
+      if (loadController.current === controller) loadController.current = null
     })
-    return () => { cancelled = true }
+    return () => controller.abort()
   }, [catalog.filters.orbitClass, catalog.filters.query, catalog.manifest])
 
   useEffect(() => {
@@ -111,24 +131,25 @@ export function CatalogWorkspace() {
       })
       return
     }
-    let cancelled = false
-    loadController.current?.abort()
+    const controller = beginLoad()
     catalogActions.patch({
       isLoading: true, error: null, browseRecords: [],
       activeResultRecords: [], activeResultScanKey: null, exactFilteredTotal: null,
       exactHydrationHasMore: false,
       recordsSampled: false, loadProgress: 0,
     })
-    void searchAsteroidCatalogPage({ query }).then((page) => {
-      if (!cancelled) {
+    void searchAsteroidCatalogPage({ query, signal: controller.signal }).then((page) => {
+      if (!controller.signal.aborted) {
         catalogActions.patch({ browseRecords: page.records, isLoading: false, recordsSampled: page.nextCursor !== null })
         setSearchPage({ total: page.total, nextCursor: page.nextCursor })
       }
     }).catch((error: unknown) => {
-      if (!cancelled) catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
+      if (!controller.signal.aborted) catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
+    }).finally(() => {
+      if (loadController.current === controller) loadController.current = null
     })
-    return () => { cancelled = true }
-  }, [catalog.filters.query, catalog.manifest])
+    return () => controller.abort()
+  }, [catalog.filters.query, catalog.filters.orbitClass, catalog.manifest])
 
   const displayedRecords = catalogDisplayRecords(catalog, scanKey)
   const filtered = useMemo(() => filterCatalogRecords(displayedRecords, catalog.filters), [catalog.filters, displayedRecords])
@@ -180,24 +201,31 @@ export function CatalogWorkspace() {
   async function loadNextExactPage() {
     if (!catalog.manifest || !catalog.exactHydrationHasMore || catalog.isLoading) return
     catalogActions.patch({ isLoading: true, error: null })
+    const controller = new AbortController()
+    activeScanController.current = controller
     try {
-      const page = await loadNextCatalogScanPage(scanKey, catalog.manifest)
-      if (currentScanKey.current === scanKey) catalogActions.setExactPage(page.records, page.hasMore)
+      const page = await loadNextCatalogScanPage(scanKey, catalog.manifest, controller.signal)
+      if (!controller.signal.aborted && currentScanKey.current === scanKey) catalogActions.setExactPage(page.records, page.hasMore)
     } catch (error) {
-      catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
+      if (!controller.signal.aborted) catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
+    } finally {
+      if (activeScanController.current === controller) activeScanController.current = null
     }
   }
 
   async function loadMore() {
     if (!catalog.manifest || catalog.isLoading || !hasMore || catalog.filters.query.trim()) return
     catalogActions.patch({ isLoading: true })
+    const controller = beginLoad()
     try {
       const page = await loadAsteroidSectionPage({
         manifest: catalog.manifest,
         orbitClassCode: catalog.filters.orbitClass,
         cursor,
         pageSize: 400,
+        signal: controller.signal,
       })
+      if (controller.signal.aborted) return
       catalogActions.patch({
         browseRecords: [...catalog.browseRecords, ...page.records], isLoading: false,
         exactFilteredTotal: null, recordsSampled: false,
@@ -206,7 +234,9 @@ export function CatalogWorkspace() {
       setCursor(page.endCursor)
       setHasMore(page.endCursor.chunkIndex < catalog.manifest.chunkCount)
     } catch (error) {
-      catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
+      if (!controller.signal.aborted) catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
+    } finally {
+      if (loadController.current === controller) loadController.current = null
     }
   }
 
@@ -214,13 +244,17 @@ export function CatalogWorkspace() {
     const query = catalog.filters.query.trim()
     if (!query || searchPage.nextCursor === null || catalog.isLoading) return
     catalogActions.patch({ isLoading: true, error: null })
+    const controller = beginLoad()
     try {
-      const page = await searchAsteroidCatalogPage({ query, cursor: searchPage.nextCursor })
+      const page = await searchAsteroidCatalogPage({ query, cursor: searchPage.nextCursor, signal: controller.signal })
+      if (controller.signal.aborted) return
       const recordsById = new Map([...catalog.browseRecords, ...page.records].map((record) => [record.id, record]))
       catalogActions.patch({ browseRecords: [...recordsById.values()], isLoading: false, recordsSampled: page.nextCursor !== null })
       setSearchPage({ total: page.total, nextCursor: page.nextCursor })
     } catch (error) {
-      catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
+      if (!controller.signal.aborted) catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
+    } finally {
+      if (loadController.current === controller) loadController.current = null
     }
   }
 

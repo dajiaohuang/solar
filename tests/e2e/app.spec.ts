@@ -616,14 +616,19 @@ test('loads the deployable catalog through gzip JSON delivery', async ({ page })
   await expect.poll(() => gzipResponses.some((url) => /\/search\/prefix-ce\.json\.gz$/.test(url))).toBe(true)
 })
 
-test('stops a cancelled compact scan download and immediately permits a new filter scan', async ({ page }) => {
+for (const phase of ['compact scan', 'result hydration', 'name search'] as const) {
+test(`stops a cancelled ${phase} download and immediately permits a new request`, async ({ page }) => {
   let started = 0, disconnected = 0
   const responses = await installMockCatalog(null, { precomputed: true })
+  const root = '/data/asteroids/releases/mock-content-lite'
+  for (const bucket of ['a', 'b']) responses.set(`${root}/search/${bucket}.json`, responses.get(`${root}/meta/chunk-0000.json`)!)
   // Use an actual same-origin unfinished response, without routing this fetch
   // through Playwright's interception proxy. Test only the production bundle.
   const server = createServer(async (request, response) => {
     const pathname = new URL(request.url!, 'http://localhost').pathname
-    if (pathname.endsWith('/catalog-index.bin')) {
+    const delayedPath = phase === 'compact scan' ? '/catalog-index.bin'
+      : phase === 'result hydration' ? '/binary/chunk-0000.bin' : '/search/a.json'
+    if (pathname.endsWith(delayedPath)) {
       started++
       if (started === 1) {
         response.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': '72', 'Cache-Control': 'no-store' })
@@ -659,14 +664,24 @@ test('stops a cancelled compact scan download and immediately permits a new filt
     await page.unrouteAll({ behavior: 'wait' })
     await page.goto(`http://127.0.0.1:${address.port}/solar/?v=4&page=catalog&lang=en`)
     const scan = page.getByRole('button', { name: /Scan full catalog/ })
-    await scan.click()
+    const search = page.getByRole('searchbox', { name: /Search name/ })
+    if (phase === 'name search') await search.fill('Alpha')
+    else await scan.click()
     await expect.poll(() => started).toBe(1)
     await expect(scan).toBeDisabled()
-    await page.getByRole('combobox', { name: 'Orbit class', exact: true }).selectOption('TNO')
+    if (phase === 'name search') await search.fill('Beta')
+    else await page.getByRole('combobox', { name: 'Orbit class', exact: true }).selectOption('TNO')
     await expect.poll(() => disconnected).toBe(1)
     await expect(scan).toBeEnabled()
-    await scan.click()
-    await expect(page.locator('.catalog-counts > span').filter({ hasText: 'Exact filtered total' }).locator('strong')).toHaveText('1')
+    if (phase === 'name search') {
+      await expect(page.locator('.catalog-table')).toContainText('Beta')
+      await search.fill('Alpha')
+      await expect(page.locator('.catalog-table')).toContainText('Alpha')
+      await expect(page.locator('.catalog-table')).not.toContainText('Beta')
+    } else {
+      await scan.click()
+      await expect(page.locator('.catalog-counts > span').filter({ hasText: 'Exact filtered total' }).locator('strong')).toHaveText('1')
+    }
     expect(started).toBe(2)
     expect(errors).toEqual([])
   } finally {
@@ -674,6 +689,7 @@ test('stops a cancelled compact scan download and immediately permits a new filt
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
   }
 })
+}
 
 test('hydrates an exact compact-index match that is absent from the precomputed sample', async ({ page }) => {
   await installMockCatalog(page, { precomputed: true, sampleCount: 2 })

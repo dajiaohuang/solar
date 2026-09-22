@@ -46,6 +46,53 @@ describe('catalog loader cache isolation', () => {
     orbitClassCode: 'MBA', orbitClassName: 'Main-belt Asteroid', isNeo: false, isPha: false,
   }
 
+  it('cancels prefix search without starting legacy fallbacks', async () => {
+    const controller = new AbortController()
+    let requestSignal: AbortSignal | null | undefined
+    const fetchMock = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      requestSignal = init?.signal
+      requestSignal?.addEventListener('abort', () => reject(requestSignal!.reason), { once: true })
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    const request = loadAsteroidSearchBucket('prefix-ce', manifest, controller.signal)
+    const rejected = expect(request).rejects.toMatchObject({ name: 'AbortError' })
+    await vi.waitFor(() => expect(requestSignal).toBeDefined())
+    controller.abort()
+    await rejected
+    await vi.waitFor(() => expect(requestSignal?.aborted).toBe(true))
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('shares decoded shard work while one owner cancels, then aborts both paired reads for the last owner', async () => {
+    const requests: AbortSignal[] = []
+    vi.stubGlobal('fetch', vi.fn((_url: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      const signal = init!.signal!
+      requests.push(signal)
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+    })))
+    const a = new AbortController(), b = new AbortController()
+    const first = loadAsteroidChunk('owned', manifest, a.signal), second = loadAsteroidChunk('owned', manifest, b.signal)
+    const rejected = [expect(first).rejects.toMatchObject({ name: 'AbortError' }), expect(second).rejects.toMatchObject({ name: 'AbortError' })]
+    await vi.waitFor(() => expect(requests).toHaveLength(2))
+    a.abort()
+    await rejected[0]
+    expect(requests.every(signal => !signal.aborted)).toBe(true)
+    b.abort()
+    await rejected[1]
+    await vi.waitFor(() => expect(requests.every(signal => signal.aborted)).toBe(true))
+  })
+
+  it('stops sibling shard metadata when binary validation fails', async () => {
+    let metadataSignal: AbortSignal | null | undefined
+    vi.stubGlobal('fetch', vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
+      if (String(url).endsWith('.bin')) return Promise.resolve(new Response(new Float64Array([2451545, 2, NaN, 0, 0, 0, 0, 1])))
+      metadataSignal = init?.signal
+      return new Promise<Response>((_resolve, reject) => metadataSignal!.addEventListener('abort', () => reject(metadataSignal!.reason), { once: true }))
+    }))
+    await expect(loadAsteroidChunk('invalid-pair', manifest)).rejects.toThrow('Non-finite')
+    await vi.waitFor(() => expect(metadataSignal?.aborted).toBe(true))
+  })
+
   it('keeps pending search and provenance bound to the release where they began', async () => {
     let finishSearch!: (response: Response) => void
     let finishProvenance!: (response: Response) => void

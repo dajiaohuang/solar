@@ -54,6 +54,11 @@ workflow/repository identity and all job pages must be verified. Missing, stale,
 skipped or unreadable evidence falls back to full native validation. Staging,
 pull requests and manual native runs always validate normally; branch-protection
 requirements are unchanged. Reuse logs link the original evidence and artifacts.
+Live acceptance: main run 35769849829 on `71f29ad` verified and linked successful
+quality run 35766649508, completed its validation-scope job successfully, and
+skipped duplicate Android/iOS jobs. The staging invocation ran both platforms
+normally. The successful jobs retained their original completion timestamps
+when the failed Android job and dependent gate were retried.
 
 ### Checkpoint 1: explicit analysis source contract (2026-09-23)
 
@@ -158,8 +163,11 @@ ESLint, production build and four desktop/mobile Chromium sample/mode-switch
 checks passed. Remote run 35764210075 passed Web, all four browser profiles and
 Android on `69bbbaa`, but iOS coverage UI timed out waiting for its success label;
 the captured hierarchy then contained that exact label. The failed run remains
-evidence, and main promotion is pending successful checks of the next combined
-head. No assertion was weakened or failed result treated as success.
+evidence. Combined head `71f29ad` subsequently passed all required checks in run
+35766649508 and was fast-forwarded to main. Its first Android attempt failed
+while downloading the emulator ZIP; only failed jobs and the gate were retried,
+retaining the successful Web/browser/iOS results. No assertion was weakened or
+failed result treated as success. Deployment and publication remained disabled.
 Production streaming, relative GPU coordinates, LOD, app frame and
 memory evidence and all other uncompleted rows remain part of the active goal.
 
@@ -181,7 +189,8 @@ production build passed. Actual desktop/mobile Chromium, Firefox and WebKit exer
 epochs, resize, WEBGL_lose_context loss/restoration, non-background point pixels,
 no WebGL errors and balanced disposal. This UI test uses three synthetic records;
 it establishes lifecycle correctness, not large-inventory FPS or device capacity.
-Exact-head remote validation and main promotion remain pending.
+All required remote checks passed on exact head `71f29ad`, which was
+fast-forwarded to main with deployment and dataset publication disabled.
 
 ### Checkpoint 6: cancellable catalog scan transport (2026-09-23)
 
@@ -207,10 +216,40 @@ Playwright route interception was removed from this transport test: a separate
 Firefox probe showed that intercepted Worker fetches can retain the proxy
 connection even after AbortError, unlike the browser's direct same-origin path.
 
-This slice covers scan-worker transport. Main-thread name search, detail
-hydration, general shard concurrency admission and large-inventory point
-streaming still require their own cancellation/budget work. Remote validation
-and main promotion remain pending; the overall goal is active.
+This slice covers scan-worker transport. General shard concurrency admission
+and large-inventory point streaming still require budget work. The following
+checkpoint extends cancellation into main-thread hydration. Remote validation
+and main promotion of these cancellation changes remain pending.
+
+### Checkpoint 7: shared decoded data and cancellable hydration (2026-09-23)
+
+Name search, ID lookup, sample loading, chunk detail and both paging directions
+now pass cancellation into transport. Decoded cache entries count active
+consumers separately from their bounded completed-value LRU: one cancelled
+caller cannot terminate another caller's shared download, pending ownership is
+not evicted with completed values, and the final departing consumer aborts the
+remaining reads. Reset and failure release owned requests; cancelled searches
+cannot fall through to legacy buckets. Paired numeric/metadata reads
+cancel each other on failure. Browser history replacement cancels old catalog
+ID hydration and surfaces current hydration errors rather than unhandled
+promise rejection. Mutable manifest/provenance and SBDB loading retain their
+existing lifetimes; this is not a claim that every source is cancellable.
+
+The scan remains cancellable through result hydration. Cancelled generations
+cannot install or delete a newer paging queue. Page cancellation preserves its
+cursor for retry, overlapping page consumption is rejected, and filter changes
+discard the old queue and its active download. The UI aborts obsolete search,
+browse and exact-result page requests on replacement or unmount.
+
+Thirty-eight focused unit checks passed, including shared ownership, reset,
+legacy-fallback suppression, sibling failure and stale-hydration races.
+TypeScript, changed-file lint and the production build passed. Twenty-one
+targeted production-browser checks passed across desktop/mobile Chromium,
+Firefox and WebKit; synthetic same-origin HTTP fixtures verified actual socket
+closure and successful replacement for compact scans, result hydration and
+name search. Existing sample and hydration behavior remained covered. This is
+transport/lifecycle evidence, not full-catalog memory or FPS evidence. Exact-head
+remote validation and main promotion remain pending; the overall goal is active.
 
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),
