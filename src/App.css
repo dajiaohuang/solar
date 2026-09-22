@@ -579,7 +579,7 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 }
 
 @media (max-width: 980px) {
-  .app-header { grid-template-columns: 1fr auto; height: calc(60px + var(--safe-top)); }
+  .app-header { grid-template-columns: minmax(0, 1fr) auto; height: calc(60px + var(--safe-top)); }
   .brand-lockup { border-right: 0; }
   .primary-navigation { display: none; }
   .route-container { min-height: calc(100dvh - 60px - var(--safe-top)); padding-bottom: calc(58px + var(--safe-bottom)); }
@@ -626,6 +626,9 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 }
 
 @media (max-width: 620px) {
+  .brand-lockup { min-width: 0; gap: 8px; padding-inline: 10px; }
+  .brand-lockup > span:last-child { min-width: 0; }
+  .brand-lockup strong { font-size: 14px; letter-spacing: .03em; overflow-wrap: anywhere; }
   .header-actions { gap: 6px; padding-inline: 8px; }
   .command-button kbd { display: none; }
   .command-results span > small { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }

@@ -15,9 +15,7 @@ test.afterEach(async ({ page }) => {
 
 test('preview header keeps all actions within a narrow phone viewport in both languages', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 844 })
-  for (const language of ['en', 'zh']) {
-    await page.goto(`?v=4&page=stories&lang=${language}`)
-    await expect(page.locator('.preview-profile-button')).toBeVisible()
+  const assertHeaderFits = async () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320)
     for (const button of await page.locator('.header-actions button:visible').all()) {
       const box = await button.boundingBox()
@@ -25,6 +23,18 @@ test('preview header keeps all actions within a narrow phone viewport in both la
       expect(box!.height).toBeGreaterThanOrEqual(44)
       expect(box!.x + box!.width).toBeLessThanOrEqual(320)
     }
+    const brand = await page.locator('.brand-lockup').boundingBox()
+    const firstAction = await page.locator('.header-actions button:visible').first().boundingBox()
+    expect(brand!.x + brand!.width).toBeLessThanOrEqual(firstAction!.x)
+  }
+  for (const language of ['en', 'zh']) {
+    await page.goto(`?v=4&page=stories&lang=${language}`)
+    await expect(page.locator('.preview-profile-button')).toBeVisible()
+    await assertHeaderFits()
+    // System font metrics differ between Windows and Linux CI. Exercise a
+    // wider available fallback as well as the normal product font stack.
+    await page.addStyleTag({ content: 'body { font-family: Verdana, sans-serif; }' })
+    await assertHeaderFits()
   }
 })
 
