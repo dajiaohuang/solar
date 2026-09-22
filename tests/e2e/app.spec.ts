@@ -619,6 +619,8 @@ test('loads the deployable catalog through gzip JSON delivery', async ({ page })
 for (const phase of ['compact scan', 'result hydration', 'name search'] as const) {
 test(`stops a cancelled ${phase} download and immediately permits a new request`, async ({ page }) => {
   let started = 0, disconnected = 0
+  let releaseSample!: () => void
+  const sampleGate = new Promise<void>(resolve => { releaseSample = resolve })
   const responses = await installMockCatalog(null, { precomputed: true })
   const root = '/data/asteroids/releases/mock-content-lite'
   for (const bucket of ['a', 'b']) responses.set(`${root}/search/${bucket}.json`, responses.get(`${root}/meta/chunk-0000.json`)!)
@@ -626,6 +628,7 @@ test(`stops a cancelled ${phase} download and immediately permits a new request`
   // through Playwright's interception proxy. Test only the production bundle.
   const server = createServer(async (request, response) => {
     const pathname = new URL(request.url!, 'http://localhost').pathname
+    if (phase === 'name search' && pathname.endsWith('/catalog-summary.json')) await sampleGate
     const delayedPath = phase === 'compact scan' ? '/catalog-index.bin'
       : phase === 'result hydration' ? '/binary/chunk-0000.bin' : '/search/a.json'
     if (pathname.endsWith(delayedPath)) {
@@ -669,6 +672,15 @@ test(`stops a cancelled ${phase} download and immediately permits a new request`
     else await scan.click()
     await expect.poll(() => started).toBe(1)
     await expect(scan).toBeDisabled()
+    if (phase === 'name search') {
+      // Make the initial sample finish after the search has started. Its
+      // completion must not mark the unrelated pending search as finished.
+      const summary = page.waitForResponse(response => response.url().endsWith('/catalog-summary.json'))
+      releaseSample()
+      await (await summary).finished()
+      await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+      await expect(scan).toBeDisabled()
+    }
     if (phase === 'name search') await search.fill('Beta')
     else await page.getByRole('combobox', { name: 'Orbit class', exact: true }).selectOption('TNO')
     await expect.poll(() => disconnected).toBe(1)
@@ -685,6 +697,7 @@ test(`stops a cancelled ${phase} download and immediately permits a new request`
     expect(started).toBe(2)
     expect(errors).toEqual([])
   } finally {
+    releaseSample()
     server.closeAllConnections()
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
   }

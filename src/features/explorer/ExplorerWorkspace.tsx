@@ -458,6 +458,9 @@ export function ExplorerWorkspace() {
         {simulation.showCatalogCloud && catalog.error && (
           <div className="error-banner catalog-cloud-error" role="alert">{catalog.error}</div>
         )}
+        {simulation.showCatalogCloud && catalog.sampleLoadError && (
+          <div className="error-banner catalog-cloud-error" role="alert">{catalog.sampleLoadError}</div>
+        )}
         {simulation.showCatalogCloud && catalogPointCloud.error && (
           <div className="error-banner catalog-cloud-error" role="alert">{catalogPointCloud.error}</div>
         )}

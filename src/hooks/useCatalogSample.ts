@@ -35,7 +35,8 @@ export function useCatalogSample(enabled = true) {
         baseSampleKey: null,
         baseSampleProfile: null,
         baseSampleRecords: [],
-        isLoading: false,
+        sampleLoading: false,
+        sampleLoadError: null,
         sampleError: resolution.error,
       })
       return
@@ -50,18 +51,20 @@ export function useCatalogSample(enabled = true) {
       return
     }
     const controller = new AbortController()
-    catalogActions.patch({ isLoading: true, error: null, sampleError: null })
+    // Sample transport must not finish or clear errors from independent search,
+    // paging or exact-scan work in the catalog workspace.
+    catalogActions.patch({ sampleLoading: true, sampleLoadError: null, sampleError: null })
     void Promise.all([loadAsteroidSample(manifest, profile, controller.signal), loadCatalogSummary(manifest, controller.signal)]).then(([records, summary]) => {
       if (controller.signal.aborted || catalogStore.getState().manifest?.version !== manifest.version) return
       catalogActions.setBaseSample(profile, key, records, summary)
-      catalogActions.patch({ isLoading: false })
+      catalogActions.patch({ sampleLoading: false })
     }).catch((error: unknown) => {
       if (!controller.signal.aborted) catalogActions.patch({
-        isLoading: false,
-        error: error instanceof Error ? error.message : String(error),
+        sampleLoading: false,
+        sampleLoadError: error instanceof Error ? error.message : String(error),
       })
       controller.abort()
     })
-    return () => controller.abort()
+    return () => { controller.abort(); catalogActions.patch({ sampleLoading: false }) }
   }, [baseSampleKey, enabled, manifest, requestedSampleCount, requestedSampleCountRaw, requestedSampleInvalid, requestedSampleProfile])
 }

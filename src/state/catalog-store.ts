@@ -32,6 +32,8 @@ type CatalogState = {
   } | null
   filters: CatalogFilters
   isLoading: boolean
+  sampleLoading: boolean
+  sampleLoadError: string | null
   error: string | null
   sampleError: CatalogSampleError | null
 }
@@ -71,6 +73,8 @@ const initialCatalogState: CatalogState = {
   selectionScope: null,
   filters: DEFAULT_CATALOG_FILTERS,
   isLoading: false,
+  sampleLoading: false,
+  sampleLoadError: null,
   error: null,
   sampleError: null,
 }
@@ -93,13 +97,13 @@ export const catalogActions = {
     }))
   },
   setBaseSample(profile: CatalogSampleProfile, key: string, records: AsteroidRecord[], summary: CatalogSummary | null) {
-    catalogStore.setState({
+    catalogStore.setState((state) => ({
       baseSampleKey: key,
       baseSampleProfile: profile,
       baseSampleRecords: records,
       summary,
-      recordsSampled: true,
-    })
+      recordsSampled: state.activeResultScanKey || state.filters.query.trim() ? state.recordsSampled : true,
+    }))
   },
   setExactResult(scanKey: string, records: AsteroidRecord[], total: number, hasMore: boolean) {
     catalogStore.setState({

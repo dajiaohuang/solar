@@ -341,6 +341,25 @@ have other lifetimes, and consumer-owned buffers are outside the admission
 count. Priority, byte/decode/compute/upload budgets, cross-realm coordination and
 the full-inventory display path remain unfinished. Main promotion is pending.
 
+### Checkpoint 11: independent sample and query loading state (2026-09-23)
+
+Remote WebKit run 35772599440 on `0916add` exposed a genuine race: an initial
+sample completing during a name search cleared the search's loading state.
+The test reproduced this deterministically on local Chromium by delaying the
+sample summary until the search was pending; its disabled-button assertion
+failed before the fix. Samples now own their loading/error fields, and late
+sample publication preserves search/exact-result completeness metadata.
+Post-manifest selected-ID hydration likewise cannot clear a newer query's
+loading state on failure. All three sample consumers display transport errors.
+
+After the fix, 28 focused checks passed across all four browser profiles,
+including the deterministically ordered sample/search race, actual cancellation,
+bounded concurrent hydration, retained paging, lazy samples and invalid source
+tuples. TypeScript, changed-file lint and the production build passed. The old
+staging head is not promoted; the corrected head requires a fresh quality gate.
+The same WebKit run also recorded a retried Saturn access-control error before
+that test passed; it remains separate evidence, not a weakened assertion.
+
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),
 [JPL SBDB](https://ssd-api.jpl.nasa.gov/doc/sbdb.html),

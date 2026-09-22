@@ -240,6 +240,7 @@ export function ElementSpaceWorkspace() {
       <div className="legend">{Object.entries(CLASS_COLORS).slice(0, 9).map(([key, color]) => <span key={key}><i style={{ background: color }} />{key}</span>)}</div>
     </div>
     {catalog.sampleError && <div className="error-banner">{catalogSampleErrorMessage(catalog.sampleError, t)}</div>}
+    {catalog.sampleLoadError && <div className="error-banner" role="alert">{catalog.sampleLoadError}</div>}
     <div className="elements-layout">
       <section className="chart-panel glass-panel">
         <div className="sample-caption">{t('showing')} {data.length.toLocaleString()} / {(catalog.activeResultScanKey === scanKey ? catalog.exactFilteredTotal ?? records.length : records.length).toLocaleString()} · {t('stratifiedSample')}{mode === 'a-H' ? ` · ${t('unknownMagnitudeExcluded')}` : ''}</div>

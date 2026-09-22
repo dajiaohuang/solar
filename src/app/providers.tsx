@@ -148,10 +148,13 @@ export function AppProviders({ children }: { children: ReactNode }) {
       recordsSampled: false,
       loadProgress: 0,
       isLoading: true,
+      sampleLoading: false,
+      sampleLoadError: null,
       error: null,
       sampleError: null,
     })
 
+    let manifestPublished = false
     void loadAsteroidManifest(initial.dataset).then(async (manifest) => {
       const provenance = manifest ? await loadDatasetProvenance() : null
       if (datasetLoadGeneration.current !== loadGeneration) return
@@ -170,6 +173,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
             ? language === 'zh' ? '当前小行星数据集不可用。' : 'The current asteroid dataset is not available.'
             : null,
       })
+      manifestPublished = true
       const [datasetBodies, sbdbBodies] = await Promise.all([
         manifest && selectedIds.some((id) => id.startsWith('asteroid:') && !majorBodiesWithPhysicalData.some((body) => body.id === id))
           ? loadAsteroidBodiesByIds(selectedIds.filter((id) => !majorBodiesWithPhysicalData.some((body) => body.id === id)), controller.signal)
@@ -181,7 +185,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
       selectionActions.addCatalogBodies([...datasetBodies, ...sbdbBodies.filter((body) => body !== null)])
     }).catch((error: unknown) => {
       if (!controller.signal.aborted && datasetLoadGeneration.current === loadGeneration) {
-        catalogActions.patch({ isLoading: false, error: error instanceof Error ? error.message : String(error) })
+        // Post-manifest identity hydration can overlap an independent catalog
+        // query. Its failure cannot mark that query's loading state complete.
+        catalogActions.patch({ ...(!manifestPublished ? { isLoading: false } : {}), error: error instanceof Error ? error.message : String(error) })
       }
     }).finally(() => {
       if (catalogHydration.current === controller) catalogHydration.current = null
