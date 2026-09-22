@@ -59,6 +59,39 @@ it('evicts old compact indexes while retaining only two release buffers', async 
   expect(urls.filter(url => url === '/one/index.bin')).toHaveLength(2)
 })
 
+it('cancels in-flight compact bytes and starts a replacement without inheriting aborted data', async () => {
+  let firstSignal!: AbortSignal
+  const cancelled = vi.fn()
+  const fetcher = vi.fn((_url: string, init: RequestInit) => {
+    firstSignal = init.signal!
+    return Promise.resolve(new Response(new ReadableStream<Uint8Array>({ cancel: cancelled })))
+  })
+  vi.stubGlobal('fetch', fetcher)
+  const { messages, send } = await worker()
+  const extra = { candidateLocators: new Uint32Array(), manifest: { ...manifest, compactIndex: { path: 'index.bin', format: 'catalog-index-v1' as const, strideBytes: 24, count: 0, classCodes: [] } } }
+  send(request(1, extra))
+  await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1))
+  send({ type: 'cancel', requestId: 1 })
+  await vi.waitFor(() => expect(cancelled).toHaveBeenCalledTimes(1))
+  expect(firstSignal.aborted).toBe(true)
+  fetcher.mockImplementation(async () => new Response(new ArrayBuffer(0)))
+  send(request(2, extra))
+  await vi.waitFor(() => expect(messages.at(-1)).toMatchObject({ type: 'result', requestId: 2, total: 0 }))
+  expect(messages.every(message => message.requestId === 2)).toBe(true)
+  expect(fetcher).toHaveBeenCalledTimes(2)
+})
+
+it('aborts unfinished metadata when its paired numeric shard fails validation', async () => {
+  const cancelled = vi.fn()
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('.json.gz')
+    ? new Response(new ReadableStream<Uint8Array>({ cancel: cancelled }))
+    : new Response(new Float64Array([2451545, NaN, .1, 0, 0, 0, 0, 1]))))
+  const { messages, send } = await worker()
+  send(request(1))
+  await vi.waitFor(() => expect(messages.at(-1)?.type).toBe('error'))
+  await vi.waitFor(() => expect(cancelled).toHaveBeenCalledTimes(1))
+})
+
 it('decodes the published 24-byte index layout and rejects row aliases across chunk boundaries', async () => {
   const buffer = new ArrayBuffer(48), view = new DataView(buffer)
   for (const offset of [0, 24]) {

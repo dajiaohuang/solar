@@ -183,6 +183,35 @@ no WebGL errors and balanced disposal. This UI test uses three synthetic records
 it establishes lifecycle correctness, not large-inventory FPS or device capacity.
 Exact-head remote validation and main promotion remain pending.
 
+### Checkpoint 6: cancellable catalog scan transport (2026-09-23)
+
+The scan worker now carries cancellation into compact-index, numeric, JSON and
+gzip reads. A shared network load counts its consumers: cancelling one caller
+rejects that caller promptly, while the download continues for a remaining
+consumer. The last consumer aborts the request and releases the stream reader;
+partial bytes never become a result or cache entry. Cancelled validation does
+not invalidate an otherwise valid shared cache record. A failed numeric shard
+also cancels its unfinished metadata peer. Only completed compact buffers enter
+the two-entry worker cache, so a new scan cannot inherit an aborted promise.
+Changing filters clears the cancelled scan's busy state and permits immediate
+retry; cancelled generations cannot publish old progress or results.
+
+Thirty-one targeted cache, bounded-stream, loader and worker tests passed,
+alongside TypeScript, changed-file lint and the production build. The actual
+Chromium desktop/mobile, Firefox and WebKit production worker was exercised
+against a same-origin local HTTP server with a deliberately unfinished response:
+filter change closed the response and a fresh scan returned the correct total.
+Three existing browser hydration checks also passed. The server uses synthetic
+catalog records and establishes cancellation behavior, not catalog capacity.
+Playwright route interception was removed from this transport test: a separate
+Firefox probe showed that intercepted Worker fetches can retain the proxy
+connection even after AbortError, unlike the browser's direct same-origin path.
+
+This slice covers scan-worker transport. Main-thread name search, detail
+hydration, general shard concurrency admission and large-inventory point
+streaming still require their own cancellation/budget work. Remote validation
+and main promotion remain pending; the overall goal is active.
+
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),
 [JPL SBDB](https://ssd-api.jpl.nasa.gov/doc/sbdb.html),

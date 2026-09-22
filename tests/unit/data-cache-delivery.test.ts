@@ -3,6 +3,69 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); vi.resetModules() })
 
 describe('optional immutable persistence', () => {
+  it('cancels one consumer promptly without aborting a sibling shared download', async () => {
+    let finish!: (response: Response) => void
+    let networkSignal!: AbortSignal
+    const fetcher = vi.fn((_url: string, init: RequestInit) => {
+      networkSignal = init.signal!
+      return new Promise<Response>(resolve => { finish = resolve })
+    })
+    vi.stubGlobal('fetch', fetcher)
+    const { fetchImmutableArrayBuffer } = await import('../../src/data/cache/indexedDb')
+    const controller = new AbortController()
+    const first = fetchImmutableArrayBuffer('/shared-cancel.bin', undefined, controller.signal)
+    const cancelled = expect(first).rejects.toMatchObject({ name: 'AbortError' })
+    const second = fetchImmutableArrayBuffer('/shared-cancel.bin')
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    controller.abort()
+    await cancelled
+    expect(networkSignal.aborted).toBe(false)
+    finish(new Response(new Uint8Array([8, 9])))
+    expect(new Uint8Array(await second)).toEqual(new Uint8Array([8, 9]))
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
+  it('aborts the last consumer, cancels a stalled body and permits an immediate clean retry', async () => {
+    const bodyCancelled = vi.fn()
+    let signal!: AbortSignal
+    const fetcher = vi.fn((_url: string, init: RequestInit) => {
+      signal = init.signal!
+      return Promise.resolve(new Response(new ReadableStream<Uint8Array>({ start(c) { c.enqueue(new Uint8Array([1])) }, cancel: bodyCancelled })))
+    })
+    vi.stubGlobal('fetch', fetcher)
+    const { fetchImmutableArrayBuffer } = await import('../../src/data/cache/indexedDb')
+    const controller = new AbortController(), validate = vi.fn()
+    const result = fetchImmutableArrayBuffer('/last-consumer.bin', validate, controller.signal)
+    const cancelled = expect(result).rejects.toMatchObject({ name: 'AbortError' })
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1))
+    controller.abort()
+    await cancelled
+    expect(signal.aborted).toBe(true)
+    expect(bodyCancelled).toHaveBeenCalledTimes(1)
+    expect(validate).not.toHaveBeenCalled()
+    fetcher.mockImplementation(async () => new Response(new Uint8Array([42])))
+    expect(new Uint8Array(await fetchImmutableArrayBuffer('/last-consumer.bin'))).toEqual(new Uint8Array([42]))
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not start an already cancelled consumer and rejects cancellation during async validation', async () => {
+    const fetcher = vi.fn(async () => new Response('ok'))
+    vi.stubGlobal('fetch', fetcher)
+    const { fetchImmutableArrayBuffer } = await import('../../src/data/cache/indexedDb')
+    const controller = new AbortController()
+    controller.abort()
+    await expect(fetchImmutableArrayBuffer('/pre-abort.bin', undefined, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
+    expect(fetcher).not.toHaveBeenCalled()
+    const next = new AbortController()
+    let finish!: () => void
+    const pending = fetchImmutableArrayBuffer('/validation-abort.bin', () => new Promise<void>(resolve => { finish = resolve }), next.signal)
+    const cancelled = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    next.abort()
+    await cancelled
+    finish()
+  })
+
   it('coalesces concurrent network loads but gives each consumer an independent transferable buffer', async () => {
     const fetcher = vi.fn(async () => new Response(new Uint8Array([1, 2, 3])))
     vi.stubGlobal('fetch', fetcher)

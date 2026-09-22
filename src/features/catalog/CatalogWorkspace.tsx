@@ -65,7 +65,10 @@ export function CatalogWorkspace() {
 
   useEffect(() => {
     currentScanKey.current = scanKey
-    activeScanController.current?.abort()
+    if (activeScanController.current) {
+      activeScanController.current.abort()
+      catalogActions.patch({ isLoading: false, loadProgress: 0 })
+    }
     activeScanController.current = null
   }, [scanKey])
 

@@ -5,6 +5,17 @@ import { fetchImmutableArrayBuffer, parseMaybeGzipJson } from '../../src/data/ca
 
 afterEach(() => vi.unstubAllGlobals())
 
+it('interrupts a stalled stream read, discards its partial bytes and releases the lock', async () => {
+  const cancelled = vi.fn(), controller = new AbortController()
+  const stream = new ReadableStream<Uint8Array>({ start(c) { c.enqueue(new Uint8Array([1, 2])) }, cancel: cancelled })
+  const result = readBoundedStream(stream, 16, controller.signal)
+  const rejection = expect(result).rejects.toMatchObject({ name: 'AbortError' })
+  controller.abort()
+  await rejection
+  expect(cancelled).toHaveBeenCalledTimes(1)
+  expect(stream.locked).toBe(false)
+})
+
 it('counts actual streamed bytes, cancels overflow, and releases the reader', async () => {
   let cancelled = false
   const stream = new ReadableStream<Uint8Array>({

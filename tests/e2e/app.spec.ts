@@ -1,6 +1,7 @@
 import { expect, test } from './fixtures'
 import type { Page } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
+import { createServer } from 'node:http'
 import datasetPin from '../../.github/asteroid-dataset.json' with { type: 'json' }
 import satelliteCatalog from '../../src/data/satelliteCatalog.json' with { type: 'json' }
 import { coverageSummaryFixture } from '../fixtures/coverageReport'
@@ -292,12 +293,18 @@ async function capture3dScene(page: Page) {
   })
 }
 
-async function installMockCatalog(page: Page, options: {
+type MockCatalogResponse = { json?: unknown; body?: Buffer; contentType?: string }
+async function installMockCatalog(page: Page | null, options: {
   precomputed?: boolean
   sampleCount?: number
   profileSamples?: { desktop: number[]; mobile: number[] }
   presetDataset?: boolean
 } = {}) {
+  const responses = new Map<string, MockCatalogResponse>()
+  const register = async (pattern: string, response: MockCatalogResponse) => {
+    responses.set(pattern.slice(2), response)
+    if (page) await page.route(pattern, route => route.fulfill(response))
+  }
   const precomputed = options.precomputed ?? false
   const fixtureEntries = [
     { id: 'asteroid:mpc:01001', packedDesignation: '01001', permanentNumber: 1001, label: '1001 Alpha', shortLabel: 'Alpha', searchKey: 'alpha 1001 01001', chunkId: 'chunk-0000', orbitClassCode: 'MBA', orbitClassName: 'Main-belt Asteroid', absoluteMagnitude: 12, isNeo: false, isPha: false },
@@ -347,11 +354,11 @@ async function installMockCatalog(page: Page, options: {
     summaryPath: 'catalog-summary.json',
     compactIndex: { path: 'catalog-index.bin', format: 'catalog-index-v1', strideBytes: 24, count: entries.length, classCodes: ['MBA', 'APO', 'TNO'] },
   })
-  await page.route('**/data/asteroids/dataset-version.json', (route) => route.fulfill({ json: { schemaVersion: 1, activeVersion: manifest.version, mode: manifest.datasetMode, manifestPath: `releases/${manifest.version}/manifest.json`, generatedAt: manifest.generatedAt, sourceSha256: manifest.sourceSha256, contentSha256: manifest.contentSha256 } }))
-  await page.route(`**/data/asteroids/releases/${manifest.version}/manifest.json`, (route) => route.fulfill({ json: manifest }))
-  await page.route(`**/data/asteroids/releases/${manifest.version}/provenance.json`, (route) => route.fulfill({ json: { datasetVersion: manifest.version, downloadedAt: manifest.generatedAt, mode: manifest.datasetMode, totalObjects: entries.length, orbitModel: 'fixture', precision: 'fixture', parserVersion: 'test', ...manifest } }))
-  await page.route(`**/data/asteroids/releases/${manifest.version}/meta/chunk-0000.json`, (route) => route.fulfill({ json: entries }))
-  await page.route(`**/data/asteroids/releases/${manifest.version}/binary/chunk-0000.bin`, (route) => route.fulfill({ body: Buffer.from(numeric.buffer), contentType: 'application/octet-stream' }))
+  await register('**/data/asteroids/dataset-version.json', { json: { schemaVersion: 1, activeVersion: manifest.version, mode: manifest.datasetMode, manifestPath: `releases/${manifest.version}/manifest.json`, generatedAt: manifest.generatedAt, sourceSha256: manifest.sourceSha256, contentSha256: manifest.contentSha256 } })
+  await register(`**/data/asteroids/releases/${manifest.version}/manifest.json`, { json: manifest })
+  await register(`**/data/asteroids/releases/${manifest.version}/provenance.json`, { json: { datasetVersion: manifest.version, downloadedAt: manifest.generatedAt, mode: manifest.datasetMode, totalObjects: entries.length, orbitModel: 'fixture', precision: 'fixture', parserVersion: 'test', ...manifest } })
+  await register(`**/data/asteroids/releases/${manifest.version}/meta/chunk-0000.json`, { json: entries })
+  await register(`**/data/asteroids/releases/${manifest.version}/binary/chunk-0000.bin`, { body: Buffer.from(numeric.buffer), contentType: 'application/octet-stream' })
   const compact = Buffer.alloc(entries.length * 24)
   entries.forEach((entry, index) => {
     const offset = index * 24
@@ -363,22 +370,23 @@ async function installMockCatalog(page: Page, options: {
     compact.writeUInt16LE(0, offset + 20)
     compact.writeUInt16LE(index, offset + 22)
   })
-  await page.route(`**/data/asteroids/releases/${manifest.version}/catalog-index.bin`, (route) => route.fulfill({ body: compact, contentType: 'application/octet-stream' }))
+  await register(`**/data/asteroids/releases/${manifest.version}/catalog-index.bin`, { body: compact, contentType: 'application/octet-stream' })
   for (const size of ['desktop', 'mobile'] as const) {
     const profileEntries = sampleIndexes[size].map((index) => entries[index])
     const profileNumeric = new Float64Array(profileEntries.length * 8)
     sampleIndexes[size].forEach((entryIndex, profileIndex) => {
       profileNumeric.set(numeric.slice(entryIndex * 8, entryIndex * 8 + 8), profileIndex * 8)
     })
-    await page.route(`**/data/asteroids/releases/${manifest.version}/catalog-sample-${size}.json`, (route) => route.fulfill({ json: profileEntries }))
-    await page.route(`**/data/asteroids/releases/${manifest.version}/catalog-sample-${size}.bin`, (route) => route.fulfill({ body: Buffer.from(profileNumeric.buffer), contentType: 'application/octet-stream' }))
+    await register(`**/data/asteroids/releases/${manifest.version}/catalog-sample-${size}.json`, { json: profileEntries })
+    await register(`**/data/asteroids/releases/${manifest.version}/catalog-sample-${size}.bin`, { body: Buffer.from(profileNumeric.buffer), contentType: 'application/octet-stream' })
   }
-  await page.route(`**/data/asteroids/releases/${manifest.version}/catalog-summary.json`, (route) => route.fulfill({ json: {
+  await register(`**/data/asteroids/releases/${manifest.version}/catalog-summary.json`, { json: {
     schemaVersion: 2, datasetMode: manifest.datasetMode, totalCount: entries.length,
     categoryCounts: manifest.categoryCounts, magnitudeKnownCount: entries.length, magnitudeUnknownCount: 0,
     numericRanges: { semiMajorAxisAU: [2.1, 2.5], eccentricity: [0.08, 0.14], inclinationDeg: [4, 6], epochJd: [2451545, 2451545] },
     sourceSha256: manifest.sourceSha256,
-  } }))
+  } })
+  return responses
 }
 
 test('lazy-loads catalog samples only inside catalog workspaces and only once', async ({ page }) => {
@@ -606,6 +614,65 @@ test('loads the deployable catalog through gzip JSON delivery', async ({ page })
   await expect.poll(() => gzipResponses.some((url) => /catalog-sample-(desktop|mobile)\.json\.gz$/.test(url))).toBe(true)
   await page.getByRole('searchbox', { name: /Search name/ }).fill('Ceres')
   await expect.poll(() => gzipResponses.some((url) => /\/search\/prefix-ce\.json\.gz$/.test(url))).toBe(true)
+})
+
+test('stops a cancelled compact scan download and immediately permits a new filter scan', async ({ page }) => {
+  let started = 0, disconnected = 0
+  const responses = await installMockCatalog(null, { precomputed: true })
+  // Use an actual same-origin unfinished response, without routing this fetch
+  // through Playwright's interception proxy. Test only the production bundle.
+  const server = createServer(async (request, response) => {
+    const pathname = new URL(request.url!, 'http://localhost').pathname
+    if (pathname.endsWith('/catalog-index.bin')) {
+      started++
+      if (started === 1) {
+        response.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': '72', 'Cache-Control': 'no-store' })
+        response.write(Buffer.alloc(1))
+        response.on('close', () => { disconnected++ })
+        return
+      }
+    }
+    const fixture = responses.get(pathname.replace(/^\/solar/, ''))
+    if (fixture) {
+      const body = fixture.body ?? Buffer.from(JSON.stringify(fixture.json))
+      response.writeHead(200, { 'Content-Type': fixture.contentType ?? 'application/json', 'Content-Length': String(body.length), 'Cache-Control': 'no-store' })
+      response.end(body)
+      return
+    }
+    const asset = pathname.match(/^\/solar\/assets\/([\w.-]+\.(js|css|woff2?))$/)
+    const file = pathname === '/solar/' ? 'index.html' : asset ? `assets/${asset[1]}` : null
+    try {
+      if (!file) { response.writeHead(404); response.end(); return }
+      const body = await readFile(new URL(`../../dist/${file}`, import.meta.url))
+      response.writeHead(200, { 'Content-Type': file.endsWith('.html') ? 'text/html' : file.endsWith('.js') ? 'application/javascript' : file.endsWith('.css') ? 'text/css' : 'font/woff2' })
+      response.end(body)
+    } catch { response.writeHead(404); response.end() }
+  })
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+  try {
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('Missing test server port')
+    const errors: string[] = []
+    page.on('pageerror', error => errors.push(error.message))
+    // Firefox's intercepted worker fetch can retain the proxy connection after
+    // AbortError. Remove interception entirely to observe the browser transport.
+    await page.unrouteAll({ behavior: 'wait' })
+    await page.goto(`http://127.0.0.1:${address.port}/solar/?v=4&page=catalog&lang=en`)
+    const scan = page.getByRole('button', { name: /Scan full catalog/ })
+    await scan.click()
+    await expect.poll(() => started).toBe(1)
+    await expect(scan).toBeDisabled()
+    await page.getByRole('combobox', { name: 'Orbit class', exact: true }).selectOption('TNO')
+    await expect.poll(() => disconnected).toBe(1)
+    await expect(scan).toBeEnabled()
+    await scan.click()
+    await expect(page.locator('.catalog-counts > span').filter({ hasText: 'Exact filtered total' }).locator('strong')).toHaveText('1')
+    expect(started).toBe(2)
+    expect(errors).toEqual([])
+  } finally {
+    server.closeAllConnections()
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+  }
 })
 
 test('hydrates an exact compact-index match that is absent from the precomputed sample', async ({ page }) => {

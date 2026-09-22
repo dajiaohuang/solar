@@ -2,15 +2,19 @@
 // expansion before retaining a complete artifact in memory.
 export const MAX_CATALOG_ARTIFACT_BYTES = 64 * 1024 * 1024
 
-export async function readBoundedStream(stream: ReadableStream<Uint8Array>, maximumBytes = MAX_CATALOG_ARTIFACT_BYTES) {
+export async function readBoundedStream(stream: ReadableStream<Uint8Array>, maximumBytes = MAX_CATALOG_ARTIFACT_BYTES, signal?: AbortSignal) {
   if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 0) throw new RangeError('Invalid artifact byte limit')
   const reader = stream.getReader()
   const chunks: Uint8Array[] = []
   let size = 0
   let complete = false
+  const abort = () => { void reader.cancel(signal?.reason).catch(() => undefined) }
+  signal?.addEventListener('abort', abort, { once: true })
   try {
+    signal?.throwIfAborted()
     while (true) {
       const { done, value } = await reader.read()
+      signal?.throwIfAborted()
       if (done) { complete = true; break }
       size += value.byteLength
       if (size > maximumBytes) throw new Error(`Catalog artifact exceeds ${maximumBytes} bytes`)
@@ -21,6 +25,7 @@ export async function readBoundedStream(stream: ReadableStream<Uint8Array>, maxi
     for (const chunk of chunks) { buffer.set(chunk, offset); offset += chunk.byteLength }
     return buffer.buffer
   } finally {
+    signal?.removeEventListener('abort', abort)
     if (!complete) void reader.cancel().catch(() => undefined)
     reader.releaseLock()
   }

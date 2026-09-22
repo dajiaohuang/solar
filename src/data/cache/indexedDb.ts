@@ -15,7 +15,42 @@ type CacheRecord = {
 
 let preparedVersion: string | null = null
 let preparePromise: Promise<void> | null = null
-const inFlight = new Map<string, Promise<{ buffer: ArrayBuffer; cached: boolean }>>()
+type Payload = { buffer: ArrayBuffer; cached: boolean }
+type SharedRequest = { promise: Promise<Payload>; controller: AbortController; consumers: number; settled: boolean }
+const inFlight = new Map<string, SharedRequest>()
+
+function withSignal<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason)
+    signal.addEventListener('abort', abort, { once: true })
+    promise.then(value => { signal.removeEventListener('abort', abort); resolve(value) }, error => { signal.removeEventListener('abort', abort); reject(error) })
+    if (signal.aborted) { signal.removeEventListener('abort', abort); abort() }
+  })
+}
+
+async function acquirePayload(url: string, signal?: AbortSignal) {
+  signal?.throwIfAborted()
+  let pending = inFlight.get(url)
+  if (!pending) {
+    const controller = new AbortController()
+    const created: SharedRequest = { controller, consumers: 0, settled: false, promise: loadImmutableArrayBuffer(url, controller.signal).finally(() => {
+      created.settled = true
+      if (inFlight.get(url) === created) inFlight.delete(url)
+    }) }
+    pending = created
+    inFlight.set(url, pending)
+  }
+  pending.consumers++
+  try { return await withSignal(pending.promise, signal) }
+  finally {
+    pending.consumers--
+    if (!pending.consumers && !pending.settled) {
+      if (inFlight.get(url) === pending) inFlight.delete(url)
+      pending.controller.abort()
+    }
+  }
+}
 
 export function datasetVersionFromUrl(url: string) {
   try {
@@ -224,51 +259,48 @@ async function invalidateCache(key: string) {
   })
 }
 
-export async function fetchImmutableArrayBuffer(url: string, validate?: (buffer: ArrayBuffer) => void | Promise<void>) {
-  let pending = inFlight.get(url)
-  if (!pending) {
-    pending = loadImmutableArrayBuffer(url)
-    inFlight.set(url, pending)
+export async function fetchImmutableArrayBuffer(url: string, validate?: (buffer: ArrayBuffer) => void | Promise<void>, signal?: AbortSignal) {
+  // Callers may transfer or modify their buffer without detaching a sibling
+  // consumer's result. Only active requests, not completed data, live here.
+  const { buffer, cached } = await acquirePayload(url, signal)
+  signal?.throwIfAborted()
+  try { await withSignal(Promise.resolve(validate?.(buffer)), signal) }
+  catch (error) {
+    // Cancellation says nothing about the validity of a shared artifact.
+    if (cached && !signal?.aborted) await invalidateCache(url)
+    throw error
   }
-  try {
-    // Callers may transfer or modify their buffer without detaching a sibling
-    // consumer's result. Only active requests, not completed data, live here.
-    const { buffer, cached } = await pending
-    try { await validate?.(buffer) }
-    catch (error) {
-      if (cached) await invalidateCache(url)
-      throw error
-    }
-    // Never persist a network payload before its caller's format validation.
-    if (!cached) void writeCache(url, buffer).catch(() => undefined)
-    return buffer.slice(0)
-  } finally {
-    if (inFlight.get(url) === pending) inFlight.delete(url)
-  }
+  signal?.throwIfAborted()
+  // Never persist a network payload before its caller's format validation.
+  if (!cached) void writeCache(url, buffer).catch(() => undefined)
+  return buffer.slice(0)
 }
 
-async function loadImmutableArrayBuffer(url: string) {
+async function loadImmutableArrayBuffer(url: string, signal: AbortSignal) {
   await prepareDatasetCache(datasetVersionFromUrl(url))
+  signal.throwIfAborted()
   const cached = await readCache(url)
+  signal.throwIfAborted()
   if (cached && cached.byteLength <= MAX_CATALOG_ARTIFACT_BYTES) return { buffer: cached, cached: true }
   if (cached) await invalidateCache(url)
-  const response = await fetch(url)
+  const response = await fetch(url, { signal })
   if (!response.ok) throw new Error(`Failed to load ${url}: ${response.status}`)
   if (Number(response.headers.get('content-length')) > MAX_CATALOG_ARTIFACT_BYTES) {
     void response.body?.cancel().catch(() => undefined)
     throw new Error(`Catalog artifact exceeds ${MAX_CATALOG_ARTIFACT_BYTES} bytes`)
   }
-  const buffer = response.body ? await readBoundedStream(response.body) : new ArrayBuffer(0)
+  const buffer = response.body ? await readBoundedStream(response.body, MAX_CATALOG_ARTIFACT_BYTES, signal) : new ArrayBuffer(0)
   return { buffer, cached: false }
 }
 
-export async function fetchImmutableJson<T>(url: string): Promise<T> {
+export async function fetchImmutableJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   let parsed!: T
-  await fetchImmutableArrayBuffer(url, buffer => { parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(buffer)) as T })
+  await fetchImmutableArrayBuffer(url, buffer => { parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(buffer)) as T }, signal)
   return parsed
 }
 
-export async function parseMaybeGzipJson<T>(buffer: ArrayBuffer, maximumBytes = MAX_CATALOG_ARTIFACT_BYTES): Promise<T> {
+export async function parseMaybeGzipJson<T>(buffer: ArrayBuffer, maximumBytes = MAX_CATALOG_ARTIFACT_BYTES, signal?: AbortSignal): Promise<T> {
+  signal?.throwIfAborted()
   if (buffer.byteLength > maximumBytes) throw new Error(`Catalog artifact exceeds ${maximumBytes} bytes`)
   const header = new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 2))
   const isGzip = header[0] === 0x1f && header[1] === 0x8b
@@ -277,12 +309,12 @@ export async function parseMaybeGzipJson<T>(buffer: ArrayBuffer, maximumBytes = 
     throw new Error('This browser does not support streamed gzip dataset delivery.')
   }
   const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'))
-  const decompressed = await readBoundedStream(stream, maximumBytes)
+  const decompressed = await readBoundedStream(stream, maximumBytes, signal)
   return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(decompressed)) as T
 }
 
-export async function fetchImmutableGzipJson<T>(url: string): Promise<T> {
+export async function fetchImmutableGzipJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   let parsed!: T
-  await fetchImmutableArrayBuffer(url, async buffer => { parsed = await parseMaybeGzipJson<T>(buffer) })
+  await fetchImmutableArrayBuffer(url, async buffer => { parsed = await parseMaybeGzipJson<T>(buffer, MAX_CATALOG_ARTIFACT_BYTES, signal) }, signal)
   return parsed
 }
