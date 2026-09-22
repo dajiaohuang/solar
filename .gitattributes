@@ -8,4 +8,8 @@ src/data/satelliteCatalog.json text eol=lf
 # Imported CLI shebangs and checksum-pinned fixtures must survive Windows checkout.
 *.mjs text eol=lf
 tests/fixtures/*.json text eol=lf
+# IERS records are fixed-width originals; trailing blanks and byte hashes matter.
+tests/fixtures/iers-finals2000a-sample.txt -text -whitespace
+tests/fixtures/observer-iers-sample.txt -text -whitespace
+third-party/*.txt -text
 scripts/reference/*-oracle.c text eol=lf
