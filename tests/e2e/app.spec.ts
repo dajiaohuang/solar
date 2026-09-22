@@ -701,6 +701,25 @@ test('hydrates an exact compact-index match that is absent from the precomputed 
   await expect(page.locator('.catalog-table')).toContainText('Gamma')
 })
 
+test('keeps completed exact-result paging available after leaving and returning to the catalog', async ({ page }) => {
+  await installMockCatalog(page, { precomputed: true, presetDataset: true, sampleCount: 2 })
+  await page.goto('./?v=4&page=catalog&lang=en')
+  await page.getByRole('button', { name: /Scan full catalog/ }).click()
+  const loaded = page.locator('.catalog-counts > span').filter({ hasText: 'Loaded' }).locator('strong')
+  await expect(loaded).toHaveText('480')
+  const firstRow = page.locator('.catalog-table > li > button strong').first()
+  const originalRow = await firstRow.innerText()
+  await openElements(page)
+  await expect(page.getByRole('heading', { name: 'Element Space' })).toBeVisible()
+  await openCatalog(page)
+  await expect(firstRow).toHaveText(originalRow)
+  await page.getByRole('button', { name: 'Load next exact-result page' }).click()
+  // Paging replaces the bounded 480-row page rather than accumulating records.
+  await expect(loaded).toHaveText('480')
+  await expect(firstRow).not.toHaveText(originalRow)
+  await expect(page.getByRole('button', { name: 'Load next exact-result page' })).toBeEnabled()
+})
+
 test('navigates through the atlas workspaces without console errors', async ({ page }) => {
   const errors: string[] = []
   page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })

@@ -251,6 +251,16 @@ name search. Existing sample and hydration behavior remained covered. This is
 transport/lifecycle evidence, not full-catalog memory or FPS evidence. Exact-head
 remote validation and main promotion remain pending; the overall goal is active.
 
+Navigation follow-up: completed result-page cursors remain available when leaving
+and returning to the catalog. Only a changed filter invalidates that retained
+queue; active downloads still cancel on unmount. The earlier cleanup could turn
+the next page into an empty result after navigation. Four-browser navigation
+checks now verify the retained first-page identity and a different next page,
+each bounded to 480 rows; pages replace rather than accumulate records. Four
+hydration-cancellation checks also pass after this correction. Staging head
+`94fafbc` predates this correction and will not be promoted on its own, even if
+its existing checks pass. The corrected combined head must pass the gate.
+
 ### Checkpoint 8: Float64 catalog snapshots before relative GPU conversion (2026-09-23)
 
 Catalog point workers now retain Float64 results through transport. Each 2D/3D

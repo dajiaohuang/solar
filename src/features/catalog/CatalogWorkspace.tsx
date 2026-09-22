@@ -44,7 +44,7 @@ export function CatalogWorkspace() {
   const [searchPage, setSearchPage] = useState<{ total: number; nextCursor: number | null }>({ total: 0, nextCursor: null })
   const loadController = useRef<AbortController | null>(null)
   const activeScanController = useRef<AbortController | null>(null)
-  const currentScanKey = useRef('')
+  const currentScanKey = useRef(catalog.activeResultScanKey ?? '')
   const [playingEpoch, setPlayingEpoch] = useState(clock.julianDay)
   const catalogEpoch = clock.isPlaying ? playingEpoch : clock.julianDay
 
@@ -74,13 +74,15 @@ export function CatalogWorkspace() {
     : ''
 
   useEffect(() => {
+    if (currentScanKey.current !== scanKey) discardCatalogScanPages(currentScanKey.current)
     currentScanKey.current = scanKey
     if (activeScanController.current) {
       activeScanController.current.abort()
       catalogActions.patch({ isLoading: false, loadProgress: 0 })
     }
     activeScanController.current = null
-    return () => discardCatalogScanPages(scanKey)
+    // Completed pages belong to the retained catalog result. Navigation only
+    // cancels active transport; a changed filter discards its paging cursor.
   }, [scanKey])
 
   function beginLoad() {
