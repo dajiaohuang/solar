@@ -1078,8 +1078,11 @@ test('reflows Evidence and exposes independent body and catalog actions', async 
     bodyClient: document.body.clientWidth,
     bodyScroll: document.body.scrollWidth,
   }))
-  expect(widths.documentScroll).toBe(widths.documentClient)
-  expect(widths.bodyScroll).toBe(widths.bodyClient)
+  // Firefox can reserve a classic scrollbar inside the root client box,
+  // making scrollWidth smaller than clientWidth. Only a larger scrollable
+  // width indicates the horizontal overflow this regression guards against.
+  expect(widths.documentScroll).toBeLessThanOrEqual(widths.documentClient)
+  expect(widths.bodyScroll).toBeLessThanOrEqual(widths.bodyClient)
 
   await page.goto('./?v=4&page=explorer&view=2d&lang=en&bodies=earth%2Cmars&focused=earth')
   await page.locator('.advanced-controls > summary').click()
