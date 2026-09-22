@@ -81,13 +81,23 @@ describe('repository contract', () => {
     expect(quality.jobs.mobile_quality).toMatchObject({
       uses: './.github/workflows/mobile.yml',
       needs: 'repository_contract',
+      permissions: { contents: 'read', actions: 'read' },
     })
+    expect(mobile.jobs.validation_scope.outputs.reuse).toBe('${{ steps.evidence.outputs.reuse }}')
+    for (const platform of ['android', 'ios']) {
+      expect(mobile.jobs[platform].needs).toBe('validation_scope')
+      expect(mobile.jobs[platform].if).toBe("needs.validation_scope.outputs.reuse != 'true'")
+    }
+    expect(quality.jobs.web_quality.steps.some((step: { run?: string }) => step.run === 'npm run test:e2e')).toBe(false)
+    const browsers = parse(readFileSync(new URL('.github/workflows/browser-quality.yml', root), 'utf8'))
+    expect(browsers.jobs['browser-matrix'].strategy.matrix.include.map((row: { project: string }) => row.project).sort()).toEqual(['desktop-chromium', 'desktop-firefox', 'desktop-webkit', 'mobile-chromium'])
     expect(quality.jobs.pull_request_quality_gate.needs).toEqual([
       'repository_contract',
       'web_quality',
       'mobile_quality',
       'browser_quality',
     ])
+    expect(quality.jobs.pull_request_quality_gate.steps[0].with.ref).toBe('${{ inputs.head_sha || github.sha }}')
   })
 
   it('classifies both sides of a code-to-document rename', () => {

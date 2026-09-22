@@ -99,11 +99,8 @@ jobs:
       - run: npm run check:capacity
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Run Chromium interaction and accessibility checks
-        env:
-          CI: 1
-          PLAYWRIGHT_REUSE_BUILD: 1
-        run: npm run test:e2e
+      # The required browser matrix runs the complete desktop/mobile Chromium
+      # suites once, alongside Firefox and WebKit. Do not duplicate them here.
       - name: Enforce Lighthouse accessibility and performance budgets
         uses: treosh/lighthouse-ci-action@3e7e23fb74242897f95c0ba9cabad3d0227b9b18 # v12.6.2
         with:
@@ -172,6 +169,7 @@ jobs:
       checkout_ref: ${{ inputs.head_sha || github.sha }}
     permissions:
       contents: read
+      actions: read
 
   browser_quality:
     name: Cross-browser quality
@@ -191,6 +189,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.head_sha || github.sha }}
       - uses: actions/setup-node@v7
         with:
           node-version: 22

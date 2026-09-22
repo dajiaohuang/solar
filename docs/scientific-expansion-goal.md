@@ -45,6 +45,16 @@ iterating, and run the required broad checks once for a completed staging head.
 Keep production/data release workflows paused. Record completion evidence and
 remaining work here; never mark the overall goal complete with pending rows.
 
+Avoid duplicate CI work: desktop/mobile Chromium interaction suites belong to
+the required four-browser matrix, not a second run in the Web job. Web retains
+lint, unit/scientific checks, production build, Lighthouse and preview coverage.
+After a main push, native jobs may reuse a successful exact-SHA quality run only
+when both Android and iOS jobs completed successfully within 24 hours. The
+workflow/repository identity and all job pages must be verified. Missing, stale,
+skipped or unreadable evidence falls back to full native validation. Staging,
+pull requests and manual native runs always validate normally; branch-protection
+requirements are unchanged. Reuse logs link the original evidence and artifacts.
+
 ### Checkpoint 1: explicit analysis source contract (2026-09-23)
 
 Implemented the shared Web analysis provider, strict/labeled fallback policy,
