@@ -13,6 +13,21 @@ test.afterEach(async ({ page }) => {
   expect(backendRequests.get(page), 'Every preview flow must use static data without live scientific APIs').toEqual([])
 })
 
+test('preview header keeps all actions within a narrow phone viewport in both languages', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 844 })
+  for (const language of ['en', 'zh']) {
+    await page.goto(`?v=4&page=stories&lang=${language}`)
+    await expect(page.locator('.preview-profile-button')).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320)
+    for (const button of await page.locator('.header-actions button:visible').all()) {
+      const box = await button.boundingBox()
+      expect(box!.width).toBeGreaterThanOrEqual(44)
+      expect(box!.height).toBeGreaterThanOrEqual(44)
+      expect(box!.x + box!.width).toBeLessThanOrEqual(320)
+    }
+  }
+})
+
 test('explains the static preview and links to the real full-version project in both languages', async ({ page }, info) => {
   await page.goto('?v=4&lang=en&page=about')
   await page.locator('.preview-profile-button').click()

@@ -25,21 +25,24 @@ const stories = storiesData as Story[]
 
 export function CommandPalette({ onClose }: { onClose: () => void }) {
   const { language, t } = useI18n()
-  const catalog = catalogStore.useStore()
+  const featuredEntries = catalogStore.useStore(state => state.manifest?.featured)
   const [query, setQuery] = useState('')
+  const [activeId, setActiveId] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const dialogRef = useRef<HTMLElement | null>(null)
   const resultsRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
     const focusFrame = window.requestAnimationFrame(() => inputRef.current?.focus())
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.isComposing || event.keyCode === 229) return
       if (event.key === 'Escape') { event.preventDefault(); onClose(); return }
       if (event.key !== 'Tab' || !dialogRef.current) return
       const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), [href], [tabindex]:not([tabindex="-1"])')]
-        .filter((element) => element.getClientRects().length > 0)
+        .filter((element) => element.tabIndex >= 0 && element.getClientRects().length > 0)
       if (!focusable.length) return
       const first = focusable[0], last = focusable[focusable.length - 1]
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
@@ -49,16 +52,17 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
     return () => {
       window.cancelAnimationFrame(focusFrame)
       window.removeEventListener('keydown', onKeyDown)
+      document.body.style.overflow = previousOverflow
       if (previousFocus?.isConnected) previousFocus.focus()
     }
   }, [onClose])
 
   const allResults = useMemo<SearchResult[]>(() => {
     const routeSpecs: Array<[AppRoute, string, string, string]> = [
-      ['home', '☉', t('home'), t('homeIntro')], ['explorer', '◉', t('explorer'), t('interactive2d')],
-      ['catalog', '⌘', t('catalog'), t('catalogKicker')], ['elements', '∷', t('elements'), t('elementsKicker')],
-      ['events', '⌁', t('events'), t('eventsKicker')], ['mission', '↗', t('mission'), t('missionKicker')],
-      ['stories', '◇', t('stories'), t('storiesDescription')], ['about', 'ⓘ', t('about'), t('evidenceKicker')],
+      ['home', '☉', t('home'), t('homeIntro')], ['explorer', '◉', t('explorer'), t('searchExplorerDescription')],
+      ['catalog', '⌘', t('catalog'), t('searchCatalogDescription')], ['elements', '∷', t('elements'), t('searchElementsDescription')],
+      ['events', '⌁', t('events'), t('searchEventsDescription')], ['mission', '↗', t('mission'), t('searchMissionDescription')],
+      ['stories', '◇', t('stories'), t('storiesDescription')], ['about', 'ⓘ', t('about'), t('searchEvidenceDescription')],
     ]
     const routes = routeSpecs.map(([route, icon, label, detail]) => ({
       id: `route:${route}`, icon, label, detail, keywords: `${route} ${label} ${detail}`.toLowerCase(),
@@ -87,57 +91,55 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
       availability: storyAvailability(story.id),
       action: () => { uiActions.selectStory(story.id, 0); uiActions.navigate('stories') },
     })))
-    const featured = (catalog.manifest?.featured ?? []).map((entry) => ({
+    const featured = (featuredEntries ?? []).map((entry) => ({
       id: `catalog:${entry.id}`, icon: '◆', label: entry.label, detail: `${t('catalogResult')} · ${entry.orbitClassCode}`,
       keywords: `${entry.label} ${entry.shortLabel} ${entry.searchKey} ${entry.permanentNumber ?? ''} ${entry.orbitClassCode}`.toLowerCase(),
       availability: routeAvailability('catalog'),
       action: () => { catalogActions.patchFilters({ query: entry.permanentNumber ? String(entry.permanentNumber) : entry.label }); uiActions.navigate('catalog') },
     }))
     return [...routes, ...storyResults, ...bodies, ...featured, ...glossary]
-  }, [catalog.manifest?.featured, language, t])
+  }, [featuredEntries, language, t])
 
   const normalized = query.trim().toLowerCase()
   const results = normalized
     ? allResults.filter((result) => result.keywords.includes(normalized) || result.label.toLowerCase().includes(normalized)).slice(0, 12)
-    : allResults.filter((result) => result.id.startsWith('route:') || result.id.startsWith('story:')).slice(0, 12)
+    : allResults.filter((result) => (result.id.startsWith('route:') && result.id !== 'route:home') || result.id.startsWith('story:')).slice(0, 12)
+  const visibleResults: SearchResult[] = normalized ? [...results, {
+    id: 'action:catalog-search', icon: '⌘', label: `${t('searchCatalogFor')} “${query.trim()}”`,
+    detail: t('searchCatalogDescription'), keywords: '', availability: routeAvailability('catalog'),
+    action: () => { catalogActions.patchFilters({ query: query.trim() }); uiActions.navigate('catalog') },
+  }] : results
+  const activeIndex = visibleResults.findIndex(result => result.id === activeId)
+
+  useEffect(() => {
+    if (activeIndex >= 0) resultsRef.current?.children[activeIndex]?.scrollIntoView({ block: 'nearest' })
+    else if (resultsRef.current) resultsRef.current.scrollTop = 0
+  }, [activeIndex, normalized])
 
   function choose(result: SearchResult) {
     onClose()
     if (availabilityActions.require(result.availability)) result.action()
   }
 
-  function moveResultFocus(event: React.KeyboardEvent<HTMLButtonElement>) {
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
-    event.preventDefault()
-    const buttons = [...(resultsRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])]
-    const index = buttons.indexOf(event.currentTarget)
-    if (index < 0 || !buttons.length) return
-    buttons[(index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus()
-  }
-
   function openResultFromInput(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.nativeEvent.isComposing || event.keyCode === 229) return
     if (!['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) return
-    const buttons = [...(resultsRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])]
-    if (!buttons.length) return
+    if (!visibleResults.length) return
     event.preventDefault()
-    const target = event.key === 'ArrowUp' ? buttons[buttons.length - 1] : buttons[0]
-    if (event.key === 'Enter') target.click()
-    else target.focus()
+    if (event.key === 'Enter') choose(visibleResults[Math.max(0, activeIndex)])
+    else {
+      const nextIndex = activeIndex < 0 ? (event.key === 'ArrowUp' ? visibleResults.length - 1 : 0)
+        : (activeIndex + (event.key === 'ArrowDown' ? 1 : -1) + visibleResults.length) % visibleResults.length
+      setActiveId(visibleResults[nextIndex].id)
+    }
   }
 
   return <div className="command-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
     <section ref={dialogRef} className="command-palette glass-panel" role="dialog" aria-modal="true" aria-labelledby="command-title">
       <header><span id="command-title">{t('globalSearch')}</span><div><kbd>Esc</kbd><button aria-label={t('dismiss')} onClick={onClose}>×</button></div></header>
-      <label><span className="sr-only">{t('globalSearch')}</span><i aria-hidden="true">⌕</i><input ref={inputRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={openResultFromInput} placeholder={t('globalSearchPlaceholder')} /></label>
-      <div ref={resultsRef} className="command-results" role="listbox" aria-label={t('searchResults')}>
-        {results.map((result) => <button role="option" aria-selected={false} {...availabilityAttributes(result.availability)} key={result.id} onClick={() => choose(result)} onKeyDown={moveResultFocus}><em>{result.icon}</em><span><strong>{result.label}{!result.availability.available && <small className="full-version-badge">{t('fullVersion')}</small>}</strong><small>{result.detail}</small></span><b>↗</b></button>)}
-        {normalized && <button role="option" aria-selected={false} {...availabilityAttributes(routeAvailability('catalog'))} className="command-catalog-fallback" onKeyDown={moveResultFocus} onClick={() => {
-          onClose()
-          if (!availabilityActions.require(routeAvailability('catalog'))) return
-          catalogActions.patchFilters({ query: query.trim() })
-          uiActions.navigate('catalog')
-        }}><em>⌘</em><span><strong>{t('searchCatalogFor')} “{query.trim()}”{!routeAvailability('catalog').available && <small className="full-version-badge">{t('fullVersion')}</small>}</strong><small>{t('searchCatalogDescription')}</small></span><b>↗</b></button>}
+      <label><span className="sr-only">{t('globalSearch')}</span><i aria-hidden="true">⌕</i><input ref={inputRef} type="search" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="command-results" aria-activedescendant={activeIndex < 0 ? undefined : `command-result-${activeIndex}`} value={query} onChange={(event) => { setQuery(event.target.value); setActiveId(null) }} onKeyDown={openResultFromInput} placeholder={t('globalSearchPlaceholder')} /></label>
+      <div id="command-results" ref={resultsRef} className="command-results" role="listbox" aria-label={t('searchResults')}>
+        {visibleResults.map((result, index) => <button id={`command-result-${index}`} role="option" tabIndex={-1} aria-selected={index === activeIndex} {...availabilityAttributes(result.availability)} className={result.id === 'action:catalog-search' ? 'command-catalog-fallback' : undefined} key={result.id} onMouseDown={event => event.preventDefault()} onClick={() => choose(result)}><em aria-hidden="true">{result.icon}</em><span><strong>{result.label}{!result.availability.available && <small className="full-version-badge">{t('fullVersion')}</small>}</strong><small>{result.detail}</small></span><b aria-hidden="true">↗</b></button>)}
       </div>
       <footer>{t('searchKeyboardHint')}</footer>
     </section>

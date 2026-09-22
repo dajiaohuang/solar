@@ -39,9 +39,11 @@ const MOBILE_MORE = NAVIGATION.filter((item) => !MOBILE_PRIMARY.some((primary) =
 
 export function AppShell() {
   const ui = uiStore.useStore()
-  const selection = selectionStore.useStore()
-  const mission = missionStore.useStore()
-  const catalog = catalogStore.useStore()
+  const focusedId = selectionStore.useStore(state => state.focusedId)
+  const departureId = missionStore.useStore(state => state.departureId)
+  const arrivalId = missionStore.useStore(state => state.arrivalId)
+  const manifest = catalogStore.useStore(state => state.manifest)
+  const datasetMode = catalogStore.useStore(state => state.mode)
   const { bodiesById } = useBodyRegistry()
   const { t, language, toggleLanguage } = useI18n()
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
@@ -50,25 +52,52 @@ export function AppShell() {
   const closeCommand = useCallback(() => setCommandOpen(false), [])
   const routeContainerRef = useRef<HTMLDivElement | null>(null)
   const previousRouteRef = useRef(ui.route)
+  const mobileMoreRef = useRef<HTMLDivElement | null>(null)
+  const mobileMoreButtonRef = useRef<HTMLButtonElement | null>(null)
+  const commandShortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K'
+
+  useEffect(() => {
+    if (!mobileMoreOpen) return
+    const closeOutside = (event: PointerEvent) => {
+      const target = event.target as Node | null
+      if (target && !mobileMoreRef.current?.contains(target) && !mobileMoreButtonRef.current?.contains(target)) setMobileMoreOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.isComposing) return
+      event.preventDefault()
+      setMobileMoreOpen(false)
+      mobileMoreButtonRef.current?.focus()
+    }
+    const desktop = window.matchMedia('(min-width: 981px)')
+    const closeOnDesktop = () => { if (desktop.matches) setMobileMoreOpen(false) }
+    document.addEventListener('pointerdown', closeOutside)
+    document.addEventListener('keydown', closeOnEscape)
+    desktop.addEventListener('change', closeOnDesktop)
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside)
+      document.removeEventListener('keydown', closeOnEscape)
+      desktop.removeEventListener('change', closeOnDesktop)
+    }
+  }, [mobileMoreOpen])
 
   useEffect(() => { document.documentElement.lang = language }, [language])
 
   useEffect(() => {
     const productName = language === 'zh' ? '太阳系图谱' : 'Solar Atlas'
     let context = t(ui.route === 'home' ? 'home' : ui.route)
-    if (ui.route === 'explorer' && selection.focusedId) {
-      const body = bodiesById.get(selection.focusedId)
-      context = body ? bodyDisplayName(body, language) : selection.focusedId
+    if (ui.route === 'explorer' && focusedId) {
+      const body = bodiesById.get(focusedId)
+      context = body ? bodyDisplayName(body, language) : focusedId
     } else if (ui.route === 'stories') {
       const story = (storiesData as StorySummary[]).find((item) => item.id === ui.storyId)
       if (story) context = story.title[language]
     } else if (ui.route === 'mission') {
-      const departure = bodiesById.get(mission.departureId)
-      const arrival = bodiesById.get(mission.arrivalId)
-      context = `${departure ? bodyDisplayName(departure, language) : mission.departureId} → ${arrival ? bodyDisplayName(arrival, language) : mission.arrivalId}`
+      const departure = bodiesById.get(departureId)
+      const arrival = bodiesById.get(arrivalId)
+      context = `${departure ? bodyDisplayName(departure, language) : departureId} → ${arrival ? bodyDisplayName(arrival, language) : arrivalId}`
     }
     document.title = ui.route === 'home' ? `${productName} — ${t('tagline')}` : `${context} — ${productName}`
-  }, [bodiesById, language, mission.arrivalId, mission.departureId, selection.focusedId, t, ui.route, ui.storyId])
+  }, [bodiesById, language, arrivalId, departureId, focusedId, t, ui.route, ui.storyId])
 
   useEffect(() => {
     if (previousRouteRef.current === ui.route) return
@@ -91,10 +120,12 @@ export function AppShell() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.isComposing || event.keyCode === 229) return
       const target = event.target as HTMLElement | null
       const isTyping = target?.matches('input, textarea, select, [contenteditable="true"]')
       if (((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') || (event.key === '/' && !isTyping)) {
         event.preventDefault()
+        setMobileMoreOpen(false)
         setCommandOpen(true)
       }
     }
@@ -131,8 +162,8 @@ export function AppShell() {
       <nav className="primary-navigation" aria-label={t('primaryNavigation')}>{NAVIGATION.map((item) => <button key={item.route} {...availabilityProps(item.route)} aria-current={ui.route === item.route ? 'page' : undefined} className={ui.route === item.route ? 'active' : ''} onClick={() => navigate(item.route)}><span>{item.icon}</span>{t(item.label)}{!routeAvailability(item.route).available && <small className="full-version-badge">{t('fullVersion')}</small>}</button>)}</nav>
       <div className="header-actions">
         {PRODUCT_PROFILE === 'preview' && <button className="preview-profile-button" onClick={availabilityActions.explain}>{t('previewVersion')}</button>}
-        <button className="command-button" onClick={() => setCommandOpen(true)} aria-label={t('globalSearch')}><span>⌕</span><kbd>⌘K</kbd></button>
-        <button className="dataset-pill" onClick={() => navigate('about')} aria-label={`${t('dataset')}: ${catalog.manifest?.version ?? t('noDataset')}`}><i className={catalog.manifest ? 'online' : ''} /><span>{catalog.manifest?.version ?? t('noDataset').toUpperCase()}</span><b>{PRODUCT_PROFILE === 'preview' ? t('previewSample') : (catalog.manifest?.datasetMode ?? catalog.mode).toUpperCase()}</b></button>
+        <button className="command-button" onClick={event => { event.currentTarget.focus(); setCommandOpen(true) }} aria-label={t('globalSearch')}><span aria-hidden="true">⌕</span><kbd>{commandShortcut}</kbd></button>
+        <button className="dataset-pill" onClick={() => navigate('about')} aria-label={`${t('dataset')}: ${manifest?.version ?? t('noDataset')}`}><i className={manifest ? 'online' : ''} /><span>{manifest?.version ?? t('noDataset').toUpperCase()}</span><b>{PRODUCT_PROFILE === 'preview' ? t('previewSample') : (manifest?.datasetMode ?? datasetMode).toUpperCase()}</b></button>
         <button className="language-button" onClick={toggleLanguage} aria-label={language === 'zh' ? 'Switch to English' : '切换为中文'}>{language === 'zh' ? 'EN' : '中文'}</button>
       </div>
     </header>
@@ -140,9 +171,9 @@ export function AppShell() {
 
     <nav className="mobile-navigation" aria-label={t('mobileNavigation')}>
       {MOBILE_PRIMARY.map((item) => <button key={item.route} {...availabilityProps(item.route)} aria-current={ui.route === item.route ? 'page' : undefined} className={ui.route === item.route ? 'active' : ''} onClick={() => navigate(item.route)}><span>{item.icon}</span><small>{item.route === 'stories' ? t('learn') : item.route === 'catalog' ? t('search') : t(item.label)}</small>{!routeAvailability(item.route).available && <small className="full-version-badge">{t('fullVersion')}</small>}</button>)}
-      <button aria-expanded={mobileMoreOpen} className={mobileMoreOpen || MOBILE_MORE.some((item) => item.route === ui.route) || ui.route === 'home' ? 'active' : ''} onClick={() => setMobileMoreOpen((value) => !value)}><span>•••</span><small>{t('more')}</small></button>
+      <button ref={mobileMoreButtonRef} aria-expanded={mobileMoreOpen} aria-controls="mobile-more-menu" className={mobileMoreOpen || MOBILE_MORE.some((item) => item.route === ui.route) || ui.route === 'home' ? 'active' : ''} onClick={() => setMobileMoreOpen((value) => !value)}><span aria-hidden="true">•••</span><small>{t('more')}</small></button>
     </nav>
-    {mobileMoreOpen && <div className="mobile-more-menu glass-panel">
+    {mobileMoreOpen && <div id="mobile-more-menu" ref={mobileMoreRef} className="mobile-more-menu glass-panel" role="navigation" aria-label={t('more')}>
       {MOBILE_MORE.map((item) => <button key={item.route} {...availabilityProps(item.route)} className={ui.route === item.route ? 'active' : ''} onClick={() => navigate(item.route)}><span>{item.icon}</span>{t(item.label)}{!routeAvailability(item.route).available && <small className="full-version-badge">{t('fullVersion')}</small>}</button>)}
     </div>}
 

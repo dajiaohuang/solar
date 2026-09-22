@@ -1,0 +1,29 @@
+# Interaction, visual clarity, and rendering audit — 2026-09-22
+
+This focused pass follows the [cross-client audit](./deep-audit-20260922.md) at main commit `571331759e4feb5a7e0e4132faaf9c78fbc90fe1`. Deployment and dataset publication remain paused. Source changes use the existing protected-main status and direct fast-forwards, without new PRs.
+
+## Observed problems and changes
+
+| Surface | Before | After |
+| --- | --- | --- |
+| Mobile navigation | More stayed open after Escape and outside interaction, and could remain mounted after switching to desktop width. | Dismiss on Escape, outside pointer interaction, route change, or desktop resize. Escape restores the trigger's focus; the trigger exposes its controlled navigation region. |
+| Short-screen search | At 844 × 390, a 240px panel clipped a 480px result list and its footer. | The panel fits the available viewport; only the result list shrinks and scrolls. The same viewport now has a 335px panel with a 172px result region and a fully visible footer. |
+| Search keyboard flow | Arrow keys moved actual focus away from typing; results never exposed a selected state. | A combobox retains input focus, identifies and highlights the active result, scrolls it into view, resets selection when typing, and opens it with Enter. Tab stays inside the dialog; Escape restores focus in Chromium, Firefox, and WebKit. Composition events do not trigger search or selection. |
+| Search readability | Result titles were 11px, descriptions 9px, and route descriptions exposed implementation details. | Titles are 14px and descriptions 12px. Bilingual descriptions explain what each workspace does; mobile descriptions wrap to two lines. The duplicated Home alias remains searchable but is omitted from default suggestions. |
+| Header controls | Search was 37px high, language 34px, and the dataset button 28px; Windows displayed a Mac shortcut. The preview's extra badge caused horizontal overflow at 320px. | All visible header controls have at least 44px targets. The shortcut matches the platform and is hidden on narrow phones. Compact desktop widths retain the dataset status without overlapping navigation; tighter phone spacing fits the preview's controls in both languages. |
+| Unnecessary application work | Identical state patches created fresh snapshots and notified all listeners. The shell and search subscribed to unrelated catalog/mission/selection fields. Opening shell controls could rerender the route subtree. | Preserve snapshot identity and emit nothing for identical patches; subscribe to needed fields and memoize the route boundary. Real shallow replacements, signed zero, explicit new fields, and symbol fields still notify. |
+| Development server | Generated scientific-data imports became Windows `file://` URLs, or lacked the `/solar/` base when introduced into dev JSON modules. Production bundles passed while development showed a blank page. | Use a root-relative decoder module and retain ordinary JSON modules during development, where Vite skips JSON import analysis. Production compaction and source fidelity remain unchanged. A real development-server HTTP test resolves generated imports under the application base. |
+
+## Design direction
+
+Keep the established observatory palette: deep space `#05080c`, instrument panel `#0c1218`, readable foreground `#dbe5e8`, selection mint `#62d0b5`, and source/status amber `#e3bb68`. Retain IBM Plex Sans / system UI for interaction and the existing monospace family for supplementary shortcuts. Search is a left-aligned, compact command surface with a clear input, one scrollable result region, and stable help/close controls. Larger type, one active-result outline, and usable target sizes carry the visual changes; no new animation, font download, or decorative asset is added.
+
+## Validation and limits
+
+- Nine focused unit tests passed: store notification/snapshot semantics, complete scientific registry round trips, and real development-module serving.
+- Ten targeted desktop/mobile Chromium checks passed, including the existing multi-surface accessibility audit and search-to-story/body navigation. Firefox and WebKit also passed the corresponding navigation/header/search checks; a WebKit-specific return-focus failure was repaired and the final keyboard/focus/short-screen test passed on all four browser projects.
+- Two further checks passed against the actual production preview build at 320px in English and Chinese; all visible header actions remained within the viewport with at least 44px targets. The preview suite's production-artifact and no-live-scientific-API guards remained enabled.
+- TypeScript, production bundle verification, and lint passed. Screenshots and measured layout bounds at desktop, phone, and short landscape sizes are retained under ignored `.cache/deep-audit-20260922/` (`ui-before*` and `ui-after*`). No local full unit/scientific/browser matrix was repeated for this pass; the final exact-head remote gate supplies the required complete checks.
+- The store regression exercises 1,000 identical writes with zero notifications and an unchanged snapshot. This demonstrates eliminated redundant work, not a measured device FPS or end-to-end latency improvement. Native physical-device performance and software-keyboard behavior remain outside this browser-emulation evidence.
+
+The review found concrete interaction and unnecessary-work defects without requiring a visual redesign or changes to scientific models, original data, approximation labels, or source-coverage claims.

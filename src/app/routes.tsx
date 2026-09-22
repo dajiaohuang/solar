@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ComponentType } from 'react'
+import { lazy, memo, Suspense, type ComponentType } from 'react'
 import { useI18n } from '../i18n/context'
 import type { AppRoute } from '../state/ui-store'
 import { WorkspaceErrorBoundary } from './WorkspaceErrorBoundary'
@@ -14,7 +14,7 @@ const MissionWorkspace = lazyNamed(() => import('../features/mission/MissionWork
 const StoriesWorkspace = lazyNamed(() => import('../features/stories/StoriesWorkspace'), 'StoriesWorkspace')
 const EvidenceWorkspace = lazyNamed(() => import('../features/about/EvidenceWorkspace'), 'EvidenceWorkspace')
 
-export function AppRouteView({ route }: { route: AppRoute }) {
+export const AppRouteView = memo(function AppRouteView({ route }: { route: AppRoute }) {
   const { t } = useI18n()
   let View: ComponentType
   switch (route) {
@@ -29,4 +29,4 @@ export function AppRouteView({ route }: { route: AppRoute }) {
     default: View = ExplorerWorkspace
   }
   return <WorkspaceErrorBoundary route={route} title={t('workspaceErrorTitle')} description={t('workspaceErrorDescription')} retry={t('retryWorkspace')} home={t('home')}><Suspense fallback={<div className="route-loading"><i /><span aria-live="polite">{t('loading')}</span></div>}><View /></Suspense></WorkspaceErrorBoundary>
-}
+})

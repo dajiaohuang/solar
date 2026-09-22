@@ -1,0 +1,80 @@
+import { expect, test } from './fixtures'
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+})
+
+test('mobile navigation dismisses predictably and restores keyboard focus', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('./?v=4&page=stories&lang=en')
+  const more = page.getByRole('button', { name: 'More', exact: true })
+  const menu = page.getByRole('navigation', { name: 'More', exact: true })
+  await more.click()
+  await expect(menu).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(menu).toHaveCount(0)
+  await expect(more).toBeFocused()
+  await expect(more).toHaveAttribute('aria-expanded', 'false')
+  await more.click()
+  await page.getByRole('heading', { name: 'Stories', exact: true }).click()
+  await expect(menu).toHaveCount(0)
+  await more.click()
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await expect(menu).toHaveCount(0)
+})
+
+test('search keeps typing focus while selecting and reveals the last result on short screens', async ({ page }) => {
+  await page.setViewportSize({ width: 844, height: 390 })
+  await page.goto('./?v=4&page=stories&lang=en')
+  const trigger = page.getByRole('button', { name: 'Search Solar Atlas' })
+  await trigger.click()
+  const dialog = page.getByRole('dialog', { name: 'Search Solar Atlas' })
+  const input = dialog.getByRole('combobox')
+  await expect(input).toBeFocused()
+  await input.press('Tab')
+  await expect(dialog.getByRole('button', { name: 'Dismiss' })).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(input).toBeFocused()
+  await input.press('Shift+Tab')
+  await page.keyboard.press('Shift+Tab')
+  await expect(input).toBeFocused()
+  await input.press('ArrowUp')
+  const last = dialog.getByRole('option').last()
+  await expect(last).toHaveAttribute('aria-selected', 'true')
+  await expect(input).toBeFocused()
+  await expect(last).toBeInViewport()
+  const dialogBox = await dialog.boundingBox(), footerBox = await dialog.locator('footer').boundingBox()
+  const listBox = await dialog.getByRole('listbox').boundingBox()
+  expect(footerBox!.y + footerBox!.height).toBeLessThanOrEqual(dialogBox!.y + dialogBox!.height)
+  expect(listBox!.y + listBox!.height).toBeLessThanOrEqual(footerBox!.y + 1)
+  await input.fill('Mar')
+  await input.press('ArrowDown')
+  await input.press('s')
+  await expect(input).toHaveValue('Mars')
+  await expect(input).not.toHaveAttribute('aria-activedescendant')
+  await expect(dialog.getByRole('option', { selected: true })).toHaveCount(0)
+  await input.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await expect(trigger).toBeFocused()
+  await expect(page.locator('body')).not.toHaveCSS('overflow', 'hidden')
+})
+
+test('compact header actions retain 44px touch targets without overlapping navigation', async ({ page }) => {
+  for (const width of [320, 390, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 844 })
+    await page.goto('./?v=4&page=stories&lang=en')
+    const actions = page.locator('.header-actions button:visible')
+    await expect(actions.first()).toBeVisible()
+    for (const action of await actions.all()) {
+      const box = await action.boundingBox()
+      expect(box!.width).toBeGreaterThanOrEqual(44)
+      expect(box!.height).toBeGreaterThanOrEqual(44)
+      expect(box!.x + box!.width).toBeLessThanOrEqual(width)
+    }
+    if (width > 980) {
+      const lastNavigation = await page.locator('.primary-navigation button').last().boundingBox()
+      const firstAction = await actions.first().boundingBox()
+      expect(lastNavigation!.x + lastNavigation!.width).toBeLessThanOrEqual(firstAction!.x)
+    }
+  }
+})

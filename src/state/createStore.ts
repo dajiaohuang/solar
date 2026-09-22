@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react'
 
 type Listener = () => void
 
-export function createStore<State>(initialState: State) {
+export function createStore<State extends object>(initialState: State) {
   let state = initialState
   const listeners = new Set<Listener>()
 
@@ -13,9 +13,13 @@ export function createStore<State>(initialState: State) {
   }
   const setState = (update: Partial<State> | ((previous: State) => Partial<State>)) => {
     const patch = typeof update === 'function' ? update(state) : update
-    const next = { ...state, ...patch }
-    if (Object.is(next, state)) return
-    state = next
+    // Object spread always creates a new identity. Preserve the snapshot and
+    // avoid notifying subscribers when every enumerable patch field is equal.
+    const changed = (Reflect.ownKeys(patch) as (keyof State)[]).some(key =>
+      Object.prototype.propertyIsEnumerable.call(patch, key)
+      && (!Object.hasOwn(state, key) || !Object.is(patch[key], state[key])))
+    if (!changed) return
+    state = { ...state, ...patch }
     for (const listener of listeners) listener()
   }
 

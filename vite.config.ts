@@ -35,7 +35,9 @@ function loadBuildInfo(): BuildInfo {
 export default defineConfig(({ command }) => {
   const delivery = productDelivery(process.env.SOLAR_ATLAS_PRODUCT_PROFILE, process.env.SOLAR_ATLAS_EPHEMERIS_PROFILE)
   const manifestModule = resolve('src/data/selectedEphemerisManifest.ts').replace(/\\/g, '/')
-  const runtimeDecoder = resolve('src/data/runtimeJson.ts').replace(/\\/g, '/')
+  // Use a Vite root-relative URL: a Windows drive path becomes a forbidden
+  // file:// import in the development browser, although bundling accepts it.
+  const runtimeDecoder = '/src/data/runtimeJson.ts'
   const compactModules = new Set(['ephemerisBodies.json', 'satelliteCatalog.json'].map(name => resolve('src/data', name).replace(/\\/g, '/')))
   const compact = (value: unknown, declaration: string) => `import { unpackRuntimeJson } from ${JSON.stringify(runtimeDecoder)}; ${declaration} unpackRuntimeJson(${JSON.stringify(packRuntimeJson(JSON.parse(JSON.stringify(value))))})`
   const manifestPlugin = () => ({
@@ -50,7 +52,9 @@ export default defineConfig(({ command }) => {
     // JSON has already been parsed by Vite. Replace only these default-import
     // registries; their checked-in source JSON remains independently auditable.
     transform(_code: string, id: string) {
-      if (compactModules.has(id.replace(/\\/g, '/'))) return { code: compact(JSON.parse(readFileSync(id, 'utf8')), 'export default'), map: null }
+      // Vite's dev import analysis skips JSON, so added imports would bypass
+      // base-path rewriting. Keep normal JSON modules during development.
+      if (command === 'build' && compactModules.has(id.replace(/\\/g, '/'))) return { code: compact(JSON.parse(readFileSync(id, 'utf8')), 'export default'), map: null }
     },
   })
 
