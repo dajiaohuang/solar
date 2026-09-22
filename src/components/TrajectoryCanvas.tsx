@@ -35,7 +35,7 @@ type Props = {
   webglUnavailableLabel?: string
   influenceLabels?: { hill: string; soi: string }
   catalogRecords?: AsteroidRecord[]
-  catalogPositions?: Float32Array
+  catalogPositions?: Float64Array
   catalogDrawCount?: number
   catalogOrigin?: Vector2
   pixelRatioLimit?: number
@@ -59,7 +59,7 @@ const CANVAS_SIZE = 880
 const MAJOR_LABEL_LIMIT = 18
 const ASTEROID_LABEL_LIMIT = 6
 const EMPTY_CATALOG_RECORDS: AsteroidRecord[] = []
-const EMPTY_CATALOG_POSITIONS = new Float32Array()
+const EMPTY_CATALOG_POSITIONS = new Float64Array()
 const HELIOCENTRIC_ORIGIN = { x: 0, y: 0 }
 
 function useElementSize<T extends HTMLElement>() {

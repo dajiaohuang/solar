@@ -38,7 +38,9 @@ async function compute(request: Extract<CatalogPointWorkerRequest, { type: 'comp
   // once per job, not once per record. Pre-1972 remains exploratory fallback,
   // matching the single-body resolver's explicit historical limitation.
   const epochTt = julianDay >= 2441317.5 ? utcJulianDayToTt(julianDay) : julianDay
-  const source = prepared, positions = new Float32Array(source.count * (mode === '2d' ? 2 : 3))
+  // Keep the shared heliocentric snapshot in Float64. Each reference pane
+  // subtracts its own origin before rounding coordinates for GPU upload.
+  const source = prepared, positions = new Float64Array(source.count * (mode === '2d' ? 2 : 3))
   // Empty sets still validate mode and epoch.
   propagatePreparedCatalogPositions(source, epochTt, mode, positions, 0, 0)
   for (let start = 0; start < source.count; start += CHUNK_ROWS) {

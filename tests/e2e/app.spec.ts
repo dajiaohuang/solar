@@ -23,7 +23,7 @@ async function auditCatalogWorkers(page: Page) {
         if (!this.auditId) return
         events.push({ type: 'start', id: this.auditId })
         this.addEventListener('message', event => {
-          const result = event.data as { type: string; mode?: string; positions?: Float32Array }
+          const result = event.data as { type: string; mode?: string; positions?: Float64Array }
           if (result.type !== 'result') return
           events.push({ type: 'result', id: this.auditId, mode: result.mode, bytes: result.positions?.byteLength,
             arrays: Object.values(result).filter(value => ArrayBuffer.isView(value)).length })
@@ -425,19 +425,19 @@ test('renders an explicitly enabled reproducible catalog cloud without reloading
   await expect(page).toHaveURL(/[?&]catalogCloud=1(?:&|$)/)
   await expect(page).toHaveURL(/[?&]quality=max(?:&|$)/)
   const latestResult = () => page.evaluate(() => (window as CatalogWorkerAuditWindow).catalogWorkerAudit.filter(event => event.type === 'result').at(-1))
-  await expect.poll(latestResult).toMatchObject({ mode: '3d', bytes: sampleCount * 12, arrays: 1 })
+  await expect.poll(latestResult).toMatchObject({ mode: '3d', bytes: sampleCount * 24, arrays: 1 })
   await page.getByTestId('trajectory-canvas-3d').screenshot({ path: testInfo.outputPath('single-mode-cloud-3d.png') })
 
   const viewSwitch = page.locator('.simulation-bar .segmented-control')
   await viewSwitch.getByRole('button', { name: '2D' }).click()
   await expect(page.locator('.trajectory-canvas')).toBeVisible()
-  await expect.poll(latestResult).toMatchObject({ mode: '2d', bytes: sampleCount * 8, arrays: 1 })
+  await expect.poll(latestResult).toMatchObject({ mode: '2d', bytes: sampleCount * 16, arrays: 1 })
   await expect(page.getByTestId('trajectory-canvas-3d')).toHaveCount(0)
   await expect(page.locator('.frame-label small')).toContainText(`catalog ${sampleCount.toLocaleString()} / ${sampleCount.toLocaleString()}`)
   await page.locator('.trajectory-canvas').screenshot({ path: testInfo.outputPath('single-mode-cloud-2d.png') })
   await viewSwitch.getByRole('button', { name: '3D' }).click()
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
-  await expect.poll(latestResult).toMatchObject({ mode: '3d', bytes: sampleCount * 12, arrays: 1 })
+  await expect.poll(latestResult).toMatchObject({ mode: '3d', bytes: sampleCount * 24, arrays: 1 })
   await expect(page.locator('.trajectory-canvas')).toHaveCount(0)
   // The dedicated catalog workspace is always planar, independently of the
   // Explorer's last mode. It must retire the Explorer worker on navigation.

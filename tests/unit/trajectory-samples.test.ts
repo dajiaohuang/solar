@@ -101,7 +101,7 @@ describe('packed historical trajectory samples', () => {
     const coordinates = new Float64Array([-0, 1 / 3, 10, 1 / 7, -9, 20, -3, 5, 30])
     const before = Buffer.from(bytes(coordinates)), projection = createProjection(20, 960, 640, 40, { x: .7, y: -.4 })
     const geometry = buildGeometry(projection, body('sun'), [{ body: body('trail'), coordinates }], EMPTY_CURRENT_POSITIONS,
-      true, true, [{ body: body('ellipse'), points: [{ x: 1, y: 2 }, { x: 3, y: 4 }] }], 1, 1, 1, [], new Float32Array(), 0, { x: 0, y: 0 })
+      true, true, [{ body: body('ellipse'), points: [{ x: 1, y: 2 }, { x: 3, y: 4 }] }], 1, 1, 1, [], new Float64Array(), 0, { x: 0, y: 0 })
     const expected = new Float32Array(8)
     for (let index = 1; index < 3; index++) {
       for (let end = 0; end < 2; end++) {

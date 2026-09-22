@@ -25,7 +25,7 @@ describe('catalog point worker scheduler', () => {
     scheduler.requestJulianDay(2)
     scheduler.requestJulianDay(3)
     expect(sent).toHaveLength(2)
-    scheduler.handle({ type: 'result', requestId: sent[1].requestId, julianDay: 1, mode: '2d', positions: new Float32Array([1, 2]) })
+    scheduler.handle({ type: 'result', requestId: sent[1].requestId, julianDay: 1, mode: '2d', positions: new Float64Array([1, 2]) })
     expect(sent[2]).toMatchObject({ type: 'compute', julianDay: 3 })
     expect(results).toEqual([1])
   })
@@ -37,7 +37,7 @@ describe('catalog point worker scheduler', () => {
     scheduler.handle({ type: 'initialized', requestId: sent[0].requestId })
     const firstCompute = sent[1].requestId
     scheduler.setElements(new Float64Array(16))
-    scheduler.handle({ type: 'result', requestId: firstCompute, julianDay: 1, mode: '2d', positions: new Float32Array([1, 2]) })
+    scheduler.handle({ type: 'result', requestId: firstCompute, julianDay: 1, mode: '2d', positions: new Float64Array([1, 2]) })
     expect(results).toEqual([])
   })
 
@@ -47,7 +47,7 @@ describe('catalog point worker scheduler', () => {
     scheduler.requestJulianDay(2451545)
     scheduler.handle({ type: 'initialized', requestId: sent[0].requestId })
     const request = sent[1]
-    scheduler.handle({ type: 'result', requestId: request.requestId, julianDay: 2451545, mode: '2d', positions: new Float32Array([1, 2]) })
+    scheduler.handle({ type: 'result', requestId: request.requestId, julianDay: 2451545, mode: '2d', positions: new Float64Array([1, 2]) })
     scheduler.handle({ type: 'error', requestId: request.requestId, error: 'bad orbit' })
     expect(results).toEqual([2451545])
     expect(errors).toEqual([])
@@ -60,7 +60,7 @@ describe('catalog point worker scheduler', () => {
     for (let epoch = 0; epoch < 10_000; epoch += 1) {
       scheduler.requestJulianDay(epoch)
       const request = sent[sent.length - 1]
-      scheduler.handle({ type: 'result', requestId: request.requestId, julianDay: epoch, mode: '2d', positions: new Float32Array([epoch, epoch]) })
+      scheduler.handle({ type: 'result', requestId: request.requestId, julianDay: epoch, mode: '2d', positions: new Float64Array([epoch, epoch]) })
     }
     expect(results).toHaveLength(10_000)
     expect(results.at(-1)).toBe(9_999)
@@ -74,10 +74,10 @@ describe('catalog point worker scheduler', () => {
     const first = sent[1]
     scheduler.requestJulianDay(2)
     scheduler.requestJulianDay(3)
-    scheduler.handle({ type: 'result', requestId: first.requestId, julianDay: 1, mode: '2d', positions: new Float32Array([1, 2]) })
+    scheduler.handle({ type: 'result', requestId: first.requestId, julianDay: 1, mode: '2d', positions: new Float64Array([1, 2]) })
     expect(results).toEqual([1])
     const second = sent[2]
-    scheduler.handle({ type: 'result', requestId: second.requestId, julianDay: 3, mode: '2d', positions: new Float32Array([3, 4]) })
+    scheduler.handle({ type: 'result', requestId: second.requestId, julianDay: 3, mode: '2d', positions: new Float64Array([3, 4]) })
     expect(results).toEqual([1, 3])
   })
 
@@ -109,7 +109,7 @@ describe('catalog point worker scheduler', () => {
     expect(sent.map(request => request.type)).toEqual(['initialize', 'reset', 'initialize'])
   })
 
-  it.each(['mode', 'epoch', 'count'] as const)('rejects a completed response with the wrong %s instead of interpreting another frame', (mismatch) => {
+  it.each(['precision', 'mode', 'epoch', 'count'] as const)('rejects a completed response with the wrong %s instead of interpreting another frame', (mismatch) => {
     const { sent, results, errors, scheduler } = harness('3d')
     scheduler.setElements(new Float64Array(8))
     scheduler.requestJulianDay(2451545)
@@ -117,7 +117,7 @@ describe('catalog point worker scheduler', () => {
     expect(sent[1]).toMatchObject({ type: 'compute', mode: '3d', julianDay: 2451545 })
     scheduler.handle({ type: 'result', requestId: sent[1].requestId,
       mode: mismatch === 'mode' ? '2d' : '3d', julianDay: mismatch === 'epoch' ? 2451546 : 2451545,
-      positions: new Float32Array(mismatch === 'count' ? 2 : 3) })
+      positions: mismatch === 'precision' ? new Float32Array(3) as unknown as Float64Array : new Float64Array(mismatch === 'count' ? 2 : 3) })
     expect(results).toEqual([])
     expect(errors).toHaveLength(1)
     expect(errors[0]).toMatch(/mode, epoch or record count/)
@@ -132,8 +132,8 @@ describe('catalog point worker scheduler', () => {
     current.scheduler.setElements(new Float64Array(8))
     current.scheduler.requestJulianDay(1)
     current.scheduler.handle({ type: 'initialized', requestId: current.sent[0].requestId })
-    old.scheduler.handle({ type: 'result', requestId: old.sent[1].requestId, mode: '3d', julianDay: 1, positions: new Float32Array(3) })
-    current.scheduler.handle({ type: 'result', requestId: current.sent[1].requestId, mode: '2d', julianDay: 1, positions: new Float32Array(2) })
+    old.scheduler.handle({ type: 'result', requestId: old.sent[1].requestId, mode: '3d', julianDay: 1, positions: new Float64Array(3) })
+    current.scheduler.handle({ type: 'result', requestId: current.sent[1].requestId, mode: '2d', julianDay: 1, positions: new Float64Array(2) })
     expect(old.results).toEqual([])
     expect(current.results).toEqual([1])
   })

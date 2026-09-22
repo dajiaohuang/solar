@@ -69,15 +69,19 @@ try {
       for (const size of [...new Set([30_000, 100_000, 300_000, 1_000_000, count].filter(n => n <= count))]) {
         const elements = new Float64Array(source.slice(0, size * 64)), start = performance.now()
         await request('initialize', { elements }, [elements.buffer])
-        const initializeMs = performance.now() - start, milliseconds = []; let outputSha256 = ''
+        const initializeMs = performance.now() - start, milliseconds = []; let outputSha256 = '', roundedOutputSha256 = '', outputBytes = 0
         for (let i = 0; i < 7; i++) {
           const start = performance.now(), data = await request('compute', { julianDay: 2461306.5 + i / 24, mode: '3d' })
           milliseconds.push(performance.now() - start)
-          if (data.positions.length !== size * 3 || !Number.isFinite(data.positions[0]) || !Number.isFinite(data.positions.at(-1))) throw new Error('Invalid worker result')
-          if (i === 6) outputSha256 = hex(await crypto.subtle.digest('SHA-256', data.positions.buffer))
+          if (!(data.positions instanceof Float64Array) || data.positions.length !== size * 3 || !Number.isFinite(data.positions[0]) || !Number.isFinite(data.positions.at(-1))) throw new Error('Invalid worker result')
+          if (i === 6) {
+            outputBytes = data.positions.byteLength
+            outputSha256 = hex(await crypto.subtle.digest('SHA-256', data.positions.buffer))
+            roundedOutputSha256 = hex(await crypto.subtle.digest('SHA-256', new Float32Array(data.positions).buffer))
+          }
         }
         const sorted = [...milliseconds].sort((a, b) => a - b)
-        cases.push({ count: size, initializeMs, milliseconds, medianMs: sorted[3], maxMs: sorted[6], finalOutputSha256: outputSha256 })
+        cases.push({ count: size, initializeMs, milliseconds, medianMs: sorted[3], maxMs: sorted[6], outputBytes, finalOutputSha256: outputSha256, roundedFloat32Sha256: roundedOutputSha256 })
       }
       // Reset after the first compute chunk; then prove the worker can process
       // a fresh empty job and the interrupted full job never publishes.
@@ -102,9 +106,9 @@ try {
   for (const row of result.cases) {
     const source = new Float64Array(elements.buffer, elements.byteOffset, row.count * 8)
     const reference = propagateCatalogElementPositions(source, utcJulianDayToTt(2461306.5 + 6 / 24), '3d')
-    if (sha(new Uint8Array(reference.buffer)) !== row.finalOutputSha256) throw new Error(`Worker/reference mismatch at ${row.count} actual records`)
+    if (sha(new Uint8Array(reference.buffer)) !== row.roundedFloat32Sha256) throw new Error(`Worker/reference mismatch at ${row.count} actual records`)
   }
-  const report = { schemaVersion: 1, measurement: 'isolated-production-browser-worker-real-MPC-input-not-GPU-or-app-streaming', generatedAt: new Date().toISOString(), browser: browser.version(), workerAsset: workerName, workerSha256: sha(workerBytes), release: { version: manifest.version, count: manifest.totalCount, manifestSha256: sha(manifestBytes), checksumsSha256: sha(checksumBytes), validatedBinaryShards: manifest.chunkCount }, inputScale: 'UTC-converted-to-TT-by-worker', finalOutputReference: 'all-final-components-hash-match-legacy-propagator-at-same-TT-epoch', ...result }
+  const report = { schemaVersion: 2, measurement: 'isolated-production-browser-worker-real-MPC-input-not-GPU-or-app-streaming', generatedAt: new Date().toISOString(), browser: browser.version(), workerAsset: workerName, workerSha256: sha(workerBytes), release: { version: manifest.version, count: manifest.totalCount, manifestSha256: sha(manifestBytes), checksumsSha256: sha(checksumBytes), validatedBinaryShards: manifest.chunkCount }, inputScale: 'UTC-converted-to-TT-by-worker', outputPrecision: 'Float64 heliocentric AU; relative Float32 GPU conversion occurs in each pane', finalOutputReference: 'all-final-components-rounded-to-Float32-hash-match-legacy-propagator-at-same-TT-epoch; not a Float64 independent accuracy bound', ...result }
   mkdirSync(dirname(output), { recursive: true }); writeFileSync(output, JSON.stringify(report, null, 2) + '\n')
   console.log(JSON.stringify({ output, cases: result.cases.map(({ count, initializeMs, medianMs, maxMs }) => ({ count, initializeMs, medianMs, maxMs })), cancellation: result.cancellation, heartbeat: result.heartbeat }, null, 2))
 } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)) }

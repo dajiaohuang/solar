@@ -70,7 +70,7 @@ type FrameViewProps = {
   onFrame: (frame: TrajectoryFrameData) => void
   onHover: (item: { body: CelestialBody; distance: number; x: number; y: number } | null) => void
   catalogRecords: AsteroidRecord[]
-  catalogPositions: Float32Array
+  catalogPositions: Float64Array
   catalogDrawCount: number
   catalogSampleTotal: number
   catalogFitKey: string

@@ -7,7 +7,7 @@ import { PREPARE_CANVAS_CAPTURE_EVENT } from '../lib/canvasCapture'
 import { cameraDistanceForFit, cameraRangeForFit, clamp3dZoom, sceneFramingForRadius } from '../lib/camera3d'
 import type { LagrangePoint } from '../lib/lagrange'
 import { createCatalogPointMaterial, createTrajectoryScene, updateTrajectoryLineGeometry } from '../lib/trajectoryScene3d'
-import { updateCurrentPointGeometry, updatePointGeometry } from '../lib/pointGeometry3d'
+import { updateCurrentPointGeometry, updateCatalogPointGeometry } from '../lib/pointGeometry3d'
 import type { AsteroidRecord, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector3 } from '../types'
 import type { CurrentPositions } from '../lib/currentPositions'
 
@@ -29,7 +29,7 @@ type Props = {
   fallbackLabel?: string
   onUnavailable?: () => void
   catalogRecords?: AsteroidRecord[]
-  catalogPositions3D?: Float32Array
+  catalogPositions3D?: Float64Array
   catalogDrawCount?: number
   catalogOrigin?: Vector3
   catalogFitKey?: string
@@ -67,7 +67,7 @@ type SceneResources = {
 }
 
 const EMPTY_CATALOG_RECORDS: AsteroidRecord[] = []
-const EMPTY_CATALOG_POSITIONS = new Float32Array()
+const EMPTY_CATALOG_POSITIONS = new Float64Array()
 const HELIOCENTRIC_ORIGIN = { x: 0, y: 0, z: 0 }
 
 function radiusFor(body: CelestialBody) {
@@ -370,19 +370,12 @@ export function TrajectoryCanvas3D({
     const resources = resourcesRef.current
     if (!resources) return
     const count = Math.min(catalogRecords.length, Math.floor(catalogPositions3D.length / 3))
-    resources.catalogPoints.geometry = updatePointGeometry(resources.catalogPoints.geometry, count, catalogRecords, (cloudPositions, index) => {
-      cloudPositions[index * 3] = catalogPositions3D[index * 3]
-      cloudPositions[index * 3 + 1] = catalogPositions3D[index * 3 + 2]
-      cloudPositions[index * 3 + 2] = catalogPositions3D[index * 3 + 1]
-    }, (cloudColors, index) => {
-      const record = catalogRecords[index]
-      const color = record.isPha ? [1, 0.35, 0.3] : record.isNeo ? [1, 0.62, 0.5] : [0.62, 0.7, 0.76]
-      cloudColors.set(color, index * 3)
-    })
+    resources.catalogPoints.geometry = updateCatalogPointGeometry(resources.catalogPoints.geometry, catalogPositions3D, catalogRecords,
+      { x: catalogOrigin.x, y: catalogOrigin.y, z: catalogOrigin.z })
     resources.catalogPoints.geometry.setDrawRange(0, Math.min(catalogDrawCount, count))
     resources.catalogPoints.visible = count > 0
     resources.invalidate()
-  }, [catalogPositions3D, catalogRecords, catalogDrawCount])
+  }, [catalogPositions3D, catalogRecords, catalogDrawCount, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z])
 
   useEffect(() => {
     const resources = resourcesRef.current
@@ -392,13 +385,6 @@ export function TrajectoryCanvas3D({
     resources.catalogPoints.visible = catalogDrawCount > 0 && available > 0
     resources.invalidate()
   }, [catalogDrawCount, catalogPositions3D.length, catalogRecords.length])
-
-  useEffect(() => {
-    const resources = resourcesRef.current
-    if (!resources) return
-    resources.catalogPoints.position.copy(toThree({ x: -catalogOrigin.x, y: -catalogOrigin.y, z: -catalogOrigin.z }))
-    resources.invalidate()
-  }, [catalogOrigin])
 
   useEffect(() => {
     const resources = resourcesRef.current

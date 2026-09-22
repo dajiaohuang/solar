@@ -251,6 +251,28 @@ name search. Existing sample and hydration behavior remained covered. This is
 transport/lifecycle evidence, not full-catalog memory or FPS evidence. Exact-head
 remote validation and main promotion remain pending; the overall goal is active.
 
+### Checkpoint 8: Float64 catalog snapshots before relative GPU conversion (2026-09-23)
+
+Catalog point workers now retain Float64 results through transport. Each 2D/3D
+reference pane subtracts its own Float64 origin before projecting or rounding
+positions into Float32 GPU storage. This removes premature absolute-coordinate
+rounding without changing the MPC model or treating its elements as precise
+SPK states. The heliocentric catalog map explicitly converts its zero-origin
+upload array. Worker results validate precision as well as mode, epoch and
+count; mode switches still retain only one dimensional output per worker.
+
+Thirty-eight focused numerical/geometry/worker checks passed, including small
+relative displacements near 100 AU, independent comparison-pane origins and
+513 scalar-evaluator comparisons. TypeScript, lint, build and eight targeted
+four-browser checks passed. The checksum-verified full 1,561,171-row production
+worker benchmark is recorded in [point-pipeline-performance.md](point-pipeline-performance.md).
+It reports 281.6 ms median full-count computation and 2.9 ms cancellation,
+not rendered FPS. Snapshot bytes double (37,468,104 bytes for a full 3D array);
+GPU attribute bytes remain Float32. No total memory-capacity claim is made.
+Arbitrary camera-focus recentering, budgeted full-inventory streaming, LOD and
+the other pending workstreams remain open. Remote validation/main promotion
+of this precision change remain pending; deployment/publication stay paused.
+
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),
 [JPL SBDB](https://ssd-api.jpl.nasa.gov/doc/sbdb.html),

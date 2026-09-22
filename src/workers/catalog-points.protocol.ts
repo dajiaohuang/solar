@@ -8,5 +8,5 @@ export type CatalogPointWorkerRequest =
 export type CatalogPointWorkerResponse =
   | { type: 'initialized'; requestId: number }
   | { type: 'progress'; requestId: number; progress?: number }
-  | { type: 'result'; requestId: number; progress?: number; julianDay: number; mode: CatalogPointMode; positions: Float32Array }
+  | { type: 'result'; requestId: number; progress?: number; julianDay: number; mode: CatalogPointMode; positions: Float64Array }
   | { type: 'error'; requestId: number; error?: string }

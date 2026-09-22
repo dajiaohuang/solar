@@ -3,7 +3,7 @@ import { createCatalogPointWorkerScheduler, type CatalogPointResult } from '../l
 import { CATALOG_ELEMENT_STRIDE, type CatalogPointMode } from '../engine/ephemeris/catalogPoints'
 import type { AsteroidRecord } from '../types'
 
-const EMPTY_POSITIONS = new Float32Array()
+const EMPTY_POSITIONS = new Float64Array()
 
 export function useCatalogPointWorker(records: AsteroidRecord[], julianDay: number, mode: CatalogPointMode) {
   const schedulerRef = useRef<ReturnType<typeof createCatalogPointWorkerScheduler> | null>(null)

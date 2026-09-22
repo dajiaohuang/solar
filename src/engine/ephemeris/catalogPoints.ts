@@ -41,7 +41,9 @@ export function prepareCatalogElements(elements: Float64Array): PreparedCatalogE
 
 /** Reuses caller-owned output and supports bounded ranges for cooperative
  * worker jobs. Science stays Float64 until the final display conversion. */
-export function propagatePreparedCatalogPositions(prepared: PreparedCatalogElements, julianDay: number, mode: CatalogPointMode, output?: Float32Array, start = 0, end = prepared.count) {
+export function propagatePreparedCatalogPositions(prepared: PreparedCatalogElements, julianDay: number, mode: CatalogPointMode, output: Float64Array, start?: number, end?: number): Float64Array
+export function propagatePreparedCatalogPositions(prepared: PreparedCatalogElements, julianDay: number, mode: CatalogPointMode, output?: Float32Array, start?: number, end?: number): Float32Array
+export function propagatePreparedCatalogPositions(prepared: PreparedCatalogElements, julianDay: number, mode: CatalogPointMode, output?: Float32Array | Float64Array, start = 0, end = prepared.count) {
   if (mode !== '2d' && mode !== '3d') throw new Error('Invalid catalog point mode')
   if (!Number.isFinite(julianDay)) throw new Error('Invalid catalog point epoch')
   if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || end > prepared.count || prepared.data.length !== prepared.count * PREPARED_CATALOG_STRIDE) throw new Error('Invalid catalog compute range')

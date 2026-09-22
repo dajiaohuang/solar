@@ -1,5 +1,20 @@
 import * as THREE from 'three'
 import type { CurrentPositions } from './currentPositions'
+import type { AsteroidRecord, Vector3 } from '../types'
+
+/** Subtract the pane's heliocentric origin in Float64 before GPU rounding. */
+export function updateCatalogPointGeometry(previous: THREE.BufferGeometry, source: Float64Array, records: AsteroidRecord[], origin: Vector3) {
+  const count = Math.min(records.length, Math.floor(source.length / 3))
+  return updatePointGeometry(previous, count, records, (positions, index) => {
+    positions[index * 3] = source[index * 3] - origin.x
+    positions[index * 3 + 1] = source[index * 3 + 2] - origin.z
+    positions[index * 3 + 2] = source[index * 3 + 1] - origin.y
+  }, (colors, index) => {
+    const record = records[index]
+    const color = record.isPha ? [1, 0.35, 0.3] : record.isNeo ? [1, 0.62, 0.5] : [0.62, 0.7, 0.76]
+    colors.set(color, index * 3)
+  })
+}
 
 /** Bulk current-state layer reads scalar source storage directly. Color identity
  * includes the exact ordinal selection, which may change without a new frame. */

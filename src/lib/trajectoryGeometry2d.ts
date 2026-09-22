@@ -90,7 +90,7 @@ export function buildGeometry(
   asteroidOpacity: number,
   moonOpacity: number,
   catalogRecords: AsteroidRecord[],
-  catalogPositions: Float32Array,
+  catalogPositions: Float64Array,
   catalogDrawCount: number,
   catalogOrigin: Vector2,
 ): Geometry {

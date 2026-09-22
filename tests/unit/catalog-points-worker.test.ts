@@ -29,7 +29,10 @@ describe('catalog point worker mode transport', () => {
       // request and echoed observation date remain UTC.
       const angle = (utcJulianDayToTt(2451545) - 2451545) * Math.PI / 180
       const xy = [Math.cos(angle), Math.sin(angle)]
-      expect(result.positions).toEqual(new Float32Array(mode === '2d' ? xy : [...xy, 0]))
+      expect(result.positions).toBeInstanceOf(Float64Array)
+      const expected = mode === '2d' ? xy : [...xy, 0]
+      expected.forEach((value, component) => expect(result.positions[component]).toBeCloseTo(value, 15))
+      expect(result.positions.byteLength).toBe(expected.length * 8)
       expect(result.julianDay).toBe(2451545)
       expect(Object.keys(result)).not.toContain('positions3D')
       expect(transfers.at(-1)).toHaveLength(1)
@@ -69,6 +72,6 @@ describe('catalog point worker mode transport', () => {
     continuations.shift()!(); await compute
     expect(messages.some(message => message.type === 'result' && message.requestId === 4)).toBe(false)
     await send({ type: 'compute', requestId: 6, julianDay: 2451545, mode: '3d' })
-    expect(messages.at(-1)).toMatchObject({ type: 'result', requestId: 6, positions: new Float32Array() })
+    expect(messages.at(-1)).toMatchObject({ type: 'result', requestId: 6, positions: new Float64Array() })
   })
 })

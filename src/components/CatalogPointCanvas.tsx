@@ -4,7 +4,7 @@ import type { AsteroidRecord } from '../types'
 
 type Props = {
   records: AsteroidRecord[]
-  positions: Float32Array
+  positions: Float64Array
   viewRadiusAU: number
   opacity?: number
   ariaLabel?: string
@@ -18,6 +18,9 @@ const CLASS_COLORS: Record<string, [number, number, number]> = {
 }
 
 export function CatalogPointCanvas({ records, positions, viewRadiusAU, opacity = 0.82, ariaLabel = 'GPU small-body catalog view', unavailableLabel = 'Catalog rendering is unavailable. The table remains usable.' }: Props) {
+  // This map is heliocentric. Other panes subtract their Float64 reference
+  // origin first; only GPU attributes use Float32.
+  const gpuPositions = useMemo(() => new Float32Array(positions), [positions])
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const frameRef = useRef<CatalogPointFrame | null>(null)
   const drawRef = useRef<(() => void) | null>(null)
@@ -34,9 +37,9 @@ export function CatalogPointCanvas({ records, positions, viewRadiusAU, opacity =
   }, [records])
 
   useEffect(() => {
-    frameRef.current = { positions, ...appearance, radius: viewRadiusAU, opacity }
+    frameRef.current = { positions: gpuPositions, ...appearance, radius: viewRadiusAU, opacity }
     drawRef.current?.()
-  }, [appearance, positions, viewRadiusAU, opacity])
+  }, [appearance, gpuPositions, viewRadiusAU, opacity])
 
   useEffect(() => {
     const canvas = canvasRef.current

@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 2,
+  "measurement": "isolated-production-browser-worker-real-MPC-input-not-GPU-or-app-streaming",
+  "generatedAt": "2026-09-22T18:56:04.407Z",
+  "browser": "151.0.7922.34",
+  "workerAsset": "catalog-points.worker-B5-CDzNp.js",
+  "workerSha256": "3218df5c3e9cc1ff9e2d334802a30b28b14f241aec098a7704512e288900bdb3",
+  "release": {
+    "version": "mpcorb-26bbcb75e45b7cbb-full",
+    "count": 1561171,
+    "manifestSha256": "bd8cf38a15c7e5a312ac7f9f8167af1916f6bfa0c7c34f30fb5b36725d68d894",
+    "checksumsSha256": "744893f440a95c126d57fa7c6d7da17adfb8f127d0a4ccafa1a07e4365ef55ae",
+    "validatedBinaryShards": 313
+  },
+  "inputScale": "UTC-converted-to-TT-by-worker",
+  "outputPrecision": "Float64 heliocentric AU; relative Float32 GPU conversion occurs in each pane",
+  "finalOutputReference": "all-final-components-rounded-to-Float32-hash-match-legacy-propagator-at-same-TT-epoch; not a Float64 independent accuracy bound",
+  "cases": [
+    {
+      "count": 30000,
+      "initializeMs": 8.799999998882413,
+      "milliseconds": [
+        7.700000001117587,
+        5.5,
+        5.599999999627471,
+        5.5,
+        5.400000000372529,
+        5.400000000372529,
+        5.5
+      ],
+      "medianMs": 5.5,
+      "maxMs": 7.700000001117587,
+      "outputBytes": 720000,
+      "finalOutputSha256": "6a3e0762883aa6ce866deb0fecf8ba26acf8a14a38aa5b9bedfc7399a3a66e67",
+      "roundedFloat32Sha256": "3f53f6bc7f9988059601681d2a4e81a78fd08a4d279e2d8587995a7e0aaddfb7"
+    },
+    {
+      "count": 100000,
+      "initializeMs": 12.099999999627471,
+      "milliseconds": [
+        18.90000000037253,
+        17.90000000037253,
+        17.899999998509884,
+        17.800000000745058,
+        17.90000000037253,
+        18,
+        17.40000000037253
+      ],
+      "medianMs": 17.90000000037253,
+      "maxMs": 18.90000000037253,
+      "outputBytes": 2400000,
+      "finalOutputSha256": "92012f01de755211c6edcfb991e47c4ac909bad5c87542a52309b39c2791ed3a",
+      "roundedFloat32Sha256": "5f177078688749f7bfb9659f816074764750231c1aac2ce6269bb8dc81109a82"
+    },
+    {
+      "count": 300000,
+      "initializeMs": 28.800000000745058,
+      "milliseconds": [
+        51.80000000074506,
+        53.09999999962747,
+        53.69999999925494,
+        53.5,
+        53.40000000037253,
+        53.40000000037253,
+        53.40000000037253
+      ],
+      "medianMs": 53.40000000037253,
+      "maxMs": 53.69999999925494,
+      "outputBytes": 7200000,
+      "finalOutputSha256": "ae8bff2c31e4aa70bf7fe6f5cf2964babef43b54cfb2ffac89446afa19b08f50",
+      "roundedFloat32Sha256": "1b8039c62ab6ae1ced417943cb146bad6047a93465f6110c4d1516a35dc744f6"
+    },
+    {
+      "count": 1000000,
+      "initializeMs": 92.79999999888241,
+      "milliseconds": [
+        183.30000000074506,
+        180.2999999988824,
+        178.5,
+        178.5,
+        178.90000000037253,
+        198.80000000074506,
+        178.5
+      ],
+      "medianMs": 178.90000000037253,
+      "maxMs": 198.80000000074506,
+      "outputBytes": 24000000,
+      "finalOutputSha256": "82219709b06b5bc141bb88ca1646a206fc6d6f04bde4d0ce4d055fb090634a84",
+      "roundedFloat32Sha256": "39a9cbae686f43a5a57f2db50b9c201309983cec544f002d667e061207fcf20b"
+    },
+    {
+      "count": 1561171,
+      "initializeMs": 139.5,
+      "milliseconds": [
+        285.7999999988824,
+        281.6000000014901,
+        281.8999999985099,
+        282.90000000037253,
+        279,
+        275.09999999962747,
+        278.80000000074506
+      ],
+      "medianMs": 281.6000000014901,
+      "maxMs": 285.7999999988824,
+      "outputBytes": 37468104,
+      "finalOutputSha256": "1e37e6b9e93e958a311c19e5367e7cbdc6c6ee70e7001e2148b4e13570aa1901",
+      "roundedFloat32Sha256": "6e7fc6266d8817410f0b84b866773a40820724d3bfb001ac1e2b3d9d96bf6dca"
+    }
+  ],
+  "cancellation": {
+    "firstProgressMs": 11.199999999254942,
+    "resetAndEmptyResultMs": 2.900000000372529,
+    "staleResults": 0
+  },
+  "heartbeat": {
+    "metric": "16ms main-thread timer intervals; not rendered frames",
+    "samples": 262,
+    "p95Ms": 17.100000001490116,
+    "p99Ms": 31.100000001490116,
+    "maxMs": 60.09999999962747
+  },
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.7922.34 Safari/537.36"
+}

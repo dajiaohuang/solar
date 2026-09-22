@@ -57,7 +57,7 @@ describe('scalar current-position views', () => {
     const source = new CurrentPositions(count, index => bodies[index], (index, axis) => (index - 16000) / (axis + 10))
     const rows = vi.spyOn(source, 'rowAt')
     const projection = createProjection(4000, 1280, 720, 40, { x: .25, y: -.75 })
-    const geometry = buildGeometry(projection, bodies[0], [], source, false, false, [], 1, 1, 1, [], new Float32Array(), 0, { x: 0, y: 0 })
+    const geometry = buildGeometry(projection, bodies[0], [], source, false, false, [], 1, 1, 1, [], new Float64Array(), 0, { x: 0, y: 0 })
     expect(geometry.pointPositions).toBeInstanceOf(Float32Array)
     expect(geometry.pointPositions.length).toBe((count + 1) * 2)
     expect(geometry.pointColors.length).toBe((count + 1) * 4)

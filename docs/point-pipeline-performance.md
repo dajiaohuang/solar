@@ -144,10 +144,11 @@ The preparation tradeoff is explicit: retained worker elements increase from
 64 to 80 bytes per record (124,893,680 bytes at the full count), replacing six
 per-epoch trigonometric rotations with prepared coefficients. Initialization
 temporarily also holds the original input. Prepared data is a display-compute
-cache, not a replacement scientific source. Each 3D result is still a new
-12-byte-per-record transferable buffer; inter-frame buffer recycling remains
-future work. Range-based evaluation also accepts caller-owned output without
-allocating another result buffer, tested separately.
+cache, not a replacement scientific source. At that checkpoint each 3D result
+was a new 12-byte-per-record transferable buffer. The later Float64 checkpoint
+below increases this to 24 bytes. Inter-frame buffer recycling remains future
+work. Range-based evaluation also accepts caller-owned output without allocating
+another result buffer, tested separately.
 
 Reproduce CPU measurements with
 `rtk proxy node --experimental-strip-types scripts/benchmark-catalog-points.mjs`.
@@ -190,3 +191,54 @@ created exactly one replacement set, rendered non-background point pixels and
 recorded no WebGL errors. Navigation released both sets. The CI test attaches
 `catalog-gpu-lifecycle.json` with the counts and scope. Resource-failure/shrink
 unit tests are mock contract evidence. Neither proves million-body rendering.
+
+### Float64 catalog snapshots and relative GPU positions (2026-09-23)
+
+The worker now transfers heliocentric coordinates as Float64. Each reference
+pane subtracts its own origin before converting to Float32 GPU attributes. The
+3D point object no longer subtracts a large origin later in its GPU model
+transform; 2D projection likewise receives the unrounded coordinates. The
+heliocentric catalog map explicitly converts its zero-origin positions once
+per snapshot. GPU attribute capacity and color reuse remain unchanged.
+
+A synthetic circular orbit of radius `100 + 1e-7` AU illustrates the former
+loss: absolute Float32 rounds its perihelion x coordinate to 100 AU, leaving
+zero after subtracting a 100 AU reference. The new path preserves the small
+relative displacement. Tests cover two independent reference panes, 2D clip
+projection and source preservation. Another 513-orbit numerical test agrees
+with the existing scalar evaluator within 64 machine-epsilon times the orbital
+scale. This bounds numerical disagreement for those cases, not physical orbit
+uncertainty. The MPC two-body model and source epochs are unchanged. Camera
+recentring at an arbitrary distant focus remains separate from this
+reference-relative conversion.
+
+The cost is explicit: transferred/retained snapshot positions rise from
+8 to 16 bytes per point in 2D, and 12 to 24 bytes in 3D. At the complete count,
+the 3D array is 37,468,104 bytes rather than 18,734,052. The 2D catalog map also
+holds its Float32 upload array; GPU storage still uses Float32. This does not
+establish a total process-memory budget or buffer recycling.
+
+The [Float64 production-worker report](benchmarks/catalog-worker-float64-chromium-20260923.json)
+revalidates all 313 source shards and all five real-input tiers:
+
+| Actual records | Worker median ms | Maximum of seven runs ms |
+| ---: | ---: | ---: |
+| 30,000 | 5.5 | 7.7 |
+| 100,000 | 17.9 | 18.9 |
+| 300,000 | 53.4 | 53.7 |
+| 1,000,000 | 178.9 | 198.8 |
+| 1,561,171 | 281.6 | 285.8 |
+
+These runs were separate from the earlier Float32 measurements; their difference
+is not an isolated causal speed comparison. Every final snapshot, rounded to
+Float32 solely for compatibility checking, has the same hash as the original
+propagator at the same TT epoch. The report also records the actual Float64
+hashes and byte counts. Reset-to-empty response was 2.9 ms, with no stale result.
+The main-thread timer recorded P95 17.1 ms, P99 31.1 ms and maximum 60.1 ms over
+262 samples, including the benchmark's hash work. These are not GPU frame
+timings and do not prove large-inventory application rendering performance.
+
+Eight targeted production-browser checks passed across desktop/mobile Chromium,
+Firefox and WebKit, covering the new result byte counts, 2D/3D switching,
+persistent catalog GPU resources and context restoration. The checks use
+synthetic records. The required broader capacity/rendering work remains open.

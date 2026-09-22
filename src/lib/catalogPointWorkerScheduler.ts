@@ -6,7 +6,7 @@ type Send = (request: CatalogPointWorkerRequest, transfer?: Transferable[]) => v
 export type CatalogPointResult = {
   requestId: number
   julianDay: number
-  positions: Float32Array
+  positions: Float64Array
   mode: CatalogPointMode
 }
 
@@ -99,10 +99,10 @@ export function createCatalogPointWorkerScheduler(
         callbacks.onError(response.error ?? 'Catalog point propagation failed')
         return
       }
-      if (response.mode !== mode || response.julianDay !== expectedEpoch ||
+      if (!(response.positions instanceof Float64Array) || response.mode !== mode || response.julianDay !== expectedEpoch ||
           response.positions.length !== elementCount * (mode === '2d' ? 2 : 3)) {
         queuedJulianDay = null
-        callbacks.onError('Catalog point result does not match the requested mode, epoch or record count')
+        callbacks.onError('Catalog point result does not match the requested precision, mode, epoch or record count')
         return
       }
       callbacks.onResult({

@@ -5,7 +5,7 @@ import { orbitToHeliocentricVector } from '../../src/lib/ephemeris'
 
 describe('catalog point propagation', () => {
   it('preserves the source elements and every derived coordinate across independent mode jobs', () => {
-    const count = 513, elements = new Float64Array(count * 8), expected = new Float32Array(count * 3)
+    const count = 513, elements = new Float64Array(count * 8), expected = new Float32Array(count * 3), expected64 = new Float64Array(count * 3)
     for (let index = 0; index < count; index++) {
       const orbit = { model: 'keplerian' as const, epochJd: 2451545, semiMajorAxisAU: 1 + index / 13,
         eccentricity: (index % 80) / 100, inclinationDeg: index % 180, ascendingNodeDeg: index % 360,
@@ -14,11 +14,17 @@ describe('catalog point propagation', () => {
         orbit.ascendingNodeDeg, orbit.argPeriapsisDeg, orbit.meanAnomalyDeg, orbit.meanMotionDegPerDay], index * 8)
       const position = orbitToHeliocentricVector(orbit, 2461287.5)
       expected.set([position.x, position.y, position.z], index * 3)
+      expected64.set([position.x, position.y, position.z], index * 3)
     }
     const before = Buffer.from(new Uint8Array(elements.buffer))
     const planar = propagateCatalogElementPositions(elements, 2461287.5, '2d')
     const spatial = propagateCatalogElementPositions(elements, 2461287.5, '3d')
     const prepared = prepareCatalogElements(elements)
+    const double = propagatePreparedCatalogPositions(prepared, 2461287.5, '3d', new Float64Array(count * 3))
+    for (let component = 0; component < double.length; component++) {
+      const scale = elements[Math.floor(component / 3) * 8 + 1]
+      expect(Math.abs(double[component] - expected64[component])).toBeLessThanOrEqual(64 * Number.EPSILON * Math.max(1, scale))
+    }
     const reused = new Float32Array(count * 3)
     expect(propagatePreparedCatalogPositions(prepared, 2461287.5, '3d', reused, 0, 256)).toBe(reused)
     propagatePreparedCatalogPositions(prepared, 2461287.5, '3d', reused, 256, count)
