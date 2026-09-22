@@ -151,6 +151,10 @@ final class ObservationUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["observation.displayed"].exists)
         let next = app.buttons["identity.next"]
         reveal(app, next); next.tap()
+        // Clearing the first page while the next request is in flight shrinks
+        // the List and can move the status row outside the accessibility
+        // viewport. Bring it back before waiting for the loaded state.
+        reveal(app, app.staticTexts["identity.status"])
         waitForLabel(app.staticTexts["identity.status"], "Source records loaded.")
         reveal(app, next)
         XCTAssertFalse(next.isEnabled)

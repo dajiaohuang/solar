@@ -21325,6 +21325,88 @@
         },
         "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
       }
+    },
+    {
+      "id": "horizons-tno-batch36-20260915-altjira-2020-01-01-2031-01-01",
+      "path": "horizons-tno-batch36-20260915-altjira-2020-01-01-2031-01-01.bsp",
+      "sha256": "dc08f9d9742cd825aa8772a406704e1dc14fec2c993145f19dcbe5df85647d27",
+      "bytes": 206848,
+      "targets": [
+        20148780
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27148780%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27148780%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T17:00:47.537Z",
+        "bytes": 268288,
+        "sha256": "7f1453a4ca10f0649cb4d5651be106f3916b14ae68d2a68aa2d727fba5ed66cc",
+        "responseSha256": "f43a6032dc872be952e3afdb5997747a689ea9d74c37b3369a6000aa58b1d041",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 20148780,
+        "designation": "148780",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS             148780 Altjira (2001 UQ18)        2026-Sep-14 10:00:50\nRec #:  148780 (+COV) Soln.date: 2023-Feb-09_17:59:21     # obs: 83 (2001-2022)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2453982.5 ! 2006-Sep-04.00 (TDB)         Residual RMS= .2692\n   EC= .06334234350762902  QR= 41.27787075203479   TP= 2420055.4615786681\n   OM= 1.942230479315163   W=  296.0515526770211   IN= 5.204831029821439\n   A= 44.06932507936104    MA= 114.2997881594204   ADIST= 46.8607794066873\n   PER= 292.55855          N= .003368988           ANGMOM= .11396635\n   DAN= 42.70452           DDN= 45.14848           L= 298.0873067\n   B= -4.6747726           MOID= 40.26520157       TP= 1913-Oct-14.9615786681\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= n.a.\n   H= 5.77                 G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#15, OCC=4\n2: source=ORB\n*******************************************************************************\n\nID= '20148780'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-tno-batch36-20260915",
+      "selectionEvidence": {
+        "sourceSelection": "148780 Altjira frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "f43a6032dc872be952e3afdb5997747a689ea9d74c37b3369a6000aa58b1d041",
+          "binarySha256": "7f1453a4ca10f0649cb4d5651be106f3916b14ae68d2a68aa2d727fba5ed66cc",
+          "retrievedAt": "2026-09-14T17:00:47.537Z"
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-tno-batch36-20260915-mbabamwanawaresa-2020-01-01-2031-01-01",
+      "path": "horizons-tno-batch36-20260915-mbabamwanawaresa-2020-01-01-2031-01-01.bsp",
+      "sha256": "df0aa0f6533b2197d4199d88343cc0a2d0ccedadb400d19fa5b5855b8b2c6612",
+      "bytes": 205824,
+      "targets": [
+        20184314
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27184314%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27184314%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-14T17:00:49.470Z",
+        "bytes": 267264,
+        "sha256": "a09d39b245ccbb5e853e8e5b5e3066a406748ee883d37715353b7a492053c167",
+        "responseSha256": "14d2c9e508e4aacccf2f10a04cc437b4905a4ee61b42fe320cd921cee0217b87",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 20184314,
+        "designation": "184314",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS        184314 Mbabamwanawaresa (2005 EO302)   2026-Sep-14 10:00:52\nRec #:  184314 (+COV) Soln.date: 2021-Apr-13_21:42:38     # obs: 25 (2005-2018)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2454403.5 ! 2007-Oct-30.00 (TDB)         Residual RMS= .2403\n   EC= .143157293679672    QR= 38.86911050836868   TP= 2470725.3111743615\n   OM= .4272204109795126   W=  268.3357462135405   IN= 5.769042433722197\n   A= 45.36318068842566    MA= 307.3477207282767   ADIST= 51.85725086848264\n   PER= 305.53675          N= .003225885           ANGMOM= .114666548\n   DAN= 44.61902           DDN= 44.24953           L= 268.7544993\n   B= -5.7666006           MOID= 37.8594017        TP= 2052-Jul-06.8111743615\n \nAsteroid physical parameters (km, seconds, rotational period in hours):\n   GM= n.a.                RAD= n.a.               ROTPER= n.a.\n   H= 6.36                 G= .150                 B-V= n.a.\n                           ALBEDO= n.a.            STYP= n.a.\n\nASTEROID comments: \n1: soln ref.= JPL#5, OCC=4\n2: source=ORB\n*******************************************************************************\n\nID= '20184314'\n\n"
+      },
+      "core": false,
+      "solution": "HORIZONS type-21 heliocentric state",
+      "integrationBatch": "horizons-tno-batch36-20260915",
+      "selectionEvidence": {
+        "sourceSelection": "184314 Mbabamwanawaresa frozen from one NASA/JPL Horizons SPK response; original type-21 records retained, no refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "14d2c9e508e4aacccf2f10a04cc437b4905a4ee61b42fe320cd921cee0217b87",
+          "binarySha256": "a09d39b245ccbb5e853e8e5b5e3066a406748ee883d37715353b7a492053c167",
+          "retrievedAt": "2026-09-14T17:00:49.470Z"
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
+      }
     }
   ]
 }
