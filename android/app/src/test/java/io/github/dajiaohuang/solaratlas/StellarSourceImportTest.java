@@ -4,9 +4,31 @@ import org.junit.Test;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.RejectedExecutionException;
 import static org.junit.Assert.*;
 
 public final class StellarSourceImportTest {
+    @Test public void blockedProviderCannotSpawnMoreReadersAndCancelledQueueCanRecover() throws Exception {
+        CountDownLatch entered=new CountDownLatch(1),release=new CountDownLatch(1);
+        AtomicBoolean unexpected=new AtomicBoolean();
+        try(StellarSourceImport.WorkQueue queue=new StellarSourceImport.WorkQueue()) {
+            Future<?> blocked=queue.submit(()->{entered.countDown();while(release.getCount()>0){try{release.await();}catch(InterruptedException ignored){/* Model an OS read that ignores cancellation. */}}});
+            try {
+                assertTrue(entered.await(2,TimeUnit.SECONDS));blocked.cancel(true);
+                for(int attempt=0;attempt<100;attempt++) {
+                    Future<?> pending=queue.submit(()->unexpected.set(true));
+                    try{queue.submit(()->unexpected.set(true));fail("Queue exceeded one waiting import");}catch(RejectedExecutionException expected){}
+                    assertTrue(pending.cancel(true));
+                }
+                Future<?> resumed=queue.submit(()->assertFalse(unexpected.get()));
+                release.countDown();resumed.get(2,TimeUnit.SECONDS);
+                assertFalse("Cancelled or rejected imports ran",unexpected.get());
+            } finally { release.countDown(); }
+        }
+    }
     @Test public void exactLimitWorksAndLimitPlusOneIsNeverTruncated() throws Exception {
         for(int limit:new int[]{1024*1024,8*1024*1024}) {
             byte[] bytes=new byte[limit];for(int i=0;i<limit;i++)bytes[i]=(byte)(i*19);

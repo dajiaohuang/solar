@@ -1932,3 +1932,23 @@ The new native scenario has not executed and may need adjustment from actual
 picker evidence; export destination writes and physical-device behavior remain
 unverified. No full local tests ran. The existing run 35843121444 is still live
 in iOS, with the separately diagnosed Android failure, and was not replaced.
+
+### Checkpoint 88: bounded Android import concurrency (2026-09-23)
+
+Replaced per-import reader threads with one shared worker and a queue capacity
+of one. Cancelled queued requests are purged before admission; excess concurrent
+requests fail with a bilingual retry message. This limits reader threads even
+when an OS/provider read ignores interruption. Existing source/generation and
+byte-limit checks remain in the import path.
+
+Four focused plain-JVM tests passed after javac --release 17 compilation. The
+new latch-controlled case deliberately ignores interruption, performs 100
+cancel/retry cycles, asserts queue rejection and prevents cancelled work from
+executing, then verifies recovery after releasing the read. This does not prove
+actual provider interruption or UI responsiveness on a device. No full local
+tests ran.
+
+Prior run 35843121444 is terminal: iOS passed and Android failed with the
+documented EACCES issue. Candidate 023248d was then pushed normally; new run
+35844926364 is live and includes the app-owned fixture fix and iOS workflow.
+The import concurrency change is subsequent local work, not that candidate.

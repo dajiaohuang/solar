@@ -18,6 +18,7 @@
     <string name="stellar_idle">Select original files and explicit assumptions.</string>
     <string name="stellar_loading">Reading sources or computing…</string>
     <string name="stellar_timeout">Source import deadline exceeded.</string>
+    <string name="stellar_import_busy">A source provider is still busy. Retry after it responds.</string>
     <string name="stellar_sigmas">Propagated marginal standard deviations (formal errors)</string>
     <string name="stellar_limits">First-order covariance is optional. No systematics, binary acceleration or observer corrections. Standard deviations are not joint confidence regions or occultation timing guarantees. Full sources, matrices and assumptions are retained in the export.</string>
     <string name="stellar_exported">Stellar source response saved.</string>

@@ -16,6 +16,7 @@
     <string name="stellar_idle">选择原始文件并明确假设。</string>
     <string name="stellar_loading">正在读取来源或计算…</string>
     <string name="stellar_timeout">来源导入超过时限。</string>
+    <string name="stellar_import_busy">文件提供方仍在读取，请在其响应后重试。</string>
     <string name="stellar_sigmas">传播后边缘标准差（形式误差）</string>
     <string name="stellar_limits">协方差为可选的一阶近似。不含系统误差、双星加速度或观测者改正。标准差不是联合置信区域或掩星时间精度保证。导出保留完整来源、矩阵与假设。</string>
     <string name="stellar_exported">已保存恒星来源响应。</string>

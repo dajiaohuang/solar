@@ -17,6 +17,8 @@ import android.widget.TextView;
 import java.io.IOException;
 import java.util.Locale;
 import java.util.function.Consumer;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 
 /** On-demand original-file analysis with explicit scientific assumptions. */
 final class StellarMotionPanel extends LinearLayout {
@@ -29,6 +31,7 @@ final class StellarMotionPanel extends LinearLayout {
     private StellarMotionReport displayed;
     private StellarMotionService service;
     private Thread worker;
+    private Future<?> importWork;
     private CancellationSignal sourceCancellation;
     private int generation;
     private Runnable importDeadline;
@@ -56,14 +59,14 @@ final class StellarMotionPanel extends LinearLayout {
         clear();if(isManifest)manifest=null;else rows=null;showFiles();final int token=generation;
         CancellationSignal cancellation=new CancellationSignal();sourceCancellation=cancellation;busy();
         importDeadline=()->{if(token==generation){clear();status.setText(R.string.stellar_timeout);}};main.postDelayed(importDeadline,25000);
-        worker=new Thread(()->{
+        try { importWork=StellarSourceImport.submit(()->{
             try(AssetFileDescriptor descriptor=getContext().getContentResolver().openAssetFileDescriptor(uri,"r",cancellation)) {
                 if(descriptor==null)throw new IOException("Source file unavailable");int limit=isManifest?1024*1024:8*1024*1024;
                 if(descriptor.getLength()>limit)throw new IOException("Original source exceeds byte budget");
                 byte[] bytes=StellarSourceImport.read(descriptor.createInputStream(),limit,cancellation::isCanceled);
                 main.post(()->{if(token!=generation)return;if(isManifest)manifest=bytes;else rows=bytes;finish();showFiles();status.setText(R.string.stellar_idle);});
             }catch(Exception error){main.post(()->{if(token!=generation)return;finish();status.setText(error.getMessage());});}
-        },"solar-stellar-import");worker.start();
+        }); } catch(RejectedExecutionException error) { finish();status.setText(R.string.stellar_import_busy); }
     }
     private void calculate() {
         clear();final int token=generation;final StellarMotionRequest request;final StellarMotionService current;
@@ -78,8 +81,8 @@ final class StellarMotionPanel extends LinearLayout {
         double[] sigma=report.formalStandardDeviations();if(sigma!=null){text.append('\n').append(getResources().getString(R.string.stellar_sigmas)).append('\n');String[] units={"delta-alpha*cos(delta) (mas)","delta-dec (mas)","parallax (mas)","pmra (mas/yr)","pmdec (mas/yr)","RV (km/s)"};for(int i=0;i<6;i++)text.append(units[i]).append(": ").append(String.format(Locale.ROOT,"%.6g",sigma[i])).append('\n');}
         text.append('\n').append(getResources().getString(R.string.stellar_limits));result.setText(text.toString());
     }
-    void clear(){generation++;if(worker!=null)worker.interrupt();if(sourceCancellation!=null)sourceCancellation.cancel();if(service!=null)service.close();finish();displayed=null;result.setText("");export.setVisibility(GONE);status.setText(R.string.stellar_idle);}
-    private void finish(){if(importDeadline!=null)main.removeCallbacks(importDeadline);importDeadline=null;worker=null;sourceCancellation=null;service=null;load.setEnabled(manifest!=null&&rows!=null&&adopt.isChecked());cancel.setVisibility(GONE);}
+    void clear(){generation++;if(worker!=null)worker.interrupt();if(importWork!=null)importWork.cancel(true);if(sourceCancellation!=null)sourceCancellation.cancel();if(service!=null)service.close();finish();displayed=null;result.setText("");export.setVisibility(GONE);status.setText(R.string.stellar_idle);}
+    private void finish(){if(importDeadline!=null)main.removeCallbacks(importDeadline);importDeadline=null;worker=null;importWork=null;sourceCancellation=null;service=null;load.setEnabled(manifest!=null&&rows!=null&&adopt.isChecked());cancel.setVisibility(GONE);}
     private void busy(){load.setEnabled(false);cancel.setVisibility(VISIBLE);status.setText(R.string.stellar_loading);}
     private void showFiles(){files.setText("manifest.json: "+(manifest==null?"—":manifest.length+" B")+"\nrows.csv: "+(rows==null?"—":rows.length+" B"));}
     void exportStatus(boolean success){status.setText(success?R.string.stellar_exported:R.string.stellar_export_failed);}

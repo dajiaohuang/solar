@@ -4,11 +4,28 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.function.BooleanSupplier;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /** Owns the provider stream and enforces actual bytes, even when reported size
  * is missing or wrong. Cancellation is checked before reads and after EOF. */
 final class StellarSourceImport {
+    private static final WorkQueue WORK = new WorkQueue();
     private StellarSourceImport() {}
+    static Future<?> submit(Runnable task) { return WORK.submit(task); }
+    /** One active OS read and one queued import across panels. Even a provider
+     * that ignores interruption cannot cause unbounded reader threads. */
+    static final class WorkQueue implements AutoCloseable {
+        private final ThreadPoolExecutor executor = new ThreadPoolExecutor(1,1,0,TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(1),runnable->{Thread thread=new Thread(runnable,"solar-stellar-import");thread.setDaemon(true);return thread;});
+        synchronized Future<?> submit(Runnable task) {
+            executor.purge();
+            return executor.submit(task);
+        }
+        @Override public void close() { executor.shutdownNow(); }
+    }
     static byte[] read(InputStream stream,int limit,BooleanSupplier cancelled) throws IOException {
         if(stream==null)throw new IOException("Source file unavailable");
         try(InputStream input=stream;ByteArrayOutputStream output=new ByteArrayOutputStream()){
