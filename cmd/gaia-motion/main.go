@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -33,6 +34,7 @@ func run() error {
 	id := flag.String("source-id", "", "exact decimal Gaia source ID")
 	epoch := flag.Float64("epoch-tcb", 0, "target Julian year in TCB")
 	policy := flag.String("rv-policy", "", "explicit spectroscopic-as-astrometric approximation")
+	covariancePolicy := flag.String("covariance-policy", "", "optional independent-spectroscopic-rv formal uncertainty assumption")
 	output := flag.String("output", "", "new receipt JSON path, never overwritten")
 	flag.Parse()
 	if *manifest == "" || *rows == "" || *id == "" || *output == "" || flag.NArg() != 0 {
@@ -46,7 +48,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	receipt, err := stellarmotion.FromCSV(m, r, *id, *epoch, *policy)
+	receipt, err := stellarmotion.FromCSVWithCovariance(context.Background(), m, r, *id, *epoch, *policy, *covariancePolicy)
 	if err != nil {
 		return err
 	}
@@ -67,7 +69,7 @@ func run() error {
 	if closeErr != nil {
 		return closeErr
 	}
-	fmt.Printf("%s: source %s at J%.9f TCB; adopted single-star model, physical uncertainty not propagated\n", *output, *id, *epoch)
+	fmt.Printf("%s: source %s at J%.9f TCB; formal covariance included: %t; physical accuracy is not certified\n", *output, *id, *epoch, receipt.FormalCovariance != nil)
 	return nil
 }
 func main() {

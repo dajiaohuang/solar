@@ -19,11 +19,12 @@ func (s *Server) stellarMotion(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 	var wire struct {
-		Manifest []byte   `json:"originalManifestBase64"`
-		Rows     []byte   `json:"originalRowsCsvBase64"`
-		SourceID string   `json:"sourceId"`
-		Epoch    *float64 `json:"targetEpochJulianYearTCB"`
-		Policy   string   `json:"radialVelocityPolicy"`
+		Manifest         []byte   `json:"originalManifestBase64"`
+		Rows             []byte   `json:"originalRowsCsvBase64"`
+		SourceID         string   `json:"sourceId"`
+		Epoch            *float64 `json:"targetEpochJulianYearTCB"`
+		Policy           string   `json:"radialVelocityPolicy"`
+		CovariancePolicy string   `json:"covariancePolicy"`
 	}
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, stellarRequestBytes))
 	decoder.DisallowUnknownFields()
@@ -52,7 +53,7 @@ func (s *Server) stellarMotion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer release()
-	result, err := stellarmotion.FromCSVContext(ctx, wire.Manifest, wire.Rows, wire.SourceID, *wire.Epoch, wire.Policy)
+	result, err := stellarmotion.FromCSVWithCovariance(ctx, wire.Manifest, wire.Rows, wire.SourceID, *wire.Epoch, wire.Policy, wire.CovariancePolicy)
 	if err != nil {
 		if ctx.Err() != nil {
 			s.error(w, 408, "cancelled", "stellar motion cancelled or deadline exceeded")

@@ -327,7 +327,7 @@ characters and checks the request cancellation signal before resuming. Original
 bytes and decoded text are still retained; this is not a claim of zero-copy
 processing or a measured total-memory budget.
 
-## Experimental formal covariance core (not yet exposed)
+## Formal covariance core and validation
 
 internal/stellarmotion/covariance.go constructs the five-astrometric-coordinate
 marginal plus spectroscopic radial-velocity variance only with the explicit
@@ -373,5 +373,28 @@ generators preserve original source, generator and prerequisite SHA-256 receipts
     rtk proxy uv run --python 3.12 --with pyerfa==2.0.1.5 --with numpy==2.4.3 python scripts/reference-gaia-covariance.py --output .cache/new-gaia-covariance.json
     rtk proxy uv run --python 3.12 --with pyerfa==2.0.1.5 --with numpy==2.4.3 python scripts/reference-gaia-covariance-ensemble.py --output .cache/new-gaia-covariance-ensemble.json
 
-Two focused Go tests validate every retained matrix and receipt. Public access
-and explicit user selection of the covariance assumptions remain to integrate.
+Two focused Go tests validate every retained matrix and receipt.
+
+## Optional formal covariance through CLI and HTTP
+
+The CLI now accepts `--covariance-policy independent-spectroscopic-rv`, and
+POST /v1/stellar/motion accepts the optional JSON field `covariancePolicy`
+with that exact value. Omission preserves nominal-state-only behavior. Unknown
+policies fail; missing covariance inputs do not silently become zero errors.
+The two explicit choices remain separate: `radialVelocityPolicy` adopts the
+spectroscopic velocity value, while `covariancePolicy` adopts independent RV
+formal errors. Neither choice certifies physical accuracy.
+
+The optional `experiment.formalCovariance` contains the input/output matrices,
+Jacobian, difference steps and convergence diagnostic, frame/time scale, target
+epoch, coordinate labels/units, policy and assumptions. Original manifest/CSV
+bytes and the selected source remain in the same experiment. Cancellation,
+request/compute admission and source budgets are preserved.
+
+    rtk proxy go run ./cmd/gaia-motion --manifest tests/fixtures/gaia-six-20260923/manifest.json --rows tests/fixtures/gaia-six-20260923/rows.csv --source-id 65212004581252736 --epoch-tcb 2026 --rv-policy spectroscopic-as-astrometric --covariance-policy independent-spectroscopic-rv --output .cache/new-gaia-motion-covariance.json
+
+The actual CLI export for this source and year was checked against original
+bytes and the independent ERFA covariance (maximum normalized difference
+6.047e-6). A real managed loopback HTTP test verifies the same receipt and
+matrix, default omission, and invalid-policy refusal. Browser/native covariance
+controls remain to integrate; no deployed-service acceptance is claimed.

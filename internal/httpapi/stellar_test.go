@@ -46,6 +46,9 @@ func TestStellarMotionOriginalSourceHTTP(t *testing.T) {
 	if !bytes.Equal(body.Experiment.OriginalRows, rows) || !bytes.Equal(body.Experiment.OriginalManifest, manifest) {
 		t.Fatal("original evidence changed over HTTP")
 	}
+	if body.Experiment.FormalCovariance != nil {
+		t.Fatal("unrequested covariance was computed")
+	}
 	var oracle struct {
 		Cases []struct {
 			Source   stellarmotion.Source `json:"source"`
@@ -84,6 +87,78 @@ func TestStellarMotionOriginalSourceHTTP(t *testing.T) {
 		if recorder.Code != 400 && recorder.Code != 422 {
 			t.Fatalf("missing %s returned %d", key, recorder.Code)
 		}
+	}
+}
+
+func TestStellarFormalCovarianceHTTP(t *testing.T) {
+	read := func(path string) []byte {
+		t.Helper()
+		raw, err := os.ReadFile("../../tests/fixtures/" + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return raw
+	}
+	manifest, rows := read("gaia-six-20260923/manifest.json"), read("gaia-six-20260923/rows.csv")
+	payload := map[string]any{"originalManifestBase64": manifest, "originalRowsCsvBase64": rows, "sourceId": "65212004581252736", "targetEpochJulianYearTCB": 2026, "radialVelocityPolicy": "spectroscopic-as-astrometric", "covariancePolicy": "independent-spectroscopic-rv"}
+	live := httptest.NewServer(testServer(t))
+	defer live.Close()
+	raw, _ := json.Marshal(payload)
+	response, err := live.Client().Post(live.URL+"/v1/stellar/motion", "application/json", bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != 200 {
+		t.Fatalf("HTTP %d", response.StatusCode)
+	}
+	var wire struct {
+		Experiment stellarmotion.Experiment `json:"experiment"`
+	}
+	if err = json.NewDecoder(response.Body).Decode(&wire); err != nil {
+		t.Fatal(err)
+	}
+	covariance := wire.Experiment.FormalCovariance
+	if covariance == nil || covariance.Policy != "independent-spectroscopic-rv" || covariance.TimeScale != "TCB" || covariance.Frame != "ICRS" || covariance.TargetEpoch != 2026 {
+		t.Fatal("missing covariance contract")
+	}
+	if !bytes.Equal(wire.Experiment.OriginalRows, rows) || !bytes.Equal(wire.Experiment.OriginalManifest, manifest) {
+		t.Fatal("lost original covariance evidence")
+	}
+	var reference struct {
+		Cases []struct {
+			Source   stellarmotion.Source  `json:"source"`
+			Year     float64               `json:"targetYearTCB"`
+			Expected stellarmotion.Matrix6 `json:"expected"`
+		} `json:"cases"`
+	}
+	if err = json.Unmarshal(read("gaia-covariance-reference.json"), &reference); err != nil {
+		t.Fatal(err)
+	}
+	matched := false
+	for _, c := range reference.Cases {
+		if c.Source.ID != payload["sourceId"] || c.Year != 2026 {
+			continue
+		}
+		matched = true
+		for i := 0; i < 6; i++ {
+			for j := 0; j < 6; j++ {
+				scale := math.Sqrt(c.Expected[i][i] * c.Expected[j][j])
+				if math.Abs(covariance.Output[i][j]-c.Expected[i][j])/scale > 5e-4 {
+					t.Fatal("HTTP covariance differs from independent ERFA reference")
+				}
+			}
+		}
+	}
+	if !matched {
+		t.Fatal("reference absent")
+	}
+	payload["covariancePolicy"] = "assume-perfect-rv"
+	raw, _ = json.Marshal(payload)
+	recorder := httptest.NewRecorder()
+	testServer(t).ServeHTTP(recorder, httptest.NewRequest("POST", "/v1/stellar/motion", bytes.NewReader(raw)))
+	if recorder.Code != 422 {
+		t.Fatalf("unsupported policy accepted: %d", recorder.Code)
 	}
 }
 

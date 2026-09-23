@@ -10,6 +10,10 @@ import (
 type Matrix6 [6][6]float64
 
 type FormalCovariance struct {
+	Model                         string     `json:"model"`
+	Policy                        string     `json:"policy"`
+	Frame                         string     `json:"frame"`
+	TimeScale                     string     `json:"timeScale"`
 	Input                         Matrix6    `json:"inputMatrix"`
 	Output                        Matrix6    `json:"outputMatrix"`
 	Jacobian                      Matrix6    `json:"jacobian"`
@@ -99,7 +103,7 @@ func FormalInputCovariance(raw json.RawMessage, policy string) (Matrix6, error) 
 }
 
 // PropagateFormalCovariance is a first-order local approximation of Propagate.
-// It is not exposed by user routes until independent propagated references pass.
+// Independent ERFA references check this numerical approximation, not physical accuracy.
 func PropagateFormalCovariance(ctx context.Context, raw json.RawMessage, year float64, rvPolicy, covariancePolicy string) (*FormalCovariance, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -121,7 +125,7 @@ func PropagateFormalCovariance(ctx context.Context, raw json.RawMessage, year fl
 	if math.Abs(cosInput) < 1e-6 || math.Abs(cosOutput) < 1e-6 {
 		return nil, fmt.Errorf("local covariance chart too close to coordinate pole")
 	}
-	result := &FormalCovariance{Input: input, TargetEpoch: year, CoordinateLabels: [6]string{"delta-alpha*cos(delta)", "delta-dec", "parallax", "pmra", "pmdec", "radial-velocity"}, CoordinateUnits: [6]string{"mas", "mas", "mas", "mas/Julian-year", "mas/Julian-year", "km/s"}, Assumptions: []string{
+	result := &FormalCovariance{Model: "first-order-starpm-covariance-v1", Policy: covariancePolicy, Frame: "ICRS", TimeScale: "TCB", Input: input, TargetEpoch: year, CoordinateLabels: [6]string{"delta-alpha*cos(delta)", "delta-dec", "parallax", "pmra", "pmdec", "radial-velocity"}, CoordinateUnits: [6]string{"mas", "mas", "mas", "mas/Julian-year", "mas/Julian-year", "km/s"}, Assumptions: []string{
 		"First-order local covariance J C J^T of the adopted uniform single-star model; not a nonlinear probability distribution.",
 		"Five-parameter astrometric marginal plus independent spectroscopic RV error; no measured astrometry/RV cross-covariance is available here.",
 		"Pseudocolour is marginalized, not substituted for radial velocity or conditioned on a fixed value.",

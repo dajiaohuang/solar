@@ -15,14 +15,35 @@ import (
 )
 
 type Experiment struct {
-	SchemaVersion      int             `json:"schemaVersion"`
-	ManifestSHA256     string          `json:"manifestSha256"`
-	RowsSHA256         string          `json:"rowsSha256"`
-	OriginalManifest   []byte          `json:"originalManifestBase64"`
-	OriginalRows       []byte          `json:"originalRowsCsvBase64"`
-	SelectedSource     json.RawMessage `json:"selectedSource"`
-	Result             *Result         `json:"result"`
-	ProvenanceBoundary string          `json:"provenanceBoundary"`
+	FormalCovariance   *FormalCovariance `json:"formalCovariance,omitempty"`
+	SchemaVersion      int               `json:"schemaVersion"`
+	ManifestSHA256     string            `json:"manifestSha256"`
+	RowsSHA256         string            `json:"rowsSha256"`
+	OriginalManifest   []byte            `json:"originalManifestBase64"`
+	OriginalRows       []byte            `json:"originalRowsCsvBase64"`
+	SelectedSource     json.RawMessage   `json:"selectedSource"`
+	Result             *Result           `json:"result"`
+	ProvenanceBoundary string            `json:"provenanceBoundary"`
+}
+
+// FromCSVWithCovariance preserves the nominal source receipt and adds formal
+// uncertainty only under an explicit supported policy. Omission computes no covariance.
+func FromCSVWithCovariance(ctx context.Context, manifestBytes, rowsBytes []byte, id string, year float64, rvPolicy, covariancePolicy string) (*Experiment, error) {
+	if covariancePolicy != "" && covariancePolicy != "independent-spectroscopic-rv" {
+		return nil, fmt.Errorf("unsupported stellar covariance policy")
+	}
+	result, err := FromCSVContext(ctx, manifestBytes, rowsBytes, id, year, rvPolicy)
+	if err != nil {
+		return nil, err
+	}
+	if covariancePolicy != "" {
+		result.FormalCovariance, err = PropagateFormalCovariance(ctx, result.SelectedSource, year, rvPolicy, covariancePolicy)
+		if err != nil {
+			return nil, err
+		}
+		result.Result.Limitations[3] = "First-order formal uncertainty is supplied separately under explicit independent RV errors; no systematics, acceleration, Galactic potential, observer parallax, deflection or aberration."
+	}
+	return result, nil
 }
 
 func digest(raw []byte) string { value := sha256.Sum256(raw); return hex.EncodeToString(value[:]) }

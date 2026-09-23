@@ -1693,3 +1693,19 @@ No draws were discarded. The maximum empirical/Go normalized difference is
 and provenance receipts. No full local tests ran. These are finite numerical
 and adopted-distribution checks, not a physical uncertainty or general nonlinear
 coverage guarantee. Public CLI/HTTP/UI covariance access remains outstanding.
+
+### Checkpoint 74: explicit CLI and HTTP formal-covariance access (2026-09-23)
+
+Added optional covariance-policy selection to the original-source experiment,
+CLI and HTTP route. The exact independent-spectroscopic-rv hypothesis is required;
+omission computes only the nominal state and unsupported policies are refused.
+The source-bearing export includes both matrices, Jacobian, step/convergence
+diagnostics, coordinate/time conventions and explicit model assumptions.
+
+Four focused Go tests passed across HTTP and independent covariance/ensemble
+references. Managed real loopback HTTP retains byte-exact originals and matches
+the independent ERFA matrix. Actual CLI execution produced an export whose
+original files and matrix were independently rechecked (normalized difference
+6.047e-6 for the chosen source/year). No full local tests ran. Browser/native
+covariance controls and live browser-to-Go acceptance remain outstanding.
+Candidate 335b083 still awaits iOS; the active candidate was not replaced.
