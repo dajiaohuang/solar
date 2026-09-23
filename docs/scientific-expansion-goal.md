@@ -10,9 +10,9 @@ remain paused. Changes may go directly to main after the required checks.
 | --- | --- | --- |
 | Shared analysis ephemeris | Events, curves and mission endpoints use a frozen source contract, expose actual per-body models, offer strict SPK coverage, and export time/frame/source evidence; shared backend integration follows | In progress |
 | Ground observer | Geodetic station, SOFA-compatible celestial/terrestrial transforms, versioned IERS EOP, vacuum/apparent altitude-azimuth, rise/set and visibility windows; source expiry and uncertainty remain visible | In progress |
-| Orbit uncertainty | Pinned SBDB covariance with labels, units and solution epoch; validated covariance propagation and sampling; uncertainty ellipsoids and event distributions, independent of numerical tolerance | In progress: source ingestion, solution-epoch Cartesian conversion and reproducible parameter sampling; temporal propagation and UI pending |
+| Orbit uncertainty | Pinned SBDB covariance with labels, units and solution epoch; validated covariance propagation and sampling; uncertainty ellipsoids and event distributions, independent of numerical tolerance | In progress: source ingestion, solution-epoch Cartesian conversion, reproducible sampling and browser inspection; temporal propagation and 3D ellipsoids pending |
 | Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | Pending |
-| Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | Pending |
+| Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | In progress: bounded numerical integrator and prescribed Newtonian variational equations; actual SPK adapter, additional forces and laboratory UI pending |
 | Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | Pending |
 | Catalog streaming | Replace the fixed 8k/30k-only cloud path with cancellable binary chunk loading, priority scheduling and independent byte/decode/compute/upload limits | In progress: full-inventory 2D snapshot, bounded upload batching and spatial display available; continuous/3D streaming and source-priority scheduling pending |
 | Rendering and time | Moving spatial bounds, visibility/LOD, selected-body retention, time/error-budgeted updates, reusable buffers and Float64-relative GPU coordinates; WebGL fallback and native contracts retained | In progress |
@@ -551,7 +551,27 @@ and correlation preserve it without clipping. Five focused units now cover
 tiny/large variance, extreme anisotropy and display-unit scaling, and the four
 browser import/export checks passed after the change. This follow-up is held
 locally while remote run 35812468105 validates `144b590`; do not replace its
-head during healthy native jobs. Neither checkpoint is on main yet.
+head during healthy native jobs. Run 35812468105 subsequently passed all jobs
+on `144b590`, which was fast-forwarded to main. The contour correction still
+requires its own exact-head gate.
+
+### Checkpoint 18: adaptive dynamics and variational foundation (2026-09-23)
+
+Added a bounded, cancellable Dormand–Prince 5(4) integrator with per-component
+tolerances, explicit maximum step/attempts, compensated state/time summation and
+reused stage buffers. A separate prescribed point-mass evaluator requires
+geometric J2000/SSB/TDB sources and explicit GM provenance/exclusion distances.
+Its analytic gradient evolves a 6x6 state transition matrix, conditional on
+fixed parameters. It does not claim complete SBDB covariance propagation.
+
+Fourteen focused tests passed. Independent 70-digit Kepler derivatives exposed
+a cancellation-sensitive deficiency in the initial DOP853-only reference; both
+reference results remain recorded. The corrected comparison retained its
+original threshold and now passes in both time directions and with a synthetic
+moving perturber. Details and limits are in
+[dynamics-laboratory.md](dynamics-laboratory.md). TypeScript and changed-file lint
+passed. No full local suite ran. Real SPK perturbations, full force models,
+source uncertainty, UI, diagnostics and every unfinished ledger item remain open.
 
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),
