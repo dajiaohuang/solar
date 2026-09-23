@@ -1265,3 +1265,32 @@ response replay rather than an upstream availability/network performance claim.
 Types and changed-file lint passed after correcting an unsupported constructor
 syntax and using removable Worker event listeners. No full local tests ran.
 Candidate a2635ac still awaits iOS; it was not interrupted or replaced.
+
+### Checkpoint 51: Gaia catalog position uncertainty readout (2026-09-23)
+
+Selected stars now expose a J2016.0 positional marginal covariance in
+(delta-alpha*cos(delta), delta-dec), formal ellipse semiaxes in mas and major
+axis orientation from east toward north. Gaia ra_error already includes cos(dec);
+it is not multiplied again. Missing/invalid/nonrepresentable errors produce an
+explicit unavailable result, circles have no arbitrary orientation, and singular
+contours are retained. The derived selected-star result is exported separately
+from untouched source rows. This is a unit-Mahalanobis marginal contour, not a
+68 percent joint confidence region, systematics model, propagated uncertainty
+or occultation timing certificate. Full astrometric covariance remains pending.
+
+Three focused numerical cases passed (analytic correlated ellipse including
+near-pole convention, missing/singular/invalid cases, and real-source variance
+trace/determinant invariants). Four browser cases passed for selection and
+export; types and changed-file lint passed. No full local tests ran. Definition
+source: ESA DR3 gaia_source data model, as linked in docs/gaia-data.md.
+
+### Verified promotion: a2635ac (2026-09-23)
+
+Run 35829908376 completed successfully for exact SHA
+a2635accd22893542c8bcc25dcf428b267ff14fe: repository, Web, four browser
+profiles, Android, iOS and final gate passed. That exact commit was
+fast-forwarded to main. Deploy application and Publish asteroid dataset remain
+manually disabled. This confirms the corrected iOS duration assertion and
+Gaia chart batch; subsequent cancellation, measurements, selection validation,
+cache and uncertainty commits require their own candidate validation. Actual
+native system-picker export and the wider scientific/capacity goal remain open.

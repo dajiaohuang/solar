@@ -95,3 +95,18 @@ Exports report cacheHits and cacheRetainedBytes. Local files bypass the cache.
 Active cancellation or failure terminates that worker; page unmount releases
 both active and idle workers. No disk persistence or full-catalog caching is
 performed.
+
+## Catalog position uncertainty
+
+The selected-star inspector reconstructs the 2D positional marginal covariance
+using ra_error, dec_error and ra_dec_corr at J2016.0. Coordinates are
+delta-alpha*cos(delta) and delta-dec in mas; the Gaia RA standard error already
+includes cos(delta). Semiaxes are the square roots of covariance eigenvalues.
+The orientation is measured from east toward north, modulo 180 degrees; a
+circular contour has no preferred axis. The exported derived result is separate
+from original source rows. Missing or invalid errors are not replaced by zeros.
+
+The unit-Mahalanobis contour is not a 68 percent joint confidence region and
+does not include systematics, epoch propagation or occultation timing error.
+This positional marginal is not the full five/six-parameter astrometric model.
+Definitions follow the [ESA DR3 source data model](https://gea.esac.esa.int/archive/documentation/GDR3/Gaia_archive/chap_datamodel/sec_dm_main_source_catalogue/ssec_dm_gaia_source.html).

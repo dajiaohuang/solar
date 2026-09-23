@@ -4,6 +4,7 @@ import type { GaiaManifest, GaiaSource, streamGaiaChunks } from '../../lib/gaiaC
 import { saveTextExport } from '../../lib/platform'
 import { BUILD_INFO } from '../../lib/buildInfo'
 import { GaiaPlot, type GaiaDisplayBatch } from './GaiaPlot'
+import { gaiaPositionUncertainty } from '../../lib/gaiaUncertainty'
 
 type Summary = Awaited<ReturnType<typeof streamGaiaChunks>>
 export function GaiaSky() {
@@ -13,6 +14,7 @@ export function GaiaSky() {
   const [batches, setBatches] = useState<GaiaDisplayBatch[]>([]), [summary, setSummary] = useState<Summary | null>(null)
   const [zoom, setZoom] = useState(1), [selected, setSelected] = useState(0), [count, setCount] = useState(0)
   const [source, setSource] = useState<GaiaSource | null>(null)
+  const uncertainty = source ? gaiaPositionUncertainty(source) : null
   const worker = useRef<Worker | null>(null), generation = useRef(0), sources = useRef<GaiaSource[]>([])
   const idleWorker = useRef<Worker | null>(null)
   const clear = useCallback(() => {
@@ -82,9 +84,17 @@ export function GaiaSky() {
         <label className="field"><span>{zh ? '恒星序号' : 'Star row'}</span><input type="number" min="1" max={count} value={selected+1} onChange={event => { const i = Number(event.target.value)-1; if (Number.isInteger(i) && i >= 0 && i < count) select(i) }} /></label>
         <p className="checksum">Gaia DR3 {source.source_id}</p>
         <dl className="contract-list"><div><dt>RA / Dec</dt><dd>{source.ra.toFixed(9)}° / {source.dec.toFixed(9)}°</dd></div><div><dt>G</dt><dd>{source.phot_g_mean_mag}</dd></div><div><dt>{zh ? '视差（mas）' : 'Parallax (mas)'}</dt><dd>{source.parallax ?? '—'}</dd></div></dl>
+        <div data-testid="gaia-position-uncertainty">
+          <p>{zh ? '目录位置形式误差 · J2016.0' : 'Catalog formal position uncertainty · J2016.0'}</p>
+          {uncertainty?.available ? <>
+            <p>{zh ? '长 / 短半轴' : 'Major / minor semiaxes'}: {uncertainty.majorMas.toPrecision(6)} / {uncertainty.minorMas.toPrecision(6)} mas</p>
+            <p>{zh ? '长轴方向（从东向北）' : 'Major-axis angle (east toward north)'}: {uncertainty.majorAxisDegreesFromEastTowardNorth === null ? '—' : uncertainty.majorAxisDegreesFromEastTowardNorth.toFixed(3)+'°'}</p>
+          </> : <p>{zh ? '缺少有效位置误差数据，未计算椭圆。' : 'No ellipse computed: valid positional uncertainty is unavailable.'}</p>}
+          <p>{zh ? '使用 Δα cosδ 与 Δδ 的相关误差；单位马氏距离轮廓不是 68% 联合置信区域。不含系统误差或历元传播，不代表掩星时间精度。' : 'Uses correlated Δα cosδ and Δδ errors. The unit-Mahalanobis contour is not a 68% joint confidence region. No systematics or epoch propagation; it does not certify occultation timing.'}</p>
+        </div>
       </div>}
       {summary && <div data-testid="gaia-complete"><p>{summary.verifiedRows} {zh ? '条来源记录已加载' : 'source records loaded'} · {summary.verifiedChunks} {zh ? '个分块' : 'chunks'}</p>
-        <button className="secondary-button" onClick={() => { void saveTextExport(JSON.stringify({ manifest, manifestSha256:manifestHash, summary, build:BUILD_INFO, projection:'gnomonic-display-only', sources:sources.current },null,2),'solar-gaia-sky.json','application/json').catch(error => setError(String(error))) }}>{zh ? '导出 Gaia 记录与来源' : 'Export Gaia records and sources'}</button>
+        <button className="secondary-button" onClick={() => { void saveTextExport(JSON.stringify({ manifest, manifestSha256:manifestHash, summary, build:BUILD_INFO, projection:'gnomonic-display-only', selectedPositionUncertainty:source ? {sourceId:source.source_id,...uncertainty} : null, sources:sources.current },null,2),'solar-gaia-sky.json','application/json').catch(error => setError(String(error))) }}>{zh ? '导出 Gaia 记录与来源' : 'Export Gaia records and sources'}</button>
       </div>}
       <p>{zh ? '未应用自行传播、观测者视差、光行差、偏折或视差零点改正。星等筛选不是完整性保证；GPU 显示精度不是科学测量精度。' : 'No proper-motion propagation, observer parallax, aberration, deflection or parallax zero-point correction is applied. Magnitude selection is not a completeness guarantee; GPU display precision is not scientific measurement accuracy.'}</p>
       <p className="checksum">SHA-256 {manifestHash}</p>
