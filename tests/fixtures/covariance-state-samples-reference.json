@@ -3,7 +3,7 @@
     "mpmath": "1.3.0",
     "decimalDigits": 80
   },
-  "inputReferenceSha256": "e3e4d98250600ae6f6976173fdea3c7008258e7e15702a87737499dcce02cd11",
+  "inputReferenceSha256": "e24b44273ee1822df2bcba4bf3258b526b813a5f40a42ae995ec95def819c36f",
   "adoptedSolarGM": {
     "au3PerDay2": 0.00029591220828411956,
     "source": "Conditional DE440 solar GM from the repository-pinned gm_de440.tpc; not asserted to reproduce the SBDB fit model"

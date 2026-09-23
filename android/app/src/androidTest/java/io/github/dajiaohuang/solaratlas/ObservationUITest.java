@@ -21,6 +21,8 @@ import static org.hamcrest.CoreMatchers.containsString;
 import static org.junit.Assert.fail;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertArrayEquals;
 
 import android.accessibilityservice.AccessibilityService;
 import android.app.Activity;

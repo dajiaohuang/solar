@@ -55,6 +55,8 @@ def main():
     parser.add_argument('--output', required=True)
     path = Path(parser.parse_args().output)
     original = (ROOT / 'tests/fixtures/orbit-covariance-reference.json').read_bytes()
+    if b'\r' in original:
+        raise ValueError('Reference input must match repository LF bytes; refresh the checkout before hashing')
     reference = json.loads(original)
     gm = reference['adoptedSolarGM']
     cases = []
@@ -67,7 +69,7 @@ def main():
             cases.append({'name': source['name']+'-'+name, 'source': source['name'],
                           'offsets': offsets, 'state': state(source['nominal'], offsets,
                                                             source['epochTdb'], mp.mpf(gm['au3PerDay2']))})
-    with path.open('x', encoding='utf-8') as handle:
+    with path.open('x', encoding='utf-8', newline='\n') as handle:
         json.dump({'software': {'mpmath': mp.__version__, 'decimalDigits': mp.mp.dps},
                    'inputReferenceSha256': hashlib.sha256(original).hexdigest(),
                    'adoptedSolarGM': gm, 'cases': cases}, handle, indent=2, allow_nan=False)
