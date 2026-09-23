@@ -14,9 +14,7 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.Locale;
 import java.util.function.Consumer;
 
@@ -62,12 +60,7 @@ final class StellarMotionPanel extends LinearLayout {
             try(AssetFileDescriptor descriptor=getContext().getContentResolver().openAssetFileDescriptor(uri,"r",cancellation)) {
                 if(descriptor==null)throw new IOException("Source file unavailable");int limit=isManifest?1024*1024:8*1024*1024;
                 if(descriptor.getLength()>limit)throw new IOException("Original source exceeds byte budget");
-                byte[] bytes;
-                try(InputStream stream=descriptor.createInputStream();ByteArrayOutputStream output=new ByteArrayOutputStream()){
-                    byte[] chunk=new byte[16384];int count;
-                    while((count=stream.read(chunk))!=-1){if(Thread.currentThread().isInterrupted()||cancellation.isCanceled())throw new IOException("Source import cancelled");if(count>limit-output.size())throw new IOException("Original source exceeds byte budget");output.write(chunk,0,count);}
-                    if(output.size()==0)throw new IOException("Original source is empty");bytes=output.toByteArray();
-                }
+                byte[] bytes=StellarSourceImport.read(descriptor.createInputStream(),limit,cancellation::isCanceled);
                 main.post(()->{if(token!=generation)return;if(isManifest)manifest=bytes;else rows=bytes;finish();showFiles();status.setText(R.string.stellar_idle);});
             }catch(Exception error){main.post(()->{if(token!=generation)return;finish();status.setText(error.getMessage());});}
         },"solar-stellar-import");worker.start();

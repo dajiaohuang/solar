@@ -1790,3 +1790,16 @@ tests, JS syntax/lint and both XML resources passed. No full local tests ran.
 Native UI compilation/execution, actual picker interaction and export destination
 write acceptance remain explicitly unproven. Candidate c3b87f7 has passed Android,
 Web and all four browsers and is still awaiting iOS; it was not replaced.
+
+### Checkpoint 80: enforce Android source-import cancellation boundaries (2026-09-23)
+
+Extracted the provider stream reader and fixed cancellation checks before reads
+and after EOF. The reader closes owned streams, enforces actual rather than
+provider-declared bytes, rejects empty sources and avoids spinning on a zero-byte
+read. The UI retains its generation/provider cancellation and timeout controls.
+
+Three focused plain-JVM tests passed after javac compilation, covering exact
+1 MiB/8 MiB budgets, one-byte overflow, pre-read/EOF cancellation, stream ownership
+and zero-progress reads. No full local tests ran. This does not establish Android
+provider interruption or system-picker behavior; those remain pending native
+execution. Candidate c3b87f7 / run 35840897494 remains live awaiting iOS.

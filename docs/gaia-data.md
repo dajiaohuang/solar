@@ -475,3 +475,11 @@ execution is unavailable. Eight focused harness/reuse unit tests, script syntax,
 targeted lint and English/Chinese resource XML parsing passed. System picker
 interaction, export destination writing and physical-device behavior remain
 unverified; the callback-driven smoke is not proof of those UI boundaries.
+
+The panel's provider stream reader is separately testable as StellarSourceImport.
+It checks cancellation before each read and after EOF, owns/closes the stream,
+checks actual byte counts against the manifest/CSV budget, rejects empty input
+and handles zero-progress reads without a tight loop. Three targeted JVM tests
+passed at exact 1 MiB/8 MiB boundaries, one byte over, pre-read/EOF cancellation,
+stream closure and zero-progress input. Provider-specific blocking/cancellation
+behavior and system document-picker interaction still require Android execution.

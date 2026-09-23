@@ -113,7 +113,7 @@ export async function androidNativeSmoke() {
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/GroundContactsReport.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/GroundContactsService.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/GroundContactsPanel.java',
-      ...['StellarMotionRequest','StellarMotionReport','StellarMotionService','StellarMotionPanel'].map(name => 'android/app/src/main/java/io/github/dajiaohuang/solaratlas/'+name+'.java'),
+      ...['StellarMotionRequest','StellarMotionReport','StellarMotionService','StellarMotionPanel','StellarSourceImport'].map(name => 'android/app/src/main/java/io/github/dajiaohuang/solaratlas/'+name+'.java'),
       'android/app/src/main/res/values/strings.xml', 'android/app/src/main/res/values-zh/strings.xml',
       'tests/fixtures/gaia-six-20260923/manifest.json', 'tests/fixtures/gaia-six-20260923/rows.csv',
       'android/app/src/main/res/values/contacts.xml', 'android/app/src/main/res/values-zh/contacts.xml',
