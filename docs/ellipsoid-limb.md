@@ -12,8 +12,14 @@ rtk proxy node --experimental-strip-types scripts/evaluate-pck-limb.mjs 401 8435
 The command validates the original source hash and writes a new report with
 axes, orientation, observer, limb and implementation hashes. Existing files
 are refused. The example is numerical geometry, not an observed occultation.
-This feature currently has offline access; the Web orientation panel does not
-yet draw or export these limb ellipses.
+In the Web About page, enable **Include finite-distance ellipsoid limb** in
+the Body orientation panel and enter the three observer coordinates. The
+panel displays the source axes, limb center and generating vectors. Its JSON
+export includes the exact input, source axes, orientation and limb limitations.
+The default viewpoint is explicitly illustrative; it does not load an actual
+observer ephemeris. Changing any input clears the previous result, and turning
+the option off returns to orientation-only calculation. No contour drawing or
+overlapping-body contact search is implied by this readout.
 
 ## Geometry and conventions
 
@@ -56,4 +62,4 @@ unknown. Orientation and axes are text-PCK approximations: no topography,
 atmosphere, rings, binary PCK, light time, stellar aberration or gravitational
 deflection is included. Callers must supply an appropriate epoch and geometry.
 Overlap/contact searches, probability calculations, complete event detection
-and native/Web limb workflows remain separate unfinished work.
+and native limb workflows remain separate unfinished work.

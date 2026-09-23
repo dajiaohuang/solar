@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { expect, test } from './fixtures'
 import reference from '../fixtures/pck-orientation-reference.json' with { type: 'json' }
+import limbReference from '../fixtures/pck-limb-reference.json' with { type: 'json' }
 
 test('exports the original PCK orientation with source identity and clears stale results', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
@@ -29,4 +30,34 @@ test('exports the original PCK orientation with source identity and clears stale
   await panel.getByLabel('TDB seconds past J2000', { exact: true }).fill('')
   await panel.getByRole('button', { name: 'Evaluate source orientation', exact: true }).click()
   await expect(panel.getByRole('alert')).toContainText('Enter the source ID')
+})
+
+test('exports a finite-distance source ellipsoid limb and rejects internal observers', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&page=about&lang=en')
+  const panel = page.getByRole('region', { name: 'Body orientation', exact: true })
+  const sample = limbReference.cases.find(row => row.body === 401 && row.epoch === 843523200)!
+  await panel.getByLabel('Exact PCK body ID', { exact: true }).fill(String(sample.body))
+  await panel.getByLabel('TDB seconds past J2000', { exact: true }).fill(String(sample.epoch))
+  await panel.getByRole('checkbox', { name: 'Include finite-distance ellipsoid limb' }).check()
+  for (const [i, axis] of ['X', 'Y', 'Z'].entries()) await panel.getByLabel(`Observer ${axis} (km)`, { exact: true }).fill(String(sample.observerJ2000Km[i]))
+  await panel.getByRole('button', { name: 'Evaluate source orientation', exact: true }).click()
+  await expect(panel.getByTestId('pck-limb-result')).toContainText('Generators are not necessarily principal axes')
+  const pending = page.waitForEvent('download')
+  await panel.getByRole('button', { name: 'Export orientation and source' }).click()
+  const receipt = JSON.parse(await readFile((await (await pending).path())!, 'utf8'))
+  expect(receipt.source.sha256).toBe(limbReference.sourceSha256)
+  expect(receipt.limb.shape.radiiKm).toEqual(sample.axes)
+  expect(receipt.limb.geometry.physicalLimbUncertaintyKm).toBeNull()
+  for (let i = 0; i < 3; i++) expect(Math.abs(receipt.limb.geometry.centerBodyFixedKm[i]-sample.centerBodyFixedKm[i])/Math.max(...sample.axes)).toBeLessThan(2e-10)
+  expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  await panel.screenshot({ path: test.info().outputPath('pck-limb.png') })
+  for (const axis of ['X', 'Y', 'Z']) await panel.getByLabel(`Observer ${axis} (km)`, { exact: true }).fill('0')
+  await expect(panel.getByTestId('pck-limb-result')).toHaveCount(0)
+  await panel.getByRole('button', { name: 'Evaluate source orientation', exact: true }).click()
+  await expect(panel.getByRole('alert')).toContainText('outside the ellipsoid')
+  await panel.getByRole('checkbox', { name: 'Include finite-distance ellipsoid limb' }).uncheck()
+  await panel.getByRole('button', { name: 'Evaluate source orientation', exact: true }).click()
+  await expect(panel.getByTestId('pck-orientation-result')).toBeVisible()
+  await expect(panel.getByTestId('pck-limb-result')).toHaveCount(0)
 })

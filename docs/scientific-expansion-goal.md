@@ -2350,3 +2350,21 @@ lint and the native source/packaging contract passed. No local full suite or
 local Swift execution was performed. The next candidate also includes the
 temporal budget, PCK orientation and ellipsoid limb commits; main delivery
 remains gated on exact-candidate checks.
+
+### Checkpoint 110: Web access to finite-distance source limbs (2026-09-23)
+
+The bilingual PCK panel now optionally accepts a body-center-relative J2000
+observer vector, validates original axes for the exact orientation body ID,
+and evaluates the finite-distance limb. The readout preserves source semi-axes,
+center and conjugate generators; JSON export retains the observer and geometric
+limitations. Illustrative defaults are labeled. Interior/surface observers
+are rejected, input changes clear stale results, and disabling limb evaluation
+restores orientation-only behavior.
+
+Four named desktop/mobile Chromium browser cases passed, including actual
+download parsing and independent CSPICE center comparison, invalid observer
+handling, stale-result clearing and narrow-screen overflow checks. TypeScript
+and targeted lint passed. No full local tests ran. Native limb access,
+ephemeris-fed observer geometry, contour drawing and apparent/contact analysis
+remain unfinished. Candidate 5936fca / run 35856001727 is active; these later Web
+changes remain local until it is terminal.
