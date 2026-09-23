@@ -48,6 +48,8 @@ public final class MainActivity extends Activity {
     private NativeObservationDeck viewport;
     private CoveragePanel coveragePanel;
     private GroundContactsPanel contactsPanel;
+    private byte[] pendingContactExport;
+    private static final int CONTACT_EXPORT_REQUEST = 731;
     private SourceIdentityPanel identityPanel;
     private SourceIdentityPage selectedSourcePage;
     private StateTileCache tileCache;
@@ -136,7 +138,7 @@ public final class MainActivity extends Activity {
             status.setText(R.string.identity_selected);
         });
         content.addView(identityPanel);
-        contactsPanel = new GroundContactsPanel(this, backend); content.addView(contactsPanel);
+        contactsPanel = new GroundContactsPanel(this, backend, this::exportContacts); content.addView(contactsPanel);
         android.text.TextWatcher invalidate = new android.text.TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
@@ -336,6 +338,32 @@ public final class MainActivity extends Activity {
     private TextView label(String text, int size, int color) { TextView result = new TextView(this); result.setText(text); result.setTextSize(size); result.setTextColor(color); return result; }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private void showTutorial() { new android.app.AlertDialog.Builder(this).setTitle("First observation").setMessage("1. Enter an HTTPS backend address and a finite TDB Julian date. 2. Choose a preset or enter custom IDs. 3. Loading verifies manifest, plan and every binary tile; cancellation publishes nothing. 4. Only verified exact rows render. Missing references never become an invented origin.").setPositiveButton("Done", null).show(); }
+    private void exportContacts(byte[] bytes) {
+        pendingContactExport = bytes;
+        android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_CREATE_DOCUMENT)
+                .addCategory(android.content.Intent.CATEGORY_OPENABLE).setType("application/json")
+                .putExtra(android.content.Intent.EXTRA_TITLE, "solar-ground-contacts.json");
+        try { startActivityForResult(intent, CONTACT_EXPORT_REQUEST); }
+        catch (RuntimeException unavailable) { pendingContactExport = null; contactsPanel.exportStatus(false); }
+    }
+    @Override protected void onActivityResult(int request, int result, android.content.Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request != CONTACT_EXPORT_REQUEST) return;
+        final byte[] bytes = pendingContactExport; pendingContactExport = null;
+        if (result != RESULT_OK || data == null || data.getData() == null || bytes == null) return;
+        final android.net.Uri destination = data.getData();
+        // The file picker authorizes this destination. Preserve the snapshot that
+        // opened it even though onPause correctly discarded the live search UI.
+        new Thread(() -> {
+            boolean saved = false;
+            try (java.io.OutputStream output = getContentResolver().openOutputStream(destination, "wt")) {
+                if (output == null) throw new java.io.IOException("Export destination unavailable");
+                output.write(bytes); output.flush(); saved = true;
+            } catch (java.io.IOException | RuntimeException error) { saved = false; }
+            final boolean success = saved;
+            runOnUiThread(() -> { if (!isFinishing() && !isDestroyed()) contactsPanel.exportStatus(success); });
+        }, "solar-contact-export").start();
+    }
     @Override protected void onPause() {
         if (Build.VERSION.SDK_INT >= 29 && thermalMonitor != null) { thermalMonitor.close(); thermalMonitor = null; }
         budget3d.resetEvidence(); budget2d.resetEvidence();
@@ -354,7 +382,7 @@ public final class MainActivity extends Activity {
             if (manager != null) thermalMonitor = new ThermalMonitor(manager, this::thermalChanged);
         }
     }
-    @Override protected void onDestroy() { cancelLoad(); projectionPrefetch.close(); if (viewport != null) viewport.release(); super.onDestroy(); }
+    @Override protected void onDestroy() { pendingContactExport = null; cancelLoad(); projectionPrefetch.close(); if (viewport != null) viewport.release(); super.onDestroy(); }
 
     private static final class Preset {
         final String id, title, reference, ids;

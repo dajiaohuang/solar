@@ -241,5 +241,8 @@ configured HTTPS backend. Enter explicit UTC bounds, WGS84 station coordinates
 and two NAIF IDs; the initial fields show the Dallas 2024 eclipse example.
 Edits, cancellation and backgrounding clear results. The form displays checked
 contact UTC/brackets, edge geometry, IERS identity and scientific limits.
-Native export and overlap-window presentation are not implemented yet. Device
-acceptance is tracked separately from plain-JVM response/transport tests.
+The form also displays validated sampled overlap windows and duration bounds.
+Save JSON opens the system document picker and writes the original response
+snapshot, retaining source evidence even while the live form clears on pause.
+Device acceptance, including the document picker, is tracked separately from
+plain-JVM response/transport tests.

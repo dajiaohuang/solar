@@ -21,6 +21,9 @@ public final class GroundContactsTest {
         assertEquals(4, r.contacts.size()); assertEquals(521, r.evaluations); assertEquals("2024-04-08T17:23:20.434570Z", r.contacts.get(0).utc);
         assertArrayEquals(bytes, r.exportBytes()); byte[] exported = r.exportBytes(); exported[0] = 0; assertArrayEquals(bytes, r.exportBytes());
         assertEquals("none", r.startGeometry); assertEquals("none", r.endGeometry);
+        assertTrue(r.hasOverlapWindows); assertEquals(2, r.overlapWindows.size());
+        assertEquals(9559.248046875, r.overlapWindows.get(0).duration, 0);
+        assertEquals(236.07421875, r.overlapWindows.get(1).duration, 0);
     }
     @Test public void sourceContractAndRequestSubstitutionAreRejected() throws Exception {
         String raw = new String(fixture(), StandardCharsets.UTF_8);
@@ -37,6 +40,17 @@ public final class GroundContactsTest {
         try { new GroundContactsReport.Request(request().startUTC, request().endUTC, Double.NaN,0,0,301,10); fail(); } catch (IOException expected) { }
         try { new GroundContactsReport.Request(request().startUTC, request().endUTC, 0,0,0,301,301); fail(); } catch (IOException expected) { }
         assertNotNull(StateTileDecoder.parseJson(request().bytes()));
+    }
+    @Test public void overlapBoundsAndMatchingEdgesAreRequired() throws Exception {
+        String raw = new String(fixture(), StandardCharsets.UTF_8);
+        for (String[] edit : new String[][]{{"\"durationSeconds\":9559.248046875", "\"durationSeconds\":9558"}, {"9559.21875", "9550"}, {"\"kind\":\"bracketed-contact\"", "\"kind\":\"search-boundary\""}, {"\"kind\":\"bracketed-contact\"", "\"kind\":\"sampled-zero\""}}) {
+            assertTrue(raw.contains(edit[0]));
+            try { GroundContactsReport.decode(raw.replace(edit[0], edit[1]).getBytes(StandardCharsets.UTF_8), request()); fail("accepted "+edit[0]); } catch (IOException expected) { }
+        }
+        String legacy = raw.replaceFirst(",\"sampledOverlapWindows\":\\[.*?\\],\"evaluations\"", ",\"evaluations\"");
+        assertNotEquals(raw, legacy);
+        GroundContactsReport older = GroundContactsReport.decode(legacy.getBytes(StandardCharsets.UTF_8), request());
+        assertFalse(older.hasOverlapWindows); assertTrue(older.overlapWindows.isEmpty()); assertEquals(4, older.contacts.size());
     }
     @Test public void boundedReadRejectsTruncationExtraBytesAndLateCancellation() throws Exception {
         byte[] bytes = fixture(); GroundContactsService service = new GroundContactsService("https://example.com");

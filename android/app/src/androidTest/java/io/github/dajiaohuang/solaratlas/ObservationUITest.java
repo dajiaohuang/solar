@@ -234,11 +234,14 @@ public final class ObservationUITest {
             shown(withTagValue(is((Object) "contacts-load"))).perform(scrollTo(), click());
             waitForText(containsString("4 contacts · 521 geometry evaluations"));
             shown(withTagValue(is((Object) "contacts-result"))).check(matches(withText(containsString("2024-04-08T17:23:20.434570Z"))));
+            shown(withTagValue(is((Object) "contacts-result"))).check(matches(withText(containsString("9559.248 s")))).check(matches(withText(containsString("236.074 s"))));
+            shown(withTagValue(is((Object) "contacts-export"))).perform(scrollTo()).check(matches(isDisplayed()));
             panelScreenshot(scenario, "contacts-status", "ground-contacts-real-response-replay.png");
             fill(BACKEND_HINT, backend + "/contacts-fixture/unavailable");
             shown(withTagValue(is((Object) "contacts-result"))).check(matches(withText("")));
             shown(withTagValue(is((Object) "contacts-load"))).perform(scrollTo(), click());
             waitForText(containsString("body_radii_unavailable"));
+            shown(withTagValue(is((Object) "contacts-export"))).check(matches(withEffectiveVisibility(GONE)));
             shown(withTagValue(is((Object) "contacts-result"))).check(matches(withText("")));
             shown(withTagValue(is((Object) "contacts-toggle"))).perform(scrollTo(), click());
             passed = true;

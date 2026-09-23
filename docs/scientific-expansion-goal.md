@@ -1066,3 +1066,22 @@ The original canonical-LF science reference failure did not recur.
 Run 35825426973 subsequently finished: iOS passed. The failed Android focus
 step prevents promotion; submit the repaired native/contact-window candidate
 only after this terminal result.
+
+### Checkpoint 42: Android overlap windows and file export (2026-09-23)
+
+Android now validates sampled overlap durations, numerical bounds, ordered
+non-overlapping spans, clipped boundaries and contact-backed edges before
+display. Older responses without windows remain accepted without invented
+spans. The bilingual form shows disk overlap/containment durations and explains
+that unsampled gaps may split windows and numerical bounds are not physical
+uncertainty. A Save JSON action opens the system document picker and writes
+the original response snapshot on a background thread; the live form is still
+cleared when paused. This preserves the chosen snapshot across the picker.
+
+Five focused plain-JVM tests passed, including the real captured Dallas windows,
+mutated duration/edge evidence, source identity, old responses, bounded reading
+and cancellation. Native packaging checks and diff checks passed. Added device
+assertions for window text and export availability/clearing are pending remote
+execution, as are actual document-picker export and Android compilation of this
+batch. No full local tests ran. Existing candidate 4b66e29 remains running; this
+batch does not interrupt it. iOS ground access and the broader goal remain open.

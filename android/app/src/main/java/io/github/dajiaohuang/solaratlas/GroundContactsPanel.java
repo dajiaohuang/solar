@@ -15,13 +15,14 @@ import android.widget.TextView;
 final class GroundContactsPanel extends LinearLayout {
     private final EditText backend, start, end, longitude, latitude, height, foreground, background;
     private final TextView status, result;
-    private final Button load, cancel;
+    private final Button load, cancel, export;
+    private GroundContactsReport displayed;
     private final Handler main = new Handler(Looper.getMainLooper());
     private GroundContactsService service;
     private Thread worker;
     private Runnable deadline;
     private int generation;
-    GroundContactsPanel(Context context, EditText backend) {
+    GroundContactsPanel(Context context, EditText backend, java.util.function.Consumer<byte[]> exportResult) {
         super(context); this.backend = backend; setOrientation(VERTICAL);
         Button toggle = button(R.string.contacts_title, "contacts-toggle"); addView(toggle);
         LinearLayout body = new LinearLayout(context); body.setOrientation(VERTICAL); body.setVisibility(GONE); addView(body);
@@ -37,6 +38,8 @@ final class GroundContactsPanel extends LinearLayout {
         cancel = button(R.string.contacts_cancel, "contacts-cancel"); cancel.setVisibility(GONE); body.addView(cancel);
         status = label(getResources().getString(R.string.contacts_idle)); status.setTag("contacts-status"); status.setAccessibilityLiveRegion(ACCESSIBILITY_LIVE_REGION_POLITE); body.addView(status);
         result = label(""); result.setTag("contacts-result"); result.setTextIsSelectable(true); body.addView(result);
+        export = button(R.string.contacts_export, "contacts-export"); export.setVisibility(GONE); body.addView(export);
+        export.setOnClickListener(v -> { if (displayed != null) exportResult.accept(displayed.exportBytes()); });
         toggle.setOnClickListener(v -> { boolean opening = body.getVisibility() != VISIBLE; if (!opening) clear(); body.setVisibility(opening ? VISIBLE : GONE); });
         load.setOnClickListener(v -> search()); cancel.setOnClickListener(v -> { clear(); status.setText(R.string.contacts_cancelled); });
         TextWatcher changed = new TextWatcher() {
@@ -66,18 +69,31 @@ final class GroundContactsPanel extends LinearLayout {
     }
     void clear() {
         generation++; if (worker != null) worker.interrupt(); if (service != null) service.close(); finish();
-        status.setText(R.string.contacts_idle); result.setText("");
+        status.setText(R.string.contacts_idle); result.setText(""); displayed = null; export.setVisibility(GONE);
     }
     private void finish() { if (deadline != null) main.removeCallbacks(deadline); deadline = null; worker = null; service = null; load.setEnabled(true); cancel.setVisibility(GONE); }
     private void show(GroundContactsReport report) {
+        displayed = report; export.setVisibility(VISIBLE);
         status.setText(getResources().getString(R.string.contacts_count, report.contacts.size(), report.evaluations));
         StringBuilder text = new StringBuilder(getResources().getString(R.string.contacts_limits)).append('\n');
         for (GroundContactsReport.Contact c : report.contacts) text.append('\n').append(c.boundary).append(" · ").append(c.direction).append('\n').append(c.utc).append('\n').append(c.bracketStartUTC).append(" → ").append(c.bracketEndUTC).append('\n');
         if (report.contacts.isEmpty()) text.append('\n').append(getResources().getString(R.string.contacts_no_crossing));
+        if (report.hasOverlapWindows) {
+            text.append("\n\n").append(getResources().getString(R.string.contacts_windows));
+            for (GroundContactsReport.OverlapWindow window : report.overlapWindows) {
+                text.append("\n\n").append(getResources().getString(window.boundary.equals("external") ? R.string.contacts_overlap : R.string.contacts_containment))
+                        .append('\n').append(window.start.position.utc).append(" → ").append(window.end.position.utc)
+                        .append('\n').append(getResources().getString(R.string.contacts_duration, window.duration, window.minimumDuration, window.maximumDuration))
+                        .append('\n').append(edgeLabel(window.start.kind)).append(" / ").append(edgeLabel(window.end.kind));
+            }
+            if (report.overlapWindows.isEmpty()) text.append('\n').append(getResources().getString(R.string.contacts_no_window));
+        }
         text.append('\n').append(getResources().getString(R.string.contacts_geometry)).append(": ").append(report.startGeometry).append(" / ").append(report.endGeometry)
                 .append("\nIERS ").append(report.eopRetrievedAt).append('\n').append(report.eopHash).append("\nCatalog SHA-256\n").append(report.catalogHash);
         result.setText(text.toString());
     }
+    private String edgeLabel(String kind) { return getResources().getString(kind.equals("search-boundary") ? R.string.contacts_clipped : kind.equals("sampled-zero") ? R.string.contacts_zero : R.string.contacts_bracketed); }
+    void exportStatus(boolean success) { status.setText(success ? R.string.contacts_exported : R.string.contacts_export_failed); }
     private static String text(EditText view) { return view.getText().toString().trim(); }
     private Button button(int text, String tag) { Button v = new Button(getContext()); v.setText(text); v.setTag(tag); return v; }
     private TextView label(String text) { TextView v = new TextView(getContext()); v.setText(text); v.setTextSize(14); v.setTextColor(Color.rgb(220,230,235)); return v; }

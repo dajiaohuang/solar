@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -42,6 +43,40 @@ public final class GroundContactsReport {
         }
     }
     public final List<Contact> contacts;
+    public static final class WindowEdge {
+        public final Contact position;
+        public final String kind;
+        WindowEdge(Map<String,Object> value, String boundary, boolean start, double duration, List<Contact> contacts) throws StateTileDecoder.ProtocolException {
+            kind = text(value.get("kind"));
+            require(Arrays.asList("search-boundary", "sampled-zero", "bracketed-contact").contains(kind), "Invalid overlap edge kind");
+            Map<String,Object> fields = new HashMap<>(value); fields.put("boundary", boundary); fields.put("direction", kind.equals("sampled-zero") ? "sampled-zero" : start ? "enter" : "exit");
+            position = new Contact(fields, duration);
+            require(kind.equals("search-boundary") == (position.elapsed == 0 || position.elapsed == duration), "Invalid clipped edge");
+            if (!kind.equals("bracketed-contact")) require(position.low == position.elapsed && position.high == position.elapsed, "Invalid sampled edge bracket");
+            if (!kind.equals("search-boundary")) {
+                boolean found = false;
+                for (Contact c : contacts) if (c.boundary.equals(boundary) && c.direction.equals(position.direction) && c.elapsed == position.elapsed && c.low == position.low && c.high == position.high
+                        && c.utc.equals(position.utc) && c.bracketStartUTC.equals(position.bracketStartUTC) && c.bracketEndUTC.equals(position.bracketEndUTC)) found = true;
+                require(found, "Overlap edge has no matching contact evidence");
+            }
+        }
+    }
+    public static final class OverlapWindow {
+        public final String boundary;
+        public final WindowEdge start, end;
+        public final double duration, minimumDuration, maximumDuration;
+        OverlapWindow(Map<String,Object> value, double searchDuration, List<Contact> contacts) throws StateTileDecoder.ProtocolException {
+            boundary = text(value.get("boundary"));
+            start = new WindowEdge(object(value.get("start")), boundary, true, searchDuration, contacts);
+            end = new WindowEdge(object(value.get("end")), boundary, false, searchDuration, contacts);
+            duration = number(value.get("durationSeconds"));
+            List<?> bounds = list(value.get("numericalDurationBoundsSeconds"), 2); require(bounds.size() == 2, "Missing numerical duration bounds");
+            minimumDuration = number(bounds.get(0)); maximumDuration = number(bounds.get(1));
+            require(duration > 0 && duration == end.position.elapsed-start.position.elapsed && minimumDuration == Math.max(0, end.position.low-start.position.high) && maximumDuration == end.position.high-start.position.low, "Inconsistent numerical duration bounds");
+        }
+    }
+    public final boolean hasOverlapWindows;
+    public final List<OverlapWindow> overlapWindows;
     public final String catalogHash, eopHash, eopRetrievedAt, startGeometry, endGeometry;
     public final int evaluations;
     public final double duration;
@@ -79,7 +114,16 @@ public final class GroundContactsReport {
         for (Object entry : list(r.get("contacts"), 512)) {
             Contact contact = new Contact(object(entry), duration); require(contact.elapsed >= previous, "Unordered contacts"); previous = contact.elapsed; parsed.add(contact);
         }
-        contacts = Collections.unmodifiableList(parsed); original = bytes.clone();
+        contacts = Collections.unmodifiableList(parsed);
+        hasOverlapWindows = r.containsKey("sampledOverlapWindows");
+        List<OverlapWindow> windows = new ArrayList<>(); double lastStart = -1;
+        Map<String,Double> ends = new HashMap<>(); ends.put("external", -1d); ends.put("internal", -1d);
+        if (hasOverlapWindows) for (Object entry : list(r.get("sampledOverlapWindows"), 514)) {
+            OverlapWindow window = new OverlapWindow(object(entry), duration, contacts);
+            require(window.start.position.elapsed >= lastStart && window.start.position.elapsed > ends.get(window.boundary), "Unordered or overlapping spans");
+            lastStart = window.start.position.elapsed; ends.put(window.boundary, window.end.position.elapsed); windows.add(window);
+        }
+        overlapWindows = Collections.unmodifiableList(windows); original = bytes.clone();
     }
     // Preserve additional server fields verbatim; only validated fields above are displayed.
     public byte[] exportBytes() { return original.clone(); }

@@ -20,4 +20,15 @@
     <string name="contacts_limits">采样搜索可能漏掉短时及擦边事件。扫描步长 30 秒；0.05 秒数值区间不代表物理精度。不含边缘光行差、偏折、地形、折射或可见性认证。物理时间不确定性未知。</string>
     <string name="contacts_no_crossing">没有接触不代表没有重叠；搜索窗口可能在事件内部。</string>
     <string name="contacts_geometry">起点 / 终点几何类型</string>
+    <string name="contacts_windows">采样推断的重叠窗口。未采样间隙可能分割区间；持续时间范围是数值范围，不是物理不确定性。</string>
+    <string name="contacts_overlap">圆盘重叠</string>
+    <string name="contacts_containment">圆盘包含</string>
+    <string name="contacts_duration">%1$.3f 秒 · 数值持续时间范围 %2$.3f–%3$.3f 秒</string>
+    <string name="contacts_no_window">没有推断出正时长重叠。</string>
+    <string name="contacts_clipped">在搜索边界截断</string>
+    <string name="contacts_zero">采样零值</string>
+    <string name="contacts_bracketed">区间定位的接触</string>
+    <string name="contacts_export">保存接触与来源 JSON</string>
+    <string name="contacts_exported">已保存地面接触来源响应。</string>
+    <string name="contacts_export_failed">无法保存接触响应。</string>
 </resources>

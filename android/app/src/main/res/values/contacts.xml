@@ -20,4 +20,15 @@
     <string name="contacts_limits">Sampled search: short and grazing events may be missed. 30 s scan; 0.05 s numerical brackets are not physical accuracy. No apparent limb aberration, deflection, terrain, refraction or visibility certification. Physical timing uncertainty unknown.</string>
     <string name="contacts_no_crossing">No contacts does not prove no overlap; the window may lie inside an event.</string>
     <string name="contacts_geometry">Start / end geometry</string>
+    <string name="contacts_windows">Sample-inferred overlap windows. Unsampled gaps may split spans; duration bounds are numerical, not physical uncertainty.</string>
+    <string name="contacts_overlap">Disk overlap</string>
+    <string name="contacts_containment">Disk containment</string>
+    <string name="contacts_duration">%1$.3f s · numerical duration bounds %2$.3f–%3$.3f s</string>
+    <string name="contacts_no_window">No positive-duration overlap inferred.</string>
+    <string name="contacts_clipped">Clipped at search boundary</string>
+    <string name="contacts_zero">Sampled zero</string>
+    <string name="contacts_bracketed">Bracketed contact</string>
+    <string name="contacts_export">Save contacts and sources JSON</string>
+    <string name="contacts_exported">Ground-contact source response saved.</string>
+    <string name="contacts_export_failed">Could not save the contact response.</string>
 </resources>
