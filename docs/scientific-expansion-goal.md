@@ -1724,3 +1724,18 @@ Screenshot review found cramped inline assumptions; separate aligned rows were
 implemented and verified with a mobile-only rerun and screenshot inspection.
 No full local tests ran. This remains replay UI plus separately verified HTTP
 evidence, not live browser/backend acceptance or physical native-device proof.
+
+### Checkpoint 76: bounded Android stellar request contract (2026-09-23)
+
+Added an original-byte-owning Java request model with signed-64-bit decimal
+source identity, explicit TCB epoch and RV approximation, optional independently
+selected covariance policy, decoded input budgets and a bounded JSON/base64 wire
+representation. The real Gaia source files survive encoding and caller mutation.
+
+The single-class Gradle test attempt stopped before tests because the local
+Android SDK path is absent. Independent javac --release 17 compilation and the
+two focused JUnit tests passed using already cached dependencies. This verifies
+the plain Java request contract only, not Android packaging or UI. No full local
+tests ran. Response validation, native network/UI integration and iOS stellar
+access remain outstanding. Existing candidate iOS job 107106826761 is still
+executing its real-SPK HTTPS UI step; it was not cancelled or replaced.

@@ -417,3 +417,15 @@ passed. A follow-up mobile-only run verified spacing of the two separate
 assumption controls after screenshot review. These browser tests replay an
 actual CLI covariance export and do not replace live browser-to-Go acceptance.
 Physical native covariance UI and device validation remain outstanding.
+
+## Android request contract in progress
+
+StellarMotionRequest owns copies of the original manifest/CSV, preserves source
+IDs as decimal strings within signed-64-bit bounds, validates J1916–J2116 TCB,
+requires the RV approximation, and adds covariance only with its explicit policy.
+Its decoded input budgets match the backend and its wire output is capped at
+13 MiB. Two plain-JVM tests verify real fixture bytes, defensive copies, optional
+policy omission and invalid identities/epochs/budgets. They passed with javac
+--release 17 and cached JUnit. The targeted Android Gradle invocation could not
+start because no SDK path is configured on this host. Network response validation,
+native controls, Android build/device proof and iOS stellar access remain pending.
