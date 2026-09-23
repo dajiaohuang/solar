@@ -1,0 +1,549 @@
+{
+  "schemaVersion": 1,
+  "frame": "J2000",
+  "aberration": "NONE",
+  "timeScale": "TDB",
+  "sources": [
+    {
+      "path": "public/data/ephemerides/de440s-2000-01-01-2051-01-01.bsp",
+      "sha256": "8724d2d1bac115a75ad1f984c5b474ca778c96ee8be2df83e624cef61c001069"
+    },
+    {
+      "path": "src/data/pck00011.tpc",
+      "sha256": "3dff7b1dbeceaa01f25467767d3fa25816051c85d162d1edf04acb310ee28bb1"
+    }
+  ],
+  "cases": [
+    {
+      "name": "venus-2012 -8h",
+      "epochTdb": 2456084.1666666665,
+      "foregroundId": 299,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          10589450.85879016,
+          38344638.84181471,
+          16824974.97702852
+        ],
+        "radiusKm": 6051.8
+      },
+      "background": {
+        "positionKm": [
+          38753654.21174956,
+          134655875.65383828,
+          58375819.385000214
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.011304631233501589,
+      "occultCode": 0
+    },
+    {
+      "name": "venus-2012 -4h",
+      "epochTdb": 2456084.3333333335,
+      "foregroundId": 299,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          10665672.972113125,
+          38337018.70837644,
+          16789275.15193072
+        ],
+        "radiusKm": 6051.8
+      },
+      "background": {
+        "positionKm": [
+          38345926.447468296,
+          134757298.19062045,
+          58419805.47826437
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.00686521186124207,
+      "occultCode": 0
+    },
+    {
+      "name": "venus-2012 -2h",
+      "epochTdb": 2456084.4166666665,
+      "foregroundId": 299,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          10703894.099094108,
+          38333590.29703133,
+          16771589.143787257
+        ],
+        "radiusKm": 6051.8
+      },
+      "background": {
+        "positionKm": [
+          38141949.030314825,
+          134807614.615818,
+          58441627.21115451
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.004808418117597347,
+      "occultCode": 0
+    },
+    {
+      "name": "venus-2012 +0h",
+      "epochTdb": 2456084.5,
+      "foregroundId": 299,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          10742187.348906595,
+          38330416.553888634,
+          16754012.616883665
+        ],
+        "radiusKm": 6051.8
+      },
+      "background": {
+        "positionKm": [
+          37937896.405114874,
+          134857667.6853672,
+          58463334.67531149
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.0031612198078512445,
+      "occultCode": 2
+    },
+    {
+      "name": "venus-2012 +2h",
+      "epochTdb": 2456084.5833333335,
+      "foregroundId": 299,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          10780551.777733937,
+          38327497.64850585,
+          16736545.728542283
+        ],
+        "radiusKm": 6051.8
+      },
+      "background": {
+        "positionKm": [
+          37733768.93645581,
+          134907457.3030084,
+          58484927.82565899
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.002783639399191838,
+      "occultCode": 2
+    },
+    {
+      "name": "venus-2012 +4h",
+      "epochTdb": 2456084.6666666665,
+      "foregroundId": 299,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          10818986.441555087,
+          38324833.74728979,
+          16719188.63478934
+        ],
+        "radiusKm": 6051.8
+      },
+      "background": {
+        "positionKm": [
+          37529566.98939695,
+          134956983.37211573,
+          58506406.61703458
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.004048003169078654,
+      "occultCode": 2
+    },
+    {
+      "name": "venus-2012 +8h",
+      "epochTdb": 2456084.8333333335,
+      "foregroundId": 299,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          10896062.69919419,
+          38320271.60721758,
+          16684804.447857477
+        ],
+        "radiusKm": 6051.8
+      },
+      "background": {
+        "positionKm": [
+          37120941.11253628,
+          135055244.47894472,
+          58549020.94290401
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.00814263052076647,
+      "occultCode": 0
+    },
+    {
+      "name": "moon-2017 -8h",
+      "epochTdb": 2457986.9166666665,
+      "foregroundId": 301,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          -298654.5095926059,
+          201830.36416379744,
+          87269.61299240022
+        ],
+        "radiusKm": 1737.4
+      },
+      "background": {
+        "positionKm": [
+          -128759849.97567855,
+          72957386.40244274,
+          31627914.557923596
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.08141908097622384,
+      "occultCode": 0
+    },
+    {
+      "name": "moon-2017 -4h",
+      "epochTdb": 2457987.0833333335,
+      "foregroundId": 301,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          -307894.16874898784,
+          190146.38122417266,
+          83740.51114704067
+        ],
+        "radiusKm": 1737.4
+      },
+      "background": {
+        "positionKm": [
+          -128977861.67771338,
+          72623560.66988805,
+          31483219.530872606
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.04329636113640077,
+      "occultCode": 0
+    },
+    {
+      "name": "moon-2017 -2h",
+      "epochTdb": 2457987.1666666665,
+      "foregroundId": 301,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          -312328.197286408,
+          184187.70185177703,
+          81924.7261462303
+        ],
+        "radiusKm": 1737.4
+      },
+      "background": {
+        "positionKm": [
+          -129086481.28991097,
+          72456429.95129442,
+          31410777.567840744
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.024640682209069734,
+      "occultCode": 0
+    },
+    {
+      "name": "moon-2017 +0h",
+      "epochTdb": 2457987.25,
+      "foregroundId": 301,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          -316636.3210894146,
+          178154.7179511215,
+          80075.87938367248
+        ],
+        "radiusKm": 1737.4
+      },
+      "background": {
+        "positionKm": [
+          -129194843.0809322,
+          72289154.47104838,
+          31338272.83854214
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.008647632723106171,
+      "occultCode": 1
+    },
+    {
+      "name": "moon-2017 +2h",
+      "epochTdb": 2457987.3333333335,
+      "foregroundId": 301,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          -320817.094040443,
+          172050.07305116093,
+          78194.80601411645
+        ],
+        "radiusKm": 1737.4
+      },
+      "background": {
+        "positionKm": [
+          -129302946.80452555,
+          72121734.58688545,
+          31265705.494279023
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.016541933385300966,
+      "occultCode": 0
+    },
+    {
+      "name": "moon-2017 +4h",
+      "epochTdb": 2457987.4166666665,
+      "foregroundId": 301,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          -324869.1359325066,
+          165876.43088267487,
+          76282.35200772081
+        ],
+        "radiusKm": 1737.4
+      },
+      "background": {
+        "positionKm": [
+          -129410792.21571487,
+          71954170.6570981,
+          31193075.686620086
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.03463836521510019,
+      "occultCode": 0
+    },
+    {
+      "name": "moon-2017 +8h",
+      "epochTdb": 2457987.5833333335,
+      "foregroundId": 301,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          -332581.83660912653,
+          153332.8998137623,
+          72366.73634871199
+        ],
+        "radiusKm": 1737.4
+      },
+      "background": {
+        "positionKm": [
+          -129625707.13273837,
+          71618612.08806649,
+          31047629.28503258
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.07223556800779199,
+      "occultCode": 0
+    },
+    {
+      "name": "moon-2024 -8h",
+      "epochTdb": 2460408.9166666665,
+      "foregroundId": 301,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          348852.2887972581,
+          79119.82799799698,
+          33370.22113533316
+        ],
+        "radiusKm": 1737.4
+      },
+      "background": {
+        "positionKm": [
+          141878469.53364053,
+          44127332.47152332,
+          19127690.956416175
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.08552212826546611,
+      "occultCode": 0
+    },
+    {
+      "name": "moon-2024 -4h",
+      "epochTdb": 2460409.0833333335,
+      "foregroundId": 301,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          344989.04375625314,
+          92514.04189128935,
+          40762.659564397625
+        ],
+        "radiusKm": 1737.4
+      },
+      "background": {
+        "positionKm": [
+          141747099.45436645,
+          44501532.8086335,
+          19289921.951267738
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.044663441047060985,
+      "occultCode": 0
+    },
+    {
+      "name": "moon-2024 -2h",
+      "epochTdb": 2460409.1666666665,
+      "foregroundId": 301,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          342825.990928505,
+          99150.8640405346,
+          44432.47844893484
+        ],
+        "radiusKm": 1737.4
+      },
+      "background": {
+        "positionKm": [
+          141680976.4805083,
+          44688495.851180464,
+          19370978.00570288
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.024506841357961953,
+      "occultCode": 0
+    },
+    {
+      "name": "moon-2024 +0h",
+      "epochTdb": 2460409.25,
+      "foregroundId": 301,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          340510.16063697694,
+          105743.55607497947,
+          48082.51165157456
+        ],
+        "radiusKm": 1737.4
+      },
+      "background": {
+        "positionKm": [
+          141614561.77591977,
+          44875366.92899694,
+          19451994.188388146
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.006892945548741581,
+      "occultCode": 1
+    },
+    {
+      "name": "moon-2024 +2h",
+      "epochTdb": 2460409.3333333335,
+      "foregroundId": 301,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          338042.78739749093,
+          112289.20127960396,
+          51711.138178208144
+        ],
+        "radiusKm": 1737.4
+      },
+      "background": {
+        "positionKm": [
+          141547855.5124461,
+          45062145.62996686,
+          19532970.316342227
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.0182608813650868,
+      "occultCode": 0
+    },
+    {
+      "name": "moon-2024 +4h",
+      "epochTdb": 2460409.4166666665,
+      "foregroundId": 301,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          335425.18612960953,
+          118784.91631063205,
+          55316.75297109754
+        ],
+        "radiusKm": 1737.4
+      },
+      "background": {
+        "positionKm": [
+          141480857.86348417,
+          45248831.54262242,
+          19613906.20688268
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.03815779155970503,
+      "occultCode": 0
+    },
+    {
+      "name": "moon-2024 +8h",
+      "epochTdb": 2460409.5833333335,
+      "foregroundId": 301,
+      "backgroundId": 10,
+      "observerId": 399,
+      "foreground": {
+        "positionKm": [
+          329744.9526187879,
+          131615.2018440213,
+          62452.61385235267
+        ],
+        "radiusKm": 1737.4
+      },
+      "background": {
+        "positionKm": [
+          141345989.10694557,
+          45621923.36984794,
+          19775656.55061973
+        ],
+        "radiusKm": 695700.0
+      },
+      "separationRadians": 0.0787402653859716,
+      "occultCode": 0
+    }
+  ],
+  "generatorSha256": "1ef629d2ca98f18995d1834b385d7cb82bb17b126066c96867089b5a29a07069",
+  "software": {
+    "spiceypy": "8.2.0",
+    "cspice": "CSPICE_N0067"
+  },
+  "boundary": "Single-epoch geometric geocentric spherical-model comparison, not ground visibility, contact times or physical prediction error."
+}

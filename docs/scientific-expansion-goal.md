@@ -11,7 +11,7 @@ remain paused. Changes may go directly to main after the required checks.
 | Shared analysis ephemeris | Events, curves and mission endpoints use a frozen source contract, expose actual per-body models, offer strict SPK coverage, and export time/frame/source evidence; shared backend integration follows | In progress |
 | Ground observer | Geodetic station, SOFA-compatible celestial/terrestrial transforms, versioned IERS EOP, vacuum/apparent altitude-azimuth, rise/set and visibility windows; source expiry and uncertainty remain visible | In progress |
 | Orbit uncertainty | Pinned SBDB covariance with labels, units and solution epoch; validated covariance propagation and sampling; uncertainty ellipsoids and event distributions, independent of numerical tolerance | In progress: source ingestion, solution-epoch conversion/sampling/browser ellipsoids and offline/browser conditional six-parameter DE440 time propagation; complete fit-model propagation, native propagation and event distributions pending |
-| Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | Pending |
+| Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | In progress: verified PCK radii and single-epoch spherical limb geometry against real CSPICE cases; contacts, oriented limbs, observer/light-time integration and event consumers pending |
 | Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | In progress: bounded integration, variational equations, pinned DE440 adapter and browser/offline source-bearing experiments; additional forces, full covariance, native access and long-term diagnostics pending |
 | Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | In progress: pinned PCK semiaxes for 95 source bodies with independent CSPICE extraction; remaining data categories, orientation and identity integration pending |
 | Catalog streaming | Replace the fixed 8k/30k-only cloud path with cancellable binary chunk loading, priority scheduling and independent byte/decode/compute/upload limits | In progress: full-inventory 2D snapshot, bounded upload batching and spatial display available; continuous/3D streaming and source-priority scheduling pending |
@@ -805,3 +805,18 @@ limits and reproduction are in [body-shape-sources.md](body-shape-sources.md).
 Orientation, apparent limbs, contact searches, event references and consumer
 identity integration remain unfinished. This data foundation does not complete
 occultations, eclipses or the other pending scientific/data/performance rows.
+
+### Checkpoint 29: source-checked spherical occultation geometry (2026-09-23)
+
+Added bounded-domain single-epoch angular-cone geometry with stable small-angle
+separation, exact spherical angular radii, explicit depth ordering and internal/
+external gap values. Independent CSPICE occult references cover 21 real DE440/
+PCK geocentric samples, with analytic total containment and invalid-domain cases
+kept separate. All 24 focused checks passed with source hashes and actual SPK
+center-chain evaluation; no full local tests ran. See
+[occultation-geometry.md](occultation-geometry.md) for assumptions and thresholds.
+
+This is not completed event analysis: contact/window searches, missed-event
+reporting, light-time/topocentric/orientation integration, non-spherical limbs,
+stellar targets, event distributions and consumers remain unfinished, along
+with the other ledger rows. The batch remains local while d5cd39f validates.
