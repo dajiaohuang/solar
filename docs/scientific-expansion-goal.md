@@ -928,3 +928,23 @@ lint passed. No full local tests ran.
 The vector bundle is a reusable event input, not completed topocentric contact
 searches or apparent-limb modeling. Those and all other unfinished ledger rows
 remain open. This batch is local behind candidate 0320813 and browser 20714a1.
+
+### Verified promotion: 0320813 (2026-09-23)
+
+Run 35822269293 passed all repository, Web, four-browser, Android, iOS and final
+gate checks on exact head 0320813ae0be5fe1c7d1a8a1d2071e6ddad431a3. That
+commit was fast-forwarded to main. Browser experiments and station-vector
+commits through 4001499 were then submitted without interrupting the finished
+run. Deployment/publication remain paused.
+
+### Checkpoint 36: ground spherical-geometry composition (2026-09-23)
+
+Added a once-parsed immutable Go PCK table, independently matching all 95
+CSPICE radius triples. The Go sphere geometry matches 21 CSPICE cases; the
+internal ground entry point combines the existing SOFA/IERS reception vectors
+with those source radii and retains full station/SPK/EOP/PCK evidence. It rejects
+non-spherical targets, implicit correction models and missing inputs. Focused
+shape, geometry, composition and cancellation tests passed. No full local tests
+ran. This is single-epoch CN geometry, not completed ground contact searches,
+visibility, oriented limbs or native/browser consumers; all those and the other
+unfinished ledger rows remain open.

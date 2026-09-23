@@ -47,6 +47,25 @@ astrometry and native/browser event consumers remain unfinished. It does not
 provide a photometric flux loss, uncertainty distribution, event probability,
 ground eclipse path or visibility prediction.
 
+## Ground-station geometry core
+
+The Go `observation.EvaluateOccultation` entry point now combines the actual
+SOFA/IERS station reception vectors with a once-parsed, immutable PCK radius
+table. It requires explicit CN, distinct target NAIF IDs and sourced equal-axis
+spheres. It preserves the complete observation's station, EOP and SPK evidence,
+the original PCK identity, gap angles and classification. It is currently an
+internal single-epoch entry point, not an HTTP/native/browser contact search.
+Below-horizon geometry is not reported as verified visibility. Apparent center
+aberration/deflection is not substituted for a properly corrected limb model.
+
+The Go PCK loader independently matches all 95 CSPICE-extracted radius triples
+and excludes commented assignments; non-spherical bodies have no mean-radius
+fallback. The Go angular-cone implementation matches the 21 existing independent
+CSPICE geometry cases. A real SPK/IERS Singapore Sun-Moon calculation checks the
+composition and complete provenance, with cancellation, missing-EOP and shape/
+model rejection cases. This composition check is not an independent measured
+ground-eclipse reference; event-time references and consumers remain pending.
+
 ## Browser experiment
 
 **Evidence → Occultation laboratory** runs the same experiment engine as the
