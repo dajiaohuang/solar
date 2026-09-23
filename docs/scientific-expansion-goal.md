@@ -861,3 +861,14 @@ complete/grazing detection, event distributions and Web/native consumers remain
 open, alongside the broader ledger. Candidate 14836ae is still validating; this
 new batch must not interrupt its native jobs. Details are in
 [occultation-geometry.md](occultation-geometry.md).
+
+### Checkpoint 32: isolated ground-observer DUT1 diagnostic (2026-09-23)
+
+Added an opt-in independent ERFA sensitivity report using each pinned Horizons
+response's printed DUT1 while retaining the local SPK and other Earth-orientation
+inputs. Six cases show only 0.000269–0.000544 arcsecond changes, excluding the
+published DUT1 difference as the explanation for the existing 0.36–0.51
+arcsecond residual in those cases. No empirical correction was applied.
+Baseline references and runtime physics remain unchanged; diagnostics cannot
+overwrite fixtures. The complete frame/polar-motion/source-chain attribution
+and topocentric contact implementation remain open. No full local tests ran.

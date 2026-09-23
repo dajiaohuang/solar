@@ -131,6 +131,20 @@ is not a reason to alter the declared ITRS convention. No empirical offset is
 applied to force agreement. The Horizons comparison is a one-arcsecond angular
 regression envelope, not a matching-input numerical oracle or error bar.
 
+The reproducible `--diagnose-horizons` mode in `verify-observer-erfa.py`
+substitutes only each response's printed UT1-UTC into the unchanged ERFA
+calculation. Across the six pinned samples, local versus Horizons DUT1 differs
+by 19–38 microseconds. The direction changes by 0.000269–0.000544 arcsecond;
+the remaining Horizons separation is 0.3612–0.5046 arcsecond. Thus the published
+DUT1 difference does not explain the observed residual in these samples.
+Horizons prints DUT1 to 0.00001 second; this is a sensitivity experiment with
+rounded input, not an exact matching-EOP comparison or physical error budget.
+The command refuses `--write-fixture` when diagnostics are enabled, so the
+substitution cannot overwrite the independent baseline. Production calculations
+still use their original IERS snapshot. Horizons documents corrected IAU76/80
+and ITRF93 conventions in its [manual](https://ssd.jpl.nasa.gov/horizons/manual.html);
+attribution of the remaining full model-chain difference is still open.
+
 The separate [ERFA reference](../tests/fixtures/observer-erfa-reference.json)
 uses ERFA's C implementation, jplephem's independent SPK reader, the same pinned
 inputs, and a direct celestial-to-terrestrial matrix followed by east/north/up
