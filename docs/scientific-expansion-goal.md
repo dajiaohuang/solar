@@ -1858,3 +1858,24 @@ Swift compilation/tests remain unexecuted locally because the compiler is absent
 No full local tests ran. Existing candidate 7257372 / run 35843121444 is live;
 this subsequent response work does not replace it. iOS transport/UI and live
 scientific acceptance, plus the broader goal gaps, remain incomplete.
+
+### Checkpoint 84: iOS stellar transport and file workflow authored (2026-09-23)
+
+Connected an actor-isolated stellar service to the existing bounded URLSession
+transfer, with a 14 MiB response cap, 25-second network resource timeout, HTTPS
+authority/redirect rules, cancellation and backend error propagation. Encoding
+and scientific validation run away from MainActor. One service rejects overlapping
+requests instead of silently adding concurrent analysis work.
+
+Added a bilingual SwiftUI section with original-file import, exact source ID and
+TCB epoch, explicit RV/covariance assumptions, state/error readout and a retained
+raw-response document export. Source reads share a serial actor and enforce real
+byte limits plus cooperative cancellation; a UI timeout invalidates late results.
+An OS/provider read already blocked may still finish later. Input/lifecycle
+changes cancel tasks and invalidate results while preserving imported source bytes.
+
+Source/Xcode registration, targeted script lint and diff checks passed. Local
+Swift compilation and actual picker/export behavior remain unverified. No full
+local tests ran. Candidate 7257372 has passed its Android build and its iOS Swift
+request checks and simulator build; both native HTTPS UI jobs remain active.
+This later response/service/UI work is not included in that running candidate.

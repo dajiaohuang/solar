@@ -359,3 +359,35 @@ actor NativeGroundContactService {
         try Task.checkCancellation(); return (report, bytes)
     }
 }
+
+/// Encoding and validation run on this actor, away from the SwiftUI main actor.
+/// Each invocation owns a bounded transfer; cancellation invalidates its session.
+actor NativeStellarMotionService {
+    private let base: URL
+    private var running = false
+    init(base: URL) throws { self.base = try NativeSourceIdentityPage.validatedBase(base) }
+
+    func load(_ input: NativeStellarMotionRequest) async throws -> NativeStellarMotionReport {
+        try Task.checkCancellation()
+        guard !running else { throw StateTileFailure.invalid("Stellar request already running.") }
+        running = true
+        defer { running = false }
+        var request = URLRequest(url: base.appendingPathComponent("v1/stellar/motion"))
+        request.httpMethod = "POST"
+        request.httpBody = try input.bytes()
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
+        let (bytes, response) = try await NativeHTTPTransfer(contentType: "application/json",
+            limit: NativeStellarMotionReport.maxBytes, includeErrorBody: true, resourceTimeout: 25).receive(request)
+        try Task.checkCancellation()
+        if response.statusCode != 200 {
+            struct Failure: Decodable { struct Detail: Decodable { let code, message: String }; let error: Detail }
+            let failure = try JSONDecoder().decode(Failure.self, from: bytes)
+            throw StateTileFailure.invalid(failure.error.code + ": " + failure.error.message)
+        }
+        let report = try NativeStellarMotionReport(validating: bytes, request: input)
+        try Task.checkCancellation()
+        return report
+    }
+}
