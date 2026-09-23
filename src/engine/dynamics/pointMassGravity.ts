@@ -38,7 +38,9 @@ export function createPointMassGravity(inputMasses: readonly PointMass[], epheme
     if (![6, 42].includes(state.length) || output.length !== state.length || !state.every(Number.isFinite)) throw new RangeError('Expected six-state or six-state plus row-major 6x6 transition matrix')
     positions.fill(NaN); positionsAt(elapsed, ids, positions)
     if (!positions.every(Number.isFinite)) throw new RangeError('Prescribed source did not supply every finite mass position')
-    output.fill(0); gradient.fill(0)
+    const variational = state.length === 42
+    output.fill(0)
+    if (variational) gradient.fill(0)
     output.set(state.subarray(3, 6))
     for (let index = 0; index < masses.length; index++) {
       const mass = masses[index]
@@ -49,10 +51,10 @@ export function createPointMassGravity(inputMasses: readonly PointMass[], epheme
       const acceleration = mass.gmKm3PerSecond2 / distance / distance, curvature = acceleration / distance
       for (let row = 0; row < 3; row++) {
         output[row+3] += acceleration * unit[row]
-        for (let column = 0; column < 3; column++) gradient[3*row+column] += curvature * (3*unit[row]*unit[column] - Number(row === column))
+        if (variational) for (let column = 0; column < 3; column++) gradient[3*row+column] += curvature * (3*unit[row]*unit[column] - Number(row === column))
       }
     }
-    if (state.length === 42) {
+    if (variational) {
       // dPhi/dt = [0 I; da/dr 0] Phi. This transition matrix conditions on
       // fixed force parameters and prescribed ephemerides; it is not a full
       // joint SBDB state/parameter covariance propagation.

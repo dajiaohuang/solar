@@ -2035,3 +2035,17 @@ The nominal source retains the existing audited elliptic validation domain;
 individual sampled conics may be hyperbolic. No full local tests ran. Candidate
 f771612 remains live in iOS; its Swift protocol, simulator build, Android and
 Web/browser jobs passed, but system-picker/live-service acceptance is pending.
+
+### Checkpoint 93: skip unused state-only force Jacobians (2026-09-23)
+
+Point-mass gravity and the solar 1PN correction no longer evaluate unused
+position/velocity Jacobian entries for six-component state-only integrations.
+The 42-component variational path retains its existing formulas and resets.
+This removes work from the force evaluation path needed by nonlinear ensembles;
+no wall-clock speedup or device frame-rate improvement is claimed.
+
+Sixteen focused point-mass/solar-relativity tests passed, including independent
+reference integrations and new alternating 6/42-state checks to detect stale
+shared derivative buffers. TypeScript build, targeted ESLint and diff checks
+passed. No full local tests ran. Candidate f771612 remains active in its iOS
+native UI job and was neither replaced nor promoted.

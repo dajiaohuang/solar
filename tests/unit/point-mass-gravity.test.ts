@@ -8,6 +8,18 @@ const source: PrescribedEphemeris = { frame: 'J2000', origin: 'SSB', timeScale: 
   positions: (_t, _ids, out) => out.fill(0) }
 const model = () => createPointMassGravity([{ naifId: 10, gmKm3PerSecond2: 1, gmSource: 'Analytic unit-GM example', exclusionKm: 0 }], source)
 
+test('state-only force remains identical when alternating with variational evaluations', () => {
+  const force = model(), stateOnly = new Float64Array(6), variational = new Float64Array(42)
+  for (const initial of [[2,3,4,.1,.2,.3], [-5,2,1,0,1,0], [2,3,4,.1,.2,.3]]) {
+    force.derivative(0, Float64Array.from(initial), stateOnly)
+    force.derivative(0, withIdentityTransition(initial), variational)
+    expect(stateOnly).toEqual(variational.slice(0,6))
+    const fresh = new Float64Array(42)
+    model().derivative(0, withIdentityTransition(initial), fresh)
+    expect(variational).toEqual(fresh)
+  }
+})
+
 test('point force and analytic variational gradient agree with known radial values', () => {
   const state = withIdentityTransition([2, 0, 0, 0, 1, 0]), out = new Float64Array(42)
   model().derivative(0, state, out)

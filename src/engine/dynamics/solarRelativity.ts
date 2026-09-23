@@ -29,7 +29,7 @@ export function withSolarRelativity(base: Derivative, sunState: (elapsed: number
     for (let i = 0; i < 3; i++) {
       force[i] = a*r[i] + 4*b*v[i]
       output[i+3] += k*force[i]
-      for (let j = 0; j < 3; j++) {
+      if (state.length === 42) for (let j = 0; j < 3; j++) {
         dr[3*i+j] = k*(a*Number(i === j) - 4*gm/radius*(r[i]/radius)*(r[j]/radius) + 4*v[i]*v[j] - 3*(r[j]/radius)*(force[i]/radius))
         dv[3*i+j] = k*(-2*v[j]*r[i] + 4*r[j]*v[i] + 4*b*Number(i === j))
       }
