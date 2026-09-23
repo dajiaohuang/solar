@@ -1758,3 +1758,19 @@ pending; the local SDK limitation remains explicit.
 Candidate 335b083 / run 35838148647 has now passed every gate, including iOS and
 the final gate, and was fast-forwarded normally to main. Subsequent source
 validation, covariance and Android work is queued for a fresh exact-SHA gate.
+
+### Checkpoint 78: bounded Android stellar transport (2026-09-23)
+
+Implemented one-active-request HTTPS transport for original-source stellar
+analysis, with credential/redirect refusal, byte/content contracts, scientific
+response validation, backend error propagation and cancellation/deadline
+disconnect. Per-request deadline resources are released on completion, and
+cancelled/expired instances do not publish or start subsequent work.
+
+Four targeted JUnit transport tests passed after javac --release 17 compilation.
+They replay actual Go outputs through controlled connections and verify exact
+payloads, malformed body contracts, errors, pre/mid-read cancellation and a
+stalled-header deadline with an asserted reached wait state. No full local
+tests ran. Live TLS, Android UI/file import and lifecycle/device validation remain
+unproven; the missing local Android SDK is unchanged. Candidate c3b87f7 /
+run 35840897494 remains active and was not replaced.

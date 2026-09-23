@@ -443,3 +443,18 @@ request encoder avoids java.util.Base64 (added in Android API 26) because this
 project also targets API 24/25; its output was checked against the JDK encoder
 for 1,025 lengths and varied byte values. These remain plain-JVM tests, not a
 claim of Android device acceptance. Native networking/UI integration is pending.
+
+StellarMotionService now implements the Android-side HTTPS POST with one active
+request per instance, no redirects or credential-bearing URLs, strict JSON
+content type/length and a 14 MiB response cap. It uses the source-bound response
+validator, propagates backend error messages, and disconnects on cancellation
+or a 25-second deadline. Socket connect/read timeouts also apply. Cancelled or
+expired instances cannot be reused and results are checked again before return.
+The caller must run it off the UI thread and discard stale UI generations.
+
+Four focused JVM transport tests passed with injected connections, including
+exact request bytes and real CLI-output replay, malformed/truncated responses,
+redirect/error handling, pre-cancellation, mid-read cancellation and a deadline
+that demonstrably disconnects during a stalled header read. This is controlled
+transport evidence, not a real TLS exchange or Android lifecycle/device proof.
+Native file-picker controls and live service integration remain outstanding.
