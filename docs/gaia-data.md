@@ -110,3 +110,26 @@ The unit-Mahalanobis contour is not a 68 percent joint confidence region and
 does not include systematics, epoch propagation or occultation timing error.
 This positional marginal is not the full five/six-parameter astrometric model.
 Definitions follow the [ESA DR3 source data model](https://gea.esac.esa.int/archive/documentation/GDR3/Gaia_archive/chap_datamodel/sec_dm_main_source_catalogue/ssec_dm_gaia_source.html).
+
+## Five-parameter astrometric covariance
+
+The selected-star readout/export now includes the J2016.0 TCB five-coordinate
+formal marginal in alpha*cos(delta), delta, parallax, pmra, pmdec. Coordinate
+units are mas, mas, mas, mas/Julian-year, mas/Julian-year; matrix entries use
+products of the corresponding row/column units. ra_error and pmra already use
+the tangent-plane cos(delta) convention; no extra factor is applied.
+
+All ten supplied correlations are required. Positive finite formal errors and
+a strict positive Cholesky factorization of the correlation matrix are required,
+without jitter, clipping or covariance repair. This conservatively reports
+singular/non-positive-definite inputs as unavailable; it does not claim such
+inputs are all physically impossible. Original source rows remain untouched.
+
+Solution code 31 provides a five-parameter solution; code 95 yields only its
+five-coordinate marginal here. The pseudocolour coordinate and correlations are
+not part of the current import schema, so this is not a full six-parameter
+matrix or a result conditioned on pseudocolour. Code 3 has no five-parameter
+result. No epoch propagation, systematics, parallax zero-point correction,
+radial-velocity covariance or occultation probability is inferred.
+
+Definitions: [ESA DR3 gaia_source data model](https://gea.esac.esa.int/archive/documentation/GDR3/Gaia_archive/chap_datamodel/sec_dm_main_source_catalogue/ssec_dm_gaia_source.html).

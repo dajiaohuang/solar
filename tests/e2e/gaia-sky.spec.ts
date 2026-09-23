@@ -25,6 +25,12 @@ test('real Gaia worker uploads, zooms, selects and exports original source rows'
   expect(result.selectedPositionUncertainty.sourceId).toBe('65212863574614912')
   expect(result.selectedPositionUncertainty.includesSystematics).toBe(false)
   expect(result.selectedPositionUncertainty.contour).toBe('unit-Mahalanobis')
+  expect(result.selectedAstrometricCovariance).toMatchObject({sourceId:'65212863574614912',available:true,propagated:false,pseudocolourIncluded:false,sourceSolutionParameters:5})
+  const original = result.sources[1]
+  expect(result.selectedAstrometricCovariance.matrix[0][4]).toBe(original.ra_pmdec_corr*original.ra_error*original.pmdec_error)
+  await expect(panel.getByTestId('gaia-astrometric-covariance')).toContainText('Validated 5 × 5 marginal')
+  await panel.getByLabel('Star row').fill('14')
+  await expect(panel.getByTestId('gaia-astrometric-covariance')).toContainText('five-parameter-solution-unavailable')
   expect(result.manifest.referenceEpochTimeScale).toBe('TCB'); expect(result.summary.verifiedChunks).toBe(1)
   expect(result.manifest.chunks[0].sha256).toBe(manifest.chunks[0].sha256)
   await panel.getByLabel('Gaia manifest URL').fill('https://example.test/manifest.json')

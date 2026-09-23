@@ -1471,3 +1471,22 @@ default maximum of 80 AU. The engine correctly rejected the invalid [100,80]
 range; the final empty selection uses [70,80]. Existing exact filters and source
 precision contracts were retained. Candidate 002b1e6 has all completed checks
 green and still awaits iOS; it remains undisturbed.
+
+### Checkpoint 61: Gaia five-parameter formal covariance access (2026-09-23)
+
+Added joint five-coordinate formal covariance construction using all ten source
+correlations, explicit mixed units and strict correlation-factor validation.
+The selected-star browser readout and source export expose availability and the
+owned matrix. Code 95 is explicitly a five-coordinate marginal excluding
+pseudocolour; code 3 remains unavailable. No epoch propagation, systematics,
+radial-velocity covariance or physical probability claim is introduced.
+
+Three focused numerical cases passed, covering exact analytic mixed-unit
+entries, invalid joint correlations, conservative singular rejection, missing/
+unrepresentable inputs and every real-source marginal (18 five-parameter and
+one position-only source). Four focused browser profiles passed selection,
+export and position-only unavailability. Build and lint passed after explicitly
+typing the correlation matrix as number[][]; final symmetric assignment was
+checked again with the focused numerical file. No full local tests ran.
+Full six-parameter imports, observer/time propagation and stellar-occultation
+integration remain open. Candidate 002b1e6 remains active awaiting iOS.
