@@ -145,3 +145,19 @@ result. No epoch propagation, systematics, parallax zero-point correction,
 radial-velocity covariance or occultation probability is inferred.
 
 Definitions: [ESA DR3 gaia_source data model](https://gea.esac.esa.int/archive/documentation/GDR3/Gaia_archive/chap_datamodel/sec_dm_main_source_catalogue/ssec_dm_gaia_source.html).
+
+## Extended source schema
+
+Add --schema 2 to fetch-gaia-cone.mjs to retain pseudocolour, its standard error
+and its five astrometric cross-correlations. The default remains schema 1;
+existing original responses/chunk hashes remain unchanged. Browser imports
+validate the exact column set selected by schemaVersion (1: 28, 2: 35 fields).
+Schema 2 preserves nulls, including absent pseudocolour for five-parameter
+solutions. Units for pseudocolour and its error are inverse micrometres.
+
+A real schema-2 capture is retained at tests/fixtures/gaia-six-20260923: the
+same Pleiades-area cone with G <= 18 returned 94 rows and a matching count,
+including 15 six-parameter, 78 five-parameter and one position-only solution.
+Original CSV bytes, query URLs/timestamps and all chunk hashes are retained.
+The current covariance inspector still exports the five-coordinate marginal;
+full six-coordinate construction and observer/time propagation remain pending.

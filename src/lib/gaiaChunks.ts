@@ -1,9 +1,10 @@
 import { readBounded } from './stateTiles'
 import columns from '../data/gaiaColumns.json'
+import columnsV2 from '../data/gaiaColumnsV2.json'
 import type { GaiaSourceCache } from './gaiaCache'
 
 export type GaiaChunkDescriptor = { path: string; sha256: string; bytes: number; rows: number; raRangeDeg: [number, number]; decRangeDeg: [number, number] }
-export type GaiaManifest = { schemaVersion: 1; catalog: 'Gaia DR3'; frame: 'ICRS'; referenceEpochJulianYear: 2016; referenceEpochTimeScale: 'TCB'; rows: number; chunks: GaiaChunkDescriptor[]; catalogCompletenessCertified: false; settings: { raDeg: number; decDeg: number; radiusDeg: number; maxMagnitude: number; maxRows: number } }
+export type GaiaManifest = { schemaVersion: 1 | 2; catalog: 'Gaia DR3'; frame: 'ICRS'; referenceEpochJulianYear: 2016; referenceEpochTimeScale: 'TCB'; rows: number; chunks: GaiaChunkDescriptor[]; catalogCompletenessCertified: false; settings: { raDeg: number; decDeg: number; radiusDeg: number; maxMagnitude: number; maxRows: number } }
 export type GaiaSkyRegion = { raStartDeg: number; raEndDeg: number; decMinDeg: number; decMaxDeg: number; epochJulianYear: 2016 }
 export type GaiaSource = { source_id: string; ref_epoch: number; ra: number; dec: number; phot_g_mean_mag: number; [field: string]: string | number | null }
 export type GaiaChunk = { descriptor: GaiaChunkDescriptor; sources: GaiaSource[]; directionsICRS: Float64Array }
@@ -32,9 +33,9 @@ export function decodeGaiaManifest(bytes: Uint8Array): GaiaManifest {
   const settings = object(m.settings)
   if (!number(settings.raDeg) || settings.raDeg < 0 || settings.raDeg >= 360 || !number(settings.decDeg) || Math.abs(settings.decDeg) > 90 || !number(settings.radiusDeg) || settings.radiusDeg <= 0 || settings.radiusDeg > 2
     || !number(settings.maxMagnitude) || settings.maxMagnitude < 3 || settings.maxMagnitude > 20 || !integer(settings.maxRows, 1, 10000)) throw new Error('Invalid Gaia cone selection')
-  if (m.schemaVersion !== 1 || m.catalog !== 'Gaia DR3' || m.table !== 'gaiadr3.gaia_source' || m.frame !== 'ICRS' || m.referenceEpochJulianYear !== 2016 || m.referenceEpochTimeScale !== 'TCB'
+  if ((m.schemaVersion !== 1 && m.schemaVersion !== 2) || m.catalog !== 'Gaia DR3' || m.table !== 'gaiadr3.gaia_source' || m.frame !== 'ICRS' || m.referenceEpochJulianYear !== 2016 || m.referenceEpochTimeScale !== 'TCB'
     || m.catalogCompletenessCertified !== false || m.queryCountMatched !== true || !integer(m.rows, 0, 10000) || !Array.isArray(m.chunks) || m.chunks.length > 2592) throw new Error('Gaia source frame or manifest contract mismatch')
-  if (JSON.stringify(m.columns) !== JSON.stringify(columns)) throw new Error('Gaia manifest columns mismatch')
+  if (JSON.stringify(m.columns) !== JSON.stringify(m.schemaVersion === 2 ? columnsV2 : columns)) throw new Error('Gaia manifest columns mismatch')
   const paths = new Set<string>(); let rows = 0
   for (const item of m.chunks) {
     const c = object(item), match = typeof c.path === 'string' && /^r(\d+)-d(\d+)\.json$/.exec(c.path)
@@ -59,7 +60,8 @@ export function selectGaiaChunks(manifest: GaiaManifest, region: GaiaSkyRegion) 
     || touchesSeam && (c.raRangeDeg[0] === 0 || c.raRangeDeg[1] === 360)
     || intervals.some(([start,end]) => c.raRangeDeg[0] <= end && c.raRangeDeg[1] >= start)))
 }
-async function decodeChunk(bytes: Uint8Array, descriptor: GaiaChunkDescriptor, settings: GaiaManifest['settings'], signal: AbortSignal): Promise<GaiaChunk> {
+async function decodeChunk(bytes: Uint8Array, descriptor: GaiaChunkDescriptor, settings: GaiaManifest['settings'], signal: AbortSignal, schemaVersion: 1 | 2): Promise<GaiaChunk> {
+  const expectedColumns = schemaVersion === 2 ? columnsV2 : columns
   cancelled(signal)
   if (bytes.byteLength !== descriptor.bytes || await gaiaHash(bytes) !== descriptor.sha256) throw new Error('Gaia chunk source hash mismatch')
   cancelled(signal)
@@ -73,7 +75,7 @@ async function decodeChunk(bytes: Uint8Array, descriptor: GaiaChunkDescriptor, s
     if (typeof id !== 'string' || !/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n || BigInt(id) <= previous || row.ref_epoch !== 2016 || !number(row.ra) || row.ra < 0 || row.ra >= 360 || !number(row.dec) || Math.abs(row.dec) > 90 || !number(row.phot_g_mean_mag)
       || Math.floor(row.ra/5)*5 !== descriptor.raRangeDeg[0] || Math.min(35,Math.floor((row.dec+90)/5))*5-90 !== descriptor.decRangeDeg[0]) throw new Error('Invalid Gaia source identity or coordinates')
     previous = BigInt(id)
-    if (Object.keys(row).length !== columns.length || columns.some(key => !Object.hasOwn(row,key))) throw new Error('Gaia source columns mismatch')
+    if (Object.keys(row).length !== expectedColumns.length || expectedColumns.some(key => !Object.hasOwn(row,key))) throw new Error('Gaia source columns mismatch')
     for (const [key, value] of Object.entries(row)) {
       if (key === 'source_id' || value === null) continue
       if (!number(value) || key.endsWith('_error') && value < 0 || key.endsWith('_corr') && Math.abs(value) > 1) throw new Error('Invalid Gaia numeric field')
@@ -133,7 +135,7 @@ export async function streamGaiaChunks(options: {
             if (!response.ok) throw new Error(`Gaia chunk HTTP ${response.status}`)
             bytes = new Uint8Array(await readBounded(response, 'application/json', descriptor.bytes))
           }
-          const chunk = await decodeChunk(bytes, descriptor, manifest.settings, controller.signal)
+          const chunk = await decodeChunk(bytes, descriptor, manifest.settings, controller.signal, manifest.schemaVersion)
           for (const source of chunk.sources) {
             if (sourceIds.has(source.source_id)) throw new Error('Duplicate Gaia source across chunks')
             sourceIds.add(source.source_id)

@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 2,
+  "catalog": "Gaia DR3",
+  "table": "gaiadr3.gaia_source",
+  "frame": "ICRS",
+  "referenceEpochJulianYear": 2016,
+  "referenceEpochTimeScale": "TCB",
+  "implementation": {
+    "node": "v24.14.1",
+    "generatorSha256": "368d52b810a14e5b3bf1311287df919c7dfda7e67d27359658bd8ef204d20c03",
+    "parserSha256": "ea09d20b1d7b2028a5c7758ff3e23143ee859b37637472f436f0199d43fe6e9a",
+    "columnsSha256": "9eaa34bac80e48f92d1e18d9099e5d59fbbeb72ceee3b347f52bb76f755eeebc"
+  },
+  "settings": {
+    "raDeg": 56.75,
+    "decDeg": 24.1167,
+    "radiusDeg": 0.1,
+    "maxMagnitude": 18,
+    "maxRows": 1024
+  },
+  "columns": [
+    "source_id",
+    "ref_epoch",
+    "ra",
+    "dec",
+    "ra_error",
+    "dec_error",
+    "parallax",
+    "parallax_error",
+    "pmra",
+    "pmra_error",
+    "pmdec",
+    "pmdec_error",
+    "ra_dec_corr",
+    "ra_parallax_corr",
+    "ra_pmra_corr",
+    "ra_pmdec_corr",
+    "dec_parallax_corr",
+    "dec_pmra_corr",
+    "dec_pmdec_corr",
+    "parallax_pmra_corr",
+    "parallax_pmdec_corr",
+    "pmra_pmdec_corr",
+    "astrometric_params_solved",
+    "ruwe",
+    "phot_g_mean_mag",
+    "bp_rp",
+    "radial_velocity",
+    "radial_velocity_error",
+    "pseudocolour",
+    "pseudocolour_error",
+    "ra_pseudocolour_corr",
+    "dec_pseudocolour_corr",
+    "parallax_pseudocolour_corr",
+    "pmra_pseudocolour_corr",
+    "pmdec_pseudocolour_corr"
+  ],
+  "rows": 94,
+  "queryCountMatched": true,
+  "catalogCompletenessCertified": false,
+  "units": {
+    "ra": "degree",
+    "dec": "degree",
+    "ra_error": "mas; alpha*cos(delta)",
+    "dec_error": "mas",
+    "parallax": "mas",
+    "pmra": "mas/Julian year; mu_alpha*cos(delta)",
+    "pmdec": "mas/Julian year",
+    "radial_velocity": "km/s",
+    "pseudocolour": "inverse-micrometre",
+    "pseudocolour_error": "inverse-micrometre"
+  },
+  "limitations": [
+    "A magnitude-limited cone is not full-sky data or a completeness guarantee.",
+    "Missing fields remain null. Negative parallax is retained; no inverse-parallax distances are inferred.",
+    "No proper-motion propagation, observer parallax, aberration, deflection, zero-point correction or occultation uncertainty model is applied.",
+    "Spatial bins describe returned coordinates at J2016.0, not bounds at arbitrary epochs."
+  ],
+  "documentation": [
+    "https://www.cosmos.esa.int/web/gaia/dr3",
+    "https://www.cosmos.esa.int/web/gaia-users/archive/programmatic-access",
+    "https://gea.esac.esa.int/archive/documentation/GDR3/Gaia_archive/chap_datamodel/sec_dm_main_source_catalogue/ssec_dm_gaia_source.html"
+  ],
+  "sources": [
+    {
+      "path": "count.csv",
+      "bytes": 18,
+      "sha256": "d41f7fbc2382c6105b46f4a7684c0f156f12c43aa36a64df995926d267ac6c26",
+      "query": "SELECT COUNT(*) AS selected_count FROM gaiadr3.gaia_source WHERE CONTAINS(POINT('ICRS',ra,dec),CIRCLE('ICRS',56.75,24.1167,0.1))=1 AND phot_g_mean_mag<=18",
+      "url": "https://gea.esac.esa.int/tap-server/tap/sync?REQUEST=doQuery&LANG=ADQL&FORMAT=csv&MAXREC=1&QUERY=SELECT+COUNT%28*%29+AS+selected_count+FROM+gaiadr3.gaia_source+WHERE+CONTAINS%28POINT%28%27ICRS%27%2Cra%2Cdec%29%2CCIRCLE%28%27ICRS%27%2C56.75%2C24.1167%2C0.1%29%29%3D1+AND+phot_g_mean_mag%3C%3D18",
+      "retrievedAt": "2026-09-23T08:07:03.505Z"
+    },
+    {
+      "path": "rows.csv",
+      "bytes": 32918,
+      "sha256": "d9e7fc946aab7425672edc0e1cb44b36d5a404ead07e4fd058a49e4a76532e48",
+      "query": "SELECT TOP 1025 source_id,ref_epoch,ra,dec,ra_error,dec_error,parallax,parallax_error,pmra,pmra_error,pmdec,pmdec_error,ra_dec_corr,ra_parallax_corr,ra_pmra_corr,ra_pmdec_corr,dec_parallax_corr,dec_pmra_corr,dec_pmdec_corr,parallax_pmra_corr,parallax_pmdec_corr,pmra_pmdec_corr,astrometric_params_solved,ruwe,phot_g_mean_mag,bp_rp,radial_velocity,radial_velocity_error,pseudocolour,pseudocolour_error,ra_pseudocolour_corr,dec_pseudocolour_corr,parallax_pseudocolour_corr,pmra_pseudocolour_corr,pmdec_pseudocolour_corr FROM gaiadr3.gaia_source WHERE CONTAINS(POINT('ICRS',ra,dec),CIRCLE('ICRS',56.75,24.1167,0.1))=1 AND phot_g_mean_mag<=18 ORDER BY source_id",
+      "url": "https://gea.esac.esa.int/tap-server/tap/sync?REQUEST=doQuery&LANG=ADQL&FORMAT=csv&MAXREC=1025&QUERY=SELECT+TOP+1025+source_id%2Cref_epoch%2Cra%2Cdec%2Cra_error%2Cdec_error%2Cparallax%2Cparallax_error%2Cpmra%2Cpmra_error%2Cpmdec%2Cpmdec_error%2Cra_dec_corr%2Cra_parallax_corr%2Cra_pmra_corr%2Cra_pmdec_corr%2Cdec_parallax_corr%2Cdec_pmra_corr%2Cdec_pmdec_corr%2Cparallax_pmra_corr%2Cparallax_pmdec_corr%2Cpmra_pmdec_corr%2Castrometric_params_solved%2Cruwe%2Cphot_g_mean_mag%2Cbp_rp%2Cradial_velocity%2Cradial_velocity_error%2Cpseudocolour%2Cpseudocolour_error%2Cra_pseudocolour_corr%2Cdec_pseudocolour_corr%2Cparallax_pseudocolour_corr%2Cpmra_pseudocolour_corr%2Cpmdec_pseudocolour_corr+FROM+gaiadr3.gaia_source+WHERE+CONTAINS%28POINT%28%27ICRS%27%2Cra%2Cdec%29%2CCIRCLE%28%27ICRS%27%2C56.75%2C24.1167%2C0.1%29%29%3D1+AND+phot_g_mean_mag%3C%3D18+ORDER+BY+source_id",
+      "retrievedAt": "2026-09-23T08:07:06.705Z"
+    }
+  ],
+  "chunks": [
+    {
+      "path": "r11-d22.json",
+      "sha256": "bf5ae3d7d09261bbb2f8af5b22f5d2e57c2933f6dec6690e297f11c612d1366a",
+      "bytes": 89350,
+      "rows": 94,
+      "raRangeDeg": [
+        55,
+        60
+      ],
+      "decRangeDeg": [
+        20,
+        25
+      ]
+    }
+  ]
+}

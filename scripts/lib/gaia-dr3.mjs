@@ -2,9 +2,15 @@ import { createHash } from 'node:crypto'
 
 export const endpoint = 'https://gea.esac.esa.int/tap-server/tap/sync'
 import columns from '../../src/data/gaiaColumns.json' with { type: 'json' }
+import columnsV2 from '../../src/data/gaiaColumnsV2.json' with { type: 'json' }
 export { columns }
+export function columnsForSchema(schemaVersion = 1) {
+  if (schemaVersion !== 1 && schemaVersion !== 2) throw new Error('Unsupported Gaia schema version')
+  return schemaVersion === 2 ? columnsV2 : columns
+}
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex')
-export function queries({ raDeg, decDeg, radiusDeg, maxMagnitude, maxRows }) {
+export function queries({ raDeg, decDeg, radiusDeg, maxMagnitude, maxRows }, schemaVersion = 1) {
+  const columns = columnsForSchema(schemaVersion)
   if (![raDeg, decDeg, radiusDeg, maxMagnitude].every(Number.isFinite) || raDeg < 0 || raDeg >= 360 || Math.abs(decDeg) > 90 || radiusDeg <= 0 || radiusDeg > 2 || maxMagnitude < 3 || maxMagnitude > 20 || !Number.isInteger(maxRows) || maxRows < 1 || maxRows > 10000) throw new Error('Invalid bounded Gaia cone settings')
   const predicate = `CONTAINS(POINT('ICRS',ra,dec),CIRCLE('ICRS',${raDeg},${decDeg},${radiusDeg}))=1 AND phot_g_mean_mag<=${maxMagnitude}`
   return { count: `SELECT COUNT(*) AS selected_count FROM gaiadr3.gaia_source WHERE ${predicate}`,
@@ -22,8 +28,9 @@ export function parseCount(bytes, maxRows) {
   const count = Number(rows[0][0]); if (!Number.isSafeInteger(count) || count > maxRows) throw new Error('Gaia cone exceeds row budget; narrow the cone or magnitude limit')
   return count
 }
-export function parseSources(bytes, settings, count) {
-  queries(settings)
+export function parseSources(bytes, settings, count, schemaVersion = 1) {
+  queries(settings, schemaVersion)
+  const columns = columnsForSchema(schemaVersion)
   const rows = csv(bytes, columns)
   if (rows.length !== count || rows.length > settings.maxRows) throw new Error('Gaia count mismatch or truncated response')
   let last = -1n

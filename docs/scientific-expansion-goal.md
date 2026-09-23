@@ -1502,3 +1502,22 @@ multi-chunk measurements, retaining their implementation and hardware limits.
 No tests were run for this documentation-only correction. No full local tests
 ran. The full goal remains active; current-state scientific and capacity gaps
 are not waived by the passing bounded checks.
+
+### Checkpoint 63: original Gaia six-parameter source fields (2026-09-23)
+
+Added opt-in source schema 2 with pseudocolour, its error and all five associated
+correlations, keeping schema 1 and its original assets unchanged. Importer and
+browser enforce version-specific column sets; the CLI records the exact schema
+hash and pseudocolour units. A real ESA query returned 94 matching-count rows:
+15 six-parameter, 78 five-parameter and one position-only source. Original CSV,
+query/time/hash receipts and the full chunk are checked in under
+tests/fixtures/gaia-six-20260923. No negative parallaxes/nulls were replaced.
+
+Thirteen existing focused importer/loader cases passed. Two additional real
+schema-2 cases passed after adding the required Content-Length header to the
+controlled response fixture; they verify every receipt hash, source fields,
+exact reconstructed chunk and browser decoder schema isolation. Project-reference
+type build and changed-file lint passed. No full local tests ran. The current
+inspector still exposes only the five-coordinate marginal; full six-coordinate
+construction, propagation and stellar occultation remain open. Candidate
+002b1e6 remains active; it was not replaced.
