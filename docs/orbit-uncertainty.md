@@ -4,9 +4,9 @@ The implementation ingests and audits SBDB covariance, converts an elliptic
 solution's joint covariance to Cartesian coordinates at its solution epoch, and
 generates reproducible Gaussian parameter offsets. The Evidence page displays
 two-coordinate projections and a rotatable three-dimensional position ellipsoid.
-An offline experiment additionally propagates six-parameter covariance under an
-explicitly adopted restricted DE440 model. Browser plots remain solution-epoch
-only; complete source-fit propagation and event probabilities are unfinished.
+Offline and browser experiments additionally propagate six-parameter covariance
+under an explicitly adopted restricted DE440 model. Complete source-fit
+propagation and event probabilities are unfinished.
 
 Run the development ingestion explicitly:
 
@@ -191,8 +191,8 @@ scales, exact degeneracies, invalid covariances and the original Eros/Bennu
 sources. Four real browser import/rotate/contour/reset/export checks passed;
 the mobile screenshot retained the true geometry without panel overflow.
 The actual Bennu CLI export retained all eight axes and 1,000 seeded parameter
-offsets alongside its ellipsoid. These are solution-epoch results; temporal
-browser propagation, model error and event distributions remain unfinished.
+offsets alongside its ellipsoid. These are solution-epoch results; complete
+fit-model propagation, model error and event distributions remain unfinished.
 
 ## Conditional six-parameter time propagation
 
@@ -239,6 +239,30 @@ numerical checks, not physical uncertainty certification or global error bounds.
 Thirteen focused propagation, sampling and CLI checks passed locally, including
 source ownership, cancellation, source/generator hashes, extra-parameter
 rejection and output preservation. A real +30-day Eros CLI experiment with solar
-1PN completed in 178 accepted steps. No full local tests ran. Browser/native
+1PN completed in 178 accepted steps. No full local tests ran. Native
 propagation, matched extra-parameter forces, nonlinear ensembles and event
 distributions remain unfinished.
+
+## Browser time propagation
+
+After importing a source, expand **Propagate formal covariance in time**. Set
+the signed TDB duration and explicit point-mass exclusion distance, optionally
+adopt solar 1PN, then explicitly adopt the conditional DE440 model. This starts
+the shared dynamics worker; the interface remains responsive and offers cancel.
+The source is reparsed and hashed in the worker, and the bounded DE440 download
+must pass its original size/hash checks before integration. Extra source axes
+are rejected before ephemeris download; solution-epoch inspection remains usable.
+
+Results display the split TDB endpoint, formal marginal standard deviations,
+rotatable propagated position ellipsoid, selected force model and accepted-step
+count. JSON export includes original source payload/hash, full covariance, model
+and numerical settings, limitations and application build identity. It does not
+compute event probabilities. Changing parameters, replacing the file or clearing
+the panel discards the old result and terminates any active worker. A terminated
+worker cannot later publish into a replacement source's view.
+
+Four browser profiles passed actual Eros propagation/export against the independent
+direct-covariance reference, plus cancellation and replacement during a held source
+request. Four profiles also passed the existing nominal dynamics experiment after
+worker reuse. The mobile result screenshot showed the full table, units, epoch and
+ellipsoid without horizontal overflow. Only focused browser cases ran locally.

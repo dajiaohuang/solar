@@ -5,6 +5,7 @@ import { cartesianCovarianceAtSolutionEpoch } from '../../engine/ephemeris/orbit
 import { covarianceProjection } from '../../engine/ephemeris/covarianceProjection'
 import { covarianceEllipsoid } from '../../engine/ephemeris/covarianceEllipsoid'
 import { CovarianceEllipsoid } from './CovarianceEllipsoid'
+import { CovarianceTimePropagation } from './CovarianceTimePropagation'
 import { useI18n } from '../../i18n/context'
 import { saveTextExport } from '../../lib/platform'
 
@@ -18,13 +19,14 @@ export function OrbitUncertainty() {
   const { language } = useI18n(), zh = language === 'zh'
   const [loaded, setLoaded] = useState<Loaded | null>(null), [result, setResult] = useState<Converted | null>(null)
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
+  const [inputBytes, setInputBytes] = useState<ArrayBuffer | null>(null)
   const generation = useRef(0)
   const ellipsoid = useMemo(() => {
     if (!result) return null
     try { return covarianceEllipsoid(result.matrix, AU_KM) } catch { return null }
   }, [result])
   useEffect(() => () => { generation.current++ }, [])
-  const clear = () => { generation.current++; setLoaded(null); setResult(null); setError(''); setBusy(false) }
+  const clear = () => { generation.current++; setLoaded(null); setInputBytes(null); setResult(null); setError(''); setBusy(false) }
   const read = async (file: File) => {
     clear()
     const current = generation.current
@@ -35,7 +37,7 @@ export function OrbitUncertainty() {
       if (current !== generation.current) return
       const source = parseSbdbCovariance(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)))
       const sourceSha256 = await sha(bytes)
-      if (current === generation.current) setLoaded({ source, sourceSha256, sourceBytes: bytes.byteLength, sourceName: file.name })
+      if (current === generation.current) { setLoaded({ source, sourceSha256, sourceBytes: bytes.byteLength, sourceName: file.name }); setInputBytes(bytes) }
     } catch (reason) { if (current === generation.current) setError(reason instanceof Error ? reason.message : String(reason)) }
     finally { if (current === generation.current) setBusy(false) }
   }
@@ -90,6 +92,7 @@ export function OrbitUncertainty() {
       {ellipsoid ? <CovarianceEllipsoid geometry={ellipsoid} zh={zh} /> : <p>{zh ? '三维椭球无法可靠分解，未修补协方差。' : 'The 3D ellipsoid cannot be factored reliably; covariance has not been repaired.'}</p>}
       <button type="button" className="secondary-button" onClick={() => { void saveTextExport(JSON.stringify({ schemaVersion: 1, calculation: 'solution-epoch-coordinate-covariance', ...loaded, adoptedGmSourceSha256: GM_SHA, result, positionEllipsoid: ellipsoid ? { ...ellipsoid, units: 'km', frame: result.frame } : null }, null, 2), `solar-covariance-${loaded.source.designation.replace(/[^\w-]/g, '_')}.json`, 'application/json').catch(reason => setError(String(reason))) }}>{zh ? '导出协方差与来源 JSON' : 'Export covariance and source JSON'}</button>
     </div>}
+    {loaded && inputBytes && <CovarianceTimePropagation key={loaded.sourceSha256} bytes={inputBytes} dimension={loaded.source.labels.length} zh={zh} />}
   </section>
 }
 
