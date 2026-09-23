@@ -267,9 +267,9 @@ final class ObservationUITests: XCTestCase {
             if route == "valid" {
                 waitForLabel(app.staticTexts["contacts.status"], "4 contacts · 521 evaluations")
                 let window = app.staticTexts["contacts.window.0"]
-                reveal(app, window); XCTAssertTrue(window.label.contains("9559.248"))
+                reveal(app, window); XCTAssertTrue(window.label.contains("9,559.248 s [9,559.219, 9,559.277]"), window.label)
                 let inner = app.staticTexts["contacts.window.1"]
-                reveal(app, inner); XCTAssertTrue(inner.label.contains("236.074"))
+                reveal(app, inner); XCTAssertTrue(inner.label.contains("236.074 s [236.045, 236.104]"), inner.label)
                 screenshot(app, "ground-contact-real-response-replay")
                 reveal(app, app.buttons["contacts.export"]); XCTAssertTrue(app.buttons["contacts.export"].exists)
                 reveal(app, app.buttons["contacts.disclosure"]); app.buttons["contacts.disclosure"].tap()

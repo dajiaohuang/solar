@@ -1187,3 +1187,11 @@ full-sky, current apparent sky, physical uncertainty or sustained capacity proof
 Candidate 5d9a2b9 finished: repository, Web, all browsers and Android passed.
 iOS compiled and executed but its new window-duration text assertion failed at
 ObservationUITests.swift:270; no main promotion. Investigation is in progress.
+
+The iOS xcresult accessibility capture confirms the actual label was
+9,559.248 s [9,559.219, 9,559.277], and containment was
+236.074 s [236.045, 236.104]. SwiftUI correctly applied en_US digit grouping;
+the test searched for an ungrouped value. Corrected the explicit en_US device
+assertions to include both the formatted duration and numerical bounds, and
+include the actual label in any failure. Scientific calculations are unchanged.
+Remote revalidation remains required; actual system-picker export remains open.
