@@ -705,3 +705,7 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 .source-coverage-counts dt { margin-top: .6rem; }
 .source-coverage-counts dd { margin: .15rem 0 0; font-variant-numeric: tabular-nums; }
 .source-coverage-report { overflow-wrap: anywhere; }
+
+.gaia-sky { overflow-wrap: anywhere; }
+.gaia-sky .field { min-width: 0; }
+.gaia-sky .checksum { font: 10px var(--font-mono); color: var(--accent-2); }

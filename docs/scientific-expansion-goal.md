@@ -1164,3 +1164,26 @@ owned copy, without changing source fixtures. No full local tests ran.
 Admission counters are not measured heap/GPU performance. Gaia UI/GPU/cache
 integration, motion-aware bounds, stellar event integration and sustained scale
 evidence remain unfinished. Candidate 5d9a2b9 is running and was not interrupted.
+
+### Checkpoint 46: source-backed Gaia WebGL sky chart (2026-09-23)
+
+The evidence workspace now accepts local manifest/chunk files or an explicit
+HTTP(S) manifest and includes the real 19-row ESA example as a lazy import. A
+dedicated worker validates sources and computes catalog-epoch gnomonic display
+coordinates from Float64 directions. Transferred Float32 display batches append
+to one bounded GPU buffer; upload acknowledgements backpressure the worker.
+Cancellation, input changes, errors and unmount terminate work and clear retained
+results. Zoom redraws the existing buffer; source selection/export preserves
+original decimal-string IDs, rows and manifest evidence.
+
+Seven focused loader/projection unit tests and 12 Gaia-only browser cases passed
+across desktop Chromium/Firefox/WebKit and mobile Chromium. Cases cover original
+source export, zoom/selection, corrupt-byte rejection, cancellation and layout.
+Mobile screenshot inspection confirmed visible stars and no horizontal overflow;
+long hash wrapping was fixed after the first focused run. Types and changed-file
+lint passed. No full local tests ran. This is a small catalog-epoch chart, not
+full-sky, current apparent sky, physical uncertainty or sustained capacity proof.
+
+Candidate 5d9a2b9 finished: repository, Web, all browsers and Android passed.
+iOS compiled and executed but its new window-duration text assertion failed at
+ObservationUITests.swift:270; no main promotion. Investigation is in progress.

@@ -1,7 +1,7 @@
 import { readBounded } from './stateTiles'
 
 export type GaiaChunkDescriptor = { path: string; sha256: string; bytes: number; rows: number; raRangeDeg: [number, number]; decRangeDeg: [number, number] }
-export type GaiaManifest = { schemaVersion: 1; catalog: 'Gaia DR3'; frame: 'ICRS'; referenceEpochJulianYear: 2016; referenceEpochTimeScale: 'TCB'; rows: number; chunks: GaiaChunkDescriptor[]; catalogCompletenessCertified: false }
+export type GaiaManifest = { schemaVersion: 1; catalog: 'Gaia DR3'; frame: 'ICRS'; referenceEpochJulianYear: 2016; referenceEpochTimeScale: 'TCB'; rows: number; chunks: GaiaChunkDescriptor[]; catalogCompletenessCertified: false; settings: { raDeg: number; decDeg: number; radiusDeg: number; maxMagnitude: number; maxRows: number } }
 export type GaiaSkyRegion = { raStartDeg: number; raEndDeg: number; decMinDeg: number; decMaxDeg: number; epochJulianYear: 2016 }
 export type GaiaSource = { source_id: string; ref_epoch: number; ra: number; dec: number; phot_g_mean_mag: number; [field: string]: string | number | null }
 export type GaiaChunk = { descriptor: GaiaChunkDescriptor; sources: GaiaSource[]; directionsICRS: Float64Array }
@@ -17,6 +17,9 @@ export async function gaiaHash(bytes: Uint8Array) {
 export function decodeGaiaManifest(bytes: Uint8Array): GaiaManifest {
   if (bytes.byteLength < 1 || bytes.byteLength > 1024*1024) throw new Error('Gaia manifest size exceeds budget')
   const m = object(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)))
+  const settings = object(m.settings)
+  if (!number(settings.raDeg) || settings.raDeg < 0 || settings.raDeg >= 360 || !number(settings.decDeg) || Math.abs(settings.decDeg) > 90 || !number(settings.radiusDeg) || settings.radiusDeg <= 0 || settings.radiusDeg > 2
+    || !number(settings.maxMagnitude) || !integer(settings.maxRows, 1, 10000)) throw new Error('Invalid Gaia cone selection')
   if (m.schemaVersion !== 1 || m.catalog !== 'Gaia DR3' || m.table !== 'gaiadr3.gaia_source' || m.frame !== 'ICRS' || m.referenceEpochJulianYear !== 2016 || m.referenceEpochTimeScale !== 'TCB'
     || m.catalogCompletenessCertified !== false || m.queryCountMatched !== true || !integer(m.rows, 0, 10000) || !Array.isArray(m.chunks) || m.chunks.length > 2592) throw new Error('Gaia source frame or manifest contract mismatch')
   const paths = new Set<string>(); let rows = 0

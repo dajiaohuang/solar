@@ -38,9 +38,8 @@ catalog completeness guarantee. See the [Gaia DR3 release](https://www.cosmos.es
 
 The checked-in Pleiades-area example contains 19 real ESA rows in one storage
 chunk. Its separate count query also returned 19. This is ingestion and byte
-provenance evidence, not a capacity benchmark. Parallel chunk consumption,
-proper-motion/observer transforms, sky rendering and stellar occultation
-integration remain unfinished.
+provenance evidence, not a capacity benchmark. Proper-motion/observer transforms, stellar occultation integration and
+sustained capacity measurements remain unfinished.
 
 ## Browser/worker chunk consumer
 
@@ -58,5 +57,19 @@ a chunk and clear its own retained state on cancellation. These counters are
 admission limits, not measurements of JavaScript heap or GPU allocations. The
 loader does not own retained consumer storage. A failed/cancelled stream never
 returns a completed summary; already emitted chunks remain individually verified
-and must not be labeled a complete catalog. UI, GPU upload/cache integration
-and sustained capacity measurements are still pending.
+and must not be labeled a complete catalog. Cache integration and sustained capacity measurements are still pending.
+
+## Catalog-epoch sky chart
+
+Open the Gaia sky chart in the evidence workspace. Load the bundled 19-source
+example, select the manifest and chunk JSON files together, or provide a hosted
+manifest URL whose server permits browser access. A worker verifies sources and
+projects onto a north-up, east-left tangent plane at J2016.0. GPU upload ACKs
+provide backpressure; zoom reuses the existing buffer. Clicking a star or choosing
+a row shows its original values; JSON export includes all accepted rows and
+source metadata. Input changes, cancellation and errors clear the current chart.
+
+This view requires WebGL 2. Point sizes distinguish G magnitudes visually and
+are not angular diameters. It does not apply proper motion, observer parallax,
+aberration, deflection or parallax zero-point corrections. Chunk hashes establish
+consistency with the imported manifest, not independent ESA authentication.
