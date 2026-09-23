@@ -228,6 +228,19 @@ public final class ObservationUITest {
                 waitForText(containsString("3D GPU points " + exact + "/" + exact + " (limit 25000)"));
                 viewportScreenshot(scenario, "source-directory-real-3d.png", exact);
             }
+            // Replay of a real loopback contact response; UI/transport evidence only.
+            fill(BACKEND_HINT, backend + "/contacts-fixture/valid");
+            shown(withTagValue(is((Object) "contacts-toggle"))).perform(scrollTo(), click());
+            shown(withTagValue(is((Object) "contacts-load"))).perform(scrollTo(), click());
+            waitForText(containsString("4 contacts · 521 geometry evaluations"));
+            shown(withTagValue(is((Object) "contacts-result"))).check(matches(withText(containsString("2024-04-08T17:23:20.434570Z"))));
+            panelScreenshot(scenario, "contacts-status", "ground-contacts-real-response-replay.png");
+            fill(BACKEND_HINT, backend + "/contacts-fixture/unavailable");
+            shown(withTagValue(is((Object) "contacts-result"))).check(matches(withText("")));
+            shown(withTagValue(is((Object) "contacts-load"))).perform(scrollTo(), click());
+            waitForText(containsString("body_radii_unavailable"));
+            shown(withTagValue(is((Object) "contacts-result"))).check(matches(withText("")));
+            shown(withTagValue(is((Object) "contacts-toggle"))).perform(scrollTo(), click());
             passed = true;
         } finally {
             try {
@@ -289,6 +302,11 @@ public final class ObservationUITest {
                 recoverInteractiveWindow();
                 awaitInteractiveWindow();
                 SystemClock.sleep(100);
+            } catch (RuntimeException error) {
+                // Focus may disappear after awaitInteractiveWindow while an IME
+                // closes. Retry only this root-focus failure within the same deadline.
+                if (!error.getClass().getName().endsWith("RootViewPicker$RootViewWithoutFocusException")) throw error;
+                last = error; recoverInteractiveWindow(); awaitInteractiveWindow();
             }
         }
         if (last instanceof AssertionError) throw (AssertionError) last;

@@ -1036,3 +1036,33 @@ test run. Candidate d5f4618 is still running and has not been interrupted.
 
 Physical timing uncertainty, apparent/oriented limbs, native ground access and
 all remaining ledger requirements are still open.
+
+### Checkpoint 41: Android ground-contact client and form (2026-09-23)
+
+Added an explicit station/UTC/target form to the native Android deck, with
+bilingual labels and scientific limitations. HTTPS POSTs are bounded to 1 MiB,
+redirects are disabled, source/model/request identities are checked, and contact
+ordering/brackets, geometry, budgets and unknown physical uncertainty are
+validated before display. Input changes, closing the disclosure, backgrounding
+and a 25-second deadline cancel requests and discard late callbacks.
+
+Four targeted JVM tests pass against the captured real loopback HTTP result,
+source/request mutations, invalid inputs, bounded reads and cancellation. Four
+smoke-harness unit tests, changed-file lint and native packaging checks pass.
+The device smoke now exercises this real-response replay and missing-source
+error; it is explicitly labeled as replay, not live scientific service evidence.
+Local Android SDK is unavailable, so platform compilation and device execution
+are pending remote validation. UI export, overlap-window display and iOS ground
+access remain incomplete; the report retains original bytes for future export.
+No full local tests ran.
+
+Candidate d5f4618 passed Web and all browsers but its Android instrumentation
+failed with RootViewPicker RootViewWithoutFocusException during the existing
+backend editor step. The bounded input recovery now catches precisely that
+previously unhandled focus exception without swallowing other runtime failures
+or removing assertions. The iOS job remains running and was not interrupted.
+The original canonical-LF science reference failure did not recur.
+
+Run 35825426973 subsequently finished: iOS passed. The failed Android focus
+step prevents promotion; submit the repaired native/contact-window candidate
+only after this terminal result.

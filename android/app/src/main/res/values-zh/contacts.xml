@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="contacts_title">地面掩星与凌日接触</string>
+    <string name="contacts_intro">达拉斯日食示例。请明确设置站点及 UTC 窗口；使用上方 HTTPS 后端。仅支持 PCK 等轴球体及 CN 接收模型。</string>
+    <string name="contacts_start">开始 UTC</string>
+    <string name="contacts_end">结束 UTC</string>
+    <string name="contacts_longitude">经度（度，东经为正）</string>
+    <string name="contacts_latitude">纬度（度）</string>
+    <string name="contacts_height">WGS84 椭球高（米）</string>
+    <string name="contacts_foreground">前景 NAIF 编号</string>
+    <string name="contacts_background">背景 NAIF 编号</string>
+    <string name="contacts_load">搜索地面接触</string>
+    <string name="contacts_cancel">取消搜索</string>
+    <string name="contacts_idle">尚未加载地面接触。</string>
+    <string name="contacts_cancelled">已取消地面接触搜索。</string>
+    <string name="contacts_loading">搜索中；不显示部分结果。</string>
+    <string name="contacts_timeout">搜索超过 25 秒；已丢弃结果。</string>
+    <string name="contacts_failed">地面接触搜索失败</string>
+    <string name="contacts_count">%1$d 次接触 · %2$d 次几何求值</string>
+    <string name="contacts_limits">采样搜索可能漏掉短时及擦边事件。扫描步长 30 秒；0.05 秒数值区间不代表物理精度。不含边缘光行差、偏折、地形、折射或可见性认证。物理时间不确定性未知。</string>
+    <string name="contacts_no_crossing">没有接触不代表没有重叠；搜索窗口可能在事件内部。</string>
+    <string name="contacts_geometry">起点 / 终点几何类型</string>
+</resources>

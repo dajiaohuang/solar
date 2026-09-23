@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
@@ -109,6 +110,11 @@ export async function androidNativeSmoke() {
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/StateTileDecoder.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/StateTileClient.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/StateTileCache.java',
+      'android/app/src/main/java/io/github/dajiaohuang/solaratlas/GroundContactsReport.java',
+      'android/app/src/main/java/io/github/dajiaohuang/solaratlas/GroundContactsService.java',
+      'android/app/src/main/java/io/github/dajiaohuang/solaratlas/GroundContactsPanel.java',
+      'android/app/src/main/res/values/contacts.xml', 'android/app/src/main/res/values-zh/contacts.xml',
+      'tests/fixtures/ground-contacts-api-dallas.json',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/CoverageReport.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/CoverageService.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/CoveragePanel.java',
@@ -175,9 +181,23 @@ export async function androidNativeSmoke() {
     if (!ready) throw new Error('Owned Go backend did not serve the staged manifest')
     const realScenario = inventory ? await realDirectoryScenario('http://127.0.0.1:18790', inventory) : null
     report.sourceDirectory = realScenario
+    const contactFixture = JSON.parse(await readFile(resolve('tests/fixtures/ground-contacts-api-dallas.json'), 'utf8'))
     const coverageReply = createNativeCoverageResponder()
     const identityReply = createNativeIdentityResponder()
     proxy = https.createServer({ key: await readFile(join(temporary, 'server.key')), cert: await readFile(join(temporary, 'server.crt')) }, (request, response) => {
+      if (request.url.startsWith('/contacts-fixture/')) {
+        let requestBody = ''; request.setEncoding('utf8');
+        request.on('data', chunk => { requestBody += chunk; if (requestBody.length > 16384) request.destroy() })
+        request.on('end', () => {
+          let matching = false
+          try { matching = isDeepStrictEqual(JSON.parse(requestBody), contactFixture.result.request) } catch { /* reject malformed request */ }
+          const valid = matching && request.method === 'POST' && request.url === '/contacts-fixture/valid/v1/observation/contacts'
+          const status = valid ? 200 : matching ? 503 : 400
+          const body = Buffer.from(JSON.stringify(valid ? contactFixture : { error: { code: matching ? 'body_radii_unavailable' : 'invalid_request', message: 'Contact replay source unavailable or request mismatch' } }))
+          traffic.push({ method: request.method, path: request.url, status, bytes: body.length })
+          response.writeHead(status, { 'Content-Type': 'application/json', 'Content-Length': body.length }); response.end(body)
+        }); return
+      }
       const fixtureReply = coverageReply(request.method, request.url) ?? identityReply(request.method, request.url)
       if (fixtureReply) {
         const body = Buffer.from(JSON.stringify(fixtureReply.body))
@@ -213,8 +233,12 @@ export async function androidNativeSmoke() {
       ...(realScenario ? ['-e', 'solarRealDirectory', Buffer.from(JSON.stringify(realScenario)).toString('base64')] : []),
       '-e', 'solarCaBase64', (await readFile(join(temporary, 'root.crt'))).toString('base64'), `${appId}.test/androidx.test.runner.AndroidJUnitRunner`],
     { env, log: join(artifact, 'instrumentation.log'), timeout: 240_000 })
-    verifyInstrumentation(output); verifyTraffic(traffic.filter(row => !row.path.startsWith('/coverage-fixture/') && !row.path.startsWith('/identity-fixture/') && !row.path.startsWith(realDirectoryPrefix)))
+    verifyInstrumentation(output); verifyTraffic(traffic.filter(row => !row.path.startsWith('/contacts-fixture/') && !row.path.startsWith('/coverage-fixture/') && !row.path.startsWith('/identity-fixture/') && !row.path.startsWith(realDirectoryPrefix)))
     report.realDirectoryUi = verifyRealDirectoryTraffic(traffic, realScenario)
+    for (const [path, status] of [['valid', 200], ['unavailable', 503]]) {
+      if (!traffic.some(row => row.path === '/contacts-fixture/'+path+'/v1/observation/contacts' && row.status === status)) throw new Error('Missing ground-contact replay UI traffic: '+path)
+    }
+    report.groundContactsUi = { evidence: 'real-loopback-response-replay', liveScientificService: false }
     report.identityUi = verifyNativeIdentityTraffic(traffic)
     report.coverageUi = verifyNativeCoverageTraffic(traffic)
     report.status = 'passed'

@@ -47,6 +47,7 @@ public final class MainActivity extends Activity {
     private EditText backend, epoch, reference, bodyIds;
     private NativeObservationDeck viewport;
     private CoveragePanel coveragePanel;
+    private GroundContactsPanel contactsPanel;
     private SourceIdentityPanel identityPanel;
     private SourceIdentityPage selectedSourcePage;
     private StateTileCache tileCache;
@@ -135,6 +136,7 @@ public final class MainActivity extends Activity {
             status.setText(R.string.identity_selected);
         });
         content.addView(identityPanel);
+        contactsPanel = new GroundContactsPanel(this, backend); content.addView(contactsPanel);
         android.text.TextWatcher invalidate = new android.text.TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
@@ -339,6 +341,7 @@ public final class MainActivity extends Activity {
         budget3d.resetEvidence(); budget2d.resetEvidence();
         coveragePanel.cancelAndClear(R.string.coverage_idle);
         identityPanel.clear();
+        contactsPanel.clear();
         boolean hadObservation = currentFrame != null || loadThread != null;
         cancelLoad(); showEvidence(null, "");
         if (hadObservation) status.setText("Observation released while inactive. Load again to resume verified states.");

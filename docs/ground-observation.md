@@ -233,3 +233,13 @@ uncertainty. Windows infer negative-gap spans from existing samples without
 extra ephemeris calls. Unsampled gaps may split them, and zero-only samples do
 not establish a positive-duration event. Older backends can omit this field;
 the browser does not manufacture windows from contact lists.
+
+## Native Android contact form
+
+The Android deck includes an on-demand ground-contact disclosure using its
+configured HTTPS backend. Enter explicit UTC bounds, WGS84 station coordinates
+and two NAIF IDs; the initial fields show the Dallas 2024 eclipse example.
+Edits, cancellation and backgrounding clear results. The form displays checked
+contact UTC/brackets, edge geometry, IERS identity and scientific limits.
+Native export and overlap-window presentation are not implemented yet. Device
+acceptance is tracked separately from plain-JVM response/transport tests.

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="contacts_title">Ground occultation and transit contacts</string>
+    <string name="contacts_intro">Dallas eclipse example. Edit station and UTC window explicitly; uses the HTTPS backend above. Equal-axis PCK spheres and CN reception only.</string>
+    <string name="contacts_start">Start UTC</string>
+    <string name="contacts_end">End UTC</string>
+    <string name="contacts_longitude">Longitude degrees, east positive</string>
+    <string name="contacts_latitude">Latitude degrees</string>
+    <string name="contacts_height">WGS84 ellipsoidal height, metres</string>
+    <string name="contacts_foreground">Foreground NAIF ID</string>
+    <string name="contacts_background">Background NAIF ID</string>
+    <string name="contacts_load">Search ground contacts</string>
+    <string name="contacts_cancel">Cancel search</string>
+    <string name="contacts_idle">No ground contacts loaded.</string>
+    <string name="contacts_cancelled">Contact search cancelled.</string>
+    <string name="contacts_loading">Searching; no partial result will be shown.</string>
+    <string name="contacts_timeout">Search exceeded 25 seconds; result discarded.</string>
+    <string name="contacts_failed">Ground contact search failed</string>
+    <string name="contacts_count">%1$d contacts · %2$d geometry evaluations</string>
+    <string name="contacts_limits">Sampled search: short and grazing events may be missed. 30 s scan; 0.05 s numerical brackets are not physical accuracy. No apparent limb aberration, deflection, terrain, refraction or visibility certification. Physical timing uncertainty unknown.</string>
+    <string name="contacts_no_crossing">No contacts does not prove no overlap; the window may lie inside an event.</string>
+    <string name="contacts_geometry">Start / end geometry</string>
+</resources>
