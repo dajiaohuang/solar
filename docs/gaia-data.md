@@ -245,3 +245,26 @@ corrections or uncertainty propagation. Spectroscopic RV contains astrophysical
 shifts and is only adopted approximately; inverse measured parallax supplies a
 nominal model distance, not a distance inference. CLI/HTTP/browser access and
 original-response export for this new core still need integration.
+
+## Source-bearing offline propagation
+
+The offline entry point reads original CSV directly and exports the entire
+original manifest and CSV as base64, their SHA-256 hashes, the selected source
+row, build identity, explicit adopted RV policy and model result:
+
+    rtk proxy go run ./cmd/gaia-motion --manifest tests/fixtures/gaia-six-20260923/manifest.json --rows tests/fixtures/gaia-six-20260923/rows.csv --source-id 65212004581252736 --epoch-tcb 2026 --rv-policy spectroscopic-as-astrometric --output .cache/new-gaia-motion.json
+
+The manifest is limited to 1 MiB and CSV to 8 MiB / 10,000 rows. Exact schema
+columns, frame/epoch, CSV header, ordered unique 64-bit source IDs, declared row
+count and original CSV hash/size are checked. The selected source must satisfy
+the complete-input propagation contract. The evidence is copied before return;
+exports never overwrite an existing file. CSV agreement with the provided
+manifest does not independently authenticate ESA or establish completeness.
+Other files referenced in the manifest are retained as references, not claimed
+to have been loaded or validated. No chunks need to be read for this entry point.
+
+The real local CLI was executed for source 65212004581252736 at J2026 TCB.
+Its exported state matches the independent ERFA fixture and both embedded
+original files decode byte-for-byte. A second run to the same output path was
+refused. This provides offline access; HTTP/browser/native integration and
+propagated covariance remain outstanding.

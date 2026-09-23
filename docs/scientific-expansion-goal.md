@@ -1576,3 +1576,21 @@ Go tests passed all reference and invalid/model-warning cases; no full local
 tests ran. CLI/HTTP/browser integration, source-bearing export, propagated
 covariance and stellar-occultation access remain outstanding. Candidate
 8968a78 remains active and was not replaced.
+
+### Checkpoint 67: original-source stellar propagation CLI (2026-09-23)
+
+Added a bounded original-CSV experiment adapter and cmd/gaia-motion. It verifies
+version-specific columns, source frame/epoch, original CSV hash/size, ordered
+unique IDs and row counts before selecting a complete-input star. Exports own
+the original manifest and CSV bytes plus selected source, hashes, build identity,
+explicit RV approximation and model limitations. Output creation is exclusive.
+Supplied-manifest consistency is explicitly not independent ESA authentication
+or a claim to validate unconsumed source files.
+
+Two focused evidence-contract tests passed for both source versions and invalid
+receipt/frame/column/row-count/missing-RV cases. Actual CLI execution for the
+real first source at J2026 produced an export checked against independent ERFA
+and byte-exact originals. An attempted same-path output was correctly refused.
+No full local tests ran. HTTP/browser/native entry points, covariance propagation
+and stellar-occultation integration remain open. Candidate 8968a78 remains live
+awaiting iOS; the running candidate was not replaced.
