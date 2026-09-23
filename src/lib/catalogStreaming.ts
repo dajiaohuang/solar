@@ -122,11 +122,26 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
     const indexBuffer = await fetchArtifact(`${root}/${compact.path}`, manifest.totalCount * 24, hash(compact.path), controller.signal)
     if (indexBuffer.byteLength !== manifest.totalCount * 24) throw new Error('Incomplete compact catalog index')
     const index = new DataView(indexBuffer)
+    // Only exact index fields may exclude a shard. The quantized e/i columns
+    // cannot decide source-precision boundaries (including perihelion).
+    const matchesIndex = createCatalogFieldMatcher({ ...filters, query: '',
+      eccentricity: [0, 1], inclination: [0, 180], perihelion: [0, Number.MAX_VALUE] })
     const chunks: number[] = []
+    let inspected = 0
     for (let chunk = 0; chunk < manifest.chunkCount; chunk++) {
+      signal.throwIfAborted()
       const end = Math.min(manifest.totalCount, (chunk + 1) * manifest.chunkSize)
       for (let row = chunk * manifest.chunkSize; row < end; row++) {
-        if (hasCandidate(row)) { chunks.push(chunk); break }
+        if (++inspected % 20_000 === 0) {
+          await new Promise<void>(resolve => setTimeout(resolve, 0))
+          signal.throwIfAborted()
+        }
+        if (!hasCandidate(row)) continue
+        const offset = row * 24, a = index.getFloat64(offset, true)
+        const classIndex = index.getUint8(offset + 18), flags = index.getUint8(offset + 19), magnitude = index.getInt16(offset + 16, true)
+        if (index.getUint16(offset + 20, true) !== chunk || index.getUint16(offset + 22, true) !== row - chunk * manifest.chunkSize) throw new Error('Catalog index locator mismatch')
+        if (!Number.isFinite(a) || a <= 0 || classIndex >= compact.classCodes.length || flags > 7 || Boolean(flags & 4) !== (magnitude !== 0x7fff)) throw new Error('Invalid catalog index metadata')
+        if (matchesIndex('', compact.classCodes[classIndex], magnitude === 0x7fff ? undefined : magnitude / 100, a, 0, 0)) { chunks.push(chunk); break }
       }
     }
     const enqueue = (sequence: number) => {

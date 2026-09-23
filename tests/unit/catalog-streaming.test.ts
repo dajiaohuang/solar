@@ -152,8 +152,35 @@ describe('bounded source catalog streaming', () => {
       candidateLocators: new Uint32Array([0, 1, 0, 1, 6, 0]), filters: { ...filters, query: 'named', magnitudeStatus: 'unknown' },
     })
     expect(result).toMatchObject({ drawnRows: 1, complete: true })
-    expect(requests.filter(path => path.startsWith('binary/'))).toEqual(['binary/chunk-0000.bin', 'binary/chunk-0006.bin'])
+    // The last named source has known H and can now be excluded from the index.
+    expect(requests.filter(path => path.startsWith('binary/'))).toEqual(['binary/chunk-0000.bin'])
     await expect(run(manifest, async () => {}, { filters: { ...filters, query: 'named' } })).rejects.toThrow('exact source locators')
+  })
+
+  it('skips shards excluded by exact indexed fields without claiming their source rows were scanned', async () => {
+    const { manifest, requests } = fixture()
+    const result = await run(manifest, async () => {}, { filters: { ...filters, semiMajorAxis: [2.12, 3], orbitClass: 'MBA', magnitudeStatus: 'known' } })
+    expect(requests.filter(path => path.startsWith('binary/'))).toEqual(['binary/chunk-0006.bin'])
+    expect(result).toEqual({ sourceRows: 1, drawnRows: 1, complete: true })
+  })
+
+  it('finishes an index-excluded query without fetching source shards or publishing empty tiles', async () => {
+    const { manifest, requests } = fixture(), published = vi.fn(async () => {})
+    expect(await run(manifest, published, { filters: { ...filters, semiMajorAxis: [10, 20] } })).toEqual({ sourceRows: 0, drawnRows: 0, complete: true })
+    expect(requests).toEqual(['checksums.json', 'catalog-index.bin'])
+    expect(published).not.toHaveBeenCalled()
+  })
+
+  it('keeps shards that match source e/i/perihelion even when their quantized index crosses a boundary', async () => {
+    const { manifest, files, rehash, requests } = fixture(1, 1)
+    const elements = new Float64Array(files.get('binary/chunk-0000.bin')!)
+    elements[2] = .1000000004; elements[3] = 10.0000004
+    const index = new DataView(files.get('catalog-index.bin')!)
+    index.setUint32(8, 100_000_000, true); index.setUint32(12, 10_000_000, true)
+    rehash()
+    const perihelion = elements[1]*(1-elements[2])
+    expect(await run(manifest, async () => {}, { filters: { ...filters, eccentricity: [.1000000003, .2], inclination: [10.0000003, 11], perihelion: [perihelion, perihelion] } })).toMatchObject({ drawnRows: 1, complete: true })
+    expect(requests).toContain('binary/chunk-0000.bin')
   })
 
   it('does not round a source eccentricity across the filter boundary', async () => {

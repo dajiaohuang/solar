@@ -1428,3 +1428,28 @@ capacity limits, native device measurements or sustained continuous simulation.
 The partial tiers retain source-order prefixes and admit up to three lookahead
 shards. Continuous/3D propagation, adaptive error budgets and actual total
 memory remain open. Candidate 002b1e6 remains active and is not replaced.
+
+### Checkpoint 59: conservative index admission before shard download (2026-09-23)
+
+Streaming now excludes shards with no matching exact index fields: Float64
+semimajor axis, class and the same indexed magnitude/knownness already used by
+source filtering. Exact name locators compose with that exclusion. Quantized
+eccentricity/inclination and derived perihelion never reject a shard; original
+Float64 source filtering remains authoritative for those boundaries. Retained
+shards still undergo hashes, structure and index/source alignment validation.
+Long index exclusion scans yield every 20k inspected rows and check cancellation.
+
+Eighteen focused streaming cases passed, including sparse last-shard admission,
+a fully excluded query with no binary fetch/publication, and source e/i/q
+boundaries crossing index quantization. An existing locator test expectation
+was updated because its known-magnitude shard is now correctly excluded from
+an unknown-magnitude query. Types and changed-file lint passed before the final
+cooperative-yield addition; focused streaming cases were rerun afterwards.
+No full local tests ran. These are controlled contract tests, not a measured
+network speedup. Previous capacity reports retain their earlier implementation
+hashes and must not be presented as measurements of this change.
+
+Complete status means all potential matches were handled; excluded shards are
+not counted as scanned source rows or as validated source payloads. Broader
+source priorities, continuous 3D/time updates and device capacity remain open.
+Candidate 002b1e6 continues remotely and is not replaced.
