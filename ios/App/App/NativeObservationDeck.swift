@@ -242,6 +242,7 @@ struct ObservationDeckView: View {
                     selectedSourcePage = page
                     model.message = SourceDirectoryCopy.selected
                 }
+                NativeGroundContactView(address: address)
                 Section(CoverageCopy.title) {
                     // Keep every audit item a separate List row. A single nested
                     // disclosure row can clip its controls and propagate its

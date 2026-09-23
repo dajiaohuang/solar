@@ -174,7 +174,39 @@ struct ProtocolTests {
         print("Source identity protocol checks passed (synthetic, not a scientific oracle)")
     }
 
+    static func groundContacts() throws {
+        let data = try Data(contentsOf: URL(fileURLWithPath: "tests/fixtures/ground-contacts-api-dallas.json"))
+        let request = NativeGroundContactRequest(startUtc: "2024-04-08T17:00:00Z", endUtc: "2024-04-08T21:00:00Z", station: .init(longitudeDeg: -96.797, latitudeDeg: 32.7767, heightMeters: 130), foregroundId: 301, backgroundId: 10, aberration: "CN")
+        let decoded = try NativeGroundContacts.decode(data, request: request)
+        precondition(decoded.result.contacts.count == 4 && decoded.result.evaluations == 521)
+        precondition(decoded.result.contacts[0].utc == "2024-04-08T17:23:20.434570Z")
+        precondition(decoded.result.sampledOverlapWindows?.map(\.durationSeconds) == [9559.248046875, 236.07421875])
+        let original = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        for index in 0..<6 {
+            var changed = original, result = original["result"] as! [String: Any]
+            switch index {
+            case 0: result["possibleMissedEvents"] = false
+            case 1: result["radiusSourceSha256"] = String(repeating: "b", count: 64)
+            case 2: var contract = result["contract"] as! [String: Any]; contract.removeValue(forKey: "physicalTimingUncertaintySeconds"); result["contract"] = contract
+            case 3: var windows = result["sampledOverlapWindows"] as! [[String: Any]]; windows[0]["durationSeconds"] = 1; result["sampledOverlapWindows"] = windows
+            case 4: var contacts = result["contacts"] as! [[String: Any]]; contacts[0]["elapsedTaiSeconds"] = -1; result["contacts"] = contacts
+            default: var echo = result["request"] as! [String: Any]; echo["foregroundId"] = 299; result["request"] = echo
+            }
+            changed["result"] = result
+            var rejected = false
+            do { _ = try NativeGroundContacts.decode(JSONSerialization.data(withJSONObject: changed), request: request) } catch { rejected = true }
+            precondition(rejected, "Malformed ground response accepted")
+        }
+        var legacy = original, result = original["result"] as! [String: Any]
+        result.removeValue(forKey: "sampledOverlapWindows"); legacy["result"] = result
+        let older = try NativeGroundContacts.decode(JSONSerialization.data(withJSONObject: legacy), request: request)
+        precondition(older.result.sampledOverlapWindows == nil)
+        print("Ground contacts: real HTTP capture, durations, source mutations and older responses passed")
+    }
+
     static func main() async throws {
+        try groundContacts()
+        if CommandLine.arguments.contains("--ground-contacts-only") { return }
         try sourceIdentityChecks()
         let coverage = try coverageFixture()
         let coverageManifest = try JSONSerialization.data(withJSONObject: ["apiVersion": "solar.api/v1", "catalogVersion": "fixture", "catalogManifestSha256": String(repeating: "a", count: 64), "inventoryManifestSha256": String(repeating: "a", count: 64)])

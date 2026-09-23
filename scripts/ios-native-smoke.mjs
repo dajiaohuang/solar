@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util'
 import { spawn } from 'node:child_process'
 import { createWriteStream } from 'node:fs'
 import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
@@ -192,7 +193,7 @@ export async function nativeSmoke() {
     await command(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', 'tests/unit/state-tiles-golden.test.ts'],
       { env: goldenEnv, log: join(artifact, 'real-web-golden.log') })
     await command('swiftc', ['ios/App/App/StateTileDecoder.swift', 'ios/App/App/StateTileCache.swift',
-      'ios/App/App/NativeStateProjection.swift', 'ios/App/App/NativeCoverageReport.swift', 'ios/App/App/NativeSourceIdentityPage.swift', 'ios/ProtocolTests/ProtocolTests.swift', '-o', join(temporary, 'protocol-tests')])
+      'ios/App/App/NativeStateProjection.swift', 'ios/App/App/NativeCoverageReport.swift', 'ios/App/App/NativeGroundContacts.swift', 'ios/App/App/NativeSourceIdentityPage.swift', 'ios/ProtocolTests/ProtocolTests.swift', '-o', join(temporary, 'protocol-tests')])
     await command(join(temporary, 'protocol-tests'), [], { env: goldenEnv, log: join(artifact, 'real-swift-golden.log') })
     report.golden = JSON.parse(await readFile(join(temporary, 'real-golden/manifest.json'), 'utf8'))
     if (report.golden.plan.exactCount !== 4 || report.golden.plan.missingCount !== 3) throw new Error('Real Earth/Moon/TNO/source-only fixture must contain four exact states and three explicit gaps')
@@ -214,9 +215,23 @@ export async function nativeSmoke() {
     backend.stdout.pipe(backendLog, { end: false }); backend.stderr.pipe(backendLog, { end: false })
     backend.once('close', () => backendLog.end())
     await waitForBackend(backend, report.profile.manifestSha256)
+    const contactFixture = JSON.parse(await readFile(resolve('tests/fixtures/ground-contacts-api-dallas.json'), 'utf8'))
     const coverageReply = createNativeCoverageResponder()
     const identityReply = createNativeIdentityResponder()
     proxy = https.createServer({ key: await readFile(join(temporary, 'server.key')), cert: await readFile(join(temporary, 'server.crt')) }, (request, response) => {
+      if (request.url.startsWith('/contacts-fixture/')) {
+        let requestBody = ''; request.setEncoding('utf8');
+        request.on('data', chunk => { requestBody += chunk; if (requestBody.length > 16384) request.destroy() })
+        request.on('end', () => {
+          let matching = false
+          try { matching = isDeepStrictEqual(JSON.parse(requestBody), contactFixture.result.request) } catch { /* reject malformed request */ }
+          const valid = matching && request.method === 'POST' && request.url === '/contacts-fixture/valid/v1/observation/contacts'
+          const status = valid ? 200 : matching ? 503 : 400
+          const body = Buffer.from(JSON.stringify(valid ? contactFixture : { error: { code: matching ? 'body_radii_unavailable' : 'invalid_request', message: 'Contact replay source unavailable or request mismatch' } }))
+          traffic.push({ method: request.method, path: request.url, status, bytes: body.length })
+          response.writeHead(status, { 'Content-Type': 'application/json', 'Content-Length': body.length }); response.end(body)
+        }); return
+      }
       const fixtureReply = coverageReply(request.method, request.url) ?? identityReply(request.method, request.url)
       if (fixtureReply) {
         const body = Buffer.from(JSON.stringify(fixtureReply.body))
@@ -244,8 +259,12 @@ export async function nativeSmoke() {
         // simulator processes after the final test has already succeeded.
         { log: join(artifact, 'xcode-test.log'), timeout: 20 * 60_000 })
     report.pointGeometry = verifyPointPixelEvidence(await readFile(join(artifact, 'xcode-test.log'), 'utf8'))
-    verifyTraffic(traffic.filter(row => !row.path.startsWith('/coverage-fixture/') && !row.path.startsWith('/identity-fixture/')))
+    verifyTraffic(traffic.filter(row => !row.path.startsWith('/contacts-fixture/') && !row.path.startsWith('/coverage-fixture/') && !row.path.startsWith('/identity-fixture/')))
     report.coverageUi = verifyNativeCoverageTraffic(traffic)
+    for (const [path, status] of [['valid', 200], ['unavailable', 503]]) {
+      if (!traffic.some(row => row.path === '/contacts-fixture/'+path+'/v1/observation/contacts' && row.status === status)) throw new Error('Missing iOS contact replay UI traffic: '+path)
+    }
+    report.groundContactsUi = { evidence: 'real-loopback-response-replay', liveScientificService: false }
     report.identityUi = verifyNativeIdentityTraffic(traffic)
     report.status = 'passed'
   } catch (error) {

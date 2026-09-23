@@ -1085,3 +1085,29 @@ assertions for window text and export availability/clearing are pending remote
 execution, as are actual document-picker export and Android compilation of this
 batch. No full local tests ran. Existing candidate 4b66e29 remains running; this
 batch does not interrupt it. iOS ground access and the broader goal remain open.
+
+### Checkpoint 43: iOS ground-contact client, windows and export (2026-09-23)
+
+Added typed Swift station requests and source/model/contact/window validation,
+including explicit null physical timing uncertainty, contact-backed window
+edges, TAI durations and old-response compatibility. The existing bounded
+streaming HTTPS transport now supports a contact-only 25-second resource limit
+and bounded structured error bodies while retaining existing defaults for other
+callers. A bilingual SwiftUI section supports explicit station/time/target edits,
+cancellation, stale-result invalidation and source JSON export via the system
+document picker. The export retains a separate immutable snapshot across pause.
+
+Xcode references, remote protocol compilation and device smoke were wired.
+The Swift protocol cases consume the actual loopback HTTP capture and reject
+mutated sources, bounds, model certainty and request identities. Device cases
+exercise a clearly labeled captured-response replay, window text, export
+availability, disclosure clearing and unavailable-source errors. Neither is
+claimed as a live browser/native scientific service comparison.
+
+Local native packaging checks, nine focused smoke-harness tests, changed-file
+lint and diff checks passed. This Windows host has no Swift compiler: Swift
+compilation, protocol execution, device interaction and actual file-picker export
+remain unverified until the remote candidate runs. No full local tests ran.
+Candidate 4b66e29 Android compilation and instrumentation have now passed; its
+iOS job is still running and is not interrupted. Android checkpoint 42 and this
+iOS batch remain local behind that candidate. The broader goal stays open.

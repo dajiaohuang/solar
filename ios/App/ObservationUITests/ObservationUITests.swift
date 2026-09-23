@@ -254,4 +254,33 @@ final class ObservationUITests: XCTestCase {
         XCTAssertFalse(invalid.staticTexts["coverage.counts"].exists)
         invalid.terminate()
     }
+
+    func testGroundContactsReplayWindowsAndUnavailableSource() {
+        continueAfterFailure = false
+        for route in ["valid", "unavailable"] {
+            let app = XCUIApplication()
+            app.launchArguments = ["-native.backend.address", "https://127.0.0.1:18791/contacts-fixture/\(route)", "-native.onboarding.complete", "YES", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+            app.launch()
+            XCTAssertTrue(app.buttons["observation.mode"].waitForExistence(timeout: 15))
+            reveal(app, app.buttons["contacts.disclosure"]); app.buttons["contacts.disclosure"].tap()
+            reveal(app, app.buttons["contacts.load"]); app.buttons["contacts.load"].tap()
+            if route == "valid" {
+                waitForLabel(app.staticTexts["contacts.status"], "4 contacts · 521 evaluations")
+                let window = app.staticTexts["contacts.window.0"]
+                reveal(app, window); XCTAssertTrue(window.label.contains("9559.248"))
+                let inner = app.staticTexts["contacts.window.1"]
+                reveal(app, inner); XCTAssertTrue(inner.label.contains("236.074"))
+                screenshot(app, "ground-contact-real-response-replay")
+                reveal(app, app.buttons["contacts.export"]); XCTAssertTrue(app.buttons["contacts.export"].exists)
+                reveal(app, app.buttons["contacts.disclosure"]); app.buttons["contacts.disclosure"].tap()
+                XCTAssertFalse(app.buttons["contacts.export"].exists)
+            } else {
+                let predicate = NSPredicate(format: "label CONTAINS %@", "body_radii_unavailable")
+                let expectation = XCTNSPredicateExpectation(predicate: predicate, object: app.staticTexts["contacts.status"])
+                XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 30), .completed)
+                XCTAssertFalse(app.buttons["contacts.export"].exists)
+            }
+            app.terminate()
+        }
+    }
 }

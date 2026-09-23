@@ -162,6 +162,8 @@ actor StateTileService {
 private final class NativeHTTPTransfer: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private let expectedType: String
     private let limit: Int
+    private let includeErrorBody: Bool
+    private let resourceTimeout: TimeInterval
     private let lock = NSLock()
     private var continuation: CheckedContinuation<(Data, HTTPURLResponse), Error>?
     private var session: URLSession?
@@ -170,7 +172,7 @@ private final class NativeHTTPTransfer: NSObject, URLSessionDataDelegate, @unche
     private var expectedLength = 0
     private var terminal = false
 
-    init(contentType: String, limit: Int) { expectedType = contentType; self.limit = limit }
+    init(contentType: String, limit: Int, includeErrorBody: Bool = false, resourceTimeout: TimeInterval = 120) { expectedType = contentType; self.limit = limit; self.includeErrorBody = includeErrorBody; self.resourceTimeout = resourceTimeout }
 
     func receive(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
         try await withTaskCancellationHandler(operation: {
@@ -186,7 +188,7 @@ private final class NativeHTTPTransfer: NSObject, URLSessionDataDelegate, @unche
         self.continuation = continuation
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 30
-        configuration.timeoutIntervalForResource = 120
+        configuration.timeoutIntervalForResource = resourceTimeout
         configuration.urlCache = nil
         configuration.httpCookieStorage = nil
         let queue = OperationQueue(); queue.maxConcurrentOperationCount = 1
@@ -219,7 +221,7 @@ private final class NativeHTTPTransfer: NSObject, URLSessionDataDelegate, @unche
             finish(.failure(StateTileFailure.invalid("Backend HTTP response is invalid.")))
             return
         }
-        guard http.statusCode == 200 else {
+        guard http.statusCode == 200 || includeErrorBody && (400...599).contains(http.statusCode) else {
             completionHandler(.cancel)
             finish(.failure(NativeHTTPStatusFailure(statusCode: http.statusCode)))
             return
@@ -334,5 +336,26 @@ actor NativeSourceIdentityService {
         request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         let (data, _) = try await NativeHTTPTransfer(contentType: "application/json", limit: limit).receive(request)
         return data
+    }
+}
+
+actor NativeGroundContactService {
+    private let base: URL
+    init(base: URL) throws { self.base = try NativeSourceIdentityPage.validatedBase(base) }
+    func load(_ input: NativeGroundContactRequest) async throws -> (NativeGroundContacts, Data) {
+        try input.validate(); try Task.checkCancellation()
+        var request = URLRequest(url: base.appendingPathComponent("v1/observation/contacts"))
+        request.httpMethod = "POST"; request.httpBody = try JSONEncoder().encode(input)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (bytes, response) = try await NativeHTTPTransfer(contentType: "application/json", limit: NativeGroundContacts.maxBytes, includeErrorBody: true, resourceTimeout: 25).receive(request)
+        try Task.checkCancellation()
+        if response.statusCode != 200 {
+            struct Failure: Decodable { struct Detail: Decodable { let code, message: String }; let error: Detail }
+            let failure = try JSONDecoder().decode(Failure.self, from: bytes)
+            throw StateTileFailure.invalid(failure.error.code + ": " + failure.error.message)
+        }
+        let report = try NativeGroundContacts.decode(bytes, request: input)
+        try Task.checkCancellation(); return (report, bytes)
     }
 }

@@ -246,3 +246,13 @@ Save JSON opens the system document picker and writes the original response
 snapshot, retaining source evidence even while the live form clears on pause.
 Device acceptance, including the document picker, is tracked separately from
 plain-JVM response/transport tests.
+
+## Native iOS contact section
+
+The iOS deck has a ground-contact section using the configured HTTPS backend.
+It uses the same explicit UTC/WGS84/NAIF request contract and displays contacts,
+numerical brackets and sampled overlap durations. Editing, closing the section
+or leaving the foreground invalidates live results. Save JSON retains the
+response snapshot for the system document picker. Missing-source error codes
+remain visible. Swift/device and actual file-picker acceptance are tracked in
+the scientific expansion ledger and must not be inferred from packaging checks.
