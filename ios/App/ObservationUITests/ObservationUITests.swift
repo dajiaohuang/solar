@@ -76,7 +76,9 @@ final class ObservationUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-native.backend.address", "https://127.0.0.1:18791", "-native.onboarding.complete", "YES", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
-        XCTAssertTrue(app.buttons["stellar.disclosure"].waitForExistence(timeout: 15))
+        // List materializes off-screen rows only after scrolling. Wait for the
+        // visible deck before using the bounded reveal helper below.
+        XCTAssertTrue(app.buttons["observation.mode"].waitForExistence(timeout: 15))
         reveal(app, app.buttons["stellar.disclosure"]); app.buttons["stellar.disclosure"].tap()
         for (control, filename) in [("manifest", "manifest.json"), ("rows", "rows.csv")] {
             let button = app.buttons["stellar.\(control)"]

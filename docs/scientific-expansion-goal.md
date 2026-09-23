@@ -2049,3 +2049,18 @@ reference integrations and new alternating 6/42-state checks to detect stale
 shared derivative buffers. TypeScript build, targeted ESLint and diff checks
 passed. No full local tests ran. Candidate f771612 remains active in its iOS
 native UI job and was neither replaced nor promoted.
+
+### Checkpoint 94: repair iOS stellar scenario's off-screen row wait (2026-09-23)
+
+Run 35845967095 is terminal with iOS failure; all other platform jobs passed.
+Downloaded its native artifact and inspected xcode-test.log: the only failed
+case stopped at ObservationUITests.swift:79 waiting for stellar.disclosure
+before scrolling. No stellar HTTP request was issued. The other six native
+tests passed, as did Swift scientific protocol validation and simulator build.
+
+The stellar section is below the initial viewport in the native List. Changed
+the startup wait to the visible observation.mode control, then retained the
+existing bounded reveal helper to scroll to stellar.disclosure. This fixes the
+test's ordering without bypassing the real document picker or source importer.
+Native re-execution remains required; no picker/live stellar pass is claimed.
+No full local tests ran.
