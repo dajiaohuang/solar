@@ -264,6 +264,27 @@ public final class ObservationUITest {
             shown(withTagValue(is((Object) "stellar-result"))).check(matches(withText(containsString("0.357911"))));
             shown(withTagValue(is((Object) "stellar-export"))).perform(scrollTo()).check(matches(isDisplayed()));
             panelScreenshot(scenario,"stellar-status","stellar-live-go-covariance.png");
+            // Intercept only the destination picker result. The export button,
+            // retained snapshot and ContentResolver write are production code.
+            android.app.Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+            File exportRoot = instrumentation.getTargetContext().getExternalFilesDir("solar-native-smoke");
+            assertNotNull(exportRoot);
+            File exported = new File(exportRoot,"stellar-export.json");
+            android.content.IntentFilter exportFilter = new android.content.IntentFilter(Intent.ACTION_CREATE_DOCUMENT);
+            exportFilter.addDataType("application/json");
+            exportFilter.addCategory(Intent.CATEGORY_OPENABLE);
+            android.app.Instrumentation.ActivityMonitor exportMonitor = instrumentation.addMonitor(exportFilter,
+                    new android.app.Instrumentation.ActivityResult(Activity.RESULT_OK,new Intent().setData(android.net.Uri.fromFile(exported))),true);
+            try {
+                shown(withTagValue(is((Object) "stellar-export"))).perform(scrollTo(),click());
+                waitForText(containsString("Stellar source response saved."));
+                assertEquals(1,exportMonitor.getHits());
+                byte[] saved = java.nio.file.Files.readAllBytes(exported.toPath());
+                StellarMotionRequest exportRequest = new StellarMotionRequest(java.nio.file.Files.readAllBytes(stellarManifest.toPath()),
+                        java.nio.file.Files.readAllBytes(stellarRows.toPath()),"65212004581252736",2026,StellarMotionRequest.RV_POLICY,StellarMotionRequest.COVARIANCE_POLICY);
+                StellarMotionReport verifiedExport = StellarMotionReport.decode(saved,exportRequest);
+                assertArrayEquals(saved,verifiedExport.exportBytes());
+            } finally { instrumentation.removeMonitor(exportMonitor); }
             shown(withTagValue(is((Object) "stellar-epoch"))).perform(scrollTo(),replaceText("2027"),closeSoftKeyboard());
             shown(withTagValue(is((Object) "stellar-result"))).check(matches(withText("")));
             shown(withTagValue(is((Object) "stellar-export"))).check(matches(withEffectiveVisibility(GONE)));

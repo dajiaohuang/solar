@@ -1992,3 +1992,19 @@ scenario, not system-picker interaction, export destination writes or physical
 device performance. The subsequent bounded-import-worker change is not in this
 candidate. iOS failed its numeric source check and its fix remains queued for
 the next gate; main was not advanced. No full local tests ran.
+
+### Checkpoint 91: Android export write/HTTP-byte verification authored (2026-09-23)
+
+Extended the native stellar scenario to click the production export button,
+intercept only ACTION_CREATE_DOCUMENT's destination result, and allow the real
+ContentResolver write to finish. The resulting file is validated against the
+original source request and retained with the runtime artifacts. The HTTPS proxy
+hashes response chunks; the harness requires the exported bytes and SHA-256 to
+match exactly one successful live stellar response before reporting success.
+
+Five focused harness tests passed, including altered, missing, duplicate and
+empty export receipts. Targeted lint and diff checks passed. Native execution
+of this added write scenario is pending; destination-picker interaction and
+pause/resume during that picker are not covered by its intercepted result.
+No full local tests ran. Candidate f771612 / run 35845967095 is live and was
+not replaced with this subsequent test change.

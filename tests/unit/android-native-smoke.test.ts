@@ -4,9 +4,20 @@ import { readFileSync } from 'node:fs'
 import { parse } from 'yaml'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { removeOwnedAndroidTemporary, validateEmulatorIdentity, verifyInstrumentation } from '../../scripts/android-native-smoke.mjs'
+import { createHash } from 'node:crypto'
+import { removeOwnedAndroidTemporary, validateEmulatorIdentity, verifyInstrumentation, verifyStellarExport } from '../../scripts/android-native-smoke.mjs'
 
 describe('isolated Android real-data smoke guards', () => {
+  it('requires an exported file to match exactly one live response receipt', () => {
+    const bytes = Buffer.from('{"apiVersion":"solar.api/v1"}')
+    const row = { path: '/v1/stellar/motion', method: 'POST', status: 200, bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }
+    expect(verifyStellarExport(bytes, [row])).toMatchObject({ bytes: bytes.length, sha256: row.sha256, destinationPickerAutomated: false })
+    for (const traffic of [[], [row, row], [{ ...row, status: 422 }], [{ ...row, bytes: bytes.length + 1 }], [{ ...row, sha256: 'bad' }]]) {
+      expect(() => verifyStellarExport(bytes, traffic)).toThrow('differs')
+    }
+    expect(() => verifyStellarExport(Buffer.from('changed'), [row])).toThrow('differs')
+    expect(() => verifyStellarExport(Buffer.alloc(0), [row])).toThrow('differs')
+  })
   it('runs each native harness only on its matching platform job', () => {
     const workflow = parse(readFileSync('.github/workflows/mobile.yml', 'utf8'))
     const scripts = (job: string) => workflow.jobs[job].steps.map((step: { run?: string }) => step.run ?? '').join('\n')

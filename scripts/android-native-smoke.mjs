@@ -16,6 +16,15 @@ import { createNativeIdentityResponder, verifyNativeIdentityTraffic } from './na
 import { pinnedNativeInventory, realDirectoryPrefix, realDirectoryScenario, verifyRealDirectoryTraffic } from './native-real-directory.mjs'
 
 const appId = 'io.github.dajiaohuang.solaratlas'
+
+export function verifyStellarExport(bytes, traffic) {
+  const replies = traffic.filter(row => row.path === '/v1/stellar/motion' && row.method === 'POST' && row.status === 200)
+  const sha256 = createHash('sha256').update(bytes).digest('hex')
+  if (!bytes.length || replies.length !== 1 || replies[0].bytes !== bytes.length || replies[0].sha256 !== sha256) {
+    throw new Error('Android stellar export differs from the live HTTP response')
+  }
+  return { bytes: bytes.length, sha256, destinationPickerAutomated: false, evidence: 'export-button-to-content-resolver-write-with-stubbed-destination' }
+}
 const windows = process.platform === 'win32'
 
 export function verifyInstrumentation(output) {
@@ -220,7 +229,9 @@ export async function androidNativeSmoke() {
         path: isRealDirectory ? '/' + request.url.slice(realDirectoryPrefix.length) : request.url, method: request.method, headers: request.headers }, incoming => {
         row.status = incoming.statusCode; traffic.push(row)
         response.writeHead(incoming.statusCode, incoming.headers)
-        incoming.on('data', bytes => { row.bytes += bytes.length }); incoming.pipe(response)
+        const hash = createHash('sha256')
+        incoming.on('data', bytes => { row.bytes += bytes.length; hash.update(bytes) })
+        incoming.on('end', () => { row.sha256 = hash.digest('hex') }); incoming.pipe(response)
       })
       upstream.on('error', () => { if (!response.headersSent) response.writeHead(502); response.end() })
       upstream.setTimeout(30_000, () => upstream.destroy()); response.on('close', () => upstream.destroy()); request.pipe(upstream)
@@ -274,6 +285,10 @@ export async function androidNativeSmoke() {
     await stop(backend); await stop(device)
     await removeOwnedAndroidTemporary(temporary).catch(error => { report.temporaryCleanupError = error.message })
     report.traffic = traffic
+    if (report.status === 'passed') {
+      try { report.stellarExport = verifyStellarExport(await readFile(join(artifact, 'screenshots', 'stellar-export.json')), traffic) }
+      catch (error) { report.evidenceError = error.message }
+    }
     if (report.evidenceError || report.deviceCleanupError || report.temporaryCleanupError) report.status = 'failed'
     await writeFile(join(artifact, 'report.json'), JSON.stringify(report, null, 2), { flag: 'wx' })
   }
