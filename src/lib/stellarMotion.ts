@@ -1,4 +1,5 @@
 import { readBounded, STATE_TILE_API_VERSION } from './stateTiles'
+import { selectedGaiaCsvSource } from './gaiaCsvSource'
 
 export type StellarMotionRequest = {
   originalManifestBase64: string; originalRowsCsvBase64: string; sourceId: string
@@ -46,6 +47,8 @@ export async function validateStellarMotion(raw: unknown, request: StellarMotion
   if ((s.raDeg as number) < 0 || (s.raDeg as number) >= 360 || Math.abs(s.decDeg as number) >= 90 || (s.parallaxMas as number) <= 0) reject()
   const [manifestHash, rowsHash] = await Promise.all([digest(request.originalManifestBase64), digest(request.originalRowsCsvBase64)])
   if (e.manifestSha256 !== manifestHash || e.rowsSha256 !== rowsHash) reject()
+  const original = selectedGaiaCsvSource(Uint8Array.from(atob(request.originalRowsCsvBase64), char => char.charCodeAt(0)), request.sourceId)
+  if (Object.keys(original).length !== Object.keys(source).length || Object.entries(original).some(([key, value]) => source[key] !== value)) reject()
   return e as StellarMotionExperiment
 }
 export async function loadStellarMotion(base: string, request: StellarMotionRequest, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<StellarMotionExperiment> {

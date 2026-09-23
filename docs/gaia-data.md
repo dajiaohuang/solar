@@ -314,3 +314,10 @@ replays that output over an intercepted transport and covers explicit adoption,
 export, stale-result clearing and cancellation. It does not establish live
 browser-to-Go or physical native-device acceptance; actual loopback HTTP is
 covered separately by the Go test. Propagated covariance remains outstanding.
+
+The browser also parses the retained original CSV and compares every selected
+source field, including nulls and the exact decimal identity, with the returned
+selectedSource. Correct hashes alone are insufficient to accept a mismatched
+selected record. Parsing is bounded to 8 MiB and 10,000 data rows, supports
+quoted fields, and rejects duplicate selected identities and malformed numeric
+values. These checks preserve the original bytes rather than rewriting them.

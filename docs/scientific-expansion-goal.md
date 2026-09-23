@@ -1631,3 +1631,18 @@ including iOS and the final gate, and was normally fast-forwarded to main.
 The subsequent time conversion, stellar core, CLI, HTTP and browser commits
 will use a new candidate gate. Native stellar access, propagated covariance,
 observer transformations and occultation integration remain outstanding.
+
+### Checkpoint 70: bind selected stellar parameters to original CSV (2026-09-23)
+
+Audit found that the browser checked original-file hashes and the source ID but
+did not compare every returned selected parameter against those original bytes.
+Added a bounded CSV reader and exact field/null comparisons. Proper-motion or
+RV substitutions with otherwise valid receipts now fail. Quoting, absent and
+duplicate identities, malformed numeric fields and altered parameter cases are
+covered by four focused client tests; project-reference types and targeted lint
+also passed. No full local tests ran.
+
+Candidate 335b083 / run 35838148647 is still active and was not replaced. This
+fix is staged as a subsequent local commit. Browser-to-Go live acceptance is
+still unproven; prior browser replay and independent Go HTTP evidence remain
+separate. The broader scientific and performance goal remains incomplete.
