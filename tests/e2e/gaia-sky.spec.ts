@@ -49,3 +49,20 @@ test('cancelling a held remote chunk prevents publication', async ({ page }) => 
   await panel.getByRole('button',{ name:'Cancel Gaia loading' }).click(); release?.()
   await expect(panel.getByRole('img')).toHaveCount(0); await expect(panel.getByTestId('gaia-complete')).toHaveCount(0)
 })
+test('a completed remote load reuses verified source bytes in the session worker', async ({ page }) => {
+  const panel = page.getByRole('region',{ name:'Gaia sky chart', exact:true })
+  let chunks = 0, manifests = 0
+  await page.route('**/gaia-cache/manifest.json', async route => { manifests++; await route.fulfill({json:manifest}) })
+  await page.route('**/gaia-cache/r11-d22.json', async route => { chunks++; await route.fulfill({contentType:'application/json',body:await readFile(root+'r11-d22.json')}) })
+  await panel.getByLabel('Gaia manifest URL').fill(new URL('gaia-cache/manifest.json',page.url()).href)
+  for (let i=0;i<2;i++) {
+    await panel.getByRole('button',{name:'Load sky region',exact:true}).click()
+    await expect(panel.getByTestId('gaia-complete')).toContainText('19 source records loaded')
+    const pending = page.waitForEvent('download')
+    await panel.getByRole('button',{name:'Export Gaia records and sources'}).click()
+    const result = JSON.parse(await readFile((await (await pending).path())!,'utf8'))
+    expect(result.summary.cacheHits).toBe(i)
+    expect(result.sources).toHaveLength(19)
+  }
+  expect(chunks).toBe(1); expect(manifests).toBe(2)
+})

@@ -1,5 +1,6 @@
 import { readBounded } from './stateTiles'
 import columns from '../data/gaiaColumns.json'
+import type { GaiaSourceCache } from './gaiaCache'
 
 export type GaiaChunkDescriptor = { path: string; sha256: string; bytes: number; rows: number; raRangeDeg: [number, number]; decRangeDeg: [number, number] }
 export type GaiaManifest = { schemaVersion: 1; catalog: 'Gaia DR3'; frame: 'ICRS'; referenceEpochJulianYear: 2016; referenceEpochTimeScale: 'TCB'; rows: number; chunks: GaiaChunkDescriptor[]; catalogCompletenessCertified: false; settings: { raDeg: number; decDeg: number; radiusDeg: number; maxMagnitude: number; maxRows: number } }
@@ -93,9 +94,10 @@ async function decodeChunk(bytes: Uint8Array, descriptor: GaiaChunkDescriptor, s
 export async function streamGaiaChunks(options: {
   manifest: GaiaManifest; region: GaiaSkyRegion; baseUrl: string; signal: AbortSignal
   onChunk: (chunk: GaiaChunk) => Promise<void>; fetcher?: typeof fetch
+  cache?: GaiaSourceCache
   concurrency?: number; maxInFlightBytes?: number; maxInFlightRows?: number; maxTotalBytes?: number
 }) {
-  const { region, signal, onChunk, fetcher = fetch, concurrency = 2, maxInFlightBytes = 16*1024*1024, maxInFlightRows = 20000, maxTotalBytes = 64*1024*1024 } = options
+  const { region, signal, onChunk, cache, fetcher = fetch, concurrency = 2, maxInFlightBytes = 16*1024*1024, maxInFlightRows = 20000, maxTotalBytes = 64*1024*1024 } = options
   // Own one validated snapshot so caller edits cannot change in-flight paths or budgets.
   const manifest = decodeGaiaManifest(new TextEncoder().encode(JSON.stringify(options.manifest)))
   if (!integer(concurrency, 1, 8) || !integer(maxInFlightBytes, 1, 64*1024*1024) || !integer(maxInFlightRows, 1, 100000) || !integer(maxTotalBytes, 1, 1024*1024*1024)) throw new Error('Invalid Gaia loading budget')
@@ -105,7 +107,7 @@ export async function streamGaiaChunks(options: {
   if (totalBytes > maxTotalBytes || selected.some(c => c.bytes > maxInFlightBytes || c.rows > maxInFlightRows)) throw new Error('Selected Gaia data exceeds loading budget')
   const controller = new AbortController(), abort = () => controller.abort()
   signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort()
-  let verifiedRows = 0, verifiedChunks = 0, peakReservedBytes = 0, peakReservedRows = 0
+  let verifiedRows = 0, verifiedChunks = 0, peakReservedBytes = 0, peakReservedRows = 0, cacheHits = 0
   const sourceIds = new Set<string>()
   try {
     let offset = 0
@@ -122,14 +124,22 @@ export async function streamGaiaChunks(options: {
       const jobs = wave.map(async descriptor => {
         const timeout = setTimeout(abort, 30000)
         try {
-          const response = await fetcher(new URL(descriptor.path, base), { signal: controller.signal, redirect: 'error' })
-          if (!response.ok) throw new Error(`Gaia chunk HTTP ${response.status}`)
-          const bytes = new Uint8Array(await readBounded(response, 'application/json', descriptor.bytes))
+          let bytes = cache?.get(descriptor.sha256)
+          if (bytes && (bytes.byteLength !== descriptor.bytes || await gaiaHash(bytes) !== descriptor.sha256)) { cache?.delete(descriptor.sha256); bytes = undefined }
+          cancelled(controller.signal)
+          const cached = Boolean(bytes)
+          if (!bytes) {
+            const response = await fetcher(new URL(descriptor.path, base), { signal: controller.signal, redirect: 'error' })
+            if (!response.ok) throw new Error(`Gaia chunk HTTP ${response.status}`)
+            bytes = new Uint8Array(await readBounded(response, 'application/json', descriptor.bytes))
+          }
           const chunk = await decodeChunk(bytes, descriptor, manifest.settings, controller.signal)
           for (const source of chunk.sources) {
             if (sourceIds.has(source.source_id)) throw new Error('Duplicate Gaia source across chunks')
             sourceIds.add(source.source_id)
           }
+          if (cached) cacheHits++
+          else cache?.put(descriptor.sha256,bytes)
           consume = consume.then(async () => { cancelled(controller.signal); await consumeUntilAbort(() => onChunk(chunk), controller.signal); cancelled(controller.signal); verifiedRows += descriptor.rows; verifiedChunks++ })
           await consume
         } finally { clearTimeout(timeout) }
@@ -137,6 +147,6 @@ export async function streamGaiaChunks(options: {
       try { await Promise.all(jobs) } catch (error) { abort(); await Promise.allSettled(jobs); throw error }
     }
     cancelled(controller.signal)
-    return { selectedChunks: selected.length, verifiedChunks, verifiedRows, totalBytes, peakReservedBytes, peakReservedRows, epochJulianYear: 2016 as const, catalogCompletenessCertified: false as const }
+    return { selectedChunks: selected.length, verifiedChunks, verifiedRows, totalBytes, peakReservedBytes, peakReservedRows, cacheHits, cacheRetainedBytes: cache?.retainedBytes ?? 0, epochJulianYear: 2016 as const, catalogCompletenessCertified: false as const }
   } finally { signal.removeEventListener('abort', abort) }
 }

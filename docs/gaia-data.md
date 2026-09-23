@@ -84,3 +84,14 @@ cone/magnitude selection, query row budget and unique source IDs across selected
 chunks in addition to hashes. Importer and browser use one column schema; future
 import receipts record that schema hash. These checks establish internal
 consistency, not independent authentication of an externally supplied manifest.
+
+## Session source cache
+
+Completed remote loads retain a worker with an LRU content-hash cache limited
+to 16 MiB and 128 encoded chunks. This is additional to active decode/GPU
+storage, not a bound on total process memory. Each new load fetches its manifest
+again and revalidates cached bytes against the current schema and selection.
+Exports report cacheHits and cacheRetainedBytes. Local files bypass the cache.
+Active cancellation or failure terminates that worker; page unmount releases
+both active and idle workers. No disk persistence or full-catalog caching is
+performed.

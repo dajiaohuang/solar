@@ -1246,3 +1246,22 @@ Future import receipts include the shared column-schema hash; existing captures
 and benchmark receipts remain unchanged. No full local tests ran. Candidate
 a2635ac has passed repository, Web, four browsers and Android; iOS remains
 in progress. This batch does not replace the running candidate.
+
+### Checkpoint 50: bounded session Gaia source cache (2026-09-23)
+
+Remote imports now reuse content-addressed encoded source bytes in a dedicated
+worker retained after successful completion. The LRU cache owns its bytes and
+is bounded to 16 MiB / 128 entries, separately from active decode and GPU
+budgets. Each reuse still checks the hash and decodes against the current
+manifest/schema/cone; corrupt cache entries are evicted before refetch. The
+manifest is always fetched again. Cancellation/errors terminate the active
+worker; leaving the page releases active and idle workers. Local file imports
+bypass cache so an altered selected file cannot be hidden by old verified bytes.
+
+Ten focused cache/loader tests and 16 Gaia-only cases across four browser
+profiles passed. The network replay case verifies two manifest requests but only
+one chunk request, source preservation and cache-hit receipts. This is captured
+response replay rather than an upstream availability/network performance claim.
+Types and changed-file lint passed after correcting an unsupported constructor
+syntax and using removable Worker event listeners. No full local tests ran.
+Candidate a2635ac still awaits iOS; it was not interrupted or replaced.

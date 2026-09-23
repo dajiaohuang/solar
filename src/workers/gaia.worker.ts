@@ -2,7 +2,9 @@
 import { decodeGaiaManifest, gaiaHash, streamGaiaChunks } from '../lib/gaiaChunks'
 import { projectGaiaDisplay } from '../lib/gaiaProjection'
 import { readBounded } from '../lib/stateTiles'
+import { GaiaSourceCache } from '../lib/gaiaCache'
 const scope = self as unknown as DedicatedWorkerGlobalScope
+const cache = new GaiaSourceCache()
 let acknowledge: (() => void) | undefined, started = false, sequence = 0
 scope.onmessage = async event => {
   if (event.data.type === 'ack') { if (event.data.sequence === sequence) { acknowledge?.(); acknowledge = undefined }; return }
@@ -35,7 +37,7 @@ scope.onmessage = async event => {
       if (!file) throw new Error(`Missing Gaia chunk: ${name}`)
       return new Response(await file.arrayBuffer(), { headers: { 'Content-Type': 'application/json', 'Content-Length': String(file.size) } })
     } : fetch
-    const summary = await streamGaiaChunks({ manifest, baseUrl: base, signal: controller.signal, fetcher,
+    const summary = await streamGaiaChunks({ manifest, baseUrl: base, signal: controller.signal, fetcher, cache: files ? undefined : cache,
       region: { raStartDeg: 0, raEndDeg: 360, decMinDeg: -90, decMaxDeg: 90, epochJulianYear: 2016 },
       onChunk: async chunk => {
         const display = projectGaiaDisplay(chunk, manifest.settings.raDeg, manifest.settings.decDeg, manifest.settings.radiusDeg)
@@ -47,4 +49,5 @@ scope.onmessage = async event => {
       } })
     scope.postMessage({ type: 'done', summary })
   } catch (error) { scope.postMessage({ type: 'error', error: String(error) }) }
+  finally { started = false; acknowledge = undefined }
 }

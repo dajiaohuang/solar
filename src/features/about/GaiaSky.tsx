@@ -14,6 +14,7 @@ export function GaiaSky() {
   const [zoom, setZoom] = useState(1), [selected, setSelected] = useState(0), [count, setCount] = useState(0)
   const [source, setSource] = useState<GaiaSource | null>(null)
   const worker = useRef<Worker | null>(null), generation = useRef(0), sources = useRef<GaiaSource[]>([])
+  const idleWorker = useRef<Worker | null>(null)
   const clear = useCallback(() => {
     generation.current++; worker.current?.terminate(); worker.current = null; sources.current = []
     setBusy(false); setError(''); setManifest(null); setManifestHash(''); setBatches([]); setSummary(null); setZoom(1); setSelected(0); setCount(0); setSource(null)
@@ -21,13 +22,14 @@ export function GaiaSky() {
   const fail = useCallback((message: string) => { clear(); setError(message) }, [clear])
   const uploaded = useCallback((sequence: number) => { worker.current?.postMessage({ type:'ack', sequence }) }, [])
   const select = (index: number) => { setSelected(index); setSource(sources.current[index]) }
-  useEffect(() => () => { generation.current++; worker.current?.terminate() }, [])
+  useEffect(() => () => { generation.current++; worker.current?.terminate(); idleWorker.current?.terminate() }, [])
   const run = (input: { files: File[] } | { manifestUrl: string }) => {
     clear()
     try {
-      const active = new Worker(new URL('../../workers/gaia.worker.ts', import.meta.url), { type:'module' })
+      const active = idleWorker.current ?? new Worker(new URL('../../workers/gaia.worker.ts', import.meta.url), { type:'module' })
+      idleWorker.current = null
       worker.current = active; setBusy(true)
-      active.onmessage = (event: MessageEvent) => {
+      const onMessage = (event: MessageEvent) => {
         if (worker.current !== active) return
         const message = event.data
         if (message.type === 'manifest') { setManifest(message.manifest); setManifestHash(message.manifestSha256) }
@@ -35,10 +37,14 @@ export function GaiaSky() {
           if (!sources.current.length) setSource(message.sources[0] ?? null)
           sources.current.push(...message.sources); setCount(sources.current.length)
           setBatches(previous => [...previous, { sequence:message.sequence, display:message.display }])
-        } else if (message.type === 'done') { active.terminate(); worker.current = null; setBusy(false); setSummary(message.summary) }
+        } else if (message.type === 'done') {
+          active.removeEventListener('message',onMessage); active.removeEventListener('error',onError)
+          idleWorker.current = active; worker.current = null; setBusy(false); setSummary(message.summary)
+        }
         else if (message.type === 'error') fail(message.error)
       }
-      active.onerror = event => { if (worker.current === active) fail(event.message || 'Gaia worker failed') }
+      const onError = (event: ErrorEvent) => { if (worker.current === active) fail(event.message || 'Gaia worker failed') }
+      active.addEventListener('message',onMessage); active.addEventListener('error',onError)
       active.postMessage(input)
     } catch (error) { fail(String(error)) }
   }

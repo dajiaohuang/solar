@@ -51,7 +51,7 @@ test('measure real Gaia capture loading and retained-buffer zoom', async ({ page
     samples.push({ iteration, loadMilliseconds, ...measurement, frameP50:ordered[60], frameP95:ordered[114], frameMax:ordered.at(-1) })
   }
   await panel.screenshot({path:info.outputPath('gaia-capacity.png')})
-  const implementations = await Promise.all(['src/data/gaiaColumns.json','src/lib/gaiaChunks.ts','src/lib/gaiaProjection.ts','src/workers/gaia.worker.ts','src/features/about/GaiaPlot.tsx','src/features/about/GaiaSky.tsx','tests/e2e/gaia-capacity.spec.ts'].map(async path => ({path,sha256:createHash('sha256').update(await readFile(path)).digest('hex')})))
+  const implementations = await Promise.all(['src/lib/gaiaCache.ts','src/data/gaiaColumns.json','src/lib/gaiaChunks.ts','src/lib/gaiaProjection.ts','src/workers/gaia.worker.ts','src/features/about/GaiaPlot.tsx','src/features/about/GaiaSky.tsx','tests/e2e/gaia-capacity.spec.ts'].map(async path => ({path,sha256:createHash('sha256').update(await readFile(path)).digest('hex')})))
   const reportPath = info.outputPath('gaia-capacity.json')
   await writeFile(reportPath,JSON.stringify({
     schemaVersion:1, capturedAt:new Date().toISOString(), browserVersion:browser.version(), profile:info.project.name,
