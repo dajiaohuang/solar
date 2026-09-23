@@ -86,7 +86,9 @@ final class ObservationUITests: XCTestCase {
             // UIDocumentPicker may reopen its last folder. Otherwise navigate
             // via its normal Browse / On My iPhone / Solar Atlas hierarchy.
             let stem = String(filename.split(separator: ".")[0])
-            let match = NSPredicate(format: "label == %@ OR label == %@", filename, stem)
+            // Files icon-mode cells append type/date/size to the filename.
+            // Match that observed cell, rather than its non-opening text label.
+            let match = NSPredicate(format: "label == %@ OR label == %@ OR label BEGINSWITH %@ OR label BEGINSWITH %@", filename, stem, filename + ", ", stem + ", ")
             var file = app.cells.matching(match).firstMatch
             if !file.waitForExistence(timeout: 3) {
                 let browse = app.buttons["Browse"].firstMatch
@@ -97,9 +99,12 @@ final class ObservationUITests: XCTestCase {
                 if folder.waitForExistence(timeout: 5) { folder.tap() }
                 file = app.cells.matching(match).firstMatch
             }
-            if !file.waitForExistence(timeout: 5) { file = app.staticTexts.matching(match).firstMatch }
             XCTAssertTrue(file.waitForExistence(timeout: 5), app.debugDescription)
-            file.tap()
+            let icon = file.images.firstMatch
+            if icon.exists && icon.isHittable { icon.tap() } else { file.tap() }
+            let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.collectionViews["File View"])
+            XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 10), .completed, app.debugDescription)
+            reveal(app, app.staticTexts["stellar.status"])
             waitForLabel(app.staticTexts["stellar.status"], "Original file loaded.")
         }
         let rv = app.switches["stellar.rv"], covariance = app.switches["stellar.covariance"]

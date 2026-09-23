@@ -2129,3 +2129,34 @@ with a deliberately large force exclusion confirms all four failed draws retain
 their original offsets/indices, null endpoints, explicit reasons and unavailable
 moments in the exported JSON. This does not assert physical confidence levels,
 sampling convergence or event probabilities. No full local tests ran.
+
+### Checkpoint 98: reproducible offline ensemble CLI (2026-09-23)
+
+Added scripts/propagate-sbdb-ensemble.mjs with explicit restricted-model adoption,
+duration, exclusion distance, count, seed and optional solar 1PN. Source reads
+are capped at 2 MiB using actual bounded reads, including one-byte overflow
+detection; cancellation is checked before/after reads and integration. Output
+is exclusive-create and contains source bytes' hash/payload, implementation
+hashes, all draw identities, force/numerical settings and descriptive moments.
+
+Executed the actual Node CLI on original Eros data: seed 42, eight draws,
+30 days and solar 1PN yielded eight valid endpoints and 2,024 force evaluations.
+A focused test passed for source/implementation receipts, existing-output
+preservation, pre-cancellation, oversized inputs and unmatched parameters.
+No full local tests ran. The exported experiment is conditional numerical
+evidence, not a complete source-fit or physical-accuracy result.
+
+### Checkpoint 99: target actual iOS Files cells and confirm dismissal (2026-09-23)
+
+Run 35848124469 reached a terminal iOS failure after successfully revealing and
+opening the stellar import control. Downloaded the xcresult and decoded its
+Zstandard attachments locally. The retained accessibility tree shows icon-mode
+file cells labeled `manifest.json, json, <time>, 5 KB` and `rows, csv, <time>,
+33 KB`. The old exact-label query missed those cells and tapped their filename
+StaticText fallback; the picker remained open and no source import occurred.
+
+Changed the query to exact filename tokens plus the observed metadata delimiter,
+targeting the cell's image when available. The test now explicitly waits for the
+Files collection view to disappear, then scrolls to the off-screen import status.
+Native re-execution is required. The prior Web hash and Android import failures
+are fixed in subsequent commits; main remains unadvanced until all gates pass.

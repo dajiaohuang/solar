@@ -1,8 +1,8 @@
 import type { SbdbCovariance } from '../../data/loaders/sbdbCovariance'
 import type { createDe440Dynamics } from './de440Dynamics'
-import { cartesianStatesFromSourceOffsets } from '../ephemeris/covarianceStateSamples'
-import { integrateAdaptive } from './adaptiveIntegrator'
-import { summarizeEnsembleEndpoints } from './ensembleMoments'
+import { cartesianStatesFromSourceOffsets } from '../ephemeris/covarianceStateSamples.ts'
+import { integrateAdaptive } from './adaptiveIntegrator.ts'
+import { summarizeEnsembleEndpoints } from './ensembleMoments.ts'
 
 const AU = 149597870.7, DAY = 86400
 const angle = 84381.448/3600*Math.PI/180, c = Math.cos(angle), s = Math.sin(angle)

@@ -1,6 +1,6 @@
 import type { SbdbCovariance } from '../../data/loaders/sbdbCovariance'
-import { cartesianCovarianceAtSolutionEpoch, type AdoptedSolarGM } from './orbitCovariance'
-import { propagatePeriapsisConic } from './conicPeriapsis'
+import { cartesianCovarianceAtSolutionEpoch, type AdoptedSolarGM } from './orbitCovariance.ts'
+import { propagatePeriapsisConic } from './conicPeriapsis.ts'
 
 const AU = 149597870.7, DAY = 86400, DEG = Math.PI/180
 
