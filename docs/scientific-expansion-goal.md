@@ -2111,3 +2111,21 @@ The same candidate Android failed Java instrumentation compilation because two
 new assertions lacked static JUnit imports. Added assertNotNull/assertArrayEquals
 imports; local Android compilation remains unavailable without the SDK. Native
 re-execution is still required. The iOS job remains live and was not replaced.
+
+### Checkpoint 97: finite-ensemble moments and failed-export acceptance (2026-09-23)
+
+Added anchored, compensated two-pass means and sample covariance for complete
+finite endpoint batches. Computing deviations around a retained anchor avoids
+subtracting a rounded large absolute mean from tiny offsets. The output keeps
+anchor and mean offset separately, the n-1 divisor, all six component standard
+deviations and an explicit descriptive-only limitation. A failed draw or fewer
+than two draws makes the summary unavailable; no survivor-only distribution
+silently replaces the original one. Degenerate zero-spread samples remain valid.
+
+Twelve focused moment/integration tests passed, including an analytic tiny-spread
+case around 2^40, translation invariance and zero spread. Extended the browser
+readout and export with these descriptive moments. A real-worker browser case
+with a deliberately large force exclusion confirms all four failed draws retain
+their original offsets/indices, null endpoints, explicit reasons and unavailable
+moments in the exported JSON. This does not assert physical confidence levels,
+sampling convergence or event probabilities. No full local tests ran.

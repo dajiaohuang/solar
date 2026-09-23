@@ -2,6 +2,7 @@ import type { SbdbCovariance } from '../../data/loaders/sbdbCovariance'
 import type { createDe440Dynamics } from './de440Dynamics'
 import { cartesianStatesFromSourceOffsets } from '../ephemeris/covarianceStateSamples'
 import { integrateAdaptive } from './adaptiveIntegrator'
+import { summarizeEnsembleEndpoints } from './ensembleMoments'
 
 const AU = 149597870.7, DAY = 86400
 const angle = 84381.448/3600*Math.PI/180, c = Math.cos(angle), s = Math.sin(angle)
@@ -68,7 +69,7 @@ export async function propagateSourceOffsetEnsemble(
     }
   }
   signal?.throwIfAborted()
-  return { initial, finalStates, valid, failures, numerics, integrationSettings, evaluations, maxEvaluations: MAX_EVALUATIONS,
+  return { initial, finalStates, valid, failures, moments: summarizeEnsembleEndpoints(finalStates,valid), numerics, integrationSettings, evaluations, maxEvaluations: MAX_EVALUATIONS,
     forceModel: evidence, frame: initial.frame, units: initial.stateUnits,
     finalEpoch: { referenceEpochTdb: initial.epochTdb, elapsedTdbSeconds: durationSeconds },
     method: 'nonlinear-joint-source-offsets-restricted-dynamics-v1',

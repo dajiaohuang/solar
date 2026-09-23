@@ -63,6 +63,10 @@ export function NonlinearOrbitEnsemble({ bytes, dimension, zh }: { bytes: ArrayB
     {result && <div data-testid="nonlinear-ensemble-result">
       <p>{zh ? '终点' : 'Endpoint'}: JD {result.finalEpoch.referenceEpochTdb} TDB + {result.finalEpoch.elapsedTdbSeconds} s</p>
       <p>{result.valid.reduce((sum,v) => sum+v,0)}/{result.initial.count} {zh ? '有效终点' : 'valid endpoints'} · {result.evaluations} {zh ? '次力计算' : 'force evaluations'}</p>
+      {result.moments.status === 'available' ? <div data-testid="ensemble-moments">
+        <p>{zh ? '样本标准差：' : 'Sample standard deviations:'} {result.moments.standardDeviations.map((v,i) => `${['x','y','z','vx','vy','vz'][i]}: ${(v*149597870.7/(i < 3 ? 1 : 86400)).toExponential(4)} ${i < 3 ? 'km' : 'km/s'}`).join(' · ')}</p>
+        <p>{zh ? '仅为本批有限样本的描述统计，不代表置信区间、收敛证明或物理误差。' : 'Descriptive statistics of this finite batch only; not confidence intervals, convergence evidence or physical errors.'}</p>
+      </div> : <p role="status">{zh ? '有样本失败或不足两个样本，不汇总均值与协方差。' : 'Mean and covariance are unavailable when a draw failed or fewer than two samples exist.'}</p>}
       <p>{zh ? '失败样本保留索引，不重新抽样。下表为日心 J2000 黄道坐标；完整速度、偏移、种子、力模型与来源见导出。' : 'Failed samples retain their indices and are never redrawn. Table: heliocentric J2000 ecliptic coordinates. Export includes velocities, offsets, seed, force model and source.'}</p>
       <div className="uncertainty-table"><table><caption>{zh ? '非线性样本终点' : 'Nonlinear sample endpoints'}</caption><thead><tr><th>#</th><th>x (AU)</th><th>y (AU)</th><th>z (AU)</th></tr></thead>
         <tbody>{Array.from(result.valid,(valid,index) => <tr key={index}><th>{index+1}</th>{[0,1,2].map(axis => <td key={axis}>{valid ? result.finalStates[index*6+axis].toPrecision(12) : '—'}</td>)}</tr>)}</tbody></table></div>
