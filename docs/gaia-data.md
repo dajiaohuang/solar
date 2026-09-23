@@ -294,3 +294,23 @@ evidence or unsupported model input 422, cancellation 408, and compute overload
 429. A focused test uses actual loopback HTTP and verifies byte-exact original
 files plus all six output components against the independent ERFA fixture.
 This is local HTTP evidence, not deployed-service or native-client acceptance.
+
+## Browser propagation workspace
+
+The evidence workspace now includes Stellar epoch propagation. Select the two
+original files, enter the exact source ID and target TCB Julian year, and
+explicitly adopt the spectroscopic RV approximation before computing. A
+configured VITE_SOLAR_API_BASE_URL is required; no remote service is silently
+selected. The chart itself remains at J2016.0. Changing inputs clears the
+previous result and cancels pending work. Exports retain the entire experiment
+and frontend build identity through the existing platform export mechanism.
+
+The client checks bounded source/response sizes, exact echoed original bytes,
+SHA-256 hashes, source/epoch/model identity, finite state and declared limits.
+The retained gaia-motion-experiment.json fixture is the experiment extracted
+from the actual Go CLI output described above. Three focused client tests and
+one UI scenario across four browser profiles passed. The browser scenario
+replays that output over an intercepted transport and covers explicit adoption,
+export, stale-result clearing and cancellation. It does not establish live
+browser-to-Go or physical native-device acceptance; actual loopback HTTP is
+covered separately by the Go test. Propagated covariance remains outstanding.

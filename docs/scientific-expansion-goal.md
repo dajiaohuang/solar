@@ -1610,3 +1610,24 @@ missing required inputs and pre-cancelled requests are refused. No full local
 tests ran. Browser/native entry points, propagated covariance and occultation
 integration remain open. Candidate 8968a78 is still awaiting iOS and has not
 been replaced; deployment and publication remain paused.
+
+### Checkpoint 69: browser stellar propagation workspace (2026-09-23)
+
+Added source-file import, exact source identity and TCB epoch controls, required
+RV approximation adoption, cancellation and source-bearing export. Input edits
+cancel pending requests and clear prior results. The client validates bounded
+responses, original bytes and hashes, model/epoch/source identity and finite
+states. Missing backend configuration remains explicit. The Gaia chart is not
+silently relabelled as a propagated or observed sky.
+
+Three focused client tests and four browser-profile runs passed, as did the
+production browser build, project-reference types and targeted lint. The UI
+tests replay an actual prior Go CLI output; they are transport-contract evidence,
+not live browser/backend or physical device acceptance. Mobile-layout output
+was visually inspected. No full local tests ran.
+
+Candidate 8968a78 completed every CI job successfully in run 35835715872,
+including iOS and the final gate, and was normally fast-forwarded to main.
+The subsequent time conversion, stellar core, CLI, HTTP and browser commits
+will use a new candidate gate. Native stellar access, propagated covariance,
+observer transformations and occultation integration remain outstanding.
