@@ -134,6 +134,22 @@ func TestContactHTTPRealSourcesAndCancellation(t *testing.T) {
 	if responseHTTP.StatusCode != 200 {
 		t.Fatal(responseHTTP.StatusCode, string(payload))
 	}
+	// Explicit local fixture capture from the real loopback route; CI leaves
+	// this unset. Never replace an existing reference silently.
+	if path := os.Getenv("SOLAR_CAPTURE_CONTACT_FIXTURE"); path != "" {
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, writeErr := f.Write(payload)
+		closeErr := f.Close()
+		if writeErr != nil {
+			t.Fatal(writeErr)
+		}
+		if closeErr != nil {
+			t.Fatal(closeErr)
+		}
+	}
 	var response struct {
 		APIVersion, CatalogVersion, CatalogManifestSHA256 string
 		Result                                            observation.ContactResult

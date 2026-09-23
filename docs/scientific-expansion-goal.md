@@ -992,3 +992,24 @@ compiled. No full local tests ran and no deployment occurred.
 Browser/native ground-contact forms and the other unfinished ledger requirements
 remain pending. Candidate 4001499 is still awaiting its running iOS job before
 the repaired and expanded batch can replace it.
+
+### Checkpoint 39: browser ground contact searches (2026-09-23)
+
+The ground-observer panel now searches source-backed spherical contacts for an
+explicit pair of NAIF targets using the same station and UTC start. Editing
+inputs, cancelling or changing stations invalidates pending responses. Results
+retain contact/bracket UTC, start/end geometry, EOP/PCK/SPK evidence, numerical
+limits and unknown physical timing uncertainty; JSON export preserves the
+validated response. Unsupported sources remain errors.
+
+Three focused transport/contract tests and twelve interaction checks across four
+browser profiles passed, together with types, changed-file lint and production
+build. Mobile results were inspected without overflow. Browser tests replay a
+response captured from the separately verified real loopback HTTP calculation;
+they are not live browser-to-service acceptance. No full local tests ran.
+
+Run 35823528664 has finished: iOS and Web/browser checks passed, Android failed
+on the previously diagnosed reference newline identity. The canonical-LF repair
+and checkpoints 36-39 require a fresh successful remote candidate before main
+promotion. Native ground-contact access, apparent/oriented limbs, completeness,
+physical uncertainty and all remaining ledger work are still open.

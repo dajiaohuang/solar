@@ -209,3 +209,17 @@ Primary references: [SOFA cookbooks](https://www.iausofa.org/cookbooks),
 [IERS field specification](https://maia.usno.navy.mil/ser7/readme.finals2000A),
 [Horizons observer quantities](https://ssd.jpl.nasa.gov/horizons/manual.html),
 [ERFA source](https://github.com/liberfa/erfa).
+
+## Browser ground-contact access
+
+In a configured full profile, open a body's Orbit tab, expand Ground observer,
+set the station and UTC start, then open Ground occultation and transit contacts.
+Set the end UTC and foreground/background NAIF IDs and submit. Input changes
+invalidate earlier results; cancellation discards late responses. The default
+pair is Moon (301) in front of Sun (10). Export preserves the full validated
+response and its source hashes.
+
+The displayed brackets are numerical root intervals, not physical timing error
+bars. The fixed 30-second scan can miss short or grazing events. A contact can
+occur below the horizon; this form does not certify visibility. Missing PCK,
+IERS or SPK coverage remains an error, and non-spherical PCK bodies are rejected.

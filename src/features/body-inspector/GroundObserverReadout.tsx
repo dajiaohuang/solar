@@ -8,6 +8,7 @@ import { saveTextExport } from '../../lib/platform'
 import { PRODUCT_PROFILE } from '../../lib/productAvailability'
 import type { CelestialBody } from '../../types'
 import { GroundVisibilityReadout } from './GroundVisibilityReadout'
+import { GroundContactsReadout } from './GroundContactsReadout'
 
 export function GroundObserverReadout({ body, julianDay }: { body: CelestialBody; julianDay: number }) {
   const { language } = useI18n(), zh = language === 'zh'
@@ -59,6 +60,7 @@ export function GroundObserverReadout({ body, julianDay }: { body: CelestialBody
       {busy && <button type="button" onClick={clear}>{zh ? '取消' : 'Cancel'}</button>}
     </form>}
     {available && Object.values(station).every(v => v.trim() !== '' && Number.isFinite(Number(v))) && <GroundVisibilityReadout key={`${utc}/${station.longitudeDeg}/${station.latitudeDeg}/${station.heightMeters}`} startUtc={utc} station={{ longitudeDeg: Number(station.longitudeDeg), latitudeDeg: Number(station.latitudeDeg), heightMeters: Number(station.heightMeters) }} bodyId={backendBodyId(body)} base={base!} />}
+    {available && Object.values(station).every(v => v.trim() !== '' && Number.isFinite(Number(v))) && <GroundContactsReadout key={`contacts/${utc}/${station.longitudeDeg}/${station.latitudeDeg}/${station.heightMeters}`} startUtc={utc} station={{ longitudeDeg: Number(station.longitudeDeg), latitudeDeg: Number(station.latitudeDeg), heightMeters: Number(station.heightMeters) }} base={base!} />}
     {error && <p role="alert">{error}</p>}
     {result && observed && <section aria-label={zh ? '地面观测结果' : 'Ground observation result'}>
       <p><strong>{bodyDisplayName(body, language)}</strong> · {result.result.request.utc}</p>
