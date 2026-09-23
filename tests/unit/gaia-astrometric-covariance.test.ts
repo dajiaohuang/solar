@@ -2,6 +2,7 @@ import { test, expect } from 'vitest'
 import { gaiaAstrometricCovariance } from '../../src/lib/gaiaAstrometricCovariance'
 import type { GaiaSource } from '../../src/lib/gaiaChunks'
 import chunk from '../fixtures/gaia-pleiades-20260923/r11-d22.json'
+import extended from '../fixtures/gaia-six-20260923/r11-d22.json'
 const fields = ['ra','dec','parallax','pmra','pmdec']
 const diagonal = () => {
   const source = { ...chunk.sources[0], astrometric_params_solved:31 } as GaiaSource
@@ -9,6 +10,26 @@ const diagonal = () => {
   fields.forEach((a,i) => fields.slice(i+1).forEach(b => { source[`${a}_${b}_corr`] = 0 }))
   return source
 }
+test('constructs the full sourced pseudocolour covariance and preserves its five-coordinate marginal', () => {
+  const rows = extended.sources.filter(row=>row.astrometric_params_solved===95)
+  expect(rows).toHaveLength(15)
+  for (const row of rows) {
+    const full=gaiaAstrometricCovariance(row as GaiaSource,6), marginal=gaiaAstrometricCovariance(row as GaiaSource)
+    expect(full.available).toBe(true); expect(marginal.available).toBe(true)
+    if (!full.available || !marginal.available) continue
+    expect(full.matrix).toHaveLength(6)
+    expect(full.coordinateUnits[5]).toBe('inverse-micrometre')
+    expect(full.matrix.slice(0,5).map(row=>row.slice(0,5))).toEqual(marginal.matrix)
+    expect(full.matrix[5][5]).toBe(row.pseudocolour_error!**2)
+    fields.forEach((field,i)=>expect(full.matrix[i][5]).toBe((row as GaiaSource)[`${field}_pseudocolour_corr`] as number * ((row as GaiaSource)[`${field}_error`] as number) * row.pseudocolour_error!))
+  }
+  expect(gaiaAstrometricCovariance(diagonal(),6).available).toBe(false)
+  expect(gaiaAstrometricCovariance({...rows[0],pseudocolour_error:null} as GaiaSource,6).available).toBe(false)
+  const invalid={...diagonal(),astrometric_params_solved:95,pseudocolour_error:1} as GaiaSource
+  fields.forEach(field=>{invalid[`${field}_pseudocolour_corr`]=.9})
+  expect(gaiaAstrometricCovariance(invalid).available).toBe(true)
+  expect(gaiaAstrometricCovariance(invalid,6)).toMatchObject({available:false,reason:'joint-matrix-not-numerically-positive-definite'})
+})
 test('constructs a mixed-unit five-coordinate covariance without an extra cos(dec)', () => {
   const source = diagonal(); source.dec = 89; source.ra_pmdec_corr = .25
   const result = gaiaAstrometricCovariance(source)

@@ -15,6 +15,7 @@ export function GaiaSky() {
   const [batches, setBatches] = useState<GaiaDisplayBatch[]>([]), [summary, setSummary] = useState<Summary | null>(null)
   const [zoom, setZoom] = useState(1), [selected, setSelected] = useState(0), [count, setCount] = useState(0)
   const [source, setSource] = useState<GaiaSource | null>(null)
+  const sixParameterCovariance = source ? gaiaAstrometricCovariance(source,6) : null
   const astrometricCovariance = source ? gaiaAstrometricCovariance(source) : null
   const uncertainty = source ? gaiaPositionUncertainty(source) : null
   const worker = useRef<Worker | null>(null), generation = useRef(0), sources = useRef<GaiaSource[]>([])
@@ -87,6 +88,7 @@ export function GaiaSky() {
         <p className="checksum">Gaia DR3 {source.source_id}</p>
         <dl className="contract-list"><div><dt>RA / Dec</dt><dd>{source.ra.toFixed(9)}° / {source.dec.toFixed(9)}°</dd></div><div><dt>G</dt><dd>{source.phot_g_mean_mag}</dd></div><div><dt>{zh ? '视差（mas）' : 'Parallax (mas)'}</dt><dd>{source.parallax ?? '—'}</dd></div></dl>
         <div data-testid="gaia-astrometric-covariance"><p>{zh ? '五参数形式协方差 · J2016.0' : 'Five-parameter formal covariance · J2016.0'}</p><p>{astrometricCovariance?.available ? (zh ? '5 × 5 边缘矩阵已验证，可随来源导出；未传播历元，未含系统误差或伪颜色。' : 'Validated 5 × 5 marginal available in export; no epoch propagation, systematics or pseudocolour.') : (zh ? '完整有效的五参数协方差不可用：' : 'Valid joint five-parameter covariance unavailable: ') + (astrometricCovariance?.reason ?? 'no-source')}</p></div>
+        <div data-testid="gaia-six-parameter-covariance"><p>{zh ? '六参数形式协方差（含伪颜色）' : 'Six-parameter formal covariance (including pseudocolour)'}</p><p>{sixParameterCovariance?.available ? (zh ? '6 × 6 矩阵已验证，可随来源导出；第六维是伪颜色，不是径向速度。' : 'Validated 6 × 6 matrix available in export; the sixth coordinate is pseudocolour, not radial velocity.') : (zh ? '六参数协方差不可用：' : 'Six-parameter covariance unavailable: ') + (sixParameterCovariance?.reason ?? 'no-source')}</p></div>
         <div data-testid="gaia-position-uncertainty">
           <p>{zh ? '目录位置形式误差 · J2016.0' : 'Catalog formal position uncertainty · J2016.0'}</p>
           {uncertainty?.available ? <>
@@ -97,7 +99,7 @@ export function GaiaSky() {
         </div>
       </div>}
       {summary && <div data-testid="gaia-complete"><p>{summary.verifiedRows} {zh ? '条来源记录已加载' : 'source records loaded'} · {summary.verifiedChunks} {zh ? '个分块' : 'chunks'}</p>
-        <button className="secondary-button" onClick={() => { void saveTextExport(JSON.stringify({ manifest, manifestSha256:manifestHash, summary, build:BUILD_INFO, projection:'gnomonic-display-only', selectedAstrometricCovariance:source ? {sourceId:source.source_id,...astrometricCovariance} : null, selectedPositionUncertainty:source ? {sourceId:source.source_id,...uncertainty} : null, sources:sources.current },null,2),'solar-gaia-sky.json','application/json').catch(error => setError(String(error))) }}>{zh ? '导出 Gaia 记录与来源' : 'Export Gaia records and sources'}</button>
+        <button className="secondary-button" onClick={() => { void saveTextExport(JSON.stringify({ manifest, manifestSha256:manifestHash, summary, build:BUILD_INFO, projection:'gnomonic-display-only', selectedSixParameterCovariance:source ? {sourceId:source.source_id,...sixParameterCovariance} : null, selectedAstrometricCovariance:source ? {sourceId:source.source_id,...astrometricCovariance} : null, selectedPositionUncertainty:source ? {sourceId:source.source_id,...uncertainty} : null, sources:sources.current },null,2),'solar-gaia-sky.json','application/json').catch(error => setError(String(error))) }}>{zh ? '导出 Gaia 记录与来源' : 'Export Gaia records and sources'}</button>
       </div>}
       <p>{zh ? '未应用自行传播、观测者视差、光行差、偏折或视差零点改正。星等筛选不是完整性保证；GPU 显示精度不是科学测量精度。' : 'No proper-motion propagation, observer parallax, aberration, deflection or parallax zero-point correction is applied. Magnitude selection is not a completeness guarantee; GPU display precision is not scientific measurement accuracy.'}</p>
       <p className="checksum">SHA-256 {manifestHash}</p>

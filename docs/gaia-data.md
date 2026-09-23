@@ -138,9 +138,9 @@ singular/non-positive-definite inputs as unavailable; it does not claim such
 inputs are all physically impossible. Original source rows remain untouched.
 
 Solution code 31 provides a five-parameter solution; code 95 yields only its
-five-coordinate marginal here. The pseudocolour coordinate and correlations are
-not part of the current import schema, so this is not a full six-parameter
-matrix or a result conditioned on pseudocolour. Code 3 has no five-parameter
+five-coordinate marginal here. Schema 1 lacks pseudocolour fields. Schema 2 can additionally supply the
+full six-parameter result described below; this five-coordinate result remains
+a marginal and is not conditioned on pseudocolour. Code 3 has no five-parameter
 result. No epoch propagation, systematics, parallax zero-point correction,
 radial-velocity covariance or occultation probability is inferred.
 
@@ -159,5 +159,25 @@ A real schema-2 capture is retained at tests/fixtures/gaia-six-20260923: the
 same Pleiades-area cone with G <= 18 returned 94 rows and a matching count,
 including 15 six-parameter, 78 five-parameter and one position-only solution.
 Original CSV bytes, query URLs/timestamps and all chunk hashes are retained.
-The current covariance inspector still exports the five-coordinate marginal;
-full six-coordinate construction and observer/time propagation remain pending.
+The covariance inspector exports both the five-coordinate marginal and, for
+complete valid code-95 records, the full six-parameter covariance. Observer/time
+propagation remains pending.
+
+## Full six-parameter covariance
+
+For solution code 95 and complete schema-2 errors/correlations, the inspector
+constructs and exports a separate 6-by-6 formal matrix with pseudocolour as the
+last coordinate, in inverse micrometres. This is not radial velocity, a 6D
+Cartesian phase-space covariance, or a result conditioned on a colour estimate.
+The upper-left block is exactly the separately exported five-coordinate marginal.
+All 15 correlations must jointly pass the same strict no-repair factorization.
+Missing pseudocolour errors/correlations or a non-positive joint factorization
+produce an explicit unavailable result; no zero correlations are invented.
+The source rows and original five-coordinate result remain available.
+
+Fifteen real six-parameter source records passed full matrix construction;
+a controlled matrix whose five-coordinate block is valid but whose sixth
+coordinate makes it indefinite is rejected. Four browser profiles verify local
+schema-2 import, source preservation, selected-star status and both exports.
+These checks establish source reconstruction, not physical accuracy, epoch
+propagation, pseudocolour correction or occultation uncertainty.

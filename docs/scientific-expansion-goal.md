@@ -1521,3 +1521,23 @@ type build and changed-file lint passed. No full local tests ran. The current
 inspector still exposes only the five-coordinate marginal; full six-coordinate
 construction, propagation and stellar occultation remain open. Candidate
 002b1e6 remains active; it was not replaced.
+
+### Checkpoint 64: full sourced Gaia six-parameter covariance (2026-09-23)
+
+Connected schema-2 pseudocolour errors and five cross-correlations to a full
+six-parameter formal covariance, with explicit inverse-micrometre sixth-axis
+units and strict joint validation. The inspector/export keeps this separate
+from its five-coordinate marginal. Missing inputs, non-code-95 solutions and
+indefinite joint matrices produce explicit unavailability without inventing
+correlations. No radial velocity, epoch propagation or colour conditioning is
+implied. Four focused numerical cases and four browser-profile cases passed,
+including all 15 real six-parameter sources, preserved marginal blocks, an
+invalid sixth-coordinate joint matrix, original-row exports and selected IDs.
+Project-reference types, production build and changed-file lint passed. No full
+local tests ran. Observer/time propagation and stellar occultation remain open.
+
+Run 35833613659 passed all gates for exact SHA
+002b1e617dad8d6caf4836d66270969acbb83d40; that SHA was fast-forwarded to main.
+Deployment and asteroid dataset publication remain manually disabled. Later
+streaming, capacity and Gaia covariance work still requires its own candidate
+validation and is not represented as already accepted on main.

@@ -36,6 +36,26 @@ test('real Gaia worker uploads, zooms, selects and exports original source rows'
   await panel.getByLabel('Gaia manifest URL').fill('https://example.test/manifest.json')
   await expect(panel.getByTestId('gaia-complete')).toHaveCount(0); await expect(canvas).toHaveCount(0)
 })
+test('extended local Gaia source exports its full six-parameter solution', async ({ page }) => {
+  const panel=page.getByRole('region',{name:'Gaia sky chart',exact:true})
+  const dir='tests/fixtures/gaia-six-20260923/'
+  const sources=JSON.parse(await readFile(dir+'r11-d22.json','utf8')).sources
+  const index=sources.findIndex((row:{source_id:string})=>row.source_id==='65212966653827840')
+  expect(index).toBeGreaterThanOrEqual(0)
+  await panel.getByLabel('Gaia manifest and chunk JSON files').setInputFiles([dir+'manifest.json',dir+'r11-d22.json'])
+  await expect(panel.getByTestId('gaia-complete')).toContainText('94 source records loaded')
+  await panel.getByLabel('Star row').fill(String(index+1))
+  await expect(panel.getByTestId('gaia-six-parameter-covariance')).toContainText('Validated 6 × 6 matrix')
+  const pending=page.waitForEvent('download')
+  await panel.getByRole('button',{name:'Export Gaia records and sources'}).click()
+  const result=JSON.parse(await readFile((await (await pending).path())!,'utf8'))
+  expect(result.sources).toEqual(sources)
+  expect(result.selectedSixParameterCovariance).toMatchObject({sourceId:'65212966653827840',available:true,pseudocolourIncluded:true,propagated:false})
+  expect(result.selectedSixParameterCovariance.matrix).toHaveLength(6)
+  expect(result.selectedSixParameterCovariance.matrix[5][5]).toBe(sources[index].pseudocolour_error**2)
+  expect(result.selectedSixParameterCovariance.coordinateLabels[5]).toBe('pseudocolour')
+  expect(result.selectedAstrometricCovariance.matrix).toHaveLength(5)
+})
 test('local imports reject corrupted source bytes without keeping a stale chart', async ({ page }) => {
   const panel = page.getByRole('region',{ name:'Gaia sky chart', exact:true })
   await panel.getByLabel('Gaia manifest and chunk JSON files').setInputFiles([root+'manifest.json',root+'r11-d22.json'])
