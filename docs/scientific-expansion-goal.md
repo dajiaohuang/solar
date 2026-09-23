@@ -2388,3 +2388,20 @@ reception. TypeScript and targeted lint passed; no full local tests ran.
 Differential limb light time, stellar aberration, deflection, ground observer
 transforms, contact/event completeness and Web/native SPK-limb access remain
 unfinished. Candidate 5936fca remains running; subsequent changes stay local.
+
+### Checkpoint 112: unique identities for source-replaced science panels (2026-09-23)
+
+Candidate 5936fca's completed Firefox and mobile Chromium jobs revealed a
+duplicate covariance propagation summary after switching Eros to Bennu.
+Inspection found sibling CovarianceTimePropagation and NonlinearOrbitEnsemble
+instances using the same source hash as their React key. Added distinct
+covariance/ensemble prefixes while retaining source-change remounting. The
+regression waits for the new source identity and requires exactly one summary;
+it does not choose the first duplicate or relax conditional-model guards.
+
+The two covariance browser cases passed under desktop Firefox and mobile
+Chromium (four executions), covering actual worker propagation/export and
+pending-source cancellation. Targeted lint and diff checks passed. No full
+local tests ran. The current candidate's iOS job remains live and will not be
+replaced before its diagnostics are retained. This fix is local pending the
+next exact-candidate verification.

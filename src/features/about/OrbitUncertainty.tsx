@@ -93,8 +93,8 @@ export function OrbitUncertainty() {
       {ellipsoid ? <CovarianceEllipsoid geometry={ellipsoid} zh={zh} /> : <p>{zh ? '三维椭球无法可靠分解，未修补协方差。' : 'The 3D ellipsoid cannot be factored reliably; covariance has not been repaired.'}</p>}
       <button type="button" className="secondary-button" onClick={() => { void saveTextExport(JSON.stringify({ schemaVersion: 1, calculation: 'solution-epoch-coordinate-covariance', ...loaded, adoptedGmSourceSha256: GM_SHA, result, positionEllipsoid: ellipsoid ? { ...ellipsoid, units: 'km', frame: result.frame } : null }, null, 2), `solar-covariance-${loaded.source.designation.replace(/[^\w-]/g, '_')}.json`, 'application/json').catch(reason => setError(String(reason))) }}>{zh ? '导出协方差与来源 JSON' : 'Export covariance and source JSON'}</button>
     </div>}
-    {loaded && inputBytes && <CovarianceTimePropagation key={loaded.sourceSha256} bytes={inputBytes} dimension={loaded.source.labels.length} zh={zh} />}
-    {loaded && inputBytes && <NonlinearOrbitEnsemble key={loaded.sourceSha256} bytes={inputBytes} dimension={loaded.source.labels.length} zh={zh} />}
+    {loaded && inputBytes && <CovarianceTimePropagation key={`covariance:${loaded.sourceSha256}`} bytes={inputBytes} dimension={loaded.source.labels.length} zh={zh} />}
+    {loaded && inputBytes && <NonlinearOrbitEnsemble key={`ensemble:${loaded.sourceSha256}`} bytes={inputBytes} dimension={loaded.source.labels.length} zh={zh} />}
   </section>
 }
 

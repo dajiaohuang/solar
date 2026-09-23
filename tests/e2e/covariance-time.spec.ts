@@ -29,6 +29,8 @@ test('real worker propagates covariance and exports independently checked condit
   await panel.getByLabel('Covariance duration (TDB days)').fill('-10')
   await expect(result).toHaveCount(0)
   await panel.getByLabel('SBDB covariance JSON file').setInputFiles('tests/fixtures/sbdb-bennu-covariance.json')
+  await expect(panel).toContainText('101955 / 118')
+  await expect(panel.getByText('Propagate formal covariance in time', { exact: true })).toHaveCount(1)
   await panel.getByText('Propagate formal covariance in time', { exact: true }).click()
   await expect(panel).toContainText('Extra source parameters have no matched force derivatives')
   await expect(panel.getByRole('button', { name: 'Adopt conditional DE440 model and propagate' })).toHaveCount(0)
