@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from 'node:util'
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
 import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import http from 'node:http'
@@ -208,6 +209,22 @@ export async function nativeSmoke() {
     await bootOwnedSimulator(device, artifact, report)
     await command('xcrun', ['simctl', 'keychain', device, 'add-root-cert', join(temporary, 'root.crt')])
 
+    // Only the freshly created simulator is populated. The production document
+    // picker reads these originals; no test-specific app import bypass is used.
+    await command('xcrun', ['simctl', 'install', device, resolve('build/ios-derived-data/Build/Products/Debug-iphonesimulator/App.app')])
+    const container = await command('xcrun', ['simctl', 'get_app_container', device, 'io.github.dajiaohuang.solaratlas', 'data'])
+    if (!container.includes(`/Devices/${device}/data/Containers/Data/Application/`) || !container.startsWith('/')) throw new Error('Unexpected owned simulator app container')
+    const documents = join(container, 'Documents')
+    await mkdir(documents, { recursive: true })
+    report.stellarSources = {}
+    for (const name of ['manifest.json', 'rows.csv']) {
+      const bytes = await readFile(resolve('tests/fixtures/gaia-six-20260923', name))
+      await writeFile(join(documents, name), bytes, { flag: 'wx' })
+      const staged = await readFile(join(documents, name))
+      if (!staged.equals(bytes)) throw new Error('Staged iOS source bytes differ from the original')
+      report.stellarSources[name] = { bytes: bytes.length, sha256: createHash('sha256').update(staged).digest('hex') }
+    }
+
     await assertFreePort(18790)
     const backendLog = createWriteStream(join(artifact, 'backend.log'), { flags: 'wx' })
     backend = spawn(join(temporary, 'solar-backend'), ['-data-dir', join(temporary, 'data'), '-listen', '127.0.0.1:18790'], { stdio: ['ignore', 'pipe', 'pipe'] })
@@ -265,6 +282,8 @@ export async function nativeSmoke() {
       if (!traffic.some(row => row.path === '/contacts-fixture/'+path+'/v1/observation/contacts' && row.status === status)) throw new Error('Missing iOS contact replay UI traffic: '+path)
     }
     report.groundContactsUi = { evidence: 'real-loopback-response-replay', liveScientificService: false }
+    if (!traffic.some(row => row.path === '/v1/stellar/motion' && row.method === 'POST' && row.status === 200)) throw new Error('Missing live iOS stellar calculation traffic')
+    report.stellarMotionUi = { evidence: 'system-file-picker-to-live-go-over-https', physicalDevice: false }
     report.identityUi = verifyNativeIdentityTraffic(traffic)
     report.status = 'passed'
   } catch (error) {

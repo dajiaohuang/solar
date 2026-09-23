@@ -71,6 +71,48 @@ final class ObservationUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["observation.pressure"].exists)
     }
 
+    func testOriginalGaiaFilesThroughSystemPickerAndLiveBackend() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-native.backend.address", "https://127.0.0.1:18791", "-native.onboarding.complete", "YES", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        XCTAssertTrue(app.buttons["stellar.disclosure"].waitForExistence(timeout: 15))
+        reveal(app, app.buttons["stellar.disclosure"]); app.buttons["stellar.disclosure"].tap()
+        for (control, filename) in [("manifest", "manifest.json"), ("rows", "rows.csv")] {
+            let button = app.buttons["stellar.\(control)"]
+            reveal(app, button); button.tap()
+            // UIDocumentPicker may reopen its last folder. Otherwise navigate
+            // via its normal Browse / On My iPhone / Solar Atlas hierarchy.
+            let stem = String(filename.split(separator: ".")[0])
+            let match = NSPredicate(format: "label == %@ OR label == %@", filename, stem)
+            var file = app.cells.matching(match).firstMatch
+            if !file.waitForExistence(timeout: 3) {
+                let browse = app.buttons["Browse"].firstMatch
+                if browse.exists && browse.isHittable { browse.tap() }
+                let local = app.staticTexts["On My iPhone"].firstMatch
+                if local.waitForExistence(timeout: 5) { local.tap() }
+                let folder = app.staticTexts["Solar Atlas"].firstMatch
+                if folder.waitForExistence(timeout: 5) { folder.tap() }
+                file = app.cells.matching(match).firstMatch
+            }
+            if !file.waitForExistence(timeout: 5) { file = app.staticTexts.matching(match).firstMatch }
+            XCTAssertTrue(file.waitForExistence(timeout: 5), app.debugDescription)
+            file.tap()
+            waitForLabel(app.staticTexts["stellar.status"], "Original file loaded.")
+        }
+        let rv = app.switches["stellar.rv"], covariance = app.switches["stellar.covariance"]
+        reveal(app, rv); rv.tap(); reveal(app, covariance); covariance.tap()
+        reveal(app, app.buttons["stellar.load"]); app.buttons["stellar.load"].tap()
+        waitForLabel(app.staticTexts["stellar.status"], "Gaia DR3 65212004581252736 · J2026.0 TCB")
+        let result = app.staticTexts["stellar.result"]
+        XCTAssertTrue(result.label.contains("56.6929443290"))
+        XCTAssertTrue(result.label.contains("0.357911"))
+        reveal(app, app.buttons["stellar.export"])
+        screenshot(app, "stellar-system-picker-live-go")
+        reveal(app, app.buttons["stellar.disclosure"]); app.buttons["stellar.disclosure"].tap()
+        XCTAssertFalse(app.buttons["stellar.export"].exists)
+    }
+
     func testRealEarthMoonStatesAndNativeModes() {
         continueAfterFailure = false
         let app = XCUIApplication()

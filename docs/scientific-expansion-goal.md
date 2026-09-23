@@ -1914,3 +1914,21 @@ was removed. Local Swift execution remains unavailable, so no test pass is
 claimed for this new code. No full local tests ran. Run 35843121444 still has a
 live iOS job; Android's diagnosed EACCES failure remains pending re-execution
 with the already committed app-owned fixture fix. Main remains c3b87f7.
+
+### Checkpoint 87: actual iOS document-picker/live-service scenario authored (2026-09-23)
+
+Enabled the app Documents directory in Files and in-place document access for
+the original-source workflow. The owned-simulator harness installs the built app,
+checks its returned container belongs to the created device, writes only new
+original manifest/CSV files, verifies staged bytes and records SHA-256 receipts.
+
+Authored an XCTest path through the real document picker, explicit RV/covariance
+controls, live Go HTTPS computation, expected state/sigma readout and collapse
+invalidation. The harness requires successful stellar HTTP traffic before
+reporting this scenario passed. This is not a picker-result callback bypass.
+
+Thirteen focused script/reuse tests, script syntax/lint and diff checks passed.
+The new native scenario has not executed and may need adjustment from actual
+picker evidence; export destination writes and physical-device behavior remain
+unverified. No full local tests ran. The existing run 35843121444 is still live
+in iOS, with the separately diagnosed Android failure, and was not replaced.
