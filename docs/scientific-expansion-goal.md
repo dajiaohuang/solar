@@ -725,3 +725,21 @@ Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [Gaia DR3](https://www.cosmos.esa.int/web/gaia/dr3).
 JPL SSD ingestion must obey its
 [single-request fair-use policy](https://ssd-api.jpl.nasa.gov/doc/index.php).
+
+### Checkpoint 25: native projection cancellation ownership (2026-09-23)
+
+Staging run 35816227292 failed iOS twice: the first attempt did not open the
+tutorial; the second passed that interaction but lost its displayed projection
+after background/foreground resume while retaining four verified source states.
+Neither failure is treated as successful native acceptance.
+
+Removed the view's deferred actor-wide cancellation callback, which could cancel
+a newer worker after scene resume. Each request now cancels only its own worker;
+generation checks prevent superseded requests from allocating or publishing after
+an actor suspension. The view also checks its projection key before publication.
+Protocol coverage now exercises already-cancelled requests, concurrent replacement
+and cancellation, and a subsequent successful projection. Existing UI resume and
+tutorial assertions remain unchanged. Locally, 13 focused native smoke/quality
+contract tests and native packaging validation passed; no full local tests ran.
+Windows has no Swift compiler here, so Swift compilation, protocol execution and
+actual simulator acceptance remain required on the new remote candidate.

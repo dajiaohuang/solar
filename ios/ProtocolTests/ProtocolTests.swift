@@ -308,6 +308,32 @@ struct ProtocolTests {
         let emptyProjection = try await prefetch.prepare(frame: nil, reference: "naif:10", limit: 1)
         precondition(emptyProjection.points.isEmpty && emptyProjection.candidates == 0)
         await prefetch.cancel()
+        let projectionFrame = frame
+        let cancelledProjection = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await prefetch.prepare(frame: projectionFrame, reference: ids[0], limit: 2)
+        }
+        do {
+            _ = try await cancelledProjection.value
+            preconditionFailure("A cancelled projection request published a result")
+        } catch is CancellationError { }
+        // Exercise replacement/cancellation interleavings, then require a fresh
+        // foreground request to recover the original verified coordinates.
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for _ in 0..<32 {
+                group.addTask {
+                    let request = Task {
+                        try await prefetch.prepare(frame: projectionFrame, reference: ids[0], limit: 2)
+                    }
+                    await Task.yield()
+                    request.cancel()
+                    do { _ = try await request.value } catch is CancellationError { }
+                }
+            }
+            try await group.waitForAll()
+        }
+        let resumedProjection = try await prefetch.prepare(frame: projectionFrame, reference: ids[0], limit: 2)
+        precondition(resumedProjection.points == projected.points && resumedProjection.candidates == 2)
         frame.exact[1] = false
         let absent = try NativeProjection.make(frame: frame, reference: ids[0], limit: 2)
         precondition(absent.points.isEmpty && absent.candidates == 1)

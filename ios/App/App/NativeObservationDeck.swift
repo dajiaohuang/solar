@@ -460,10 +460,9 @@ private struct NativeStateViewport: View {
             applyThermal()
             let source = frame, sourceReference = reference, renderLimit = limit
             do {
-                let result = try await withTaskCancellationHandler(operation: {
-                    try await projectionPrefetch.prepare(frame: source, reference: sourceReference, limit: renderLimit)
-                }, onCancel: { Task { await projectionPrefetch.cancel() } })
+                let result = try await projectionPrefetch.prepare(frame: source, reference: sourceReference, limit: renderLimit)
                 try Task.checkCancellation()
+                guard expected == key else { return }
                 // A pressure warning may arrive while the worker runs. Clamp
                 // against the current policy, not the captured old limit.
                 projection = try result.limited(to: limit); projectedKey = expected

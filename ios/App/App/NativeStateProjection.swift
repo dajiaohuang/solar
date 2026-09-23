@@ -93,12 +93,21 @@ actor NativeProjectionPrefetch {
         worker?.cancel()
         if let previous = worker { _ = await previous.result }
         try Task.checkCancellation()
+        // The actor can admit a newer request while awaiting the old worker.
+        guard generation == current else { throw CancellationError() }
         let next = Task.detached(priority: .userInitiated) {
             try NativeProjection.make(frame: frame, reference: reference, limit: limit)
         }
         worker = next
         defer { if generation == current { worker = nil } }
-        return try await next.value
+        // Cancellation belongs to this request's worker. A deferred actor-wide
+        // cancel from an old view task could otherwise kill its replacement.
+        let result = try await withTaskCancellationHandler(operation: {
+            try await next.value
+        }, onCancel: { next.cancel() })
+        try Task.checkCancellation()
+        guard generation == current else { throw CancellationError() }
+        return result
     }
 
     func cancel() async {
