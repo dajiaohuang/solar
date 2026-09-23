@@ -181,3 +181,32 @@ coordinate makes it indefinite is rejected. Four browser profiles verify local
 schema-2 import, source preservation, selected-star status and both exports.
 These checks establish source reconstruction, not physical accuracy, epoch
 propagation, pseudocolour correction or occultation uncertainty.
+
+## Epoch propagation prerequisites
+
+The captured 94-source schema-2 cone has 91 positive parallaxes and 16 supplied
+radial velocities. Only 16 rows jointly have positive parallax, both proper
+motions and radial velocity. All of those happen to be code-31 solutions.
+The 15 code-95 solutions do not thereby supply radial velocity: their sixth
+fitted coordinate is pseudocolour. These counts describe this capture only.
+
+The existing GoFA Starpm interface documents TDB epochs and angular rates,
+whereas Gaia gives a TCB catalog epoch and proper motions. The new
+src/engine/ephemeris/barycentricTime.ts implements only the IAU 2006 B3 affine
+TCB/TDB coordinate-time conversion, retaining two-part dates and the defining
+nonzero offset. It does not change Gaia parameter units or implement propagation.
+A separate ERFA execution generated 14 forward/inverse reference cases spanning
+the origin, J2000, Gaia J2016 and day boundaries; focused checks compare them
+within 0.3 ns numerically. This tolerance is not a stellar-position accuracy.
+
+Reproduce the independent time oracle into a new file:
+
+    rtk proxy uv run --python 3.12 --with pyerfa==2.0.1.5 python scripts/reference-barycentric-time.py --output .cache/new-barycentric-time.json
+
+[IAU 2006 Resolution B3](https://www.iau.org/static/resolutions/IAU2006_Resol3.pdf)
+defines the time relation. A complete astrometric adapter must also establish
+consistent rate/length conventions, perspective and light-time treatment,
+explicit treatment of spectroscopic versus astrometric radial velocity, and
+independent reference states. Merely replacing dates is insufficient. No
+missing radial velocity is currently filled with zero, and no new propagated
+star state is exposed by this time-conversion module.

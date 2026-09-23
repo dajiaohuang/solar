@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "software": {
+    "pyerfa": "2.0.1.5",
+    "erfa": "2.0.1"
+  },
+  "generatorSha256": "15ad982722793a92e3dbef0b094e409b53fa467bdc1586ad0e245ae4a55dd989",
+  "source": "https://www.iau.org/static/resolutions/IAU2006_Resol3.pdf",
+  "boundary": "Time-coordinate conversion only, not astrometric parameter scaling or stellar propagation.",
+  "cases": [
+    {
+      "direction": "tcbtdb",
+      "input": {
+        "day": 2443144,
+        "fraction": 0.5003725
+      },
+      "expectedParts": [
+        2443144.0,
+        0.5003724992418982
+      ]
+    },
+    {
+      "direction": "tdbtcb",
+      "input": {
+        "day": 2443144,
+        "fraction": 0.5003725
+      },
+      "expectedParts": [
+        2443144.0,
+        0.5003725007581018
+      ]
+    },
+    {
+      "direction": "tcbtdb",
+      "input": {
+        "day": 2451545,
+        "fraction": 0
+      },
+      "expectedParts": [
+        2451545.0,
+        -0.00013025216543700573
+      ]
+    },
+    {
+      "direction": "tdbtcb",
+      "input": {
+        "day": 2451545,
+        "fraction": 0
+      },
+      "expectedParts": [
+        2451545.0,
+        0.00013025216745659132
+      ]
+    },
+    {
+      "direction": "tcbtdb",
+      "input": {
+        "day": 2457389,
+        "fraction": 0
+      },
+      "expectedParts": [
+        2457389.0,
+        -0.00022086454067892574
+      ]
+    },
+    {
+      "direction": "tdbtcb",
+      "input": {
+        "day": 2457389,
+        "fraction": 0
+      },
+      "expectedParts": [
+        2457389.0,
+        0.00022086454410347414
+      ]
+    },
+    {
+      "direction": "tcbtdb",
+      "input": {
+        "day": 2461041,
+        "fraction": 0.123456789012345
+      },
+      "expectedParts": [
+        2461041.0,
+        0.1231792975755168
+      ]
+    },
+    {
+      "direction": "tdbtcb",
+      "input": {
+        "day": 2461041,
+        "fraction": 0.123456789012345
+      },
+      "expectedParts": [
+        2461041.0,
+        0.12373428045347576
+      ]
+    },
+    {
+      "direction": "tcbtdb",
+      "input": {
+        "day": 2457389,
+        "fraction": 0.999999999999
+      },
+      "expectedParts": [
+        2457389.0,
+        0.9997791199531235
+      ]
+    },
+    {
+      "direction": "tdbtcb",
+      "input": {
+        "day": 2457389,
+        "fraction": 0.999999999999
+      },
+      "expectedParts": [
+        2457389.0,
+        1.0002208800483015
+      ]
+    },
+    {
+      "direction": "tcbtdb",
+      "input": {
+        "day": 2400000,
+        "fraction": 1e-12
+      },
+      "expectedParts": [
+        2400000.0,
+        0.0006689632499785943
+      ]
+    },
+    {
+      "direction": "tdbtcb",
+      "input": {
+        "day": 2400000,
+        "fraction": 1e-12
+      },
+      "expectedParts": [
+        2400000.0,
+        -0.0006689632583510019
+      ]
+    },
+    {
+      "direction": "tcbtdb",
+      "input": {
+        "day": 2500000,
+        "fraction": 0.999999999999
+      },
+      "expectedParts": [
+        2500000.0,
+        0.999118427974781
+      ]
+    },
+    {
+      "direction": "tdbtcb",
+      "input": {
+        "day": 2500000,
+        "fraction": 0.999999999999
+      },
+      "expectedParts": [
+        2500000.0,
+        1.0008815720368882
+      ]
+    }
+  ]
+}

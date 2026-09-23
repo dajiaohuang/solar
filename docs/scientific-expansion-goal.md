@@ -1541,3 +1541,20 @@ Run 35833613659 passed all gates for exact SHA
 Deployment and asteroid dataset publication remain manually disabled. Later
 streaming, capacity and Gaia covariance work still requires its own candidate
 validation and is not represented as already accepted on main.
+
+### Checkpoint 65: explicit barycentric time conversion prerequisite (2026-09-23)
+
+Verified the Gaia TCB / GoFA Starpm documented TDB convention difference and
+audited the real 94-source capture: only 16 rows jointly supply positive
+parallax, both proper motions and radial velocity. Added canonical two-part
+TCB/TDB conversion using IAU 2006 B3 constants, preserving the nonzero origin
+offset and date-boundary precision. A separately executed pinned PyERFA oracle
+produced 14 reference conversions with generator/software evidence. Fifteen
+focused comparisons/roundtrips/invalid-input cases, project-reference types and
+lint passed. No full local tests ran.
+
+This is a necessary time-coordinate building block, not completed stellar
+propagation. Parameter rate/length conventions, perspective/light time, the
+spectroscopic radial-velocity approximation, independent propagated-state
+references and user access remain to implement. Missing inputs are not silently
+filled. Candidate 8968a78 / run 35835715872 remains active and is not replaced.
