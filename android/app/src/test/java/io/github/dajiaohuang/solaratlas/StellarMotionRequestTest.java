@@ -10,6 +10,9 @@ import java.util.Map;
 import static org.junit.Assert.*;
 
 public final class StellarMotionRequestTest {
+    @Test public void portableBase64MatchesJdkAcrossBytesAndPadding() {
+        for(int size=0;size<=1024;size++){byte[] bytes=new byte[size];for(int i=0;i<size;i++)bytes[i]=(byte)(i*73+size);assertEquals(Base64.getEncoder().encodeToString(bytes),StellarMotionRequest.base64(bytes));}
+    }
     private static byte[] fixture(String file) throws IOException {
         Path root=Paths.get("").toAbsolutePath();
         while(root!=null) {Path path=root.resolve("tests/fixtures/gaia-six-20260923/"+file);if(Files.exists(path))return Files.readAllBytes(path);root=root.getParent();}

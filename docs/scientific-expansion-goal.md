@@ -1739,3 +1739,22 @@ the plain Java request contract only, not Android packaging or UI. No full local
 tests ran. Response validation, native network/UI integration and iOS stellar
 access remain outstanding. Existing candidate iOS job 107106826761 is still
 executing its real-SPK HTTPS UI step; it was not cancelled or replaced.
+
+### Checkpoint 77: Android response evidence and compatible source encoding (2026-09-23)
+
+Added bounded original-response validation with exact source bytes/hashes,
+selected CSV fields, state/model/epoch identity and covariance matrix semantics.
+Exports preserve received bytes; public readout arrays and originals are copied.
+Thread interruption is checked before and during source scanning. Corrected a
+request-encoder compatibility issue: java.util.Base64 needs API 26 but this app
+supports API 24, so the new portable encoder is checked against JDK base64.
+
+Plain javac --release 17 compilation and six focused JUnit tests passed,
+including 1,025 encoder lengths, real Go output receipts, altered contracts,
+bounds, defensive copies and cancellation. No full local tests ran. Android
+network/UI integration, packaging/device validation and iOS stellar access remain
+pending; the local SDK limitation remains explicit.
+
+Candidate 335b083 / run 35838148647 has now passed every gate, including iOS and
+the final gate, and was fast-forwarded normally to main. Subsequent source
+validation, covariance and Android work is queued for a fresh exact-SHA gate.

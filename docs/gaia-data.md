@@ -429,3 +429,17 @@ policy omission and invalid identities/epochs/budgets. They passed with javac
 --release 17 and cached JUnit. The targeted Android Gradle invocation could not
 start because no SDK path is configured on this host. Network response validation,
 native controls, Android build/device proof and iOS stellar access remain pending.
+
+The Android response model now verifies original base64 bytes and SHA-256,
+parses the selected CSV row without storing every row, binds every returned
+source field, validates model/epoch identity and finite state, and checks the
+optional covariance input errors, units, positive matrices and J C J-transpose.
+Response bytes and returned readout arrays are defensively copied. Validation
+observes worker-thread interruption. The response budget is 14 MiB.
+
+Six focused JVM request/report tests passed against real Go output fixtures,
+altered scientific contracts, cancellation, bounds and byte retention. The
+request encoder avoids java.util.Base64 (added in Android API 26) because this
+project also targets API 24/25; its output was checked against the JDK encoder
+for 1,025 lengths and varied byte values. These remain plain-JVM tests, not a
+claim of Android device acceptance. Native networking/UI integration is pending.
