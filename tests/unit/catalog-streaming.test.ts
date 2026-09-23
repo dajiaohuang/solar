@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { planCatalogStream, streamCatalogPoints, type CatalogStreamTile } from '../../src/lib/catalogStreaming'
+import { CATALOG_STREAM_ARTIFACT_TIMEOUT_MS, planCatalogStream, streamCatalogPoints, type CatalogStreamTile } from '../../src/lib/catalogStreaming'
 import { utcJulianDayToTt } from '../../src/engine/ephemeris/timeScales'
 import type { AsteroidManifest, CatalogFilters } from '../../src/types'
 
 const filters: CatalogFilters = { query: '', orbitClass: 'all', semiMajorAxis: [0, 100], eccentricity: [0, 1], inclination: [0, 180], absoluteMagnitude: [-10, 40], magnitudeStatus: 'all', perihelion: [0, 100] }
 const hash = (buffer: ArrayBuffer) => createHash('sha256').update(new Uint8Array(buffer)).digest('hex')
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
 
 function fixture(count = 13, chunkSize = 2) {
   const manifest: AsteroidManifest = { version: 'test', source: 'synthetic circular orbits', generatedAt: '', totalCount: count, chunkSize, chunkCount: Math.ceil(count / chunkSize), format: 'binary-v1', releasePath: '/test', compactIndex: { path: 'catalog-index.bin', format: 'catalog-index-v1', strideBytes: 24, count, classCodes: ['MBA', 'APO'] }, bucketCounts: {}, categoryCounts: {}, featured: [] }
@@ -98,6 +98,52 @@ describe('bounded source catalog streaming', () => {
     expect(cancelled).toBe(4)
     vi.stubGlobal('fetch', original)
     await expect(run(manifest, async () => {})).resolves.toMatchObject({ drawnRows: 13, complete: true })
+  })
+
+  it.each(['checksums.json', 'catalog-index.bin', '/binary/'])('times out a stalled %s body and returns leases for a fresh load', async stalled => {
+    vi.useFakeTimers()
+    const { manifest } = fixture(), original = globalThis.fetch, published = vi.fn(async () => {})
+    let started = 0, cancelled = 0, ready!: () => void
+    const expected = stalled === '/binary/' ? 4 : 1
+    const waiting = new Promise<void>(resolve => { ready = resolve })
+    vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit) => {
+      if (!url.includes(stalled)) return original(url, options)
+      return new Response(new ReadableStream<Uint8Array>({
+        start(stream) { stream.enqueue(new Uint8Array([0])); if (++started === expected) ready() },
+        cancel() { cancelled++ },
+      }))
+    }))
+    const result = run(manifest, published)
+    const rejection = expect(result).rejects.toMatchObject({ name: 'TimeoutError' })
+    await waiting
+    await vi.advanceTimersByTimeAsync(CATALOG_STREAM_ARTIFACT_TIMEOUT_MS)
+    await rejection
+    expect(cancelled).toBe(expected)
+    expect(published).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+    vi.stubGlobal('fetch', original)
+    await expect(run(manifest, async () => {})).resolves.toMatchObject({ drawnRows: 13, complete: true })
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('aborts a request that never returns headers and can reload afterwards', async () => {
+    vi.useFakeTimers()
+    const { manifest } = fixture(), original = globalThis.fetch
+    let ready!: () => void, aborted = 0
+    const waiting = new Promise<void>(resolve => { ready = resolve })
+    vi.stubGlobal('fetch', vi.fn((_url: string, options: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      options.signal!.addEventListener('abort', () => { aborted++; reject(options.signal!.reason) }, { once: true })
+      ready()
+    })))
+    const result = run(manifest, async () => { throw new Error('No response was received') })
+    const rejection = expect(result).rejects.toMatchObject({ name: 'TimeoutError' })
+    await waiting
+    await vi.advanceTimersByTimeAsync(CATALOG_STREAM_ARTIFACT_TIMEOUT_MS)
+    await rejection
+    expect(aborted).toBe(1)
+    expect(vi.getTimerCount()).toBe(0)
+    vi.stubGlobal('fetch', original)
+    await expect(run(manifest, async () => {})).resolves.toMatchObject({ complete: true })
   })
 
   it('uses query locators without duplicates and applies full source precision and unknown magnitude filters', async () => {

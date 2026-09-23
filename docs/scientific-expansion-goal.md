@@ -1390,3 +1390,22 @@ regressions, not claims of physical validity at enormous propagation times.
 The subsequent signed-Kepler, conic solver, original Borisov import and browser
 experiment commits still require their own exact-SHA remote gates before main
 promotion. The broader goal and its previously recorded gaps remain open.
+
+### Checkpoint 57: catalog artifact resource deadlines (2026-09-23)
+
+The full-source snapshot pipeline bounded bytes and concurrent acquisitions but
+had no download deadline: a stalled response could retain a lease indefinitely.
+Each artifact now has a 30-second deadline spanning admission, headers, body
+consumption and hash verification. Parent cancellation remains linked; timers
+and listeners are removed and leases released on every settled path. This is
+a per-artifact transport bound, not an overall compute or GPU-upload deadline.
+
+Twenty-one focused streaming/admission/transfer cases passed, including new
+stalled checksum, index and four-concurrent-shard response tests. A separate
+focused no-response-headers case also passed. They verify timeout errors, body
+cancellation, no partial publication, timer cleanup and successful subsequent
+loads. Types and changed-file lint passed. These use controlled transport
+fixtures, not measured public-network reliability. No full local tests ran.
+Candidate 002b1e6 / run 35833613659 remains active and was not replaced. This
+change is retained for the next candidate; continuous/3D streaming, scheduling
+priorities and broader capacity/physical-model work remain incomplete.

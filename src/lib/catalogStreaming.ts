@@ -7,6 +7,7 @@ import { validateBinaryElements } from './catalogLoader'
 import type { AsteroidManifest, CatalogFilters } from '../types'
 
 export const CATALOG_STREAM_CONCURRENCY = 4
+export const CATALOG_STREAM_ARTIFACT_TIMEOUT_MS = 30_000
 const MIB = 1024 * 1024
 export type CatalogStreamPlan = { capacity: number; budgetBytes: number; reservedBytes: number }
 export type CatalogStreamTile = {
@@ -44,19 +45,31 @@ async function sha256(buffer: ArrayBuffer) {
 /** HTTP caching remains available; this path avoids unbounded asynchronous
  * IndexedDB writes and does not hydrate any per-object metadata records. */
 async function fetchArtifact(url: string, maximumBytes: number, expectedHash: string | undefined, signal: AbortSignal) {
-  const release = await catalogAdmission.acquire(signal)
+  const controller = new AbortController()
+  const abort = () => controller.abort(signal.reason)
+  signal.addEventListener('abort', abort, { once: true })
+  if (signal.aborted) abort()
+  // Include admission wait and body consumption, not just response headers.
+  const timer = setTimeout(() => controller.abort(new DOMException('Catalog artifact exceeded its 30-second deadline', 'TimeoutError')), CATALOG_STREAM_ARTIFACT_TIMEOUT_MS)
+  let release: (() => void) | undefined
   try {
-    const response = await fetch(url, { signal })
+    release = await catalogAdmission.acquire(controller.signal)
+    controller.signal.throwIfAborted()
+    const response = await fetch(url, { signal: controller.signal })
     if (!response.ok) throw new Error(`Failed to load catalog artifact: ${response.status}`)
     if (Number(response.headers.get('content-length')) > maximumBytes) {
       void response.body?.cancel().catch(() => undefined)
       throw new Error('Catalog artifact exceeds its declared capacity')
     }
-    const buffer = response.body ? await readBoundedStream(response.body, maximumBytes, signal) : new ArrayBuffer(0)
+    const buffer = response.body ? await readBoundedStream(response.body, maximumBytes, controller.signal) : new ArrayBuffer(0)
     if (expectedHash !== undefined && await sha256(buffer) !== expectedHash) throw new Error('Catalog artifact SHA-256 mismatch')
-    signal.throwIfAborted()
+    controller.signal.throwIfAborted()
     return buffer
-  } finally { release() }
+  } finally {
+    clearTimeout(timer)
+    signal.removeEventListener('abort', abort)
+    release?.()
+  }
 }
 
 type StreamOptions = {
