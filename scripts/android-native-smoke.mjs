@@ -102,6 +102,7 @@ export async function androidNativeSmoke() {
     const inventory = await pinnedNativeInventory(process.env.SOLAR_ANDROID_INVENTORY_DIR, process.env.SOLAR_ANDROID_INVENTORY_SHA256)
     report.source = { commit: await command('git', ['rev-parse', 'HEAD']), files: {} }
     for (const file of ['scripts/android-native-smoke.mjs', 'scripts/ios-native-smoke.mjs', 'scripts/native-coverage-fixture.mjs', 'scripts/native-identity-fixture.mjs', 'scripts/native-real-directory.mjs',
+      'android/app/build.gradle',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/MainActivity.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/NativeObservationDeck.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/NativeProjectionPrefetch.java',
@@ -229,18 +230,19 @@ export async function androidNativeSmoke() {
     // Package install and SystemUI boot can steal focus from the activity
     // window. Wake and dismiss the keyguard again immediately before Espresso.
     await unlockOwnedEmulator(deviceCommand)
-    const stellarSourceDir = '/sdcard/Android/data/'+appId+'/files/solar-native-smoke/gaia-source'
-    await assertOwned()
-    await deviceCommand(['shell','mkdir','-p',stellarSourceDir])
-    for (const name of ['manifest.json','rows.csv']) await deviceCommand(['push',resolve('tests/fixtures/gaia-six-20260923',name),stellarSourceDir+'/'+name])
+    // Test APK assets are copied by the app UID into its private cache. Files
+    // created by adb in scoped external storage are not necessarily app-readable.
+    const stellarManifest = await readFile(resolve('tests/fixtures/gaia-six-20260923/manifest.json'))
+    const stellarRows = await readFile(resolve('tests/fixtures/gaia-six-20260923/rows.csv'))
     // Test APK trusts only this temporary CA. Production TLS and hostname
     // validation remain unchanged; no root cert is installed on the host/device.
     const output = await command(adb, ['-s', serial, 'shell', 'am', 'instrument', '-w', '-r',
       '-e', 'class', `${appId}.ObservationUITest`, '-e', 'solarBackend', 'https://127.0.0.1:18791',
       ...(realScenario ? ['-e', 'solarRealDirectory', Buffer.from(JSON.stringify(realScenario)).toString('base64')] : []),
-      '-e', 'solarStellarSourceDirectory', stellarSourceDir,
-      '-e', 'solarStellarManifestBytes', String((await readFile(resolve('tests/fixtures/gaia-six-20260923/manifest.json'))).length),
-      '-e', 'solarStellarRowsBytes', String((await readFile(resolve('tests/fixtures/gaia-six-20260923/rows.csv'))).length),
+      '-e', 'solarStellarManifestBytes', String(stellarManifest.length),
+      '-e', 'solarStellarRowsBytes', String(stellarRows.length),
+      '-e', 'solarStellarManifestHash', createHash('sha256').update(stellarManifest).digest('base64'),
+      '-e', 'solarStellarRowsHash', createHash('sha256').update(stellarRows).digest('base64'),
       '-e', 'solarCaBase64', (await readFile(join(temporary, 'root.crt'))).toString('base64'), `${appId}.test/androidx.test.runner.AndroidJUnitRunner`],
     { env, log: join(artifact, 'instrumentation.log'), timeout: 240_000 })
     verifyInstrumentation(output); verifyTraffic(traffic.filter(row => !row.path.startsWith('/contacts-fixture/') && !row.path.startsWith('/coverage-fixture/') && !row.path.startsWith('/identity-fixture/') && !row.path.startsWith(realDirectoryPrefix)))

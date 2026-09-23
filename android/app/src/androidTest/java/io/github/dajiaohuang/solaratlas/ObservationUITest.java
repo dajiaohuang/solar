@@ -248,12 +248,13 @@ public final class ObservationUITest {
             fill(BACKEND_HINT, backend);
             shown(withTagValue(is((Object) "stellar-toggle"))).perform(scrollTo(), click());
             shown(withTagValue(is((Object) "stellar-load"))).check(matches(not(androidx.test.espresso.matcher.ViewMatchers.isEnabled())));
-            String stellarFiles = requiredArg(args, "solarStellarSourceDirectory");
+            File stellarManifest = stellarSource("manifest.json", 1024*1024, requiredArg(args,"solarStellarManifestHash"));
+            File stellarRows = stellarSource("rows.csv", 8*1024*1024, requiredArg(args,"solarStellarRowsHash"));
             scenario.onActivity(activity -> activity.onActivityResult(732, Activity.RESULT_OK,
-                    new Intent().setData(android.net.Uri.fromFile(new File(stellarFiles, "manifest.json")))));
+                    new Intent().setData(android.net.Uri.fromFile(stellarManifest))));
             waitForText(containsString("manifest.json: "+requiredArg(args,"solarStellarManifestBytes")+" B"));
             scenario.onActivity(activity -> activity.onActivityResult(733, Activity.RESULT_OK,
-                    new Intent().setData(android.net.Uri.fromFile(new File(stellarFiles, "rows.csv")))));
+                    new Intent().setData(android.net.Uri.fromFile(stellarRows))));
             waitForText(containsString("rows.csv: "+requiredArg(args,"solarStellarRowsBytes")+" B"));
             shown(withTagValue(is((Object) "stellar-rv"))).perform(scrollTo(), click());
             shown(withTagValue(is((Object) "stellar-covariance"))).perform(scrollTo(), click());
@@ -279,6 +280,16 @@ public final class ObservationUITest {
                 }
             }
         }
+    }
+
+    private static File stellarSource(String name, int limit, String expectedHash) throws Exception {
+        android.app.Instrumentation instrumentation = InstrumentationRegistry.getInstrumentation();
+        byte[] bytes = StellarSourceImport.read(instrumentation.getContext().getAssets().open(name), limit, () -> false);
+        assertEquals("Test APK must retain original Gaia source bytes", expectedHash,
+                StellarMotionRequest.base64(java.security.MessageDigest.getInstance("SHA-256").digest(bytes)));
+        File file = File.createTempFile("stellar-", "-"+name, instrumentation.getTargetContext().getCacheDir());
+        try (FileOutputStream output = new FileOutputStream(file)) { output.write(bytes); }
+        return file;
     }
 
     private static String requiredArg(Bundle args, String name) {

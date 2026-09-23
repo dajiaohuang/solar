@@ -1879,3 +1879,23 @@ Swift compilation and actual picker/export behavior remain unverified. No full
 local tests ran. Candidate 7257372 has passed its Android build and its iOS Swift
 request checks and simulator build; both native HTTPS UI jobs remain active.
 This later response/service/UI work is not included in that running candidate.
+
+### Checkpoint 85: diagnose and repair Android fixture permission failure (2026-09-23)
+
+Candidate 7257372 Android UI job 107123036073 failed before stellar computation.
+Downloaded its retained evidence and inspected instrumentation.log: the original
+manifest import reported `open failed: EACCES (Permission denied)`, and the test
+timed out waiting for the manifest byte count. Backend traffic confirms no stellar
+request was issued. This is not a successful live stellar validation.
+
+Removed adb-created app-external source staging. The original Gaia directory is
+now an androidTest-only asset input, and instrumentation verifies source SHA-256
+against host-provided hashes before copying to an app-owned private cache file.
+The same picker-result callback, production import reader and live HTTPS request
+remain under test. No production storage permission or source validation was
+relaxed. The Gradle source wiring is included in future evidence hashes.
+
+Eight focused harness/reuse tests, script syntax/lint and diff checks passed.
+Native re-execution is pending; the local Android SDK is absent. No full local
+tests ran. All four browser jobs and Web passed, but iOS remains live in run
+35843121444, so that candidate was not replaced or promoted to main.
