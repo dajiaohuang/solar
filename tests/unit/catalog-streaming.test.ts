@@ -44,6 +44,28 @@ function run(manifest: AsteroidManifest, onTile: (tile: CatalogStreamTile) => Pr
 }
 
 describe('bounded source catalog streaming', () => {
+  it.each(['neo-first', 'pha-first'] as const)('prioritizes %s shards stably while retaining ordinary rows and every source exactly once', async priority => {
+    const { manifest, files, requests, rehash } = fixture(13, 2)
+    const index = new DataView(files.get('catalog-index.bin')!)
+    for (let row = 0; row < 13; row++) index.setUint8(row * 24 + 19, row % 2 ? 0 : 4)
+    // Only a late shard has the requested tag; an earlier shard has the other tag.
+    index.setUint8(11 * 24 + 19, priority === 'neo-first' ? 1 : 2)
+    index.setUint8(3 * 24 + 19, priority === 'neo-first' ? 2 : 1)
+    rehash()
+    const values: number[] = []
+    const result = await run(manifest, async tile => { for (let i = 0; i < tile.positions.length; i += 2) values.push(tile.positions[i]) }, { priority })
+    expect(result).toEqual({ sourceRows: 13, drawnRows: 13, complete: true })
+    expect(values).toEqual([10, 11, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12].map(row => 2 + row / 100))
+    expect(requests.filter(path => path.startsWith('binary/'))).toEqual([5, 0, 1, 2, 3, 4, 6].map(chunk => `binary/chunk-${String(chunk).padStart(4, '0')}.bin`))
+    const limited: number[] = []
+    expect(await run(manifest, async tile => { limited.push(...tile.positions) }, { priority, requestedRows: 2 })).toMatchObject({ drawnRows: 2, complete: false })
+    expect(limited).toEqual([2.1, 0, 2.11, 0])
+  })
+  it('rejects unknown source priorities before fetching', async () => {
+    const { manifest, requests } = fixture()
+    await expect(run(manifest, async () => {}, { priority: 'unknown' as never })).rejects.toThrow('source priority')
+    expect(requests).toEqual([])
+  })
   it('streams Float64 inclined 3D states and reserves every added coordinate buffer', async () => {
     const { manifest,files,rehash } = fixture(3,3)
     const elements = new Float64Array(files.get('binary/chunk-0000.bin')!), index = new DataView(files.get('catalog-index.bin')!)

@@ -8,6 +8,7 @@ import type { AsteroidManifest, CatalogFilters } from '../types'
 
 export const CATALOG_STREAM_CONCURRENCY = 4
 export const CATALOG_STREAM_ARTIFACT_TIMEOUT_MS = 30_000
+export type CatalogStreamPriority = 'source' | 'neo-first' | 'pha-first'
 const MIB = 1024 * 1024
 export type CatalogStreamPlan = { capacity: number; budgetBytes: number; reservedBytes: number }
 export type CatalogStreamTile = {
@@ -76,6 +77,7 @@ async function fetchArtifact(url: string, maximumBytes: number, expectedHash: st
 }
 
 type StreamOptions = {
+  priority?: CatalogStreamPriority
   mode?: '2d' | '3d'
   manifest: AsteroidManifest
   filters: CatalogFilters
@@ -92,6 +94,9 @@ type StreamOptions = {
 export async function streamCatalogPoints(options: StreamOptions): Promise<CatalogStreamResult> {
   const { manifest, filters, signal, onTile } = options
   signal.throwIfAborted()
+  const priority = options.priority ?? 'source'
+  if (!['source', 'neo-first', 'pha-first'].includes(priority)) throw new Error('Invalid catalog source priority')
+  const priorityFlag = priority === 'neo-first' ? 1 : priority === 'pha-first' ? 2 : 0
   if (!Number.isFinite(options.julianDay) || options.julianDay < 2441317.5) throw new Error('Catalog streaming requires a UTC epoch from 1972 onwards')
   const mode = options.mode ?? '2d', stride = mode === '3d' ? 3 : 2
   const plan = planCatalogStream(manifest, options.requestedRows, options.budgetBytes, mode)
@@ -131,10 +136,11 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
     // cannot decide source-precision boundaries (including perihelion).
     const matchesIndex = createCatalogFieldMatcher({ ...filters, query: '',
       eccentricity: [0, 1], inclination: [0, 180], perihelion: [0, Number.MAX_VALUE] })
-    const chunks: number[] = []
+    const chunks: number[] = [], deferredChunks: number[] = []
     let inspected = 0
     for (let chunk = 0; chunk < manifest.chunkCount; chunk++) {
       signal.throwIfAborted()
+      let admitted = false, preferred = false
       const end = Math.min(manifest.totalCount, (chunk + 1) * manifest.chunkSize)
       for (let row = chunk * manifest.chunkSize; row < end; row++) {
         if (++inspected % 20_000 === 0) {
@@ -146,9 +152,17 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
         const classIndex = index.getUint8(offset + 18), flags = index.getUint8(offset + 19), magnitude = index.getInt16(offset + 16, true)
         if (index.getUint16(offset + 20, true) !== chunk || index.getUint16(offset + 22, true) !== row - chunk * manifest.chunkSize) throw new Error('Catalog index locator mismatch')
         if (!Number.isFinite(a) || a <= 0 || classIndex >= compact.classCodes.length || flags > 7 || Boolean(flags & 4) !== (magnitude !== 0x7fff)) throw new Error('Invalid catalog index metadata')
-        if (matchesIndex('', compact.classCodes[classIndex], magnitude === 0x7fff ? undefined : magnitude / 100, a, 0, 0)) { chunks.push(chunk); break }
+        if (matchesIndex('', compact.classCodes[classIndex], magnitude === 0x7fff ? undefined : magnitude / 100, a, 0, 0)) {
+          admitted = true
+          preferred = priorityFlag === 0 || Boolean(flags & priorityFlag)
+          if (preferred) break
+        }
       }
+      // Stable shard priority only. Exact source filters still run below; a
+      // preferred shard can contain ordinary rows or no final filter matches.
+      if (admitted) (preferred ? chunks : deferredChunks).push(chunk)
     }
+    for (const chunk of deferredChunks) chunks.push(chunk)
     const enqueue = (sequence: number) => {
       if (sequence >= chunks.length) return
       const chunk = chunks[sequence], path = `binary/chunk-${String(chunk).padStart(4, '0')}.bin`

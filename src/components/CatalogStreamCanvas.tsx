@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useI18n } from '../i18n/context'
 import { catalogPointColor, catalogPointSize } from '../lib/catalogPointAppearance'
 import { createCatalogPointRenderer, type CatalogPointFrame } from '../lib/catalogPointRenderer'
-import { planCatalogStream } from '../lib/catalogStreaming'
+import { planCatalogStream, type CatalogStreamPriority } from '../lib/catalogStreaming'
 import { julianDayToDate } from '../lib/julianDate'
 import type { AsteroidManifest, CatalogFilters } from '../types'
 import type { CatalogStreamRequest, CatalogStreamResponse } from '../workers/catalog-stream.protocol'
@@ -19,6 +19,7 @@ type Props = {
   displayMode: 'spatial' | 'all'
   displayLimit: number
   mode?: '2d' | '3d'
+  priority?: CatalogStreamPriority
   rotation?: CatalogRotation
 }
 type Status = { drawnRows: number; sourceRows: number; phase: 'loading' | 'complete' | 'limited' | 'cancelled' | 'error'; error?: string }
@@ -26,7 +27,7 @@ type Attributes = Pick<CatalogPointFrame, 'positions' | 'colors' | 'sizes'>
 
 const DEFAULT_ROTATION: CatalogRotation = { azimuthDegrees: 0,tiltDegrees: 0 }
 
-export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRows, budgetBytes, viewRadiusAU, displayMode, displayLimit, mode = '2d', rotation = DEFAULT_ROTATION }: Props) {
+export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRows, budgetBytes, viewRadiusAU, displayMode, displayLimit, mode = '2d', priority = 'source', rotation = DEFAULT_ROTATION }: Props) {
   const { t } = useI18n()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const cancelRef = useRef<(() => void) | null>(null)
@@ -206,7 +207,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
           else setStatus({ ...count, phase: response.complete ? 'complete' : 'limited' })
         }
       }
-      post({ type: 'start', manifest, filters, julianDay, requestedRows, budgetBytes, mode })
+      post({ type: 'start', manifest, filters, julianDay, requestedRows, budgetBytes, mode, priority })
     }
     return () => {
       active = false
@@ -222,7 +223,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
       pendingTiles.length = 0
       retained.length = 0
     }
-  }, [manifest, filters, julianDay, requestedRows, budgetBytes, plan.capacity, mode, dimensions])
+  }, [manifest, filters, julianDay, requestedRows, budgetBytes, plan.capacity, mode, dimensions, priority])
 
   return <>
     <canvas ref={canvasRef} className="viz-canvas catalog-point-canvas" role="img" aria-label={`${t('catalogPointAria')} ${mode}: ${display.count.toLocaleString()}`} data-testid="catalog-stream-canvas" data-drawn-rows={status.drawnRows} data-source-rows={status.sourceRows} data-phase={status.phase} data-capacity={plan.capacity} data-display-count={display.count} data-spatial-pending={display.pending} data-display-mode={displayMode} data-coordinate-mode={mode} />

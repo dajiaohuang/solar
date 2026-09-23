@@ -2199,3 +2199,23 @@ SHA-256 b39baaf5d8e3b70aa112347530b2c6717f96873e5310cedb46c7ddb92e21fcf1.
 This closes the authored export-write acceptance gap from checkpoint 91.
 The destination result remains stubbed; actual system-picker interaction and
 physical-device performance remain unverified. iOS is still running.
+
+### Checkpoint 103: source-flag shard priorities and four-browser 3D acceptance (2026-09-23)
+
+Added optional NEO-first/PHA-first shard admission using original compact-index
+flags. Matching candidate shards with a preferred flag precede the others,
+with stable original order inside both groups and each shard visited once.
+Original Float64 filtering, four admitted transfers, cancellation and capacity
+bounds remain enforced. A shard may contain ordinary rows, and preliminary
+index matching does not promise every tagged row passes exact source filters.
+Bilingual controls explain these limits and invalidate the prior snapshot when
+priority changes. Truncated results depend on order and are not risk estimates.
+
+Twenty-two focused streaming tests passed, including late-tag priority, ordinary
+row retention, no duplicates, partial capacity and invalid priority refusal.
+A named desktop browser case confirms actual worker request order and snapshot
+invalidation. TypeScript build, targeted ESLint and diff checks passed. The
+previous 3D rotation case also passed in Firefox and WebKit, completing its
+four-browser targeted coverage. No full local tests ran. This is explicit
+source-tag scheduling, not camera/selected-body priority or continuous time.
+Candidate 690f6ea remains live in iOS and was not replaced.

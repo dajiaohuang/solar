@@ -1,10 +1,11 @@
 import type { AsteroidManifest, CatalogFilters } from '../types'
-import type { CatalogStreamResult, CatalogStreamTile } from '../lib/catalogStreaming'
+import type { CatalogStreamPriority, CatalogStreamResult, CatalogStreamTile } from '../lib/catalogStreaming'
 import type { CatalogSpatialView } from '../lib/catalogSpatialSelection'
 
 export type CatalogStreamRequest = {
   type: 'start'
   mode?: '2d' | '3d'
+  priority?: CatalogStreamPriority
   manifest: AsteroidManifest
   filters: CatalogFilters
   julianDay: number

@@ -483,3 +483,19 @@ rtk npm run build
 rtk proxy node scripts/benchmark-catalog-stream.mjs --detail spatial --output .cache/catalog-spatial-new.json
 rtk proxy node scripts/benchmark-catalog-stream.mjs --detail spatial --graphics d3d11 --output .cache/catalog-spatial-hardware-new.json
 ```
+
+## Source-tag shard scheduling (2026-09-23)
+
+Expanded snapshots support original order, NEO-containing shards first, and
+PHA-containing shards first. The immutable compact index supplies the flags.
+The preferred and remaining groups each retain source order; original-precision
+filtering and four-way admission still apply. The scan yields every 20,000
+inspected rows and observes cancellation. The default keeps its early-exit scan.
+
+This schedules whole shards, not individual tagged bodies. Ordinary rows within
+a preferred shard remain eligible, and exact orbital filters can reject its
+preliminary candidates. Changing priority clears the previous snapshot. When
+capacity truncates the result, the chosen source subset depends on order and is
+not a representative sample or a collision-risk assessment. Full source runs
+retain every matching row exactly once. Camera/selected-body scheduling and
+continuous-time propagation remain separate incomplete work.

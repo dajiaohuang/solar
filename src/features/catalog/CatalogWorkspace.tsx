@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CatalogPointCanvas } from '../../components/CatalogPointCanvas'
 import { CatalogStreamCanvas } from '../../components/CatalogStreamCanvas'
-import { planCatalogStream } from '../../lib/catalogStreaming'
+import { planCatalogStream, type CatalogStreamPriority } from '../../lib/catalogStreaming'
 import { requireCatalogAccess } from '../../lib/productAccess'
 import { simulationClock } from '../../engine/clock/SimulationClock'
 import { useSimulationClock } from '../../engine/clock/useSimulationClock'
@@ -60,12 +60,13 @@ export function CatalogWorkspace() {
   const [streamLimit, setStreamLimit] = useState(() => window.innerWidth <= 800 ? 30_000 : 100_000)
   const [streamRadius, setStreamRadius] = useState(8)
   const [streamMode,setStreamMode] = useState<'2d' | '3d'>('2d')
+  const [streamPriority, setStreamPriority] = useState<CatalogStreamPriority>('source')
   const [streamAzimuth,setStreamAzimuth] = useState(0), [streamTilt,setStreamTilt] = useState(30)
   const streamRotation = useMemo(() => ({ azimuthDegrees: streamAzimuth,tiltDegrees: streamTilt }),[streamAzimuth,streamTilt])
   const [streamDisplay, setStreamDisplay] = useState<'spatial' | 'all'>('spatial')
   const [streamDisplayLimit, setStreamDisplayLimit] = useState(() => window.innerWidth <= 800 ? 30_000 : 100_000)
   const [streamRequest, setStreamRequest] = useState<{ key: string; epoch: number; id: number } | null>(null)
-  const streamKey = JSON.stringify([catalog.manifest?.releasePath, catalog.manifest?.version, catalog.filters, streamLimit, streamMode])
+  const streamKey = JSON.stringify([catalog.manifest?.releasePath, catalog.manifest?.version, catalog.filters, streamLimit, streamMode, streamPriority])
   const streaming = streamRequest?.key === streamKey
   let streamCapacity = 0
   try { if (catalog.manifest) streamCapacity = planCatalogStream(catalog.manifest, streamLimit, streamBudget, streamMode).capacity }
@@ -324,6 +325,12 @@ export function CatalogWorkspace() {
           </select></label>
           <RangeFields label="q (AU)" minimumLabel={t('minimum')} maximumLabel={t('maximum')} value={catalog.filters.perihelion} onChange={(value) => catalogActions.patchFilters({ perihelion: value })} step="0.1" />
           {catalog.manifest?.compactIndex && <div className="catalog-stream-controls">
+            <label className="field"><span>{language === 'zh' ? '分片加载顺序' : 'Source shard order'}</span><select value={streamPriority} onChange={event => setStreamPriority(event.target.value as CatalogStreamPriority)}>
+              <option value="source">{language === 'zh' ? '原始目录顺序' : 'Original catalog order'}</option>
+              <option value="neo-first">{language === 'zh' ? '含近地天体的分片优先' : 'NEO-containing shards first'}</option>
+              <option value="pha-first">{language === 'zh' ? '含 PHA 标签的分片优先' : 'PHA-containing shards first'}</option>
+            </select></label>
+            {streamPriority !== 'source' && <p className="catalog-result-note">{language === 'zh' ? '仅按原始目录标签调整分片顺序；分片内仍保留普通天体，并应用原有筛选。有限容量结果受加载顺序影响，不代表完整分布或碰撞风险。' : 'Reorders shards using original catalog flags; ordinary bodies remain within each shard and existing filters still apply. Capacity-limited results depend on this order and do not represent the full distribution or collision risk.'}</p>}
             <label className="field"><span>{language === 'zh' ? '目录快照投影' : 'Catalog snapshot projection'}</span><select value={streamMode} onChange={event => setStreamMode(event.target.value as '2d' | '3d')}>
               <option value="2d">2D</option><option value="3d">{language === 'zh' ? '3D 正交投影' : '3D orthographic'}</option>
             </select></label>
@@ -363,7 +370,7 @@ export function CatalogWorkspace() {
 
         <section className="catalog-map glass-panel">
           <div className="map-caption"><span>{t('catalogModeCaption')}</span><strong>{streaming ? t('catalogStreamSnapshot') : `${Math.floor(pointCloud.positions.length / 2).toLocaleString()} / ${resultTotal.toLocaleString()}`}</strong></div>
-          {streaming && catalog.manifest ? <CatalogStreamCanvas key={streamRequest.id} manifest={catalog.manifest} filters={catalog.filters} julianDay={streamRequest.epoch} requestedRows={streamLimit} budgetBytes={streamBudget} viewRadiusAU={streamRadius} displayMode={streamDisplay} displayLimit={streamDisplayLimit} mode={streamMode} rotation={streamRotation} /> : pointCloud.positions.length === pointRecords.length * 2 && pointRecords.length ? <CatalogPointCanvas
+          {streaming && catalog.manifest ? <CatalogStreamCanvas key={streamRequest.id} manifest={catalog.manifest} filters={catalog.filters} julianDay={streamRequest.epoch} requestedRows={streamLimit} budgetBytes={streamBudget} viewRadiusAU={streamRadius} displayMode={streamDisplay} displayLimit={streamDisplayLimit} mode={streamMode} priority={streamPriority} rotation={streamRotation} /> : pointCloud.positions.length === pointRecords.length * 2 && pointRecords.length ? <CatalogPointCanvas
             records={pointRecords}
             positions={pointCloud.positions}
             viewRadiusAU={catalog.filters.semiMajorAxis[1] || 50}

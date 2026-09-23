@@ -747,6 +747,26 @@ test('rotates a streamed 3D catalog without reloading sources or uploading point
   expect(errors).toEqual([])
 })
 
+test('loads NEO-tagged shards first and invalidates a snapshot when source priority changes', async ({ page }) => {
+  await installMockCatalog(page, { precomputed: true, sampleCount: 1, chunkSize: 1 })
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  const binaries: string[] = []
+  page.on('request', request => { if (request.url().includes('/binary/chunk-')) binaries.push(request.url().split('/').at(-1)!) })
+  await page.goto('./?v=4&page=catalog&lang=en')
+  const priority = page.getByRole('combobox', { name: 'Source shard order', exact: true })
+  await priority.selectOption('neo-first')
+  await expect(page.getByText(/Capacity-limited results depend on this order/)).toBeVisible()
+  const before = binaries.length
+  await page.getByRole('button', { name: /Load expanded snapshot/ }).click()
+  const canvas = page.getByTestId('catalog-stream-canvas')
+  await expect(canvas).toHaveAttribute('data-phase', 'complete')
+  await expect(canvas).toHaveAttribute('data-drawn-rows', '3')
+  expect(binaries.slice(before)).toEqual(['chunk-0001.bin', 'chunk-0000.bin', 'chunk-0002.bin'])
+  await priority.selectOption('source')
+  await expect(canvas).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Load expanded snapshot/ })).toBeEnabled()
+})
+
 test('bounds expanded source transfers and waits for the last upload acknowledgement before completion', async ({ page }) => {
   type FlowWindow = Window & { streamFlow: { received: number; acknowledged: number; peak: number; finished: boolean; release: () => void } }
   await installMockCatalog(page, { precomputed: true, presetDataset: true, sampleCount: 1, chunkSize: 1000 })
