@@ -1,9 +1,9 @@
 # Dynamics laboratory: numerical foundation
 
 This workstream is incomplete. A bounded adaptive integrator, restricted
-Newtonian force/variational evaluator and browser experiment panel exist;
-additional force-model selection, non-gravitational terms and complete joint
-covariance propagation do not yet exist. Neither module replaces authoritative
+Newtonian force/variational evaluator, optional solar 1PN correction and browser
+experiment panel exist. Non-gravitational terms and complete joint covariance
+propagation do not yet exist. These experiments do not replace authoritative
 SPK states or reproduces a source orbit-fit model.
 The pinned DE440 adapter and offline experiment command are now implemented.
 
@@ -21,8 +21,9 @@ The dimension is limited to 512 and attempts to 200,000. Every 32 attempts the
 routine yields to the event loop, checking cancellation before subsequent force
 evaluations. Buffers are reused. Missing/nonfinite derivatives, time-resolution
 failure or an exhausted budget throw instead of returning a partial solution as
-complete. Only the final state and numerical diagnostics are returned: dense
-output, event detection and long-term symplectic behavior are not implemented.
+complete. The return value contains the final state and numerical diagnostics;
+an optional observer receives owned accepted endpoints. Dense output, event
+detection and long-term symplectic behavior are not implemented.
 Tolerance controls a local numerical estimate, not a global error bound or
 physical orbit uncertainty. See [SciPy's method and tolerance description](https://docs.scipy.org/doc/scipy/reference/generated/scipy.integrate.RK45.html).
 
@@ -40,7 +41,8 @@ equation using the analytic acceleration gradient. The source masses are
 prescribed and do not react to the test particle. GM values and source orbits
 are fixed. System barycenters must not be combined with their constituent
 masses. The pinned DE440 adapter enforces one non-overlapping selection.
-Relativity, harmonics and non-gravitational effects remain absent. In particular,
+This base evaluator excludes relativity, harmonics and non-gravitational effects;
+the separately adopted solar 1PN wrapper is described below. In particular,
 this 6x6 transition matrix must not discard Bennu's RHO/AMRAT axes or be labeled
 as propagation of its complete eight-axis fitted covariance.
 
