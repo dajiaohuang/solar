@@ -1135,3 +1135,12 @@ rendering, stellar occultations and capacity measurements remain unfinished.
 The 19-row cone is ingestion evidence only, never a scale-performance claim.
 Existing candidate 4b66e29 is still awaiting its iOS job; healthy work was not
 interrupted. Android window/export and iOS contact additions remain local too.
+
+### Verified promotion: 4b66e29 (2026-09-23)
+
+Run 35826593299 completed successfully for exact SHA
+4b66e29f496c696fcf8e34f2ced4dad1b09a9881: repository, Web, all four browser
+profiles, Android, iOS and final gate passed. That exact commit was fast-forwarded
+to main. Deploy application and Publish asteroid dataset workflows were checked
+and remain manually disabled. Android window/export, iOS ground-contact and Gaia
+ingestion commits are the next candidate; their acceptance remains separate.
