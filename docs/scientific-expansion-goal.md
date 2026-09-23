@@ -2368,3 +2368,23 @@ and targeted lint passed. No full local tests ran. Native limb access,
 ephemeris-fed observer geometry, contour drawing and apparent/contact analysis
 remain unfinished. Candidate 5936fca / run 35856001727 is active; these later Web
 changes remain local until it is terminal.
+
+### Checkpoint 111: source-SPK observer geometry and emission-time limbs (2026-09-23)
+
+Added runSpkLimbExperiment and an actual offline JSON-input command, using
+verified frozen DE440 states, original PCK axes and exact-ID orientation. NONE
+uses simultaneous geometry; CN holds the observer at reception, converges the
+target-center light time and evaluates orientation at emission. Explicit
+source margins and unsupported body/barycenter identities fail closed. The
+receipt retains original input/hash, both epochs, iteration evidence, source
+hashes and implementation hashes. No trajectory integration is performed.
+
+Four named tests passed, including 12 independent CSPICE composed references
+for Moon/Earth/Venus, frozen source/input bytes, invalid coverage/margins,
+corruption, cancellation and real exclusive CLI writes. Observer components
+pass 2e-6 km, normalized geometry and orientation pass 2e-10. The original
+Moon example CLI ran successfully with emission 1.2373275155 seconds before
+reception. TypeScript and targeted lint passed; no full local tests ran.
+Differential limb light time, stellar aberration, deflection, ground observer
+transforms, contact/event completeness and Web/native SPK-limb access remain
+unfinished. Candidate 5936fca remains running; subsequent changes stay local.

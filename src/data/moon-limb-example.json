@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "targetId": 301,
+  "observerId": 399,
+  "referenceEpochTdb": 2461287.5,
+  "elapsedTdbSeconds": 0,
+  "frame": "J2000",
+  "timeScale": "TDB",
+  "aberration": "CN",
+  "maxLightTimeSeconds": 10
+}
