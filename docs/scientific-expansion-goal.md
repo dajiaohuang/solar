@@ -1409,3 +1409,22 @@ fixtures, not measured public-network reliability. No full local tests ran.
 Candidate 002b1e6 / run 35833613659 remains active and was not replaced. This
 change is retained for the next candidate; continuous/3D streaming, scheduling
 priorities and broader capacity/physical-model work remain incomplete.
+
+### Checkpoint 58: real source capacity tier measurements (2026-09-23)
+
+The built-app benchmark now accepts the same row tiers exposed in the UI and
+asserts limited versus complete status, exact uploads and bounded prefetch.
+Executed five sequential fresh-browser runs against one production build using
+real MPC rows: 30k, 100k, 300k, 1m and the complete 1,561,171-row inventory.
+Reports and source/implementation/harness receipts are retained under
+docs/benchmarks/catalog-tiers-20260923. Loads were 242.3/298.5/468.5/1067.3/1553.1
+ms on RTX 5070 Ti Direct3D11; final representatives were 5416/16956/21590/30466/34505.
+All five verified counts, visible pixels, GPU allocations, transfer bounds and
+zero page/GL errors. The full-tier screenshot was visually inspected. Build
+and changed-file lint passed; no full local tests ran.
+
+These are local-HTTP, fixed-epoch, single-run observations, not statistical
+capacity limits, native device measurements or sustained continuous simulation.
+The partial tiers retain source-order prefixes and admit up to three lookahead
+shards. Continuous/3D propagation, adaptive error budgets and actual total
+memory remain open. Candidate 002b1e6 remains active and is not replaced.

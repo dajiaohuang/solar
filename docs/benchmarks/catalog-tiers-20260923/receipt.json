@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "harness": "scripts/benchmark-catalog-stream.mjs",
+  "harnessSha256": "520931e718ee13b1a69539ef06ffabdae82c3f899316477c1a6512753bb7fd5b",
+  "buildSourceCommit": "1cbc0a531dee",
+  "execution": "Five sequential fresh-browser runs against one unchanged production build; one run per tier.",
+  "reports": [
+    {
+      "path": "30000-d3d11.json",
+      "sha256": "39f6b2c6ca9e5973088b62c2aa7462b8f3e2d29cb00c80fcba5437f045e0172c"
+    },
+    {
+      "path": "100000-d3d11.json",
+      "sha256": "96da565f7b74f718be77954b9e4d268b2528dfb057a5001ca2d8480adce9c038"
+    },
+    {
+      "path": "300000-d3d11.json",
+      "sha256": "ef128a114b3086a5e8c7ee7b25b251e74a84c0f6acb3ae53ee79676ad467cce8"
+    },
+    {
+      "path": "1000000-d3d11.json",
+      "sha256": "7694e153541cc1931b0b7affee8defb06c1332262874ffd23d73cc0116f10ead"
+    },
+    {
+      "path": "1561171-d3d11.json",
+      "sha256": "f17ae00b590b6d8fc505fb7c3393122f05e2ba64038b95a2850962e47e18ff75"
+    }
+  ]
+}

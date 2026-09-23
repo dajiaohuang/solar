@@ -18,6 +18,10 @@ const sha = value => createHash('sha256').update(value).digest('hex')
 const pointer = JSON.parse(readFileSync('public/data/asteroids/dataset-version.json', 'utf8'))
 const manifestFile = resolve('public/data/asteroids', pointer.manifestPath)
 const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'))
+const requestedRows = Number(option('--rows', manifest.totalCount))
+if (![30_000, 100_000, 300_000, 1_000_000, manifest.totalCount].includes(requestedRows) || requestedRows > manifest.totalCount) throw new Error('Invalid source row tier')
+const requiredShards = Math.ceil(requestedRows / manifest.chunkSize)
+const maximumFetchedShards = Math.min(manifest.chunkCount, requiredShards + 3)
 const checksums = readFileSync(resolve(dirname(manifestFile), 'checksums.json'))
 const roots = { assets: resolve('dist'), data: resolve('public') }
 const serverAudit = { binaryRequests: 0, binaryBytes: 0, active: 0, peak: 0 }
@@ -113,12 +117,12 @@ try {
   for (const [label, value] of [['a (AU): Maximum', '1000000'], ['e: Maximum', '1'], ['H: Minimum', '-100'], ['H: Maximum', '100'], ['q (AU): Maximum', '1000000']]) {
     await page.getByRole('spinbutton', { name: label, exact: true }).fill(value)
   }
-  await page.getByRole('combobox', { name: 'Expanded map point limit' }).selectOption(String(manifest.totalCount))
+  await page.getByRole('combobox', { name: 'Expanded map point limit' }).selectOption(String(requestedRows))
   await page.getByRole('combobox', { name: 'Map detail', exact: true }).selectOption(detailMode)
   const startButton = page.getByRole('button', { name: /Load expanded snapshot/ })
-  if (!await startButton.isEnabled()) throw new Error('Full source streaming is unavailable in this browser')
+  if (!await startButton.isEnabled()) throw new Error('Requested source tier is unavailable in this browser')
   const requestStart = requests.length
-  await page.evaluate(rows => { window.streamExpectedRows = rows; window.streamAudit.active = true; window.streamStart = performance.now() }, manifest.totalCount)
+  await page.evaluate(rows => { window.streamExpectedRows = rows; window.streamAudit.active = true; window.streamStart = performance.now() }, requestedRows)
   await startButton.click()
   const canvas = page.getByTestId('catalog-stream-canvas')
   await page.waitForFunction(() => ['complete', 'limited', 'error'].includes(document.querySelector('[data-testid="catalog-stream-canvas"]')?.getAttribute('data-phase')), undefined, { timeout: 120_000 })
@@ -131,17 +135,19 @@ try {
     canvas.dispatchEvent(new Event('solar-atlas-prepare-canvas-capture'))
     return { phase: canvas.getAttribute('data-phase'), drawnRows: Number(canvas.getAttribute('data-drawn-rows')), displayedRows: Number(canvas.getAttribute('data-display-count')), checkedRows: Number(canvas.getAttribute('data-source-rows')), canvasSize: { width: canvas.width, height: canvas.height }, loadMs, audit: window.streamAudit, userAgent: navigator.userAgent }
   })
-  if (result.phase !== 'complete' || result.drawnRows !== manifest.totalCount || result.checkedRows !== manifest.totalCount || result.audit.glErrors.length || !result.audit.litPixels) throw new Error(JSON.stringify({ ...result, audit: { glErrors: result.audit.glErrors, litPixels: result.audit.litPixels }, errors }))
+  const expectedPhase = requestedRows === manifest.totalCount ? 'complete' : 'limited'
+  if (result.phase !== expectedPhase || result.drawnRows !== requestedRows || result.checkedRows !== requestedRows || result.audit.glErrors.length || !result.audit.litPixels) throw new Error(JSON.stringify({ ...result, audit: { glErrors: result.audit.glErrors, litPixels: result.audit.litPixels }, errors }))
   if (errors.length) throw new Error(JSON.stringify(errors))
   if (graphicsMode === 'd3d11' && (!/Direct3D11/i.test(result.audit.graphics?.renderer ?? '') || /SwiftShader|software|llvmpipe|basic render/i.test(result.audit.graphics.renderer))) throw new Error('Hardware D3D11 renderer was not established')
   const expandedRequests = requests.slice(requestStart)
   if (expandedRequests.some(path => path.includes('/meta/') || path.includes('catalog-sample-'))) throw new Error('Expanded loading hydrated per-object metadata')
-  if (serverAudit.binaryRequests !== manifest.chunkCount || result.audit.allocations !== 3 || result.audit.allocationBytes !== manifest.totalCount * 24 || result.audit.uploadBytes !== manifest.totalCount * 24 || result.audit.pendingTiles !== 0 || result.audit.peakPendingTiles > 4) throw new Error('Source count, GPU allocation or transfer contract mismatch')
+  if (serverAudit.binaryRequests < requiredShards || serverAudit.binaryRequests > maximumFetchedShards || result.audit.allocations !== 3 || result.audit.allocationBytes !== requestedRows * 24 || result.audit.uploadBytes !== requestedRows * 24 || result.audit.pendingTiles !== 0 || result.audit.peakPendingTiles > 4) throw new Error('Source count, GPU allocation or transfer contract mismatch')
   const summary = values => {
     const sorted = [...values].sort((a, b) => a - b), q = p => sorted[Math.max(0, Math.ceil(sorted.length * p) - 1)] ?? null
     return { count: sorted.length, p50Ms: q(.5), p95Ms: q(.95), p99Ms: q(.99), maxMs: sorted.at(-1) ?? null }
   }
-  const report = { schemaVersion: 1, generatedAt: new Date().toISOString(), measurement: 'built-application-full-MPC-source-static-2D-snapshot-local-HTTP',
+  const report = { schemaVersion: 2, generatedAt: new Date().toISOString(), measurement: 'built-application-MPC-source-tier-static-2D-snapshot-local-HTTP',
+    requestedRows, requiredShards, maximumFetchedShards, completeInventory: result.phase === 'complete',
     graphicsMode, detailMode, launchOptions, browser: browser.version(), viewport: { width: 1600, height: 1000, pixelRatio: 1 },
     source: { version: manifest.version, rows: manifest.totalCount, shards: manifest.chunkCount, sourceSha256: manifest.sourceSha256, contentSha256: manifest.contentSha256, manifestSha256: sha(readFileSync(manifestFile)), checksumsSha256: sha(checksums) },
     implementationSha256: Object.fromEntries(['src/lib/catalogStreaming.ts', 'src/lib/catalogPointRenderer.ts', 'src/lib/catalogSpatialSelection.ts', 'src/lib/catalogTransferWindow.ts', 'src/workers/catalog-stream.worker.ts', 'src/components/CatalogStreamCanvas.tsx'].map(path => [path, sha(readFileSync(path))])),
@@ -151,7 +157,7 @@ try {
     firstNonemptyDrawMs: result.audit.firstVisibleMs, submittedPointsAcrossDraws: result.audit.submittedPoints, peakUnacknowledgedTiles: result.audit.peakPendingTiles,
     spatialIndexBytes: result.audit.indexBytes, peakSpatialIndexBytes: result.audit.peakIndexBytes, spatialIndexUploadBytes: result.audit.indexUploadBytes,
     serverAudit, expandedArtifactRequests: expandedRequests.length,
-    limits: ['Local filesystem/HTTP, not public network throughput.', 'One fixed UTC epoch; not continuous full-catalog simulation or physical display FPS.', 'Headless animation callbacks and CPU GL submission times, not GPU execution timers.', 'Explicit source attribute bytes exclude spatial-index bytes and are not total browser/process/driver memory.', 'drawnRows is the uploaded source count; displayedRows is the actual final draw count, including offscreen points in all mode.', 'Spatial representatives are a visual simplification, not an estimate of density or event probability.', 'This desktop result does not establish native or mobile hardware capacity.'] }
+    limits: ['Local filesystem/HTTP, not public network throughput.', 'One fixed UTC epoch; not continuous full-catalog simulation or physical display FPS.', 'Headless animation callbacks and CPU GL submission times, not GPU execution timers.', 'Explicit source attribute bytes exclude spatial-index bytes and are not total browser/process/driver memory.', 'drawnRows is the uploaded source count; displayedRows is the actual final draw count, including offscreen points in all mode.', 'Partial tiers use source-order prefixes, not representative scientific samples; up to three extra shards can be prefetched before cancellation.', 'Spatial representatives are a visual simplification, not an estimate of density or event probability.', 'This desktop result does not establish native or mobile hardware capacity.'] }
   mkdirSync(dirname(output), { recursive: true })
   await page.locator('.catalog-map').screenshot({ path: output.replace(/\.json$/, '') + '.png' })
   writeFileSync(output, JSON.stringify(report, null, 2) + '\n', { flag: 'wx' })
