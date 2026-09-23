@@ -13,7 +13,7 @@ remain paused. Changes may go directly to main after the required checks.
 | Orbit uncertainty | Pinned SBDB covariance with labels, units and solution epoch; validated covariance propagation and sampling; uncertainty ellipsoids and event distributions, independent of numerical tolerance | In progress: source ingestion, solution-epoch conversion/sampling/browser ellipsoids, conditional six-parameter DE440 covariance and finite nonlinear ensembles with browser/offline access; complete fit-model propagation, native propagation and event distributions pending |
 | Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | In progress: verified PCK radii, geocentric NONE/CN contacts and windows, SOFA/IERS ground CN contacts and sampled overlap windows with CLI/HTTP/browser access; complete detection, oriented/apparent limbs, native consumers and event distributions pending |
 | Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | In progress: bounded integration, variational equations, pinned DE440 adapter and browser/offline source-bearing experiments; additional forces, full covariance, native access and long-term diagnostics pending |
-| Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | In progress: pinned PCK semiaxes for 95 source bodies with independent CSPICE extraction; remaining data categories, orientation and identity integration pending |
+| Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | In progress: pinned PCK semiaxes for 95 bodies and 75 source orientation models with independent CSPICE comparisons and Web/offline orientation access; remaining data categories, limb/orientation and identity integration pending |
 | Catalog streaming | Replace the fixed 8k/30k-only cloud path with cancellable binary chunk loading, priority scheduling and independent byte/decode/compute/upload limits | In progress: full-inventory 2D/3D orthographic snapshots, bounded upload batching and spatial display available; continuous-time streaming and source-priority scheduling pending |
 | Rendering and time | Moving spatial bounds, visibility/LOD, selected-body retention, time/error-budgeted updates, reusable buffers and Float64-relative GPU coordinates; WebGL fallback and native contracts retained | In progress |
 | Capacity evidence | Real catalog runs at 30k/100k/300k/1m/full inventory, real SPK coverage and separately labeled synthetic GPU stress; P95/P99 frames, memory, first-visible time, upload and cancellation measurements | In progress |
@@ -2279,3 +2279,28 @@ passed. The model derivation and limits are in point-pipeline-performance.md.
 No full local tests ran. This is sample scheduling, not a physical error
 certificate or full-source continuous-time delivery. Candidate ff6d190 /
 run 35852896925 remains active and was not replaced.
+
+### Checkpoint 107: original PCK orientation models and user access (2026-09-23)
+
+Added all 75 orientation models from the fixed original PCK, retaining exact
+IDs and reference epochs. The loader shares original byte/hash verification
+with radii and excludes comment examples. It evaluates source polynomial
+degrees, periodic terms, Mars quadratic phases and Tempel 1 reference time.
+Outputs state the J2000-to-body-fixed matrix convention, TDB time and unknown
+physical uncertainty. The ±100 Julian-year numerical evaluation policy is
+explicitly not a physical-accuracy interval or binary-PCK equivalence.
+
+Seven focused orientation/radius tests passed, including 300 independent
+CSPICE matrices spanning every source model; maximum observed component
+difference was 7.863124040774494e-11. A separate CLI test passed for source
+receipts and exclusive output creation, and the actual Phobos CLI completed.
+Bilingual Web readout/export and desktop/mobile named browser cases passed.
+The browser checks caught and verified the fix for reversed export arguments;
+actual exported JSON now contains the matrix and source receipt. Narrow-screen
+output was inspected. TypeScript build and targeted lint passed. No full local
+tests ran. See docs/pck-orientation.md for primary references and reproduction.
+
+This adds real orientation access, not ellipsoidal contact search, limb
+topography, apparent-limb corrections, native integration or physical accuracy
+certification. Candidate ff6d190 remains live in iOS; these changes stay local
+until that run is terminal.

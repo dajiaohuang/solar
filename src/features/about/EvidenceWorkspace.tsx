@@ -13,6 +13,7 @@ import { SourceCoverageReport } from './SourceCoverageReport'
 import { OrbitUncertainty } from './OrbitUncertainty'
 import { DynamicsLaboratory } from './DynamicsLaboratory'
 import { OccultationLaboratory } from './OccultationLaboratory'
+import { PckOrientationPanel } from './PckOrientationPanel'
 import { GaiaSky } from './GaiaSky'
 import { GaiaMotion } from './GaiaMotion'
 import { ConicLaboratory } from './ConicLaboratory'
@@ -75,6 +76,7 @@ export function EvidenceWorkspace() {
       <OrbitUncertainty />
       <DynamicsLaboratory />
       <OccultationLaboratory />
+      <PckOrientationPanel />
       <GaiaSky />
       <GaiaMotion />
       <ConicLaboratory />

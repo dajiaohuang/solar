@@ -11,7 +11,7 @@ export type BodyRadii = {
 /** Reads only the pinned, unmodified PCK. This is not a general kernel parser:
  * incremental assignments, expressions and external kernel overrides are absent
  * from the accepted source. Comments and their historical/example radii are not data. */
-export async function loadPckRadii(input: ArrayBuffer) {
+export async function readPinnedPckData(input: ArrayBuffer) {
   if (input.byteLength !== evidence.bytes) throw new RangeError('PCK source size mismatch')
   const bytes = input.slice(0)
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), value => value.toString(16).padStart(2, '0')).join('')
@@ -24,8 +24,13 @@ export async function loadPckRadii(input: ArrayBuffer) {
     else if (line.trim() === '\\begintext') active = false
     else if (active) blocks.push(line)
   }
+  return blocks.join('\n')
+}
+
+export async function loadPckRadii(input: ArrayBuffer) {
+  const data = await readPinnedPckData(input)
   const bodies = new Map<number, BodyRadii>()
-  for (const match of blocks.join('\n').matchAll(/\bBODY(\d+)_RADII\s*=\s*\(([^)]*)\)/g)) {
+  for (const match of data.matchAll(/\bBODY(\d+)_RADII\s*=\s*\(([^)]*)\)/g)) {
     const naifPckId = Number(match[1])
     const values = match[2].trim().split(/\s+/).map(token => Number(token.replace(/[dD]/, 'E')))
     if (!Number.isSafeInteger(naifPckId) || bodies.has(naifPckId) || values.length !== 3 || values.some(value => !Number.isFinite(value) || value <= 0)) throw new RangeError('Invalid pinned PCK radius assignment')
