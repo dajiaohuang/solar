@@ -1228,3 +1228,21 @@ Initial in-memory Playwright attachments were not retained by the list reporter;
 the harness now writes JSON artifacts explicitly and the two cases were rerun.
 Changed-file lint/types passed; no full local tests ran. Candidate a2635ac is
 still active remotely and has not been interrupted or replaced.
+
+### Checkpoint 49: Gaia declared-selection integrity (2026-09-23)
+
+Browser decoding now rejects hash-consistent chunks whose rows omit declared
+fields, use unsupported astrometric solution codes, exceed the magnitude cut,
+lie outside the stated cone, or duplicate a source ID across spatial chunks.
+Manifest row totals must also fit the declared query budget, and its columns
+must match the shared importer/browser schema. This closes a gap where a hash
+only established byte consistency but was incorrectly sufficient for selection
+integrity. Nullable/negative parallaxes remain intact; no scientific corrections
+or quality cuts were introduced. Synthetic queue fixtures now inhabit an actual
+bounded seam-crossing cone rather than unrelated far-apart bins.
+
+Thirteen focused loader/importer tests, types and changed-file lint passed.
+Future import receipts include the shared column-schema hash; existing captures
+and benchmark receipts remain unchanged. No full local tests ran. Candidate
+a2635ac has passed repository, Web, four browsers and Android; iOS remains
+in progress. This batch does not replace the running candidate.

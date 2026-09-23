@@ -78,3 +78,9 @@ Stream cancellation/deadlines do not wait for an outstanding consumer upload
 acknowledgement. Late consumer failures remain observed. Consumer-owned effects
 still need their own cancellation and cleanup; the sky chart terminates its
 worker and clears retained display/source state.
+
+The browser verifies all declared source columns, valid solution codes, the
+cone/magnitude selection, query row budget and unique source IDs across selected
+chunks in addition to hashes. Importer and browser use one column schema; future
+import receipts record that schema hash. These checks establish internal
+consistency, not independent authentication of an externally supplied manifest.

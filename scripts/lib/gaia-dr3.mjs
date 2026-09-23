@@ -1,9 +1,8 @@
 import { createHash } from 'node:crypto'
 
 export const endpoint = 'https://gea.esac.esa.int/tap-server/tap/sync'
-export const columns = ['source_id', 'ref_epoch', 'ra', 'dec', 'ra_error', 'dec_error', 'parallax', 'parallax_error', 'pmra', 'pmra_error', 'pmdec', 'pmdec_error',
-  'ra_dec_corr', 'ra_parallax_corr', 'ra_pmra_corr', 'ra_pmdec_corr', 'dec_parallax_corr', 'dec_pmra_corr', 'dec_pmdec_corr', 'parallax_pmra_corr', 'parallax_pmdec_corr', 'pmra_pmdec_corr',
-  'astrometric_params_solved', 'ruwe', 'phot_g_mean_mag', 'bp_rp', 'radial_velocity', 'radial_velocity_error']
+import columns from '../../src/data/gaiaColumns.json' with { type: 'json' }
+export { columns }
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex')
 export function queries({ raDeg, decDeg, radiusDeg, maxMagnitude, maxRows }) {
   if (![raDeg, decDeg, radiusDeg, maxMagnitude].every(Number.isFinite) || raDeg < 0 || raDeg >= 360 || Math.abs(decDeg) > 90 || radiusDeg <= 0 || radiusDeg > 2 || maxMagnitude < 3 || maxMagnitude > 20 || !Number.isInteger(maxRows) || maxRows < 1 || maxRows > 10000) throw new Error('Invalid bounded Gaia cone settings')

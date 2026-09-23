@@ -34,18 +34,18 @@ async function syntheticPartition() {
   // Synthetic queue/budget geometry only; never a scientific or capacity oracle.
   const source = JSON.parse(raw.toString()).sources[0], files = new Map<string, Uint8Array>()
   const descriptors = []
-  for (const r of [0,1,71]) {
-    const path = `r${r}-d18.json`, raRangeDeg: [number,number] = [r*5,(r+1)*5], decRangeDeg: [number,number] = [0,5]
-    const bytes = new TextEncoder().encode(JSON.stringify({ key: path.slice(0,-5), raRangeDeg, decRangeDeg, sources: [{ ...source, source_id: String(100+r), ra: r*5+1, dec: 1 }] }))
+  for (const [r,d,ra,dec,id] of [[0,18,0.5,0.5,100],[0,17,0.5,-0.5,101],[71,18,359.5,0.5,102]]) {
+    const path = `r${r}-d${d}.json`, raRangeDeg: [number,number] = [r*5,(r+1)*5], decRangeDeg: [number,number] = [d*5-90,(d+1)*5-90]
+    const bytes = new TextEncoder().encode(JSON.stringify({ key: path.slice(0,-5), raRangeDeg, decRangeDeg, sources: [{ ...source, source_id: String(id), ra, dec }] }))
     files.set(path, bytes); descriptors.push({ path, raRangeDeg, decRangeDeg, bytes: bytes.length, rows: 1, sha256: await gaiaHash(bytes) })
   }
-  return { files, manifest: { ...manifest, rows: 3, chunks: descriptors } }
+  return { files, manifest: { ...manifest, settings: { ...manifest.settings, raDeg:0, decDeg:0, radiusDeg:2 }, rows: 3, chunks: descriptors } }
 }
 test('wrap-aware filtering selects only intersecting bins', async () => {
   const { manifest: m } = await syntheticPartition()
-  expect(selectGaiaChunks(m, { ...region, raStartDeg: 358, raEndDeg: 2 }).map(c => c.path)).toEqual(['r0-d18.json','r71-d18.json'])
+  expect(selectGaiaChunks(m, { ...region, raStartDeg: 358, raEndDeg: 2 }).map(c => c.path)).toEqual(['r0-d18.json','r0-d17.json','r71-d18.json'])
   expect(selectGaiaChunks(m, { ...region, decMinDeg: 30, decMaxDeg: 40 })).toEqual([])
-  expect(selectGaiaChunks(m, { ...region, raStartDeg: 0, raEndDeg: 0 }).map(c => c.path)).toEqual(['r0-d18.json','r71-d18.json'])
+  expect(selectGaiaChunks(m, { ...region, raStartDeg: 0, raEndDeg: 0 }).map(c => c.path)).toEqual(['r0-d18.json','r0-d17.json','r71-d18.json'])
   const polar = { ...m, chunks: m.chunks.map(c => ({ ...c, decRangeDeg: [85,90] as [number,number] })) }
   expect(selectGaiaChunks(polar, { ...region, raStartDeg: 20, raEndDeg: 21, decMinDeg: 90 })).toHaveLength(3)
 })
@@ -83,4 +83,31 @@ test('cancellation settles even when an upload acknowledgement never arrives', a
   // A late GPU/consumer failure must remain observed after the stream terminates.
   rejectUpload(new Error('late upload failure'))
   await Promise.resolve()
+})
+test('hash-consistent inputs still require complete fields and the declared cone selection', async () => {
+  for (const mutate of [
+    (row: Record<string, unknown>) => { delete row.pmra },
+    (row: Record<string, unknown>) => { row.astrometric_params_solved = 6 },
+    (row: Record<string, unknown>) => { row.phot_g_mean_mag = 19 },
+    (row: Record<string, unknown>) => { row.dec = 24.8 },
+  ]) {
+    const data = JSON.parse(raw.toString()); mutate(data.sources[0])
+    const bytes = new TextEncoder().encode(JSON.stringify(data)), m = structuredClone(manifest)
+    m.chunks[0].bytes = bytes.length; m.chunks[0].sha256 = await gaiaHash(bytes)
+    const publish = vi.fn(async () => {})
+    await expect(streamGaiaChunks({ manifest:m, region, baseUrl:'https://example.test/gaia/', signal:new AbortController().signal, fetcher:async () => response(bytes), onChunk:publish })).rejects.toThrow(/columns|selection|cone/)
+    expect(publish).not.toHaveBeenCalled()
+  }
+  const m = structuredClone(manifest); m.settings.maxRows = 18
+  expect(() => decodeGaiaManifest(new TextEncoder().encode(JSON.stringify(m)))).toThrow(/row count/)
+})
+test('source identity cannot appear in multiple spatial chunks', async () => {
+  const {files,manifest:m} = await syntheticPartition()
+  const descriptor = m.chunks[1], data = JSON.parse(new TextDecoder().decode(files.get(descriptor.path)!))
+  data.sources[0].source_id = '100'
+  const bytes = new TextEncoder().encode(JSON.stringify(data))
+  files.set(descriptor.path,bytes); descriptor.bytes = bytes.length; descriptor.sha256 = await gaiaHash(bytes)
+  await expect(streamGaiaChunks({ manifest:m, region, baseUrl:'https://example.test/gaia/', signal:new AbortController().signal,
+    fetcher:async url => response(files.get(String(url).split('/').at(-1)!)!), onChunk:async () => {},
+  })).rejects.toThrow(/Duplicate Gaia source/)
 })
