@@ -2304,3 +2304,30 @@ This adds real orientation access, not ellipsoidal contact search, limb
 topography, apparent-limb corrections, native integration or physical accuracy
 certification. Candidate ff6d190 remains live in iOS; these changes stay local
 until that run is terminal.
+
+### Checkpoint 108: finite-distance source ellipsoid limbs (2026-09-23)
+
+Added a bounded finite-distance triaxial limb evaluator with explicit
+body-center/J2000 conventions and conjugate ellipse generators. Original PCK
+axes and orientation are available together through evaluate-pck-limb.mjs;
+missing exact IDs are rejected, original and implementation hashes retained,
+and existing outputs protected. Actual Phobos CLI execution succeeded.
+
+Four named unit cases passed: 42 independently generated CSPICE edlimb
+comparisons, surface/tangency equations, analytic spheres, rotation and
+conditioning rejection, and actual export behavior. Geometry-only normalized
+comparisons pass 1e-12; composed orientation/geometry comparisons pass 2e-10.
+The initial 1e-12 composed test exposed previously measured orientation
+roundoff; fixtures now preserve the independent rotation to distinguish the
+two error contributions. TypeScript and targeted lint passed. No full local
+tests ran. See docs/ellipsoid-limb.md. Apparent corrections, contact searches,
+native/Web limb access and physical error certification remain unfinished.
+
+Diagnostic candidate ff6d190 / run 35852896925 is now terminal: Web, four
+browsers and Android passed; iOS failed. Downloaded lifecycle evidence shows
+manifest request and importer presentation, but no completion callback, read
+start or section disappearance during the failed import. This does not support
+a source-reader failure, nor prove a root cause inside the system picker.
+The same run additionally failed a fully-visible-frame assertion for source
+row 50 at y=755, height=129.7 in an 874-point screen. No further blind picker
+tap workaround was applied. Main remains c3b87f7; delivery is not complete.
