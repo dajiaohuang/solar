@@ -2,10 +2,20 @@ package stellarmotion
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"testing"
 )
+
+func TestCSVExperimentCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := FromCSVContext(ctx, nil, nil, "", 2026, ""); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected cancellation before parsing, got %v", err)
+	}
+}
 
 func TestOriginalCSVExperiment(t *testing.T) {
 	for _, directory := range []string{"gaia-pleiades-20260923", "gaia-six-20260923"} {

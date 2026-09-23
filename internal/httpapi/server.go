@@ -180,6 +180,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.observationWindows(w, r)
 	case r.Method == "POST" && path == "observation/contacts":
 		s.observationContacts(w, r)
+	case r.Method == "POST" && path == "stellar/motion":
+		s.stellarMotion(w, r)
 	case r.Method == "GET" && path == "catalog/manifest":
 		s.catalogManifest(w, r)
 	case r.Method == "GET" && path == "coverage":

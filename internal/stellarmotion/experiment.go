@@ -2,6 +2,7 @@ package stellarmotion
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/csv"
 	"encoding/hex"
@@ -29,6 +30,14 @@ func digest(raw []byte) string { value := sha256.Sum256(raw); return hex.EncodeT
 // FromCSV evaluates one original source row. It verifies the CSV receipt and
 // selected input, not an upstream identity or the manifest's completeness claim.
 func FromCSV(manifestBytes, rowsBytes []byte, id string, year float64, policy string) (*Experiment, error) {
+	return FromCSVContext(context.Background(), manifestBytes, rowsBytes, id, year, policy)
+}
+
+// FromCSVContext checks cancellation before parsing and between bounded CSV rows.
+func FromCSVContext(ctx context.Context, manifestBytes, rowsBytes []byte, id string, year float64, policy string) (*Experiment, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if len(manifestBytes) == 0 || len(manifestBytes) > 1<<20 || len(rowsBytes) == 0 || len(rowsBytes) > 8<<20 {
 		return nil, fmt.Errorf("Gaia source byte budget exceeded")
 	}
@@ -92,6 +101,9 @@ func FromCSV(manifestBytes, rowsBytes []byte, id string, year float64, policy st
 	count := 0
 	var previous int64
 	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		row, err := reader.Read()
 		if err == io.EOF {
 			break
@@ -143,6 +155,9 @@ func FromCSV(manifestBytes, rowsBytes []byte, id string, year float64, policy st
 	}
 	result, err := Propagate(source, year, policy)
 	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	return &Experiment{SchemaVersion: 1, ManifestSHA256: digest(manifestBytes), RowsSHA256: rowsHash, OriginalManifest: append([]byte(nil), manifestBytes...), OriginalRows: append([]byte(nil), rowsBytes...), SelectedSource: raw, Result: result,

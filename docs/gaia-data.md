@@ -243,8 +243,8 @@ This incorporates SOFA changing-light-time/special-relativistic treatment for
 uniform single-star motion, not binary/Galactic acceleration, observed-station
 corrections or uncertainty propagation. Spectroscopic RV contains astrophysical
 shifts and is only adopted approximately; inverse measured parallax supplies a
-nominal model distance, not a distance inference. CLI/HTTP/browser access and
-original-response export for this new core still need integration.
+nominal model distance, not a distance inference. Source-bearing CLI and HTTP
+access are described below; browser/native integration remains outstanding.
 
 ## Source-bearing offline propagation
 
@@ -266,5 +266,31 @@ to have been loaded or validated. No chunks need to be read for this entry point
 The real local CLI was executed for source 65212004581252736 at J2026 TCB.
 Its exported state matches the independent ERFA fixture and both embedded
 original files decode byte-for-byte. A second run to the same output path was
-refused. This provides offline access; HTTP/browser/native integration and
-propagated covariance remain outstanding.
+refused. Browser/native integration and propagated covariance remain outstanding.
+
+## Source-bearing HTTP propagation
+
+`POST /v1/stellar/motion` accepts one JSON object with these fields:
+
+| Field | Meaning |
+| --- | --- |
+| `originalManifestBase64` | Base64 of the original manifest file bytes |
+| `originalRowsCsvBase64` | Base64 of the original CSV file bytes |
+| `sourceId` | Exact decimal source ID string |
+| `targetEpochJulianYearTCB` | Explicit target epoch, for example 2026 |
+| `radialVelocityPolicy` | Explicit `spectroscopic-as-astrometric` adoption |
+
+The response contains `apiVersion` and the same source-bearing `experiment`
+as the offline adapter. It does not imply configured SPK coverage or ESA
+authentication. The JSON body is capped at 13 MiB to cover base64 expansion;
+decoded source limits remain 1 MiB / 8 MiB / 10,000 rows. Unknown fields and
+trailing JSON are rejected. The route uses request admission and the weighted
+trajectory compute queue, with a 20-second context budget and cancellation
+checks between CSV rows. The production server also limits request reads to
+15 seconds. The response is bounded at 14 MiB.
+
+Malformed input returns 400, an oversized initial JSON body 413, invalid source
+evidence or unsupported model input 422, cancellation 408, and compute overload
+429. A focused test uses actual loopback HTTP and verifies byte-exact original
+files plus all six output components against the independent ERFA fixture.
+This is local HTTP evidence, not deployed-service or native-client acceptance.

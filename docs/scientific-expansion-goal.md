@@ -1594,3 +1594,19 @@ and byte-exact originals. An attempted same-path output was correctly refused.
 No full local tests ran. HTTP/browser/native entry points, covariance propagation
 and stellar-occultation integration remain open. Candidate 8968a78 remains live
 awaiting iOS; the running candidate was not replaced.
+
+### Checkpoint 68: bounded source-bearing stellar HTTP access (2026-09-23)
+
+Added POST /v1/stellar/motion with strict fields, explicit target TCB epoch and
+RV policy, a 13 MiB wire limit, existing decoded source budgets and a 14 MiB
+response limit. It participates in admission and weighted trajectory compute
+scheduling. The shared CSV adapter now supports context cancellation before
+parsing and between rows; the offline entry point retains its existing API.
+
+Five focused HTTP/source tests passed, including a real managed loopback HTTP
+request whose original files are byte-exact and whose six output components
+match the independently generated ERFA fixture. Invalid/oversized wire data,
+missing required inputs and pre-cancelled requests are refused. No full local
+tests ran. Browser/native entry points, propagated covariance and occultation
+integration remain open. Candidate 8968a78 is still awaiting iOS and has not
+been replaced; deployment and publication remain paused.
