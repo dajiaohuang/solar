@@ -1899,3 +1899,18 @@ Eight focused harness/reuse tests, script syntax/lint and diff checks passed.
 Native re-execution is pending; the local Android SDK is absent. No full local
 tests ran. All four browser jobs and Web passed, but iOS remains live in run
 35843121444, so that candidate was not replaced or promoted to main.
+
+### Checkpoint 86: separately testable iOS bounded source reader (2026-09-23)
+
+Moved the shared serial source reader into the Foundation scientific module so
+the Swift protocol harness can exercise the exact production reader without
+SwiftUI. Added an explicit supported-budget guard and authored original-file
+identity, exact 1/8 MiB limits, empty/overflow rejection, pre-cancellation and
+subsequent-reader recovery checks. A stellar-source-only switch permits focused
+execution on a Swift host.
+
+Source registration passed and a trailing blank line found by raw diff checking
+was removed. Local Swift execution remains unavailable, so no test pass is
+claimed for this new code. No full local tests ran. Run 35843121444 still has a
+live iOS job; Android's diagnosed EACCES failure remains pending re-execution
+with the already committed app-owned fixture fix. Main remains c3b87f7.

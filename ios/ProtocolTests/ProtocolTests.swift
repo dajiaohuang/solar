@@ -305,10 +305,47 @@ struct ProtocolTests {
         print("Stellar response: real CLI replay, original CSV/hashes, covariance, mutations and cancellation passed")
     }
 
+    static func stellarSourceReadChecks() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("solar-stellar-import-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("original.csv")
+        for limit in [NativeStellarMotionRequest.maxManifestBytes, NativeStellarMotionRequest.maxRowsBytes] {
+            let original = Data(repeating: 255, count: limit)
+            try original.write(to: file)
+            let loaded = try await StellarSourceReader.shared.read(file, limit: limit)
+            precondition(loaded == original)
+            for bytes in [Data(), Data(repeating: 255, count: limit + 1)] {
+                try bytes.write(to: file)
+                var rejected = false
+                do { _ = try await StellarSourceReader.shared.read(file, limit: limit) } catch { rejected = true }
+                precondition(rejected, "Empty or oversized original file accepted")
+            }
+        }
+        let originalFile = URL(fileURLWithPath: "tests/fixtures/gaia-six-20260923/rows.csv")
+        let expected = try Data(contentsOf: originalFile)
+        let loaded = try await StellarSourceReader.shared.read(originalFile, limit: NativeStellarMotionRequest.maxRowsBytes)
+        precondition(loaded == expected)
+        var invalidBudgetRejected = false
+        do { _ = try await StellarSourceReader.shared.read(originalFile, limit: Int.max) } catch { invalidBudgetRejected = true }
+        precondition(invalidBudgetRejected)
+        let cancelled = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await StellarSourceReader.shared.read(originalFile, limit: NativeStellarMotionRequest.maxRowsBytes)
+        }
+        do { _ = try await cancelled.value; preconditionFailure("Cancelled source read succeeded") }
+        catch is CancellationError { }
+        let recovered = try await StellarSourceReader.shared.read(originalFile, limit: NativeStellarMotionRequest.maxRowsBytes)
+        precondition(recovered == expected, "Cancelled import poisoned the shared reader")
+        print("Stellar source import: real bytes, exact budgets, overflow/empty refusal and cancellation recovery passed")
+    }
+
     static func main() async throws {
-        if CommandLine.arguments.contains("--stellar-motion-only") { try await stellarMotionRequestChecks(); try await stellarMotionResponseChecks(); return }
+        if CommandLine.arguments.contains("--stellar-source-only") { try await stellarSourceReadChecks(); return }
+        if CommandLine.arguments.contains("--stellar-motion-only") { try await stellarMotionRequestChecks(); try await stellarMotionResponseChecks(); try await stellarSourceReadChecks(); return }
         try await stellarMotionRequestChecks()
         try await stellarMotionResponseChecks()
+        try await stellarSourceReadChecks()
         try groundContacts()
         if CommandLine.arguments.contains("--ground-contacts-only") { return }
         try sourceIdentityChecks()

@@ -9,30 +9,6 @@ private struct StellarDocument: FileDocument {
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: bytes) }
 }
 
-/// Provider reads run away from MainActor. Cancellation is cooperative between
-/// bounded reads; a provider blocked inside an OS read may finish later.
-private actor StellarSourceReader {
-    static let shared = StellarSourceReader()
-    func read(_ url: URL, limit: Int) throws -> Data {
-        try Task.checkCancellation()
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        let file = try FileHandle(forReadingFrom: url)
-        defer { try? file.close() }
-        var result = Data()
-        while true {
-            try Task.checkCancellation()
-            let chunk = try file.read(upToCount: min(16384, limit - result.count + 1)) ?? Data()
-            try Task.checkCancellation()
-            if chunk.isEmpty { break }
-            guard chunk.count <= limit - result.count else { throw StateTileFailure.invalid("Original file exceeds its byte budget.") }
-            result.append(chunk)
-        }
-        guard !result.isEmpty else { throw StateTileFailure.invalid("Original file is empty.") }
-        return result
-    }
-}
-
 struct NativeStellarMotionView: View {
     let address: String
     @Environment(\.scenePhase) private var scenePhase
