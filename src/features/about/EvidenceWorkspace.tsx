@@ -14,6 +14,7 @@ import { OrbitUncertainty } from './OrbitUncertainty'
 import { DynamicsLaboratory } from './DynamicsLaboratory'
 import { OccultationLaboratory } from './OccultationLaboratory'
 import { GaiaSky } from './GaiaSky'
+import { ConicLaboratory } from './ConicLaboratory'
 
 type ValidationReport = {
   passed?: boolean
@@ -74,6 +75,7 @@ export function EvidenceWorkspace() {
       <DynamicsLaboratory />
       <OccultationLaboratory />
       <GaiaSky />
+      <ConicLaboratory />
       <section className="evidence-module glass-panel">
         <div className="module-heading"><span>{t('physicalEphemerides')}</span><em>JPL SPK</em></div>
         <p>{t('ephemerisBoundary')}</p><p>{t('ephemerisTimeBoundary')}</p>

@@ -5,7 +5,7 @@ distance in km, eccentricity, central GM in km^3/s^2, orientation in radians
 and elapsed TDB seconds from periapsis. It returns position and velocity in the
 input inertial orientation. It has no implicit Sun GM, epoch or frame choice.
 The module supports elliptic, parabolic and hyperbolic two-body trajectories;
-it is not yet wired to imported comet data or a user-facing propagation flow.
+the evidence workspace now supports a captured Borisov example and local SBDB JSON imports.
 
 With x = chi/sqrt(q), beta = 1-e, tau = dt*sqrt(mu/q^3), it solves
 x + e*x^3*S(beta*x^2) = tau using a bracketed Newton iteration. The derivative
@@ -35,9 +35,8 @@ Run only the relevant cases with:
 rtk proxy npx vitest run tests/unit/periapsis-conics.test.ts
 ~~~
 
-Pending: source-backed q/e/tp ingestion with explicit time/frame/center/GM,
-user-facing access, realistic perturbed comet references, non-gravitational
-forces and uncertainty. Two-body conics must remain distinguishable from
+Pending: broader original comet coverage, main catalog/scene integration,
+realistic perturbed comet references, non-gravitational forces and uncertainty. Two-body conics must remain distinguishable from
 authoritative SPK evaluations. Tested time/eccentricity ranges are evidence,
 not certification for arbitrary finite inputs or long-term physical prediction.
 
@@ -61,5 +60,24 @@ Borisov's source fit includes A1/A2/A3 and other non-gravitational parameters.
 They are retained without claiming they are integrated. Source validity bounds
 remain in their original form, and callers must enforce them when providing a
 propagation interface. The importer supplies no inferred GM: an explicit sourced
-GM is required by the calculation module. User-facing import/propagation and
-independent real-body trajectory comparison are still pending.
+GM is required by the calculation module. The evidence-workspace experiment uses a checksum-verified DE440 solar GM.
+Independent comparison to the real fitted trajectory remains pending.
+
+## Browser experiment and adopted GM
+
+Open the Conic orbit laboratory in the evidence workspace, load the real
+Borisov source or choose a local SBDB JSON, enter a decimal TDB Julian day and
+compute. Input changes invalidate earlier output. The JSON export includes
+original source data, split target/periapsis times, source hashes, adopted GM,
+position/velocity and all omitted source fit parameters. The adopted GM comes
+from checksum-pinned gm_de440.tpc; no SPK download is required for this two-body
+experiment. It is not claimed to be the GM used by the imported fit.
+
+Five Borisov states at the source osculation epoch and +/-100/1000 days were
+independently computed with CSPICE using the same adopted GM. Six focused
+checks cover those states, altered GM bytes and unsupported UTC validity bounds.
+Four browser profiles validate display, export against that oracle, no horizontal
+overflow and stale-result clearing. Screenshot inspection includes mobile
+emulation. These compare two-body calculations from real source elements, not
+the full JPL fitted trajectory or observational residuals. Source validity
+bounds with non-null UTC values currently cause an explicit refusal.

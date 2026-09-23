@@ -15,9 +15,10 @@ const text = (value: unknown, field: string) => {
   if (typeof value !== 'string' || !value.trim() || value.length > 200) throw new Error(`Invalid SBDB ${field}`)
   return value
 }
-const splitTdbDay = (value: unknown) => {
+export const splitTdbDay = (value: unknown) => {
   if (typeof value !== 'string' || !/^\d{7}(?:\.\d{1,20})?$/.test(value)) throw new Error('SBDB TDB epoch requires decimal Julian-day source text')
   const [day,fraction='0'] = value.split('.')
+  if (Number(day) < 2000000 || Number(day) > 3000000) throw new Error('TDB epoch outside supported range')
   return { day:Number(day),fraction:Number('0.'+fraction) }
 }
 
@@ -52,7 +53,7 @@ export async function decodeSbdbConic(bytes: Uint8Array) {
   const parameters: Omit<PeriapsisConic,'gmKm3PerSecond2'> = { eccentricity,periapsisKm,inclinationRadians,ascendingNodeRadians,argumentOfPeriapsisRadians }
   const sha256 = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',owned)),v=>v.toString(16).padStart(2,'0')).join('')
   return { designation:text(object.des,'designation'), name:text(object.fullname,'fullname'), spkId:text(object.spkid,'SPK ID'), orbitId,
-    parameters, periapsisTdb, osculationTdb, periapsisTdbJd, osculationTdbJd, timeScale:'TDB' as const, frame:'ECLIPJ2000' as const, center:'Sun' as const,
+    parameters, periapsisTdbText:elements.get('tp')!.value as string, osculationTdbText:orbit.epoch as string, periapsisTdb, osculationTdb, periapsisTdbJd, osculationTdbJd, timeScale:'TDB' as const, frame:'ECLIPJ2000' as const, center:'Sun' as const,
     sourceSha256:sha256, sourceBytes:owned.length, raw, modelParameters:structuredClone(orbit.model_pars),
     sourceValidity:{notValidBefore:orbit.not_valid_before ?? null,notValidAfter:orbit.not_valid_after ?? null},
     limitations:['GM must be supplied with independent source evidence.', 'Osculating two-body propagation does not reproduce the fitted planetary, relativistic or non-gravitational model.', 'No propagated covariance or physical accuracy certification.'] }

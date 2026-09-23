@@ -1348,3 +1348,25 @@ six corrupted-contract mutations. Types/lint passed. No full local tests ran.
 This is source import, not a complete comet UI or physical trajectory validation;
 GM-backed propagation, user access, fit forces and uncertainty remain open.
 Candidate 858e895 has all checks except iOS complete; its active run is retained.
+
+### Checkpoint 55: sourced Borisov conic browser experiment (2026-09-23)
+
+Connected original SBDB conics to checksum-verified gm_de440.tpc solar GM and
+split-TDB elapsed time. The result retains source/GM identity, complete raw
+source, omitted fit parameters and explicit unknown physical uncertainty.
+Unsupported non-null source UTC validity bounds cause refusal, never a silent
+TDB reinterpretation. Added a bilingual evidence-workspace interface for the
+real Borisov example/local import, target TDB epoch, computation and JSON export;
+input edits/cancel/unmount prevent stale asynchronous publication.
+
+A separate CSPICE run generated five real-element Borisov two-body reference
+states using the same sourced GM. Six focused engine checks and four browser
+profiles passed; browser exports match reference state vectors and preserve
+evidence. Types/lint passed. Mobile screenshot inspection confirmed readable
+content and wrapping. A missing JSON import attribute initially prevented test
+discovery; it was corrected and the focused file passed. No full local tests ran.
+
+This is observable non-elliptic two-body support in the experiment interface,
+not main catalog/scene integration, original SPK coverage, the full source force
+model, native access or physical trajectory accuracy. Those remain open.
+Candidate 858e895 still awaits iOS and is not interrupted.
