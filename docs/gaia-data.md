@@ -326,3 +326,29 @@ array of every parsed row. It yields after at most roughly 32 KiB of input
 characters and checks the request cancellation signal before resuming. Original
 bytes and decoded text are still retained; this is not a claim of zero-copy
 processing or a measured total-memory budget.
+
+## Experimental formal covariance core (not yet exposed)
+
+internal/stellarmotion/covariance.go constructs the five-astrometric-coordinate
+marginal plus spectroscopic radial-velocity variance only with the explicit
+independent-spectroscopic-rv policy. No cross-correlations are represented as
+measured. Gaia pseudocolour is marginalized, never substituted for radial
+velocity. All six errors and ten astrometric correlations must be present;
+the normalized matrix must pass strict Cholesky without repair.
+
+The prototype computes a local first-order J C J-transpose from two central
+difference scales and Richardson extrapolation of the adopted Starpm model.
+Tangent angular coordinates use mas, proper motions mas/Julian-year, and RV
+km/s. The exact same-epoch map uses the identity Jacobian to avoid numerical
+subtraction noise. Near-pole coordinate charts and unconverged derivatives are
+refused. This follows the general covariance transformation described in
+[ESA's astrometric transformation documentation](https://gea.esac.esa.int/archive/documentation/GEDR3/Data_processing/chap_cu3ast/sec_cu3ast_intro/ssec_cu3ast_intro_tansforms.html),
+but uses RV rather than radial proper motion as the sixth numerical coordinate.
+It does not copy the documented radial-proper-motion covariance formula into
+the different coordinate system.
+
+Two focused Go tests cover 16 real same-epoch sources, malformed matrices,
+missing errors, explicit assumptions, cancellation and one future-epoch
+variance-growth sanity check. Those tests do not establish cross-epoch accuracy:
+independent propagated covariance references and nonlinear-limit assessment
+remain required before exposing this prototype through CLI/HTTP/UI.

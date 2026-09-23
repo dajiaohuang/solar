@@ -1660,3 +1660,20 @@ reject cancellation without publishing a selected source. Project-reference
 types and targeted lint passed after fixing TypeScript callback narrowing. No
 full local tests ran. Candidate 335b083 remains live; this subsequent local
 change does not replace it. Browser-to-Go live acceptance remains outstanding.
+
+### Checkpoint 72: experimental source-backed formal covariance core (2026-09-23)
+
+Verified ESA's covariance-coordinate conventions and implemented a Go prototype
+with the original five-coordinate marginal and explicit independent spectroscopic
+RV variance. Missing errors/correlations and nonpositive joint matrices are
+rejected. The sixth motion coordinate is RV, not Gaia pseudocolour. A local
+numerical Jacobian uses two step scales and Richardson extrapolation, preserving
+the existing Starpm coordinate/time conventions and cancellation.
+
+Two targeted tests passed, covering 16 real same-epoch sources plus missing and
+invalid data, policy enforcement, cancellation and a future-epoch sanity check.
+The first attempt exposed subtraction noise at the identity epoch; that known
+analytic case now uses an exact identity matrix. No full local tests ran.
+The prototype is deliberately not exposed to users yet: independent cross-epoch
+covariance references and nonlinear-limit assessment are still absent. This
+checkpoint does not count propagated uncertainty as complete.
