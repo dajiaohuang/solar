@@ -1,11 +1,30 @@
 import { describe, expect, it, vi } from 'vitest'
 import experiment from '../fixtures/gaia-motion-experiment.json'
+import covarianceExperiment from '../fixtures/gaia-motion-covariance-experiment.json'
 import { loadStellarMotion, stellarSourceBase64, validateStellarMotion, type StellarMotionRequest } from '../../src/lib/stellarMotion'
 import { STATE_TILE_API_VERSION } from '../../src/lib/stateTiles'
 import { selectedGaiaCsvSource } from '../../src/lib/gaiaCsvSource'
 const request: StellarMotionRequest = { originalManifestBase64: experiment.originalManifestBase64, originalRowsCsvBase64: experiment.originalRowsCsvBase64, sourceId: experiment.result.sourceId, targetEpochJulianYearTCB: 2026, radialVelocityPolicy: 'spectroscopic-as-astrometric' }
 const envelope = () => ({ apiVersion: STATE_TILE_API_VERSION, experiment: structuredClone(experiment) })
 describe('original-source stellar client', () => {
+  it('validates optional covariance against source errors and the Jacobian transform', async () => {
+    const covarianceRequest: StellarMotionRequest = { ...request, covariancePolicy:'independent-spectroscopic-rv' }
+    const wire = () => ({ apiVersion:STATE_TILE_API_VERSION, experiment:structuredClone(covarianceExperiment) })
+    expect(await validateStellarMotion(wire(), covarianceRequest)).toEqual(covarianceExperiment)
+    await expect(validateStellarMotion(envelope(), covarianceRequest)).rejects.toThrow()
+    await expect(validateStellarMotion(wire(), request)).rejects.toThrow()
+    const changes = [
+      (c: typeof covarianceExperiment.formalCovariance) => { c.inputMatrix[0][0] *= 2 },
+      (c: typeof covarianceExperiment.formalCovariance) => { c.outputMatrix[0][0] *= 2 },
+      (c: typeof covarianceExperiment.formalCovariance) => { c.jacobian[0][3] += 1 },
+      (c: typeof covarianceExperiment.formalCovariance) => { c.coordinateLabels[5] = 'pseudocolour' },
+      (c: typeof covarianceExperiment.formalCovariance) => { c.policy = 'unknown' },
+      (c: typeof covarianceExperiment.formalCovariance) => { c.targetEpochJulianYearTCB++ },
+      (c: typeof covarianceExperiment.formalCovariance) => { c.outputMatrix[0][1] += 1 },
+      (c: typeof covarianceExperiment.formalCovariance) => { c.maxScaledDerivativeDifference = 1 },
+    ]
+    for (const change of changes) { const value = wire(); change(value.experiment.formalCovariance); await expect(validateStellarMotion(value,covarianceRequest)).rejects.toThrow() }
+  })
   it('accepts the real Go experiment and preserves byte encoding', async () => {
     expect(await validateStellarMotion(envelope(), request)).toEqual(experiment)
     const bytes = Uint8Array.from(atob(request.originalRowsCsvBase64), v => v.charCodeAt(0))

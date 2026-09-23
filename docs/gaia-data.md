@@ -398,3 +398,22 @@ bytes and the independent ERFA covariance (maximum normalized difference
 6.047e-6). A real managed loopback HTTP test verifies the same receipt and
 matrix, default omission, and invalid-policy refusal. Browser/native covariance
 controls remain to integrate; no deployed-service acceptance is claimed.
+
+## Browser formal covariance
+
+The stellar panel now has a separate unchecked covariance option describing
+the independent-RV assumption. Its selected state is sent only when explicitly
+enabled. Changing it clears prior results and cancels pending requests. The
+result shows all six marginal standard deviations with their own units and
+explains that these are not a joint confidence region or timing guarantee.
+The full matrices, Jacobian, source bytes and assumptions remain in the export.
+
+The browser reconstructs the five-coordinate input covariance from the verified
+CSV row, adds the adopted RV variance, checks symmetric positive matrices and
+validates J C J-transpose. Wrong policy/epoch/units, missing or unsolicited
+covariance, altered input or output matrices and altered Jacobians are refused.
+Six focused client tests and the stellar UI scenario in four browser profiles
+passed. A follow-up mobile-only run verified spacing of the two separate
+assumption controls after screenshot review. These browser tests replay an
+actual CLI covariance export and do not replace live browser-to-Go acceptance.
+Physical native covariance UI and device validation remain outstanding.

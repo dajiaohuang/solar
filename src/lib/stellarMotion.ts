@@ -1,11 +1,14 @@
 import { readBounded, STATE_TILE_API_VERSION } from './stateTiles'
 import { selectedGaiaCsvSource } from './gaiaCsvSource'
+import { validateStellarCovariance, type StellarCovariance } from './stellarCovariance'
 
 export type StellarMotionRequest = {
   originalManifestBase64: string; originalRowsCsvBase64: string; sourceId: string
   targetEpochJulianYearTCB: number; radialVelocityPolicy: 'spectroscopic-as-astrometric'
+  covariancePolicy?: 'independent-spectroscopic-rv'
 }
 export type StellarMotionExperiment = {
+  formalCovariance?: StellarCovariance
   schemaVersion: 1; manifestSha256: string; rowsSha256: string
   originalManifestBase64: string; originalRowsCsvBase64: string
   selectedSource: Record<string, unknown>; provenanceBoundary: string
@@ -51,6 +54,8 @@ export async function validateStellarMotion(raw: unknown, request: StellarMotion
   signal?.throwIfAborted()
   const original = await selectedGaiaCsvSource(Uint8Array.from(atob(request.originalRowsCsvBase64), char => char.charCodeAt(0)), request.sourceId, signal)
   if (Object.keys(original).length !== Object.keys(source).length || Object.entries(original).some(([key, value]) => source[key] !== value)) reject()
+  if (request.covariancePolicy) validateStellarCovariance(e.formalCovariance, original, request.targetEpochJulianYearTCB)
+  else if (e.formalCovariance !== undefined) reject()
   return e as StellarMotionExperiment
 }
 export async function loadStellarMotion(base: string, request: StellarMotionRequest, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<StellarMotionExperiment> {
@@ -58,6 +63,7 @@ export async function loadStellarMotion(base: string, request: StellarMotionRequ
   if (!/^[1-9][0-9]{0,18}$/.test(request.sourceId) || BigInt(request.sourceId) > 9223372036854775807n
     || !finite(request.targetEpochJulianYearTCB) || Math.abs(request.targetEpochJulianYearTCB - 2016) > 100
     || request.radialVelocityPolicy !== 'spectroscopic-as-astrometric'
+    || (request.covariancePolicy !== undefined && request.covariancePolicy !== 'independent-spectroscopic-rv')
     || !request.originalManifestBase64.length || request.originalManifestBase64.length > 4 * Math.ceil((1 << 20) / 3)
     || !request.originalRowsCsvBase64.length || request.originalRowsCsvBase64.length > 4 * Math.ceil((8 << 20) / 3)) throw new Error('Invalid stellar request or source budget')
   const controller = new AbortController(), cancel = () => controller.abort(signal.reason)

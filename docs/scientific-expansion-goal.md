@@ -1709,3 +1709,18 @@ original files and matrix were independently rechecked (normalized difference
 6.047e-6 for the chosen source/year). No full local tests ran. Browser/native
 covariance controls and live browser-to-Go acceptance remain outstanding.
 Candidate 335b083 still awaits iOS; the active candidate was not replaced.
+
+### Checkpoint 75: browser covariance assumptions, validation and readout (2026-09-23)
+
+Added separate opt-in formal covariance controls, six marginal standard
+deviations with units, explicit limits and full source-bearing export. The
+client reconstructs input covariance from the verified original row, checks
+matrix symmetry/positivity, model/policy/time/units and J C J-transpose. It
+refuses unsolicited or missing covariance and altered matrices or Jacobians.
+
+Six focused client tests, type checking, targeted lint and four browser-profile
+UI runs passed. The replay fixture is extracted from the actual Go CLI output.
+Screenshot review found cramped inline assumptions; separate aligned rows were
+implemented and verified with a mobile-only rerun and screenshot inspection.
+No full local tests ran. This remains replay UI plus separately verified HTTP
+evidence, not live browser/backend acceptance or physical native-device proof.
