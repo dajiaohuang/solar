@@ -1144,3 +1144,23 @@ profiles, Android, iOS and final gate passed. That exact commit was fast-forward
 to main. Deploy application and Publish asteroid dataset workflows were checked
 and remain manually disabled. Android window/export, iOS ground-contact and Gaia
 ingestion commits are the next candidate; their acceptance remains separate.
+
+### Checkpoint 45: bounded spatial Gaia chunk consumption (2026-09-23)
+
+Added browser/worker-compatible manifest validation, catalog-epoch rectangle
+selection with RA wrap/seam/polar handling, chunk hash verification and Float64
+ICRS unit directions preserving original source rows and 64-bit IDs. Parallel
+waves reserve encoded bytes and rows, bound total selected bytes, enforce
+request deadlines and await the consumer before further admission. Cancellation
+stops queued publication and new waves. Snapshot validation prevents in-flight
+manifest edits from changing paths or budgets.
+
+Five focused tests passed against the real ESA capture and explicitly synthetic
+queue/budget cases, including altered bytes, outside budgets, epoch refusal,
+backpressure and cancellation. Types, changed-file lint and diff checks passed.
+An initial test mutated a shared Node Buffer view; it was corrected to use an
+owned copy, without changing source fixtures. No full local tests ran.
+
+Admission counters are not measured heap/GPU performance. Gaia UI/GPU/cache
+integration, motion-aware bounds, stellar event integration and sustained scale
+evidence remain unfinished. Candidate 5d9a2b9 is running and was not interrupted.

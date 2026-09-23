@@ -41,3 +41,22 @@ chunk. Its separate count query also returned 19. This is ingestion and byte
 provenance evidence, not a capacity benchmark. Parallel chunk consumption,
 proper-motion/observer transforms, sky rendering and stellar occultation
 integration remain unfinished.
+
+## Browser/worker chunk consumer
+
+`src/lib/gaiaChunks.ts` validates an imported manifest, conservatively selects
+5-degree bins intersecting an explicit RA/declination rectangle, and streams
+hash-verified chunks with Float64 ICRS unit directions. Wrapping RA, the 0/360
+seam and polar directions are handled conservatively. Selection is limited to
+J2016.0; requesting a later epoch is rejected until motion-aware bounds exist.
+
+The loader defaults to two parallel requests, a 16 MiB in-flight encoded-byte
+reservation, 20,000 in-flight rows and 64 MiB total selected bytes. Each request
+has a 30-second deadline. One wave waits for its asynchronous consumer callbacks
+before admitting more data. The consumer must resolve after accepting/uploading
+a chunk and clear its own retained state on cancellation. These counters are
+admission limits, not measurements of JavaScript heap or GPU allocations. The
+loader does not own retained consumer storage. A failed/cancelled stream never
+returns a completed summary; already emitted chunks remain individually verified
+and must not be labeled a complete catalog. UI, GPU upload/cache integration
+and sustained capacity measurements are still pending.
