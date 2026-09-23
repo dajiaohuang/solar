@@ -66,6 +66,39 @@ composition and complete provenance, with cancellation, missing-EOP and shape/
 model rejection cases. This composition check is not an independent measured
 ground-eclipse reference; event-time references and consumers remain pending.
 
+## Ground contact searches and offline export
+
+`observation.SearchGroundContacts` now searches up to 86401 elapsed TAI seconds
+with 30-second scans and 0.05-second root brackets. UTC output preserves a real
+leap second. One source-identity session spans all reception, emission and
+refinement evaluations; source changes, missing states/EOP, cancellation and
+evaluation/result budgets fail the whole job. It returns contacts, start/end
+geometry, EOP/PCK/SPK identities and explicit incomplete-search coverage.
+There are at most 8192 geometry evaluations and 512 contacts. Sampled zeros
+remain distinct from inferred enter/exit crossings. Short events and grazing
+contacts can still be missed; this is not continuous-coverage certification.
+
+The offline command accepts an existing local SPK catalog and immutable IERS
+snapshot. It requires all station coordinates explicitly and refuses existing
+output files. A 20-second search deadline and interrupt cancellation apply.
+
+```sh
+rtk proxy go run ./cmd/ground-contacts --data-dir <source-catalog-directory> --iers <iers-manifest.json> --pck src/data/pck00011.tpc --input src/data/dallas-ground-contacts-example.json --output <new-receipt.json>
+```
+
+The Dallas 2024-04-08 case uses a declared example station at -96.797° longitude,
+32.7767° latitude and 130 m WGS84 ellipsoidal height, not a surveyed observing
+site. Four selected original IERS rows have their own byte hash and a receipt
+identifying the full upstream snapshot. The
+[independent ERFA/jplephem generator](../scripts/reference-ground-contacts.py)
+uses 60-second scans and 0.001-second refinement on the same source/model
+contract. Its four CN sphere contacts agree with Go within 0.03 seconds; actual
+residuals are about 0.00046–0.00961 seconds. The real CLI used 521 geometry
+evaluations. This is agreement between numerical models, not observed eclipse
+contact timings or physical timing accuracy. Terrain, limb profile, exact
+apparent limb transformations, physical uncertainty and visibility remain absent.
+HTTP/browser/native access to this ground search remains unfinished.
+
 ## Browser experiment
 
 **Evidence → Occultation laboratory** runs the same experiment engine as the

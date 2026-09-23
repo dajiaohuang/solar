@@ -1,0 +1,12 @@
+{
+  "startUtc": "2024-04-08T17:00:00Z",
+  "endUtc": "2024-04-08T21:00:00Z",
+  "station": {
+    "longitudeDeg": -96.797,
+    "latitudeDeg": 32.7767,
+    "heightMeters": 130
+  },
+  "foregroundId": 301,
+  "backgroundId": 10,
+  "aberration": "CN"
+}

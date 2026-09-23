@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "request": {
+    "startUtc": "2024-04-08T17:00:00Z",
+    "endUtc": "2024-04-08T21:00:00Z",
+    "station": {
+      "longitudeDeg": -96.797,
+      "latitudeDeg": 32.7767,
+      "heightMeters": 130
+    },
+    "foregroundId": 301,
+    "backgroundId": 10,
+    "aberration": "CN"
+  },
+  "contacts": [
+    {
+      "boundary": "external",
+      "direction": "enter",
+      "elapsedTaiSeconds": 1400.4249572753906,
+      "utc": "2024-04-08T17:23:20.424957Z",
+      "bracketSeconds": [
+        1400.4244995117188,
+        1400.4254150390625
+      ]
+    },
+    {
+      "boundary": "internal",
+      "direction": "enter",
+      "elapsedTaiSeconds": 6040.941925048828,
+      "utc": "2024-04-08T18:40:40.941925Z",
+      "bracketSeconds": [
+        6040.941467285156,
+        6040.9423828125
+      ]
+    },
+    {
+      "boundary": "internal",
+      "direction": "exit",
+      "elapsedTaiSeconds": 6277.009735107422,
+      "utc": "2024-04-08T18:44:37.009735Z",
+      "bracketSeconds": [
+        6277.00927734375,
+        6277.010192871094
+      ]
+    },
+    {
+      "boundary": "external",
+      "direction": "exit",
+      "elapsedTaiSeconds": 10959.683074951172,
+      "utc": "2024-04-08T20:02:39.683075Z",
+      "bracketSeconds": [
+        10959.6826171875,
+        10959.683532714844
+      ]
+    }
+  ],
+  "evaluations": 305,
+  "software": {
+    "pyerfa": "2.0.1.5",
+    "erfa": "2.0.1",
+    "numpy": "2.4.2",
+    "jplephem": "2.24"
+  },
+  "stepSeconds": 60,
+  "toleranceSeconds": 0.001,
+  "sources": [
+    {
+      "path": "public/data/ephemerides/de440s-2000-01-01-2051-01-01.bsp",
+      "sha256": "8724d2d1bac115a75ad1f984c5b474ca778c96ee8be2df83e624cef61c001069"
+    },
+    {
+      "path": "tests/fixtures/eclipse-iers-sample.txt",
+      "sha256": "4ce806c8712887550e560a7cd8405f3b3d4406bf91091878e689614d75d277d7"
+    },
+    {
+      "path": "tests/fixtures/pck-radii-reference.json",
+      "sha256": "12c869dc2f1e75d9f6f6b069bf8520cc31dc39823d926a0f83e5e9a4d2581f30"
+    },
+    {
+      "path": "src/data/pck00011.tpc",
+      "sha256": "3dff7b1dbeceaa01f25467767d3fa25816051c85d162d1edf04acb310ee28bb1"
+    },
+    {
+      "path": "scripts/verify-observer-erfa.py",
+      "sha256": "892a233956cad5e7407f79a1b68e2d0230fc00f321d8a65e3ad30d2219afab09"
+    },
+    {
+      "path": "scripts/reference-ground-contacts.py",
+      "sha256": "d8c32cfeae66d6b8f48aeb7ce7c58abb69e8ef25c49704edc2f89e344d1ece95"
+    }
+  ],
+  "boundary": "Independent numerical CN spherical-limb model, not observed eclipse timings, limb topography or physical timing uncertainty. This UTC interval has no leap second; elapsed UTC seconds equal elapsed TAI seconds."
+}

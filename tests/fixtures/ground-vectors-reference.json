@@ -23,11 +23,11 @@
     },
     {
       "path": "tests/fixtures/observer-erfa-reference.json",
-      "sha256": "bb5261a4bdb014dfc1908692e24b8f6be5601a0c0c17360e5dc08391876b688d"
+      "sha256": "e1f3ccffcf8a38b0f3409e2912cd186c6b92dc9bdfeb5f4dcc6b866b4abc7cda"
     },
     {
       "path": "scripts/verify-observer-erfa.py",
-      "sha256": "f1f42b65fb9d1e559bbb493f35a9ba0192c281371efeed8c288db1d467d98e23"
+      "sha256": "892a233956cad5e7407f79a1b68e2d0230fc00f321d8a65e3ad30d2219afab09"
     },
     {
       "path": "scripts/reference-ground-vectors.py",

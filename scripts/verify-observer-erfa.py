@@ -168,7 +168,7 @@ def main():
         )
     encoded = json.dumps(report, indent=2)+"\n"
     if args.write_fixture:
-        (ROOT / "tests/fixtures/observer-erfa-reference.json").write_text(encoded, encoding="utf-8")
+        (ROOT / "tests/fixtures/observer-erfa-reference.json").write_text(encoded, encoding="utf-8", newline="\n")
     print(encoded)
 
 

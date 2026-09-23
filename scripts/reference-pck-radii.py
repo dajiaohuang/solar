@@ -27,7 +27,7 @@ def main():
                   generatorSha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                   software=dict(spiceypy=spice.__version__, cspice=spice.tkvrsn('TOOLKIT')),
                   boundary='Kernel-pool extraction parity only; no independent physical accuracy or limb/orientation certification.')
-    with output.open('x', encoding='utf-8') as handle:
+    with output.open('x', encoding='utf-8', newline='\n') as handle:
         json.dump(report, handle, indent=2, allow_nan=False)
         handle.write('\n')
     print(json.dumps(dict(output=str(output), bodies=len(bodies))))

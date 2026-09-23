@@ -948,3 +948,31 @@ shape, geometry, composition and cancellation tests passed. No full local tests
 ran. This is single-epoch CN geometry, not completed ground contact searches,
 visibility, oriented limbs or native/browser consumers; all those and the other
 unfinished ledger rows remain open.
+
+### Checkpoint 37: bounded ground contact timing and CLI (2026-09-23)
+
+Added a source-frozen TAI-axis ground search with UTC leap seconds, 30-second
+scans, 0.05-second brackets, evaluation/contact limits and fail-whole-job source
+errors/cancellation. An offline command validates explicit station fields and
+exports the original input hash, catalog/SPK/PCK/IERS identity, contacts and
+numerical limits into a new file. Independent ERFA/jplephem Dallas 2024 eclipse
+references use original IERS records and verify all four CN sphere contacts;
+residuals are approximately 0.00046-0.00961 seconds. The real CLI used 521 geometry
+evaluations. Focused reference, analytical, leap-second, changing-source,
+cancellation, budget and input checks passed; no full local tests ran.
+
+These are numerical model comparisons, not measured contact accuracy. Ground
+HTTP/browser/native access, full apparent limbs, oriented shapes, grazing
+completeness, event distributions and all other ledger requirements remain open.
+The batch is local while remote candidate 4001499 validates.
+
+### Candidate 4001499 Android failure: reference newline identity (2026-09-23)
+
+Run 35823528664 failed its Android Go gate because the new vector fixture had
+hashed a CRLF working-copy JSON while Linux checked out the committed LF bytes.
+The source/physics assertion was retained. Python fixture writers now explicitly
+produce LF; dependent provenance receipts were regenerated from canonical files.
+All 95 radii, six vector results and four ground contact times remain identical.
+Focused Go and TypeScript source/vector/contact checks passed after the repair.
+The still-running iOS job was not interrupted; the repaired candidate must pass
+new remote checks before main promotion.

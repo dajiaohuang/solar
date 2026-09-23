@@ -1,0 +1,18 @@
+{
+  "source": {
+    "schemaVersion": 1,
+    "sourceUrl": "https://data.iers.org/products/eop/rapid/standard/finals2000A.all",
+    "retrievedAt": "2026-09-22T16:38:44.484Z",
+    "sha256": "c672540e026d3cd4840c0858d4ce2bc4a18c3bc9751f9636c3285e11950d58a1",
+    "bytes": 3767520,
+    "path": "finals2000A-c672540e026d3cd4840c0858d4ce2bc4a18c3bc9751f9636c3285e11950d58a1.all"
+  },
+  "fixtureSha256": "4ce806c8712887550e560a7cd8405f3b3d4406bf91091878e689614d75d277d7",
+  "fixtureBytes": 752,
+  "selectedMjd": [
+    60407,
+    60408,
+    60409,
+    60410
+  ]
+}

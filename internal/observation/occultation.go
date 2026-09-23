@@ -41,6 +41,11 @@ type OccultationResult struct {
 // vectors. Apparent center deflection/aberration is deliberately not applied to
 // geometric sphere limbs, for which those corrections need a separate model.
 func EvaluateOccultation(ctx context.Context, req OccultationRequest, shapes *bodyshape.Table, eop *earthorientation.Table, evaluate Evaluator) (*OccultationResult, error) {
+	sess := &session{ctx: ctx, evaluate: evaluate, sources: map[string]*Source{}, identities: map[string]string{}}
+	return evaluateOccultationSession(ctx, req, shapes, eop, sess)
+}
+
+func evaluateOccultationSession(ctx context.Context, req OccultationRequest, shapes *bodyshape.Table, eop *earthorientation.Table, sess *session) (*OccultationResult, error) {
 	if req.Aberration != "CN" || req.ForegroundID <= 0 || req.BackgroundID <= 0 || req.ForegroundID == req.BackgroundID || req.ForegroundID == 399 || req.BackgroundID == 399 {
 		return nil, fail("invalid_occultation", "ground occultation requires explicit CN and distinct non-Earth NAIF target IDs")
 	}
@@ -49,7 +54,7 @@ func EvaluateOccultation(ctx context.Context, req OccultationRequest, shapes *bo
 	if !okFront || !okBack || front.Representation != "sphere" || back.Representation != "sphere" {
 		return nil, fail("unsupported_body_shape", "both targets require sourced equal-axis PCK spheres; no mean-radius substitution")
 	}
-	observation, err := Evaluate(ctx, Request{UTC: req.UTC, Station: req.Station, BodyIDs: []string{"naif:" + strconv.Itoa(req.ForegroundID), "naif:" + strconv.Itoa(req.BackgroundID)}}, eop, evaluate)
+	observation, err := evaluateSession(ctx, Request{UTC: req.UTC, Station: req.Station, BodyIDs: []string{"naif:" + strconv.Itoa(req.ForegroundID), "naif:" + strconv.Itoa(req.BackgroundID)}}, eop, sess)
 	if err != nil {
 		return nil, err
 	}
