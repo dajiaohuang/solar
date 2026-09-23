@@ -10,6 +10,8 @@ const args = process.argv.slice(2)
 const option = (name, fallback) => { const index = args.indexOf(name); return index < 0 ? fallback : args[index + 1] }
 const output = resolve(option('--output', '.cache/catalog-stream-app.json'))
 const graphicsMode = option('--graphics', 'default')
+const detailMode = option('--detail', 'all')
+if (!['all', 'spatial'].includes(detailMode)) throw new Error('Invalid detail mode')
 if (!['default', 'd3d11'].includes(graphicsMode) || graphicsMode === 'd3d11' && process.platform !== 'win32') throw new Error('Invalid graphics mode')
 if (existsSync(output)) throw new Error('Report already exists; choose a new output path')
 const sha = value => createHash('sha256').update(value).digest('hex')
@@ -48,7 +50,7 @@ try {
   page.on('request', request => { if (request.url().includes('/data/asteroids/')) requests.push(new URL(request.url()).pathname) })
   await page.addInitScript(() => {
     localStorage.setItem('solar-atlas-first-run-v1', 'complete')
-    const audit = { active: false, intervals: [], longTasks: [], uploads: [], draws: [], allocations: 0, allocationBytes: 0, uploadBytes: 0, glErrors: [], graphics: null, litPixels: null, submittedPoints: 0, firstVisibleMs: null, pendingTiles: 0, peakPendingTiles: 0 }
+    const audit = { active: false, intervals: [], longTasks: [], uploads: [], draws: [], allocations: 0, allocationBytes: 0, uploadBytes: 0, glErrors: [], graphics: null, litPixels: null, submittedPoints: 0, firstVisibleMs: null, pendingTiles: 0, peakPendingTiles: 0, indexBytes: 0, peakIndexBytes: 0, indexUploadBytes: 0 }
     window.streamAudit = audit
     const NativeWorker = window.Worker
     window.Worker = class extends NativeWorker {
@@ -69,23 +71,30 @@ try {
     requestAnimationFrame(frame)
     new PerformanceObserver(list => { if (audit.active) audit.longTasks.push(...list.getEntries().map(entry => entry.duration)) }).observe({ type: 'longtask', buffered: false })
     const proto = WebGLRenderingContext.prototype
-    for (const method of ['bufferData', 'bufferSubData', 'drawArrays']) {
+    for (const method of ['bufferData', 'bufferSubData', 'drawArrays', 'drawElements']) {
       const original = proto[method]
       proto[method] = function (...parameters) {
         const start = performance.now(), result = Reflect.apply(original, this, parameters)
         if (this.canvas.getAttribute?.('data-testid') !== 'catalog-stream-canvas') return result
         const elapsed = performance.now() - start
-        if (method === 'bufferData') { audit.allocations++; audit.allocationBytes += typeof parameters[1] === 'number' ? parameters[1] : parameters[1].byteLength }
-        if (method === 'bufferSubData') { audit.uploads.push(elapsed); audit.uploadBytes += parameters[2].byteLength }
-        if (method === 'drawArrays') {
+        if (method === 'bufferData' && parameters[0] === this.ARRAY_BUFFER) { audit.allocations++; audit.allocationBytes += typeof parameters[1] === 'number' ? parameters[1] : parameters[1].byteLength }
+        if (method === 'bufferSubData' && parameters[0] === this.ARRAY_BUFFER) { audit.uploads.push(elapsed); audit.uploadBytes += parameters[2].byteLength }
+        if (method === 'bufferData' && parameters[0] === this.ELEMENT_ARRAY_BUFFER) {
+          const bytes = typeof parameters[1] === 'number' ? parameters[1] : parameters[1].byteLength
+          audit.indexBytes = bytes; audit.peakIndexBytes = Math.max(audit.peakIndexBytes, bytes); audit.indexUploadBytes += bytes
+        }
+        if (method === 'bufferSubData' && parameters[0] === this.ELEMENT_ARRAY_BUFFER) audit.indexUploadBytes += parameters[2].byteLength
+        if (method === 'drawArrays' || method === 'drawElements') {
+          const count = method === 'drawArrays' ? parameters[2] : parameters[1]
           audit.draws.push(elapsed)
-          audit.submittedPoints += parameters[2]
-          if (parameters[2] > 0 && audit.firstVisibleMs === null) audit.firstVisibleMs = performance.now() - window.streamStart
+          audit.submittedPoints += count
+          if (count > 0 && audit.firstVisibleMs === null) audit.firstVisibleMs = performance.now() - window.streamStart
           if (!audit.graphics) {
             const debug = this.getExtension('WEBGL_debug_renderer_info')
             audit.graphics = { version: this.getParameter(this.VERSION), renderer: debug ? this.getParameter(debug.UNMASKED_RENDERER_WEBGL) : null }
           }
-          if (parameters[2] === window.streamExpectedRows) {
+          if (window.streamCapture) {
+            window.streamCapture = false
             const pixels = new Uint8Array(this.drawingBufferWidth * this.drawingBufferHeight * 4)
             this.readPixels(0, 0, this.drawingBufferWidth, this.drawingBufferHeight, this.RGBA, this.UNSIGNED_BYTE, pixels)
             let lit = 0
@@ -105,6 +114,7 @@ try {
     await page.getByRole('spinbutton', { name: label, exact: true }).fill(value)
   }
   await page.getByRole('combobox', { name: 'Expanded map point limit' }).selectOption(String(manifest.totalCount))
+  await page.getByRole('combobox', { name: 'Map detail', exact: true }).selectOption(detailMode)
   const startButton = page.getByRole('button', { name: /Load expanded snapshot/ })
   if (!await startButton.isEnabled()) throw new Error('Full source streaming is unavailable in this browser')
   const requestStart = requests.length
@@ -112,10 +122,14 @@ try {
   await startButton.click()
   const canvas = page.getByTestId('catalog-stream-canvas')
   await page.waitForFunction(() => ['complete', 'limited', 'error'].includes(document.querySelector('[data-testid="catalog-stream-canvas"]')?.getAttribute('data-phase')), undefined, { timeout: 120_000 })
+  await page.waitForFunction(() => document.querySelector('[data-testid="catalog-stream-canvas"]')?.getAttribute('data-spatial-pending') === 'false', undefined, { timeout: 30_000 })
   const result = await page.evaluate(() => {
     window.streamAudit.active = false
     const canvas = document.querySelector('[data-testid="catalog-stream-canvas"]')
-    return { phase: canvas.getAttribute('data-phase'), drawnRows: Number(canvas.getAttribute('data-drawn-rows')), checkedRows: Number(canvas.getAttribute('data-source-rows')), loadMs: performance.now() - window.streamStart, audit: window.streamAudit, userAgent: navigator.userAgent }
+    const loadMs = performance.now() - window.streamStart
+    window.streamCapture = true
+    canvas.dispatchEvent(new Event('solar-atlas-prepare-canvas-capture'))
+    return { phase: canvas.getAttribute('data-phase'), drawnRows: Number(canvas.getAttribute('data-drawn-rows')), displayedRows: Number(canvas.getAttribute('data-display-count')), checkedRows: Number(canvas.getAttribute('data-source-rows')), canvasSize: { width: canvas.width, height: canvas.height }, loadMs, audit: window.streamAudit, userAgent: navigator.userAgent }
   })
   if (result.phase !== 'complete' || result.drawnRows !== manifest.totalCount || result.checkedRows !== manifest.totalCount || result.audit.glErrors.length || !result.audit.litPixels) throw new Error(JSON.stringify({ ...result, audit: { glErrors: result.audit.glErrors, litPixels: result.audit.litPixels }, errors }))
   if (errors.length) throw new Error(JSON.stringify(errors))
@@ -128,15 +142,16 @@ try {
     return { count: sorted.length, p50Ms: q(.5), p95Ms: q(.95), p99Ms: q(.99), maxMs: sorted.at(-1) ?? null }
   }
   const report = { schemaVersion: 1, generatedAt: new Date().toISOString(), measurement: 'built-application-full-MPC-source-static-2D-snapshot-local-HTTP',
-    graphicsMode, launchOptions, browser: browser.version(), viewport: { width: 1600, height: 1000, pixelRatio: 1 },
+    graphicsMode, detailMode, launchOptions, browser: browser.version(), viewport: { width: 1600, height: 1000, pixelRatio: 1 },
     source: { version: manifest.version, rows: manifest.totalCount, shards: manifest.chunkCount, sourceSha256: manifest.sourceSha256, contentSha256: manifest.contentSha256, manifestSha256: sha(readFileSync(manifestFile)), checksumsSha256: sha(checksums) },
-    implementationSha256: Object.fromEntries(['src/lib/catalogStreaming.ts', 'src/lib/catalogPointRenderer.ts', 'src/lib/catalogTransferWindow.ts', 'src/workers/catalog-stream.worker.ts', 'src/components/CatalogStreamCanvas.tsx'].map(path => [path, sha(readFileSync(path))])),
-    phase: result.phase, drawnRows: result.drawnRows, checkedRows: result.checkedRows, loadMs: result.loadMs, graphics: result.audit.graphics,
+    implementationSha256: Object.fromEntries(['src/lib/catalogStreaming.ts', 'src/lib/catalogPointRenderer.ts', 'src/lib/catalogSpatialSelection.ts', 'src/lib/catalogTransferWindow.ts', 'src/workers/catalog-stream.worker.ts', 'src/components/CatalogStreamCanvas.tsx'].map(path => [path, sha(readFileSync(path))])),
+    phase: result.phase, drawnRows: result.drawnRows, displayedRows: result.displayedRows, checkedRows: result.checkedRows, canvasSize: result.canvasSize, loadMs: result.loadMs, graphics: result.audit.graphics,
     frameIntervals: summary(result.audit.intervals), uploadSubmission: summary(result.audit.uploads), drawSubmission: summary(result.audit.draws), longTasks: summary(result.audit.longTasks),
     allocations: result.audit.allocations, gpuAttributeBytes: result.audit.allocationBytes, uploadBytes: result.audit.uploadBytes, litPixels: result.audit.litPixels, glErrors: result.audit.glErrors, pageErrors: errors,
     firstNonemptyDrawMs: result.audit.firstVisibleMs, submittedPointsAcrossDraws: result.audit.submittedPoints, peakUnacknowledgedTiles: result.audit.peakPendingTiles,
+    spatialIndexBytes: result.audit.indexBytes, peakSpatialIndexBytes: result.audit.peakIndexBytes, spatialIndexUploadBytes: result.audit.indexUploadBytes,
     serverAudit, expandedArtifactRequests: expandedRequests.length,
-    limits: ['Local filesystem/HTTP, not public network throughput.', 'One fixed UTC epoch; not continuous full-catalog simulation or physical display FPS.', 'Headless animation callbacks and CPU GL submission times, not GPU execution timers.', 'Explicit attribute bytes are not total browser/process/driver memory.', 'Two-dimensional ecliptic projection; offscreen points count as submitted, not visible.', 'This desktop result does not establish native or mobile hardware capacity.'] }
+    limits: ['Local filesystem/HTTP, not public network throughput.', 'One fixed UTC epoch; not continuous full-catalog simulation or physical display FPS.', 'Headless animation callbacks and CPU GL submission times, not GPU execution timers.', 'Explicit source attribute bytes exclude spatial-index bytes and are not total browser/process/driver memory.', 'drawnRows is the uploaded source count; displayedRows is the actual final draw count, including offscreen points in all mode.', 'Spatial representatives are a visual simplification, not an estimate of density or event probability.', 'This desktop result does not establish native or mobile hardware capacity.'] }
   mkdirSync(dirname(output), { recursive: true })
   await page.locator('.catalog-map').screenshot({ path: output.replace(/\.json$/, '') + '.png' })
   writeFileSync(output, JSON.stringify(report, null, 2) + '\n', { flag: 'wx' })

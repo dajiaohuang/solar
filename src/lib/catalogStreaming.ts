@@ -29,10 +29,11 @@ export function planCatalogStream(manifest: AsteroidManifest, requestedRows: num
   // Explicit typed-array / GPU allocations, not total browser RSS: index read
   // plus concatenation, optional query locators + bitset, four in-flight shards
   // and their compute/transfer scratch, checksum parsing reserve. GPU attributes
-  // and a CPU copy for context restoration use another 48 bytes per point.
+  // and a CPU copy for context restoration use 48 bytes per point. Spatial
+  // positions, index scratch and CPU/GPU selections reserve another 24 bytes.
   const fixed = totalCount * (48 + 9) + CATALOG_STREAM_CONCURRENCY * chunkSize * 256 + 8 * MIB
-  const capacity = Math.min(totalCount, requestedRows, Math.max(0, Math.floor((budgetBytes - fixed) / 48)))
-  return { capacity, budgetBytes, reservedBytes: fixed + capacity * 48 }
+  const capacity = Math.min(totalCount, requestedRows, Math.max(0, Math.floor((budgetBytes - fixed) / 72)))
+  return { capacity, budgetBytes, reservedBytes: fixed + capacity * 72 }
 }
 
 async function sha256(buffer: ArrayBuffer) {

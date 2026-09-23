@@ -362,7 +362,7 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 .range-fields span { font: 9px var(--font-mono); color: var(--muted); }
 .range-fields input { padding: 7px 5px; }
 .range-fields b { color: var(--subtle); font-weight: 400; }
-.catalog-map { position: relative; min-height: 620px; overflow: hidden; }
+.catalog-map { position: relative; align-self: start; height: clamp(430px, 70vh, 800px); min-height: 620px; overflow: hidden; }
 .catalog-map .viz-canvas { top: 38px; }
 .map-caption { height: 38px; padding: 0 12px; border-bottom: 1px solid var(--line); font: 9px var(--font-mono); color: var(--muted); letter-spacing: .08em; }
 .map-caption strong { color: var(--accent); }

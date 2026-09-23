@@ -14,7 +14,7 @@ remain paused. Changes may go directly to main after the required checks.
 | Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | Pending |
 | Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | Pending |
 | Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | Pending |
-| Catalog streaming | Replace the fixed 8k/30k-only cloud path with cancellable binary chunk loading, priority scheduling and independent byte/decode/compute/upload limits | In progress: full-inventory 2D snapshot now available; continuous/3D streaming, priority and spatial scheduling pending |
+| Catalog streaming | Replace the fixed 8k/30k-only cloud path with cancellable binary chunk loading, priority scheduling and independent byte/decode/compute/upload limits | In progress: full-inventory 2D snapshot, bounded upload batching and spatial display available; continuous/3D streaming and source-priority scheduling pending |
 | Rendering and time | Moving spatial bounds, visibility/LOD, selected-body retention, time/error-budgeted updates, reusable buffers and Float64-relative GPU coordinates; WebGL fallback and native contracts retained | In progress |
 | Capacity evidence | Real catalog runs at 30k/100k/300k/1m/full inventory, real SPK coverage and separately labeled synthetic GPU stress; P95/P99 frames, memory, first-visible time, upload and cancellation measurements | In progress |
 
@@ -42,6 +42,8 @@ gap. Do not claim physical accuracy from numerical agreement.
 
 Develop coherent slices, run relevant numerical/contract/interaction tests while
 iterating, and run the required broad checks once for a completed staging head.
+The owner's latest instruction prohibits full local test runs; local verification
+must remain targeted. Required remote checks still govern main promotion.
 Keep production/data release workflows paused. Record completion evidence and
 remaining work here; never mark the overall goal complete with pending rows.
 
@@ -419,7 +421,11 @@ after admission was introduced. That run passed Web, Android and iOS but failed
 the three cache tests in every browser. It is not eligible for main promotion.
 The corrected dependency bundle passes all twelve focused cache checks.
 
-The combined head still requires its remote gate. Continuous/3D streaming,
+Combined head `5a8131e` passed all required remote checks in run 35777679758:
+Web, all four browser profiles, Android, iOS and the stable gate. It was
+fast-forwarded to main; main native-scope run 35779921145 verified exact-head
+evidence and reused the successful native jobs. This also delivers checkpoints
+6 through 12 and the browser cache-loader correction. Continuous/3D streaming,
 priority/spatial scheduling, total memory evidence and the unfinished scientific
 ledger rows remain open. Deployment and publication remain paused.
 
@@ -447,6 +453,42 @@ are linked from [point-pipeline-performance.md](point-pipeline-performance.md).
 Spatial/time/error budgets, continuous/3D streaming, measured total memory and
 the unfinished scientific ledger rows remain required. The new optimization
 must pass its remote gate; a local benchmark does not authorize main promotion.
+
+### Checkpoint 15: spatial representatives over the complete snapshot (2026-09-23)
+
+Expanded snapshots now offer deterministic representatives per occupied screen
+cell, with a separate display limit and immediate switching to all loaded
+points. Source rows still undergo the same checksum verification, Float64
+propagation and complete attribute upload. Radius/detail changes only recompute
+visual indices in the retained worker; they do not reload or propagate source
+orbits. Obsolete requests cancel cooperatively, and changing only the loaded
+prefix preserves the earlier partial image while new indices are calculated.
+The UI distinguishes source coverage, loaded capacity, displayed points and
+points inside the view. Representatives do not estimate density or event risk.
+
+Three immutable built-application reports compare the same 545 by 698 canvas.
+All checked and loaded all 1,561,171 source rows. With SwiftShader, drawing all
+points took 3.55 s with callback P95/P99 66.7/83.4 ms and 30 long tasks; the
+34,505 spatial representatives completed in 1.54 s, with P95/P99 16.8 ms and
+no observed long task. D3D11 representatives completed in 1.55 s with the same
+callback quantiles. Each retained the original three attribute buffers; spatial
+selection used one additional 138,020-byte final index buffer. Reports and
+limits are in [point-pipeline-performance.md](point-pipeline-performance.md).
+These are fixed-epoch 2D snapshots and callback timings, not continuous
+million-body simulation, display FPS, total memory or native-device evidence.
+
+Twenty-seven focused units and twenty-four targeted browser checks passed before
+the final context-loss follow-up. A deterministic real-worker regression then
+reproduced a stale selection changing a completed snapshot to an error while
+its GPU context was lost. Context loss now invalidates that pending selection;
+restoration rebuilds attributes and requests fresh indices. All four browser
+profiles passed that regression after the fix; changed-file lint, production
+build/type checking and the repository contract also passed. The reports pin the
+pre-follow-up implementation; this lifecycle-only correction does not change
+their measured no-context-loss path. Required remote validation of checkpoints
+14 and 15 remains pending. Adaptive/time/error budgets, continuous/3D streaming,
+total memory measurements and every unfinished scientific ledger row remain
+part of the active goal.
 
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),

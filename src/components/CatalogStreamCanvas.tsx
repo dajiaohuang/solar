@@ -15,56 +15,97 @@ type Props = {
   requestedRows: number
   budgetBytes: number
   viewRadiusAU: number
+  displayMode: 'spatial' | 'all'
+  displayLimit: number
 }
 type Status = { drawnRows: number; sourceRows: number; phase: 'loading' | 'complete' | 'limited' | 'cancelled' | 'error'; error?: string }
 type Attributes = Pick<CatalogPointFrame, 'positions' | 'colors' | 'sizes'>
 
-export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRows, budgetBytes, viewRadiusAU }: Props) {
+export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRows, budgetBytes, viewRadiusAU, displayMode, displayLimit }: Props) {
   const { t } = useI18n()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const cancelRef = useRef<(() => void) | null>(null)
   const drawRef = useRef<(() => void) | null>(null)
   const radiusRef = useRef(viewRadiusAU)
+  const detailRef = useRef({ displayMode, displayLimit })
+  const [display, setDisplay] = useState({ count: 0, visible: 0, pending: false })
   const [status, setStatus] = useState<Status>({ drawnRows: 0, sourceRows: 0, phase: 'loading' })
   const [unavailable, setUnavailable] = useState(false)
   const plan = planCatalogStream(manifest, requestedRows, budgetBytes)
 
-  useEffect(() => { radiusRef.current = viewRadiusAU; drawRef.current?.() }, [viewRadiusAU])
+  useEffect(() => {
+    radiusRef.current = viewRadiusAU
+    detailRef.current = { displayMode, displayLimit }
+    drawRef.current?.()
+  }, [viewRadiusAU, displayMode, displayLimit])
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    let active = true, acceptingTiles = true, worker: Worker | null = null, frameId = 0
+    let active = true, acceptingTiles = true, loading = true, worker: Worker | null = null, frameId = 0
     let renderer: ReturnType<typeof createCatalogPointRenderer> | null = null
     let gl: WebGLRenderingContext | null = null
+    let viewKey = '', selectionViewKey = '', viewRequestId = 0
     const retained: Attributes[] = []
     const pendingTiles: Extract<CatalogStreamResponse, { type: 'tile' }>[] = []
     const count = { drawnRows: 0, sourceRows: 0 }
     const post = (request: CatalogStreamRequest) => worker?.postMessage(request)
     const cancel = () => {
       // Explicit abort ends admitted fetches and the pending upload ACK. The
-      // worker is terminated after reporting cancellation; cleanup also has a
-      // hard termination boundary for navigation and changed filters.
+      // worker retains only the visual coordinates for the stopped snapshot.
+      // Navigation and changed filters terminate it and release that storage.
       acceptingTiles = false
+      loading = false
       pendingTiles.length = 0
       post({ type: 'cancel' })
       if (frameId) { cancelAnimationFrame(frameId); frameId = 0 }
       setStatus({ ...count, phase: 'cancelled' })
+      viewKey = ''
+      draw()
     }
     cancelRef.current = cancel
     const fail = (error: unknown) => {
       acceptingTiles = false
+      loading = false
       pendingTiles.length = 0
       if (frameId) { cancelAnimationFrame(frameId); frameId = 0 }
       worker?.terminate(); worker = null
+      setDisplay(previous => ({ ...previous, pending: false }))
       if (active) setStatus({ ...count, phase: 'error', error: error instanceof Error ? error.message : String(error) })
     }
     const draw = () => {
-      if (!renderer) return
-      const rect = canvas.getBoundingClientRect(), ratio = Math.min(window.devicePixelRatio, 2)
-      const width = Math.max(1, Math.round(rect.width * ratio)), height = Math.max(1, Math.round(rect.height * ratio))
-      if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height }
-      renderer.drawRetained(radiusRef.current, 0.82, width, height, ratio)
+      if (!renderer) return false
+      try {
+        const rect = canvas.getBoundingClientRect(), ratio = Math.min(window.devicePixelRatio, 2)
+        const width = Math.max(1, Math.round(rect.width * ratio)), height = Math.max(1, Math.round(rect.height * ratio))
+        if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height }
+        const detail = detailRef.current
+        const spatialKey = `${detail.displayMode}:${detail.displayLimit}:${radiusRef.current}:${width}:${height}`
+        const key = `${spatialKey}:${count.drawnRows}`
+        if (key !== viewKey) {
+          viewKey = key
+          viewRequestId++
+          if (detail.displayMode === 'all') {
+            selectionViewKey = ''
+            renderer.setSpatialSelection(null)
+            setDisplay({ count: count.drawnRows, visible: count.drawnRows, pending: false })
+          } else {
+            // A changed camera invalidates its representatives. More source
+            // rows at the same epoch/view can keep the previous partial image
+            // visible while the new selection is computed.
+            const pending = count.drawnRows > 0 && worker !== null
+            if (selectionViewKey !== spatialKey) {
+              selectionViewKey = spatialKey
+              renderer.setSpatialSelection(new Uint32Array())
+              setDisplay({ count: 0, visible: 0, pending })
+            } else setDisplay(previous => ({ ...previous, pending }))
+            if (count.drawnRows) post({ type: 'view', requestId: viewRequestId, count: count.drawnRows,
+              view: { radius: radiusRef.current, aspect: width / height, maximumPoints: Math.min(plan.capacity, detail.displayLimit) } })
+          }
+        }
+        renderer.drawRetained(radiusRef.current, 0.82, width, height, ratio)
+        return true
+      } catch (error) { fail(error); return false }
     }
     const checkGl = () => { if (gl?.getError() !== gl?.NO_ERROR) throw new Error('Catalog GPU allocation or upload failed') }
     const flushTiles = () => {
@@ -107,7 +148,9 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
         renderer = createCatalogPointRenderer(gl, plan.capacity)
         checkGl()
         for (const tile of retained) renderer.append(tile)
-        checkGl(); draw()
+        viewKey = ''; selectionViewKey = ''
+        checkGl()
+        if (!draw()) return false
         queueMicrotask(() => { if (active) setUnavailable(false) })
         return true
       } catch (error) {
@@ -118,12 +161,16 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
     }
     const lost = (event: Event) => {
       event.preventDefault()
+      // A selection already posted by the worker belongs to the lost context.
+      // Restoration requests fresh indices after rebuilding the attributes.
+      viewRequestId++
       renderer?.dispose(); renderer = null
       setUnavailable(true)
-      if (worker) cancel()
+      if (worker && loading) cancel()
     }
     canvas.addEventListener('webglcontextlost', lost)
     canvas.addEventListener('webglcontextrestored', initialize)
+    canvas.addEventListener('solar-atlas-prepare-canvas-capture', draw)
     drawRef.current = draw
     const resize = new ResizeObserver(draw); resize.observe(canvas)
     if (initialize()) {
@@ -132,13 +179,21 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
       worker.onmessage = (event: MessageEvent<CatalogStreamResponse>) => {
         if (!active) return
         const response = event.data
-        if (response.type === 'tile') {
+        if (response.type === 'selection') {
+          if (response.requestId !== viewRequestId || response.count !== count.drawnRows || detailRef.current.displayMode !== 'spatial') return
+          try {
+            if (!renderer || response.indices.length > detailRef.current.displayLimit || response.visible < response.indices.length || response.visible > count.drawnRows) throw new Error('Invalid catalog spatial selection')
+            renderer.setSpatialSelection(response.indices)
+            checkGl(); draw()
+            setDisplay({ count: response.indices.length, visible: response.visible, pending: false })
+          } catch (error) { fail(error) }
+        } else if (response.type === 'tile') {
           if (!acceptingTiles) return
           if (pendingTiles.length >= CATALOG_TRANSFER_WINDOW) { fail(new Error('Catalog transfer window exceeded')); return }
           pendingTiles.push(response)
           if (!frameId) frameId = requestAnimationFrame(flushTiles)
         } else {
-          worker?.terminate(); worker = null
+          loading = false
           if (response.type === 'error') fail(new Error(response.error))
           else if (response.type === 'cancelled') setStatus({ ...count, phase: 'cancelled' })
           else if (pendingTiles.length || response.drawnRows !== count.drawnRows || response.sourceRows !== count.sourceRows) fail(new Error('Catalog completed before all tiles were uploaded'))
@@ -156,6 +211,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
       resize.disconnect()
       canvas.removeEventListener('webglcontextlost', lost)
       canvas.removeEventListener('webglcontextrestored', initialize)
+      canvas.removeEventListener('solar-atlas-prepare-canvas-capture', draw)
       renderer?.dispose()
       pendingTiles.length = 0
       retained.length = 0
@@ -163,9 +219,11 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
   }, [manifest, filters, julianDay, requestedRows, budgetBytes, plan.capacity])
 
   return <>
-    <canvas ref={canvasRef} className="viz-canvas catalog-point-canvas" role="img" aria-label={`${t('catalogPointAria')}: ${status.drawnRows.toLocaleString()}`} data-testid="catalog-stream-canvas" data-drawn-rows={status.drawnRows} data-source-rows={status.sourceRows} data-phase={status.phase} data-capacity={plan.capacity} />
+    <canvas ref={canvasRef} className="viz-canvas catalog-point-canvas" role="img" aria-label={`${t('catalogPointAria')}: ${display.count.toLocaleString()}`} data-testid="catalog-stream-canvas" data-drawn-rows={status.drawnRows} data-source-rows={status.sourceRows} data-phase={status.phase} data-capacity={plan.capacity} data-display-count={display.count} data-spatial-pending={display.pending} data-display-mode={displayMode} />
     <div className="catalog-stream-status">
-      <strong>{status.drawnRows.toLocaleString()} / {plan.capacity.toLocaleString()} · {t('catalogStreamDrawn')}</strong>
+      <strong>{status.drawnRows.toLocaleString()} / {plan.capacity.toLocaleString()} · {t('catalogStreamLoaded')}</strong>
+      <span>{t('catalogStreamDisplayed')}: {display.count.toLocaleString()}{displayMode === 'spatial' ? ` / ${display.visible.toLocaleString()} ${t('catalogStreamInView')}` : ''}</span>
+      {displayMode === 'spatial' && <span>{t(display.pending ? 'catalogSpatialUpdating' : 'catalogSpatialExplanation')}</span>}
       <span>{t('catalogStreamScanned')}: {status.sourceRows.toLocaleString()} / {manifest.totalCount.toLocaleString()}</span>
       <span role="status">{t(status.phase === 'loading' ? 'catalogStreamLoading' : status.phase === 'complete' ? 'catalogStreamComplete' : status.phase === 'limited' ? 'catalogStreamLimited' : status.phase === 'cancelled' ? 'catalogStreamCancelled' : 'catalogStreamFailed')}</span>
       {status.phase === 'loading' && <button className="secondary-button" onClick={() => cancelRef.current?.()}>{t('catalogStreamCancel')}</button>}

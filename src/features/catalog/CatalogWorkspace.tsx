@@ -59,6 +59,8 @@ export function CatalogWorkspace() {
   })
   const [streamLimit, setStreamLimit] = useState(() => window.innerWidth <= 800 ? 30_000 : 100_000)
   const [streamRadius, setStreamRadius] = useState(8)
+  const [streamDisplay, setStreamDisplay] = useState<'spatial' | 'all'>('spatial')
+  const [streamDisplayLimit, setStreamDisplayLimit] = useState(() => window.innerWidth <= 800 ? 30_000 : 100_000)
   const [streamRequest, setStreamRequest] = useState<{ key: string; epoch: number; id: number } | null>(null)
   const streamKey = JSON.stringify([catalog.manifest?.releasePath, catalog.manifest?.version, catalog.filters, streamLimit])
   const streaming = streamRequest?.key === streamKey
@@ -326,6 +328,12 @@ export function CatalogWorkspace() {
               const radius = Number(event.target.value)
               if (Number.isFinite(radius) && radius > 0 && radius <= 1_000_000) setStreamRadius(radius)
             }} /></label>
+            <label className="field"><span>{t('catalogSpatialDetail')}</span><select value={streamDisplay} onChange={event => setStreamDisplay(event.target.value as 'spatial' | 'all')}>
+              <option value="spatial">{t('catalogSpatialMode')}</option><option value="all">{t('catalogSpatialAll')}</option>
+            </select></label>
+            {streamDisplay === 'spatial' && <label className="field"><span>{t('catalogSpatialLimit')}</span><select value={streamDisplayLimit} onChange={event => setStreamDisplayLimit(Number(event.target.value))}>
+              {[10_000, 30_000, 100_000, 300_000, 500_000].map(value => <option value={value} key={value}>{value.toLocaleString()}</option>)}
+            </select></label>}
             <p className="catalog-result-note">{t('catalogStreamExplanation')}</p>
             <button className="secondary-button full-width" disabled={!streamCapacity || nameSearchTooShort} onClick={() => {
               requireCatalogAccess('scan')
@@ -344,7 +352,7 @@ export function CatalogWorkspace() {
 
         <section className="catalog-map glass-panel">
           <div className="map-caption"><span>{t('catalogModeCaption')}</span><strong>{streaming ? t('catalogStreamSnapshot') : `${Math.floor(pointCloud.positions.length / 2).toLocaleString()} / ${resultTotal.toLocaleString()}`}</strong></div>
-          {streaming && catalog.manifest ? <CatalogStreamCanvas key={streamRequest.id} manifest={catalog.manifest} filters={catalog.filters} julianDay={streamRequest.epoch} requestedRows={streamLimit} budgetBytes={streamBudget} viewRadiusAU={streamRadius} /> : pointCloud.positions.length === pointRecords.length * 2 && pointRecords.length ? <CatalogPointCanvas
+          {streaming && catalog.manifest ? <CatalogStreamCanvas key={streamRequest.id} manifest={catalog.manifest} filters={catalog.filters} julianDay={streamRequest.epoch} requestedRows={streamLimit} budgetBytes={streamBudget} viewRadiusAU={streamRadius} displayMode={streamDisplay} displayLimit={streamDisplayLimit} /> : pointCloud.positions.length === pointRecords.length * 2 && pointRecords.length ? <CatalogPointCanvas
             records={pointRecords}
             positions={pointCloud.positions}
             viewRadiusAU={catalog.filters.semiMajorAxis[1] || 50}

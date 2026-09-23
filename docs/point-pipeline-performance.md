@@ -419,3 +419,67 @@ acknowledgements and verifies four-tile saturation, no early completion and
 complete eight-shard recovery after acknowledgements resume. Unit checks also
 cover duplicate/out-of-order acknowledgements, concurrent producers, send
 failure, cancellation and the final partial window.
+
+### Spatial representatives over full-source snapshots (2026-09-23)
+
+Expanded snapshots now default to a bounded visual selection: one deterministic
+source row per occupied projected screen cell. The representative with the
+smallest mixed row-index hash wins, avoiding a simple early-source prefix.
+The grid respects the requested display limit and view aspect; point centers
+outside the current view are omitted. Selection uses the Float32 coordinates
+already destined for display. Source propagation and transport remain Float64.
+This is a visual simplification, **not a density-preserving sample or an event
+probability calculation**. The loaded count and complete/partial source status
+remain separate from the displayed count and number of points inside the view.
+
+The worker retains visual coordinates after loading or cancellation so radius
+and detail changes do not reload source files. Selection yields every 20,000
+rows, superseded requests cancel, and the main thread rejects obsolete results.
+Same-view source additions keep the previous partial image until replacement
+indices arrive. A view change clears the old representatives. The complete
+attributes remain resident; one reusable Uint32 element buffer selects the
+displayed rows. Switching to all points uses the same source buffers immediately.
+Restored GPU contexts rebuild their attributes and request fresh indices.
+
+The explicit allocation plan now reserves 72 bytes per loaded point: 48 for
+CPU/GPU source attributes, 8 for worker display positions, and 16 for selection
+scratch and CPU/GPU indices. Fixed source/transfer reserves remain additional.
+This is still an array/GPU planning bound, not measured total browser or driver
+memory. The worker is released on navigation or source/filter replacement.
+
+The following separate local runs used the same production build, complete MPC
+source, fixed UTC epoch, 8 AU radius, 100k representative limit and **545 by 698
+pixel canvas**. The map height no longer stretches with its controls. Earlier
+reports used a taller canvas and should not be treated as a controlled comparison
+with this table. The benchmark now makes an explicit final capture draw and
+records source-attribute and spatial-index bytes separately.
+
+| Renderer and detail | Loaded / final submitted points | Snapshot ms | Callback P95 / P99 ms | Long tasks |
+| --- | ---: | ---: | ---: | ---: |
+| [SwiftShader, all points](benchmarks/catalog-stream-spatial-comparison-all-swiftshader-20260923.json) | 1,561,171 / 1,561,171 | 3,553.5 | 66.7 / 83.4 | 30 |
+| [SwiftShader, representatives](benchmarks/catalog-stream-spatial-indexed-swiftshader-20260923.json) | 1,561,171 / 34,505 | 1,536.8 | 16.8 / 16.8 | 0 |
+| [NVIDIA D3D11, representatives](benchmarks/catalog-stream-spatial-indexed-d3d11-20260923.json) | 1,561,171 / 34,505 | 1,550.0 | 16.8 / 16.8 | 0 |
+
+Every run checked all 313 shards, loaded all source rows, observed four network
+requests and four transfer credits at peak, uploaded 37,468,104 source attribute
+bytes through 939 range updates, rendered non-background pixels and reported no
+page/WebGL errors. Representatives used 138,020 final/peak index bytes, with
+894,404 total index upload bytes on SwiftShader and 904,076 on D3D11. First
+nonempty draw submission occurred at 204.6 and 221.0 ms respectively. On
+SwiftShader, total submitted vertices across loading fell from 64,352,342 to
+1,836,111; all source rows still underwent computation and attribute upload.
+
+These one-off local measurements do not establish a statistical tail estimate,
+public-network throughput or physical-display FPS. The 16.8 ms callback result
+belongs to a **34,505-representative display**, not simultaneous display of all
+1.56 million rows. Hardware and software browser modes differ. The reports pin
+the implementation before the later stale-selection/context-loss correction;
+that correction was verified separately using actual browser context loss.
+Continuous/3D updates, adaptive time/error budgets, total process memory and
+native/mobile hardware remain unverified.
+
+```sh
+rtk npm run build
+rtk proxy node scripts/benchmark-catalog-stream.mjs --detail spatial --output .cache/catalog-spatial-new.json
+rtk proxy node scripts/benchmark-catalog-stream.mjs --detail spatial --graphics d3d11 --output .cache/catalog-spatial-hardware-new.json
+```

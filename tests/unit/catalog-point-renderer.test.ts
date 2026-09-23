@@ -11,8 +11,9 @@ function context() {
     useProgram: vi.fn(), getAttribLocation: vi.fn(() => 0), getUniformLocation: vi.fn(() => ({})),
     bindBuffer: vi.fn(), enableVertexAttribArray: vi.fn(), vertexAttribPointer: vi.fn(),
     bufferData: vi.fn(), bufferSubData: vi.fn(), viewport: vi.fn(), clearColor: vi.fn(), clear: vi.fn(),
-    enable: vi.fn(), blendFunc: vi.fn(), uniform1f: vi.fn(), drawArrays: vi.fn(),
+    enable: vi.fn(), blendFunc: vi.fn(), uniform1f: vi.fn(), drawArrays: vi.fn(), drawElements: vi.fn(), getExtension: vi.fn((): object | null => ({})),
     ARRAY_BUFFER: 1, DYNAMIC_DRAW: 2, STATIC_DRAW: 3, POINTS: 4,
+    ELEMENT_ARRAY_BUFFER: 5, UNSIGNED_INT: 6,
   }
   return { calls, gl: calls as unknown as WebGLRenderingContext }
 }
@@ -20,6 +21,30 @@ function context() {
 const frame = (count = 3): CatalogPointFrame => ({ positions: new Float32Array(count * 2), colors: new Float32Array(count * 3), sizes: new Float32Array(count), radius: 10, opacity: 0.82 })
 
 describe('persistent catalog GPU ownership', () => {
+  it('changes spatial indices without reallocating source attributes and restores full drawing', () => {
+    const { gl, calls } = context(), renderer = createCatalogPointRenderer(gl, 3)
+    renderer.append(frame(3))
+    renderer.setSpatialSelection(new Uint32Array([0, 2]))
+    renderer.drawRetained(5, .8, 800, 600, 1)
+    expect(calls.drawElements).toHaveBeenLastCalledWith(gl.POINTS, 2, gl.UNSIGNED_INT, 0)
+    expect(calls.createBuffer).toHaveBeenCalledTimes(4)
+    const allocations = calls.bufferData.mock.calls.length
+    renderer.setSpatialSelection(new Uint32Array([1, 2]))
+    expect(calls.bufferData).toHaveBeenCalledTimes(allocations)
+    expect(calls.bufferSubData).toHaveBeenLastCalledWith(gl.ELEMENT_ARRAY_BUFFER, 0, new Uint32Array([1, 2]))
+    for (const indices of [[3], [1, 0], [1, 1]]) expect(() => renderer.setSpatialSelection(new Uint32Array(indices))).toThrow('indices')
+    renderer.setSpatialSelection(null)
+    renderer.drawRetained(5, .8, 800, 600, 1)
+    expect(calls.drawArrays).toHaveBeenLastCalledWith(gl.POINTS, 0, 3)
+    renderer.dispose(); expect(calls.deleteBuffer).toHaveBeenCalledTimes(4)
+  })
+  it('reports missing spatial index capability before allocating an index buffer', () => {
+    const { gl, calls } = context(), renderer = createCatalogPointRenderer(gl, 3)
+    calls.getExtension.mockReturnValue(null)
+    expect(() => renderer.setSpatialSelection(new Uint32Array())).toThrow('32-bit')
+    expect(calls.createBuffer).toHaveBeenCalledTimes(3)
+    renderer.dispose()
+  })
   it('allocates streaming capacity once, uploads only the new ranges, and rejects overflow without a partial upload', () => {
     const { gl, calls } = context(), renderer = createCatalogPointRenderer(gl, 5)
     expect(calls.bufferData.mock.calls.map(call => call[1])).toEqual([40, 60, 20])

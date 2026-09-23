@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-22T20:26:46.313Z",
+  "measurement": "built-application-full-MPC-source-static-2D-snapshot-local-HTTP",
+  "graphicsMode": "default",
+  "detailMode": "spatial",
+  "launchOptions": {},
+  "browser": "151.0.7922.34",
+  "viewport": {
+    "width": 1600,
+    "height": 1000,
+    "pixelRatio": 1
+  },
+  "source": {
+    "version": "mpcorb-26bbcb75e45b7cbb-full",
+    "rows": 1561171,
+    "shards": 313,
+    "sourceSha256": "4a506b526777ae86cc2b04adbb1f82ca6570e5960cfa10eb9c215c6f90a9afb3",
+    "contentSha256": "6befc193f2a6bd35fa04f4e83e339784a3c988dbdd974afcdd0f871cb07f9b61",
+    "manifestSha256": "bd8cf38a15c7e5a312ac7f9f8167af1916f6bfa0c7c34f30fb5b36725d68d894",
+    "checksumsSha256": "744893f440a95c126d57fa7c6d7da17adfb8f127d0a4ccafa1a07e4365ef55ae"
+  },
+  "implementationSha256": {
+    "src/lib/catalogStreaming.ts": "6eab0bb4698bdd1f846823ee4a62a87fa793c93a9f9e1c7fe7b4b73edcd3b9a6",
+    "src/lib/catalogPointRenderer.ts": "79f812e3c2f74f452db3a7861bef2a05ee5689e5b4f2cabbe8ce5eb6fd41d2d3",
+    "src/lib/catalogSpatialSelection.ts": "3fdcc28a431f74b02714854f7da9d9179020fe8568e2ecc3defbe0722234aa05",
+    "src/lib/catalogTransferWindow.ts": "5cf14c45a939bc71c6bc208140d996ec8f1d64c239f5accd02441aeeb76e5d0c",
+    "src/workers/catalog-stream.worker.ts": "971c8e7e6b445e7bb625732826708a61ff0448ac26f49ce110eacb58c23c088a",
+    "src/components/CatalogStreamCanvas.tsx": "12ca0be6311a9d114b482de79546a415aba7c4a8c636c19a0b24f00ea12d3c2d"
+  },
+  "phase": "complete",
+  "drawnRows": 1561171,
+  "displayedRows": 34505,
+  "checkedRows": 1561171,
+  "canvasSize": {
+    "width": 545,
+    "height": 698
+  },
+  "loadMs": 1536.800000000745,
+  "graphics": {
+    "version": "WebGL 1.0 (OpenGL ES 2.0 Chromium)",
+    "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)"
+  },
+  "frameIntervals": {
+    "count": 92,
+    "p50Ms": 16.699999999999818,
+    "p95Ms": 16.799999999999955,
+    "p99Ms": 16.800000000000182,
+    "maxMs": 16.800000000000182
+  },
+  "uploadSubmission": {
+    "count": 939,
+    "p50Ms": 0,
+    "p95Ms": 0,
+    "p99Ms": 0.10000000149011612,
+    "maxMs": 0.10000000149011612
+  },
+  "drawSubmission": {
+    "count": 94,
+    "p50Ms": 0,
+    "p95Ms": 0.09999999776482582,
+    "p99Ms": 0.10000000149011612,
+    "maxMs": 0.10000000149011612
+  },
+  "longTasks": {
+    "count": 0,
+    "p50Ms": null,
+    "p95Ms": null,
+    "p99Ms": null,
+    "maxMs": null
+  },
+  "allocations": 3,
+  "gpuAttributeBytes": 37468104,
+  "uploadBytes": 37468104,
+  "litPixels": 76400,
+  "glErrors": [],
+  "pageErrors": [],
+  "firstNonemptyDrawMs": 204.59999999776483,
+  "submittedPointsAcrossDraws": 1836111,
+  "peakUnacknowledgedTiles": 4,
+  "spatialIndexBytes": 138020,
+  "peakSpatialIndexBytes": 138020,
+  "spatialIndexUploadBytes": 894404,
+  "serverAudit": {
+    "binaryRequests": 313,
+    "binaryBytes": 99914944,
+    "active": 0,
+    "peak": 4
+  },
+  "expandedArtifactRequests": 315,
+  "limits": [
+    "Local filesystem/HTTP, not public network throughput.",
+    "One fixed UTC epoch; not continuous full-catalog simulation or physical display FPS.",
+    "Headless animation callbacks and CPU GL submission times, not GPU execution timers.",
+    "Explicit source attribute bytes exclude spatial-index bytes and are not total browser/process/driver memory.",
+    "drawnRows is the uploaded source count; displayedRows is the actual final draw count, including offscreen points in all mode.",
+    "Spatial representatives are a visual simplification, not an estimate of density or event probability.",
+    "This desktop result does not establish native or mobile hardware capacity."
+  ]
+}

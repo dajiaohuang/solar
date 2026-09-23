@@ -550,11 +550,41 @@ test('reuses catalog GPU resources across epochs and resize, and recovers actual
 })
 
 test('streams an expanded source snapshot beyond the sample and restores its actual GPU context', async ({ page }, info) => {
+  type SelectionWindow = Window & { heldSelections: { latest: number; received: number; release: () => void } }
   const errors: string[] = [], requests: string[] = []
   page.on('pageerror', error => errors.push(error.message))
   page.on('request', request => { if (request.url().includes('/data/asteroids/')) requests.push(request.url()) })
   await installMockCatalog(page, { precomputed: true, sampleCount: 1 })
-  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.addInitScript(() => {
+    localStorage.setItem('solar-atlas-first-run-v1', 'complete')
+    const NativeWorker = window.Worker, held: (() => void)[] = []
+    let holding = true
+    const selections = { latest: 0, received: 0, release: () => {
+      holding = false
+      for (const deliver of held.splice(0)) deliver()
+    } }
+    ;(window as SelectionWindow).heldSelections = selections
+    window.Worker = class extends NativeWorker {
+      private stream: boolean
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(url, options)
+        this.stream = String(url).includes('catalog-stream.worker')
+        if (this.stream) this.addEventListener('message', event => {
+          if (holding && event.data.type === 'selection') {
+            event.stopImmediatePropagation()
+            selections.received = event.data.requestId
+            held.push(() => this.dispatchEvent(new MessageEvent('message', { data: event.data })))
+          }
+        })
+      }
+      override postMessage(data: unknown, options?: Transferable[] | StructuredSerializeOptions) {
+        const request = data as { type: string; requestId: number }
+        if (this.stream && request.type === 'view') selections.latest = request.requestId
+        if (Array.isArray(options)) super.postMessage(data, options)
+        else super.postMessage(data, options)
+      }
+    }
+  })
   await page.goto('./?v=4&page=catalog&lang=en&jd=2461287.5')
   await expect(page.locator('canvas.catalog-point-canvas')).toHaveAttribute('aria-label', /: 1$/)
   const before = requests.length
@@ -567,8 +597,11 @@ test('streams an expanded source snapshot beyond the sample and restores its act
   expect(requests.slice(before).some(url => /\/meta\/|catalog-sample-/.test(url))).toBe(false)
   expect(requests.slice(before).filter(url => url.endsWith('/binary/chunk-0000.bin'))).toHaveLength(1)
   const afterLoad = requests.length
-  await page.getByRole('spinbutton', { name: 'Map radius (AU)', exact: true }).fill('6')
-  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+  await page.getByRole('spinbutton', { name: 'Map radius (AU)', exact: true }).fill('20')
+  await expect.poll(() => page.evaluate(() => {
+    const selection = (window as SelectionWindow).heldSelections
+    return selection.latest > 0 && selection.received === selection.latest
+  })).toBe(true)
   expect(requests.length).toBe(afterLoad)
   const readPixels = () => stream.evaluate(element => {
     const gl = (element as HTMLCanvasElement).getContext('webgl')!
@@ -582,9 +615,15 @@ test('streams an expanded source snapshot beyond the sample and restores its act
     extension.loseContext()
   })
   await expect(page.locator('.catalog-render-status')).toBeVisible()
+  // Deliver the real worker's now-obsolete selection while no GPU exists.
+  await page.evaluate(() => (window as SelectionWindow).heldSelections.release())
+  await expect(stream).toHaveAttribute('data-phase', 'complete')
   await page.evaluate(() => (window as Window & { streamContext: WEBGL_lose_context }).streamContext.restoreContext())
   await expect(page.locator('.catalog-render-status')).toHaveCount(0)
   await expect(stream).toHaveAttribute('data-drawn-rows', '3')
+  await expect(stream).toHaveAttribute('data-phase', 'complete')
+  await expect(stream).toHaveAttribute('data-spatial-pending', 'false')
+  expect(Number(await stream.getAttribute('data-display-count'))).toBeGreaterThan(0)
   expect(await readPixels()).toEqual({ error: 0, lost: false })
   await page.locator('.catalog-map').screenshot({ path: info.outputPath('expanded-source-snapshot.png') })
   // Changing a scientific filter invalidates the entire old snapshot immediately.
@@ -595,6 +634,35 @@ test('streams an expanded source snapshot beyond the sample and restores its act
   await expect(stream).toHaveAttribute('data-drawn-rows', '1')
   await page.getByRole('button', { name: 'Return to sample map' }).click()
   await expect(stream).toHaveCount(0)
+  expect(errors).toEqual([])
+})
+
+test('updates spatial catalog representatives on zoom and detail changes without reloading source data', async ({ page }) => {
+  const requests: string[] = [], errors: string[] = []
+  page.on('request', request => { if (request.url().includes('/data/asteroids/')) requests.push(request.url()) })
+  page.on('pageerror', error => errors.push(error.message))
+  await installMockCatalog(page, { precomputed: true, presetDataset: true, sampleCount: 1, chunkSize: 1000 })
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&page=catalog&lang=en&jd=2461287.5')
+  await page.getByRole('button', { name: /Load expanded snapshot/ }).click()
+  const canvas = page.getByTestId('catalog-stream-canvas')
+  await expect(canvas).toHaveAttribute('data-phase', 'complete')
+  await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
+  await expect(canvas).toHaveAttribute('data-drawn-rows', '8000')
+  const displayed = Number(await canvas.getAttribute('data-display-count'))
+  expect(displayed).toBeGreaterThan(0); expect(displayed).toBeLessThan(8000)
+  const before = requests.length
+  await page.getByRole('spinbutton', { name: 'Map radius (AU)', exact: true }).fill('0.01')
+  await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
+  await expect(canvas).toHaveAttribute('data-display-count', '0')
+  await page.getByRole('spinbutton', { name: 'Map radius (AU)', exact: true }).fill('8')
+  await expect(canvas).toHaveAttribute('data-display-count', String(displayed))
+  await page.getByRole('combobox', { name: 'Map detail', exact: true }).selectOption('all')
+  await expect(canvas).toHaveAttribute('data-display-mode', 'all')
+  await expect(canvas).toHaveAttribute('data-display-count', '8000')
+  await page.getByRole('combobox', { name: 'Map detail', exact: true }).selectOption('spatial')
+  await expect(canvas).toHaveAttribute('data-display-count', String(displayed))
+  expect(requests.length).toBe(before)
   expect(errors).toEqual([])
 })
 

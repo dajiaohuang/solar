@@ -62,10 +62,13 @@ export function createCatalogPointRenderer(gl: WebGLRenderingContext, capacity?:
   const buffers: { handle: WebGLBuffer; data: Float32Array | null }[] = []
   let disposed = false
   let retainedCount = 0
+  let elementBuffer: WebGLBuffer | null = null
+  let selection: Uint32Array | null = null
   const dispose = () => {
     if (disposed) return
     disposed = true
     for (const buffer of buffers) { gl.deleteBuffer(buffer.handle); buffer.data = null }
+    if (elementBuffer) gl.deleteBuffer(elementBuffer)
     gl.deleteProgram(program)
   }
   try {
@@ -89,9 +92,29 @@ export function createCatalogPointRenderer(gl: WebGLRenderingContext, capacity?:
       gl.uniform1f(uniforms[1], width / Math.max(height, 1))
       gl.uniform1f(uniforms[2], pixelRatio)
       gl.uniform1f(uniforms[3], opacity)
-      gl.drawArrays(gl.POINTS, 0, count)
+      if (selection) {
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, elementBuffer)
+        gl.drawElements(gl.POINTS, selection.length, gl.UNSIGNED_INT, 0)
+      } else gl.drawArrays(gl.POINTS, 0, count)
     }
     return {
+      setSpatialSelection(indices: Uint32Array | null) {
+        if (disposed) return
+        if (capacity === undefined) throw new Error('Spatial selection requires a retained catalog')
+        if (indices === null) { selection = null; return }
+        for (let i = 0; i < indices.length; i++) {
+          if (indices[i] >= retainedCount || i > 0 && indices[i] <= indices[i - 1]) throw new Error('Invalid catalog spatial indices')
+        }
+        if (!elementBuffer) {
+          if (!gl.getExtension('OES_element_index_uint')) throw new Error('Spatial catalog display requires 32-bit element indices')
+          elementBuffer = gl.createBuffer()
+          if (!elementBuffer) throw new Error('Unable to allocate catalog spatial indices')
+        }
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, elementBuffer)
+        if (selection?.byteLength === indices.byteLength) gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER, 0, indices as Uint32Array<ArrayBuffer>)
+        else gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices as Uint32Array<ArrayBuffer>, gl.DYNAMIC_DRAW)
+        selection = indices
+      },
       /** Fixed-capacity streaming: append only the newly computed shard. */
       append(attributes: Pick<CatalogPointFrame, 'positions' | 'colors' | 'sizes'>) {
         if (disposed) throw new Error('Catalog GPU renderer is disposed')
