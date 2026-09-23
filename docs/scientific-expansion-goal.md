@@ -11,7 +11,7 @@ remain paused. Changes may go directly to main after the required checks.
 | Shared analysis ephemeris | Events, curves and mission endpoints use a frozen source contract, expose actual per-body models, offer strict SPK coverage, and export time/frame/source evidence; shared backend integration follows | In progress |
 | Ground observer | Geodetic station, SOFA-compatible celestial/terrestrial transforms, versioned IERS EOP, vacuum/apparent altitude-azimuth, rise/set and visibility windows; source expiry and uncertainty remain visible | In progress |
 | Orbit uncertainty | Pinned SBDB covariance with labels, units and solution epoch; validated covariance propagation and sampling; uncertainty ellipsoids and event distributions, independent of numerical tolerance | In progress: source ingestion, solution-epoch conversion/sampling/browser ellipsoids and offline/browser conditional six-parameter DE440 time propagation; complete fit-model propagation, native propagation and event distributions pending |
-| Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | In progress: verified PCK radii and spherical limb geometry and bounded offline contact search against real CSPICE cases; complete detection, oriented limbs, observer/light-time integration and event consumers pending |
+| Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | In progress: verified PCK radii and spherical limb geometry and bounded NONE/CN offline contacts against real CSPICE cases; complete detection, oriented limbs, topocentric integration and event consumers pending |
 | Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | In progress: bounded integration, variational equations, pinned DE440 adapter and browser/offline source-bearing experiments; additional forces, full covariance, native access and long-term diagnostics pending |
 | Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | In progress: pinned PCK semiaxes for 95 source bodies with independent CSPICE extraction; remaining data categories, orientation and identity integration pending |
 | Catalog streaming | Replace the fixed 8k/30k-only cloud path with cancellable binary chunk loading, priority scheduling and independent byte/decode/compute/upload limits | In progress: full-inventory 2D snapshot, bounded upload batching and spatial display available; continuous/3D streaming and source-priority scheduling pending |
@@ -843,3 +843,21 @@ This offline sphere prototype does not complete event analysis. Certified
 coverage, grazing contacts, apparent/topocentric integration, oriented limbs,
 stellar events, event uncertainty and Web/native consumers remain open together
 with all other unfinished ledger rows. This batch requires remote validation.
+
+### Checkpoint 31: converged reception contact model (2026-09-23)
+
+Added explicit CN reception to offline occultation searches. Each target uses
+a fixed reception observer and its iterated emission state in relative TDB
+seconds. Source padding, iteration limits, residuals and state-request counts
+are bounded and exported; margin/coverage failures cannot fall back to NONE.
+Independent CSPICE CN directions and all eight contact times agree within the
+documented numerical thresholds. Seven focused core/export checks, types and
+changed-file lint passed; no full local tests ran. The real Venus example shifted
+333-382 seconds from NONE and matched CN references within about 1-4 milliseconds.
+
+This comparison is not physical timing certification. Differential limb light
+time, stellar aberration/deflection, topocentric visibility, oriented shapes,
+complete/grazing detection, event distributions and Web/native consumers remain
+open, alongside the broader ledger. Candidate 14836ae is still validating; this
+new batch must not interrupt its native jobs. Details are in
+[occultation-geometry.md](occultation-geometry.md).

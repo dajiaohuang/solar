@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "path": "public/data/ephemerides/de440s-2000-01-01-2051-01-01.bsp",
+      "sha256": "8724d2d1bac115a75ad1f984c5b474ca778c96ee8be2df83e624cef61c001069"
+    },
+    {
+      "path": "src/data/pck00011.tpc",
+      "sha256": "3dff7b1dbeceaa01f25467767d3fa25816051c85d162d1edf04acb310ee28bb1"
+    }
+  ],
+  "cases": [
+    {
+      "name": "venus-2012",
+      "foregroundId": 299,
+      "backgroundId": 10,
+      "observerId": 399,
+      "referenceEpochTdb": 2456084.5,
+      "startSeconds": -43200,
+      "endSeconds": 43200,
+      "contacts": [
+        {
+          "boundary": "external",
+          "direction": "enter",
+          "elapsedTdbSeconds": -6544.984261870384
+        },
+        {
+          "boundary": "internal",
+          "direction": "enter",
+          "elapsedTdbSeconds": -5476.653856754303
+        },
+        {
+          "boundary": "internal",
+          "direction": "exit",
+          "elapsedTdbSeconds": 16362.140665531158
+        },
+        {
+          "boundary": "external",
+          "direction": "exit",
+          "elapsedTdbSeconds": 17430.49040567875
+        }
+      ],
+      "directionsAtReferenceEpoch": [
+        {
+          "targetId": 299,
+          "positionKm": [
+            10737335.546958536,
+            38331477.23223181,
+            16754796.805090964
+          ],
+          "lightTimeSeconds": 144.06400174271474
+        },
+        {
+          "targetId": 10,
+          "positionKm": [
+            37937891.85622355,
+            134857670.3197987,
+            58463335.9202739
+          ],
+          "lightTimeSeconds": 506.3568505139826
+        }
+      ]
+    },
+    {
+      "name": "moon-2017",
+      "foregroundId": 301,
+      "backgroundId": 10,
+      "observerId": 399,
+      "referenceEpochTdb": 2457987.25,
+      "startSeconds": -43200,
+      "endSeconds": 43200,
+      "contacts": [
+        {
+          "boundary": "external",
+          "direction": "enter",
+          "elapsedTdbSeconds": -466.41195273399353
+        },
+        {
+          "boundary": "external",
+          "direction": "exit",
+          "elapsedTdbSeconds": 3668.3795709609985
+        }
+      ],
+      "directionsAtReferenceEpoch": [
+        {
+          "targetId": 301,
+          "positionKm": [
+            -316654.23391474783,
+            178126.90921385586,
+            80063.69361495227
+          ],
+          "lightTimeSeconds": 1.2409718348183676
+        },
+        {
+          "targetId": 10,
+          "positionKm": [
+            -129194838.90110084,
+            72289149.90278542,
+            31338270.755795907
+          ],
+          "lightTimeSeconds": 504.7643150305071
+        }
+      ]
+    },
+    {
+      "name": "moon-2024",
+      "foregroundId": 301,
+      "backgroundId": 10,
+      "observerId": 399,
+      "referenceEpochTdb": 2460409.25,
+      "startSeconds": -43200,
+      "endSeconds": 43200,
+      "contacts": [
+        {
+          "boundary": "external",
+          "direction": "enter",
+          "elapsedTdbSeconds": -1447.5553255081177
+        },
+        {
+          "boundary": "external",
+          "direction": "exit",
+          "elapsedTdbSeconds": 3667.041674375534
+        }
+      ],
+      "directionsAtReferenceEpoch": [
+        {
+          "targetId": 301,
+          "positionKm": [
+            340499.45337846875,
+            105773.61292418838,
+            48095.41076026857
+          ],
+          "lightTimeSeconds": 1.2000943756252693
+        },
+        {
+          "targetId": 10,
+          "positionKm": [
+            141614556.93012944,
+            44875371.89942159,
+            19451996.40811222
+          ],
+          "lightTimeSeconds": 499.75496148978016
+        }
+      ]
+    }
+  ],
+  "frame": "J2000",
+  "aberration": "CN",
+  "timeScale": "TDB",
+  "stepSeconds": 60,
+  "convergenceToleranceSeconds": 1e-06,
+  "generatorSha256": "52798d306a473fa72ac7521d1f1025748020abd8798be95aec5e55d0d45b0e5d",
+  "software": {
+    "spiceypy": "8.2.0",
+    "cspice": "CSPICE_N0067"
+  },
+  "boundary": "Converged Newtonian reception, geocentric spherical-source comparison; no full relativistic apparent limb or physical timing accuracy claim."
+}

@@ -41,7 +41,7 @@ rtk proxy uv run --python 3.12 --with spiceypy==8.2.0 python scripts/reference-s
 ```
 
 This is a geometry foundation, not completed event analysis. Complete-window
-certification, light-time conventions, topocentric observers,
+certification, full apparent-limb modeling, topocentric observers,
 triaxial/oriented limbs, topography, refraction, atmospheres/rings, stellar
 astrometry and native/browser event consumers remain unfinished. It does not
 provide a photometric flux loss, uncertainty distribution, event probability,
@@ -86,5 +86,43 @@ The real CLI example found four contacts in 349 geometry evaluations. Nine
 focused search/export checks passed, including limits, cancellation, ownership
 of existing output, source hashes and deliberate missed-event reporting. Types
 and changed-file lint passed; no full local tests ran. The prototype is offline;
-browser/native event access, apparent/topocentric directions, oriented shapes,
+browser/native event access, full apparent/topocentric directions, oriented shapes,
 robust grazing-event detection and all remaining event requirements stay open.
+
+## Converged reception light time
+
+The CLI also accepts explicit `aberration: "CN"`. It holds the barycentric
+observer at reception and iterates each target's emission epoch in **relative
+TDB seconds**, avoiding repeated conversion through a large Julian date. The
+fixed-point equation is range divided by 299792.458 km/s. The returned direction
+and emission epoch refer to the same evaluated target state. Residuals, iteration
+counts and the configured source margin are retained in the export.
+
+The emission interval is covered before searching. The default source margin is
+36,000 seconds, configurable up to one day; a target outside that margin fails
+without geometric fallback or partial output. Each solve permits at most 12
+iterations at a `1e-9`-second residual threshold. Nonconvergence, unrepresentable
+emission epochs and missing source coverage are explicit errors. This is center
+Newtonian reception light time, not stellar aberration, gravitational deflection
+or different light times across an extended body's limb.
+
+```sh
+rtk proxy node --experimental-strip-types scripts/find-occultation-contacts.mjs src/data/venus-transit-reception-example.json .cache/venus-reception-new.json
+```
+
+The [independent reception generator](../scripts/reference-reception-contacts.py)
+uses CSPICE `spkpos` and `gfoclt` with `CN` on the same original source kernels.
+Six target directions across the three cases agree within `2e-5` km per component;
+all eight contacts agree within 0.02 seconds. A closed-form moving-target case
+also verifies iteration, with separate rejection cases for margin, convergence
+and time-resolution failures. Seven focused core/export checks passed including
+the existing geometric export; types and changed-file lint passed. No full local
+tests ran.
+
+The actual Venus CN example required 349 geometry evaluations and 2,478 state
+requests (including cache hits), with at most four iterations per target. Its
+contacts shifted approximately 333–382 seconds from the geometric model and
+differed from the independent CN reference by about 1–4 milliseconds. These are
+specific model/numerical comparisons, not a measured physical timing accuracy.
+The observer is still Earth's center; ground visibility, full apparent limbs,
+non-spherical shapes and event probabilities remain unfinished.

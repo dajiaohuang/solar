@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "frame": "J2000",
+  "timeScale": "TDB",
+  "aberration": "CN",
+  "maxLightTimeSeconds": 36000,
+  "foregroundId": 299,
+  "backgroundId": 10,
+  "observerId": 399,
+  "referenceEpochTdb": 2456084.5,
+  "startSeconds": -43200,
+  "endSeconds": 43200,
+  "maxStepSeconds": 300,
+  "toleranceSeconds": 0.01,
+  "description": "Geocentric Venus transit with converged Newtonian reception light time. Not topocentric visibility or physical timing accuracy."
+}
