@@ -10,7 +10,7 @@ remain paused. Changes may go directly to main after the required checks.
 | --- | --- | --- |
 | Shared analysis ephemeris | Events, curves and mission endpoints use a frozen source contract, expose actual per-body models, offer strict SPK coverage, and export time/frame/source evidence; shared backend integration follows | In progress |
 | Ground observer | Geodetic station, SOFA-compatible celestial/terrestrial transforms, versioned IERS EOP, vacuum/apparent altitude-azimuth, rise/set and visibility windows; source expiry and uncertainty remain visible | In progress |
-| Orbit uncertainty | Pinned SBDB covariance with labels, units and solution epoch; validated covariance propagation and sampling; uncertainty ellipsoids and event distributions, independent of numerical tolerance | In progress: source ingestion, solution-epoch Cartesian conversion, reproducible sampling and browser inspection; temporal propagation and 3D ellipsoids pending |
+| Orbit uncertainty | Pinned SBDB covariance with labels, units and solution epoch; validated covariance propagation and sampling; uncertainty ellipsoids and event distributions, independent of numerical tolerance | In progress: source ingestion, solution-epoch Cartesian conversion, reproducible sampling, browser inspection and 3D position ellipsoids; model-aware temporal propagation and event distributions pending |
 | Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | Pending |
 | Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | In progress: bounded integration, variational equations, pinned DE440 adapter and browser/offline source-bearing experiments; additional forces, full covariance, native access and long-term diagnostics pending |
 | Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | Pending |
@@ -665,6 +665,15 @@ requires its separate exact-head gate. Additional
 forces, joint parameter uncertainty, long-term diagnostics, native access and
 every other incomplete ledger row remain open.
 
+Remote follow-up: run 35816227292 on `dd43c07` passed Web, four browser profiles,
+Android and the source/protocol golden checks. iOS failed its first-launch
+tutorial navigation assertion at ObservationUITests.swift:121. The preserved
+XCTest log and accessibility tree show the original Start tutorial controls
+still present after the tap; they do not establish why navigation failed.
+The head contains no iOS changes. Only failed iOS/gate jobs were retried on the
+same head, with no assertion changes; original artifacts are preserved. Main
+promotion remains blocked on that exact-head result.
+
 ### Checkpoint 23: instantaneous conic diagnostics and source reuse (2026-09-23)
 
 Trajectory samples now retain Sun-relative velocities and instantaneous conic
@@ -688,6 +697,25 @@ change was under one percent; no meaningful speedup or rendering claim is made.
 This batch remains local during the previous healthy native gate. Long-term
 stability/resonance, full force/covariance models and all unfinished ledger
 requirements remain open.
+
+### Checkpoint 24: interactive 3D solution-epoch ellipsoids (2026-09-23)
+
+Added a scale-aware position-marginal factorization, rotatable browser wireframe
+and Web/CLI geometry exports. The UI retains true axis proportions, km scale,
+source-frame offsets and explicit Gaussian contour masses. Full joint matrices
+and extra model parameters remain untouched. Degenerate or unavailable geometry
+does not acquire fabricated three-dimensional probability claims.
+
+Eleven targeted factor/projection/CLI checks and four browser profile checks
+passed, including rotation, contour changes, reset, source-preserving export
+and input replacement. The actual Bennu CLI result retained its eight axes and
+1,000 seeded offsets. Source-independent distribution values were checked with
+SciPy's three-degree-of-freedom chi-square CDF; build/type checking, changed-file
+lint and mobile screenshot inspection were used. No full local suite ran.
+
+Checkpoints 23 and 24 await staging after the same-head iOS retry for checkpoint
+22. Model-aware time propagation, event distributions, native uncertainty access
+and every other unfinished goal requirement remain open.
 
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),

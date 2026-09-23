@@ -386,6 +386,10 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 .uncertainty-projections figcaption { text-align: center; font: 10px var(--font-mono); color: var(--muted); }
 .uncertainty-axis { stroke: var(--line); fill: none; }
 .uncertainty-contour { stroke: var(--accent); fill: rgba(98,208,181,.12); stroke-width: 1.5; }
+.covariance-ellipsoid { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 8px; }
+.covariance-ellipsoid svg { width: 100%; max-height: 300px; }
+.covariance-ellipsoid svg text { fill: var(--muted); font-size: 12px; }
+.covariance-mesh { stroke: var(--accent); fill: none; stroke-width: .8; opacity: .65; }
 .map-caption { height: 38px; padding: 0 12px; border-bottom: 1px solid var(--line); font: 9px var(--font-mono); color: var(--muted); letter-spacing: .08em; }
 .map-caption strong { color: var(--accent); }
 .catalog-stream-controls { padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }

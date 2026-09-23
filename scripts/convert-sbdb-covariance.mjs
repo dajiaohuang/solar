@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { parseSbdbCovariance } from '../src/data/loaders/sbdbCovariance.ts'
 import { cartesianCovarianceAtSolutionEpoch } from '../src/engine/ephemeris/orbitCovariance.ts'
 import { sampleSbdbCovariance } from '../src/engine/ephemeris/covarianceSampling.ts'
+import { covarianceEllipsoid } from '../src/engine/ephemeris/covarianceEllipsoid.ts'
 
 const sha = value => createHash('sha256').update(value).digest('hex')
 const root = new URL('../', import.meta.url)
@@ -23,12 +24,16 @@ export async function convertCovarianceFile(sourcePath, outputPath, sampling) {
   const result = cartesianCovarianceAtSolutionEpoch(parsed, { au3PerDay2,
     source: 'Explicitly adopted DE440 solar GM; not asserted to reproduce the SBDB orbit-fit force model' })
   const samples = sampling ? sampleSbdbCovariance(parsed, sampling.count, sampling.seed) : undefined
+  let positionEllipsoid = null, positionEllipsoidError = null
+  try { positionEllipsoid = { ...covarianceEllipsoid(result.matrix, 149597870.7), units: 'km', frame: result.frame } }
+  catch (reason) { positionEllipsoidError = String(reason) }
   const implementation = {}
   for (const path of ['src/data/loaders/sbdbCovariance.ts', 'src/engine/ephemeris/orbitCovariance.ts', 'src/engine/ephemeris/kepler.ts', 'src/engine/ephemeris/covarianceSampling.ts']) implementation[path] = sha(await readFile(new URL(path, root)))
   const receipt = { schemaVersion: 1, calculation: 'solution-epoch-coordinate-covariance',
+    positionEllipsoid, positionEllipsoidError,
     sourceSha256: sha(bytes), sourceBytes: bytes.length, sourceAudit: parsed,
     adoptedGM: { url: 'https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc', sha256: gmHash, km3PerSecond2 },
-    implementationSha256: implementation, result,
+    implementationSha256: { ...implementation, 'src/engine/ephemeris/covarianceEllipsoid.ts': sha(await readFile(new URL('src/engine/ephemeris/covarianceEllipsoid.ts', root))) }, result,
     sampling: samples ? { ...samples, offsets: Array.from(samples.offsets), layout: 'row-major; one joint parameter-offset vector per sample' } : undefined }
   await writeFile(outputPath, `${JSON.stringify(receipt, null, 2)}\n`, { flag: 'wx' })
   return { outputPath: resolve(outputPath), sourceSha256: receipt.sourceSha256, dimension: result.labels.length,

@@ -13,6 +13,13 @@ it('exports the source, adopted GM, complete joint matrix and reproducible offse
     const first = await readFile(output), data = JSON.parse(first.toString('utf8'))
     expect(summary).toMatchObject({ dimension: 8, epochTdb: 2455562.5 })
     expect(data.result.labels.slice(6)).toEqual(['RHO', 'AMRAT'])
+    expect(data.positionEllipsoid).toMatchObject({ rank: 3, units: 'km', frame: data.result.frame })
+    expect(data.positionEllipsoidError).toBeNull()
+    expect(data.implementationSha256['src/engine/ephemeris/covarianceEllipsoid.ts']).toMatch(/^[a-f0-9]{64}$/)
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+      const value = data.positionEllipsoid.factor[i].reduce((sum: number, factor: number, k: number) => sum+factor*data.positionEllipsoid.factor[j][k], 0)
+      expect(Math.abs(value/(data.result.matrix[i][j]*149597870.7**2)-1)).toBeLessThan(1e-12)
+    }
     expect(data.sourceSha256).toBe(createHash('sha256').update(await readFile('tests/fixtures/sbdb-bennu-covariance.json')).digest('hex'))
     expect(data.adoptedGM.sha256).toBe(createHash('sha256').update(await readFile('src/data/gm_de440.tpc')).digest('hex'))
     expect(data.sampling).toMatchObject({ count: 10, dimension: 8, seed: 17 })

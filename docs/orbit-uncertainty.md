@@ -2,9 +2,9 @@
 
 The implementation ingests and audits SBDB covariance, converts an elliptic
 solution's joint covariance to Cartesian coordinates at its solution epoch, and
-generates reproducible Gaussian parameter offsets. It does not yet propagate
-uncertainty in time, draw three-dimensional uncertainty ellipsoids or calculate
-event probabilities. The Evidence page displays two-coordinate projections.
+generates reproducible Gaussian parameter offsets. The Evidence page displays
+two-coordinate projections and a rotatable three-dimensional position ellipsoid.
+It does not yet propagate uncertainty in time or calculate event probabilities.
 
 Run the development ingestion explicitly:
 
@@ -154,6 +154,40 @@ suite was run.
 Remaining work includes model-aware temporal propagation, singular/poorly
 conditioned sampling, source validity limits and force-model metadata in consumer
 contracts, independent propagated trajectory/covariance references, Web/native
-source acquisition, native access and three-dimensional uncertainty visualization. Additional parameters must not be
+source acquisition and native access. Additional parameters must not be
 silently dropped when implementing propagation. The source covariance is a
 formal orbit-fit uncertainty, not a guarantee that every model error is covered.
+
+## Three-dimensional position marginal
+
+The Evidence page now maps a unit sphere through a correlation-based Cholesky
+factor of the position covariance. Unit conversion happens after factorization
+to retain very small/large or anisotropic axes. No covariance jitter, clipping
+of negative pivots or axis exaggeration is applied. An unrepresentable or
+numerically non-PSD factor is reported unavailable while the original full
+joint matrix is retained. Exact degenerate covariances render as lower-rank
+shapes; they are not assigned a three-dimensional probability mass.
+
+Keyboard-accessible azimuth/elevation sliders rotate the orthographic wireframe;
+one button resets the view. The plot is centered on the nominal solution and
+labels J2000 ecliptic coordinate offsets, km axis scale, true axis proportions
+and Mahalanobis contour radius. Radii 1, 2 and 3 correspond to approximately
+19.87%, 73.85% and 97.07% mass **only for a full-rank three-dimensional Gaussian**.
+These values were checked with SciPy 1.16.1
+[`chi2.cdf(radius**2, df=3)`](https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.chi2.html).
+They are not one-dimensional sigma coverage, physical accuracy or collision
+probabilities. Camera angles are presentation settings, not source-frame changes.
+
+Web and offline covariance exports include the position factor, rank, units,
+source frame, supported contour levels and limitations. The complete transformed
+joint matrix, additional parameter axes and original source evidence remain
+available. The CLI also pins the factorization implementation hash and records
+factorization errors without fabricating a repaired covariance.
+
+Eleven targeted factor/projection/CLI checks passed, including extreme variance
+scales, exact degeneracies, invalid covariances and the original Eros/Bennu
+sources. Four real browser import/rotate/contour/reset/export checks passed;
+the mobile screenshot retained the true geometry without panel overflow.
+The actual Bennu CLI export retained all eight axes and 1,000 seeded parameter
+offsets alongside its ellipsoid. These are solution-epoch results; temporal
+propagation, model error and event distributions remain unfinished.

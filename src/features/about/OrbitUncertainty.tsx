@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import gmText from '../../data/gm_de440.tpc?raw'
 import { parseSbdbCovariance, type SbdbCovariance } from '../../data/loaders/sbdbCovariance'
 import { cartesianCovarianceAtSolutionEpoch } from '../../engine/ephemeris/orbitCovariance'
 import { covarianceProjection } from '../../engine/ephemeris/covarianceProjection'
+import { covarianceEllipsoid } from '../../engine/ephemeris/covarianceEllipsoid'
+import { CovarianceEllipsoid } from './CovarianceEllipsoid'
 import { useI18n } from '../../i18n/context'
 import { saveTextExport } from '../../lib/platform'
 
@@ -17,6 +19,10 @@ export function OrbitUncertainty() {
   const [loaded, setLoaded] = useState<Loaded | null>(null), [result, setResult] = useState<Converted | null>(null)
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
   const generation = useRef(0)
+  const ellipsoid = useMemo(() => {
+    if (!result) return null
+    try { return covarianceEllipsoid(result.matrix, AU_KM) } catch { return null }
+  }, [result])
   useEffect(() => () => { generation.current++ }, [])
   const clear = () => { generation.current++; setLoaded(null); setResult(null); setError(''); setBusy(false) }
   const read = async (file: File) => {
@@ -81,7 +87,8 @@ export function OrbitUncertainty() {
       })}</tbody></table></div>
       <div className="uncertainty-projections">{[[0, 1], [0, 2], [1, 2]].map(([a, b]) => <Projection key={`${a}${b}`} matrix={result.matrix} first={a} second={b} zh={zh} />)}</div>
       <p>{zh ? '椭圆为二维投影协方差的单位马氏距离轮廓。尚未随时间传播，不用于估计事件概率；形式协方差不包含全部物理模型误差。' : 'Ellipses are unit-Mahalanobis contours of the projected covariance. No time propagation or event probability is calculated; formal covariance does not cover every physical model error.'}</p>
-      <button type="button" className="secondary-button" onClick={() => { void saveTextExport(JSON.stringify({ schemaVersion: 1, calculation: 'solution-epoch-coordinate-covariance', ...loaded, adoptedGmSourceSha256: GM_SHA, result }, null, 2), `solar-covariance-${loaded.source.designation.replace(/[^\w-]/g, '_')}.json`, 'application/json').catch(reason => setError(String(reason))) }}>{zh ? '导出协方差与来源 JSON' : 'Export covariance and source JSON'}</button>
+      {ellipsoid ? <CovarianceEllipsoid geometry={ellipsoid} zh={zh} /> : <p>{zh ? '三维椭球无法可靠分解，未修补协方差。' : 'The 3D ellipsoid cannot be factored reliably; covariance has not been repaired.'}</p>}
+      <button type="button" className="secondary-button" onClick={() => { void saveTextExport(JSON.stringify({ schemaVersion: 1, calculation: 'solution-epoch-coordinate-covariance', ...loaded, adoptedGmSourceSha256: GM_SHA, result, positionEllipsoid: ellipsoid ? { ...ellipsoid, units: 'km', frame: result.frame } : null }, null, 2), `solar-covariance-${loaded.source.designation.replace(/[^\w-]/g, '_')}.json`, 'application/json').catch(reason => setError(String(reason))) }}>{zh ? '导出协方差与来源 JSON' : 'Export covariance and source JSON'}</button>
     </div>}
   </section>
 }
