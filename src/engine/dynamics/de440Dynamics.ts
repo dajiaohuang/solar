@@ -48,7 +48,12 @@ export async function createDe440Dynamics(options: {
     if (!Number.isFinite(elapsed) || elapsed < start || elapsed > end) throw new RangeError('Dynamics epoch outside frozen source window')
     return referenceEt + elapsed
   }
+  let cachedEpoch: number | undefined
+  let cachedResolver: ((id: number) => Float64Array) | undefined
   function resolver(et: number) {
+    // One epoch only: Newtonian forces, optional 1PN and accepted-node sampling
+    // can share the same center chains without an unbounded trajectory cache.
+    if (et === cachedEpoch && cachedResolver) return cachedResolver
     const cache = new Map<number, Float64Array>([[0, new Float64Array(6)]])
     const visiting = new Set<number>()
     const resolve = (id: number): Float64Array => {
@@ -56,14 +61,17 @@ export async function createDe440Dynamics(options: {
       if (cached) return cached
       if (!Number.isSafeInteger(id) || visiting.has(id) || visiting.size > 8) throw new Error('Invalid DE440 center chain')
       visiting.add(id)
-      const value = kernel.evaluate(id, et)
-      if (!value) throw new Error(`Missing pinned DE440 state for NAIF ${id}`)
-      const center = resolve(value.center)
-      const state = Float64Array.of(value.position.x, value.position.y, value.position.z, value.velocity.x, value.velocity.y, value.velocity.z)
-      for (let i = 0; i < 6; i++) state[i] += center[i]
-      cache.set(id, state); visiting.delete(id)
-      return state
+      try {
+        const value = kernel.evaluate(id, et)
+        if (!value) throw new Error(`Missing pinned DE440 state for NAIF ${id}`)
+        const center = resolve(value.center)
+        const state = Float64Array.of(value.position.x, value.position.y, value.position.z, value.velocity.x, value.velocity.y, value.velocity.z)
+        for (let i = 0; i < 6; i++) state[i] += center[i]
+        cache.set(id, state)
+        return state
+      } finally { visiting.delete(id) }
     }
+    cachedEpoch = et; cachedResolver = resolve
     return resolve
   }
   const ephemeris: PrescribedEphemeris = {

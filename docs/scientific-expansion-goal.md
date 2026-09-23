@@ -665,6 +665,30 @@ requires its separate exact-head gate. Additional
 forces, joint parameter uncertainty, long-term diagnostics, native access and
 every other incomplete ledger row remain open.
 
+### Checkpoint 23: instantaneous conic diagnostics and source reuse (2026-09-23)
+
+Trajectory samples now retain Sun-relative velocities and instantaneous conic
+diagnostics, including hyperbolic states and explicit near-parabolic/radial
+degeneracy. The browser compares initial/final values with visible frame, units
+and model boundaries; both export paths retain every sampled diagnostic.
+These values are not treated as invariants of perturbed or 1PN dynamics, and
+their periapsis is not labeled an actual encounter prediction.
+
+Eight independent CSPICE OSCELT reference cases cover actual Eros experiment
+states and separate synthetic conics. Eighteen targeted diagnostic/recorder/CLI
+checks and eight four-profile real-worker checks passed. A mobile screenshot
+exposed a clipped unit column; units now appear below quantity labels, and the
+focused mobile rerun passed the stricter table-overflow assertion. Build/type
+checking and changed-file lint passed. No full local suite ran.
+
+A one-epoch DE440 center-chain cache also removes repeated same-epoch Sun work
+while keeping public arrays isolated and failed queries recoverable. Fourteen
+targeted source/1PN/CLI checks passed for this change. Its local elapsed-time
+change was under one percent; no meaningful speedup or rendering claim is made.
+This batch remains local during the previous healthy native gate. Long-term
+stability/resonance, full force/covariance models and all unfinished ledger
+requirements remain open.
+
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),
 [JPL SBDB](https://ssd-api.jpl.nasa.gov/doc/sbdb.html),

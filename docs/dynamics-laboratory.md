@@ -237,3 +237,38 @@ from its finer-setting run by `1.49e-8 km`, and from the original SPK by
 `0.0006262555 km`. These are distinct comparisons. Runtime and total-memory
 benchmarks for the new correction have not been measured.
 
+## Instantaneous orbit diagnostics
+
+Each retained node now includes Sun-relative velocity and Newtonian osculating
+diagnostics using the same pinned solar GM: eccentricity, signed semimajor axis
+and its reciprocal, periapsis distance, inclination to the J2000 equator, and
+two-body specific energy. The browser shows initial/final values; CLI and Web
+exports retain all sampled values with the diagnostic model and limitations.
+Negative semimajor axes are supported for hyperbolic instantaneous conics.
+
+The conic shape uses dimensionless position/velocity scaling. A near-parabolic
+energy denominator within 32 machine epsilons of its component scale yields a
+null semimajor axis; the reciprocal is retained. Near-radial angular momentum
+with transverse fraction at most `1e-12` yields a null inclination. These
+conditioning guards do not quantify physical uncertainty. Undefined diagnostics
+remain null and do not overwrite integrated states.
+
+These quantities are not conserved under the prescribed planetary perturbations
+or the optional 1PN term. Their variations do not prove integration error,
+resonance or instability. Instantaneous periapsis is not an actual encounter
+prediction. The node cap and missing-between-node limitations still apply.
+
+Eight independent [CSPICE OSCELT](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/oscelt_c.html)
+comparisons cover four source-backed Eros states and circular, eccentric,
+hyperbolic and retrograde synthetic conics. The source hashes, generator and
+toolkit versions are retained in `tests/fixtures/conic-diagnostics-reference.json`;
+`scripts/reference-conic-diagnostics.py --output <new.json>` regenerates the
+reference without network acquisition. This validates coordinate diagnostics,
+not real comet source coverage or long-term dynamics.
+
+The DE440 adapter now reuses center chains only at its most recent epoch, so
+the Newtonian evaluation, solar correction and accepted-node sample do not
+repeat identical SPK work. Returned public states remain owned copies; failed
+queries clear cycle tracking, and time changes replace the cache. The cache
+does not grow with trajectory duration.
+

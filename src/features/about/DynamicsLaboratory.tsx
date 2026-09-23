@@ -5,6 +5,7 @@ import { useI18n } from '../../i18n/context'
 import { saveTextExport } from '../../lib/platform'
 import { BUILD_INFO } from '../../lib/buildInfo'
 import { DynamicsTrajectory } from './DynamicsTrajectory'
+import { DynamicsDiagnostics } from './DynamicsDiagnostics'
 
 type Receipt = Awaited<ReturnType<typeof integrateDynamicsExperiment>> & { initialFile: { sha256: string; bytes: number; payload: Record<string, unknown> }; schemaVersion: number; calculation: string }
 type Input = { bytes: ArrayBuffer; parsed: ReturnType<typeof parseDynamicsInitial>; name: string }
@@ -78,6 +79,7 @@ export function DynamicsLaboratory() {
       <p>{result.forceModel.solarRelativity ? (zh ? '已采用太阳 1PN 修正；独立 Eros 30 天参考案例相对原始 SPK 的位置差异约 0.63 米。' : 'Solar 1PN adopted; the independent 30-day Eros reference differs from its original SPK by about 0.63 m.') : (zh ? '牛顿点质量模型；独立 Eros 30 天参考案例相对原始 SPK 的位置差异约 191 米。' : 'Newtonian point masses; the independent 30-day Eros reference differs from its original SPK by about 191 m.')}</p>
       <p>{zh ? '日心 J2000 投影；金色为太阳，空心为起点，实心为终点。' : 'Heliocentric J2000 projections: gold Sun, open start, filled endpoint.'}</p>
       <DynamicsTrajectory samples={result.trajectory.samples} zh={zh} />
+      <DynamicsDiagnostics first={result.trajectory.samples[0].osculating} last={result.trajectory.samples[result.trajectory.samples.length-1].osculating} zh={zh} />
       <p>{result.trajectory.retainedNodes} {zh ? '个实际积分节点；抽样间隔' : 'actual integration nodes; sampling stride'} {result.trajectory.stride}. {zh ? '连线仅供显示，不保证中间没有碰撞或事件。' : 'Connecting lines are visual only and do not exclude intervening collisions or events.'}</p>
       {result.refinement && <div data-testid="dynamics-refinement"><p>{zh ? '细化设置的终点差异' : 'Endpoint difference with finer settings'}: {result.refinement.endpointPositionDifferenceKm.toExponential(3)} km · {result.refinement.endpointVelocityDifferenceKmPerSecond.toExponential(3)} km/s</p><p>{zh ? '这是同一力模型的两次数值计算比较，不是全局误差界或物理不确定性。' : 'This compares two numerical settings of the same force model, not a global error bound or physical uncertainty.'}</p></div>}
       <p>{zh ? '太阳、分离的地球和月球、其他行星系统质心，共 11 个点质量。容差只控制数值计算；参考案例差异不代表任意输入的物理精度。' : 'Eleven point masses: Sun, separate Earth/Moon and other planetary system barycenters. Tolerances control numerical computation only; reference-case differences do not establish physical accuracy for arbitrary inputs.'}</p>

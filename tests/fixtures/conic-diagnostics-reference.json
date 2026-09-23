@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "reference": "https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/oscelt_c.html",
+  "source": {
+    "id": "de440s-2000-01-01-2051-01-01",
+    "sha256": "8724d2d1bac115a75ad1f984c5b474ca778c96ee8be2df83e624cef61c001069",
+    "path": "public/data/ephemerides/de440s-2000-01-01-2051-01-01.bsp"
+  },
+  "inputReferenceSha256": "97decee0310103358c9bad585457b647691a9a910120536d38b51202dfe90840",
+  "generatorSha256": "c73935f86f815c43e1d4ab59db5f8e9aba266569d49db23fd719b1494478218c",
+  "software": {
+    "spiceypy": "8.2.0",
+    "cspice": "CSPICE_N0067"
+  },
+  "cases": [
+    {
+      "name": "Eros integrated 0 seconds",
+      "stateKmKmPerSecond": [
+        -138827103.8309622,
+        -138423572.4155143,
+        -103682276.60627434,
+        14.699767442427529,
+        -17.80113788385514,
+        -7.450194044210487
+      ],
+      "gmKm3PerSecond2": 132712440041.27939,
+      "periapsisKm": 169532258.50982925,
+      "eccentricity": 0.2228657638586286,
+      "inclinationDeg": 30.788020017470643,
+      "reciprocalSemiMajorAxisPerKm": 4.583990344801041e-09
+    },
+    {
+      "name": "Eros integrated -864000 seconds",
+      "stateKmKmPerSecond": [
+        -150864263.86437038,
+        -122425712.37043533,
+        -96774710.79244514,
+        13.125319226236936,
+        -19.217224972571895,
+        -8.538747411418463
+      ],
+      "gmKm3PerSecond2": 132712440041.27939,
+      "periapsisKm": 169531329.7060278,
+      "eccentricity": 0.22286934958815266,
+      "inclinationDeg": 30.788018904600367,
+      "reciprocalSemiMajorAxisPerKm": 4.5839943080692765e-09
+    },
+    {
+      "name": "Eros integrated 864000 seconds",
+      "stateKmKmPerSecond": [
+        -125527992.4871226,
+        -153165860.978957,
+        -109648901.19996391,
+        16.048806968899324,
+        -16.314700628944653,
+        -6.362435589287593
+      ],
+      "gmKm3PerSecond2": 132712440041.27939,
+      "periapsisKm": 169533198.6491283,
+      "eccentricity": 0.22286236630876577,
+      "inclinationDeg": 30.788020438733163,
+      "reciprocalSemiMajorAxisPerKm": 4.5839849650900814e-09
+    },
+    {
+      "name": "Eros integrated 2592000 seconds",
+      "stateKmKmPerSecond": [
+        -95886322.42369822,
+        -178695060.52532095,
+        -118786382.74304987,
+        18.127353122130963,
+        -13.211745310849683,
+        -4.2250291953876005
+      ],
+      "gmKm3PerSecond2": 132712440041.27939,
+      "periapsisKm": 169534956.61384597,
+      "eccentricity": 0.22285683012296117,
+      "inclinationDeg": 30.788020090484,
+      "reciprocalSemiMajorAxisPerKm": 4.583970087344035e-09
+    },
+    {
+      "name": "Synthetic e=0, i=0",
+      "stateKmKmPerSecond": [
+        -25242305.229992874,
+        43160468.33244369,
+        0.0,
+        -44.47203052459437,
+        -26.009369501107372,
+        0.0
+      ],
+      "gmKm3PerSecond2": 132712440041.27939,
+      "periapsisKm": 50000000.00000001,
+      "eccentricity": 1.9472985132304737e-16,
+      "inclinationDeg": 0.0,
+      "reciprocalSemiMajorAxisPerKm": 1.9999999999999994e-08
+    },
+    {
+      "name": "Synthetic e=0.7, i=2.3",
+      "stateKmKmPerSecond": [
+        -42510861.05720198,
+        -68865841.54458657,
+        28299599.290264927,
+        -42.054096839498015,
+        -15.485456147005351,
+        -17.065839956482332
+      ],
+      "gmKm3PerSecond2": 132712440041.27939,
+      "periapsisKm": 50000000.000000015,
+      "eccentricity": 0.7000000000000002,
+      "inclinationDeg": 131.78029288008932,
+      "reciprocalSemiMajorAxisPerKm": 5.999999999999995e-09
+    },
+    {
+      "name": "Synthetic e=1.5, i=0.5",
+      "stateKmKmPerSecond": [
+        -63388063.206615396,
+        15302417.567716029,
+        28702539.425680023,
+        -56.804054978137174,
+        -42.67561983856176,
+        2.1601141902182253
+      ],
+      "gmKm3PerSecond2": 132712440041.27939,
+      "periapsisKm": 50000000.0,
+      "eccentricity": 1.5,
+      "inclinationDeg": 28.64788975654116,
+      "reciprocalSemiMajorAxisPerKm": -1e-08
+    },
+    {
+      "name": "Synthetic e=3, i=3.141592653589793",
+      "stateKmKmPerSecond": [
+        41673607.054303974,
+        -29113694.222711556,
+        6.014761680043202e-09,
+        -44.84644527871303,
+        -92.29569492301562,
+        5.1068711959595135e-15
+      ],
+      "gmKm3PerSecond2": 132712440041.27939,
+      "periapsisKm": 49999999.99999997,
+      "eccentricity": 3.0000000000000013,
+      "inclinationDeg": 180.0,
+      "reciprocalSemiMajorAxisPerKm": -4.0000000000000054e-08
+    }
+  ],
+  "limitation": "Instantaneous conic coordinate diagnostics; not invariants of the integrated perturbed or 1PN model."
+}

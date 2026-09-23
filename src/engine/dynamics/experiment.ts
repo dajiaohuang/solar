@@ -2,6 +2,7 @@ import { createDe440Dynamics } from './de440Dynamics.ts'
 import { integrateAdaptive } from './adaptiveIntegrator.ts'
 import { withIdentityTransition } from './pointMassGravity.ts'
 import { createTrajectoryRecorder } from './trajectorySamples.ts'
+import { stateToConicDiagnostics } from '../ephemeris/osculating.ts'
 
 export function parseDynamicsInitial(value: unknown) {
   const input = value as Record<string, unknown> | null
@@ -15,10 +16,13 @@ export async function integrateDynamicsExperiment(dynamics: Awaited<ReturnType<t
   if (!Number.isFinite(durationSeconds) || Math.abs(durationSeconds) > 365 * 86400) throw new RangeError('Experiment duration must be within 365 days')
   const absoluteTolerance = new Float64Array(42).fill(1e-12)
   absoluteTolerance.fill(1e-5, 0, 3)
+  const solarGm = dynamics.evidence.masses.find(mass => mass.naifId === 10)!.gmKm3PerSecond2
   const sample = (elapsed: number, state: ArrayLike<number>) => {
     const sun = dynamics.state(10, elapsed)
+    const relative = Array.from({ length: 6 }, (_, i) => state[i]-sun[i])
     return { elapsedTdbSeconds: elapsed, stateKmKmPerSecond: Array.from(state).slice(0, 6),
-      heliocentricPositionKm: [state[0]-sun[0], state[1]-sun[1], state[2]-sun[2]] }
+      heliocentricPositionKm: relative.slice(0, 3), heliocentricVelocityKmPerSecond: relative.slice(3),
+      osculating: stateToConicDiagnostics({ x: relative[0], y: relative[1], z: relative[2] }, { x: relative[3], y: relative[4], z: relative[5] }, solarGm) }
   }
   const trajectory = createTrajectoryRecorder(sample(0, initial))
   const { state, ...numerics } = await integrateAdaptive({ initial: withIdentityTransition(initial), duration: durationSeconds,
@@ -40,6 +44,8 @@ export async function integrateDynamicsExperiment(dynamics: Awaited<ReturnType<t
       limitation: 'Agreement between two numerical settings of the same force model; not a global error bound or physical uncertainty.' }
   }
   return { forceModel: dynamics.evidence,
+    diagnostics: { model: 'instantaneous-newtonian-solar-conic', frame: 'J2000', origin: 'Sun', solarGmKm3PerSecond2: solarGm,
+      limitation: 'Sampled osculating diagnostics, not conserved quantities of the perturbed/1PN model, collision predictions, resonance classification or long-term stability proof. Null values indicate undefined, ill-conditioned or numerically unrepresentable diagnostics; near-parabolic classification uses 32 machine epsilons, not physical uncertainty.' },
     trajectory: trajectory.finish(sample(durationSeconds, state)), refinement,
     finalEpoch: { referenceEpochTdb: dynamics.evidence.referenceEpochTdb, elapsedTdbSeconds: durationSeconds },
     finalStateKmKmPerSecond: Array.from(state.subarray(0, 6)),

@@ -23,6 +23,7 @@ export async function runDynamicsFile(sourcePath, outputPath, { durationSeconds,
   const result = await integrateDynamicsExperiment(dynamics, initial.initial, durationSeconds, signal, compareRefinement)
   const implementationSha256 = {}
   for (const path of ['scripts/run-dynamics.mjs', 'src/engine/dynamics/experiment.ts', 'src/engine/dynamics/trajectorySamples.ts', 'src/engine/dynamics/de440Dynamics.ts', 'src/engine/dynamics/solarRelativity.ts', 'src/engine/dynamics/adaptiveIntegrator.ts', 'src/engine/dynamics/pointMassGravity.ts', 'src/engine/ephemeris/spk.ts', 'src/engine/ephemeris/spkType17.ts', 'src/engine/ephemeris/spkType21.ts']) implementationSha256[path] = sha(await readFile(new URL(path, root)))
+  implementationSha256['src/engine/ephemeris/osculating.ts'] = sha(await readFile(new URL('src/engine/ephemeris/osculating.ts', root)))
   const receipt = { schemaVersion: 1, calculation: solarRelativity ? 'restricted-de440-solar-1pn-experiment' : 'restricted-newtonian-de440-experiment',
     initialFile: { sha256: sha(bytes), bytes: bytes.length, payload: initial.payload }, implementationSha256, ...result }
   if (signal?.aborted) throw new DOMException('Experiment cancelled', 'AbortError')

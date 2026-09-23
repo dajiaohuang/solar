@@ -374,6 +374,8 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 .dynamics-sun { fill: var(--accent-2); }
 .dynamics-start { fill: var(--bg); stroke: var(--accent); stroke-width: 1.5; }
 .dynamics-end { fill: var(--accent); }
+.dynamics-diagnostics table { font-size: 12px; font-variant-numeric: tabular-nums; }
+.dynamics-diagnostics th small { display: block; color: var(--muted); font-weight: 400; }
 .uncertainty-table { overflow-x: auto; }
 .uncertainty-table table { width: 100%; border-collapse: collapse; text-align: left; }
 .uncertainty-table th, .uncertainty-table td { padding: 6px; border-bottom: 1px solid var(--line); }

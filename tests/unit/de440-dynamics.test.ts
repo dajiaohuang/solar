@@ -36,6 +36,13 @@ test('owns source bytes and returned states despite caller mutation', async () =
   const state = frozen.state(399)
   state.fill(0)
   expect(frozen.state(399)[0]).not.toBe(0)
+  // A failed query must not poison a retained center-chain resolver.
+  expect(() => frozen.state(499)).toThrow('Missing pinned')
+  expect(() => frozen.state(499)).toThrow('Missing pinned')
+  expect(frozen.state(399)).toEqual(dynamics.state(399))
+  // Time travel must replace the single-epoch cache, not return stale values.
+  expect(frozen.state(399, 864000)).toEqual(dynamics.state(399, 864000))
+  expect(frozen.state(399)).toEqual(dynamics.state(399))
 })
 
 test('rejects corrupt sources, omitted exclusions and uncovered epochs', async () => {

@@ -17,6 +17,28 @@ const cross = (a: Vector3, b: Vector3): Vector3 => ({ x: a.y * b.z - a.z * b.y, 
 const magnitude = (v: Vector3) => Math.hypot(v.x, v.y, v.z)
 const angle = (value: number) => ((value % 360) + 360) % 360
 
+/** Instantaneous Newtonian conic diagnostics for km, km/s and km^3/s^2.
+ * Includes unbound conics. These are not constants of a perturbed/1PN orbit.
+ * Null axes/planes remain undefined rather than receiving a fabricated angle. */
+export function stateToConicDiagnostics(positionKm: Vector3, velocityKmPerSecond: Vector3, gmKm3PerSecond2: number) {
+  const r = magnitude(positionKm), mu = gmKm3PerSecond2
+  if (![positionKm.x, positionKm.y, positionKm.z, velocityKmPerSecond.x, velocityKmPerSecond.y, velocityKmPerSecond.z, mu, r].every(Number.isFinite) || !(mu > 0) || !(r > 0)) return null
+  const scale = Math.sqrt(mu/r)
+  const unit = { x: positionKm.x/r, y: positionKm.y/r, z: positionKm.z/r }
+  const velocity = { x: velocityKmPerSecond.x/scale, y: velocityKmPerSecond.y/scale, z: velocityKmPerSecond.z/scale }
+  const h = cross(unit, velocity), hNorm = magnitude(h), speed2 = dot(velocity, velocity)
+  const vxh = cross(velocity, h), eccentricity = Math.hypot(vxh.x-unit.x, vxh.y-unit.y, vxh.z-unit.z)
+  const reciprocalSemiMajorAxisPerKm = (2-speed2)/r
+  const periapsisKm = r*(hNorm/(1+eccentricity))*hNorm
+  const specificKeplerEnergyKm2PerSecond2 = (speed2/2-1)*(mu/r)
+  if (![hNorm, speed2, eccentricity, reciprocalSemiMajorAxisPerKm, periapsisKm, specificKeplerEnergyKm2PerSecond2].every(Number.isFinite)) return null
+  const axis = 1/reciprocalSemiMajorAxisPerKm
+  const nearParabolic = Math.abs(2-speed2) <= 32*Number.EPSILON*Math.max(2, speed2)
+  return { eccentricity, reciprocalSemiMajorAxisPerKm, nearParabolic, semiMajorAxisKm: !nearParabolic && Number.isFinite(axis) ? axis : null, periapsisKm,
+    inclinationDeg: hNorm > 0 && hNorm/Math.sqrt(speed2) > EPS ? Math.atan2(Math.hypot(h.x, h.y), h.z)*deg : null,
+    specificKeplerEnergyKm2PerSecond2 }
+}
+
 /**
  * Derive instantaneous two-body osculating elements from an AU/AU-day state.
  * This is a snapshot diagnostic: it does not assert that a perturbed body will
