@@ -1818,3 +1818,25 @@ the subsequent run of old compiled classes was excluded from validation, then
 the corrected compile and five-test run succeeded. No full local tests ran.
 These controlled JVM tests do not prove native TLS or device behavior. Candidate
 c3b87f7 / run 35840897494 remains active awaiting iOS and was not replaced.
+
+### Checkpoint 82: iOS original-source request contract and gated integration (2026-09-23)
+
+Added a Foundation request value with original Data bytes, exact signed-64-bit
+Gaia identity, bounded TCB epoch, required RV approximation and optional explicit
+independent-RV covariance policy. Base64 encoding avoids slash escaping so even
+slash-heavy maximum-size inputs remain within the 13 MiB wire budget. Encoding
+checks task cancellation before and after serialization.
+
+Registered the source in Xcode, both Swift compiler invocation paths and the
+native source verifier. Authored source-byte, mutation, ID/policy/size/epoch,
+slash-heavy maximum-input and cancellation checks with a stellar-only switch.
+Swift is unavailable locally, so these checks have not executed. The source
+verifier, script syntax/lint and 13 focused harness/reuse tests passed; no full
+local tests ran. iOS response validation, transport, UI and live scientific
+acceptance remain outstanding.
+
+Run 35840897494 completed successfully across all jobs, including iOS and the
+final quality gate, on exact SHA c3b87f736f47a2a182752b2c02bdc2a199b4f961.
+After rechecking the remote branch and ancestry, that SHA was normally
+fast-forwarded to main from 335b083. Subsequent Android UI/transport and this iOS
+request work require a fresh candidate gate. Deployment/publication stay paused.

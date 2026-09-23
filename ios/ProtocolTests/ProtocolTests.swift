@@ -204,7 +204,65 @@ struct ProtocolTests {
         print("Ground contacts: real HTTP capture, durations, source mutations and older responses passed")
     }
 
+    static func stellarMotionRequestChecks() async throws {
+        let directory = URL(fileURLWithPath: "tests/fixtures/gaia-six-20260923")
+        var manifest = try Data(contentsOf: directory.appendingPathComponent("manifest.json"))
+        var rows = try Data(contentsOf: directory.appendingPathComponent("rows.csv"))
+        let originalManifest = manifest, originalRows = rows
+        let source = "65212004581252736"
+        func make(_ manifest: Data, _ rows: Data,
+                  _ id: String = "65212004581252736", _ epoch: Double = 2026,
+                  _ rv: String = NativeStellarMotionRequest.rvPolicy, _ covariance: String? = nil) throws -> NativeStellarMotionRequest {
+            try NativeStellarMotionRequest(manifest: manifest, rows: rows, sourceId: id, epoch: epoch,
+                                          radialVelocityPolicy: rv, covariancePolicy: covariance)
+        }
+        func reject(_ operation: () throws -> Void) throws {
+            do { try operation() } catch { return }
+            throw StateTileFailure.invalid("Invalid stellar request accepted")
+        }
+        let request = try make(manifest, rows)
+        manifest[0] ^= 1; rows[0] ^= 1
+        precondition(request.originalManifestBase64 == originalManifest && request.originalRowsCsvBase64 == originalRows)
+        for policy in [nil, NativeStellarMotionRequest.independentRVPolicy] as [String?] {
+            let encoded = try make(originalManifest, originalRows, source, 2026, NativeStellarMotionRequest.rvPolicy, policy).bytes()
+            let object = try JSONSerialization.jsonObject(with: encoded) as! [String: Any]
+            precondition(Data(base64Encoded: object["originalManifestBase64"] as! String) == originalManifest)
+            precondition(Data(base64Encoded: object["originalRowsCsvBase64"] as! String) == originalRows)
+            precondition(object["sourceId"] as? String == source && object["targetEpochJulianYearTCB"] as? Double == 2026)
+            precondition(object["radialVelocityPolicy"] as? String == NativeStellarMotionRequest.rvPolicy)
+            precondition(object["covariancePolicy"] as? String == policy && object.count == (policy == nil ? 5 : 6))
+        }
+        for id in ["", "0", "01", "+1", "1.0", "1\n", "١", "9223372036854775808"] {
+            try reject { _ = try make(originalManifest, originalRows, id) }
+        }
+        _ = try make(originalManifest, originalRows, String(Int64.max), 1916)
+        _ = try make(originalManifest, originalRows, "1", 2116)
+        for epoch in [Double.nan, .infinity, -.infinity, 1915.999, 2116.001] {
+            try reject { _ = try make(originalManifest, originalRows, source, epoch) }
+        }
+        try reject { _ = try make(Data(), originalRows) }
+        try reject { _ = try make(originalManifest, Data()) }
+        try reject { _ = try make(Data(count: NativeStellarMotionRequest.maxManifestBytes + 1), originalRows) }
+        try reject { _ = try make(originalManifest, Data(count: NativeStellarMotionRequest.maxRowsBytes + 1)) }
+        try reject { _ = try make(originalManifest, originalRows, source, 2026, "") }
+        try reject { _ = try make(originalManifest, originalRows, source, 2026, NativeStellarMotionRequest.rvPolicy, "") }
+        // All-ones bytes produce slash-heavy base64; escaping each slash would
+        // incorrectly make valid maximum-size inputs exceed the wire budget.
+        let largest = try make(Data(repeating: 255, count: NativeStellarMotionRequest.maxManifestBytes), Data(repeating: 255, count: NativeStellarMotionRequest.maxRowsBytes))
+        let largestBytes = try largest.bytes()
+        precondition(largestBytes.count <= NativeStellarMotionRequest.maxWireBytes)
+        let cancelled = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try request.bytes()
+        }
+        do { _ = try await cancelled.value; preconditionFailure("Cancelled request encoded") }
+        catch is CancellationError { }
+        print("Stellar request: original-byte identity, policies, bounds and cancellation passed")
+    }
+
     static func main() async throws {
+        if CommandLine.arguments.contains("--stellar-motion-only") { try await stellarMotionRequestChecks(); return }
+        try await stellarMotionRequestChecks()
         try groundContacts()
         if CommandLine.arguments.contains("--ground-contacts-only") { return }
         try sourceIdentityChecks()

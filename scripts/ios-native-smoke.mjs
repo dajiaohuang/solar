@@ -193,7 +193,7 @@ export async function nativeSmoke() {
     await command(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', 'tests/unit/state-tiles-golden.test.ts'],
       { env: goldenEnv, log: join(artifact, 'real-web-golden.log') })
     await command('swiftc', ['ios/App/App/StateTileDecoder.swift', 'ios/App/App/StateTileCache.swift',
-      'ios/App/App/NativeStateProjection.swift', 'ios/App/App/NativeCoverageReport.swift', 'ios/App/App/NativeGroundContacts.swift', 'ios/App/App/NativeSourceIdentityPage.swift', 'ios/ProtocolTests/ProtocolTests.swift', '-o', join(temporary, 'protocol-tests')])
+      'ios/App/App/NativeStateProjection.swift', 'ios/App/App/NativeCoverageReport.swift', 'ios/App/App/NativeGroundContacts.swift', 'ios/App/App/NativeStellarMotion.swift', 'ios/App/App/NativeSourceIdentityPage.swift', 'ios/ProtocolTests/ProtocolTests.swift', '-o', join(temporary, 'protocol-tests')])
     await command(join(temporary, 'protocol-tests'), [], { env: goldenEnv, log: join(artifact, 'real-swift-golden.log') })
     report.golden = JSON.parse(await readFile(join(temporary, 'real-golden/manifest.json'), 'utf8'))
     if (report.golden.plan.exactCount !== 4 || report.golden.plan.missingCount !== 3) throw new Error('Real Earth/Moon/TNO/source-only fixture must contain four exact states and three explicit gaps')
