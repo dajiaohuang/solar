@@ -40,3 +40,26 @@ user-facing access, realistic perturbed comet references, non-gravitational
 forces and uncertainty. Two-body conics must remain distinguishable from
 authoritative SPK evaluations. Tested time/eccentricity ranges are evidence,
 not certification for arbitrary finite inputs or long-term physical prediction.
+
+## Source-backed Borisov import
+
+The bounded decoder src/data/loaders/sbdbConic.ts now accepts full-precision
+JPL SBDB API 1.3 J2000 osculating conics, including e >= 1. A real 2I query
+returned C/2019 Q4 (Borisov), solution 54, e=3.356475782676596 and
+q=2.006520878500843 au. Original response bytes and retrieval URL/time/hash are
+committed under tests/fixtures/sbdb-borisov-20260923. The importer verifies
+version, source, solution identity, duplicate fields, units and finite ranges.
+
+The [SBDB API contract](https://ssd-api.jpl.nasa.gov/doc/sbdb.html) defines
+heliocentric ecliptic J2000 osculating elements and TDB epoch/perihelion times.
+Day integers and decimal fractions are retained separately to avoid losing
+sub-day precision when subtracting two large Julian dates. Convenience scalar
+JD fields are rounded binary64 values; propagation should use the split fields.
+The original text remains available in the owned raw response.
+
+Borisov's source fit includes A1/A2/A3 and other non-gravitational parameters.
+They are retained without claiming they are integrated. Source validity bounds
+remain in their original form, and callers must enforce them when providing a
+propagation interface. The importer supplies no inferred GM: an explicit sourced
+GM is required by the calculation module. User-facing import/propagation and
+independent real-body trajectory comparison are still pending.

@@ -1331,3 +1331,20 @@ source ingestion, UI integration, perturbations/non-gravitational forces and
 physical uncertainty remain open. See docs/periapsis-conics.md for reference
 commands and evidence limits. Candidate 858e895 remains active remotely and
 is not replaced by this batch.
+
+### Checkpoint 54: original non-elliptic SBDB source import (2026-09-23)
+
+Captured a real JPL full-precision 2I response (Borisov, solution 54) with
+original bytes, URL, retrieval time and SHA-256. Added a bounded owned-response
+conic decoder requiring API/source/frame/solution identity, unambiguous fields,
+units and finite values. It preserves e>=1, q/tp, source fit/validity metadata
+and all nine non-gravitational model entries without silently integrating them.
+No central GM is guessed. TDB epochs retain separate integer-day/fraction parts
+as well as raw source strings, avoiding the precision loss identified by lint
+in a direct long-decimal JD test literal.
+
+Two focused cases passed: real original-byte receipt/parameter preservation and
+six corrupted-contract mutations. Types/lint passed. No full local tests ran.
+This is source import, not a complete comet UI or physical trajectory validation;
+GM-backed propagation, user access, fit forces and uncertainty remain open.
+Candidate 858e895 has all checks except iOS complete; its active run is retained.

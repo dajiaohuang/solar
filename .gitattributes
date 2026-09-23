@@ -20,3 +20,6 @@ tests/fixtures/gaia-*/*.csv -text
 tests/fixtures/gaia-*/*.json text eol=lf
 third-party/*.txt -text
 scripts/reference/*-oracle.c text eol=lf
+
+tests/fixtures/sbdb-borisov-20260923/response.json -text
+tests/fixtures/sbdb-borisov-20260923/receipt.json text eol=lf
