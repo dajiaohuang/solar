@@ -1,0 +1,772 @@
+{
+  "schemaVersion": 1,
+  "sourceSha256": "3dff7b1dbeceaa01f25467767d3fa25816051c85d162d1edf04acb310ee28bb1",
+  "bodies": [
+    {
+      "naifPckId": 10,
+      "radiiKm": [
+        695700.0,
+        695700.0,
+        695700.0
+      ]
+    },
+    {
+      "naifPckId": 199,
+      "radiiKm": [
+        2440.53,
+        2440.53,
+        2438.26
+      ]
+    },
+    {
+      "naifPckId": 299,
+      "radiiKm": [
+        6051.8,
+        6051.8,
+        6051.8
+      ]
+    },
+    {
+      "naifPckId": 301,
+      "radiiKm": [
+        1737.4,
+        1737.4,
+        1737.4
+      ]
+    },
+    {
+      "naifPckId": 399,
+      "radiiKm": [
+        6378.1366,
+        6378.1366,
+        6356.7519
+      ]
+    },
+    {
+      "naifPckId": 401,
+      "radiiKm": [
+        13.0,
+        11.4,
+        9.1
+      ]
+    },
+    {
+      "naifPckId": 402,
+      "radiiKm": [
+        7.8,
+        6.0,
+        5.1
+      ]
+    },
+    {
+      "naifPckId": 499,
+      "radiiKm": [
+        3396.19,
+        3396.19,
+        3376.2
+      ]
+    },
+    {
+      "naifPckId": 501,
+      "radiiKm": [
+        1829.4,
+        1819.4,
+        1815.7
+      ]
+    },
+    {
+      "naifPckId": 502,
+      "radiiKm": [
+        1562.6,
+        1560.3,
+        1559.5
+      ]
+    },
+    {
+      "naifPckId": 503,
+      "radiiKm": [
+        2631.2,
+        2631.2,
+        2631.2
+      ]
+    },
+    {
+      "naifPckId": 504,
+      "radiiKm": [
+        2410.3,
+        2410.3,
+        2410.3
+      ]
+    },
+    {
+      "naifPckId": 505,
+      "radiiKm": [
+        125.0,
+        73.0,
+        64.0
+      ]
+    },
+    {
+      "naifPckId": 506,
+      "radiiKm": [
+        85.0,
+        85.0,
+        85.0
+      ]
+    },
+    {
+      "naifPckId": 507,
+      "radiiKm": [
+        40.0,
+        40.0,
+        40.0
+      ]
+    },
+    {
+      "naifPckId": 508,
+      "radiiKm": [
+        18.0,
+        18.0,
+        18.0
+      ]
+    },
+    {
+      "naifPckId": 509,
+      "radiiKm": [
+        14.0,
+        14.0,
+        14.0
+      ]
+    },
+    {
+      "naifPckId": 510,
+      "radiiKm": [
+        12.0,
+        12.0,
+        12.0
+      ]
+    },
+    {
+      "naifPckId": 511,
+      "radiiKm": [
+        15.0,
+        15.0,
+        15.0
+      ]
+    },
+    {
+      "naifPckId": 512,
+      "radiiKm": [
+        10.0,
+        10.0,
+        10.0
+      ]
+    },
+    {
+      "naifPckId": 513,
+      "radiiKm": [
+        5.0,
+        5.0,
+        5.0
+      ]
+    },
+    {
+      "naifPckId": 514,
+      "radiiKm": [
+        58.0,
+        49.0,
+        42.0
+      ]
+    },
+    {
+      "naifPckId": 515,
+      "radiiKm": [
+        10.0,
+        8.0,
+        7.0
+      ]
+    },
+    {
+      "naifPckId": 516,
+      "radiiKm": [
+        30.0,
+        20.0,
+        17.0
+      ]
+    },
+    {
+      "naifPckId": 599,
+      "radiiKm": [
+        71492.0,
+        71492.0,
+        66854.0
+      ]
+    },
+    {
+      "naifPckId": 601,
+      "radiiKm": [
+        207.8,
+        196.7,
+        190.6
+      ]
+    },
+    {
+      "naifPckId": 602,
+      "radiiKm": [
+        256.6,
+        251.4,
+        248.3
+      ]
+    },
+    {
+      "naifPckId": 603,
+      "radiiKm": [
+        538.4,
+        528.3,
+        526.3
+      ]
+    },
+    {
+      "naifPckId": 604,
+      "radiiKm": [
+        563.4,
+        561.3,
+        559.6
+      ]
+    },
+    {
+      "naifPckId": 605,
+      "radiiKm": [
+        765.0,
+        763.1,
+        762.4
+      ]
+    },
+    {
+      "naifPckId": 606,
+      "radiiKm": [
+        2575.15,
+        2574.78,
+        2574.47
+      ]
+    },
+    {
+      "naifPckId": 607,
+      "radiiKm": [
+        180.1,
+        133.0,
+        102.7
+      ]
+    },
+    {
+      "naifPckId": 608,
+      "radiiKm": [
+        745.7,
+        745.7,
+        712.1
+      ]
+    },
+    {
+      "naifPckId": 609,
+      "radiiKm": [
+        109.4,
+        108.5,
+        101.8
+      ]
+    },
+    {
+      "naifPckId": 610,
+      "radiiKm": [
+        101.7,
+        93.0,
+        76.3
+      ]
+    },
+    {
+      "naifPckId": 611,
+      "radiiKm": [
+        64.9,
+        57.3,
+        53.0
+      ]
+    },
+    {
+      "naifPckId": 612,
+      "radiiKm": [
+        22.5,
+        19.6,
+        13.3
+      ]
+    },
+    {
+      "naifPckId": 613,
+      "radiiKm": [
+        16.3,
+        11.8,
+        9.8
+      ]
+    },
+    {
+      "naifPckId": 614,
+      "radiiKm": [
+        15.3,
+        9.3,
+        6.3
+      ]
+    },
+    {
+      "naifPckId": 615,
+      "radiiKm": [
+        20.5,
+        17.8,
+        9.4
+      ]
+    },
+    {
+      "naifPckId": 616,
+      "radiiKm": [
+        68.2,
+        41.6,
+        28.2
+      ]
+    },
+    {
+      "naifPckId": 617,
+      "radiiKm": [
+        52.2,
+        40.8,
+        31.5
+      ]
+    },
+    {
+      "naifPckId": 618,
+      "radiiKm": [
+        17.2,
+        15.4,
+        10.4
+      ]
+    },
+    {
+      "naifPckId": 632,
+      "radiiKm": [
+        1.94,
+        1.29,
+        1.21
+      ]
+    },
+    {
+      "naifPckId": 633,
+      "radiiKm": [
+        2.88,
+        2.08,
+        1.8
+      ]
+    },
+    {
+      "naifPckId": 634,
+      "radiiKm": [
+        1.5,
+        1.2,
+        1.0
+      ]
+    },
+    {
+      "naifPckId": 635,
+      "radiiKm": [
+        4.6,
+        4.5,
+        2.8
+      ]
+    },
+    {
+      "naifPckId": 649,
+      "radiiKm": [
+        0.5,
+        0.5,
+        0.5
+      ]
+    },
+    {
+      "naifPckId": 653,
+      "radiiKm": [
+        0.7,
+        0.25,
+        0.2
+      ]
+    },
+    {
+      "naifPckId": 699,
+      "radiiKm": [
+        60268.0,
+        60268.0,
+        54364.0
+      ]
+    },
+    {
+      "naifPckId": 701,
+      "radiiKm": [
+        581.1,
+        577.9,
+        577.7
+      ]
+    },
+    {
+      "naifPckId": 702,
+      "radiiKm": [
+        584.7,
+        584.7,
+        584.7
+      ]
+    },
+    {
+      "naifPckId": 703,
+      "radiiKm": [
+        788.9,
+        788.9,
+        788.9
+      ]
+    },
+    {
+      "naifPckId": 704,
+      "radiiKm": [
+        761.4,
+        761.4,
+        761.4
+      ]
+    },
+    {
+      "naifPckId": 705,
+      "radiiKm": [
+        240.4,
+        234.2,
+        232.9
+      ]
+    },
+    {
+      "naifPckId": 706,
+      "radiiKm": [
+        13.0,
+        13.0,
+        13.0
+      ]
+    },
+    {
+      "naifPckId": 707,
+      "radiiKm": [
+        15.0,
+        15.0,
+        15.0
+      ]
+    },
+    {
+      "naifPckId": 708,
+      "radiiKm": [
+        21.0,
+        21.0,
+        21.0
+      ]
+    },
+    {
+      "naifPckId": 709,
+      "radiiKm": [
+        31.0,
+        31.0,
+        31.0
+      ]
+    },
+    {
+      "naifPckId": 710,
+      "radiiKm": [
+        27.0,
+        27.0,
+        27.0
+      ]
+    },
+    {
+      "naifPckId": 711,
+      "radiiKm": [
+        42.0,
+        42.0,
+        42.0
+      ]
+    },
+    {
+      "naifPckId": 712,
+      "radiiKm": [
+        54.0,
+        54.0,
+        54.0
+      ]
+    },
+    {
+      "naifPckId": 713,
+      "radiiKm": [
+        27.0,
+        27.0,
+        27.0
+      ]
+    },
+    {
+      "naifPckId": 714,
+      "radiiKm": [
+        33.0,
+        33.0,
+        33.0
+      ]
+    },
+    {
+      "naifPckId": 715,
+      "radiiKm": [
+        77.0,
+        77.0,
+        77.0
+      ]
+    },
+    {
+      "naifPckId": 799,
+      "radiiKm": [
+        25559.0,
+        25559.0,
+        24973.0
+      ]
+    },
+    {
+      "naifPckId": 801,
+      "radiiKm": [
+        1352.6,
+        1352.6,
+        1352.6
+      ]
+    },
+    {
+      "naifPckId": 802,
+      "radiiKm": [
+        170.0,
+        170.0,
+        170.0
+      ]
+    },
+    {
+      "naifPckId": 803,
+      "radiiKm": [
+        29.0,
+        29.0,
+        29.0
+      ]
+    },
+    {
+      "naifPckId": 804,
+      "radiiKm": [
+        40.0,
+        40.0,
+        40.0
+      ]
+    },
+    {
+      "naifPckId": 805,
+      "radiiKm": [
+        74.0,
+        74.0,
+        74.0
+      ]
+    },
+    {
+      "naifPckId": 806,
+      "radiiKm": [
+        79.0,
+        79.0,
+        79.0
+      ]
+    },
+    {
+      "naifPckId": 807,
+      "radiiKm": [
+        96.0,
+        96.0,
+        96.0
+      ]
+    },
+    {
+      "naifPckId": 808,
+      "radiiKm": [
+        218.0,
+        208.0,
+        201.0
+      ]
+    },
+    {
+      "naifPckId": 899,
+      "radiiKm": [
+        24764.0,
+        24764.0,
+        24341.0
+      ]
+    },
+    {
+      "naifPckId": 901,
+      "radiiKm": [
+        606.0,
+        606.0,
+        606.0
+      ]
+    },
+    {
+      "naifPckId": 999,
+      "radiiKm": [
+        1188.3,
+        1188.3,
+        1188.3
+      ]
+    },
+    {
+      "naifPckId": 1000005,
+      "radiiKm": [
+        4.22,
+        4.22,
+        4.22
+      ]
+    },
+    {
+      "naifPckId": 1000012,
+      "radiiKm": [
+        2.4,
+        1.55,
+        1.2
+      ]
+    },
+    {
+      "naifPckId": 1000036,
+      "radiiKm": [
+        8.0,
+        4.0,
+        4.0
+      ]
+    },
+    {
+      "naifPckId": 1000093,
+      "radiiKm": [
+        3.0,
+        3.0,
+        3.0
+      ]
+    },
+    {
+      "naifPckId": 1000107,
+      "radiiKm": [
+        2.7,
+        1.9,
+        1.5
+      ]
+    },
+    {
+      "naifPckId": 2000001,
+      "radiiKm": [
+        487.3,
+        487.3,
+        446.0
+      ]
+    },
+    {
+      "naifPckId": 2000004,
+      "radiiKm": [
+        289.0,
+        280.0,
+        229.0
+      ]
+    },
+    {
+      "naifPckId": 2000016,
+      "radiiKm": [
+        139.5,
+        116.0,
+        94.5
+      ]
+    },
+    {
+      "naifPckId": 2000021,
+      "radiiKm": [
+        62.0,
+        50.5,
+        46.5
+      ]
+    },
+    {
+      "naifPckId": 2000052,
+      "radiiKm": [
+        189.5,
+        165.0,
+        124.5
+      ]
+    },
+    {
+      "naifPckId": 2000253,
+      "radiiKm": [
+        33.0,
+        24.0,
+        23.0
+      ]
+    },
+    {
+      "naifPckId": 2000433,
+      "radiiKm": [
+        17.0,
+        5.5,
+        5.5
+      ]
+    },
+    {
+      "naifPckId": 2000511,
+      "radiiKm": [
+        180.0,
+        147.0,
+        127.0
+      ]
+    },
+    {
+      "naifPckId": 2002867,
+      "radiiKm": [
+        3.24,
+        2.73,
+        2.04
+      ]
+    },
+    {
+      "naifPckId": 2004179,
+      "radiiKm": [
+        2.13,
+        1.015,
+        0.85
+      ]
+    },
+    {
+      "naifPckId": 2025143,
+      "radiiKm": [
+        0.268,
+        0.147,
+        0.104
+      ]
+    },
+    {
+      "naifPckId": 2431010,
+      "radiiKm": [
+        26.8,
+        12.0,
+        7.6
+      ]
+    },
+    {
+      "naifPckId": 9511010,
+      "radiiKm": [
+        9.1,
+        5.2,
+        4.4
+      ]
+    }
+  ],
+  "generatorSha256": "5c5014af2e32fba7d84b80cf5d06b5537686afc517ca7d5026eefdc575487d84",
+  "software": {
+    "spiceypy": "8.2.0",
+    "cspice": "CSPICE_N0067"
+  },
+  "boundary": "Kernel-pool extraction parity only; no independent physical accuracy or limb/orientation certification."
+}

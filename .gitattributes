@@ -1,6 +1,8 @@
 # Preserve authoritative source bytes and reproducible data digests.
 *.bsp -text
 src/data/gm_de440.tpc -text -whitespace
+src/data/pck00011.tpc -text -whitespace
+src/data/pck00011.source.json text eol=lf
 src/data/ephemeris-manifest.json text eol=lf
 src/data/ephemeris-manifest-full.json text eol=lf
 src/data/ephemerisBodies.json text eol=lf

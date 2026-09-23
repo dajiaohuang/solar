@@ -13,7 +13,7 @@ remain paused. Changes may go directly to main after the required checks.
 | Orbit uncertainty | Pinned SBDB covariance with labels, units and solution epoch; validated covariance propagation and sampling; uncertainty ellipsoids and event distributions, independent of numerical tolerance | In progress: source ingestion, solution-epoch conversion/sampling/browser ellipsoids and offline/browser conditional six-parameter DE440 time propagation; complete fit-model propagation, native propagation and event distributions pending |
 | Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | Pending |
 | Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | In progress: bounded integration, variational equations, pinned DE440 adapter and browser/offline source-bearing experiments; additional forces, full covariance, native access and long-term diagnostics pending |
-| Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | Pending |
+| Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | In progress: pinned PCK semiaxes for 95 source bodies with independent CSPICE extraction; remaining data categories, orientation and identity integration pending |
 | Catalog streaming | Replace the fixed 8k/30k-only cloud path with cancellable binary chunk loading, priority scheduling and independent byte/decode/compute/upload limits | In progress: full-inventory 2D snapshot, bounded upload batching and spatial display available; continuous/3D streaming and source-priority scheduling pending |
 | Rendering and time | Moving spatial bounds, visibility/LOD, selected-body retention, time/error-budgeted updates, reusable buffers and Float64-relative GPU coordinates; WebGL fallback and native contracts retained | In progress |
 | Capacity evidence | Real catalog runs at 30k/100k/300k/1m/full inventory, real SPK coverage and separately labeled synthetic GPU stress; P95/P99 frames, memory, first-visible time, upload and cancellation measurements | In progress |
@@ -780,3 +780,28 @@ passed. The mobile result screenshot was inspected without horizontal overflow.
 No full local tests ran. Native access, matched additional force derivatives,
 nonlinear ensembles, events and all remaining ledger requirements stay open.
 Remote validation of this batch is pending behind candidate 613d8d4.
+
+### Verified promotion: 613d8d4 (2026-09-23)
+
+Run 35818809180 passed repository, Web, all four browser profiles, Android, iOS
+and the final quality gate on exact head
+`613d8d496de051ab3dde5f9d050b4fed348b09da`. This includes the unchanged iOS
+tutorial and real-state background/resume assertions after request-owned
+projection cancellation. That exact commit was fast-forwarded to main.
+Covariance core/browser commits a760c3f and d5cd39f were then submitted as the
+next candidate, without interrupting the completed native run. No deployment
+or data publication was enabled.
+
+### Checkpoint 28: pinned physical semiaxis source (2026-09-23)
+
+Preserved the unmodified NAIF pck00011.tpc and a retrieval/hash receipt. A
+verified-byte loader retains all 95 actual RADII triples, excludes commented
+historical/example values, returns owned axes and reports uncertainty unknown.
+It does not replace ellipsoids with mean spheres or invent SPK/catalog aliases.
+CSPICE kernel-pool extraction independently verifies every triple. Three focused
+checks, types and changed-file lint passed; no full local tests ran. Source
+limits and reproduction are in [body-shape-sources.md](body-shape-sources.md).
+
+Orientation, apparent limbs, contact searches, event references and consumer
+identity integration remain unfinished. This data foundation does not complete
+occultations, eclipses or the other pending scientific/data/performance rows.
