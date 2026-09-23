@@ -45,8 +45,32 @@ final class ObservationUITests: XCTestCase {
     }
 
     private func reveal(_ app: XCUIApplication, _ element: XCUIElement) {
-        for _ in 0..<10 { if isRevealed(app, element) { return }; app.swipeUp() }
-        for _ in 0..<10 { if isRevealed(app, element) { return }; app.swipeDown() }
+        for attempt in 0..<24 {
+            if isRevealed(app, element) { return }
+            let navigation = app.navigationBars.firstMatch
+            let top = navigation.exists ? max(app.frame.minY, navigation.frame.maxY) : app.frame.minY
+            let bottom = app.frame.maxY - 20
+            let middle = (top + bottom) / 2
+            var travel = min(240, (bottom - top) * 0.35)
+            var upward = attempt < 12
+            if element.exists, element.frame.height > 0 {
+                let frame = element.frame
+                if frame.maxY > bottom {
+                    upward = true
+                    travel = min(travel, max(40, frame.maxY - bottom + 20))
+                } else if frame.minY < top {
+                    upward = false
+                    travel = min(travel, max(40, top - frame.minY + 20))
+                }
+            }
+            // A bounded drag corrects a partially visible row without the
+            // full-screen fling that previously skipped it in both directions.
+            let startY = middle + (upward ? travel / 2 : -travel / 2)
+            let endY = middle + (upward ? -travel / 2 : travel / 2)
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            origin.withOffset(CGVector(dx: app.frame.width * 0.5, dy: startY - app.frame.minY))
+                .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: app.frame.width * 0.5, dy: endY - app.frame.minY)))
+        }
         XCTAssertTrue(isRevealed(app, element), "Element could not be revealed: \(element.debugDescription)")
     }
 

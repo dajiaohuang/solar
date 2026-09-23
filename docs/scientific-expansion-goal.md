@@ -2331,3 +2331,22 @@ a source-reader failure, nor prove a root cause inside the system picker.
 The same run additionally failed a fully-visible-frame assertion for source
 row 50 at y=755, height=129.7 in an 874-point screen. No further blind picker
 tap workaround was applied. Main remains c3b87f7; delivery is not complete.
+
+### Checkpoint 109: evidence-guided native visibility and provider diagnostics (2026-09-23)
+
+Decoded and visually inspected both actual iOS failure screenshots from
+run 35852896925. The Files picker remains visible with the original files;
+the source-directory row is only partially visible at the bottom. Replaced
+the directory reveal helper's full-screen up/down sweeps with bounded drags
+guided by the element's current frame, keeping the full-visibility assertion.
+This is a test navigation repair; simulator execution must still verify it.
+
+Importer lifecycle markers alone did not identify a root cause. The managed
+fixture-only simulator now retains default/error/fault logs from the app and
+document/file-provider processes before shutdown, with a 20-minute window and
+30-second collection deadline. Actual import behavior and picker tapping are
+unchanged pending that evidence. Nine named native-harness unit cases, targeted
+lint and the native source/packaging contract passed. No local full suite or
+local Swift execution was performed. The next candidate also includes the
+temporal budget, PCK orientation and ellipsoid limb commits; main delivery
+remains gated on exact-candidate checks.

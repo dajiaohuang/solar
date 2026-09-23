@@ -306,6 +306,12 @@ export async function nativeSmoke() {
       await command('xcrun', ['simctl', 'spawn', device, 'log', 'show', '--style', 'compact', '--last', '30m',
         '--predicate', 'subsystem == "io.github.dajiaohuang.solaratlas.stellar-import"'],
       { log: join(artifact, 'stellar-import-lifecycle.log'), timeout: 30_000 }).catch(error => { report.importLogError = error.message })
+      // This is the isolated fixture-only simulator owned by this run. Retain
+      // provider-side diagnostics as well: no app callback does not establish
+      // whether Files selection, provider transfer or presentation failed.
+      await command('xcrun', ['simctl', 'spawn', device, 'log', 'show', '--style', 'compact', '--last', '20m',
+        '--predicate', '(process == "App" OR process CONTAINS[c] "fileprovider" OR process CONTAINS[c] "documentpicker" OR subsystem CONTAINS[c] "fileprovider" OR subsystem CONTAINS[c] "documentmanager") AND (messageType == error OR messageType == fault OR messageType == default)'],
+      { log: join(artifact, 'document-provider.log'), timeout: 30_000 }).catch(error => { report.documentProviderLogError = error.message })
       await command('xcrun', ['simctl', 'shutdown', device]).catch(error => { report.shutdownError = error.message })
       await command('xcrun', ['simctl', 'delete', device]).catch(error => { report.cleanupError = error.message })
     }
