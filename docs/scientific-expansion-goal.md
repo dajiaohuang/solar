@@ -14,7 +14,7 @@ remain paused. Changes may go directly to main after the required checks.
 | Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | In progress: verified PCK radii, geocentric NONE/CN contacts and windows, SOFA/IERS ground CN contacts and sampled overlap windows with CLI/HTTP/browser access; complete detection, oriented/apparent limbs, native consumers and event distributions pending |
 | Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | In progress: bounded integration, variational equations, pinned DE440 adapter and browser/offline source-bearing experiments; additional forces, full covariance, native access and long-term diagnostics pending |
 | Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | In progress: pinned PCK semiaxes for 95 source bodies with independent CSPICE extraction; remaining data categories, orientation and identity integration pending |
-| Catalog streaming | Replace the fixed 8k/30k-only cloud path with cancellable binary chunk loading, priority scheduling and independent byte/decode/compute/upload limits | In progress: full-inventory 2D snapshot, bounded upload batching and spatial display available; continuous/3D streaming and source-priority scheduling pending |
+| Catalog streaming | Replace the fixed 8k/30k-only cloud path with cancellable binary chunk loading, priority scheduling and independent byte/decode/compute/upload limits | In progress: full-inventory 2D/3D orthographic snapshots, bounded upload batching and spatial display available; continuous-time streaming and source-priority scheduling pending |
 | Rendering and time | Moving spatial bounds, visibility/LOD, selected-body retention, time/error-budgeted updates, reusable buffers and Float64-relative GPU coordinates; WebGL fallback and native contracts retained | In progress |
 | Capacity evidence | Real catalog runs at 30k/100k/300k/1m/full inventory, real SPK coverage and separately labeled synthetic GPU stress; P95/P99 frames, memory, first-visible time, upload and cancellation measurements | In progress |
 
@@ -2170,3 +2170,32 @@ retaining invalid masks and zero evaluation/step receipts. Nine focused ensemble
 tests passed, including the identity assertion and independent nonzero-duration
 references. No full local tests ran. Candidate 690f6ea / run 35850104881 remains
 live; this subsequent identity correction has not yet entered that candidate.
+
+### Checkpoint 101: full-source 3D orthographic snapshots (2026-09-23)
+
+Extended bounded source streaming to Float64 XYZ propagation, retained Float32
+XYZ display, matching worker spatial projection and GPU orthographic uniforms.
+Rotation updates view selection without downloading or recomputing source states
+or uploading attribute buffers. The explicit point budget rises from 72 to 84
+bytes. Bilingual controls identify the fixed-epoch two-body approximation.
+
+Thirty-three focused unit tests, TypeScript build and targeted ESLint passed.
+One named browser case passed on desktop and mobile Chromium: changed pixels,
+8,000 retained points and zero rotation source/attribute uploads. A real-source
+RTX 5070 Ti run loaded all 1,561,171 rows / 313 shards in 1563.7 ms, with
+43,712,788 GPU attribute bytes, 33,119 displayed representatives and no page/GL
+errors. Twelve rotations added no requests or attribute uploads. Original
+receipt and limitations are in docs/benchmarks/catalog-3d-20260923/. This is a
+static epoch, not continuous-time streaming or native hardware evidence.
+No full local tests ran. Candidate 690f6ea remains live in iOS; these changes
+are queued locally until its run is terminal.
+
+### Checkpoint 102: Android live-response export verified (2026-09-23)
+
+Downloaded the successful Android artifact for run 35850104881, candidate
+690f6ea, and inspected its report and exported file. The real stellar HTTPS
+response and ContentResolver-written export both contain 56,910 bytes with
+SHA-256 b39baaf5d8e3b70aa112347530b2c6717f96873e5310cedb46c7ddb92e21fcf1.
+This closes the authored export-write acceptance gap from checkpoint 91.
+The destination result remains stubbed; actual system-picker interaction and
+physical-device performance remain unverified. iOS is still running.

@@ -11,6 +11,9 @@ const option = (name, fallback) => { const index = args.indexOf(name); return in
 const output = resolve(option('--output', '.cache/catalog-stream-app.json'))
 const graphicsMode = option('--graphics', 'default')
 const detailMode = option('--detail', 'all')
+const coordinateMode = option('--mode', '2d')
+if (!['2d', '3d'].includes(coordinateMode)) throw new Error('Invalid coordinate mode')
+const attributeBytesPerPoint = coordinateMode === '3d' ? 28 : 24
 if (!['all', 'spatial'].includes(detailMode)) throw new Error('Invalid detail mode')
 if (!['default', 'd3d11'].includes(graphicsMode) || graphicsMode === 'd3d11' && process.platform !== 'win32') throw new Error('Invalid graphics mode')
 if (existsSync(output)) throw new Error('Report already exists; choose a new output path')
@@ -119,6 +122,7 @@ try {
   }
   await page.getByRole('combobox', { name: 'Expanded map point limit' }).selectOption(String(requestedRows))
   await page.getByRole('combobox', { name: 'Map detail', exact: true }).selectOption(detailMode)
+  await page.getByRole('combobox', { name: 'Catalog snapshot projection', exact: true }).selectOption(coordinateMode)
   const startButton = page.getByRole('button', { name: /Load expanded snapshot/ })
   if (!await startButton.isEnabled()) throw new Error('Requested source tier is unavailable in this browser')
   const requestStart = requests.length
@@ -141,16 +145,28 @@ try {
   if (graphicsMode === 'd3d11' && (!/Direct3D11/i.test(result.audit.graphics?.renderer ?? '') || /SwiftShader|software|llvmpipe|basic render/i.test(result.audit.graphics.renderer))) throw new Error('Hardware D3D11 renderer was not established')
   const expandedRequests = requests.slice(requestStart)
   if (expandedRequests.some(path => path.includes('/meta/') || path.includes('catalog-sample-'))) throw new Error('Expanded loading hydrated per-object metadata')
-  if (serverAudit.binaryRequests < requiredShards || serverAudit.binaryRequests > maximumFetchedShards || result.audit.allocations !== 3 || result.audit.allocationBytes !== requestedRows * 24 || result.audit.uploadBytes !== requestedRows * 24 || result.audit.pendingTiles !== 0 || result.audit.peakPendingTiles > 4) throw new Error('Source count, GPU allocation or transfer contract mismatch')
+  if (serverAudit.binaryRequests < requiredShards || serverAudit.binaryRequests > maximumFetchedShards || result.audit.allocations !== 3 || result.audit.allocationBytes !== requestedRows * attributeBytesPerPoint || result.audit.uploadBytes !== requestedRows * attributeBytesPerPoint || result.audit.pendingTiles !== 0 || result.audit.peakPendingTiles > 4) throw new Error('Source count, GPU allocation or transfer contract mismatch')
+  let rotationAudit = null
+  if (coordinateMode === '3d') {
+    const beforeRequests = requests.length
+    const started = performance.now()
+    for (let step = 0; step < 12; step++) {
+      await page.getByRole('slider', { name: 'Catalog azimuth', exact: true }).press('ArrowRight')
+      await page.waitForFunction(() => document.querySelector('[data-testid="catalog-stream-canvas"]')?.getAttribute('data-spatial-pending') === 'false')
+    }
+    const after = await page.evaluate(() => ({ allocations: window.streamAudit.allocations, uploadBytes: window.streamAudit.uploadBytes, glErrors: window.streamAudit.glErrors }))
+    rotationAudit = { steps: 12, automationElapsedMs: performance.now() - started, additionalRequests: requests.length - beforeRequests, additionalAllocations: after.allocations - result.audit.allocations, additionalAttributeUploadBytes: after.uploadBytes - result.audit.uploadBytes }
+    if (rotationAudit.additionalRequests || rotationAudit.additionalAllocations || rotationAudit.additionalAttributeUploadBytes || after.glErrors.length || errors.length) throw new Error('Rotation reloaded source data, reuploaded attributes or failed rendering')
+  }
   const summary = values => {
     const sorted = [...values].sort((a, b) => a - b), q = p => sorted[Math.max(0, Math.ceil(sorted.length * p) - 1)] ?? null
     return { count: sorted.length, p50Ms: q(.5), p95Ms: q(.95), p99Ms: q(.99), maxMs: sorted.at(-1) ?? null }
   }
-  const report = { schemaVersion: 2, generatedAt: new Date().toISOString(), measurement: 'built-application-MPC-source-tier-static-2D-snapshot-local-HTTP',
+  const report = { schemaVersion: 3, generatedAt: new Date().toISOString(), measurement: `built-application-MPC-source-tier-static-${coordinateMode.toUpperCase()}-snapshot-local-HTTP`,
     requestedRows, requiredShards, maximumFetchedShards, completeInventory: result.phase === 'complete',
-    graphicsMode, detailMode, launchOptions, browser: browser.version(), viewport: { width: 1600, height: 1000, pixelRatio: 1 },
+    graphicsMode, detailMode, coordinateMode, rotationAudit, launchOptions, browser: browser.version(), viewport: { width: 1600, height: 1000, pixelRatio: 1 },
     source: { version: manifest.version, rows: manifest.totalCount, shards: manifest.chunkCount, sourceSha256: manifest.sourceSha256, contentSha256: manifest.contentSha256, manifestSha256: sha(readFileSync(manifestFile)), checksumsSha256: sha(checksums) },
-    implementationSha256: Object.fromEntries(['src/lib/catalogStreaming.ts', 'src/lib/catalogPointRenderer.ts', 'src/lib/catalogSpatialSelection.ts', 'src/lib/catalogTransferWindow.ts', 'src/workers/catalog-stream.worker.ts', 'src/components/CatalogStreamCanvas.tsx'].map(path => [path, sha(readFileSync(path))])),
+    implementationSha256: Object.fromEntries(['src/lib/catalogStreaming.ts', 'src/lib/catalogPointRenderer.ts', 'src/lib/catalogSpatialSelection.ts', 'src/lib/catalogProjection.ts', 'src/lib/catalogTransferWindow.ts', 'src/workers/catalog-stream.worker.ts', 'src/components/CatalogStreamCanvas.tsx'].map(path => [path, sha(readFileSync(path))])),
     phase: result.phase, drawnRows: result.drawnRows, displayedRows: result.displayedRows, checkedRows: result.checkedRows, canvasSize: result.canvasSize, loadMs: result.loadMs, graphics: result.audit.graphics,
     frameIntervals: summary(result.audit.intervals), uploadSubmission: summary(result.audit.uploads), drawSubmission: summary(result.audit.draws), longTasks: summary(result.audit.longTasks),
     allocations: result.audit.allocations, gpuAttributeBytes: result.audit.allocationBytes, uploadBytes: result.audit.uploadBytes, litPixels: result.audit.litPixels, glErrors: result.audit.glErrors, pageErrors: errors,

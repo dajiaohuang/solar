@@ -59,13 +59,16 @@ export function CatalogWorkspace() {
   })
   const [streamLimit, setStreamLimit] = useState(() => window.innerWidth <= 800 ? 30_000 : 100_000)
   const [streamRadius, setStreamRadius] = useState(8)
+  const [streamMode,setStreamMode] = useState<'2d' | '3d'>('2d')
+  const [streamAzimuth,setStreamAzimuth] = useState(0), [streamTilt,setStreamTilt] = useState(30)
+  const streamRotation = useMemo(() => ({ azimuthDegrees: streamAzimuth,tiltDegrees: streamTilt }),[streamAzimuth,streamTilt])
   const [streamDisplay, setStreamDisplay] = useState<'spatial' | 'all'>('spatial')
   const [streamDisplayLimit, setStreamDisplayLimit] = useState(() => window.innerWidth <= 800 ? 30_000 : 100_000)
   const [streamRequest, setStreamRequest] = useState<{ key: string; epoch: number; id: number } | null>(null)
-  const streamKey = JSON.stringify([catalog.manifest?.releasePath, catalog.manifest?.version, catalog.filters, streamLimit])
+  const streamKey = JSON.stringify([catalog.manifest?.releasePath, catalog.manifest?.version, catalog.filters, streamLimit, streamMode])
   const streaming = streamRequest?.key === streamKey
   let streamCapacity = 0
-  try { if (catalog.manifest) streamCapacity = planCatalogStream(catalog.manifest, streamLimit, streamBudget).capacity }
+  try { if (catalog.manifest) streamCapacity = planCatalogStream(catalog.manifest, streamLimit, streamBudget, streamMode).capacity }
   catch { /* Older dataset formats retain their existing sample renderer. */ }
 
   useEffect(() => {
@@ -321,6 +324,14 @@ export function CatalogWorkspace() {
           </select></label>
           <RangeFields label="q (AU)" minimumLabel={t('minimum')} maximumLabel={t('maximum')} value={catalog.filters.perihelion} onChange={(value) => catalogActions.patchFilters({ perihelion: value })} step="0.1" />
           {catalog.manifest?.compactIndex && <div className="catalog-stream-controls">
+            <label className="field"><span>{language === 'zh' ? '目录快照投影' : 'Catalog snapshot projection'}</span><select value={streamMode} onChange={event => setStreamMode(event.target.value as '2d' | '3d')}>
+              <option value="2d">2D</option><option value="3d">{language === 'zh' ? '3D 正交投影' : '3D orthographic'}</option>
+            </select></label>
+            {streamMode === '3d' && <>
+              <label className="field"><span>{language === 'zh' ? '目录方位角' : 'Catalog azimuth'}: {streamAzimuth}°</span><input aria-label={language === 'zh' ? '目录方位角' : 'Catalog azimuth'} type="range" min="-180" max="180" value={streamAzimuth} onChange={event => setStreamAzimuth(Number(event.target.value))} /></label>
+              <label className="field"><span>{language === 'zh' ? '目录倾斜角' : 'Catalog tilt'}: {streamTilt}°</span><input aria-label={language === 'zh' ? '目录倾斜角' : 'Catalog tilt'} type="range" min="-90" max="90" value={streamTilt} onChange={event => setStreamTilt(Number(event.target.value))} /></label>
+              <p className="catalog-result-note">{language === 'zh' ? '真实三维坐标的正交视图；旋转不改变冻结历元，也不重新下载目录。尚非连续时间动画。' : 'Orthographic view of actual 3D positions. Rotation keeps the frozen epoch and reuses loaded data; this is not continuous time animation.'}</p>
+            </>}
             <label className="field"><span>{t('catalogStreamLimit')}</span><select value={streamLimit} onChange={event => setStreamLimit(Number(event.target.value))}>
               {[...new Set([30_000, 100_000, 300_000, 1_000_000, catalog.manifest.totalCount])].sort((a, b) => a - b).map(limit => <option key={limit} value={limit}>{limit === catalog.manifest!.totalCount ? t('catalogStreamAll') : limit.toLocaleString()}</option>)}
             </select></label>
@@ -352,7 +363,7 @@ export function CatalogWorkspace() {
 
         <section className="catalog-map glass-panel">
           <div className="map-caption"><span>{t('catalogModeCaption')}</span><strong>{streaming ? t('catalogStreamSnapshot') : `${Math.floor(pointCloud.positions.length / 2).toLocaleString()} / ${resultTotal.toLocaleString()}`}</strong></div>
-          {streaming && catalog.manifest ? <CatalogStreamCanvas key={streamRequest.id} manifest={catalog.manifest} filters={catalog.filters} julianDay={streamRequest.epoch} requestedRows={streamLimit} budgetBytes={streamBudget} viewRadiusAU={streamRadius} displayMode={streamDisplay} displayLimit={streamDisplayLimit} /> : pointCloud.positions.length === pointRecords.length * 2 && pointRecords.length ? <CatalogPointCanvas
+          {streaming && catalog.manifest ? <CatalogStreamCanvas key={streamRequest.id} manifest={catalog.manifest} filters={catalog.filters} julianDay={streamRequest.epoch} requestedRows={streamLimit} budgetBytes={streamBudget} viewRadiusAU={streamRadius} displayMode={streamDisplay} displayLimit={streamDisplayLimit} mode={streamMode} rotation={streamRotation} /> : pointCloud.positions.length === pointRecords.length * 2 && pointRecords.length ? <CatalogPointCanvas
             records={pointRecords}
             positions={pointCloud.positions}
             viewRadiusAU={catalog.filters.semiMajorAxis[1] || 50}

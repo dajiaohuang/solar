@@ -11,7 +11,7 @@ function context() {
     useProgram: vi.fn(), getAttribLocation: vi.fn(() => 0), getUniformLocation: vi.fn(() => ({})),
     bindBuffer: vi.fn(), enableVertexAttribArray: vi.fn(), vertexAttribPointer: vi.fn(),
     bufferData: vi.fn(), bufferSubData: vi.fn(), viewport: vi.fn(), clearColor: vi.fn(), clear: vi.fn(),
-    enable: vi.fn(), blendFunc: vi.fn(), uniform1f: vi.fn(), drawArrays: vi.fn(), drawElements: vi.fn(), getExtension: vi.fn((): object | null => ({})),
+    enable: vi.fn(), blendFunc: vi.fn(), uniform1f: vi.fn(), uniform3f: vi.fn(), drawArrays: vi.fn(), drawElements: vi.fn(), getExtension: vi.fn((): object | null => ({})),
     ARRAY_BUFFER: 1, DYNAMIC_DRAW: 2, STATIC_DRAW: 3, POINTS: 4,
     ELEMENT_ARRAY_BUFFER: 5, UNSIGNED_INT: 6,
   }
@@ -21,6 +21,21 @@ function context() {
 const frame = (count = 3): CatalogPointFrame => ({ positions: new Float32Array(count * 2), colors: new Float32Array(count * 3), sizes: new Float32Array(count), radius: 10, opacity: 0.82 })
 
 describe('persistent catalog GPU ownership', () => {
+  it('retains all three coordinates and rotates only display uniforms without reuploading attributes', () => {
+    const { gl,calls } = context(), renderer = createCatalogPointRenderer(gl,3,3)
+    expect(calls.bufferData.mock.calls.map(call => call[1])).toEqual([36,36,12])
+    renderer.append({ positions: new Float32Array([1,2,3,4,5,6,7,8,9]),colors: new Float32Array(9),sizes: new Float32Array(3) })
+    renderer.drawRetained(10,.8,800,600,1,{azimuthDegrees: 0,tiltDegrees: 0})
+    renderer.drawRetained(10,.8,800,600,1,{azimuthDegrees: 0,tiltDegrees: 90})
+    expect(calls.bufferData).toHaveBeenCalledTimes(3)
+    expect(calls.bufferSubData).toHaveBeenCalledTimes(3)
+    const vertical = calls.uniform3f.mock.calls.at(-1)!
+    expect(vertical[1]).toBe(0)
+    expect(Math.abs(vertical[2])).toBeLessThan(1e-15)
+    expect(vertical[3]).toBe(-1)
+    expect(calls.drawArrays).toHaveBeenLastCalledWith(gl.POINTS,0,3)
+    renderer.dispose()
+  })
   it('changes spatial indices without reallocating source attributes and restores full drawing', () => {
     const { gl, calls } = context(), renderer = createCatalogPointRenderer(gl, 3)
     renderer.append(frame(3))

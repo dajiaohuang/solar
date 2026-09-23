@@ -700,6 +700,53 @@ test('updates spatial catalog representatives on zoom and detail changes without
   expect(errors).toEqual([])
 })
 
+test('rotates a streamed 3D catalog without reloading sources or uploading point attributes', async ({ page }) => {
+  type AuditWindow = Window & { catalogAttributeWrites: number }
+  const requests: string[] = [], errors: string[] = []
+  page.on('request', request => { if (request.url().includes('/data/asteroids/')) requests.push(request.url()) })
+  page.on('pageerror', error => errors.push(error.message))
+  await installMockCatalog(page, { precomputed: true, presetDataset: true, sampleCount: 1, chunkSize: 1000 })
+  await page.addInitScript(() => {
+    localStorage.setItem('solar-atlas-first-run-v1', 'complete')
+    const audit = window as AuditWindow
+    audit.catalogAttributeWrites = 0
+    for (const method of ['bufferData', 'bufferSubData'] as const) {
+      const original = WebGLRenderingContext.prototype[method]
+      Object.defineProperty(WebGLRenderingContext.prototype, method, { value: function (this: WebGLRenderingContext, ...args: unknown[]) {
+        if ((this.canvas as HTMLCanvasElement).dataset.testid === 'catalog-stream-canvas' && args[0] === this.ARRAY_BUFFER) audit.catalogAttributeWrites++
+        return Reflect.apply(original, this, args)
+      } })
+    }
+  })
+  await page.goto('./?v=4&page=catalog&lang=en&jd=2461287.5')
+  await page.getByRole('combobox', { name: 'Catalog snapshot projection', exact: true }).selectOption('3d')
+  await page.getByRole('button', { name: /Load expanded snapshot/ }).click()
+  const canvas = page.getByTestId('catalog-stream-canvas')
+  await expect(canvas).toHaveAttribute('data-phase', 'complete')
+  await expect(canvas).toHaveAttribute('data-coordinate-mode', '3d')
+  await expect(canvas).toHaveAttribute('data-drawn-rows', '8000')
+  await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
+  const capture = () => canvas.evaluate(element => {
+    element.dispatchEvent(new Event('solar-atlas-prepare-canvas-capture'))
+    return (element as HTMLCanvasElement).toDataURL('image/png')
+  })
+  const beforeImage = await capture(), beforeRequests = requests.length
+  const beforeWrites = await page.evaluate(() => (window as AuditWindow).catalogAttributeWrites)
+  expect(beforeWrites).toBeGreaterThan(0)
+  await page.getByRole('slider', { name: 'Catalog tilt', exact: true }).press('End')
+  await expect(page.getByRole('slider', { name: 'Catalog tilt', exact: true })).toHaveValue('90')
+  await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
+  await expect.poll(capture).not.toBe(beforeImage)
+  await page.getByRole('slider', { name: 'Catalog azimuth', exact: true }).press('End')
+  await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
+  await page.getByRole('combobox', { name: 'Map detail', exact: true }).selectOption('all')
+  await expect(canvas).toHaveAttribute('data-display-count', '8000')
+  expect(await page.evaluate(() => (window as AuditWindow).catalogAttributeWrites)).toBe(beforeWrites)
+  expect(requests.length).toBe(beforeRequests)
+  expect(await canvas.evaluate(element => (element as HTMLCanvasElement).getContext('webgl')!.getError())).toBe(0)
+  expect(errors).toEqual([])
+})
+
 test('bounds expanded source transfers and waits for the last upload acknowledgement before completion', async ({ page }) => {
   type FlowWindow = Window & { streamFlow: { received: number; acknowledged: number; peak: number; finished: boolean; release: () => void } }
   await installMockCatalog(page, { precomputed: true, presetDataset: true, sampleCount: 1, chunkSize: 1000 })

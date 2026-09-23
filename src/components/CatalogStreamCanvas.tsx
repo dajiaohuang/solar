@@ -7,6 +7,7 @@ import { julianDayToDate } from '../lib/julianDate'
 import type { AsteroidManifest, CatalogFilters } from '../types'
 import type { CatalogStreamRequest, CatalogStreamResponse } from '../workers/catalog-stream.protocol'
 import { CATALOG_TRANSFER_WINDOW } from '../lib/catalogTransferWindow'
+import type { CatalogRotation } from '../lib/catalogProjection'
 
 type Props = {
   manifest: AsteroidManifest
@@ -17,27 +18,32 @@ type Props = {
   viewRadiusAU: number
   displayMode: 'spatial' | 'all'
   displayLimit: number
+  mode?: '2d' | '3d'
+  rotation?: CatalogRotation
 }
 type Status = { drawnRows: number; sourceRows: number; phase: 'loading' | 'complete' | 'limited' | 'cancelled' | 'error'; error?: string }
 type Attributes = Pick<CatalogPointFrame, 'positions' | 'colors' | 'sizes'>
 
-export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRows, budgetBytes, viewRadiusAU, displayMode, displayLimit }: Props) {
+const DEFAULT_ROTATION: CatalogRotation = { azimuthDegrees: 0,tiltDegrees: 0 }
+
+export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRows, budgetBytes, viewRadiusAU, displayMode, displayLimit, mode = '2d', rotation = DEFAULT_ROTATION }: Props) {
   const { t } = useI18n()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const cancelRef = useRef<(() => void) | null>(null)
   const drawRef = useRef<(() => void) | null>(null)
   const radiusRef = useRef(viewRadiusAU)
-  const detailRef = useRef({ displayMode, displayLimit })
+  const detailRef = useRef({ displayMode, displayLimit, rotation })
   const [display, setDisplay] = useState({ count: 0, visible: 0, pending: false })
   const [status, setStatus] = useState<Status>({ drawnRows: 0, sourceRows: 0, phase: 'loading' })
   const [unavailable, setUnavailable] = useState(false)
-  const plan = planCatalogStream(manifest, requestedRows, budgetBytes)
+  const plan = planCatalogStream(manifest, requestedRows, budgetBytes, mode)
+  const dimensions = mode === '3d' ? 3 : 2
 
   useEffect(() => {
     radiusRef.current = viewRadiusAU
-    detailRef.current = { displayMode, displayLimit }
+    detailRef.current = { displayMode, displayLimit, rotation }
     drawRef.current?.()
-  }, [viewRadiusAU, displayMode, displayLimit])
+  }, [viewRadiusAU, displayMode, displayLimit, rotation])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -80,7 +86,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
         const width = Math.max(1, Math.round(rect.width * ratio)), height = Math.max(1, Math.round(rect.height * ratio))
         if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height }
         const detail = detailRef.current
-        const spatialKey = `${detail.displayMode}:${detail.displayLimit}:${radiusRef.current}:${width}:${height}`
+        const spatialKey = `${detail.displayMode}:${detail.displayLimit}:${radiusRef.current}:${width}:${height}:${mode === '3d' ? `${detail.rotation.azimuthDegrees}:${detail.rotation.tiltDegrees}` : ''}`
         const key = `${spatialKey}:${count.drawnRows}`
         if (key !== viewKey) {
           viewKey = key
@@ -100,10 +106,10 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
               setDisplay({ count: 0, visible: 0, pending })
             } else setDisplay(previous => ({ ...previous, pending }))
             if (count.drawnRows) post({ type: 'view', requestId: viewRequestId, count: count.drawnRows,
-              view: { radius: radiusRef.current, aspect: width / height, maximumPoints: Math.min(plan.capacity, detail.displayLimit) } })
+              view: { radius: radiusRef.current, aspect: width / height, maximumPoints: Math.min(plan.capacity, detail.displayLimit), ...(mode === '3d' ? { rotation: detail.rotation } : {}) } })
           }
         }
-        renderer.drawRetained(radiusRef.current, 0.82, width, height, ratio)
+        renderer.drawRetained(radiusRef.current, 0.82, width, height, ratio, mode === '3d' ? detail.rotation : undefined)
         return true
       } catch (error) { fail(error); return false }
     }
@@ -119,11 +125,11 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
         // exceed it on slow hardware; neither compute nor upload is unbounded.
         while (pendingTiles.length && (!acknowledgements.length || performance.now() - started < 3)) {
           const response = pendingTiles.shift()!
-          const points = response.positions.length / 2
+          const points = response.positions.length / dimensions
           if (!Number.isSafeInteger(points) || points > manifest.chunkSize || response.appearance.length !== points * 2 || response.drawnRows !== count.drawnRows + points || response.drawnRows > plan.capacity || response.sourceRows < count.sourceRows || response.sourceRows > manifest.totalCount) throw new Error('Invalid catalog streaming tile')
           const tile: Attributes = { positions: new Float32Array(response.positions), colors: new Float32Array(points * 3), sizes: new Float32Array(points) }
+          if (!tile.positions.every(Number.isFinite)) throw new Error('Catalog position exceeds GPU coordinates')
           for (let row = 0; row < points; row++) {
-            if (!Number.isFinite(tile.positions[row * 2]) || !Number.isFinite(tile.positions[row * 2 + 1])) throw new Error('Catalog position exceeds GPU coordinates')
             const orbitClass = manifest.compactIndex!.classCodes[response.appearance[row * 2]], flags = response.appearance[row * 2 + 1]
             if (!orbitClass || flags > 7) throw new Error('Invalid catalog appearance')
             tile.colors.set(catalogPointColor(orbitClass, flags), row * 3)
@@ -145,7 +151,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
       try {
         gl = canvas.getContext('webgl', { antialias: false, alpha: false })
         if (!gl) throw new Error('WebGL unavailable')
-        renderer = createCatalogPointRenderer(gl, plan.capacity)
+        renderer = createCatalogPointRenderer(gl, plan.capacity, dimensions)
         checkGl()
         for (const tile of retained) renderer.append(tile)
         viewKey = ''; selectionViewKey = ''
@@ -200,7 +206,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
           else setStatus({ ...count, phase: response.complete ? 'complete' : 'limited' })
         }
       }
-      post({ type: 'start', manifest, filters, julianDay, requestedRows, budgetBytes })
+      post({ type: 'start', manifest, filters, julianDay, requestedRows, budgetBytes, mode })
     }
     return () => {
       active = false
@@ -216,10 +222,10 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
       pendingTiles.length = 0
       retained.length = 0
     }
-  }, [manifest, filters, julianDay, requestedRows, budgetBytes, plan.capacity])
+  }, [manifest, filters, julianDay, requestedRows, budgetBytes, plan.capacity, mode, dimensions])
 
   return <>
-    <canvas ref={canvasRef} className="viz-canvas catalog-point-canvas" role="img" aria-label={`${t('catalogPointAria')}: ${display.count.toLocaleString()}`} data-testid="catalog-stream-canvas" data-drawn-rows={status.drawnRows} data-source-rows={status.sourceRows} data-phase={status.phase} data-capacity={plan.capacity} data-display-count={display.count} data-spatial-pending={display.pending} data-display-mode={displayMode} />
+    <canvas ref={canvasRef} className="viz-canvas catalog-point-canvas" role="img" aria-label={`${t('catalogPointAria')} ${mode}: ${display.count.toLocaleString()}`} data-testid="catalog-stream-canvas" data-drawn-rows={status.drawnRows} data-source-rows={status.sourceRows} data-phase={status.phase} data-capacity={plan.capacity} data-display-count={display.count} data-spatial-pending={display.pending} data-display-mode={displayMode} data-coordinate-mode={mode} />
     <div className="catalog-stream-status">
       <strong>{status.drawnRows.toLocaleString()} / {plan.capacity.toLocaleString()} · {t('catalogStreamLoaded')}</strong>
       <span>{t('catalogStreamDisplayed')}: {display.count.toLocaleString()}{displayMode === 'spatial' ? ` / ${display.visible.toLocaleString()} ${t('catalogStreamInView')}` : ''}</span>
@@ -231,7 +237,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
     </div>
     {unavailable && <div className="empty-state catalog-render-status" role="status"><p>{t('catalogRenderUnavailable')}</p></div>}
     <p className="catalog-point-epoch" data-testid="catalog-point-epoch" data-utc-jd={julianDay}>
-      {t('catalogPointModel')} <time dateTime={julianDayToDate(julianDay).toISOString()}>{julianDayToDate(julianDay).toISOString().replace('T', ' ')}</time>
+      {t(mode === '3d' ? 'catalogPointModel3d' : 'catalogPointModel')} <time dateTime={julianDayToDate(julianDay).toISOString()}>{julianDayToDate(julianDay).toISOString().replace('T', ' ')}</time>
     </p>
   </>
 }

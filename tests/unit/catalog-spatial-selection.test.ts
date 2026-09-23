@@ -4,6 +4,16 @@ import { selectCatalogSpatialPoints } from '../../src/lib/catalogSpatialSelectio
 const noYield = async () => {}
 const view = { radius: 1, aspect: 1, maximumPoints: 4 }
 
+it('uses the same 3D display rotation for culling, including actual z coordinates', async () => {
+  const positions = new Float32Array([-.5,0,4, 0,4,0, .5,0,.5]), original = positions.slice()
+  const face = await selectCatalogSpatialPoints(positions,3,{...view,maximumPoints: 100,rotation: {azimuthDegrees: 0,tiltDegrees: 0}},() => false,noYield)
+  expect([...face!.indices]).toEqual([0,2])
+  const edge = await selectCatalogSpatialPoints(positions,3,{...view,maximumPoints: 100,rotation: {azimuthDegrees: 0,tiltDegrees: 90}},() => false,noYield)
+  expect([...edge!.indices]).toEqual([1,2])
+  expect(positions).toEqual(original)
+  await expect(selectCatalogSpatialPoints(positions,3,{...view,rotation: {azimuthDegrees: NaN,tiltDegrees: 0}},() => false,noYield)).rejects.toThrow('rotation')
+})
+
 it('represents each occupied screen region instead of taking a source prefix', async () => {
   const positions = new Float32Array(8000)
   for (let region = 0; region < 4; region++) for (let row = 0; row < 1000; row++) positions.set([region & 1 ? .5 : -.5, region & 2 ? .5 : -.5], (region * 1000 + row) * 2)

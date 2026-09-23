@@ -4,6 +4,7 @@ import type { CatalogSpatialView } from '../lib/catalogSpatialSelection'
 
 export type CatalogStreamRequest = {
   type: 'start'
+  mode?: '2d' | '3d'
   manifest: AsteroidManifest
   filters: CatalogFilters
   julianDay: number

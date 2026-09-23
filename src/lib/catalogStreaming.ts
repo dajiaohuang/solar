@@ -19,7 +19,8 @@ export type CatalogStreamTile = {
 export type CatalogStreamResult = { sourceRows: number; drawnRows: number; complete: boolean }
 type Checksums = { schemaVersion: number; algorithm: string; files: Record<string, string> }
 
-export function planCatalogStream(manifest: AsteroidManifest, requestedRows: number, budgetBytes: number): CatalogStreamPlan {
+export function planCatalogStream(manifest: AsteroidManifest, requestedRows: number, budgetBytes: number, mode: '2d' | '3d' = '2d'): CatalogStreamPlan {
+  if (mode !== '2d' && mode !== '3d') throw new Error('Invalid catalog streaming dimension')
   const { compactIndex: compact, totalCount, chunkSize, chunkCount } = manifest
   if (manifest.format !== 'binary-v1' || !compact || compact.format !== 'catalog-index-v1' || compact.strideBytes !== 24 || compact.count !== totalCount ||
       !Number.isSafeInteger(totalCount) || totalCount < 1 || !Number.isSafeInteger(chunkSize) || chunkSize < 1 || chunkSize > 65_536 ||
@@ -33,8 +34,10 @@ export function planCatalogStream(manifest: AsteroidManifest, requestedRows: num
   // and a CPU copy for context restoration use 48 bytes per point. Spatial
   // positions, index scratch and CPU/GPU selections reserve another 24 bytes.
   const fixed = totalCount * (48 + 9) + CATALOG_STREAM_CONCURRENCY * chunkSize * 256 + 8 * MIB
-  const capacity = Math.min(totalCount, requestedRows, Math.max(0, Math.floor((budgetBytes - fixed) / 72)))
-  return { capacity, budgetBytes, reservedBytes: fixed + capacity * 72 }
+  // 3D adds one Float32 coordinate in both CPU/GPU attributes and worker culling.
+  const perPoint = mode === '3d' ? 84 : 72
+  const capacity = Math.min(totalCount, requestedRows, Math.max(0, Math.floor((budgetBytes - fixed) / perPoint)))
+  return { capacity, budgetBytes, reservedBytes: fixed + capacity * perPoint }
 }
 
 async function sha256(buffer: ArrayBuffer) {
@@ -73,6 +76,7 @@ async function fetchArtifact(url: string, maximumBytes: number, expectedHash: st
 }
 
 type StreamOptions = {
+  mode?: '2d' | '3d'
   manifest: AsteroidManifest
   filters: CatalogFilters
   julianDay: number
@@ -89,7 +93,8 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
   const { manifest, filters, signal, onTile } = options
   signal.throwIfAborted()
   if (!Number.isFinite(options.julianDay) || options.julianDay < 2441317.5) throw new Error('Catalog streaming requires a UTC epoch from 1972 onwards')
-  const plan = planCatalogStream(manifest, options.requestedRows, options.budgetBytes)
+  const mode = options.mode ?? '2d', stride = mode === '3d' ? 3 : 2
+  const plan = planCatalogStream(manifest, options.requestedRows, options.budgetBytes, mode)
   if (!plan.capacity) throw new Error('The catalog index exceeds the available streaming budget')
   if (filters.query.trim() && !options.candidateLocators) throw new Error('Catalog name search requires exact source locators')
   const ranges = [filters.semiMajorAxis, filters.eccentricity, filters.inclination, filters.absoluteMagnitude, filters.perihelion]
@@ -181,7 +186,7 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
         used++
       }
       const prepared = prepareCatalogElements(selected.subarray(0, used * 8))
-      const positions = propagatePreparedCatalogPositions(prepared, epochTt, '2d', new Float64Array(used * 2))
+      const positions = propagatePreparedCatalogPositions(prepared, epochTt, mode, new Float64Array(used * stride))
       drawnRows += used
       await onTile({ positions, appearance: appearance.slice(0, used * 2), sourceRows, drawnRows })
       signal.throwIfAborted()

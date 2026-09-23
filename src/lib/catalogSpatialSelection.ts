@@ -1,4 +1,6 @@
-export type CatalogSpatialView = { radius: number; aspect: number; maximumPoints: number }
+import { catalogProjection, type CatalogRotation } from './catalogProjection'
+
+export type CatalogSpatialView = { radius: number; aspect: number; maximumPoints: number; rotation?: CatalogRotation }
 
 function hash(index: number) {
   let value = index + 1
@@ -16,7 +18,9 @@ export async function selectCatalogSpatialPoints(
   cancelled: () => boolean,
   yieldToMessages: () => Promise<void>,
 ) {
-  if (!Number.isSafeInteger(count) || count < 0 || count * 2 > positions.length ||
+  const stride = view.rotation ? 3 : 2
+  const projection = view.rotation ? catalogProjection(view.rotation) : null
+  if (!Number.isSafeInteger(count) || count < 0 || count * stride > positions.length ||
       !Number.isFinite(view.radius) || view.radius <= 0 || !Number.isFinite(view.aspect) || view.aspect <= 0 ||
       !Number.isSafeInteger(view.maximumPoints) || view.maximumPoints < 1 || view.maximumPoints > 500_000) throw new Error('Invalid spatial catalog view')
   const columns = Math.max(1, Math.min(view.maximumPoints, Math.floor(Math.sqrt(view.maximumPoints * view.aspect))))
@@ -27,7 +31,10 @@ export async function selectCatalogSpatialPoints(
     if (cancelled()) return null
     const end = Math.min(count, start + 20_000)
     for (let index = start; index < end; index++) {
-      const x = positions[index * 2] / view.radius / view.aspect, y = positions[index * 2 + 1] / view.radius
+      const offset = index*stride
+      const px = projection ? projection[0][0]*positions[offset]+projection[0][1]*positions[offset+1] : positions[offset]
+      const py = projection ? projection[1][0]*positions[offset]+projection[1][1]*positions[offset+1]+projection[1][2]*positions[offset+2] : positions[offset+1]
+      const x = px / view.radius / view.aspect, y = py / view.radius
       if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error('Invalid spatial catalog position')
       if (x < -1 || x > 1 || y < -1 || y > 1) continue
       visible++

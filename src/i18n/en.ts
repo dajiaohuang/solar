@@ -1,6 +1,7 @@
 export const en = {
   catalogRenderUnavailable: 'Catalog rendering is unavailable. The table remains usable; the map will return when graphics recover.',
   catalogPointModel: 'Approximate heliocentric two-body positions, projected on the ecliptic. Snapshot UTC:',
+  catalogPointModel3d: 'Approximate heliocentric two-body 3D positions, orthographic display. Snapshot UTC:',
   catalogStreamLimit: 'Expanded map point limit',
   catalogStreamRadius: 'Map radius (AU)',
   catalogStreamLoaded: 'loaded / capacity',

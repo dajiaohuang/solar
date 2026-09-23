@@ -10,6 +10,7 @@ const scope = self as DedicatedWorkerGlobalScope
 let controller: AbortController | null = null
 let transfers: ReturnType<typeof createCatalogTransferWindow> | null = null
 let spatialPositions = new Float32Array(), availablePoints = 0
+let dimensions = 2
 let pendingView: Extract<CatalogStreamRequest, { type: 'view' }> | null = null
 let selecting = false, viewGeneration = 0
 const channel = new MessageChannel(), continuations: (() => void)[] = []
@@ -24,6 +25,7 @@ async function selectViews() {
       const request = pendingView, generation = viewGeneration
       pendingView = null
       if (request.count > availablePoints) throw new Error('Spatial view exceeds computed source rows')
+      if (Boolean(request.view.rotation) !== (dimensions === 3)) throw new Error('Spatial view dimension does not match its source snapshot')
       const result = await selectCatalogSpatialPoints(spatialPositions, request.count, request.view, () => generation !== viewGeneration, yieldToMessages)
       if (result && generation === viewGeneration) scope.postMessage({ type: 'selection', requestId: request.requestId, count: request.count, indices: result.indices, visible: result.visible } satisfies CatalogStreamResponse, [result.indices.buffer])
     }
@@ -48,9 +50,11 @@ scope.onmessage = (event: MessageEvent<CatalogStreamRequest>) => {
   void (async () => {
     try {
       requireCatalogAccess('scan')
-      const plan = planCatalogStream(request.manifest, request.requestedRows, request.budgetBytes)
+      const mode = request.mode ?? '2d'
+      dimensions = mode === '3d' ? 3 : 2
+      const plan = planCatalogStream(request.manifest, request.requestedRows, request.budgetBytes, mode)
       if (!plan.capacity) throw new Error('The catalog index exceeds the available streaming budget')
-      spatialPositions = new Float32Array(plan.capacity * 2)
+      spatialPositions = new Float32Array(plan.capacity * dimensions)
       const candidateLocators = request.filters.query.trim()
         ? await loadAsteroidSearchLocators(request.filters.query, request.manifest, active.signal)
         : undefined
@@ -59,7 +63,7 @@ scope.onmessage = (event: MessageEvent<CatalogStreamRequest>) => {
         onTile: tile => {
           // This Float32 copy is exclusively for visual culling. Scientific
           // propagation and the transferred source snapshot remain Float64.
-          spatialPositions.set(tile.positions, (tile.drawnRows - tile.positions.length / 2) * 2)
+          spatialPositions.set(tile.positions, (tile.drawnRows - tile.positions.length / dimensions) * dimensions)
           availablePoints = tile.drawnRows
           return window.publish(tileId => {
             scope.postMessage({ type: 'tile', tileId, ...tile } satisfies CatalogStreamResponse, [tile.positions.buffer, tile.appearance.buffer])

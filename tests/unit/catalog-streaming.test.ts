@@ -44,6 +44,22 @@ function run(manifest: AsteroidManifest, onTile: (tile: CatalogStreamTile) => Pr
 }
 
 describe('bounded source catalog streaming', () => {
+  it('streams Float64 inclined 3D states and reserves every added coordinate buffer', async () => {
+    const { manifest,files,rehash } = fixture(3,3)
+    const elements = new Float64Array(files.get('binary/chunk-0000.bin')!), index = new DataView(files.get('catalog-index.bin')!)
+    for (let row = 0; row < 3; row++) { elements[row*8+3] = 90; elements[row*8+5] = 90; index.setUint32(row*24+12,90000000,true) }
+    rehash()
+    const positions: number[] = []
+    await run(manifest,async tile => { expect(tile.positions).toBeInstanceOf(Float64Array); positions.push(...tile.positions) },{mode: '3d'})
+    expect(positions).toHaveLength(9)
+    for (let row = 0; row < 3; row++) {
+      expect(Math.abs(positions[row*3])).toBeLessThan(1e-14)
+      expect(Math.abs(positions[row*3+1])).toBeLessThan(1e-14)
+      expect(positions[row*3+2]).toBe(2+row/100)
+    }
+    const two = planCatalogStream(manifest,3,32*1024*1024), three = planCatalogStream(manifest,3,32*1024*1024,'3d')
+    expect(three.reservedBytes-two.reservedBytes).toBe(3*12)
+  })
   it('uses every source row once in source order, preserving flags and an independently known circular state', async () => {
     const { manifest, requests } = fixture(), positions: number[] = [], flags: number[] = []
     const result = await run(manifest, async tile => {

@@ -3,6 +3,7 @@ import type { TranslationKey } from './en'
 export const zh: Record<TranslationKey, string> = {
   catalogRenderUnavailable: '星表绘图暂不可用，仍可使用表格；图形恢复后地图会重新显示。',
   catalogPointModel: '日心二体近似位置，投影到黄道平面。快照 UTC：',
+  catalogPointModel3d: '日心二体近似三维位置，正交显示。快照 UTC：',
   catalogStreamLimit: '扩展星图显示上限',
   catalogStreamRadius: '星图半径（AU）',
   catalogStreamLoaded: '已加载 / 容量',
