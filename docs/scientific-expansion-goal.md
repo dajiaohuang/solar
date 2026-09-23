@@ -1774,3 +1774,19 @@ stalled-header deadline with an asserted reached wait state. No full local
 tests ran. Live TLS, Android UI/file import and lifecycle/device validation remain
 unproven; the missing local Android SDK is unchanged. Candidate c3b87f7 /
 run 35840897494 remains active and was not replaced.
+
+### Checkpoint 79: Android stellar panel and pending live native scenario (2026-09-23)
+
+Wired original-file pickers, bounded background import with provider cancellation
+and a UI deadline, explicit RV/covariance controls, real service calls, readouts
+and snapshot-preserving document export. Generation guards and lifecycle/input
+clear paths prevent stale results. Added bilingual strings and scientific limits.
+
+Extended the existing owned-emulator HTTPS harness to stage the original Gaia
+files, invoke import-result callbacks, require the live Go stellar request and
+assert state/covariance values and input invalidation. This scenario is authored
+but unexecuted; the local Android SDK is absent. Eight focused harness/reuse
+tests, JS syntax/lint and both XML resources passed. No full local tests ran.
+Native UI compilation/execution, actual picker interaction and export destination
+write acceptance remain explicitly unproven. Candidate c3b87f7 has passed Android,
+Web and all four browsers and is still awaiting iOS; it was not replaced.

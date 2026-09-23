@@ -244,6 +244,29 @@ public final class ObservationUITest {
             shown(withTagValue(is((Object) "contacts-export"))).check(matches(withEffectiveVisibility(GONE)));
             shown(withTagValue(is((Object) "contacts-result"))).check(matches(withText("")));
             shown(withTagValue(is((Object) "contacts-toggle"))).perform(scrollTo(), click());
+            // Original files enter through the picker-result callback; the system picker itself is not automated here.
+            fill(BACKEND_HINT, backend);
+            shown(withTagValue(is((Object) "stellar-toggle"))).perform(scrollTo(), click());
+            shown(withTagValue(is((Object) "stellar-load"))).check(matches(not(androidx.test.espresso.matcher.ViewMatchers.isEnabled())));
+            String stellarFiles = requiredArg(args, "solarStellarSourceDirectory");
+            scenario.onActivity(activity -> activity.onActivityResult(732, Activity.RESULT_OK,
+                    new Intent().setData(android.net.Uri.fromFile(new File(stellarFiles, "manifest.json")))));
+            waitForText(containsString("manifest.json: "+requiredArg(args,"solarStellarManifestBytes")+" B"));
+            scenario.onActivity(activity -> activity.onActivityResult(733, Activity.RESULT_OK,
+                    new Intent().setData(android.net.Uri.fromFile(new File(stellarFiles, "rows.csv")))));
+            waitForText(containsString("rows.csv: "+requiredArg(args,"solarStellarRowsBytes")+" B"));
+            shown(withTagValue(is((Object) "stellar-rv"))).perform(scrollTo(), click());
+            shown(withTagValue(is((Object) "stellar-covariance"))).perform(scrollTo(), click());
+            shown(withTagValue(is((Object) "stellar-load"))).perform(scrollTo(), click());
+            waitForText(containsString("Gaia DR3 65212004581252736 · J2026.0 TCB"));
+            shown(withTagValue(is((Object) "stellar-result"))).check(matches(withText(containsString("56.6929443290"))));
+            shown(withTagValue(is((Object) "stellar-result"))).check(matches(withText(containsString("0.357911"))));
+            shown(withTagValue(is((Object) "stellar-export"))).perform(scrollTo()).check(matches(isDisplayed()));
+            panelScreenshot(scenario,"stellar-status","stellar-live-go-covariance.png");
+            shown(withTagValue(is((Object) "stellar-epoch"))).perform(scrollTo(),replaceText("2027"),closeSoftKeyboard());
+            shown(withTagValue(is((Object) "stellar-result"))).check(matches(withText("")));
+            shown(withTagValue(is((Object) "stellar-export"))).check(matches(withEffectiveVisibility(GONE)));
+            shown(withTagValue(is((Object) "stellar-toggle"))).perform(scrollTo(),click());
             passed = true;
         } finally {
             try {

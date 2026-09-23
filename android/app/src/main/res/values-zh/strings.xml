@@ -2,4 +2,22 @@
 <resources>
     <string name="app_name">Solar Atlas</string>
     <string name="title_activity_main">Solar Atlas</string>
+    <string name="stellar_title">恒星历元传播</string>
+    <string name="stellar_intro">导入 Gaia 原始清单与 CSV。使用匀速单星模型，不是地面视天空。</string>
+    <string name="stellar_manifest">选择原始 manifest.json（最多 1 MiB）</string>
+    <string name="stellar_rows">选择原始 rows.csv（最多 8 MiB）</string>
+    <string name="stellar_id">精确 Gaia 源 ID</string>
+    <string name="stellar_epoch">目标 TCB 儒略年（1916–2116）</string>
+    <string name="stellar_rv">采用光谱径向速度近似天体测量径向速度；未校正天体物理位移。</string>
+    <string name="stellar_covariance">传播形式协方差，假设径向速度误差独立于天体测量误差。</string>
+    <string name="stellar_load">计算恒星状态</string>
+    <string name="stellar_cancel">取消恒星任务</string>
+    <string name="stellar_export">保存恒星计算与原始来源</string>
+    <string name="stellar_idle">选择原始文件并明确假设。</string>
+    <string name="stellar_loading">正在读取来源或计算…</string>
+    <string name="stellar_timeout">来源导入超过时限。</string>
+    <string name="stellar_sigmas">传播后边缘标准差（形式误差）</string>
+    <string name="stellar_limits">协方差为可选的一阶近似。不含系统误差、双星加速度或观测者改正。标准差不是联合置信区域或掩星时间精度保证。导出保留完整来源、矩阵与假设。</string>
+    <string name="stellar_exported">已保存恒星来源响应。</string>
+    <string name="stellar_export_failed">恒星文件操作失败。</string>
 </resources>

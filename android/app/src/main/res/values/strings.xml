@@ -4,4 +4,22 @@
     <string name="title_activity_main">Solar Atlas</string>
     <string name="package_name" translatable="false">io.github.dajiaohuang.solaratlas</string>
     <string name="custom_url_scheme" translatable="false">io.github.dajiaohuang.solaratlas</string>
+    <string name="stellar_title">Stellar epoch propagation</string>
+    <string name="stellar_intro">Import original Gaia manifest and CSV. This is a uniform single-star model, not a ground apparent sky.</string>
+    <string name="stellar_manifest">Choose original manifest.json (up to 1 MiB)</string>
+    <string name="stellar_rows">Choose original rows.csv (up to 8 MiB)</string>
+    <string name="stellar_id">Exact Gaia source ID</string>
+    <string name="stellar_epoch">Target TCB Julian year (1916–2116)</string>
+    <string name="stellar_rv">Adopt spectroscopic RV as astrometric RV; astrophysical shifts remain uncorrected.</string>
+    <string name="stellar_covariance">Propagate formal covariance assuming RV errors are independent of astrometry.</string>
+    <string name="stellar_load">Compute stellar state</string>
+    <string name="stellar_cancel">Cancel stellar work</string>
+    <string name="stellar_export">Save stellar calculation and original sources</string>
+    <string name="stellar_idle">Select original files and explicit assumptions.</string>
+    <string name="stellar_loading">Reading sources or computing…</string>
+    <string name="stellar_timeout">Source import deadline exceeded.</string>
+    <string name="stellar_sigmas">Propagated marginal standard deviations (formal errors)</string>
+    <string name="stellar_limits">First-order covariance is optional. No systematics, binary acceleration or observer corrections. Standard deviations are not joint confidence regions or occultation timing guarantees. Full sources, matrices and assumptions are retained in the export.</string>
+    <string name="stellar_exported">Stellar source response saved.</string>
+    <string name="stellar_export_failed">Stellar file operation failed.</string>
 </resources>

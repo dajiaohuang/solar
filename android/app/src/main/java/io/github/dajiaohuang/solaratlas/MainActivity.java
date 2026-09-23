@@ -48,6 +48,9 @@ public final class MainActivity extends Activity {
     private NativeObservationDeck viewport;
     private CoveragePanel coveragePanel;
     private GroundContactsPanel contactsPanel;
+    private StellarMotionPanel stellarPanel;
+    private byte[] pendingStellarExport;
+    private static final int STELLAR_MANIFEST_REQUEST = 732, STELLAR_ROWS_REQUEST = 733, STELLAR_EXPORT_REQUEST = 734;
     private byte[] pendingContactExport;
     private static final int CONTACT_EXPORT_REQUEST = 731;
     private SourceIdentityPanel identityPanel;
@@ -139,6 +142,7 @@ public final class MainActivity extends Activity {
         });
         content.addView(identityPanel);
         contactsPanel = new GroundContactsPanel(this, backend, this::exportContacts); content.addView(contactsPanel);
+        stellarPanel = new StellarMotionPanel(this, backend, this::pickStellarSource, this::exportStellar); content.addView(stellarPanel);
         android.text.TextWatcher invalidate = new android.text.TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
@@ -338,6 +342,21 @@ public final class MainActivity extends Activity {
     private TextView label(String text, int size, int color) { TextView result = new TextView(this); result.setText(text); result.setTextSize(size); result.setTextColor(color); return result; }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private void showTutorial() { new android.app.AlertDialog.Builder(this).setTitle("First observation").setMessage("1. Enter an HTTPS backend address and a finite TDB Julian date. 2. Choose a preset or enter custom IDs. 3. Loading verifies manifest, plan and every binary tile; cancellation publishes nothing. 4. Only verified exact rows render. Missing references never become an invented origin.").setPositiveButton("Done", null).show(); }
+    private void pickStellarSource(boolean manifest) {
+        android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(android.content.Intent.CATEGORY_OPENABLE).setType("*/*")
+                .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try { startActivityForResult(intent, manifest ? STELLAR_MANIFEST_REQUEST : STELLAR_ROWS_REQUEST); }
+        catch (RuntimeException unavailable) { stellarPanel.exportStatus(false); }
+    }
+    private void exportStellar(byte[] bytes) {
+        pendingStellarExport = bytes.clone();
+        android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_CREATE_DOCUMENT)
+                .addCategory(android.content.Intent.CATEGORY_OPENABLE).setType("application/json")
+                .putExtra(android.content.Intent.EXTRA_TITLE, "solar-stellar-motion.json");
+        try { startActivityForResult(intent, STELLAR_EXPORT_REQUEST); }
+        catch (RuntimeException unavailable) { pendingStellarExport = null; stellarPanel.exportStatus(false); }
+    }
     private void exportContacts(byte[] bytes) {
         pendingContactExport = bytes;
         android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_CREATE_DOCUMENT)
@@ -348,6 +367,25 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request, int result, android.content.Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == STELLAR_MANIFEST_REQUEST || request == STELLAR_ROWS_REQUEST) {
+            if (result == RESULT_OK && data != null && data.getData() != null) stellarPanel.importSource(data.getData(), request == STELLAR_MANIFEST_REQUEST);
+            return;
+        }
+        if (request == STELLAR_EXPORT_REQUEST) {
+            final byte[] bytes = pendingStellarExport; pendingStellarExport = null;
+            if (result != RESULT_OK || data == null || data.getData() == null || bytes == null) return;
+            final android.net.Uri destination = data.getData();
+            new Thread(() -> {
+                boolean saved = false;
+                try (java.io.OutputStream output = getContentResolver().openOutputStream(destination, "wt")) {
+                    if (output == null) throw new java.io.IOException("Export destination unavailable");
+                    output.write(bytes); output.flush(); saved = true;
+                } catch (java.io.IOException | RuntimeException error) { saved = false; }
+                final boolean success = saved;
+                runOnUiThread(() -> { if (!isFinishing() && !isDestroyed()) stellarPanel.exportStatus(success); });
+            }, "solar-stellar-export").start();
+            return;
+        }
         if (request != CONTACT_EXPORT_REQUEST) return;
         final byte[] bytes = pendingContactExport; pendingContactExport = null;
         if (result != RESULT_OK || data == null || data.getData() == null || bytes == null) return;
@@ -370,6 +408,7 @@ public final class MainActivity extends Activity {
         coveragePanel.cancelAndClear(R.string.coverage_idle);
         identityPanel.clear();
         contactsPanel.clear();
+        stellarPanel.clear();
         boolean hadObservation = currentFrame != null || loadThread != null;
         cancelLoad(); showEvidence(null, "");
         if (hadObservation) status.setText("Observation released while inactive. Load again to resume verified states.");
@@ -382,7 +421,7 @@ public final class MainActivity extends Activity {
             if (manager != null) thermalMonitor = new ThermalMonitor(manager, this::thermalChanged);
         }
     }
-    @Override protected void onDestroy() { pendingContactExport = null; cancelLoad(); projectionPrefetch.close(); if (viewport != null) viewport.release(); super.onDestroy(); }
+    @Override protected void onDestroy() { pendingContactExport = null; pendingStellarExport = null; if (stellarPanel != null) stellarPanel.clear(); cancelLoad(); projectionPrefetch.close(); if (viewport != null) viewport.release(); super.onDestroy(); }
 
     private static final class Preset {
         final String id, title, reference, ids;

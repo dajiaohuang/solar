@@ -458,3 +458,20 @@ redirect/error handling, pre-cancellation, mid-read cancellation and a deadline
 that demonstrably disconnects during a stalled header read. This is controlled
 transport evidence, not a real TLS exchange or Android lifecycle/device proof.
 Native file-picker controls and live service integration remain outstanding.
+
+The Android panel is now wired to separate original-manifest and CSV document
+selection, bounded background reads, explicit RV/covariance checkboxes, HTTPS
+calculation and result export. Source reads have a 25-second UI deadline and a
+provider cancellation signal; late callbacks are suppressed by generation.
+Input edits, collapse, detach and activity pause clear results and cancel work.
+The selected original file bytes remain available to retry while the activity
+lives. Exports retain the snapshot chosen before the destination picker opens.
+
+The native smoke harness now stages only the two pinned original files on its
+owned emulator, supplies picker-result callbacks, and requires a real HTTPS
+stellar POST plus expected nominal/covariance readouts and stale-result clearing.
+This new native scenario has not yet run: local Android SDK compilation/device
+execution is unavailable. Eight focused harness/reuse unit tests, script syntax,
+targeted lint and English/Chinese resource XML parsing passed. System picker
+interaction, export destination writing and physical-device behavior remain
+unverified; the callback-driven smoke is not proof of those UI boundaries.
