@@ -2160,3 +2160,13 @@ targeting the cell's image when available. The test now explicitly waits for the
 Files collection view to disappear, then scrolls to the off-screen import status.
 Native re-execution is required. The prior Web hash and Android import failures
 are fixed in subsequent commits; main remains unadvanced until all gates pass.
+
+### Checkpoint 100: exact identity for zero-duration ensembles (2026-09-23)
+
+A targeted regression reproduced zero-duration endpoints differing from their
+initial coordinates by Float64 roundoff after an unnecessary frame/origin round
+trip. Zero-duration valid draws now copy the initial output-frame state exactly,
+retaining invalid masks and zero evaluation/step receipts. Nine focused ensemble
+tests passed, including the identity assertion and independent nonzero-duration
+references. No full local tests ran. Candidate 690f6ea / run 35850104881 remains
+live; this subsequent identity correction has not yet entered that candidate.

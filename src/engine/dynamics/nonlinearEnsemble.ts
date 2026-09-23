@@ -38,7 +38,15 @@ export async function propagateSourceOffsetEnsemble(
     await new Promise<void>(resolve => setTimeout(resolve, 0))
     signal?.throwIfAborted()
     if (!valid[index]) continue
-    const sample = initial.states.subarray(index*6,index*6+6), barycentric = new Float64Array(6)
+    const sample = initial.states.subarray(index*6,index*6+6)
+    // Zero elapsed time is an exact identity in the output frame. Avoid an
+    // unnecessary rotation/translation round trip changing tiny dispersions.
+    if (durationSeconds === 0) {
+      finalStates.set(sample,index*6)
+      numerics.push({ index, evaluations: 0, accepted: 0, rejected: 0 })
+      continue
+    }
+    const barycentric = new Float64Array(6)
     for (const start of [0,3]) {
       const scale = AU/(start === 0 ? 1 : DAY)
       barycentric[start] = sample[start]*scale+sun0[start]
