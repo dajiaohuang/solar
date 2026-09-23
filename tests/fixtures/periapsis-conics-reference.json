@@ -1,0 +1,845 @@
+{
+  "schemaVersion": 1,
+  "software": {
+    "spiceypy": "8.2.0",
+    "cspice": "CSPICE_N0067"
+  },
+  "generatorSha256": "e589cc54028ef526bd0c26fb94f843bbb3bb99899c3313415cea7ccce6f9d232",
+  "reference": "https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/conics_c.html",
+  "boundary": "Independent numerical two-body conics. Synthetic elements, not measured comet trajectories or physical accuracy.",
+  "cases": [
+    {
+      "eccentricity": 0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -86400000,
+      "state": [
+        45481889.15172986,
+        -128830903.91536233,
+        -60938648.43852672,
+        23.65227640070369,
+        13.858826356761142,
+        -11.646056016825213
+      ]
+    },
+    {
+      "eccentricity": 0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -8640000,
+      "state": [
+        -17695817.646343227,
+        141155510.73373583,
+        46276373.510674246,
+        -25.08020943163475,
+        -7.756634002545168,
+        14.069313824244285
+      ]
+    },
+    {
+      "eccentricity": 0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -86.4,
+      "state": [
+        -121931913.08484042,
+        -59534607.16649669,
+        62990174.14625675,
+        7.216933462269718,
+        -26.63627898306755,
+        -11.20501588604569
+      ]
+    },
+    {
+      "eccentricity": 0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 0,
+      "state": [
+        -121931289.52374874,
+        -59536908.5321922,
+        62989206.02356446,
+        7.217351067008174,
+        -26.636075078465957,
+        -11.205231620053707
+      ]
+    },
+    {
+      "eccentricity": 0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 86.4,
+      "state": [
+        -121930665.92657611,
+        -59539209.88027001,
+        62988237.8822329,
+        7.217768669610929,
+        -26.635871165982426,
+        -11.20544735074596
+      ]
+    },
+    {
+      "eccentricity": 0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 8640000,
+      "state": [
+        53996776.84558885,
+        -123430389.5124484,
+        -65029300.72718604,
+        22.931484788161942,
+        15.686633582046976,
+        -10.733331260240947
+      ]
+    },
+    {
+      "eccentricity": 0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 86400000,
+      "state": [
+        -26805532.2017202,
+        137950241.20598227,
+        51290518.739507526,
+        -24.75776642945242,
+        -9.778947862440777,
+        13.362374332337653
+      ]
+    },
+    {
+      "eccentricity": 0.8,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -86400000,
+      "state": [
+        753030490.7579699,
+        737756425.8333559,
+        -297272554.77748203,
+        -6.804963650900797,
+        -0.11495185257009632,
+        4.310635476995596
+      ]
+    },
+    {
+      "eccentricity": 0.8,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -8640000,
+      "state": [
+        -72646445.77342325,
+        227184466.1673276,
+        102641989.4162758,
+        -13.522618378401656,
+        -25.62705654430642,
+        2.2695870619871243
+      ]
+    },
+    {
+      "eccentricity": 0.8,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -86.4,
+      "state": [
+        -121932126.12490557,
+        -59533820.92911991,
+        62990504.89963874,
+        9.682674956883321,
+        -35.73624862079793,
+        -15.03318002906772
+      ]
+    },
+    {
+      "eccentricity": 0.8,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 0,
+      "state": [
+        -121931289.52374874,
+        -59536908.5321922,
+        62989206.02356446,
+        9.68309256198655,
+        -35.73604471754276,
+        -15.033395763642114
+      ]
+    },
+    {
+      "eccentricity": 0.8,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 86.4,
+      "state": [
+        -121930452.88651095,
+        -59539996.11764679,
+        62987907.12885091,
+        9.683510164224433,
+        -35.735840803712854,
+        -15.03361149376794
+      ]
+    },
+    {
+      "eccentricity": 0.8,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 8640000,
+      "state": [
+        53061275.827938646,
+        -236747560.8921205,
+        -92524370.6367059,
+        22.627625125064633,
+        -7.975527151900982,
+        -16.4054810418268
+      ]
+    },
+    {
+      "eccentricity": 0.8,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 86400000,
+      "state": [
+        930144015.2743769,
+        84108142.32449478,
+        -572248518.5105422,
+        5.26970997512875,
+        5.780899343926727,
+        -1.9270915877143773
+      ]
+    },
+    {
+      "eccentricity": 0.999999,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -86400000,
+      "state": [
+        768719855.4741805,
+        1289188888.4252965,
+        -170575393.09276187,
+        -9.244202189602971,
+        -8.737638813874138,
+        3.728413279221421
+      ]
+    },
+    {
+      "eccentricity": 0.999999,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -8640000,
+      "state": [
+        -82383795.28460166,
+        244484206.78217357,
+        113139579.92478032,
+        -11.71264004591316,
+        -28.369302239376943,
+        0.4356594600937953
+      ]
+    },
+    {
+      "eccentricity": 0.999999,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -86.4,
+      "state": [
+        -121932171.3795537,
+        -59533653.914076015,
+        62990575.15932397,
+        10.206455606470914,
+        -37.66929311004789,
+        -15.846370830268972
+      ]
+    },
+    {
+      "eccentricity": 0.999999,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 0,
+      "state": [
+        -121931289.52374874,
+        -59536908.5321922,
+        62989206.02356446,
+        10.206873211651628,
+        -37.66908920707873,
+        -15.846586564963674
+      ]
+    },
+    {
+      "eccentricity": 0.999999,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 86.4,
+      "state": [
+        -121930407.63186282,
+        -59540163.13269068,
+        62987836.86916568,
+        10.207290813812001,
+        -37.66888529296283,
+        -15.846802294969178
+      ]
+    },
+    {
+      "eccentricity": 0.999999,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 8640000,
+      "state": [
+        53879151.57384461,
+        -258402523.99163377,
+        -98414197.43815069,
+        22.55306775588455,
+        -11.637958552659777,
+        -17.265865199417878
+      ]
+    },
+    {
+      "eccentricity": 0.999999,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 86400000,
+      "state": [
+        1206083190.8298175,
+        -324927222.7271276,
+        -849599792.6652577,
+        11.265745754369979,
+        1.277008775844887,
+        -6.866942036231613
+      ]
+    },
+    {
+      "eccentricity": 1.0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -86400000,
+      "state": [
+        768719672.6272017,
+        1289191274.8399057,
+        -170574684.9041866,
+        -9.244206555124318,
+        -8.73767521981117,
+        3.7284070377475462
+      ]
+    },
+    {
+      "eccentricity": 1.0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -8640000,
+      "state": [
+        -82383841.57171676,
+        244484290.73242432,
+        113139630.25085871,
+        -11.712631600534129,
+        -28.36931520954581,
+        0.43565085962894123
+      ]
+    },
+    {
+      "eccentricity": 1.0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -86.4,
+      "state": [
+        -121932171.37977417,
+        -59533653.91326237,
+        62990575.159666255,
+        10.206458158190175,
+        -37.66930252732372,
+        -15.8463747919171
+      ]
+    },
+    {
+      "eccentricity": 1.0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 0,
+      "state": [
+        -121931289.52374874,
+        -59536908.5321922,
+        62989206.02356446,
+        10.206875763370888,
+        -37.66909862435456,
+        -15.846590526611802
+      ]
+    },
+    {
+      "eccentricity": 1.0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 86.4,
+      "state": [
+        -121930407.63164236,
+        -59540163.13350433,
+        62987836.868823394,
+        10.207293365531262,
+        -37.66889471023866,
+        -15.846806256617306
+      ]
+    },
+    {
+      "eccentricity": 1.0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 8640000,
+      "state": [
+        53879156.28238678,
+        -258402628.24397188,
+        -98414226.28490818,
+        22.553067491668095,
+        -11.637975775571245,
+        -17.265869300541283
+      ]
+    },
+    {
+      "eccentricity": 1.0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 86400000,
+      "state": [
+        1206084192.8539891,
+        -324929209.15189195,
+        -849600924.0374238,
+        11.265766523630404,
+        1.2769846427806222,
+        -6.866961262231066
+      ]
+    },
+    {
+      "eccentricity": 1.000001,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -86400000,
+      "state": [
+        768719489.7785434,
+        1289193661.2513871,
+        -170573976.71531606,
+        -9.244210920596293,
+        -8.737711625691679,
+        3.728400796256201
+      ]
+    },
+    {
+      "eccentricity": 1.000001,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -8640000,
+      "state": [
+        -82383887.85880962,
+        244484374.6826513,
+        113139680.57691701,
+        -11.712623155160625,
+        -28.36932817970802,
+        0.4356422591692617
+      ]
+    },
+    {
+      "eccentricity": 1.000001,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -86.4,
+      "state": [
+        -121932171.37999465,
+        -59533653.91244871,
+        62990575.16000854,
+        10.206460709908798,
+        -37.6693119445972,
+        -15.846378753564236
+      ]
+    },
+    {
+      "eccentricity": 1.000001,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 0,
+      "state": [
+        -121931289.52374874,
+        -59536908.5321922,
+        62989206.02356446,
+        10.206878315089511,
+        -37.66910804162804,
+        -15.84659448825894
+      ]
+    },
+    {
+      "eccentricity": 1.000001,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 86.4,
+      "state": [
+        -121930407.63142188,
+        -59540163.13431799,
+        62987836.86848111,
+        10.207295917249885,
+        -37.668904127512135,
+        -15.846810218264443
+      ]
+    },
+    {
+      "eccentricity": 1.000001,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 8640000,
+      "state": [
+        53879160.99093461,
+        -258402732.49627262,
+        -98414255.13165997,
+        22.553067227452683,
+        -11.637992998472864,
+        -17.265873401662915
+      ]
+    },
+    {
+      "eccentricity": 1.000001,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 86400000,
+      "state": [
+        1206085194.8753765,
+        -324931195.5757077,
+        -849602055.4075798,
+        11.265787292825939,
+        1.276960509717083,
+        -6.866980488188961
+      ]
+    },
+    {
+      "eccentricity": 1.5,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -86400000,
+      "state": [
+        580194227.0198427,
+        2207177128.7463417,
+        177207887.58260167,
+        -8.442699599778877,
+        -22.095951049419003,
+        -0.09421466037139048
+      ]
+    },
+    {
+      "eccentricity": 1.5,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -8640000,
+      "state": [
+        -103177182.0520805,
+        283875126.63886344,
+        136163420.50546888,
+        -8.058009452577597,
+        -34.185094980922415,
+        -3.336435664826113
+      ]
+    },
+    {
+      "eccentricity": 1.5,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -86.4,
+      "state": [
+        -121932275.47088775,
+        -59533269.75864796,
+        62990736.765361525,
+        11.411216417037249,
+        -42.11553648991161,
+        -17.716811079582662
+      ]
+    },
+    {
+      "eccentricity": 1.5,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 0,
+      "state": [
+        -121931289.52374874,
+        -59536908.5321922,
+        62989206.02356446,
+        11.411634022396182,
+        -42.115332587600314,
+        -17.717026814554092
+      ]
+    },
+    {
+      "eccentricity": 1.5,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 86.4,
+      "state": [
+        -121930303.54052877,
+        -59540547.288118735,
+        62987675.263128124,
+        11.412051624378275,
+        -42.11512867282658,
+        -17.71724254428284
+      ]
+    },
+    {
+      "eccentricity": 1.5,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 8640000,
+      "state": [
+        56797571.723333225,
+        -306521476.3058497,
+        -112203903.29129973,
+        22.535943391475307,
+        -19.246604793300726,
+        -19.141146713944657
+      ]
+    },
+    {
+      "eccentricity": 1.5,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 86400000,
+      "state": [
+        1500964985.7826505,
+        -1190983613.7141082,
+        -1252326234.440754,
+        17.04485415461293,
+        -9.650825909583581,
+        -13.260980801718278
+      ]
+    },
+    {
+      "eccentricity": 3.0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -86400000,
+      "state": [
+        -12346460.97766304,
+        3721969324.1677647,
+        930557297.8156221,
+        -1.8371159328540738,
+        -41.89462542285649,
+        -9.214350333882976
+      ]
+    },
+    {
+      "eccentricity": 3.0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -8640000,
+      "state": [
+        -148673159.8017341,
+        381702020.98413736,
+        189425087.84126315,
+        -0.8482848206864588,
+        -47.29264841031282,
+        -11.183053017954277
+      ]
+    },
+    {
+      "eccentricity": 3.0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": -86.4,
+      "state": [
+        -121932536.66397259,
+        -59532305.80961002,
+        62991142.27826867,
+        14.434284528210226,
+        -53.27235405759245,
+        -22.41024750444161
+      ]
+    },
+    {
+      "eccentricity": 3.0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 0,
+      "state": [
+        -121931289.52374874,
+        -59536908.5321922,
+        62989206.02356446,
+        14.434702134016348,
+        -53.272150156931914,
+        -22.410463240107415
+      ]
+    },
+    {
+      "eccentricity": 3.0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 86.4,
+      "state": [
+        -121930042.34744394,
+        -59541511.23715668,
+        62987269.75022098,
+        14.435119735551067,
+        -53.2719462405075,
+        -22.41067896914169
+      ]
+    },
+    {
+      "eccentricity": 3.0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 8640000,
+      "state": [
+        68753748.09872152,
+        -420725266.9704116,
+        -148139046.26238987,
+        23.28437045343418,
+        -35.50909641716833,
+        -23.649884139765494
+      ]
+    },
+    {
+      "eccentricity": 3.0,
+      "periapsisKm": 149597870.7,
+      "gmKm3PerSecond2": 132712440041.93938,
+      "inclinationRadians": 0.6,
+      "ascendingNodeRadians": 1.2,
+      "argumentOfPeriapsisRadians": 2.3,
+      "elapsedTdbSeconds": 86400000,
+      "state": [
+        1771878214.2737496,
+        -2862820852.396102,
+        -1839524213.0862424,
+        21.458618153300414,
+        -30.519727356125934,
+        -21.248831389192034
+      ]
+    }
+  ]
+}

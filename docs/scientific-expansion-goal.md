@@ -1313,3 +1313,21 @@ and changed-file lint passed. Catalog point propagation was checked separately.
 No full local tests ran. This fixes numerical precision only, not physical model
 accuracy or non-elliptic feature completion. Candidate 858e895 / run 35831624808
 is active and remains undisturbed.
+
+### Checkpoint 53: independently checked unified conic calculation (2026-09-23)
+
+Added a Float64 periapsis universal-variable module spanning elliptic, parabolic
+and hyperbolic conics without division by 1-e. Inputs carry explicit km/GM and
+elapsed TDB seconds; signed time, safeguarded root finding, near-zero Stumpff
+series, orientation rotation and explicit numerical failure handling are covered.
+An independently executed CSPICE conics oracle generated 49 synthetic states
+with source-generator hash and software identity. All 51 focused cases passed
+(state/energy comparisons, exact Barker parabola, invalid/unrepresentable input).
+Types and changed-file lint passed after removing one unused initial assignment.
+No full local tests ran.
+
+This is a calculation foundation, not completed non-elliptic comet support:
+source ingestion, UI integration, perturbations/non-gravitational forces and
+physical uncertainty remain open. See docs/periapsis-conics.md for reference
+commands and evidence limits. Candidate 858e895 remains active remotely and
+is not replaced by this batch.
