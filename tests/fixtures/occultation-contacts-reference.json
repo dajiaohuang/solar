@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "path": "public/data/ephemerides/de440s-2000-01-01-2051-01-01.bsp",
+      "sha256": "8724d2d1bac115a75ad1f984c5b474ca778c96ee8be2df83e624cef61c001069"
+    },
+    {
+      "path": "src/data/pck00011.tpc",
+      "sha256": "3dff7b1dbeceaa01f25467767d3fa25816051c85d162d1edf04acb310ee28bb1"
+    }
+  ],
+  "cases": [
+    {
+      "name": "venus-2012",
+      "foregroundId": 299,
+      "backgroundId": 10,
+      "observerId": 399,
+      "referenceEpochTdb": 2456084.5,
+      "startSeconds": -43200,
+      "endSeconds": 43200,
+      "contacts": [
+        {
+          "boundary": "external",
+          "direction": "enter",
+          "elapsedTdbSeconds": -6880.648720741272
+        },
+        {
+          "boundary": "internal",
+          "direction": "enter",
+          "elapsedTdbSeconds": -5810.148573040962
+        },
+        {
+          "boundary": "internal",
+          "direction": "exit",
+          "elapsedTdbSeconds": 15980.03284561634
+        },
+        {
+          "boundary": "external",
+          "direction": "exit",
+          "elapsedTdbSeconds": 17050.550998926163
+        }
+      ]
+    },
+    {
+      "name": "moon-2017",
+      "foregroundId": 301,
+      "backgroundId": 10,
+      "observerId": 399,
+      "referenceEpochTdb": 2457987.25,
+      "startSeconds": -43200,
+      "endSeconds": 43200,
+      "contacts": [
+        {
+          "boundary": "external",
+          "direction": "enter",
+          "elapsedTdbSeconds": -425.9623963832855
+        },
+        {
+          "boundary": "external",
+          "direction": "exit",
+          "elapsedTdbSeconds": 3698.938286781311
+        }
+      ]
+    },
+    {
+      "name": "moon-2024",
+      "foregroundId": 301,
+      "backgroundId": 10,
+      "observerId": 399,
+      "referenceEpochTdb": 2460409.25,
+      "startSeconds": -43200,
+      "endSeconds": 43200,
+      "contacts": [
+        {
+          "boundary": "external",
+          "direction": "enter",
+          "elapsedTdbSeconds": -1411.2586913108826
+        },
+        {
+          "boundary": "external",
+          "direction": "exit",
+          "elapsedTdbSeconds": 3697.6207373142242
+        }
+      ]
+    }
+  ],
+  "frame": "J2000",
+  "aberration": "NONE",
+  "timeScale": "TDB",
+  "stepSeconds": 60,
+  "convergenceToleranceSeconds": 1e-06,
+  "generatorSha256": "45f426baa4cd9717ca7e82f7067501d2928d7dfba10543a4b31c97787744bcf9",
+  "software": {
+    "spiceypy": "8.2.0",
+    "cspice": "CSPICE_N0067"
+  },
+  "boundary": "Geocentric spherical-source GF comparison. GF step affects detection completeness; convergence tolerance is not physical timing uncertainty."
+}

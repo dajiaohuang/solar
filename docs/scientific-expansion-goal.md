@@ -11,7 +11,7 @@ remain paused. Changes may go directly to main after the required checks.
 | Shared analysis ephemeris | Events, curves and mission endpoints use a frozen source contract, expose actual per-body models, offer strict SPK coverage, and export time/frame/source evidence; shared backend integration follows | In progress |
 | Ground observer | Geodetic station, SOFA-compatible celestial/terrestrial transforms, versioned IERS EOP, vacuum/apparent altitude-azimuth, rise/set and visibility windows; source expiry and uncertainty remain visible | In progress |
 | Orbit uncertainty | Pinned SBDB covariance with labels, units and solution epoch; validated covariance propagation and sampling; uncertainty ellipsoids and event distributions, independent of numerical tolerance | In progress: source ingestion, solution-epoch conversion/sampling/browser ellipsoids and offline/browser conditional six-parameter DE440 time propagation; complete fit-model propagation, native propagation and event distributions pending |
-| Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | In progress: verified PCK radii and single-epoch spherical limb geometry against real CSPICE cases; contacts, oriented limbs, observer/light-time integration and event consumers pending |
+| Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | In progress: verified PCK radii and spherical limb geometry and bounded offline contact search against real CSPICE cases; complete detection, oriented limbs, observer/light-time integration and event consumers pending |
 | Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | In progress: bounded integration, variational equations, pinned DE440 adapter and browser/offline source-bearing experiments; additional forces, full covariance, native access and long-term diagnostics pending |
 | Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | In progress: pinned PCK semiaxes for 95 source bodies with independent CSPICE extraction; remaining data categories, orientation and identity integration pending |
 | Catalog streaming | Replace the fixed 8k/30k-only cloud path with cancellable binary chunk loading, priority scheduling and independent byte/decode/compute/upload limits | In progress: full-inventory 2D snapshot, bounded upload batching and spatial display available; continuous/3D streaming and source-priority scheduling pending |
@@ -820,3 +820,26 @@ This is not completed event analysis: contact/window searches, missed-event
 reporting, light-time/topocentric/orientation integration, non-spherical limbs,
 stellar targets, event distributions and consumers remain unfinished, along
 with the other ledger rows. The batch remains local while d5cd39f validates.
+
+### Verified promotion: d5cd39f (2026-09-23)
+
+Run 35819970981 passed every repository, Web, four-browser, Android, iOS and
+final-gate job for exact head `d5cd39f82667d80e04b1150eee1c174784f87fba`.
+That commit was fast-forwarded to main, delivering the conditional covariance
+core/CLI and cancellable browser propagation. Deployment/publication stay paused.
+
+### Checkpoint 30: bounded offline contact searches (2026-09-23)
+
+Added cancellable external/internal gap scans with bisection brackets, endpoint
+states, explicit evaluation/result budgets and permanent missed-event disclosure.
+An empty contact list is not a proof of no events. Independent CSPICE GF windows
+verify four Venus contacts and two contacts each for two Sun-Moon cases; nine
+focused search/CLI checks passed. The real CLI example used 349 geometry
+evaluations and exports source/implementation hashes with numerical/physical
+limits. Types and changed-file lint passed; no full local tests ran. Details are
+in [occultation-geometry.md](occultation-geometry.md).
+
+This offline sphere prototype does not complete event analysis. Certified
+coverage, grazing contacts, apparent/topocentric integration, oriented limbs,
+stellar events, event uncertainty and Web/native consumers remain open together
+with all other unfinished ledger rows. This batch requires remote validation.
