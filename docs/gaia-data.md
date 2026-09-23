@@ -210,3 +210,38 @@ explicit treatment of spectroscopic versus astrometric radial velocity, and
 independent reference states. Merely replacing dates is insufficient. No
 missing radial velocity is currently filled with zero, and no new propagated
 star state is exposed by this time-conversion module.
+
+## Single-star computation core
+
+internal/stellarmotion now implements an explicitly adopted catalog model with
+gofa v1.19.1 Starpm. Source inputs require J2016.0, valid five/six-parameter
+solution identity, positive measured parallax, both proper motions and a radial
+velocity. The caller must explicitly choose spectroscopic-as-astrometric;
+missing radial velocity is not filled. Exact coordinate poles are unsupported.
+Supported target years are within 100 Julian years of J2016.0; that bound is a
+software domain, not a positional-accuracy guarantee. Any nonzero SOFA status
+(distance override, excessive-velocity replacement, or failed convergence)
+is rejected. The output includes model assumptions and both TDB epoch parts.
+
+For F=1-LB, the adapter uses the derived compatible-coordinate mapping
+t*=F t+constant, x*=F x: angular rates divide by F; the formal AU/distance
+parallax argument divides by F when using the same defined AU in metres;
+velocity is unchanged. Outputs are mapped back to TCB-compatible quantities.
+This is an internal computational scaling, not a correction applied to Gaia
+source rows. See [Klioner 2008](https://www.aanda.org/articles/aa/pdf/2008/06/aa7786-07.pdf)
+for compatible coordinate scaling and the IAU resolution above for time.
+
+A separate pinned ERFA oracle produces 64 states from 16 actual source rows at
+J1916, J2016, J2026 and J2116. It also verifies that evaluating the same uniform
+model entirely in TCB agrees with joint scaled TDB evaluation. Focused Go tests
+compare the output with ERFA and reject missing, invalid and SOFA-modified states.
+
+    rtk proxy uv run --python 3.12 --with pyerfa==2.0.1.5 python scripts/reference-gaia-motion.py --output .cache/new-gaia-motion.json
+    rtk proxy go test ./internal/stellarmotion -run 'TestIndependentERFAStates|TestRefusesIncompleteOrModifiedModels' -count=1
+
+This incorporates SOFA changing-light-time/special-relativistic treatment for
+uniform single-star motion, not binary/Galactic acceleration, observed-station
+corrections or uncertainty propagation. Spectroscopic RV contains astrophysical
+shifts and is only adopted approximately; inverse measured parallax supplies a
+nominal model distance, not a distance inference. CLI/HTTP/browser access and
+original-response export for this new core still need integration.

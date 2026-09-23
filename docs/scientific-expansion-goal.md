@@ -1558,3 +1558,21 @@ propagation. Parameter rate/length conventions, perspective/light time, the
 spectroscopic radial-velocity approximation, independent propagated-state
 references and user access remain to implement. Missing inputs are not silently
 filled. Candidate 8968a78 / run 35835715872 remains active and is not replaced.
+
+### Checkpoint 66: independently checked Gaia single-star motion core (2026-09-23)
+
+Implemented a GoFA Starpm adapter with explicit TCB/TDB compatible time/length
+scaling and restored TCB-compatible output parameters. It requires complete
+inputs and an explicit spectroscopic-as-astrometric RV policy, and rejects every
+nonzero SOFA status rather than publishing overridden distances or velocities.
+Source identity, epoch, proper-motion convention, finite values and supported
+epoch/pole boundaries are checked. Returned model limitations distinguish
+nominal propagation from uncertainty, acceleration and observer corrections.
+
+A separately executed PyERFA oracle generated 64 states for 16 real sources
+and four epochs, with source/generator hashes and software versions. An
+additional all-TCB evaluation checks coordinate-scaling invariance. Two focused
+Go tests passed all reference and invalid/model-warning cases; no full local
+tests ran. CLI/HTTP/browser integration, source-bearing export, propagated
+covariance and stellar-occultation access remain outstanding. Candidate
+8968a78 remains active and was not replaced.
