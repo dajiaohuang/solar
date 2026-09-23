@@ -16,5 +16,7 @@ tests/fixtures/*.json text eol=lf
 tests/fixtures/iers-finals2000a-sample.txt -text -whitespace
 tests/fixtures/observer-iers-sample.txt -text -whitespace
 tests/fixtures/eclipse-iers-sample.txt -text -whitespace
+tests/fixtures/gaia-*/*.csv -text
+tests/fixtures/gaia-*/*.json text eol=lf
 third-party/*.txt -text
 scripts/reference/*-oracle.c text eol=lf

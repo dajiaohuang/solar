@@ -1111,3 +1111,27 @@ remain unverified until the remote candidate runs. No full local tests ran.
 Candidate 4b66e29 Android compilation and instrumentation have now passed; its
 iOS job is still running and is not interrupted. Android checkpoint 42 and this
 iOS batch remain local behind that candidate. The broader goal stays open.
+
+### Checkpoint 44: bounded source-backed Gaia DR3 cone ingestion (2026-09-23)
+
+Added an explicit ESA TAP importer with a sequential COUNT preflight, row/byte/
+time limits, cancellation, count reconciliation, 64-bit string source IDs and
+exclusive new output directories. Original CSV/query/time/hash evidence remains
+separate from spatial storage chunks. Coordinates and metadata explicitly retain
+ICRS J2016.0 / TCB, cosine-declination proper motion conventions, nullable fields
+and negative parallaxes. The importer does not infer distances or silently
+apply astrometric quality cuts. Current-coordinate 5-degree storage bins avoid
+pretending source-ID pixels are exact present coordinates or full-sky coverage.
+
+A real Pleiades-area ESA cone returned 19 rows and an independent count of 19;
+the original capture is committed for repeatable ingestion checks. Five focused
+tests cover source-byte hashes, exact IDs, truncated/duplicated/out-of-cone rows,
+uncertainty bounds, null/negative values, polar/wrap bins, preflight budgeting
+and cancellation. Types, changed-file lint and diff checks passed. No full local
+tests ran; no deployment or publication occurred.
+
+Parallel chunk consumption, proper-motion and observer corrections, Gaia sky
+rendering, stellar occultations and capacity measurements remain unfinished.
+The 19-row cone is ingestion evidence only, never a scale-performance claim.
+Existing candidate 4b66e29 is still awaiting its iOS job; healthy work was not
+interrupted. Android window/export and iOS contact additions remain local too.

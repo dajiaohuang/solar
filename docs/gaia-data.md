@@ -1,0 +1,43 @@
+# Gaia DR3 cone data
+
+Run a bounded, explicit query against the ESA TAP service:
+
+```powershell
+rtk proxy node scripts/fetch-gaia-cone.mjs --ra 56.75 --dec 24.1167 --radius 0.1 --max-mag 15 --max-rows 1024 --output .cache/gaia-cone-new
+```
+
+The output directory must be new. Angles are degrees; the magnitude limit is
+Gaia G. Each query has a 45-second deadline and an 8 MiB response ceiling. Cone
+radius is at most two degrees and the row budget at most 10,000. The script first
+requests COUNT, rejects oversized selections, then requests rows sequentially.
+The returned count must match exactly; a truncated CSV is not accepted as a
+complete selection. SIGINT aborts the current request. The manifest is written
+last, after the original CSV and hashed chunks; an interrupted output without
+a manifest is not a completed artifact. No data is published or deployed.
+
+The manifest retains both ADQL queries, URLs, retrieval times, byte lengths,
+SHA-256 values, original CSV files and implementation identities. `source_id`
+stays a decimal string to preserve its 64-bit identity. The selected columns
+include positions, proper motions, parallax, their errors and correlations,
+solution type, RUWE, G magnitude, BP-RP and radial velocity where supplied.
+Nulls and negative parallaxes remain unchanged; no distance inference or
+quality cut is silently applied.
+
+The coordinates are barycentric ICRS at J2016.0, expressed as a Julian year in
+TCB. Gaia's `pmra` and `ra_error` include the cosine of declination. See the
+[DR3 source data model](https://gea.esac.esa.int/archive/documentation/GDR3/Gaia_archive/chap_datamodel/sec_dm_main_source_catalogue/ssec_dm_gaia_source.html)
+and [ESA programmatic access](https://www.cosmos.esa.int/web/gaia-users/archive/programmatic-access).
+This importer does not propagate stars, construct a complete six-parameter
+covariance model, correct parallax zero points, or certify occultation timing.
+
+Chunks use 5-degree RA/declination bins computed from the returned coordinates.
+These are storage partitions of the selected cone, not full-sky tiles, equal-area
+HEALPix cells or bounds valid at other epochs. They intentionally do not infer
+current positions from source-ID bit fields. Magnitude-limited counts are not a
+catalog completeness guarantee. See the [Gaia DR3 release](https://www.cosmos.esa.int/web/gaia/dr3).
+
+The checked-in Pleiades-area example contains 19 real ESA rows in one storage
+chunk. Its separate count query also returned 19. This is ingestion and byte
+provenance evidence, not a capacity benchmark. Parallel chunk consumption,
+proper-motion/observer transforms, sky rendering and stellar occultation
+integration remain unfinished.
