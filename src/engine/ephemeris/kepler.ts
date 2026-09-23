@@ -1,14 +1,17 @@
 const TWO_PI = Math.PI * 2
 const MAX_ITERATIONS = 80
 
+/** Returns the signed principal eccentric anomaly; adding a full turn would
+ * erase tiny negative roots needed near periapsis. */
 export function solveEllipticKeplerRadians(meanAnomaly: number, eccentricity: number) {
   if (!Number.isFinite(meanAnomaly) || !Number.isFinite(eccentricity) || eccentricity < 0 || eccentricity >= 1) {
     throw new RangeError('Elliptic Kepler inputs require a finite mean anomaly and 0 <= e < 1')
   }
   const wrappedMeanAnomaly = meanAnomaly % TWO_PI
-  const normalizedMeanAnomaly = wrappedMeanAnomaly < 0 ? wrappedMeanAnomaly + TWO_PI : wrappedMeanAnomaly
-  const reflected = normalizedMeanAnomaly > Math.PI
-  const reducedMeanAnomaly = reflected ? TWO_PI - normalizedMeanAnomaly : normalizedMeanAnomaly
+  const normalizedMeanAnomaly = wrappedMeanAnomaly > Math.PI ? wrappedMeanAnomaly - TWO_PI
+    : wrappedMeanAnomaly < -Math.PI ? wrappedMeanAnomaly + TWO_PI : wrappedMeanAnomaly
+  const reflected = normalizedMeanAnomaly < 0
+  const reducedMeanAnomaly = Math.abs(normalizedMeanAnomaly)
   if (reducedMeanAnomaly === 0) return 0
 
   let lower = 0
@@ -29,7 +32,7 @@ export function solveEllipticKeplerRadians(meanAnomaly: number, eccentricity: nu
     const derivative = (1 - eccentricity) + 2 * eccentricity * Math.sin(eccentricAnomaly / 2) ** 2
     const correction = residual / derivative
     if (Math.abs(correction) <= 4 * Number.EPSILON * Math.abs(eccentricAnomaly)) {
-      return reflected ? TWO_PI - eccentricAnomaly : eccentricAnomaly
+      return reflected ? -eccentricAnomaly : eccentricAnomaly
     }
 
     if (residual > 0) upper = eccentricAnomaly
@@ -39,7 +42,7 @@ export function solveEllipticKeplerRadians(meanAnomaly: number, eccentricity: nu
     const next = Number.isFinite(newton) && newton > lower && newton < upper
       ? newton
       : (lower + upper) / 2
-    if (next === eccentricAnomaly) return reflected ? TWO_PI - next : next
+    if (next === eccentricAnomaly) return reflected ? -next : next
     eccentricAnomaly = next
   }
 

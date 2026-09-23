@@ -96,7 +96,7 @@ function getPlanetaryElementsAtJulianDay(orbit: PlanetaryApproxOrbit, julianDay:
     inclinationDeg: elements.inclinationDeg,
     ascendingNodeDeg: elements.longitudeOfAscendingNodeDeg,
     argPeriapsisDeg: elements.longitudeOfPerihelionDeg - elements.longitudeOfAscendingNodeDeg,
-    meanAnomalyDeg: normalizeDegrees(meanAnomalyDeg),
+    meanAnomalyDeg: meanAnomalyDeg % 360,
   }
 }
 
@@ -115,7 +115,7 @@ function getKeplerianElementsAtJulianDay(orbit: KeplerianOrbit, julianDay: numbe
     inclinationDeg: orbit.inclinationDeg,
     ascendingNodeDeg: orbit.ascendingNodeDeg,
     argPeriapsisDeg: orbit.argPeriapsisDeg,
-    meanAnomalyDeg: normalizeDegrees(meanAnomalyDeg),
+    meanAnomalyDeg: meanAnomalyDeg % 360,
   }
 }
 

@@ -1294,3 +1294,22 @@ manually disabled. This confirms the corrected iOS duration assertion and
 Gaia chart batch; subsequent cancellation, measurements, selection validation,
 cache and uncertainty commits require their own candidate validation. Actual
 native system-picker export and the wider scientific/capacity goal remain open.
+
+### Checkpoint 52: signed near-periapsis Kepler accuracy (2026-09-23)
+
+Non-elliptic catalog/Kepler paths currently reject unsupported conics rather
+than fabricating elliptic states; full hyperbolic/parabolic source support
+remains pending. The boundary audit found a real elliptic precision defect:
+normalizing a tiny negative mean anomaly by adding a whole revolution erased
+its sign/magnitude, particularly damaging near e=1. The solver now returns the
+signed principal eccentric anomaly; public fitted/Kepler element paths retain
+a signed remainder before solving. Trigonometric consumers remain equivalent
+for ordinary angles while tiny pre-periapsis roots remain representable.
+
+Twenty-nine focused Kepler, public ephemeris and covariance tests passed, with
+negative roots checked against the existing independent 80-digit reference roots
+using odd symmetry and end-to-end pre/post-periapsis position symmetry. Types
+and changed-file lint passed. Catalog point propagation was checked separately.
+No full local tests ran. This fixes numerical precision only, not physical model
+accuracy or non-elliptic feature completion. Candidate 858e895 / run 35831624808
+is active and remains undisturbed.

@@ -16,6 +16,20 @@ const references = [
 describe('elliptic root accuracy', () => {
   it.each(references)('matches an independent high precision root at M=%s, e=%s', (mean, eccentricity, expected) => {
     expect(Math.abs(solveEllipticKeplerRadians(mean, eccentricity) / expected - 1)).toBeLessThan(3e-14)
+    // Kepler's equation is odd; the signed independent root is exact here.
+    expect(Math.abs(solveEllipticKeplerRadians(-mean, eccentricity) / -expected - 1)).toBeLessThan(3e-14)
+  })
+
+  it('preserves tiny negative roots and pre-periapsis positions through the public orbit path', () => {
+    expect(solveEllipticKeplerRadians(-1e-20,0)).toBe(-1e-20)
+    const orbit: KeplerianOrbit = { model:'keplerian', epochJd:2451545, semiMajorAxisAU:1,
+      eccentricity:0.999999999999, meanAnomalyDeg:1e-18*180/Math.PI, meanMotionDegPerDay:1,
+      inclinationDeg:0, ascendingNodeDeg:0, argPeriapsisDeg:0 }
+    const after = orbitToHeliocentricVector(orbit,orbit.epochJd)
+    const before = orbitToHeliocentricVector({...orbit,meanAnomalyDeg:-orbit.meanAnomalyDeg},orbit.epochJd)
+    expect(after.y).toBeGreaterThan(0); expect(before.y).toBeLessThan(0)
+    expect(before.y / after.y).toBeCloseTo(-1,14)
+    expect(before.x).toBe(after.x)
   })
 
   it('rejects invalid angles before they enter rendering geometry', () => {
