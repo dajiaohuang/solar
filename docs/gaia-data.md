@@ -321,3 +321,8 @@ selectedSource. Correct hashes alone are insufficient to accept a mismatched
 selected record. Parsing is bounded to 8 MiB and 10,000 data rows, supports
 quoted fields, and rejects duplicate selected identities and malformed numeric
 values. These checks preserve the original bytes rather than rewriting them.
+The scan keeps only the header, current row and selected row, rather than an
+array of every parsed row. It yields after at most roughly 32 KiB of input
+characters and checks the request cancellation signal before resuming. Original
+bytes and decoded text are still retained; this is not a claim of zero-copy
+processing or a measured total-memory budget.

@@ -1646,3 +1646,17 @@ Candidate 335b083 / run 35838148647 is still active and was not replaced. This
 fix is staged as a subsequent local commit. Browser-to-Go live acceptance is
 still unproven; prior browser replay and independent Go HTTP evidence remain
 separate. The broader scientific and performance goal remains incomplete.
+
+### Checkpoint 71: cancellable browser source scan (2026-09-23)
+
+Replaced the synchronous all-rows CSV materialization with a cooperative scan
+that retains only header/current/selected rows. It yields by character count,
+including inside long quoted fields, and checks the active request signal.
+The response validator passes through the same cancellation/deadline signal.
+Original bytes and decoded text remain retained; total heap usage is not claimed.
+
+Five focused tests passed, including a long-field scan that must yield and then
+reject cancellation without publishing a selected source. Project-reference
+types and targeted lint passed after fixing TypeScript callback narrowing. No
+full local tests ran. Candidate 335b083 remains live; this subsequent local
+change does not replace it. Browser-to-Go live acceptance remains outstanding.

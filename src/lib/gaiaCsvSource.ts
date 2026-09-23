@@ -1,12 +1,29 @@
 // Parse only bounded original evidence; keep decimal source IDs as text.
-export function selectedGaiaCsvSource(bytes: Uint8Array, sourceId: string): Record<string, unknown> {
+export async function selectedGaiaCsvSource(bytes: Uint8Array, sourceId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+  signal?.throwIfAborted()
   if (!bytes.length || bytes.length > 8 << 20) throw new Error('Gaia CSV byte budget exceeded')
   const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-  const rows: string[][] = [], row: string[] = []
+  let header: string[] | undefined, selected: string[] | undefined, count = 0
+  const row: string[] = []
   let cell = '', quoted = false, closed = false
   const field = () => { row.push(cell); cell = ''; closed = false }
-  const record = () => { field(); if (row.length !== 1 || row[0] !== '') rows.push(row.splice(0)); else row.length = 0; if (rows.length > 10001) throw new Error('Gaia CSV row budget exceeded') }
+  const record = () => {
+    field()
+    if (row.length === 1 && row[0] === '') { row.length = 0; return }
+    if (!header) {
+      header = row.splice(0)
+      if (header[0] !== 'source_id' || new Set(header).size !== header.length || header.some(v => !v)) throw new Error('Invalid Gaia CSV header')
+      return
+    }
+    if (++count > 10000) throw new Error('Gaia CSV row budget exceeded')
+    if (row.length !== header.length) throw new Error('Gaia CSV column mismatch')
+    if (row[0] === sourceId) { if (selected) throw new Error('Duplicate Gaia source'); selected = row.slice() }
+    row.length = 0
+  }
+  let nextYield = 0
   for (let i = 0; i < text.length; i++) {
+    // Yield by input size rather than row count: even one long field is bounded.
+    if (i >= nextYield) { await new Promise<void>(resolve => setTimeout(resolve, 0)); signal?.throwIfAborted(); nextYield = i + 32768 }
     const char = text[i]
     if (quoted) {
       if (char === '"') { if (text[i + 1] === '"') { cell += '"'; i++ } else { quoted = false; closed = true } }
@@ -18,17 +35,13 @@ export function selectedGaiaCsvSource(bytes: Uint8Array, sourceId: string): Reco
   }
   if (quoted) throw new Error('Unterminated Gaia CSV field')
   if (cell || closed || row.length) record()
-  const header = rows.shift()
-  if (!header || header[0] !== 'source_id' || new Set(header).size !== header.length || header.some(v => !v)) throw new Error('Invalid Gaia CSV header')
-  let selected: string[] | undefined
-  for (const current of rows) {
-    if (current.length !== header.length) throw new Error('Gaia CSV column mismatch')
-    if (current[0] === sourceId) { if (selected) throw new Error('Duplicate Gaia source'); selected = current }
-  }
+  signal?.throwIfAborted()
+  if (!header) throw new Error('Invalid Gaia CSV header')
   if (!selected) throw new Error('Selected Gaia source absent from original CSV')
+  const selectedRow = selected
   const result: Record<string, unknown> = Object.create(null)
   header.forEach((name, i) => {
-    const value = selected[i]
+    const value = selectedRow[i]
     if (i === 0) result[name] = value
     else if (value === '') result[name] = null
     else {

@@ -26,10 +26,27 @@ describe('original-source stellar client', () => {
     ]
     for (const mutate of mutations) { const wire = envelope(); mutate(wire.experiment); await expect(validateStellarMotion(wire, request)).rejects.toThrow() }
   })
-  it('reads quoted original values and rejects ambiguous or missing identities', () => {
+  it('reads quoted original values and rejects ambiguous or missing identities', async () => {
     const parse = (csv: string) => selectedGaiaCsvSource(new TextEncoder().encode(csv), '65212004581252736')
-    expect(parse('source_id,ra,pmra\r\n"65212004581252736","56.2",\r\n')).toEqual({ source_id:'65212004581252736', ra:56.2, pmra:null })
-    for (const csv of ['source_id,ra\n1,5\n', 'source_id,ra\n65212004581252736,5\n65212004581252736,6\n', 'source_id,ra\n65212004581252736,"5"x\n', 'source_id,ra\n65212004581252736,"5\n', 'source_id,ra\n65212004581252736,0x10\n']) expect(() => parse(csv)).toThrow()
+    expect(await parse('source_id,ra,pmra\r\n"65212004581252736","56.2",\r\n')).toEqual({ source_id:'65212004581252736', ra:56.2, pmra:null })
+    for (const csv of ['source_id,ra\n1,5\n', 'source_id,ra\n65212004581252736,5\n65212004581252736,6\n', 'source_id,ra\n65212004581252736,"5"x\n', 'source_id,ra\n65212004581252736,"5\n', 'source_id,ra\n65212004581252736,0x10\n']) await expect(parse(csv)).rejects.toThrow()
+  })
+  it('yields during a long source scan and cancels before publishing', async () => {
+    vi.useFakeTimers()
+    try {
+      const controller = new AbortController()
+      const csv = new TextEncoder().encode('source_id,ra\n65212004581252736,1\n2,' + '0'.repeat(100000) + '\n')
+      let settled = false
+      const pending = selectedGaiaCsvSource(csv, '65212004581252736', controller.signal)
+      const rejected = expect(pending).rejects.toThrow('stop scan')
+      void pending.then(() => { settled = true }, () => { settled = true })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(settled).toBe(false)
+      controller.abort(new Error('stop scan'))
+      await vi.runAllTimersAsync()
+      await rejected
+      expect(settled).toBe(true)
+    } finally { vi.useRealTimers() }
   })
   it('bounds HTTP, checks response identity and refuses pre-cancelled work', async () => {
     const body = JSON.stringify(envelope())

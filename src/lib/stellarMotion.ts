@@ -31,7 +31,8 @@ export function stellarSourceBase64(bytes: Uint8Array, limit: number): string {
   for (let at = 0; at < bytes.length; at += 8192) binary += String.fromCharCode(...bytes.subarray(at, at + 8192))
   return btoa(binary)
 }
-export async function validateStellarMotion(raw: unknown, request: StellarMotionRequest): Promise<StellarMotionExperiment> {
+export async function validateStellarMotion(raw: unknown, request: StellarMotionRequest, signal?: AbortSignal): Promise<StellarMotionExperiment> {
+  signal?.throwIfAborted()
   const envelope = object(raw), e = object(envelope.experiment), r = object(e.result), s = object(r.stateTCBCompatible), source = object(e.selectedSource)
   const reject = () => { throw new Error('Stellar source identity or model contract mismatch') }
   if (envelope.apiVersion !== STATE_TILE_API_VERSION || e.schemaVersion !== 1
@@ -47,7 +48,8 @@ export async function validateStellarMotion(raw: unknown, request: StellarMotion
   if ((s.raDeg as number) < 0 || (s.raDeg as number) >= 360 || Math.abs(s.decDeg as number) >= 90 || (s.parallaxMas as number) <= 0) reject()
   const [manifestHash, rowsHash] = await Promise.all([digest(request.originalManifestBase64), digest(request.originalRowsCsvBase64)])
   if (e.manifestSha256 !== manifestHash || e.rowsSha256 !== rowsHash) reject()
-  const original = selectedGaiaCsvSource(Uint8Array.from(atob(request.originalRowsCsvBase64), char => char.charCodeAt(0)), request.sourceId)
+  signal?.throwIfAborted()
+  const original = await selectedGaiaCsvSource(Uint8Array.from(atob(request.originalRowsCsvBase64), char => char.charCodeAt(0)), request.sourceId, signal)
   if (Object.keys(original).length !== Object.keys(source).length || Object.entries(original).some(([key, value]) => source[key] !== value)) reject()
   return e as StellarMotionExperiment
 }
@@ -72,7 +74,7 @@ export async function loadStellarMotion(base: string, request: StellarMotionRequ
       const error = object(object(raw).error)
       throw new Error(typeof error.message === 'string' ? error.message : `Stellar HTTP ${response.status}`)
     }
-    const result = await validateStellarMotion(raw, request)
+    const result = await validateStellarMotion(raw, request, controller.signal)
     controller.signal.throwIfAborted()
     return result
   } catch (error) {
