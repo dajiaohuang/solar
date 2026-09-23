@@ -45,6 +45,18 @@ for (const row of reference.cases) test(`verified SPK/PCK contacts agree with in
   expect(result.maximumScanIntervalSeconds).toBe(300)
   expect(result.startGapsRadians.external).toBeGreaterThan(0)
   expect(result.endGapsRadians.external).toBeGreaterThan(0)
+  for (const boundary of ['external', 'internal'] as const) {
+    const expected = row.contacts.filter(contact => contact.boundary === boundary)
+    const windows = result.sampledOverlapWindows.filter(window => window.boundary === boundary)
+    expect(windows).toHaveLength(expected.length/2)
+    for (const [i, window] of windows.entries()) {
+      const duration = expected[2*i+1].elapsedTdbSeconds-expected[2*i].elapsedTdbSeconds
+      expect(Math.abs(window.durationSeconds-duration)).toBeLessThan(.04)
+      expect(window.start.kind).toBe('bracketed-contact')
+      expect(window.end.kind).toBe('bracketed-contact')
+      expect(window.numericalDurationBoundsSeconds[1]-window.numericalDurationBoundsSeconds[0]).toBeLessThanOrEqual(.02)
+    }
+  }
 })
 
 test('brackets analytic external/internal contacts and retains window-edge state', async () => {
@@ -62,6 +74,33 @@ test('brackets analytic external/internal contacts and retains window-edge state
   expect(inside.contacts).toEqual([])
   expect(inside.startGapsRadians.external).toBeLessThan(0)
   expect(inside.endGapsRadians.external).toBeLessThan(0)
+  expect(inside.sampledOverlapWindows).toHaveLength(2)
+  for (const window of inside.sampledOverlapWindows) {
+    expect(window.durationSeconds).toBe(.2)
+    expect(window.numericalDurationBoundsSeconds).toEqual([.2, .2])
+    expect(window.start.kind).toBe('search-boundary')
+    expect(window.end.kind).toBe('search-boundary')
+  }
+  for (const window of result.sampledOverlapWindows) {
+    const duration = window.boundary === 'external' ? 2 : 1
+    expect(window.numericalDurationBoundsSeconds[0]).toBeLessThanOrEqual(duration)
+    expect(window.numericalDurationBoundsSeconds[1]).toBeGreaterThanOrEqual(duration)
+  }
+})
+
+test('sampled windows preserve clipping, separate events and zero-only ambiguity', async () => {
+  const run = (evaluate: (t: number) => number, startSeconds = -2, endSeconds = 2) => findOccultationContacts({
+    startSeconds, endSeconds, maxStepSeconds: .5, toleranceSeconds: 1e-6,
+    evaluate: t => ({ externalGapRadians: evaluate(t), internalGapRadians: 1 }),
+  })
+  const clipped = await run(t => t)
+  expect(clipped.sampledOverlapWindows).toMatchObject([{ boundary: 'external', durationSeconds: 2,
+    start: { kind: 'search-boundary', elapsedTdbSeconds: -2 }, end: { kind: 'sampled-zero', elapsedTdbSeconds: 0 } }])
+  const separate = await run(t => -(t*t-1))
+  expect(separate.sampledOverlapWindows.map(w => [w.start.elapsedTdbSeconds, w.end.elapsedTdbSeconds])).toEqual([[-2, -1], [1, 2]])
+  expect((await run(t => t*t)).sampledOverlapWindows).toEqual([])
+  expect((await run(() => 0)).sampledOverlapWindows).toEqual([])
+  expect((await run(() => -1, 0, 0)).sampledOverlapWindows).toEqual([])
 })
 
 test('sampled zeros are not duplicated or asserted to be crossings, and empty output does not certify completeness', async () => {

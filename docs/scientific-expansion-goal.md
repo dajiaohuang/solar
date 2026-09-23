@@ -872,3 +872,27 @@ arcsecond residual in those cases. No empirical correction was applied.
 Baseline references and runtime physics remain unchanged; diagnostics cannot
 overwrite fixtures. The complete frame/polar-motion/source-chain attribution
 and topocentric contact implementation remain open. No full local tests ran.
+
+### Checkpoint 33: sampled overlap windows and duration brackets (2026-09-23)
+
+The contact engine now exports external-overlap and internal-containment spans,
+with clipped search edges, sampled-zero distinctions and numerical duration
+bounds. It assembles windows from the existing sampled signs and roots without
+additional state evaluations. Three real SPK/PCK cases match independent CSPICE
+GF durations; analytic cases cover clipping, separate events and zero-only
+ambiguity. Sixteen focused search/reception/export checks, types and changed-file
+lint passed. No full local tests ran. The real Venus CN export retains 349
+geometry evaluations and source/implementation hashes.
+
+These are sampled geocentric windows, not certified complete events, physical
+uncertainty or topocentric visibility. Ground contacts, oriented limbs, event
+consumers and all broader unfinished ledger requirements remain open.
+
+### Verified promotion: 14836ae (2026-09-23)
+
+Run 35821138076 passed repository, Web, all four browser profiles, Android, iOS
+and the final quality gate for exact head
+14836aec229cbd7e95d90b9539656d20d2318c47. That commit was fast-forwarded to
+main, delivering source-backed PCK radii and geometric contact searches.
+Reception correction, DUT1 diagnostics and overlap windows form the next
+candidate. Deployment and publication remain paused.

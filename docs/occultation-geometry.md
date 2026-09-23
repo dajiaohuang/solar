@@ -57,6 +57,24 @@ without inventing a crossing direction. Evaluation/result budgets reject rather
 than return incomplete success. The search yields every 64 evaluations, checks
 cancellation before and after source evaluation, and does not hide source errors.
 
+`sampledOverlapWindows` adds inferred positive-duration negative-gap spans for
+each boundary. External spans mean disc overlap; internal spans mean one angular
+disc contains the other, not necessarily a total eclipse. Edges distinguish
+bracketed contacts, sampled zeros and clipping at the requested search boundary.
+Durations retain numerical lower/upper bounds from both endpoint brackets. These
+are not physical uncertainty intervals. Adjacent negative samples may conceal
+an unsampled interruption; the spans inherit the search's missed-event warning.
+Zero-only samples do not establish an event duration, and an instantaneous
+search can report contacts/gaps but produces no positive-duration windows.
+
+Three original-SPK cases independently reproduce the CSPICE GF window durations
+within 0.04 second. Analytic checks cover clipped windows, separate events,
+sampled zeros and duration brackets. The real Venus CN export gives overlap
+23975.473 seconds and containment 21838.797 seconds, each with a numerical
+duration interval about 0.0184 second wide. Window assembly reuses existing
+samples and roots: this case still uses 349 geometry evaluations. These values
+are geocentric model results, not surface-observer visibility or measured timing.
+
 **Completeness is not certified.** Grazing events or two crossings inside one scan
 interval may be missed. This is tested with a deliberately missed short synthetic
 event, whose result still reports `possibleMissedEvents: true`. Empty contact
