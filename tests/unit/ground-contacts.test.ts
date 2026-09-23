@@ -15,6 +15,10 @@ test('captured loopback HTTP contacts retain real station, brackets and source i
   expect(result.result.contacts).toHaveLength(4)
   expect(result.result.contacts[0].utc).toBe('2024-04-08T17:23:20.434570Z')
   expect(result.result.contract.physicalTimingUncertaintySeconds).toBeNull()
+  expect(result.result.sampledOverlapWindows?.map(s => s.durationSeconds)).toEqual([9559.248046875, 236.07421875])
+  const legacy = structuredClone(fixture) as Record<string, unknown>
+  delete (legacy.result as Record<string, unknown>).sampledOverlapWindows
+  expect(validateGroundContacts(legacy, request).result.sampledOverlapWindows).toBeUndefined()
 })
 test('rejects mismatched station, unbounded brackets, source substitution and false completeness', () => {
   for (const mutate of [
@@ -28,6 +32,13 @@ test('rejects mismatched station, unbounded brackets, source substitution and fa
     (v: typeof fixture) => { v.result.sources[0].kernelSha256 = 'unknown' },
     (v: typeof fixture) => { v.result.startGeometry.classification = 'total' },
     (v: typeof fixture) => { v.result.endGeometry.externalGapRadians = Infinity },
+    (v: typeof fixture) => { v.result.sampledOverlapWindows[0].durationSeconds = 100 },
+    (v: typeof fixture) => { v.result.sampledOverlapWindows[0].numericalDurationBoundsSeconds[0] = 0 },
+    (v: typeof fixture) => { v.result.sampledOverlapWindows[0].start.kind = 'search-boundary' },
+    (v: typeof fixture) => { v.result.sampledOverlapWindows[0].start.bracketSeconds[0] -= 1 },
+    (v: typeof fixture) => { v.result.sampledOverlapWindows.reverse() },
+    (v: typeof fixture) => { v.result.sampledOverlapWindows[0].boundary = 'internal' },
+    (v: typeof fixture) => { v.result.sampledOverlapWindows[0].start.utc = '2099-01-01T00:00:00.000000Z' },
   ]) {
     const changed = structuredClone(fixture); mutate(changed)
     expect(() => validateGroundContacts(changed, request)).toThrow()

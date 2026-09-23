@@ -4,9 +4,11 @@ import pck from '../data/pck00011.source.json'
 
 export type GroundContactRequest = { startUtc: string; endUtc: string; station: GroundStation; foregroundId: number; backgroundId: number; aberration: 'CN' }
 export type GroundContact = { boundary: 'external' | 'internal'; direction: 'enter' | 'exit' | 'sampled-zero'; utc: string; elapsedTaiSeconds: number; bracketSeconds: [number, number]; bracketUtc: [string, string] }
+export type GroundWindowEdge = Omit<GroundContact, 'boundary' | 'direction'> & { kind: 'search-boundary' | 'sampled-zero' | 'bracketed-contact' }
+export type GroundOverlapWindow = { boundary: 'external' | 'internal'; start: GroundWindowEdge; end: GroundWindowEdge; durationSeconds: number; numericalDurationBoundsSeconds: [number, number] }
 type Geometry = { classification: 'none' | 'partial' | 'annular' | 'total'; separationRadians: number; foregroundAngularRadiusRadians: number; backgroundAngularRadiusRadians: number; externalGapRadians: number; internalGapRadians: number }
 export type GroundContacts = Pick<GroundObservation, 'apiVersion' | 'catalogVersion' | 'catalogManifestSha256'> & {
-  result: { model: string; request: GroundContactRequest; durationSeconds: number; contacts: GroundContact[]; evaluations: number
+  result: { model: string; request: GroundContactRequest; durationSeconds: number; contacts: GroundContact[]; sampledOverlapWindows?: GroundOverlapWindow[]; evaluations: number
     startGeometry: Geometry; endGeometry: Geometry; sources: GroundObservation['result']['sources']; earthOrientation: GroundObservation['earthOrientation']
     radiusSourceSha256: string; radiusSourceUrl: string; warnings: string[]; possibleMissedEvents: true; contract: Record<string, unknown> }
 }
@@ -49,6 +51,34 @@ export function validateGroundContacts(raw: unknown, request: GroundContactReque
     if (typeof s.bodyId !== 'string' || !expected.delete(s.bodyId) || typeof s.source !== 'string' || !s.source || !hash(s.kernelSha256) || !finite(s.startJdTdb) || !finite(s.endJdTdb) || s.startJdTdb > s.endJdTdb) reject()
   }
   if (expected.size) reject()
+  if (r.sampledOverlapWindows !== undefined) {
+    if (!Array.isArray(r.sampledOverlapWindows) || r.sampledOverlapWindows.length > 514) reject()
+    let lastStart = -1
+    const ends = { external: -1, internal: -1 }
+    for (const rawSpan of r.sampledOverlapWindows as unknown[]) {
+      const span = object(rawSpan), start = object(span.start), end = object(span.end)
+      if (!['external', 'internal'].includes(span.boundary as string)) reject()
+      for (const edge of [start, end]) {
+        const at = edge.elapsedTaiSeconds, b = edge.bracketSeconds, times = edge.bracketUtc
+        if (!finite(at) || at < 0 || at > (r.durationSeconds as number) || !utc(edge.utc)
+          || !['search-boundary', 'sampled-zero', 'bracketed-contact'].includes(edge.kind as string)
+          || !Array.isArray(b) || b.length !== 2 || !b.every(finite) || b[0] < 0 || b[0] > at || b[1] < at || b[1] > (r.durationSeconds as number) || b[1]-b[0] > .05+1e-9
+          || !Array.isArray(times) || times.length !== 2 || !times.every(utc) || times[0] > edge.utc || times[1] < edge.utc
+          || (edge.kind === 'search-boundary') !== (at === 0 || at === r.durationSeconds)
+          || edge.kind !== 'bracketed-contact' && (b[0] !== at || b[1] !== at)) reject()
+        if (edge.kind !== 'search-boundary' && !(r.contacts as GroundContact[]).some(c => c.boundary === span.boundary && c.elapsedTaiSeconds === at && c.utc === edge.utc
+          && c.bracketSeconds[0] === (b as number[])[0] && c.bracketSeconds[1] === (b as number[])[1]
+          && (edge.kind === 'sampled-zero' ? c.direction === 'sampled-zero' : c.direction === (edge === start ? 'enter' : 'exit')))) reject()
+      }
+      const a = start as GroundWindowEdge, b = end as GroundWindowEdge, bounds = span.numericalDurationBoundsSeconds
+      const boundary = span.boundary as 'external' | 'internal'
+      if (a.elapsedTaiSeconds < lastStart || a.elapsedTaiSeconds <= ends[boundary] || b.elapsedTaiSeconds <= a.elapsedTaiSeconds
+        || span.durationSeconds !== b.elapsedTaiSeconds-a.elapsedTaiSeconds
+        || !Array.isArray(bounds) || bounds.length !== 2 || !bounds.every(finite)
+        || bounds[0] !== Math.max(0, b.bracketSeconds[0]-a.bracketSeconds[1]) || bounds[1] !== b.bracketSeconds[1]-a.bracketSeconds[0]) reject()
+      lastStart = a.elapsedTaiSeconds; ends[boundary] = b.elapsedTaiSeconds
+    }
+  }
   return raw as GroundContacts
 }
 

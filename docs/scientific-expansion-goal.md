@@ -11,7 +11,7 @@ remain paused. Changes may go directly to main after the required checks.
 | Shared analysis ephemeris | Events, curves and mission endpoints use a frozen source contract, expose actual per-body models, offer strict SPK coverage, and export time/frame/source evidence; shared backend integration follows | In progress |
 | Ground observer | Geodetic station, SOFA-compatible celestial/terrestrial transforms, versioned IERS EOP, vacuum/apparent altitude-azimuth, rise/set and visibility windows; source expiry and uncertainty remain visible | In progress |
 | Orbit uncertainty | Pinned SBDB covariance with labels, units and solution epoch; validated covariance propagation and sampling; uncertainty ellipsoids and event distributions, independent of numerical tolerance | In progress: source ingestion, solution-epoch conversion/sampling/browser ellipsoids and offline/browser conditional six-parameter DE440 time propagation; complete fit-model propagation, native propagation and event distributions pending |
-| Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | In progress: verified PCK radii and spherical limb geometry and bounded NONE/CN offline contacts against real CSPICE cases; complete detection, oriented limbs, topocentric integration and event consumers pending |
+| Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | In progress: verified PCK radii, geocentric NONE/CN contacts and windows, SOFA/IERS ground CN contacts and sampled overlap windows with CLI/HTTP/browser access; complete detection, oriented/apparent limbs, native consumers and event distributions pending |
 | Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | In progress: bounded integration, variational equations, pinned DE440 adapter and browser/offline source-bearing experiments; additional forces, full covariance, native access and long-term diagnostics pending |
 | Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | In progress: pinned PCK semiaxes for 95 source bodies with independent CSPICE extraction; remaining data categories, orientation and identity integration pending |
 | Catalog streaming | Replace the fixed 8k/30k-only cloud path with cancellable binary chunk loading, priority scheduling and independent byte/decode/compute/upload limits | In progress: full-inventory 2D snapshot, bounded upload batching and spatial display available; continuous/3D streaming and source-priority scheduling pending |
@@ -1013,3 +1013,26 @@ on the previously diagnosed reference newline identity. The canonical-LF repair
 and checkpoints 36-39 require a fresh successful remote candidate before main
 promotion. Native ground-contact access, apparent/oriented limbs, completeness,
 physical uncertainty and all remaining ledger work are still open.
+
+### Checkpoint 40: sampled ground-overlap durations (2026-09-23)
+
+Ground contact results now include sampled disk-overlap and disk-containment
+windows, UTC/TAI edges, clipped-search and sampled-zero distinctions, and
+numerical duration bounds. Windows reuse the existing sampled signs and root
+brackets with no additional ephemeris evaluations. Zero-only spans do not
+imply positive-duration events; missing short/grazing events remains explicit.
+
+The independent Dallas reference verifies both durations: approximately
+9559.248 seconds overlap and 236.074 seconds containment, still 521 geometry
+evaluations. Focused Go tests cover clipping, sampled zeros, separated events,
+leap-second duration, source changes, cancellation and budgets. Real CLI and
+loopback HTTP results retain the same four contacts and source identity. The
+browser displays and exports the windows, validates bounds and edge evidence,
+and remains compatible with older responses that omit window information.
+Three transport tests, twelve four-browser interactions, types, changed-file
+lint and production build passed. Browser responses are real HTTP captures
+replayed for UI verification; no live browser/service claim and no full local
+test run. Candidate d5f4618 is still running and has not been interrupted.
+
+Physical timing uncertainty, apparent/oriented limbs, native ground access and
+all remaining ledger requirements are still open.

@@ -95,6 +95,16 @@ func TestGroundContactsIndependentDallasReference(t *testing.T) {
 		}
 		t.Logf("%s %s %s residual %.6f s", got.Boundary, got.Direction, got.UTC, got.ElapsedTAISeconds-want.ElapsedTAISeconds)
 	}
+	if len(r.SampledOverlapWindows) != 2 || r.Evaluations != 521 {
+		t.Fatalf("lost windows or added evaluations: %+v", r)
+	}
+	for i, pair := range [][2]int{{0, 3}, {1, 2}} {
+		span := r.SampledOverlapWindows[i]
+		want := fixture.Contacts[pair[1]].ElapsedTAISeconds - fixture.Contacts[pair[0]].ElapsedTAISeconds
+		if math.Abs(span.DurationSeconds-want) > .03 || span.Start.Kind != "bracketed-contact" || span.End.Kind != "bracketed-contact" || span.NumericalDurationBoundsSeconds[0] > want || span.NumericalDurationBoundsSeconds[1] < want {
+			t.Fatalf("reference duration outside numerical window: %+v want %.9f", span, want)
+		}
+	}
 	if r.EarthOrientation.SHA256 != m.SHA256 || r.RadiusSourceSHA256 != bodyshape.SHA256 {
 		t.Fatal("lost source evidence")
 	}
@@ -165,5 +175,43 @@ func TestGroundContactLeapSecond(t *testing.T) {
 	})
 	if err != nil || len(r.Contacts) != 1 || r.Contacts[0].UTC != "2016-12-31T23:59:60.000000Z" || r.Contacts[0].Direction != "sampled-zero" {
 		t.Fatalf("%+v %v", r, err)
+	}
+	if len(r.SampledOverlapWindows) != 1 || r.SampledOverlapWindows[0].DurationSeconds != 86400 || r.SampledOverlapWindows[0].End.UTC != "2016-12-31T23:59:60.000000Z" {
+		t.Fatal("lost TAI duration or leap-second window edge", r.SampledOverlapWindows)
+	}
+}
+
+func TestGroundOverlapSampledSignsClippingAndZeros(t *testing.T) {
+	w := taiWindow{day: 2457753.5, fraction: 36.0 / 86400, duration: 120}
+	for _, tc := range []struct {
+		name      string
+		gap       func(float64) float64
+		durations []float64
+		edges     [][2]string
+	}{
+		{"clipped", func(float64) float64 { return -1 }, []float64{120}, [][2]string{{"search-boundary", "search-boundary"}}},
+		{"zero-only", func(float64) float64 { return 0 }, nil, nil},
+		{"touch-outside", func(t float64) float64 { return (t - 60) * (t - 60) }, nil, nil},
+		{"touch-inside", func(t float64) float64 { return -(t - 60) * (t - 60) }, []float64{120}, [][2]string{{"search-boundary", "search-boundary"}}},
+		{"sampled-entry", func(t float64) float64 { return 60 - t }, []float64{60}, [][2]string{{"sampled-zero", "search-boundary"}}},
+		{"separate", func(t float64) float64 { return -(t - 21) * (t - 99) }, []float64{21, 21}, [][2]string{{"search-boundary", "bracketed-contact"}, {"bracketed-contact", "search-boundary"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r, err := searchGroundContacts(context.Background(), w, func(at float64) (SphereGeometry, error) {
+				return SphereGeometry{ExternalGapRadians: tc.gap(at), InternalGapRadians: 1}, nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(r.SampledOverlapWindows) != len(tc.durations) {
+				t.Fatal(r.SampledOverlapWindows)
+			}
+			for i, want := range tc.durations {
+				span := r.SampledOverlapWindows[i]
+				if math.Abs(span.DurationSeconds-want) > ContactToleranceSeconds || span.NumericalDurationBoundsSeconds[0] > want || span.NumericalDurationBoundsSeconds[1] < want || span.Start.Kind != tc.edges[i][0] || span.End.Kind != tc.edges[i][1] {
+					t.Fatal(span)
+				}
+			}
+		})
 	}
 }

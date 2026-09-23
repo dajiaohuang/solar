@@ -223,3 +223,13 @@ The displayed brackets are numerical root intervals, not physical timing error
 bars. The fixed 30-second scan can miss short or grazing events. A contact can
 occur below the horizon; this form does not certify visibility. Missing PCK,
 IERS or SPK coverage remains an error, and non-spherical PCK bodies are rejected.
+
+Ground contact responses also include sampledOverlapWindows for external disk
+overlap and internal disk containment. Each edge retains UTC, elapsed TAI, a
+numerical bracket and its kind (clipped search boundary, sampled zero or
+bracketed contact). Durations use elapsed TAI, including UTC leap seconds.
+Numerical duration bounds combine the endpoint brackets; they are not physical
+uncertainty. Windows infer negative-gap spans from existing samples without
+extra ephemeris calls. Unsampled gaps may split them, and zero-only samples do
+not establish a positive-duration event. Older backends can omit this field;
+the browser does not manufacture windows from contact lists.
