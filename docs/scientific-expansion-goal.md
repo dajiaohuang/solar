@@ -2219,3 +2219,18 @@ previous 3D rotation case also passed in Firefox and WebKit, completing its
 four-browser targeted coverage. No full local tests ran. This is explicit
 source-tag scheduling, not camera/selected-body priority or continuous time.
 Candidate 690f6ea remains live in iOS and was not replaced.
+
+### Checkpoint 104: real-source priority capacity and excluded-tag boundary (2026-09-23)
+
+The benchmark now records explicit source priority. A single real-source
+NEO-first 30,000-point 3D run took 283 ms, first nonempty draw 225.9 ms, and
+840,000 attribute bytes on the same verified desktop D3D11 renderer. Four-way
+admission fetched nine shards (six used, three prefetched). Twelve rotations
+added no requests, allocations or attribute uploads. There were no page/GL
+errors or recorded long tasks. The receipt is under
+docs/benchmarks/catalog-neo-3d-20260923/. This is an order-dependent partial
+shard sample, not 30,000 NEOs, complete coverage or native hardware evidence.
+
+One additional focused regression passed: a flagged row excluded by exact name
+locators or index-precision filters cannot elevate its otherwise eligible shard.
+No full local tests ran. Run 35850104881 remains live in its iOS UI step.

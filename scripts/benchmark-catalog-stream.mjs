@@ -12,6 +12,8 @@ const output = resolve(option('--output', '.cache/catalog-stream-app.json'))
 const graphicsMode = option('--graphics', 'default')
 const detailMode = option('--detail', 'all')
 const coordinateMode = option('--mode', '2d')
+const sourcePriority = option('--priority', 'source')
+if (!['source', 'neo-first', 'pha-first'].includes(sourcePriority)) throw new Error('Invalid source priority')
 if (!['2d', '3d'].includes(coordinateMode)) throw new Error('Invalid coordinate mode')
 const attributeBytesPerPoint = coordinateMode === '3d' ? 28 : 24
 if (!['all', 'spatial'].includes(detailMode)) throw new Error('Invalid detail mode')
@@ -123,6 +125,7 @@ try {
   await page.getByRole('combobox', { name: 'Expanded map point limit' }).selectOption(String(requestedRows))
   await page.getByRole('combobox', { name: 'Map detail', exact: true }).selectOption(detailMode)
   await page.getByRole('combobox', { name: 'Catalog snapshot projection', exact: true }).selectOption(coordinateMode)
+  await page.getByRole('combobox', { name: 'Source shard order', exact: true }).selectOption(sourcePriority)
   const startButton = page.getByRole('button', { name: /Load expanded snapshot/ })
   if (!await startButton.isEnabled()) throw new Error('Requested source tier is unavailable in this browser')
   const requestStart = requests.length
@@ -164,7 +167,7 @@ try {
   }
   const report = { schemaVersion: 3, generatedAt: new Date().toISOString(), measurement: `built-application-MPC-source-tier-static-${coordinateMode.toUpperCase()}-snapshot-local-HTTP`,
     requestedRows, requiredShards, maximumFetchedShards, completeInventory: result.phase === 'complete',
-    graphicsMode, detailMode, coordinateMode, rotationAudit, launchOptions, browser: browser.version(), viewport: { width: 1600, height: 1000, pixelRatio: 1 },
+    graphicsMode, detailMode, coordinateMode, sourcePriority, rotationAudit, launchOptions, browser: browser.version(), viewport: { width: 1600, height: 1000, pixelRatio: 1 },
     source: { version: manifest.version, rows: manifest.totalCount, shards: manifest.chunkCount, sourceSha256: manifest.sourceSha256, contentSha256: manifest.contentSha256, manifestSha256: sha(readFileSync(manifestFile)), checksumsSha256: sha(checksums) },
     implementationSha256: Object.fromEntries(['src/lib/catalogStreaming.ts', 'src/lib/catalogPointRenderer.ts', 'src/lib/catalogSpatialSelection.ts', 'src/lib/catalogProjection.ts', 'src/lib/catalogTransferWindow.ts', 'src/workers/catalog-stream.worker.ts', 'src/components/CatalogStreamCanvas.tsx'].map(path => [path, sha(readFileSync(path))])),
     phase: result.phase, drawnRows: result.drawnRows, displayedRows: result.displayedRows, checkedRows: result.checkedRows, canvasSize: result.canvasSize, loadMs: result.loadMs, graphics: result.audit.graphics,
@@ -173,7 +176,7 @@ try {
     firstNonemptyDrawMs: result.audit.firstVisibleMs, submittedPointsAcrossDraws: result.audit.submittedPoints, peakUnacknowledgedTiles: result.audit.peakPendingTiles,
     spatialIndexBytes: result.audit.indexBytes, peakSpatialIndexBytes: result.audit.peakIndexBytes, spatialIndexUploadBytes: result.audit.indexUploadBytes,
     serverAudit, expandedArtifactRequests: expandedRequests.length,
-    limits: ['Local filesystem/HTTP, not public network throughput.', 'One fixed UTC epoch; not continuous full-catalog simulation or physical display FPS.', 'Headless animation callbacks and CPU GL submission times, not GPU execution timers.', 'Explicit source attribute bytes exclude spatial-index bytes and are not total browser/process/driver memory.', 'drawnRows is the uploaded source count; displayedRows is the actual final draw count, including offscreen points in all mode.', 'Partial tiers use source-order prefixes, not representative scientific samples; up to three extra shards can be prefetched before cancellation.', 'Spatial representatives are a visual simplification, not an estimate of density or event probability.', 'This desktop result does not establish native or mobile hardware capacity.'] }
+    limits: ['Local filesystem/HTTP, not public network throughput.', 'One fixed UTC epoch; not continuous full-catalog simulation or physical display FPS.', 'Headless animation callbacks and CPU GL submission times, not GPU execution timers.', 'Explicit source attribute bytes exclude spatial-index bytes and are not total browser/process/driver memory.', 'drawnRows is the uploaded source count; displayedRows is the actual final draw count, including offscreen points in all mode.', 'Partial tiers follow the selected shard priority, not representative scientific sampling; up to three extra shards can be prefetched before cancellation.', 'Spatial representatives are a visual simplification, not an estimate of density or event probability.', 'This desktop result does not establish native or mobile hardware capacity.'] }
   mkdirSync(dirname(output), { recursive: true })
   await page.locator('.catalog-map').screenshot({ path: output.replace(/\.json$/, '') + '.png' })
   writeFileSync(output, JSON.stringify(report, null, 2) + '\n', { flag: 'wx' })

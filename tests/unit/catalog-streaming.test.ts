@@ -66,6 +66,22 @@ describe('bounded source catalog streaming', () => {
     await expect(run(manifest, async () => {}, { priority: 'unknown' as never })).rejects.toThrow('source priority')
     expect(requests).toEqual([])
   })
+  it('does not elevate a shard for a tagged row excluded by exact name locators or index filters', async () => {
+    const { manifest, files, requests, rehash } = fixture(13, 2)
+    const index = new DataView(files.get('catalog-index.bin')!)
+    for (let row = 0; row < 13; row++) index.setUint8(row * 24 + 19, row % 2 ? 0 : 4)
+    index.setUint8(11 * 24 + 19, 1)
+    rehash()
+    const values: number[] = []
+    await run(manifest, async tile => { for (let i = 0; i < tile.positions.length; i += 2) values.push(tile.positions[i]) }, {
+      priority: 'neo-first', filters: { ...filters, query: 'exact selection' }, candidateLocators: new Uint32Array([0, 0, 5, 0]),
+    })
+    expect(values).toEqual([2, 2.1])
+    expect(requests.filter(path => path.startsWith('binary/'))).toEqual(['binary/chunk-0000.bin', 'binary/chunk-0005.bin'])
+    requests.length = 0
+    await run(manifest, async () => {}, { priority: 'neo-first', filters: { ...filters, semiMajorAxis: [2, 2.105] } })
+    expect(requests.filter(path => path.startsWith('binary/'))[0]).toBe('binary/chunk-0000.bin')
+  })
   it('streams Float64 inclined 3D states and reserves every added coordinate buffer', async () => {
     const { manifest,files,rehash } = fixture(3,3)
     const elements = new Float64Array(files.get('binary/chunk-0000.bin')!), index = new DataView(files.get('catalog-index.bin')!)
