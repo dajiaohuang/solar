@@ -195,7 +195,10 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
         if (index.getFloat64(offset, true) !== elements[orbit + 1] || index.getUint32(offset + 8, true) !== Math.round(elements[orbit + 2] * 1e9) || index.getUint32(offset + 12, true) !== Math.round(elements[orbit + 3] * 1e6)) throw new Error('Catalog index orbital fields mismatch')
         if (!hasCandidate(sourceRow) || !matches('', compact.classCodes[classIndex], magnitude === 0x7fff ? undefined : magnitude / 100, elements[orbit + 1], elements[orbit + 2], elements[orbit + 3])) continue
         if (drawnRows + used >= plan.capacity) { truncated = true; break }
-        selected.set(elements.subarray(orbit, orbit + 8), used * 8)
+        // Preserve each Float64 source value without allocating a typed-array
+        // view for every retained body (1.56 million views at the full tier).
+        const target = used * 8
+        for (let column = 0; column < 8; column++) selected[target + column] = elements[orbit + column]
         appearance[used * 2] = classIndex; appearance[used * 2 + 1] = flags
         used++
       }

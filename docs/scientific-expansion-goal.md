@@ -2446,3 +2446,22 @@ provider, default/error/fault and the separate import lifecycle evidence.
 No scientific/native acceptance is claimed beyond the observed stages.
 Firefox/mobile covariance duplicate-panel failures have already been fixed
 and verified locally; all subsequent changes will enter the next candidate.
+
+### Checkpoint 115: remove per-body view allocations in source streaming (2026-09-23)
+
+Replaced eight-value subarray/set copies with direct Float64 copies inside
+the catalog filter loop. Full source loading avoids 1,561,171 temporary typed
+array views. No source order, filters, capacity, positions, transfer or culling
+semantics changed. A reproducible 313-shard microbenchmark retains exact-byte
+hash parity under full, half and one-percent synthetic retention masks.
+Ten alternating warmed full-retention samples measured 39.8034 ms median
+before and 12.1543 ms after; sparse copies show little difference.
+
+Actual full-source browser runs before/after completed with identical row,
+representative and attribute-byte counts, four-way loading, zero observed
+long tasks and no attribute/network work during twelve rotations. Single-run
+load times were 1616.8/1585.3 ms: not a statistically established whole-pipeline
+speedup. Reports, source/harness hashes and explicit scope limits are retained
+in docs/benchmarks/catalog-row-copy-20260923. Twenty-three named streaming
+tests, targeted lint and production build passed. No full local tests ran.
+Candidate 4d9e9e6 / run 35857808370 remains live and is not replaced.
