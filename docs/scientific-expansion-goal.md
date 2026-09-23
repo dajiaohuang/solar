@@ -1840,3 +1840,21 @@ final quality gate, on exact SHA c3b87f736f47a2a182752b2c02bdc2a199b4f961.
 After rechecking the remote branch and ancestry, that SHA was normally
 fast-forwarded to main from 335b083. Subsequent Android UI/transport and this iOS
 request work require a fresh candidate gate. Deployment/publication stay paused.
+
+### Checkpoint 83: iOS stellar response validation authored (2026-09-23)
+
+Added bounded Foundation response validation that retains raw export bytes,
+compares byte-exact original files and SHA-256 receipts, scans the original CSV
+for every selected field, and checks model/epoch/finite-state contracts. Optional
+formal covariance requires the requested policy, coordinates, positive symmetric
+matrices, original errors/correlations and agreement with J C J-transpose.
+Boolean JSON values cannot masquerade as numbers. Source scanning and validation
+check cancellation, retain only header/current/selected CSV rows and cap rows.
+
+Authored real CLI-output replay checks for nominal and covariance responses,
+19 altered contracts and cancellation. Fixture numeric expectations were checked
+against the retained bytes. Source registration and diff checks passed, but
+Swift compilation/tests remain unexecuted locally because the compiler is absent.
+No full local tests ran. Existing candidate 7257372 / run 35843121444 is live;
+this subsequent response work does not replace it. iOS transport/UI and live
+scientific acceptance, plus the broader goal gaps, remain incomplete.

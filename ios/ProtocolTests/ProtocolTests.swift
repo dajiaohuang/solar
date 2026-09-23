@@ -260,9 +260,55 @@ struct ProtocolTests {
         print("Stellar request: original-byte identity, policies, bounds and cancellation passed")
     }
 
+    static func stellarMotionResponseChecks() async throws {
+        let directory = URL(fileURLWithPath: "tests/fixtures/gaia-six-20260923")
+        let manifest = try Data(contentsOf: directory.appendingPathComponent("manifest.json"))
+        let rows = try Data(contentsOf: directory.appendingPathComponent("rows.csv"))
+        for covariance in [false, true] {
+            let request = try NativeStellarMotionRequest(manifest: manifest, rows: rows, sourceId: "65212004581252736", epoch: 2026,
+                radialVelocityPolicy: NativeStellarMotionRequest.rvPolicy, covariancePolicy: covariance ? NativeStellarMotionRequest.independentRVPolicy : nil)
+            let file = covariance ? "gaia-motion-covariance-experiment.json" : "gaia-motion-experiment.json"
+            let experiment = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: "tests/fixtures/" + file))) as! [String: Any]
+            let envelope: [String: Any] = ["apiVersion": "solar.api/v1", "experiment": experiment]
+            let raw = try JSONSerialization.data(withJSONObject: envelope)
+            let report = try NativeStellarMotionReport(validating: raw, request: request)
+            precondition(report.originalResponse == raw && report.sourceId == request.sourceId && report.epoch == 2026)
+            precondition(abs(report.state[0] - 56.6929443290) < 1e-10 && (report.formalStandardDeviations != nil) == covariance)
+            if let sigma = report.formalStandardDeviations { precondition(sigma.count == 6 && abs(sigma[0] - 0.357911) < 1e-6) }
+            for mutation in 0..<(covariance ? 11 : 8) {
+                var changed = experiment
+                switch mutation {
+                case 0: changed["rowsSha256"] = String(repeating: "0", count: 64)
+                case 1: changed["originalManifestBase64"] = "e30="
+                case 2: var source = changed["selectedSource"] as! [String: Any]; source["pmra"] = 123; changed["selectedSource"] = source
+                case 3: var source = changed["selectedSource"] as! [String: Any]; source["source_id"] = 65212004581252736.0; changed["selectedSource"] = source
+                case 4: var result = changed["result"] as! [String: Any]; result["targetEpochJulianYearTCB"] = 2027; changed["result"] = result
+                case 5: changed["schemaVersion"] = true
+                case 6: var result = changed["result"] as! [String: Any]; var state = result["stateTCBCompatible"] as! [String: Any]; state["raDeg"] = true; result["stateTCBCompatible"] = state; changed["result"] = result
+                case 7: if covariance { changed.removeValue(forKey: "formalCovariance") } else { changed["formalCovariance"] = NSNull() }
+                case 8: var value = changed["formalCovariance"] as! [String: Any]; var matrix = value["jacobian"] as! [[Double]]; matrix[0][0] += 1; value["jacobian"] = matrix; changed["formalCovariance"] = value
+                case 9: var value = changed["formalCovariance"] as! [String: Any]; var matrix = value["outputMatrix"] as! [[Double]]; matrix[0][1] += 1; value["outputMatrix"] = matrix; changed["formalCovariance"] = value
+                default: var value = changed["formalCovariance"] as! [String: Any]; value["coordinateUnits"] = ["deg", "mas", "mas", "mas/Julian-year", "mas/Julian-year", "km/s"]; changed["formalCovariance"] = value
+                }
+                let invalid = try JSONSerialization.data(withJSONObject: ["apiVersion": "solar.api/v1", "experiment": changed])
+                var rejected = false
+                do { _ = try NativeStellarMotionReport(validating: invalid, request: request) } catch { rejected = true }
+                precondition(rejected, "Malformed stellar response accepted: \(mutation)")
+            }
+            let cancelled = Task {
+                withUnsafeCurrentTask { $0?.cancel() }
+                return try NativeStellarMotionReport(validating: raw, request: request)
+            }
+            do { _ = try await cancelled.value; preconditionFailure("Cancelled stellar response published") }
+            catch is CancellationError { }
+        }
+        print("Stellar response: real CLI replay, original CSV/hashes, covariance, mutations and cancellation passed")
+    }
+
     static func main() async throws {
-        if CommandLine.arguments.contains("--stellar-motion-only") { try await stellarMotionRequestChecks(); return }
+        if CommandLine.arguments.contains("--stellar-motion-only") { try await stellarMotionRequestChecks(); try await stellarMotionResponseChecks(); return }
         try await stellarMotionRequestChecks()
+        try await stellarMotionResponseChecks()
         try groundContacts()
         if CommandLine.arguments.contains("--ground-contacts-only") { return }
         try sourceIdentityChecks()
