@@ -1972,3 +1972,23 @@ failure diagnostics; no tolerance or source-validation requirement was relaxed.
 Source registration and diff checks passed. Swift re-execution is pending and no
 success is claimed for this correction. No full local tests ran. Android and
 several Web/browser jobs remain live in the same run, so it was not replaced.
+
+### Checkpoint 90: Android original-source live HTTPS acceptance (2026-09-23)
+
+Run 35844926364 Android job 107129069868 passed on exact candidate 023248d.
+Downloaded solar-atlas-android-native-smoke and inspected report.json,
+instrumentation.log and stellar-live-go-covariance.png. Instrumentation completed
+one full native scenario successfully; the request ledger records a real
+POST /v1/stellar/motion with HTTP 200 and 56,910 response bytes.
+
+The screenshot shows the original 5,305-byte manifest and 32,918-byte CSV,
+explicit RV/covariance selections, J2026 state and six propagated formal standard
+deviations. Native assertions also verified the chosen state/sigma and input
+invalidation. The earlier external-file EACCES failure is resolved by the
+test-asset/app-owned file path. Source bytes still enter the production importer.
+
+This proves the callback-import → real Go HTTPS → Android simulator readout
+scenario, not system-picker interaction, export destination writes or physical
+device performance. The subsequent bounded-import-worker change is not in this
+candidate. iOS failed its numeric source check and its fix remains queued for
+the next gate; main was not advanced. No full local tests ran.
