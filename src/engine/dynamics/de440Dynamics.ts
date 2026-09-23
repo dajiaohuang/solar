@@ -1,5 +1,6 @@
 import { SpkKernel } from '../ephemeris/spk.ts'
 import { createPointMassGravity, type PrescribedEphemeris } from './pointMassGravity.ts'
+import { SOLAR_1PN, withSolarRelativity } from './solarRelativity.ts'
 
 export const DE440_DYNAMICS_SOURCE = Object.freeze({
   id: 'de440s-2000-01-01-2051-01-01',
@@ -21,8 +22,11 @@ export async function createDe440Dynamics(options: {
   spkBytes: ArrayBuffer; gmText: string; referenceEpochTdb: number;
   elapsedRangeSeconds: readonly [number, number];
   exclusionKm: Readonly<Record<number, number>>;
+  solarRelativity?: boolean;
 }) {
   const { referenceEpochTdb, gmText } = options
+  const solarRelativity = options.solarRelativity ?? false
+  if (typeof solarRelativity !== 'boolean') throw new RangeError('Solar relativity adoption must be boolean')
   const [start, end] = options.elapsedRangeSeconds
   const exclusions = { ...options.exclusionKm }
   const referenceEt = (referenceEpochTdb - 2451545) * 86400
@@ -77,11 +81,13 @@ export async function createDe440Dynamics(options: {
     const resolve = resolver(epoch(time))
     for (const id of DE440_FORCE_IDS) resolve(id)
   }
-  return { derivative: force.derivative,
+  return { derivative: solarRelativity ? withSolarRelativity(force.derivative, elapsed => resolver(epoch(elapsed))(10), masses.find(mass => mass.naifId === 10)!.gmKm3PerSecond2) : force.derivative,
     state: (naifId: number, elapsed = 0) => resolver(epoch(elapsed))(naifId).slice(),
-    evidence: { ...force.evidence, kernel: { ...DE440_DYNAMICS_SOURCE },
+    evidence: { ...force.evidence, model: solarRelativity ? 'restricted-newtonian-plus-solar-1pn' as const : force.evidence.model,
+      solarRelativity: solarRelativity ? SOLAR_1PN : null, kernel: { ...DE440_DYNAMICS_SOURCE },
       representation: 'Sun; separate Earth and Moon; other planetary systems as single barycentric point masses',
-      limitations: [...force.evidence.limitations,
+      limitations: [...force.evidence.limitations.filter(value => !solarRelativity || !value.startsWith('No relativistic,')),
+        ...(solarRelativity ? ['Solar monopole 1PN only; no planetary/mixed relativistic terms, spin, harmonics, non-gravitational forces or back-reaction.', SOLAR_1PN.approximation] : []),
         'Planetary-system point masses do not resolve non-lunar satellites.',
-        'This restricted Newtonian force model is not the DE440 or Horizons orbit-fit force model.'] } }
+        'This restricted force model is not the DE440 or Horizons orbit-fit force model.'] } }
 }

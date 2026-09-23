@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { expect, test } from './fixtures'
 import reference from '../fixtures/de440-dynamics-reference.json' with { type: 'json' }
+import relativistic from '../fixtures/de440-solar-1pn-reference.json' with { type: 'json' }
 
 test.beforeEach(async ({ page }) => { await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete')) })
 
@@ -53,6 +54,28 @@ test('cancelling a held ephemeris request cannot publish a stale result', async 
   await expect(panel.getByTestId('dynamics-result')).toHaveCount(0)
   await expect(panel.getByRole('alert')).toHaveCount(0)
   await expect(panel.getByRole('button', { name: 'Adopt DE440 point masses and run' })).toBeEnabled()
+})
+
+test('solar 1PN is explicitly adopted and exports its independently checked trajectory', async ({ page }) => {
+  await page.goto('./?v=4&page=about&lang=en')
+  const panel = page.getByRole('region', { name: 'Dynamics laboratory', exact: true })
+  await panel.getByRole('button', { name: 'Load source-backed Eros example' }).click()
+  const adoption = panel.getByLabel('Adopt solar first post-Newtonian correction (1PN)')
+  await expect(adoption).not.toBeChecked()
+  await adoption.check()
+  await expect(panel).toContainText('not full barycentric EIH')
+  await panel.getByRole('button', { name: 'Adopt DE440 point masses and run' }).click()
+  const result = panel.getByTestId('dynamics-result')
+  await expect(result).toContainText('Solar 1PN adopted')
+  const pending = page.waitForEvent('download')
+  await result.getByRole('button', { name: 'Export experiment and sources JSON' }).click()
+  const receipt = JSON.parse(await readFile((await (await pending).path())!, 'utf8'))
+  expect(receipt.calculation).toBe('restricted-de440-solar-1pn-experiment')
+  expect(receipt.forceModel.solarRelativity.model).toBe('solar-monopole-1pn')
+  const target = relativistic.cases.find(row => row.duration === 2592000)!
+  expect(Math.hypot(...receipt.finalStateKmKmPerSecond.slice(0, 3).map((value: number, i: number) => value-target.result[i]))).toBeLessThan(1e-4)
+  await adoption.uncheck()
+  await expect(result).toHaveCount(0)
 })
 
 test('Chinese import keeps unit and frame validation explicit', async ({ page }) => {

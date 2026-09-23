@@ -642,6 +642,27 @@ retained. All twelve targeted cancellation cases across four browser profiles
 passed locally. No application behavior or timeout was weakened. The failed
 head has not been promoted; do not replace it while healthy native jobs run.
 
+### Checkpoint 22: optional solar first post-Newtonian correction (2026-09-23)
+
+Added an explicitly adopted Sun-monopole 1PN term using the pinned Sun position,
+velocity and GM, with analytic position/velocity variational derivatives and
+finite weak-field/slow-motion guards. The default model stays Newtonian.
+Browser and CLI select and export the actual model; changing the option clears
+old results. This is not full barycentric EIH or complete source-fit dynamics.
+
+Fourteen targeted model/source/CLI checks and eight actual-worker checks across
+four browser profiles passed, including independent CSPICE/DOP853 integration
+and complex-step derivative comparisons. The actual Eros 30-day experiment's
+original-SPK residual decreased from approximately 191 m to 0.626 m, while its
+independent-integration difference was `5.16e-8 km`. No physical-uncertainty,
+arbitrary-input accuracy or new rendering-performance claim follows. Production
+build/type checking and changed-file lint passed; no full local suite ran.
+
+This slice is held locally while run 35815461132 validates checkpoints 19–21
+on `4ccb540`. It requires a separate exact-head gate afterward. Additional
+forces, joint parameter uncertainty, long-term diagnostics, native access and
+every other incomplete ledger row remain open.
+
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),
 [JPL SBDB](https://ssd-api.jpl.nasa.gov/doc/sbdb.html),

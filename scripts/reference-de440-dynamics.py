@@ -20,7 +20,9 @@ ET = (EPOCH-2451545)*86400
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', required=True)
-    output = Path(parser.parse_args().output)
+    parser.add_argument('--solar-1pn', action='store_true')
+    args = parser.parse_args()
+    output = Path(args.output)
     if output.exists():
         raise FileExistsError('Choose a new immutable reference output')
     manifest = json.loads((ROOT/'src/data/ephemeris-manifest.json').read_text())
@@ -44,6 +46,23 @@ def main():
     def positions(t):
         return [spice.spkgeo(id_, ET+t, 'J2000', 0)[0][:3] for id_ in IDS]
 
+    def solar_correction(relative):
+        # Analytic extension for complex-step derivatives, not abs/norm.
+        r, v = relative[:3], relative[3:]
+        radius = np.sqrt(np.dot(r, r))
+        return gms[0]/299792.458**2/radius**3*((4*gms[0]/radius-np.dot(v, v))*r+4*np.dot(r, v)*v)
+
+    def solar_terms(t, state):
+        relative = state[:6]-spice.spkgeo(10, ET+t, 'J2000', 0)[0]
+        jacobian = np.zeros((3, 6))
+        # Independent complex-step differentiation avoids copying the JS
+        # analytic Jacobian, including all three velocity derivatives.
+        for axis in range(6):
+            perturbed = relative.astype(complex)
+            perturbed[axis] += 1e-15j
+            jacobian[:, axis] = np.imag(solar_correction(perturbed))/1e-15
+        return solar_correction(relative), jacobian
+
     def rhs(t, state):
         acceleration, gradient = np.zeros(3), np.zeros((3, 3))
         for position, gm in zip(positions(t), gms):
@@ -54,6 +73,10 @@ def main():
         linear = np.zeros((6, 6))
         linear[:3, 3:] = np.eye(3)
         linear[3:, :3] = gradient
+        if args.solar_1pn:
+            correction, jacobian = solar_terms(t, state)
+            acceleration += correction
+            linear[3:, :] += jacobian
         return np.concatenate([state[3:6], acceleration, (linear@state[6:].reshape((6, 6))).ravel()])
 
     cases = []
@@ -80,6 +103,13 @@ def main():
                   generatorSha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                   boundary='Restricted Newtonian point-mass integration from real Eros initial state. Original SPK residuals are model disagreement, not numerical tolerance or physical uncertainty.',
                   cases=cases)
+    if args.solar_1pn:
+        acceleration, jacobian = solar_terms(0, initial)
+        report['solarRelativity'] = dict(model='solar-monopole-1pn', speedOfLightKmPerSecond=299792.458,
+                                        acceleration=acceleration.tolist(), jacobian=jacobian.tolist(),
+                                        reference='https://cds.cern.ch/record/257177/files/P00019892.pdf',
+                                        derivativeMethod='Complex-step differentiation of the acceleration, step 1e-15')
+        report['boundary'] = 'Newtonian prescribed DE440 point masses plus Sun-relative test-particle 1PN monopole. Not full barycentric EIH or a complete source-fit model; source residuals are not physical uncertainty.'
     with output.open('x', encoding='utf-8') as handle:
         json.dump(report, handle, indent=2, allow_nan=False)
         handle.write('\n')

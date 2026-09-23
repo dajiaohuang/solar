@@ -199,3 +199,39 @@ retained all 123 nodes (stride one). Baseline/refined work was 122/192 accepted
 steps and 733/1,153 force evaluations. Endpoint differences were `1.49e-8` km
 and `3.97e-15` km/s; these tiny numerical differences do not reduce the about
 191 m source-orbit model discrepancy documented above. No full local suite ran.
+## Optional solar first post-Newtonian term
+
+The browser checkbox and offline `--adopt-solar-1pn` flag explicitly enable a
+Sun-monopole correction. Default experiments remain Newtonian. The implementation
+uses the [Schwarzschild monopole expression](https://cds.cern.ch/record/257177/files/P00019892.pdf)
+also stated in this [A&A paper](https://doi.org/10.1051/0004-6361/202554676):
+`a = mu/(c² r³) [(4 mu/r - v²) r + 4 (r·v) v]`.
+Here position and velocity are relative to the same pinned DE440 Sun, solar GM
+comes from the verified GM kernel, and `c = 299792.458 km/s`. Both analytic
+position and velocity Jacobians contribute to the 6x6 variational equations.
+No REBOUNDx implementation is copied or invoked.
+
+This is an explicitly adopted approximation added to barycentric Newtonian
+acceleration, not full barycentric EIH dynamics or the Horizons orbit-fit model.
+It omits planetary/mixed relativistic terms, solar spin, harmonics and
+non-gravitational accelerations. The implementation rejects force evaluations
+where either `GM/(r c²)` or `v²/c²` exceeds `1e-4`. That chosen weak-field and
+slow-motion guard does not establish a truncation error bound. The existing
+force-sample exclusion and coverage requirements still apply.
+
+`scripts/reference-de440-dynamics.py --solar-1pn --output <new.json>` generates
+an independent CSPICE/DOP853 reference, with complex-step differentiation of
+the correction instead of copying the implementation's analytic Jacobian.
+The pinned `tests/fixtures/de440-solar-1pn-reference.json` contains all 42
+integrated components, source hashes, refinement comparisons and original
+Eros SPK states at -10, +10 and +30 days. The respective independent model
+position residuals are approximately 0.071 m, 0.069 m and 0.626 m. These
+particular source-fit comparisons are not physical uncertainty or a guarantee
+for other objects/epochs. The Newtonian-only references remain unchanged.
+
+The actual local 30-day CLI experiment used 122 accepted steps / 733 force
+evaluations. Its position differed from independent DOP853 by `5.16e-8 km`,
+from its finer-setting run by `1.49e-8 km`, and from the original SPK by
+`0.0006262555 km`. These are distinct comparisons. Runtime and total-memory
+benchmarks for the new correction have not been measured.
+
