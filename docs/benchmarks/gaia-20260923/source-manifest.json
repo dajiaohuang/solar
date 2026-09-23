@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "catalog": "Gaia DR3",
+  "table": "gaiadr3.gaia_source",
+  "frame": "ICRS",
+  "referenceEpochJulianYear": 2016,
+  "referenceEpochTimeScale": "TCB",
+  "implementation": {
+    "node": "v24.14.1",
+    "generatorSha256": "f6328c050a166352645e27b86c92964bf69a251db91ecf97e76204fe3fba1c6b",
+    "parserSha256": "6c9fb369fc2048ed5437b7043e3be2bbf58f218078f12f50dc107d5907c571da"
+  },
+  "settings": {
+    "raDeg": 55,
+    "decDeg": 25,
+    "radiusDeg": 1,
+    "maxMagnitude": 17,
+    "maxRows": 10000
+  },
+  "columns": [
+    "source_id",
+    "ref_epoch",
+    "ra",
+    "dec",
+    "ra_error",
+    "dec_error",
+    "parallax",
+    "parallax_error",
+    "pmra",
+    "pmra_error",
+    "pmdec",
+    "pmdec_error",
+    "ra_dec_corr",
+    "ra_parallax_corr",
+    "ra_pmra_corr",
+    "ra_pmdec_corr",
+    "dec_parallax_corr",
+    "dec_pmra_corr",
+    "dec_pmdec_corr",
+    "parallax_pmra_corr",
+    "parallax_pmdec_corr",
+    "pmra_pmdec_corr",
+    "astrometric_params_solved",
+    "ruwe",
+    "phot_g_mean_mag",
+    "bp_rp",
+    "radial_velocity",
+    "radial_velocity_error"
+  ],
+  "rows": 4460,
+  "queryCountMatched": true,
+  "catalogCompletenessCertified": false,
+  "units": {
+    "ra": "degree",
+    "dec": "degree",
+    "ra_error": "mas; alpha*cos(delta)",
+    "dec_error": "mas",
+    "parallax": "mas",
+    "pmra": "mas/Julian year; mu_alpha*cos(delta)",
+    "pmdec": "mas/Julian year",
+    "radial_velocity": "km/s"
+  },
+  "limitations": [
+    "A magnitude-limited cone is not full-sky data or a completeness guarantee.",
+    "Missing fields remain null. Negative parallax is retained; no inverse-parallax distances are inferred.",
+    "No proper-motion propagation, observer parallax, aberration, deflection, zero-point correction or occultation uncertainty model is applied.",
+    "Spatial bins describe returned coordinates at J2016.0, not bounds at arbitrary epochs."
+  ],
+  "documentation": [
+    "https://www.cosmos.esa.int/web/gaia/dr3",
+    "https://www.cosmos.esa.int/web/gaia-users/archive/programmatic-access",
+    "https://gea.esac.esa.int/archive/documentation/GDR3/Gaia_archive/chap_datamodel/sec_dm_main_source_catalogue/ssec_dm_gaia_source.html"
+  ],
+  "sources": [
+    {
+      "path": "count.csv",
+      "bytes": 20,
+      "sha256": "64568b5857ca3a181963329a652bdd3b22a44bceceffcb904423f8f5e77c8eb1",
+      "query": "SELECT COUNT(*) AS selected_count FROM gaiadr3.gaia_source WHERE CONTAINS(POINT('ICRS',ra,dec),CIRCLE('ICRS',55,25,1))=1 AND phot_g_mean_mag<=17",
+      "url": "https://gea.esac.esa.int/tap-server/tap/sync?REQUEST=doQuery&LANG=ADQL&FORMAT=csv&MAXREC=1&QUERY=SELECT+COUNT%28*%29+AS+selected_count+FROM+gaiadr3.gaia_source+WHERE+CONTAINS%28POINT%28%27ICRS%27%2Cra%2Cdec%29%2CCIRCLE%28%27ICRS%27%2C55%2C25%2C1%29%29%3D1+AND+phot_g_mean_mag%3C%3D17",
+      "retrievedAt": "2026-09-23T07:07:32.452Z"
+    },
+    {
+      "path": "rows.csv",
+      "bytes": 1469978,
+      "sha256": "be9643fb9ee483c561707d41458c1c00f0061f87816c556b93464be1034f35d2",
+      "query": "SELECT TOP 10001 source_id,ref_epoch,ra,dec,ra_error,dec_error,parallax,parallax_error,pmra,pmra_error,pmdec,pmdec_error,ra_dec_corr,ra_parallax_corr,ra_pmra_corr,ra_pmdec_corr,dec_parallax_corr,dec_pmra_corr,dec_pmdec_corr,parallax_pmra_corr,parallax_pmdec_corr,pmra_pmdec_corr,astrometric_params_solved,ruwe,phot_g_mean_mag,bp_rp,radial_velocity,radial_velocity_error FROM gaiadr3.gaia_source WHERE CONTAINS(POINT('ICRS',ra,dec),CIRCLE('ICRS',55,25,1))=1 AND phot_g_mean_mag<=17 ORDER BY source_id",
+      "url": "https://gea.esac.esa.int/tap-server/tap/sync?REQUEST=doQuery&LANG=ADQL&FORMAT=csv&MAXREC=10001&QUERY=SELECT+TOP+10001+source_id%2Cref_epoch%2Cra%2Cdec%2Cra_error%2Cdec_error%2Cparallax%2Cparallax_error%2Cpmra%2Cpmra_error%2Cpmdec%2Cpmdec_error%2Cra_dec_corr%2Cra_parallax_corr%2Cra_pmra_corr%2Cra_pmdec_corr%2Cdec_parallax_corr%2Cdec_pmra_corr%2Cdec_pmdec_corr%2Cparallax_pmra_corr%2Cparallax_pmdec_corr%2Cpmra_pmdec_corr%2Castrometric_params_solved%2Cruwe%2Cphot_g_mean_mag%2Cbp_rp%2Cradial_velocity%2Cradial_velocity_error+FROM+gaiadr3.gaia_source+WHERE+CONTAINS%28POINT%28%27ICRS%27%2Cra%2Cdec%29%2CCIRCLE%28%27ICRS%27%2C55%2C25%2C1%29%29%3D1+AND+phot_g_mean_mag%3C%3D17+ORDER+BY+source_id",
+      "retrievedAt": "2026-09-23T07:07:40.987Z"
+    }
+  ],
+  "chunks": [
+    {
+      "path": "r10-d22.json",
+      "sha256": "9b65a04611fd08f67d4ba8a23b253d81a1b964e6ce7e7f66fbaefc0dc6e399c8",
+      "bytes": 733039,
+      "rows": 981,
+      "raRangeDeg": [
+        50,
+        55
+      ],
+      "decRangeDeg": [
+        20,
+        25
+      ]
+    },
+    {
+      "path": "r10-d23.json",
+      "sha256": "6c1f1f75c5f58acbb1ec0955d8b648ac2a3844df2e5126a1d2ddeadec8f2be90",
+      "bytes": 905115,
+      "rows": 1214,
+      "raRangeDeg": [
+        50,
+        55
+      ],
+      "decRangeDeg": [
+        25,
+        30
+      ]
+    },
+    {
+      "path": "r11-d22.json",
+      "sha256": "c6fd2687393cf3d7a0667016a47b0ae40b48bf224eebf7052e9b00bfb4a75487",
+      "bytes": 789391,
+      "rows": 1055,
+      "raRangeDeg": [
+        55,
+        60
+      ],
+      "decRangeDeg": [
+        20,
+        25
+      ]
+    },
+    {
+      "path": "r11-d23.json",
+      "sha256": "eef7853b2cd33e79962277a9b29624ef0ff5688efcf0c97699163a73cb362e4d",
+      "bytes": 904879,
+      "rows": 1210,
+      "raRangeDeg": [
+        55,
+        60
+      ],
+      "decRangeDeg": [
+        25,
+        30
+      ]
+    }
+  ]
+}

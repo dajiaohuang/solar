@@ -1209,3 +1209,22 @@ Six focused Gaia-loader tests passed, including cancellation before a held
 upload settles and an observed late upload error. Types and changed-file lint
 passed. No full local tests ran. Candidate a2635ac / run 35829908376 remains
 in progress and was not replaced. This fix is retained for the next candidate.
+
+### Checkpoint 48: measured real multi-chunk Gaia rendering (2026-09-23)
+
+An explicit ESA query at RA 55 / Dec 25, radius 1 degree, G <= 17 returned
+4,460 rows and a matching independent count. Original CSV and four chunks are
+retained in .cache/gaia-scale-20260923. Added an opt-in focused browser capacity
+measurement and committed source receipts, implementation hashes and raw frame
+samples in docs/benchmarks/gaia-20260923. Desktop and mobile-emulation cases
+passed three imports and 120 zoom steps each. Import timings were 64-511 ms;
+frame interval P95 was 16.7-16.8 ms on this desktop host. Star buffer allocation
+was 53,520 bytes with no zoom reallocations or uploads. Screenshot inspection
+confirmed actual visible star rendering.
+
+These are local-file, short, instrumented desktop-host measurements, not live
+network, actual mobile hardware, full-sky, sustained FPS or total-memory proof.
+Initial in-memory Playwright attachments were not retained by the list reporter;
+the harness now writes JSON artifacts explicitly and the two cases were rerun.
+Changed-file lint/types passed; no full local tests ran. Candidate a2635ac is
+still active remotely and has not been interrupted or replaced.
