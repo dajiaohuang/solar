@@ -57,7 +57,8 @@ a chunk and clear its own retained state on cancellation. These counters are
 admission limits, not measurements of JavaScript heap or GPU allocations. The
 loader does not own retained consumer storage. A failed/cancelled stream never
 returns a completed summary; already emitted chunks remain individually verified
-and must not be labeled a complete catalog. Cache integration and sustained capacity measurements are still pending.
+and must not be labeled a complete catalog. Remote imports use the bounded
+session cache described below. Sustained capacity measurements remain pending.
 
 ## Catalog-epoch sky chart
 
@@ -95,6 +96,17 @@ Exports report cacheHits and cacheRetainedBytes. Local files bypass the cache.
 Active cancellation or failure terminates that worker; page unmount releases
 both active and idle workers. No disk persistence or full-catalog caching is
 performed.
+
+## Measured multi-chunk example
+
+The separate [4,460-row measurement](benchmarks/gaia-20260923/README.md) retains
+real ESA query/source receipts and three imports plus 120 zoom steps for each
+of desktop Chromium and mobile emulation on one Windows host. Four source chunks
+were loaded and a 53,520-byte star buffer was reused without zoom uploads or
+reallocation. The reports pin the measured implementation; they do not establish
+identical timings for later revisions. This is a short local-file experiment,
+not full-sky, sustained real-time, public-network, total-memory or real mobile
+hardware evidence. The bundled 19-row example remains an ingestion fixture.
 
 ## Catalog position uncertainty
 

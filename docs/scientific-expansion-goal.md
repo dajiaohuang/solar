@@ -1490,3 +1490,15 @@ typing the correlation matrix as number[][]; final symmetric assignment was
 checked again with the focused numerical file. No full local tests ran.
 Full six-parameter imports, observer/time propagation and stellar-occultation
 integration remain open. Candidate 002b1e6 remains active awaiting iOS.
+
+### Checkpoint 62: evidence documentation reconciliation (2026-09-23)
+
+Confirmed candidate 002b1e6 remains live at the iOS real-SPK-over-HTTPS UI step
+(job 107092054174); repository, Web, four browsers and Android have passed.
+The candidate was not restarted or replaced. Deployment and asteroid dataset
+publication remain manually disabled. Corrected the stale Gaia documentation
+claim that cache integration was pending and linked the recorded 4,460-source
+multi-chunk measurements, retaining their implementation and hardware limits.
+No tests were run for this documentation-only correction. No full local tests
+ran. The full goal remains active; current-state scientific and capacity gaps
+are not waived by the passing bounded checks.
