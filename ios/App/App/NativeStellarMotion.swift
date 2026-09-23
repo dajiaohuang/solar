@@ -67,7 +67,7 @@ struct NativeStellarMotionReport: Sendable {
     init(validating raw: Data, request: NativeStellarMotionRequest) throws {
         try Self.require(!raw.isEmpty && raw.count <= Self.maxBytes, "Stellar response byte budget exceeded.")
         try Task.checkCancellation()
-        let envelope = try Self.object(JSONSerialization.jsonObject(with: raw))
+        let envelope = try Self.jsonObject(raw)
         let experiment = try Self.object(envelope["experiment"]), result = try Self.object(experiment["result"])
         try Self.require(envelope["apiVersion"] as? String == "solar.api/v1" && Self.number(experiment["schemaVersion"]) == 1, "Stellar API identity mismatch.")
         let manifest = request.originalManifestBase64, rows = request.originalRowsCsvBase64
@@ -81,7 +81,10 @@ struct NativeStellarMotionReport: Sendable {
         for (key, value) in original {
             if key == "source_id" { try Self.require(source[key] as? String == value as? String, "Selected source ID differs from CSV.") }
             else if value is NSNull { try Self.require(source[key] is NSNull, "Missing CSV value was replaced.") }
-            else { try Self.require(Self.number(source[key]) == Self.number(value), "Selected source value differs from CSV.") }
+            else {
+                let actual = try Self.number(source[key]), expected = try Self.number(value)
+                try Self.require(actual == expected, "Selected source field \(key) differs from CSV: \(actual.bitPattern) versus \(expected.bitPattern).")
+            }
         }
         try Self.require(Self.number(source["ref_epoch"]) == 2016
             && result["sourceId"] as? String == request.sourceId
@@ -210,6 +213,26 @@ struct NativeStellarMotionReport: Sendable {
     private static func object(_ value: Any?) throws -> [String: Any] {
         guard let object = value as? [String: Any] else { throw StateTileFailure.invalid("Stellar object required.") }
         return object
+    }
+    // Decode numeric tokens directly to binary64. Do not route science values
+    // through Foundation's inferred NSNumber/NSDecimalNumber representation.
+    static func jsonObject(_ data: Data) throws -> [String: Any] {
+        try object(JSONDecoder().decode(ScientificJSON.self, from: data).value)
+    }
+    private struct ScientificJSON: Decodable {
+        let value: Any
+        init(from decoder: Decoder) throws {
+            guard decoder.codingPath.count <= 32 else {
+                throw StateTileFailure.invalid("Stellar JSON nesting exceeds its budget.")
+            }
+            let container = try decoder.singleValueContainer()
+            if container.decodeNil() { value = NSNull() }
+            else if let boolean = try? container.decode(Bool.self) { value = boolean }
+            else if let number = try? container.decode(Double.self), number.isFinite { value = number }
+            else if let text = try? container.decode(String.self) { value = text }
+            else if let list = try? container.decode([ScientificJSON].self) { value = list.map(\.value) }
+            else { value = try container.decode([String: ScientificJSON].self).mapValues(\.value) }
+        }
     }
     private static func number(_ value: Any?) throws -> Double {
         guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(), number.doubleValue.isFinite else { throw StateTileFailure.invalid("Finite stellar number required.") }

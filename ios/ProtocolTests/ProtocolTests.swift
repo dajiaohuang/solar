@@ -268,9 +268,12 @@ struct ProtocolTests {
             let request = try NativeStellarMotionRequest(manifest: manifest, rows: rows, sourceId: "65212004581252736", epoch: 2026,
                 radialVelocityPolicy: NativeStellarMotionRequest.rvPolicy, covariancePolicy: covariance ? NativeStellarMotionRequest.independentRVPolicy : nil)
             let file = covariance ? "gaia-motion-covariance-experiment.json" : "gaia-motion-experiment.json"
-            let experiment = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: "tests/fixtures/" + file))) as! [String: Any]
-            let envelope: [String: Any] = ["apiVersion": "solar.api/v1", "experiment": experiment]
-            let raw = try JSONSerialization.data(withJSONObject: envelope)
+            let originalExperiment = try Data(contentsOf: URL(fileURLWithPath: "tests/fixtures/" + file))
+            // Preserve the Go numeric tokens for the acceptance case; a
+            // Foundation deserialize/serialize round trip is a different input.
+            var raw = Data("{\"apiVersion\":\"solar.api/v1\",\"experiment\":".utf8)
+            raw.append(originalExperiment); raw.append(contentsOf: [125])
+            let experiment = try NativeStellarMotionReport.jsonObject(originalExperiment)
             let report = try NativeStellarMotionReport(validating: raw, request: request)
             precondition(report.originalResponse == raw && report.sourceId == request.sourceId && report.epoch == 2026)
             precondition(abs(report.state[0] - 56.6929443290) < 1e-10 && (report.formalStandardDeviations != nil) == covariance)

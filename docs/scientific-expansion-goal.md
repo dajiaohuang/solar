@@ -1952,3 +1952,23 @@ Prior run 35843121444 is terminal: iOS passed and Android failed with the
 documented EACCES issue. Candidate 023248d was then pushed normally; new run
 35844926364 is live and includes the app-owned fixture fix and iOS workflow.
 The import concurrency change is subsequent local work, not that candidate.
+
+### Checkpoint 89: correct the iOS scientific JSON conversion path (2026-09-23)
+
+Run 35844926364 iOS job 107129069821 compiled the Foundation sources, then its
+protocol executable failed with `Selected source value differs from CSV.` before
+simulator build/UI. Cross-checking the retained Go experiment and original CSV
+in JavaScript found all 35 selected fields consistent. The precise failing field
+was absent from the old error, so the Foundation numeric conversion/fixture
+round-trip diagnosis remains an inference pending the next Swift execution.
+
+Changed response parsing to decode numeric tokens explicitly as Double, retaining
+boolean/null/string types and a nesting budget. Normal response acceptance tests
+now wrap the untouched Go experiment bytes instead of reserializing them through
+Foundation's inferred numeric types. Mutations start from the same typed decoder.
+Exact source equality remains required, with field names and binary64 bits in
+failure diagnostics; no tolerance or source-validation requirement was relaxed.
+
+Source registration and diff checks passed. Swift re-execution is pending and no
+success is claimed for this correction. No full local tests ran. Android and
+several Web/browser jobs remain live in the same run, so it was not replaced.
