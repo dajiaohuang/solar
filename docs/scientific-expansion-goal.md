@@ -1370,3 +1370,23 @@ This is observable non-elliptic two-body support in the experiment interface,
 not main catalog/scene integration, original SPK coverage, the full source force
 model, native access or physical trajectory accuracy. Those remain open.
 Candidate 858e895 still awaits iOS and is not interrupted.
+
+### Checkpoint 56: stable parabolic transverse velocity and promotion (2026-09-23)
+
+Run 35831624808 passed repository, Web, four browser profiles, Android, iOS
+and final gate for exact SHA 858e89561e4036b0c3df18e52f62630a84acc2ed.
+That SHA was fast-forwarded to main. Deploy application and Publish asteroid
+dataset remain manually disabled.
+
+Boundary auditing reproduced cancellation in the universal conic transverse
+velocity: subtracting x-squared C / radius from one lost the small component
+at large parabolic Barker parameters. Combining the numerator algebraically
+before division preserves it. Three analytic component-relative cases failed
+before the fix, including positive/negative elapsed time, then passed. Both
+focused conic/reference files passed all 60 cases; types and changed-file lint
+passed. No full local tests ran. The extreme analytic examples are numerical
+regressions, not claims of physical validity at enormous propagation times.
+
+The subsequent signed-Kepler, conic solver, original Borisov import and browser
+experiment commits still require their own exact-SHA remote gates before main
+promotion. The broader goal and its previously recorded gaps remain open.

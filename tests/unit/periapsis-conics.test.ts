@@ -23,6 +23,15 @@ describe('independent CSPICE periapsis conics', () => {
     const periapsis=propagatePeriapsisConic(orbit,0)
     expect(periapsis.positionKm).toEqual({x:1,y:0,z:0})
   })
+  test.each([1e4,1e8,-1e8])('retains parabolic transverse velocity at Barker D=%s', d => {
+    const orbit={periapsisKm:1,eccentricity:1,gmKm3PerSecond2:1,inclinationRadians:0,ascendingNodeRadians:0,argumentOfPeriapsisRadians:0}
+    // Analytic Barker state; component-relative checks detect cancellation that
+    // a total-vector relative tolerance hides in the small transverse velocity.
+    const state=propagatePeriapsisConic(orbit,Math.sqrt(2)*(d+d**3/3))
+    const expectedY=Math.sqrt(2)/(1+d*d)
+    expect(Math.abs(state.velocityKmPerSecond.y/expectedY-1)).toBeLessThan(2e-12)
+    expect(Math.abs(state.velocityKmPerSecond.x/(-Math.sqrt(2)*d/(1+d*d))-1)).toBeLessThan(2e-12)
+  })
   test('invalid inputs fail explicitly', () => {
     const orbit=reference.cases[0]
     expect(()=>propagatePeriapsisConic({...orbit,periapsisKm:0},1)).toThrow()

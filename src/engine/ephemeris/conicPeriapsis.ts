@@ -56,7 +56,9 @@ export function propagatePeriapsisConic(conic: PeriapsisConic, elapsedTdbSeconds
   x *= sign
   const {c,t} = evaluate(x), radius = 1+e*x*x*c, transverse = Math.sqrt(1+e)
   const px = q*(1-x*x*c), py = q*transverse*x*t
-  const vx = -speed*x*t/radius, vy = speed*transverse*(1-x*x*c/radius)
+  // Combine the numerator before dividing: 1-x²C/r cancels near the
+  // parabolic asymptote, erasing a representable transverse velocity.
+  const vx = -speed*x*t/radius, vy = speed*transverse*((1-beta*x*x*c)/radius)
   const co = Math.cos(o), so = Math.sin(o), cw = Math.cos(w), sw = Math.sin(w), ci = Math.cos(i), si = Math.sin(i)
   const rotate = (a: number,b: number) => ({ x:(co*cw-so*sw*ci)*a+(-co*sw-so*cw*ci)*b,
     y:(so*cw+co*sw*ci)*a+(-so*sw+co*cw*ci)*b, z:sw*si*a+cw*si*b })
