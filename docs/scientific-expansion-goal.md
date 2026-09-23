@@ -2465,3 +2465,21 @@ speedup. Reports, source/harness hashes and explicit scope limits are retained
 in docs/benchmarks/catalog-row-copy-20260923. Twenty-three named streaming
 tests, targeted lint and production build passed. No full local tests ran.
 Candidate 4d9e9e6 / run 35857808370 remains live and is not replaced.
+
+### Checkpoint 116: bounded stream ownership without per-chunk retention (2026-09-23)
+
+The bounded artifact reader formerly retained every upstream Uint8Array view
+until final concatenation. Tiny views could pin large backing buffers, and
+a sequential producer reusing its buffer could alter previously consumed
+bytes. Replaced retained chunks with an immediately owned byte buffer that
+grows geometrically up to the declared byte limit and returns the exact length.
+Default 64 MiB limits do not cause eager 64 MiB allocations for small JSON.
+Overflow is checked before copying; cancellation and lock release remain.
+
+Twenty-nine named bounded-delivery/streaming cases passed, including a reused
+1 MiB backing buffer with small views, 65,539 single-byte chunks crossing growth
+boundaries, zero-byte responses, cancellation, gzip limits and exact catalog
+source behavior. TypeScript and targeted lint passed. No full local tests ran.
+This removes retained per-chunk views; transient growth copies, the upstream
+stream's own allocations and browser/process RSS are separate from the byte
+limit. Candidate 4d9e9e6 remains active; changes are local until it is terminal.
