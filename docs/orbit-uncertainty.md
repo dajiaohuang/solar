@@ -5,7 +5,7 @@ solution's joint covariance to Cartesian coordinates at its solution epoch, and
 generates reproducible Gaussian parameter offsets. The Evidence page displays
 two-coordinate projections and a rotatable three-dimensional position ellipsoid.
 Offline and browser experiments additionally propagate six-parameter covariance
-under an explicitly adopted restricted DE440 model. Complete source-fit
+and finite nonlinear ensembles under an explicitly adopted restricted DE440 model. Complete source-fit
 propagation and event probabilities are unfinished.
 
 Run the development ingestion explicitly:
@@ -240,7 +240,7 @@ Thirteen focused propagation, sampling and CLI checks passed locally, including
 source ownership, cancellation, source/generator hashes, extra-parameter
 rejection and output preservation. A real +30-day Eros CLI experiment with solar
 1PN completed in 178 accepted steps. No full local tests ran. Native
-propagation, matched extra-parameter forces, nonlinear ensembles and event
+propagation, matched extra-parameter forces and event
 distributions remain unfinished.
 
 ## Browser time propagation
@@ -266,3 +266,51 @@ direct-covariance reference, plus cancellation and replacement during a held sou
 request. Four profiles also passed the existing nominal dynamics experiment after
 worker reuse. The mobile result screenshot showed the full table, units, epoch and
 ellipsoid without horizontal overflow. Only focused browser cases ran locally.
+
+## Nonlinear finite ensembles
+
+After source import, expand **Propagate nonlinear orbit samples**. Choose
+1–128 joint draws, an unsigned 32-bit seed, signed TDB duration, exclusion
+distance and optional solar 1PN. Each sample uses the original joint Gaussian
+source offsets and an independent six-state nonlinear integration. Periapsis-time
+offsets are applied to relative time, avoiding an extra rounding step at the
+large absolute Julian date. The nominal source retains the audited elliptic
+coordinate domain; individual draws may cross into other valid conics.
+
+The whole run shares a 250,000 force-evaluation budget, with at most 20,000
+adaptive attempts per draw. Cancellation and budget exhaustion produce no
+completed receipt. Other failed draws retain their source offsets, zero-based
+indices, reasons and validity mask. JSON endpoints for invalid draws are `null`,
+not zeros, and arrays retain their original length. No rejection/resampling
+changes the source distribution. Additional fitted force axes remain unsupported.
+
+The readout lists endpoint positions and exports all six state components,
+original source/hash, full source offsets, seed/algorithm, force evidence and
+numerical settings. Complete batches with at least two samples also include
+descriptive mean, sample covariance with divisor `n-1`, and standard deviations.
+Anchored compensated sums preserve small spreads around large coordinates.
+If any draw failed, summary moments are unavailable: statistics of survivors
+would describe a different distribution. These finite moments are not confidence
+intervals, sampling convergence evidence, event probabilities or physical errors.
+
+The same calculation is available offline; choose a new output filename:
+
+```sh
+rtk proxy node --experimental-strip-types scripts/propagate-sbdb-ensemble.mjs tests/fixtures/sbdb-eros-covariance.json .cache/eros-ensemble-new.json --adopt-conditional-de440-model --duration-seconds 2592000 --exclusion-km 1 --count 8 --seed 42 --adopt-solar-1pn
+```
+
+The CLI records implementation hashes, caps original-source reads at 2 MiB,
+supports SIGINT cancellation and never overwrites existing output. An actual
+eight-draw Eros run with these settings produced eight valid endpoints using
+2,024 force evaluations. This is numerical execution evidence only.
+
+The [independent generator](../scripts/reference-nonlinear-ensemble.py) combines
+80-digit classical-anomaly coordinates with CSPICE frame/states and SciPy
+DOP853 integration. Twelve cases cover three hand-selected joint offsets,
+-10/+30 days and both force choices. Application comparisons passed within
+`2e-12` AU and `2e-14` AU/day for those cases. Deliberately large reference offsets
+exercise nonlinear trajectories; they are not probability-weighted samples.
+Real browser checks covered seeded export, cancellation/source replacement,
+narrow-screen layout and an all-failed force-exclusion batch with preserved
+indices. Complete source-fit forces, native ensemble access and event
+distributions remain pending.
