@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import OSLog
 
 private struct StellarDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.json] }
@@ -10,6 +11,7 @@ private struct StellarDocument: FileDocument {
 }
 
 struct NativeStellarMotionView: View {
+    private static let importLog = Logger(subsystem: "io.github.dajiaohuang.solaratlas.stellar-import", category: "lifecycle")
     let address: String
     @Environment(\.scenePhase) private var scenePhase
     @State private var expanded = false
@@ -36,8 +38,8 @@ struct NativeStellarMotionView: View {
             Button(copy("Gaia stellar motion", "Gaia 恒星运动")) { expanded.toggle() }.accessibilityIdentifier("stellar.disclosure")
             if expanded {
                 Text(copy("Import the original Gaia manifest.json and rows.csv. J2016 TCB single-star propagation; measured radial velocity is required.", "导入 Gaia 原始 manifest.json 与 rows.csv。从 J2016 TCB 传播单星运动；必须提供实测径向速度。"))
-                Button(copy("Import manifest.json", "导入 manifest.json")) { importingManifest = true; importing = true }.accessibilityIdentifier("stellar.manifest")
-                Button(copy("Import rows.csv", "导入 rows.csv")) { importingManifest = false; importing = true }.accessibilityIdentifier("stellar.rows")
+                Button(copy("Import manifest.json", "导入 manifest.json")) { Self.importLog.notice("Manifest import requested"); importingManifest = true; importing = true }.accessibilityIdentifier("stellar.manifest")
+                Button(copy("Import rows.csv", "导入 rows.csv")) { Self.importLog.notice("Rows import requested"); importingManifest = false; importing = true }.accessibilityIdentifier("stellar.rows")
                 Text("manifest.json: \(manifest?.count ?? 0) B · rows.csv: \(rows?.count ?? 0) B").accessibilityIdentifier("stellar.files")
                 field(copy("Exact Gaia source ID", "精确 Gaia 来源编号"), $sourceId, "id")
                 field(copy("Target TCB Julian year (1916–2116)", "目标 TCB 儒略年（1916–2116）"), $epoch, "epoch")
@@ -57,11 +59,12 @@ struct NativeStellarMotionView: View {
         .onChange(of: adoptRV) { _ in clear() }
         .onChange(of: covariance) { _ in clear() }
         .onChange(of: expanded) { if !$0 { clear() } }
-        .onChange(of: scenePhase) { if $0 != .active { clear() } }
-        .onDisappear { clear() }
+        .onChange(of: scenePhase) { if $0 != .active { Self.importLog.notice("Scene left active state"); clear() } }
+        .onChange(of: importing) { shown in Self.importLog.notice("Importer presentation binding: \(shown)") }
+        .onDisappear { Self.importLog.notice("Stellar section disappeared"); clear() }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.data]) { outcome in
-            switch outcome { case .success(let url): importFile(url, isManifest: importingManifest)
-            case .failure(let error): message = String(describing: error) }
+            switch outcome { case .success(let url): Self.importLog.notice("Importer completion delivered a URL"); importFile(url, isManifest: importingManifest)
+            case .failure(let error): Self.importLog.error("Importer completion failed"); message = String(describing: error) }
         }
         .fileExporter(isPresented: $exporting, document: document, contentType: .json, defaultFilename: "solar-stellar-motion") { outcome in
             switch outcome { case .success: message = copy("Source-bearing result saved.", "已保存包含原始来源的结果。")
@@ -78,6 +81,7 @@ struct NativeStellarMotionView: View {
     private func clear() { generation = UUID(); work?.cancel(); finish(); report = nil; message = "" }
     private func finish() { work = nil; importDeadline?.cancel(); importDeadline = nil }
     private func importFile(_ url: URL, isManifest: Bool) {
+        Self.importLog.notice("Bounded source read started")
         clear(); if isManifest { manifest = nil } else { rows = nil }
         let token = generation; message = copy("Reading original file…", "正在读取原始文件…")
         importDeadline = Task { @MainActor in
@@ -90,8 +94,9 @@ struct NativeStellarMotionView: View {
                 let bytes = try await StellarSourceReader.shared.read(url, limit: isManifest ? NativeStellarMotionRequest.maxManifestBytes : NativeStellarMotionRequest.maxRowsBytes)
                 guard !Task.isCancelled, token == generation else { return }
                 if isManifest { manifest = bytes } else { rows = bytes }
+                Self.importLog.notice("Bounded source read completed: \(bytes.count) bytes")
                 finish(); message = copy("Original file loaded.", "原始文件已载入。")
-            } catch { guard token == generation else { return }; finish(); message = String(describing: error) }
+            } catch { Self.importLog.error("Bounded source read failed or cancelled"); guard token == generation else { return }; finish(); message = String(describing: error) }
         }
     }
     private func calculate() {

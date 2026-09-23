@@ -2234,3 +2234,27 @@ shard sample, not 30,000 NEOs, complete coverage or native hardware evidence.
 One additional focused regression passed: a flagged row excluded by exact name
 locators or index-precision filters cannot elevate its otherwise eligible shard.
 No full local tests ran. Run 35850104881 remains live in its iOS UI step.
+
+### Checkpoint 105: stop picker-geometry guesses and capture native lifecycle (2026-09-23)
+
+Run 35850104881 is terminal: all other platform jobs passed, iOS failed at
+ObservationUITests.swift:106 because the Files collection did not disappear.
+The exact manifest cell was found; its image was not hittable, so the existing
+cell fallback was tapped. The retained screenshot still shows the two normal
+files and no calculation occurred. This supersedes the earlier assumption that
+filename matching alone explains the failure. Repeated locator fixes have not
+resolved the chain; no further click-position workaround was applied.
+
+Added privacy-limited OSLog phases for import request, presentation binding,
+completion callback, bounded read, section disappearance and scene deactivation.
+The owned-simulator harness now retains that subsystem log before shutdown even
+on failure. No source bytes, URLs or user filenames enter these log messages.
+This is diagnostic instrumentation, not a claimed picker fix. Apple documents
+the presentation binding and completion callback separately:
+https://developer.apple.com/documentation/swiftui/view/fileimporter(ispresented:allowedcontenttypes:oncompletion:)
+The next native execution must distinguish missing selection/callback from
+lifecycle cancellation before changing importer behavior.
+
+Nine targeted iOS harness tests and targeted lint/diff checks passed; Swift
+execution remains unavailable locally. No full local tests ran. Main remains
+unadvanced; the next candidate also contains checkpoints 100 through 104.

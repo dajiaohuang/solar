@@ -300,6 +300,12 @@ export async function nativeSmoke() {
       })
     }
     if (device) {
+      // Retain importer binding/callback/read phases even when XCTest fails.
+      // This subsystem logs only lifecycle markers and counts, never source
+      // contents, security-scoped URLs or filenames from user-selected files.
+      await command('xcrun', ['simctl', 'spawn', device, 'log', 'show', '--style', 'compact', '--last', '30m',
+        '--predicate', 'subsystem == "io.github.dajiaohuang.solaratlas.stellar-import"'],
+      { log: join(artifact, 'stellar-import-lifecycle.log'), timeout: 30_000 }).catch(error => { report.importLogError = error.message })
       await command('xcrun', ['simctl', 'shutdown', device]).catch(error => { report.shutdownError = error.message })
       await command('xcrun', ['simctl', 'delete', device]).catch(error => { report.cleanupError = error.message })
     }
