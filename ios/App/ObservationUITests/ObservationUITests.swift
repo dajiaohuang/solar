@@ -84,6 +84,20 @@ final class ObservationUITests: XCTestCase {
                        "Disclosure did not reach \(expected): \(element.debugDescription)")
     }
 
+    private func enableSwitch(_ app: XCUIApplication, _ element: XCUIElement) {
+        reveal(app, element)
+        if element.value as? String != "1" {
+            // SwiftUI exposes a row-sized Switch containing the actual UISwitch.
+            // The row center is its text label and did not toggle it on iOS 26.5.
+            let control = element.switches.firstMatch
+            if control.exists { reveal(app, control); control.tap() }
+            else { element.tap() }
+        }
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: element)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 5), .completed,
+                       "Switch did not enable: \(element.debugDescription)")
+    }
+
     private func waitForDisplayed(_ app: XCUIApplication, mode3D: Bool) {
         // The simulator can inherit actual host thermal pressure. Check exact
         // state counts and only valid mode-specific limits, not a nominal host.
@@ -132,8 +146,10 @@ final class ObservationUITests: XCTestCase {
             waitForLabel(app.staticTexts["stellar.status"], "Original file loaded.")
         }
         let rv = app.switches["stellar.rv"], covariance = app.switches["stellar.covariance"]
-        reveal(app, rv); rv.tap(); reveal(app, covariance); covariance.tap()
-        reveal(app, app.buttons["stellar.load"]); app.buttons["stellar.load"].tap()
+        enableSwitch(app, rv); enableSwitch(app, covariance)
+        reveal(app, app.buttons["stellar.load"])
+        XCTAssertTrue(app.buttons["stellar.load"].isEnabled, "Verified files and RV adoption must enable calculation")
+        app.buttons["stellar.load"].tap()
         waitForLabel(app.staticTexts["stellar.status"], "Gaia DR3 65212004581252736 · J2026.0 TCB")
         let result = app.staticTexts["stellar.result"]
         XCTAssertTrue(result.label.contains("56.6929443290"))

@@ -2426,3 +2426,23 @@ TypeScript and targeted lint passed; no full local tests ran. Native access,
 apparent corrections, contour visualization and ellipsoid contact searches
 remain unfinished. Candidate 5936fca is still running in iOS; these changes
 remain local pending a terminal result and the next candidate run.
+
+### Checkpoint 114: native picker succeeds; switch activation is the remaining step (2026-09-23)
+
+Run 35856001727 is terminal. The new bounded scroll helper passed source
+directory selection/inventory-change testing. Gaia lifecycle logs now prove
+both actual system-picker callbacks and bounded file reads: 5305 manifest
+bytes and 32918 CSV bytes. Failure moved beyond import: screenshot and actual
+accessibility state show both switches still off and Calculate disabled,
+with no stellar HTTP request. XCTest tapped the outer row-sized Switch's
+label area, not its nested actual switch. Added child-control selection and
+an explicit value=1 assertion for both switches, then an enabled-button
+assertion before calculation. The system picker and application import logic
+remain unchanged. Swift execution awaits the next candidate.
+
+Provider diagnostics also included 55.8 MB of XCTest hierarchy queries;
+excluded only that subsystem from the provider log while retaining app,
+provider, default/error/fault and the separate import lifecycle evidence.
+No scientific/native acceptance is claimed beyond the observed stages.
+Firefox/mobile covariance duplicate-panel failures have already been fixed
+and verified locally; all subsequent changes will enter the next candidate.
