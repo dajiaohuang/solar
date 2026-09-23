@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "frame": "J2000",
+  "origin": "SSB",
+  "timeScale": "TDB",
+  "referenceEpochTdb": 2461234.5,
+  "initial": [
+    -139087788.8245916,
+    -139159843.25445253,
+    -103984361.27964424,
+    14.710833403429982,
+    -17.79792162512364,
+    -7.449047834170681
+  ],
+  "initialSource": "Eros 433; CSPICE N0067 geometric state from pinned original SPK, NAIF 20000433",
+  "sourceFiles": [
+    {
+      "id": "de440s-2000-01-01-2051-01-01",
+      "sha256": "8724d2d1bac115a75ad1f984c5b474ca778c96ee8be2df83e624cef61c001069",
+      "path": "public/data/ephemerides/de440s-2000-01-01-2051-01-01.bsp"
+    },
+    {
+      "id": "horizons-eros-2026-01-01-2027-01-01",
+      "sha256": "c9240dfdbe410ed08705306c01276b70ec54f34dbb9f135759f5734e16f74f6d",
+      "path": "public/data/ephemerides/horizons-eros-2026-01-01-2027-01-01.bsp"
+    }
+  ]
+}

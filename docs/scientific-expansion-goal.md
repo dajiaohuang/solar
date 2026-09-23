@@ -12,7 +12,7 @@ remain paused. Changes may go directly to main after the required checks.
 | Ground observer | Geodetic station, SOFA-compatible celestial/terrestrial transforms, versioned IERS EOP, vacuum/apparent altitude-azimuth, rise/set and visibility windows; source expiry and uncertainty remain visible | In progress |
 | Orbit uncertainty | Pinned SBDB covariance with labels, units and solution epoch; validated covariance propagation and sampling; uncertainty ellipsoids and event distributions, independent of numerical tolerance | In progress: source ingestion, solution-epoch Cartesian conversion, reproducible sampling and browser inspection; temporal propagation and 3D ellipsoids pending |
 | Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | Pending |
-| Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | In progress: bounded integration, variational equations, pinned DE440 adapter and offline source-bearing experiments; additional forces, full covariance and laboratory UI pending |
+| Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | In progress: bounded integration, variational equations, pinned DE440 adapter and browser/offline source-bearing experiments; additional forces, full covariance, native access and long-term diagnostics pending |
 | Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | Pending |
 | Catalog streaming | Replace the fixed 8k/30k-only cloud path with cancellable binary chunk loading, priority scheduling and independent byte/decode/compute/upload limits | In progress: full-inventory 2D snapshot, bounded upload batching and spatial display available; continuous/3D streaming and source-priority scheduling pending |
 | Rendering and time | Moving spatial bounds, visibility/LOD, selected-body retention, time/error-budgeted updates, reusable buffers and Float64-relative GPU coordinates; WebGL fallback and native contracts retained | In progress |
@@ -573,6 +573,10 @@ moving perturber. Details and limits are in
 passed. No full local suite ran. Real SPK perturbations, full force models,
 source uncertainty, UI, diagnostics and every unfinished ledger item remain open.
 
+Remote follow-up: run 35813379051 passed every applicable gate on `f18a321`,
+including all four browser profiles and native Android/iOS. That exact head was
+fast-forwarded to main, delivering the contour correction and checkpoint 18.
+
 ### Checkpoint 19: real SPK-driven restricted dynamics (2026-09-23)
 
 Added a byte-verified, owned DE440 kernel/GM adapter with geometric J2000/SSB/TDB
@@ -594,6 +598,24 @@ The source-orbit residual remains visible: about 22 m at 10 days and 191 m at
 disagreement with independent integration. See [dynamics-laboratory.md](dynamics-laboratory.md).
 Full source-fit dynamics, additional parameter covariance, physical uncertainty,
 UI/native access and long-term diagnostics are not delivered by this foundation.
+
+### Checkpoint 20: interactive source-backed experiments (2026-09-23)
+
+The Evidence page now offers a bilingual experiment panel with the source-backed
+Eros initial example, initial-state inspection/template export, custom JSON
+import, signed duration, explicit exclusion distance, run/cancel and result
+export. A dedicated Worker owns each experiment and bounded source fetch; no
+calculation blocks the UI thread. Input edits/unmount/cancel invalidate prior
+work. Browser and CLI share their parser and numerical experiment function.
+
+Sixteen targeted four-profile browser checks passed using actual Worker/kernel
+bytes and independent reference comparisons, including corrupt-source rejection,
+template round-trip and held-request cancellation. Seven targeted source/CLI
+checks passed after the shared-core refactor. Production build, TypeScript,
+changed-file lint and mobile screenshot inspection were used; no full local
+suite ran. The new source adapter and browser panel still need their exact-head
+remote gate. Native laboratory access, richer forces, full joint covariance,
+trajectory/long-term diagnostics and the other ledger requirements remain open.
 
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),

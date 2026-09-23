@@ -1,8 +1,8 @@
 # Dynamics laboratory: numerical foundation
 
-This workstream is incomplete. A bounded adaptive integrator and restricted
-Newtonian force/variational evaluator exist; a source-backed laboratory UI,
-force-model selection, non-gravitational terms and complete joint
+This workstream is incomplete. A bounded adaptive integrator, restricted
+Newtonian force/variational evaluator and browser experiment panel exist;
+additional force-model selection, non-gravitational terms and complete joint
 covariance propagation do not yet exist. Neither module replaces authoritative
 SPK states or reproduces a source orbit-fit model.
 The pinned DE440 adapter and offline experiment command are now implemented.
@@ -141,6 +141,34 @@ cancels the experiment; a failed/cancelled integration does not emit a successfu
 partial result. An actual local Eros 30-day run completed with 122 accepted steps
 and 733 force evaluations. No source was downloaded, published or deployed.
 
-The laboratory still needs user-facing/native access, richer force models,
+The laboratory still needs native access, trajectory visualization, richer force models,
 complete joint parameter covariance propagation, long-term diagnostics and
 model-validity/physical-error evidence. This CLI does not complete those goals.
+
+## Browser experiment panel
+
+The Evidence page now provides the same explicit model experiment through a
+dedicated Worker. Users can load the pinned Eros/CSPICE initial example, inspect
+its coordinates and source identity, export it as a reusable template, or import
+a bounded 2 MiB initial-condition file. Signed duration and point-mass exclusion
+distance remain explicit. Changing inputs invalidates previous results.
+
+The Worker uses the same initial-condition parser and numerical experiment
+function as the CLI. It fetches the pinned 5.56 MB DE440 source with a 30-second
+deadline and an exact byte cap, then checks the source hashes before integration.
+Cancel/unmount/input changes terminate the owned Worker; late messages cannot
+replace a newer result. Source corruption never falls back to an approximate
+trajectory. Output shows the final state, reference epoch/elapsed TDB seconds,
+accepted steps, force evaluations and the restricted model's limitations. JSON
+exports retain the full input/source receipt, force model, transition matrix,
+numerical settings and application build identity. CLI exports additionally
+retain individual implementation file hashes.
+
+Sixteen focused checks across desktop/mobile Chromium, Firefox and WebKit
+passed. They exercised real original kernel bytes and the actual Worker,
+compared the exported Eros result with the independent reference, verified
+input-template round-trip, invalid replacement, held-request cancellation,
+corrupted source rejection and Chinese duration validation. Seven targeted
+source/CLI unit checks also passed after sharing the experiment function. Mobile
+screenshots were inspected and a panel-width assertion guards overflow. No full
+local suite ran. This is Web evidence, not native-device laboratory acceptance.

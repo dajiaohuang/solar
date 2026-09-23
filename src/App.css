@@ -367,6 +367,8 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 .orbit-uncertainty .checksum { overflow-wrap: anywhere; font: 10px var(--font-mono); color: var(--accent-2); }
 .orbit-uncertainty dd { overflow-wrap: anywhere; }
 .orbit-uncertainty button { max-width: 100%; white-space: normal; }
+.dynamics-laboratory dd { overflow-wrap: anywhere; }
+.dynamics-laboratory button { max-width: 100%; white-space: normal; }
 .uncertainty-table { overflow-x: auto; }
 .uncertainty-table table { width: 100%; border-collapse: collapse; text-align: left; }
 .uncertainty-table th, .uncertainty-table td { padding: 6px; border-bottom: 1px solid var(--line); }
