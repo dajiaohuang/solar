@@ -10,7 +10,7 @@ remain paused. Changes may go directly to main after the required checks.
 | --- | --- | --- |
 | Shared analysis ephemeris | Events, curves and mission endpoints use a frozen source contract, expose actual per-body models, offer strict SPK coverage, and export time/frame/source evidence; shared backend integration follows | In progress |
 | Ground observer | Geodetic station, SOFA-compatible celestial/terrestrial transforms, versioned IERS EOP, vacuum/apparent altitude-azimuth, rise/set and visibility windows; source expiry and uncertainty remain visible | In progress |
-| Orbit uncertainty | Pinned SBDB covariance with labels, units and solution epoch; validated covariance propagation and sampling; uncertainty ellipsoids and event distributions, independent of numerical tolerance | In progress: source ingestion only |
+| Orbit uncertainty | Pinned SBDB covariance with labels, units and solution epoch; validated covariance propagation and sampling; uncertainty ellipsoids and event distributions, independent of numerical tolerance | In progress: source ingestion, solution-epoch Cartesian conversion and reproducible parameter sampling; temporal propagation and UI pending |
 | Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | Pending |
 | Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | Pending |
 | Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | Pending |
@@ -489,6 +489,41 @@ their measured no-context-loss path. Required remote validation of checkpoints
 14 and 15 remains pending. Adaptive/time/error budgets, continuous/3D streaming,
 total memory measurements and every unfinished scientific ledger row remain
 part of the active goal.
+
+Remote follow-up: run 35810288605 on `1e21bf2` passed repository, Web, all four
+browser profiles and Android. Its first iOS attempt failed the first tutorial
+tap and the Earth preset tap: retained accessibility trees still showed the
+original controls and default selection, and no state HTTP request was made.
+The real SPK/Web/Swift numerical golden checks passed. This evidence does not
+yet establish whether input delivery or application behavior caused the UI
+failures. Only failed iOS/gate jobs were retried on the same head; successful
+jobs and the first failed artifact remain evidence. Main promotion is pending.
+
+### Checkpoint 16: joint state covariance and reproducible offsets (2026-09-23)
+
+Added a solution-epoch elliptic element-to-Cartesian covariance conversion with
+an analytic Jacobian and explicitly adopted/source-labeled solar GM. All
+additional covariance axes and state/parameter cross-correlations survive the
+joint transformation. The source solution epoch cannot be replaced by the
+standard element epoch. Unsupported near-parabolic/non-elliptic cases fail
+explicitly. This initializes a possible later dynamics calculation; it does
+not integrate the source force model or propagate uncertainty through time.
+
+A second module produces bounded, seeded joint Gaussian parameter offsets with
+dimensionless Cholesky factorization and no matrix repairs. Time offsets remain
+separate from large nominal Julian dates. All draws are retained without hidden
+physical-parameter rejection. The CLI exports immutable source/GM/implementation
+receipts, joint matrices and optional reproducible offsets from existing source
+files. It does not acquire or publish data.
+
+Forty targeted ingestion/conversion/sampling/export tests passed, plus TypeScript
+and changed-file lint. Ten independent mpmath 80-digit / CSPICE reference cases
+cover the two original SBDB sources and conic boundary/phase cases. Real Eros
+and Bennu CLI exports succeeded; a Bennu receipt also retained all eight axes
+for 1,000 seeded draws. Details, reproduction commands and numerical limits
+are in [orbit-uncertainty.md](orbit-uncertainty.md). No full local tests ran.
+Temporal force-model propagation, Web/native access, ellipsoids, event
+distributions and all other unfinished ledger requirements remain open.
 
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),

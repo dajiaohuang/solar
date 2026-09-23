@@ -1,7 +1,9 @@
 # Orbit uncertainty source boundary
 
-The initial implementation ingests and audits SBDB covariance. It does not yet
-propagate uncertainty, draw uncertainty ellipsoids or calculate event probabilities.
+The implementation ingests and audits SBDB covariance, converts an elliptic
+solution's joint covariance to Cartesian coordinates at its solution epoch, and
+generates reproducible Gaussian parameter offsets. It does not yet propagate
+uncertainty in time, draw uncertainty ellipsoids or calculate event probabilities.
 
 Run the development ingestion explicitly:
 
@@ -46,9 +48,82 @@ correlations. NumPy independently checked all eight eigenvalues within `2e-14`.
 These source parameters cannot be replaced with invented A1/A2 defaults or
 discarded to force a six-dimensional propagation model.
 
-Remaining work includes model-aware propagation, singular/poorly conditioned
-cases, source validity limits and force-model metadata in consumer contracts,
-independent trajectory/covariance references, reproducible sampling, user-facing
+## Cartesian coordinates at the solution epoch
+
+`cartesianCovarianceAtSolutionEpoch` maps the six labeled source elements to
+heliocentric position (au) and velocity (au/day). An analytic Jacobian differentiates
+the implicit elliptic Kepler equation, orbital scale, phase and three rotations.
+The phase derivative retains complete revolutions. The covariance map is
+`J C J^T`; additional estimated/considered parameters have an identity block,
+preserving their variances and transforming all state/parameter cross terms.
+The source matrix and nominal values are not mutated. Standard-epoch elements
+are never substituted for solution-epoch elements.
+
+The GM must be explicitly provided with its source. SBDB's `cov=mat` response
+does not supply the central GM or its uncertainty. The CLI requires
+`--adopt-de440-gm`, verifies the repository's original GM file hash and labels
+the result as conditional on that adopted constant. In particular, this does
+not reproduce Bennu's DE424 orbit-fit force model. Coordinate conversion at one
+epoch is not integration of planetary perturbations, relativistic corrections,
+radiation pressure or thermal recoil. The current conversion domain is
+`0 <= e <= 0.9999`, positive perihelion distance and finite accumulated phase
+within one million radians. Other conics are rejected, not silently replaced.
+
+The independent [reference generator](../scripts/reference-orbit-covariance.py)
+uses mpmath 1.3.0 at 80 decimal digits, differentiating a true-anomaly state
+formulation. CSPICE N0067 via SpiceyPy 8.2.0 independently evaluates nominal
+states with [conics](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/conics_c.html).
+The [pinned reference](../tests/fixtures/orbit-covariance-reference.json) covers
+Eros, Bennu, circular/equatorial/retrograde cases, high eccentricity, inbound and
+outbound motion, multiple complete revolutions and a distant orbit. It records
+original fixture hashes and the adopted GM source. Reference inputs deliberately
+use the same rounded Float64 nominal values, isolating calculation error from
+decimal-input rounding.
+
+Across these ten cases, the observed largest position-component difference
+from the high-precision reference was `1.44e-14` au and velocity-component
+difference `1.35e-15` au/day. The largest covariance entry difference, normalized
+by the corresponding reference marginal standard-deviation product when nonzero,
+was `2.27e-13`. These are numerical agreement measurements for these cases,
+**not physical prediction uncertainties or a global error bound**. No source
+orbit-fit trajectory has been independently reproduced.
+
+## Reproducible joint Gaussian offsets
+
+`sampleSbdbCovariance` accepts an explicit unsigned 32-bit seed and 1–10,000
+draws. It factors the dimensionless correlation matrix, applies the marginal
+scales, and retains every source axis. Mulberry32, Box–Muller and the correlation
+Cholesky algorithm are versioned in the result. A singular/non-positive-definite
+factor is rejected without jitter or eigenvalue clipping. Same-runtime,
+same-input exports reproduce exactly; transcendental arithmetic may differ in
+the last bit across runtimes.
+
+Samples store **offsets separately from nominal parameters**. Adding a tiny
+perihelion-time offset to a large Julian date prematurely would round away
+uncertainty. A later dynamics evaluator must subtract its reference epoch before
+applying that offset. All Gaussian draws remain present, including any implying
+invalid physical parameters; no hidden rejection or truncation changes the
+distribution. Gaussian parameter sampling is only a formal approximation to an
+orbit-fit distribution and does not establish event probabilities.
+
+The development CLI reads an existing source response, exports the complete
+source audit, adopted GM, implementation hashes, transformed matrix and optional
+sample offsets. It refuses to overwrite an output file and makes no network or
+publication request:
+
+```sh
+rtk proxy node --experimental-strip-types scripts/convert-sbdb-covariance.mjs tests/fixtures/sbdb-bennu-covariance.json .cache/bennu-joint-new.json --adopt-de440-gm --samples 1000 --seed 42
+```
+
+Forty targeted ingestion/conversion/sampling/export checks passed. Fixed-seed
+10,000-draw checks recover Bennu's marginal scales and cross-correlations within
+finite-sample tolerances; they do not establish statistical quality for every
+seed. Real Eros/Bennu CLI exports succeeded, including an eight-axis Bennu
+1,000-draw receipt. Full local test runs were not used.
+
+Remaining work includes model-aware temporal propagation, singular/poorly
+conditioned sampling, source validity limits and force-model metadata in consumer
+contracts, independent propagated trajectory/covariance references, Web/native
 source access and uncertainty visualization. Additional parameters must not be
 silently dropped when implementing propagation. The source covariance is a
 formal orbit-fit uncertainty, not a guarantee that every model error is covered.
