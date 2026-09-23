@@ -3,17 +3,21 @@ import gmText from '../data/gm_de440.tpc?raw'
 import pckText from '../data/pck00011.tpc?raw'
 import { DE440_DYNAMICS_SOURCE } from '../engine/dynamics/de440Dynamics'
 import { parseOccultationInput, runOccultationExperiment } from '../engine/events/occultationExperiment'
+import { parseSpkLimbInput, runSpkLimbExperiment } from '../engine/events/spkLimbExperiment'
 
 const scope = self as DedicatedWorkerGlobalScope
 let started = false
-scope.onmessage = (event: MessageEvent<{ inputBytes: ArrayBuffer }>) => {
+scope.onmessage = (event: MessageEvent<{ inputBytes: ArrayBuffer; calculation?: 'contacts' | 'limb' }>) => {
   if (started) return
   started = true
   void (async () => {
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 30_000)
     try {
       const { inputBytes } = event.data
-      parseOccultationInput(inputBytes)
+      const calculation = event.data.calculation ?? 'contacts'
+      if (calculation !== 'contacts' && calculation !== 'limb') throw new Error('Unsupported SPK geometry calculation')
+      if (calculation === 'limb') parseSpkLimbInput(inputBytes)
+      else parseOccultationInput(inputBytes)
       const response = await fetch(`${import.meta.env.BASE_URL}data/ephemerides/${DE440_DYNAMICS_SOURCE.path}`, { signal: controller.signal })
       if (!response.ok || !response.body) throw new Error(`DE440 source unavailable: HTTP ${response.status}`)
       const bytes = new Uint8Array(DE440_DYNAMICS_SOURCE.bytes), reader = response.body.getReader()
@@ -27,7 +31,8 @@ scope.onmessage = (event: MessageEvent<{ inputBytes: ArrayBuffer }>) => {
         }
       } catch (error) { await reader.cancel(); throw error }
       if (offset !== bytes.length) throw new Error('Truncated DE440 source')
-      const receipt = await runOccultationExperiment({ inputBytes, spkBytes: bytes.buffer,
+      const compute = calculation === 'limb' ? runSpkLimbExperiment : runOccultationExperiment
+      const receipt = await compute({ inputBytes, spkBytes: bytes.buffer,
         pckBytes: new TextEncoder().encode(pckText).buffer, gmText, signal: controller.signal })
       scope.postMessage({ type: 'done', receipt })
     } catch (error) { scope.postMessage({ type: 'error', error: error instanceof Error ? error.message : String(error) }) }

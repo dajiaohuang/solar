@@ -2405,3 +2405,24 @@ pending-source cancellation. Targeted lint and diff checks passed. No full
 local tests ran. The current candidate's iOS job remains live and will not be
 replaced before its diagnostics are retained. This fix is local pending the
 next exact-candidate verification.
+
+### Checkpoint 113: cancellable Web source-SPK limb workflow (2026-09-23)
+
+Added bilingual editable exact IDs, TDB reference/elapsed time, NONE/CN mode
+and explicit source margin in the evidence workspace. A calculation
+discriminator reuses the existing bounded DE440 worker transport, retaining
+byte cap, hash verification, timeout and termination-based cancellation.
+Outputs include observer position, limb center/generators and both epochs;
+actual JSON exports carry the source/input evidence. Input changes clear and
+terminate pending calculations. Missing coverage is never approximated.
+
+Desktop/mobile Chromium passed actual worker/source export against CSPICE,
+NONE switching, exact-ID rejection, cancellation and HTTP 503 failure (four
+executions). A separate existing contact-worker browser case passed after
+the shared transport change. Initial checks exposed an accessible select-name
+problem and a test interception assumption about a single source request; both
+were corrected, without weakening numeric checks or cancellation behavior.
+TypeScript and targeted lint passed; no full local tests ran. Native access,
+apparent corrections, contour visualization and ellipsoid contact searches
+remain unfinished. Candidate 5936fca is still running in iOS; these changes
+remain local pending a terminal result and the next candidate run.

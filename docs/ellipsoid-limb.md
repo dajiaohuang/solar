@@ -53,7 +53,16 @@ orientation and normalized limb comparisons pass 2e-10. These are numerical
 parity thresholds, not physical uncertainty estimates. CLI receipt, frozen
 input bytes, cancellation and source-failure behavior have targeted coverage.
 The actual supplied Moon example evaluates its orientation about 1.2373 seconds
-before reception. SPK-fed calculation currently has offline access only.
+before reception.
+
+The Web About page also provides **SPK ellipsoid limb** with exact target and
+observer IDs, reference TDB JD, elapsed seconds, correction mode and source
+margin. It uses the same bounded source fetch and dedicated worker as contact
+analysis, with a separate calculation discriminator. The worker verifies the
+original source before computing; cancellation, input changes and unmount
+terminate it and invalidate pending results. Missing data is an explicit error.
+Export includes the input receipt, kernel/PCK hashes, center-emission epoch,
+limb and model limits. Native access remains unfinished.
 
 ## Geometry and conventions
 

@@ -14,6 +14,7 @@ import { OrbitUncertainty } from './OrbitUncertainty'
 import { DynamicsLaboratory } from './DynamicsLaboratory'
 import { OccultationLaboratory } from './OccultationLaboratory'
 import { PckOrientationPanel } from './PckOrientationPanel'
+import { SpkLimbPanel } from './SpkLimbPanel'
 import { GaiaSky } from './GaiaSky'
 import { GaiaMotion } from './GaiaMotion'
 import { ConicLaboratory } from './ConicLaboratory'
@@ -77,6 +78,7 @@ export function EvidenceWorkspace() {
       <DynamicsLaboratory />
       <OccultationLaboratory />
       <PckOrientationPanel />
+      <SpkLimbPanel />
       <GaiaSky />
       <GaiaMotion />
       <ConicLaboratory />
