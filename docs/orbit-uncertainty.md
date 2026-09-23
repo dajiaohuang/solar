@@ -4,7 +4,9 @@ The implementation ingests and audits SBDB covariance, converts an elliptic
 solution's joint covariance to Cartesian coordinates at its solution epoch, and
 generates reproducible Gaussian parameter offsets. The Evidence page displays
 two-coordinate projections and a rotatable three-dimensional position ellipsoid.
-It does not yet propagate uncertainty in time or calculate event probabilities.
+An offline experiment additionally propagates six-parameter covariance under an
+explicitly adopted restricted DE440 model. Browser plots remain solution-epoch
+only; complete source-fit propagation and event probabilities are unfinished.
 
 Run the development ingestion explicitly:
 
@@ -151,9 +153,9 @@ highly anisotropic and singular matrices without injecting variance. All four
 browser import/export checks passed again after that correction. No full local
 suite was run.
 
-Remaining work includes model-aware temporal propagation, singular/poorly
+Remaining work includes complete source-fit temporal propagation, singular/poorly
 conditioned sampling, source validity limits and force-model metadata in consumer
-contracts, independent propagated trajectory/covariance references, Web/native
+contracts, additional propagated trajectory/covariance references, Web/native
 source acquisition and native access. Additional parameters must not be
 silently dropped when implementing propagation. The source covariance is a
 formal orbit-fit uncertainty, not a guarantee that every model error is covered.
@@ -190,4 +192,53 @@ sources. Four real browser import/rotate/contour/reset/export checks passed;
 the mobile screenshot retained the true geometry without panel overflow.
 The actual Bennu CLI export retained all eight axes and 1,000 seeded parameter
 offsets alongside its ellipsoid. These are solution-epoch results; temporal
-propagation, model error and event distributions remain unfinished.
+browser propagation, model error and event distributions remain unfinished.
+
+## Conditional six-parameter time propagation
+
+The offline experiment explicitly adopts the restricted eleven-source DE440
+point-mass model, optionally adding the Sun-relative 1PN monopole. It starts at
+the **covariance solution epoch**, converts the element Jacobian and covariance
+square root from heliocentric ecliptic AU/AU-day to barycentric J2000 km/km-second,
+then integrates the nominal state and variational equations together. At the
+requested epoch it transforms back to heliocentric ecliptic coordinates.
+The [NAIF frame contract](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/frames.html)
+defines the fixed ECLIPJ2000/J2000 rotation; CSPICE `sxform` independently verifies
+the application's rotation and unit conversions in the reference cases.
+
+The covariance output is `B B^T`, where `B` is the propagated source square root;
+no diagonal jitter or clipping repairs the source. This currently requires a
+positive-definite six-axis source. Additional parameters, including Bennu's RHO
+and AMRAT, are **rejected rather than dropped or silently held fixed**. DE440
+ephemerides and adopted GMs are deterministic inputs with no added uncertainty.
+This does not reproduce the complete SBDB fit model, even for a six-axis source.
+First-order Gaussian uncertainty excludes model mismatch and nonlinear effects.
+
+```sh
+rtk proxy node --experimental-strip-types scripts/propagate-sbdb-covariance.mjs tests/fixtures/sbdb-eros-covariance.json .cache/eros-propagated-new.json --adopt-conditional-de440-model --duration-seconds 2592000 --exclusion-km 0 --adopt-solar-1pn
+```
+
+Positive duration advances time; negative duration goes backward. The duration
+is limited to 365 days and must stay inside pinned source coverage. The explicit
+exclusion distance is a sampled singularity guard, not continuous collision
+detection. The CLI does not overwrite files, fetch data, deploy or publish.
+It exports original payload/hash, implementation hashes, adopted force sources,
+integration settings, split epoch, complete covariance and its units/limitations.
+Cancellation produces no result file.
+
+The [independent generator](../scripts/reference-dynamics-covariance.py) combines
+an 80-digit coordinate Jacobian, CSPICE states/frame transformations and SciPy
+DOP853 **direct covariance evolution**, `dC/dt = A C + C A^T`, rather than the
+application's square-root pushforward. Six pinned Eros cases cover -10, 0 and
++30 days with each force model. Its two-setting maximum covariance refinement
+difference is `1.21e-15`, normalized by marginal sigma products. Application
+checks require covariance agreement within `2e-9` in that normalization and
+nominal agreement within `2e-12` AU / `2e-14` AU/day. These are case-specific
+numerical checks, not physical uncertainty certification or global error bounds.
+
+Thirteen focused propagation, sampling and CLI checks passed locally, including
+source ownership, cancellation, source/generator hashes, extra-parameter
+rejection and output preservation. A real +30-day Eros CLI experiment with solar
+1PN completed in 178 accepted steps. No full local tests ran. Browser/native
+propagation, matched extra-parameter forces, nonlinear ensembles and event
+distributions remain unfinished.

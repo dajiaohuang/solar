@@ -10,7 +10,7 @@ remain paused. Changes may go directly to main after the required checks.
 | --- | --- | --- |
 | Shared analysis ephemeris | Events, curves and mission endpoints use a frozen source contract, expose actual per-body models, offer strict SPK coverage, and export time/frame/source evidence; shared backend integration follows | In progress |
 | Ground observer | Geodetic station, SOFA-compatible celestial/terrestrial transforms, versioned IERS EOP, vacuum/apparent altitude-azimuth, rise/set and visibility windows; source expiry and uncertainty remain visible | In progress |
-| Orbit uncertainty | Pinned SBDB covariance with labels, units and solution epoch; validated covariance propagation and sampling; uncertainty ellipsoids and event distributions, independent of numerical tolerance | In progress: source ingestion, solution-epoch Cartesian conversion, reproducible sampling, browser inspection and 3D position ellipsoids; model-aware temporal propagation and event distributions pending |
+| Orbit uncertainty | Pinned SBDB covariance with labels, units and solution epoch; validated covariance propagation and sampling; uncertainty ellipsoids and event distributions, independent of numerical tolerance | In progress: source ingestion, solution-epoch conversion/sampling/browser ellipsoids and offline conditional six-parameter DE440 time propagation; complete fit-model propagation, browser/native propagation and event distributions pending |
 | Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | Pending |
 | Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | In progress: bounded integration, variational equations, pinned DE440 adapter and browser/offline source-bearing experiments; additional forces, full covariance, native access and long-term diagnostics pending |
 | Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | Pending |
@@ -743,3 +743,22 @@ tutorial assertions remain unchanged. Locally, 13 focused native smoke/quality
 contract tests and native packaging validation passed; no full local tests ran.
 Windows has no Swift compiler here, so Swift compilation, protocol execution and
 actual simulator acceptance remain required on the new remote candidate.
+
+### Checkpoint 26: conditional six-parameter covariance propagation (2026-09-23)
+
+Added bounded offline propagation from the actual SBDB covariance epoch under
+an explicitly adopted DE440 point-mass model, with optional solar 1PN.
+The source-root pushforward preserves correlations and rejects unmatched extra
+parameters. Original bytes, force sources, implementation hashes, units and
+limits accompany immutable CLI exports. An independent CSPICE/mpmath/DOP853
+generator directly evolves the covariance equation for six Eros cases at
+-10, 0 and +30 days across both force models. Thirteen focused checks, type
+checking and changed-file lint passed; a real +30-day CLI run took 178 accepted
+steps. No full local tests ran. Details and numeric thresholds are recorded in
+[orbit-uncertainty.md](orbit-uncertainty.md).
+
+This is conditional linearized propagation, not the complete SBDB fit model or
+a physical error guarantee. Browser/native access, extra-parameter force
+derivatives, nonlinear ensembles, event distributions and all other unfinished
+ledger rows remain open. This batch remains local while candidate 613d8d4 is
+undergoing remote native and browser validation; it must not cancel that run.

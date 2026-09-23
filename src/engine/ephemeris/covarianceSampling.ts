@@ -1,13 +1,8 @@
 import type { SbdbCovariance } from '../../data/loaders/sbdbCovariance'
 
-/** Deterministic joint Gaussian offsets in the source axes. Offsets stay
- * separate from the nominal values so a small tp uncertainty is not rounded
- * away by adding it to a large Julian date. No rejection/resampling of draws. */
-export function sampleSbdbCovariance(source: SbdbCovariance, count: number, seed: number) {
+/** Owned correlation factor and source-unit marginal scales; no matrix repair. */
+export function factorSbdbCovariance(source: SbdbCovariance) {
   const dimension = source.labels.length
-  if (!Number.isSafeInteger(count) || count < 1 || count > 10_000 || !Number.isSafeInteger(seed) || seed < 0 || seed > 0xffffffff) {
-    throw new RangeError('Gaussian sampling requires 1 to 10000 draws and an unsigned 32-bit seed')
-  }
   if (!source.positiveDefinite) throw new RangeError('Gaussian sampling currently requires positive definite covariance; no jitter or clipping is applied')
   if (dimension < 6 || dimension > 16 || source.matrix.length !== dimension || source.matrix.some(row => row.length !== dimension || row.some(value => !Number.isFinite(value)))) {
     throw new RangeError('Invalid audited covariance dimensions')
@@ -25,6 +20,17 @@ export function sampleSbdbCovariance(source: SbdbCovariance, count: number, seed
       lower[i][j] = Math.sqrt(value)
     } else lower[i][j] = value / lower[j][j]
   }
+  return { lower, sigmas, dimension }
+}
+
+/** Deterministic joint Gaussian offsets in the source axes. Offsets stay
+ * separate from the nominal values so a small tp uncertainty is not rounded
+ * away by adding it to a large Julian date. No rejection/resampling of draws. */
+export function sampleSbdbCovariance(source: SbdbCovariance, count: number, seed: number) {
+  if (!Number.isSafeInteger(count) || count < 1 || count > 10_000 || !Number.isSafeInteger(seed) || seed < 0 || seed > 0xffffffff) {
+    throw new RangeError('Gaussian sampling requires 1 to 10000 draws and an unsigned 32-bit seed')
+  }
+  const { lower, sigmas, dimension } = factorSbdbCovariance(source)
   // Mulberry32's 32-bit operations and Box-Muller mapping are versioned in
   // the result. This is a reproducible simulation stream, not cryptography.
   let state = seed >>> 0, spare: number | undefined
