@@ -499,3 +499,37 @@ capacity truncates the result, the chosen source subset depends on order and is
 not a representative sample or a collision-risk assessment. Full source runs
 retain every matching row exactly once. Camera/selected-body scheduling and
 continuous-time propagation remain separate incomplete work.
+
+## Temporal displacement budget for the sample map (2026-09-23)
+
+The sample map now offers an opt-in AU displacement budget. Zero retains the
+existing requested-epoch computation policy, with exact duplicate requests
+deduplicated. Nonzero budgets consume the clock publication cadence and reuse
+the last computed coordinates only when the source two-body model permits it.
+The original Float64 coordinates and their UTC epoch are never relabeled.
+Tightening the budget flushes the latest requested epoch; changing the dataset,
+mode or an error invalidates reuse. Unsupported/historical motion computes
+normally instead of assuming a bound.
+
+For each elliptic source row, vis-viva at periapsis gives maximum speed
+v_max = a n sqrt((1+e)/(1-e)), with n in radians per TT day from the original
+source. The catalogue cap is the maximum over its rows. Path length bounds
+endpoint displacement by v_max times the absolute elapsed TT days. The existing
+UTC-to-TT conversion is applied at both epochs, so known leap changes are
+included. A small floating-point padding is applied to the speed computation;
+this is not interval arithmetic or a certified bound on numerical error.
+
+The formula follows the two-body vis-viva relation in MIT OCW, Lecture 3:
+https://ocw.mit.edu/courses/16-50-introduction-to-propulsion-systems-spring-2012/ed0c2e057d08d0d954a206a622962b3c_MIT16_50S12_lec3.pdf
+Combining v^2 = mu(2/r-1/a), r_peri = a(1-e), and mu = n^2 a^3
+gives the speed cap for the same source-parameterized conic; no external GM
+is substituted into the source trajectory.
+
+The UI separately shows the current temporal model-displacement estimate. A
+busy worker may temporarily leave a displayed snapshot beyond the requested
+budget while computing; its real epoch and displacement remain visible. This
+is a display scheduling limit, not physical orbit uncertainty, a GPU-rounding
+bound, interpolation, or continuous full-inventory streaming. Default zero
+retains the existing five-second sample-map playback request cadence; opt-in
+budgets use the clock notifications and can demand more computation at high
+playback rates.

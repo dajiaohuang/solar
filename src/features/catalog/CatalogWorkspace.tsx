@@ -60,6 +60,7 @@ export function CatalogWorkspace() {
   const [streamLimit, setStreamLimit] = useState(() => window.innerWidth <= 800 ? 30_000 : 100_000)
   const [streamRadius, setStreamRadius] = useState(8)
   const [streamMode,setStreamMode] = useState<'2d' | '3d'>('2d')
+  const [sampleTemporalBudget, setSampleTemporalBudget] = useState(0)
   const [streamPriority, setStreamPriority] = useState<CatalogStreamPriority>('source')
   const [streamAzimuth,setStreamAzimuth] = useState(0), [streamTilt,setStreamTilt] = useState(30)
   const streamRotation = useMemo(() => ({ azimuthDegrees: streamAzimuth,tiltDegrees: streamTilt }),[streamAzimuth,streamTilt])
@@ -184,7 +185,7 @@ export function CatalogWorkspace() {
   const pointRecords = useMemo(() => exactResultIsPartial && !catalog.filters.query.trim()
     ? filterCatalogRecords(catalog.baseSampleRecords, catalog.filters)
     : filtered, [catalog.baseSampleRecords, catalog.filters, exactResultIsPartial, filtered])
-  const pointCloud = useCatalogPointWorker(streaming ? EMPTY_RECORDS : pointRecords, catalogEpoch, '2d')
+  const pointCloud = useCatalogPointWorker(streaming ? EMPTY_RECORDS : pointRecords, sampleTemporalBudget > 0 ? clock.julianDay : catalogEpoch, '2d', sampleTemporalBudget)
 
   async function scanEntireCatalog() {
     if (!catalog.manifest) return null
@@ -325,6 +326,11 @@ export function CatalogWorkspace() {
           </select></label>
           <RangeFields label="q (AU)" minimumLabel={t('minimum')} maximumLabel={t('maximum')} value={catalog.filters.perihelion} onChange={(value) => catalogActions.patchFilters({ perihelion: value })} step="0.1" />
           {catalog.manifest?.compactIndex && <div className="catalog-stream-controls">
+            {!streaming && <label className="field"><span>{language === 'zh' ? '样本地图位移预算（AU）' : 'Sample map displacement budget (AU)'}</span><select value={sampleTemporalBudget} onChange={event => { setPlayingEpoch(simulationClock.getJulianDay()); setSampleTemporalBudget(Number(event.target.value)) }}>
+              <option value="0">{language === 'zh' ? '0 · 每个请求时刻计算' : '0 · Compute each requested epoch'}</option>
+              {[0.000001, 0.0001, 0.001].map(value => <option key={value} value={value}>{value}</option>)}
+            </select></label>}
+            {!streaming && sampleTemporalBudget > 0 && <p className="catalog-result-note">{language === 'zh' ? '仅在两体模型的速度上限允许时复用样本坐标，显示的计算时刻保持不变。预算只约束时刻复用引入的模型位移，不包含轨道物理误差、数值误差或 GPU 舍入；新计算期间可能暂时超出预算。' : 'Reuse sample coordinates only within the two-body speed limit; the displayed computation epoch stays unchanged. This budgets temporal model displacement, not physical orbit error, numerical error or GPU rounding; a pending computation can temporarily exceed the budget.'}</p>}
             <label className="field"><span>{language === 'zh' ? '分片加载顺序' : 'Source shard order'}</span><select value={streamPriority} onChange={event => setStreamPriority(event.target.value as CatalogStreamPriority)}>
               <option value="source">{language === 'zh' ? '原始目录顺序' : 'Original catalog order'}</option>
               <option value="neo-first">{language === 'zh' ? '含近地天体的分片优先' : 'NEO-containing shards first'}</option>
@@ -381,6 +387,9 @@ export function CatalogWorkspace() {
           {pointCloud.error && <div className="error-banner">{pointCloud.error}</div>}
           {pointCloud.readyCount > 0 && <p className="catalog-point-epoch" data-testid="catalog-point-epoch" data-utc-jd={pointCloud.computedJulianDay}>
             {t('catalogPointModel')} <time dateTime={julianDayToDate(pointCloud.computedJulianDay).toISOString()}>{julianDayToDate(pointCloud.computedJulianDay).toISOString().replace('T', ' ')}</time>
+          </p>}
+          {!streaming && sampleTemporalBudget > 0 && pointCloud.readyCount > 0 && <p className="catalog-result-note" data-testid="catalog-temporal-budget" data-drift-au={pointCloud.temporalDriftAU ?? 'unavailable'}>
+            {language === 'zh' ? '模型时间位移上限（AU）：' : 'Temporal model displacement limit (AU): '}{pointCloud.temporalDriftAU?.toExponential(3) ?? '—'}
           </p>}
         </section>
 

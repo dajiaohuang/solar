@@ -479,6 +479,42 @@ test('renders an explicitly enabled reproducible catalog cloud without reloading
   expect(errors).toEqual([])
 })
 
+test('reuses sample coordinates within an explicit temporal budget without relabeling their epoch', async ({ page }) => {
+  type AuditWindow = Window & { catalogComputes: number }
+  await installMockCatalog(page, { precomputed: true })
+  await page.addInitScript(() => {
+    localStorage.setItem('solar-atlas-first-run-v1', 'complete')
+    const NativeWorker = window.Worker, audit = window as AuditWindow
+    audit.catalogComputes = 0
+    window.Worker = class extends NativeWorker {
+      private catalog: boolean
+      constructor(url: string | URL, options?: WorkerOptions) { super(url, options); this.catalog = String(url).includes('catalog-points.worker') }
+      override postMessage(data: unknown, options?: Transferable[] | StructuredSerializeOptions) {
+        if (this.catalog && (data as { type: string }).type === 'compute') audit.catalogComputes++
+        if (Array.isArray(options)) super.postMessage(data, options)
+        else super.postMessage(data, options)
+      }
+    }
+  })
+  await page.goto('./?v=4&page=explorer&lang=en&jd=2461287.5&speed=0.001')
+  await page.getByRole('button', { name: '▶ Play', exact: true }).click()
+  await openCatalog(page)
+  const epoch = page.getByTestId('catalog-point-epoch')
+  await expect(epoch).toBeVisible()
+  const budget = page.getByRole('combobox', { name: 'Sample map displacement budget (AU)', exact: true })
+  await budget.selectOption('0.001')
+  const beforeEpoch = await epoch.getAttribute('data-utc-jd')
+  const beforeComputes = await page.evaluate(() => (window as AuditWindow).catalogComputes)
+  const drift = page.getByTestId('catalog-temporal-budget')
+  await expect.poll(async () => Number(await drift.getAttribute('data-drift-au'))).toBeGreaterThan(0.00001)
+  expect(Number(await drift.getAttribute('data-drift-au'))).toBeLessThan(0.001)
+  expect(await epoch.getAttribute('data-utc-jd')).toBe(beforeEpoch)
+  expect(await page.evaluate(() => (window as AuditWindow).catalogComputes)).toBe(beforeComputes)
+  await budget.selectOption('0')
+  await expect.poll(async () => Number(await epoch.getAttribute('data-utc-jd'))).toBeGreaterThan(Number(beforeEpoch))
+  expect(await page.evaluate(() => (window as AuditWindow).catalogComputes)).toBeGreaterThan(beforeComputes)
+})
+
 test('reuses catalog GPU resources across epochs and resize, and recovers actual context loss', async ({ page }, info) => {
   type Audit = { programs: number; buffers: number; allocations: number; updates: number; deletedPrograms: number; deletedBuffers: number; draws: number; brightPixels: number; errors: number[] }
   type AuditWindow = Window & { catalogGpuAudit: Audit; catalogGpuExtension?: WEBGL_lose_context }

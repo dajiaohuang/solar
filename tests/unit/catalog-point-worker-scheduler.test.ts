@@ -15,6 +15,35 @@ function harness(mode: '2d' | '3d' = '2d') {
 }
 
 describe('catalog point worker scheduler', () => {
+  it('reuses the actual computed epoch only within its temporal budget and recomputes when tightened', () => {
+    const { scheduler, sent, results } = harness()
+    scheduler.setElements(new Float64Array([2451545, 1, 0, 0, 0, 0, 0, 180 / Math.PI]))
+    scheduler.setTemporalBudget(0.01)
+    scheduler.requestJulianDay(2451545)
+    scheduler.handle({ type: 'initialized', requestId: sent[0].requestId })
+    scheduler.handle({ type: 'result', requestId: sent[1].requestId, julianDay: 2451545, mode: '2d', positions: new Float64Array([1, 0]) })
+    scheduler.requestJulianDay(2451545.005)
+    expect(sent).toHaveLength(2)
+    expect(results).toEqual([2451545]) // Never relabel held coordinates as a fresh computation.
+    scheduler.setTemporalBudget(0)
+    expect(sent[2]).toMatchObject({ type: 'compute', julianDay: 2451545.005 })
+    scheduler.handle({ type: 'result', requestId: sent[2].requestId, julianDay: 2451545.005, mode: '2d', positions: new Float64Array([1, 0]) })
+    scheduler.requestJulianDay(2451545.005)
+    expect(sent).toHaveLength(3) // Exact-epoch deduplication also applies with budget zero.
+    scheduler.requestJulianDay(2451545.006)
+    expect(sent).toHaveLength(4)
+  })
+  it('drops reuse after a dataset reset and refuses invalid display budgets', () => {
+    const { scheduler, sent } = harness()
+    for (const budget of [-1, NaN, Infinity, 1.1]) expect(() => scheduler.setTemporalBudget(budget)).toThrow('budget')
+    const source = () => new Float64Array([2451545, 1, 0, 0, 0, 0, 0, 1])
+    scheduler.setElements(source()); scheduler.setTemporalBudget(1); scheduler.requestJulianDay(2451545)
+    scheduler.handle({ type: 'initialized', requestId: sent[0].requestId })
+    scheduler.handle({ type: 'result', requestId: sent[1].requestId, julianDay: 2451545, mode: '2d', positions: new Float64Array([1, 0]) })
+    scheduler.reset(false); scheduler.setElements(source()); scheduler.requestJulianDay(2451545)
+    scheduler.handle({ type: 'initialized', requestId: sent[2].requestId })
+    expect(sent[3]).toMatchObject({ type: 'compute', julianDay: 2451545 })
+  })
   it('initializes once and coalesces busy clock updates to the latest epoch', () => {
     const { sent, results, scheduler } = harness()
     scheduler.setElements(new Float64Array(8))

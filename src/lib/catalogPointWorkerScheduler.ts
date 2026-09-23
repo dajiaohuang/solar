@@ -1,5 +1,6 @@
 import type { CatalogPointWorkerRequest, CatalogPointWorkerResponse } from '../workers/catalog-points.protocol'
 import { CATALOG_ELEMENT_STRIDE, type CatalogPointMode } from '../engine/ephemeris/catalogPoints'
+import { catalogMaximumSpeedAUPerTtDay, catalogTemporalDisplacementAU } from '../engine/ephemeris/catalogTemporalBudget'
 
 type Send = (request: CatalogPointWorkerRequest, transfer?: Transferable[]) => void
 
@@ -8,6 +9,7 @@ export type CatalogPointResult = {
   julianDay: number
   positions: Float64Array
   mode: CatalogPointMode
+  maximumSpeedAUPerTtDay?: number | null
 }
 
 /** Keeps one element set in the worker and coalesces clock updates while busy. */
@@ -29,6 +31,8 @@ export function createCatalogPointWorkerScheduler(
   let elementCount = 0
   let initialized = false
   let queuedJulianDay: number | null = null
+  let completedEpoch: number | null = null, latestEpoch: number | null = null
+  let maximumSpeed: number | null = null, maximumDriftAU = 0
 
   const safeSend = (request: CatalogPointWorkerRequest, transfer?: Transferable[]) => {
     try {
@@ -40,6 +44,7 @@ export function createCatalogPointWorkerScheduler(
       activeComputeEpoch = null
       initialized = false
       queuedJulianDay = null
+      completedEpoch = null
       callbacks.onError(error instanceof Error ? error.message : String(error))
       return false
     }
@@ -49,6 +54,8 @@ export function createCatalogPointWorkerScheduler(
     if (!initialized || activeComputeId !== null || queuedJulianDay === null) return
     const julianDay = queuedJulianDay
     queuedJulianDay = null
+    const drift = completedEpoch === null ? null : catalogTemporalDisplacementAU(completedEpoch, julianDay, maximumSpeed)
+    if (completedEpoch === julianDay || maximumDriftAU > 0 && drift !== null && drift <= maximumDriftAU) return
     const requestId = ++nextRequestId
     activeComputeId = requestId
     activeComputeGeneration = generation
@@ -58,6 +65,8 @@ export function createCatalogPointWorkerScheduler(
 
   return {
     setElements(elements: Float64Array) {
+      maximumSpeed = catalogMaximumSpeedAUPerTtDay(elements)
+      completedEpoch = null
       elementCount = elements.length / CATALOG_ELEMENT_STRIDE
       generation += 1
       initialized = false
@@ -68,7 +77,14 @@ export function createCatalogPointWorkerScheduler(
       safeSend({ type: 'initialize', requestId: elementRequestId, elements }, [elements.buffer])
     },
     requestJulianDay(julianDay: number) {
+      latestEpoch = julianDay
       queuedJulianDay = julianDay
+      flush()
+    },
+    setTemporalBudget(maximumAU: number) {
+      if (!Number.isFinite(maximumAU) || maximumAU < 0 || maximumAU > 1) throw new RangeError('Invalid catalog temporal display budget')
+      maximumDriftAU = maximumAU
+      if (latestEpoch !== null) queuedJulianDay = latestEpoch
       flush()
     },
     handle(response: CatalogPointWorkerResponse) {
@@ -79,6 +95,7 @@ export function createCatalogPointWorkerScheduler(
         return
       }
       if (response.type === 'error' && response.requestId === elementRequestId) {
+        completedEpoch = null
         initialized = false
         elementRequestId = null
         queuedJulianDay = null
@@ -95,21 +112,25 @@ export function createCatalogPointWorkerScheduler(
       activeComputeGeneration = null
       activeComputeEpoch = null
       if (response.type === 'error') {
+        completedEpoch = null
         queuedJulianDay = null
         callbacks.onError(response.error ?? 'Catalog point propagation failed')
         return
       }
       if (!(response.positions instanceof Float64Array) || response.mode !== mode || response.julianDay !== expectedEpoch ||
           response.positions.length !== elementCount * (mode === '2d' ? 2 : 3)) {
+        completedEpoch = null
         queuedJulianDay = null
         callbacks.onError('Catalog point result does not match the requested precision, mode, epoch or record count')
         return
       }
+      completedEpoch = response.julianDay
       callbacks.onResult({
           requestId: response.requestId,
           julianDay: response.julianDay,
           positions: response.positions,
           mode: response.mode,
+          maximumSpeedAUPerTtDay: maximumSpeed,
         })
       flush()
     },
@@ -122,6 +143,7 @@ export function createCatalogPointWorkerScheduler(
       activeComputeEpoch = null
       initialized = false
       queuedJulianDay = null
+      completedEpoch = null; latestEpoch = null; maximumSpeed = null
     },
   }
 }

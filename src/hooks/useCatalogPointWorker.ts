@@ -2,17 +2,20 @@ import { useEffect, useRef, useState } from 'react'
 import { createCatalogPointWorkerScheduler, type CatalogPointResult } from '../lib/catalogPointWorkerScheduler'
 import { CATALOG_ELEMENT_STRIDE, type CatalogPointMode } from '../engine/ephemeris/catalogPoints'
 import type { AsteroidRecord } from '../types'
+import { catalogTemporalDisplacementAU } from '../engine/ephemeris/catalogTemporalBudget'
 
 const EMPTY_POSITIONS = new Float64Array()
 
-export function useCatalogPointWorker(records: AsteroidRecord[], julianDay: number, mode: CatalogPointMode) {
+export function useCatalogPointWorker(records: AsteroidRecord[], julianDay: number, mode: CatalogPointMode, maximumTemporalDriftAU = 0) {
   const schedulerRef = useRef<ReturnType<typeof createCatalogPointWorkerScheduler> | null>(null)
   const julianDayRef = useRef(julianDay)
+  const temporalBudgetRef = useRef(maximumTemporalDriftAU)
   const [computed, setComputed] = useState<(CatalogPointResult & { records: AsteroidRecord[] }) | null>(null)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => { julianDayRef.current = julianDay }, [julianDay])
+  useEffect(() => { temporalBudgetRef.current = maximumTemporalDriftAU; schedulerRef.current?.setTemporalBudget(maximumTemporalDriftAU) }, [maximumTemporalDriftAU])
 
   useEffect(() => {
     // A mode/dataset switch releases the old worker and its source elements.
@@ -55,6 +58,7 @@ export function useCatalogPointWorker(records: AsteroidRecord[], julianDay: numb
       elements[offset + 7] = record.meanMotionDegPerDay
     }
     scheduler.setElements(elements)
+    scheduler.setTemporalBudget(temporalBudgetRef.current)
     scheduler.requestJulianDay(julianDayRef.current)
     return () => {
       active = false
@@ -73,5 +77,6 @@ export function useCatalogPointWorker(records: AsteroidRecord[], julianDay: numb
     readyCount: current ? Math.min(records.length, current.positions.length / (mode === '2d' ? 2 : 3)) : 0,
     progress,
     error,
+    temporalDriftAU: current ? catalogTemporalDisplacementAU(current.julianDay, julianDay, current.maximumSpeedAUPerTtDay ?? null) : null,
   }
 }

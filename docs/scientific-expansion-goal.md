@@ -2258,3 +2258,24 @@ lifecycle cancellation before changing importer behavior.
 Nine targeted iOS harness tests and targeted lint/diff checks passed; Swift
 execution remains unavailable locally. No full local tests ran. Main remains
 unadvanced; the next candidate also contains checkpoints 100 through 104.
+
+### Checkpoint 106: source-derived temporal reuse for sample coordinates (2026-09-23)
+
+Added an opt-in sample-map displacement budget using each elliptic source
+mean motion and periapsis speed. Reuse preserves the actual Float64 snapshot
+and its computed epoch; it cannot relabel old states as newly propagated.
+Known UTC leap changes enter through TT elapsed time. Invalid/overflowing or
+pre-1972 bounds disable reuse. Dataset changes and errors invalidate the cache;
+tightening the budget computes the latest requested epoch. Default zero
+retains existing playback cadence and only deduplicates identical epochs.
+
+Nineteen focused temporal/scheduler tests passed: analytic circular/e=0.6 speed,
+high-eccentricity periapsis displacement, both time directions, the 2017 leap
+boundary, invalid inputs, budget tightening and dataset replacement. Named
+desktop/mobile Chromium tests passed through the real worker, proving clock
+advance without extra compute requests or changed epoch labels while within
+budget, then renewed computation when disabled. TypeScript and targeted lint
+passed. The model derivation and limits are in point-pipeline-performance.md.
+No full local tests ran. This is sample scheduling, not a physical error
+certificate or full-source continuous-time delivery. Candidate ff6d190 /
+run 35852896925 remains active and was not replaced.
