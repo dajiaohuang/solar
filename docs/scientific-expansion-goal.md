@@ -1803,3 +1803,18 @@ Three focused plain-JVM tests passed after javac compilation, covering exact
 and zero-progress reads. No full local tests ran. This does not establish Android
 provider interruption or system-picker behavior; those remain pending native
 execution. Candidate c3b87f7 / run 35840897494 remains live awaiting iOS.
+
+### Checkpoint 81: progress-safe Android stellar response reads (2026-09-23)
+
+The bounded HTTP reader now checks cancellation before each read and after EOF,
+and falls back to a single-byte read when a bulk read reports zero progress.
+Declared-length overflow/truncation still fails and owned streams are closed.
+This prevents a misbehaving stream from causing a tight bulk-read loop.
+
+Five focused transport JUnit tests passed after successful javac --release 17
+compilation, including zero-progress exact/truncated/oversized bodies and EOF
+cancellation. An initial compile command included a nonexistent source filename;
+the subsequent run of old compiled classes was excluded from validation, then
+the corrected compile and five-test run succeeded. No full local tests ran.
+These controlled JVM tests do not prove native TLS or device behavior. Candidate
+c3b87f7 / run 35840897494 remains active awaiting iOS and was not replaced.

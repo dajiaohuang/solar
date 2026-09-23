@@ -59,4 +59,27 @@ public final class StellarMotionServiceTest {
         InputStream late=new ByteArrayInputStream(raw){public synchronized int read(byte[] bytes,int offset,int length){int count=super.read(bytes,offset,length);service.close();return count;}};
         try{service.readBody(late,raw.length);fail();}catch(IOException expected){assertTrue(expected.getMessage().contains("cancelled"));}
     }
+    @Test public void zeroProgressAndEofCancellationCannotSpinOrPublish() throws Exception {
+        for(int actual:new int[]{2,3,4}){
+            StellarMotionService service=new StellarMotionService("https://example.test");
+            int[] reads={0};boolean[] closed={false};
+            InputStream zero=new InputStream(){
+                int remaining=actual;
+                public int read(byte[] bytes,int offset,int length){assertTrue("Reader must make progress",++reads[0]<=5);return remaining==0?-1:0;}
+                public int read(){if(remaining==0)return -1;remaining--;return 7;}
+                public void close(){closed[0]=true;}
+            };
+            try{assertArrayEquals(new byte[]{7,7,7},service.readBody(zero,3));assertEquals(3,actual);}
+            catch(IOException error){assertNotEquals(3,actual);assertTrue(error.getMessage().contains(actual<3?"truncated":"exceeds"));}
+            assertTrue(closed[0]);
+        }
+        StellarMotionService service=new StellarMotionService("https://example.test");
+        boolean[] closed={false};
+        InputStream eof=new ByteArrayInputStream(new byte[]{7}){
+            public synchronized int read(byte[] bytes,int offset,int length){int n=super.read(bytes,offset,length);if(n<0)service.close();return n;}
+            public void close(){closed[0]=true;}
+        };
+        try{service.readBody(eof,1);fail("Cancelled EOF published a body");}catch(IOException error){assertTrue(error.getMessage().contains("cancelled"));}
+        assertTrue(closed[0]);
+    }
 }

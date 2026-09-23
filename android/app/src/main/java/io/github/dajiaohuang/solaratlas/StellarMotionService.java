@@ -61,8 +61,12 @@ public final class StellarMotionService implements Closeable {
     byte[] readBody(InputStream input,int expected) throws IOException {
         require(input!=null && expected>0 && expected<=StellarMotionReport.MAX_BYTES,"Stellar body exceeds bounds");
         try(InputStream source=input;ByteArrayOutputStream output=new ByteArrayOutputStream(expected)){
-            byte[] chunk=new byte[Math.min(expected,16384)];int total=0,count;check();
-            while((count=source.read(chunk))!=-1){check();require(count<=expected-total,"Stellar body exceeds declared length");output.write(chunk,0,count);total+=count;}
+            byte[] chunk=new byte[Math.min(expected,16384)];int total=0;
+            while(true){
+                check();int count=source.read(chunk);check();if(count<0)break;
+                if(count==0){check();int value=source.read();check();if(value<0)break;require(total<expected,"Stellar body exceeds declared length");output.write(value);total++;continue;}
+                require(count<=expected-total,"Stellar body exceeds declared length");output.write(chunk,0,count);total+=count;
+            }
             check();require(total==expected,"Stellar body is truncated");return output.toByteArray();
         }
     }
