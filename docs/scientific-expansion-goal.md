@@ -2008,3 +2008,30 @@ of this added write scenario is pending; destination-picker interaction and
 pause/resume during that picker are not covered by its intercepted result.
 No full local tests ran. Candidate f771612 / run 35845967095 is live and was
 not replaced with this subsequent test change.
+
+### Checkpoint 92: nonlinear source-offset coordinates at the solution epoch (2026-09-23)
+
+Added a bounded asynchronous conversion of 1–10,000 joint source-offset draws
+through the existing universal periapsis conic solver. Inputs are validated
+before offset allocation, copied before yielding, and checked for cancellation
+between 32-draw batches. Periapsis-time offsets are subtracted from relative time
+instead of added to large Julian dates. Invalid conics retain original offsets,
+indices, failure reasons and explicit validity masks; no clipping or resampling
+changes the source distribution. Additional fitted parameter values are retained.
+
+Twelve focused tests passed, including eight independently generated 80-digit
+mpmath classical-anomaly references for Eros/Bennu nominal, tiny-time, joint and
+hyperbolic-offset cases. The tiny-time case verifies a 1e-10 day displacement
+that would vanish when added directly to the source Julian date. Other tests
+cover ownership across yields, permuted axes, failed draws and cancellation.
+TypeScript build passed. The reference generator records its upstream fixture
+hash and adopted GM, imports no application code, and follows conventional
+conic state definitions documented by NAIF:
+https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/conics_c.html
+
+This is a library coordinate-conversion primitive, not nonlinear time
+propagation, full fitted-force reproduction, event probabilities or native UI.
+The nominal source retains the existing audited elliptic validation domain;
+individual sampled conics may be hyperbolic. No full local tests ran. Candidate
+f771612 remains live in iOS; its Swift protocol, simulator build, Android and
+Web/browser jobs passed, but system-picker/live-service acceptance is pending.
