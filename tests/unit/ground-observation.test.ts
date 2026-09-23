@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import fixture from '../fixtures/observer-api-sun.json'
+import vectors from '../fixtures/ground-vectors-reference.json'
 import { GroundObservationError, loadGroundObservation, validateGroundObservation } from '../../src/lib/groundObservation'
 
 const request = fixture.result.request
@@ -9,6 +10,30 @@ const response = (body: unknown, status = 200) => {
 }
 
 describe('ground observation transport and evidence', () => {
+  it('retains validated vector extensions and rejects partial or wrong-frame bundles', () => {
+    // Transport-only composition from two independently checked references.
+    // This is not represented as a captured backend response.
+    const row = vectors.cases.find(row => row.bodyId === 'naif:10' && row.utc === request.utc)!
+    const value = structuredClone(fixture)
+    const enriched = { ...value, result: { ...value.result,
+      observerState: { frame: 'J2000', origin: 'solar-system-barycenter', positionKm: row.positionKm,
+        velocityKmPerSecond: row.velocityKmPerSecond, epochJdTdbParts: row.epochJdTdbParts },
+      contract: { ...value.result.contract, vectorFrame: 'J2000', vectorUnit: 'km', vectorOrigin: 'observer-at-reception' },
+      bodies: value.result.bodies.map(body => ({ ...body, geometricPositionKm: row.geometricPositionKm,
+        receptionPositionKm: row.receptionPositionKm, lightTimeResidualSeconds: 0.00001 })),
+    } }
+    expect(validateGroundObservation(enriched, request).result.observerState?.positionKm).toEqual(row.positionKm)
+    for (const mutate of [
+      (v: typeof enriched) => { v.result.observerState.frame = 'ECLIPJ2000' },
+      (v: typeof enriched) => { v.result.observerState.epochJdTdbParts = [0, 0] },
+      (v: typeof enriched) => { v.result.bodies[0].receptionPositionKm = [1, 2] },
+      (v: typeof enriched) => { v.result.bodies[0].lightTimeResidualSeconds = 1 },
+      (v: typeof enriched) => { v.result.contract.vectorUnit = 'au' },
+    ]) {
+      const changed = structuredClone(enriched); mutate(changed)
+      expect(() => validateGroundObservation(changed, request)).toThrow()
+    }
+  })
   it('accepts a captured real backend result with the original UTC, station and source hashes', () => {
     expect(validateGroundObservation(fixture, request).result.bodies[0].apparentAirless?.altitudeDeg).toBeCloseTo(75.6659293555, 8)
   })

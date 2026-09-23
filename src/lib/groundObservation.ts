@@ -4,14 +4,16 @@ export type GroundStation = { longitudeDeg: number; latitudeDeg: number; heightM
 export type GroundAtmosphere = { pressureHPa: number; temperatureC: number; relativeHumidity: number; wavelengthMicrometers: number }
 export type GroundObservationRequest = { utc: string; station: GroundStation; bodyIds: string[]; atmosphere?: GroundAtmosphere }
 export type GroundDirection = { azimuthDeg: number; altitudeDeg: number }
+type GroundVector = [number, number, number]
 export type GroundObservation = {
   apiVersion: string; catalogVersion: string; catalogManifestSha256: string
   earthOrientation: { sourceUrl: string; retrievedAt: string; sha256: string }
   result: {
     model: string; request: GroundObservationRequest; jdTdb: number; jdTt: number; jdUt1: number
+    observerState?: { frame: 'J2000'; origin: 'solar-system-barycenter'; positionKm: GroundVector; velocityKmPerSecond: GroundVector; epochJdTdbParts: [number, number] }
     earthOrientation: { predicted: boolean; celestialPoleCorrectionAvailable: boolean; sourceSha256: string; retrievedAt: string; xpArcsec: number; ypArcsec: number; ut1MinusUtcSeconds: number }
     sources: { bodyId: string; source: string; kernelSha256: string; startJdTdb: number; endJdTdb: number }[]
-    bodies: { bodyId: string; status: 'available' | 'missing'; missingReason?: string; geometric?: GroundDirection; apparentAirless?: GroundDirection; refracted?: GroundDirection; lightTimeRangeKm?: number; lightTimeSeconds?: number; warnings: string[] }[]
+    bodies: { bodyId: string; status: 'available' | 'missing'; missingReason?: string; geometric?: GroundDirection; apparentAirless?: GroundDirection; refracted?: GroundDirection; lightTimeRangeKm?: number; lightTimeSeconds?: number; geometricPositionKm?: GroundVector; receptionPositionKm?: GroundVector; lightTimeResidualSeconds?: number; warnings: string[] }[]
     warnings: string[]; contract: Record<string, unknown>
   }
 }
@@ -51,14 +53,25 @@ export function validateGroundObservation(raw: unknown, request: GroundObservati
     if (Object.entries(request.atmosphere).some(([key, expected]) => atmosphere[key] !== expected)) reject()
   } else if (echoed.atmosphere != null) reject()
   const direction = (raw: unknown) => { const d = object(raw); if (!finite(d.azimuthDeg) || d.azimuthDeg < 0 || d.azimuthDeg >= 360 || !finite(d.altitudeDeg) || Math.abs(d.altitudeDeg) > 90) reject() }
+  const vector = (value: unknown): value is GroundVector => Array.isArray(value) && value.length === 3 && value.every(finite)
+  const hasVectors = result.observerState != null
+  if (hasVectors) {
+    const observer = object(result.observerState), epoch = observer.epochJdTdbParts
+    if (observer.frame !== 'J2000' || observer.origin !== 'solar-system-barycenter' || !vector(observer.positionKm) || !vector(observer.velocityKmPerSecond)
+      || !Array.isArray(epoch) || epoch.length !== 2 || !epoch.every(finite) || epoch[0]+epoch[1] !== result.jdTdb
+      || contract.vectorFrame !== 'J2000' || contract.vectorUnit !== 'km' || contract.vectorOrigin !== 'observer-at-reception') reject()
+  }
   for (const [index, raw] of (result.bodies as unknown[]).entries()) {
     const body = object(raw)
     if (body.bodyId !== request.bodyIds[index] || !texts(body.warnings)) reject()
+    if (!hasVectors && (body.geometricPositionKm != null || body.receptionPositionKm != null || body.lightTimeResidualSeconds != null)) reject()
     if (body.status === 'available') {
       direction(body.geometric); direction(body.apparentAirless)
       if (body.refracted != null) { if (!request.atmosphere) reject(); direction(body.refracted) }
       if (!finite(body.lightTimeRangeKm) || body.lightTimeRangeKm <= 0 || !finite(body.lightTimeSeconds) || body.lightTimeSeconds <= 0) reject()
-    } else if (body.status !== 'missing' || typeof body.missingReason !== 'string' || !body.missingReason || body.geometric != null || body.apparentAirless != null || body.refracted != null) reject()
+      if (hasVectors && (!vector(body.geometricPositionKm) || !vector(body.receptionPositionKm)
+        || !finite(body.lightTimeResidualSeconds) || body.lightTimeResidualSeconds < 0 || body.lightTimeResidualSeconds > 0.00005)) reject()
+    } else if (body.status !== 'missing' || typeof body.missingReason !== 'string' || !body.missingReason || body.geometric != null || body.apparentAirless != null || body.refracted != null || body.geometricPositionKm != null || body.receptionPositionKm != null || body.lightTimeResidualSeconds != null) reject()
   }
   for (const raw of result.sources as unknown[]) {
     const source = object(raw)

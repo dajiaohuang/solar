@@ -1,0 +1,237 @@
+{
+  "schemaVersion": 1,
+  "frame": "J2000",
+  "observerOrigin": "solar-system-barycenter",
+  "vectorOrigin": "observer-at-reception",
+  "positionUnit": "km",
+  "velocityUnit": "km/s",
+  "software": {
+    "pyerfa": "2.0.1.5",
+    "erfa": "2.0.1",
+    "numpy": "2.4.2",
+    "jplephem": "2.24"
+  },
+  "boundary": "Numerical model comparison, not physical accuracy. Separate ERFA terrestrial PV rotation and original SPK Earth translation; no station tectonics/tides or exact relativistic terrestrial/BCRS transform.",
+  "sources": [
+    {
+      "path": "public/data/ephemerides/de440s-2000-01-01-2051-01-01.bsp",
+      "sha256": "8724d2d1bac115a75ad1f984c5b474ca778c96ee8be2df83e624cef61c001069"
+    },
+    {
+      "path": "tests/fixtures/observer-iers-sample.txt",
+      "sha256": "552d7189f7d77ea2cfa48fad3ba74c4edb39620160c9e1277e64b1d87e9da0ec"
+    },
+    {
+      "path": "tests/fixtures/observer-erfa-reference.json",
+      "sha256": "bb5261a4bdb014dfc1908692e24b8f6be5601a0c0c17360e5dc08391876b688d"
+    },
+    {
+      "path": "scripts/verify-observer-erfa.py",
+      "sha256": "f1f42b65fb9d1e559bbb493f35a9ba0192c281371efeed8c288db1d467d98e23"
+    },
+    {
+      "path": "scripts/reference-ground-vectors.py",
+      "sha256": "ba54728a9715537be436f01bf12de888cc7b1f0f54a27a551ee42497f5a7e5e0"
+    }
+  ],
+  "cases": [
+    {
+      "utc": "2026-09-23T00:00:00Z",
+      "station": {
+        "longitudeDeg": 103.851959,
+        "latitudeDeg": 1.29027,
+        "heightMeters": 0.0
+      },
+      "bodyId": "naif:301",
+      "epochJdTdbParts": [
+        2461306.5,
+        0.0008007223062786365
+      ],
+      "positionKm": [
+        149934646.00681964,
+        -1605927.473034195,
+        -683982.9301406691
+      ],
+      "velocityKmPerSecond": [
+        -0.7340466834247882,
+        27.10119824051702,
+        11.801033663515897
+      ],
+      "geometricPositionKm": [
+        282736.31375377945,
+        -257861.34638818578,
+        -118732.52927223952
+      ],
+      "receptionPositionKm": [
+        282735.8079746838,
+        -257898.58680555757,
+        -118748.79960592421
+      ]
+    },
+    {
+      "utc": "2026-09-23T00:01:00Z",
+      "station": {
+        "longitudeDeg": 103.851959,
+        "latitudeDeg": 1.29027,
+        "heightMeters": 0.0
+      },
+      "bodyId": "naif:301",
+      "epochJdTdbParts": [
+        2461306.5,
+        0.0014951667506479017
+      ],
+      "positionKm": [
+        149934601.9697213,
+        -1604301.460036669,
+        -683274.8681937157
+      ],
+      "velocityKmPerSecond": [
+        -0.7338552126065081,
+        27.09923864740709,
+        11.80103266128714
+      ],
+      "geometricPositionKm": [
+        282803.0420953413,
+        -257815.56425506348,
+        -118710.18403353004
+      ],
+      "receptionPositionKm": [
+        282802.53691671666,
+        -257852.80592546644,
+        -118726.45491913181
+      ]
+    },
+    {
+      "utc": "2026-09-23T12:00:00Z",
+      "station": {
+        "longitudeDeg": 0.0,
+        "latitudeDeg": 51.477811,
+        "heightMeters": 46.0
+      },
+      "bodyId": "naif:299",
+      "epochJdTdbParts": [
+        2461306.5,
+        0.5008007222562474
+      ],
+      "positionKm": [
+        149914555.382112,
+        -436119.9004617959,
+        -169399.0244366236
+      ],
+      "velocityKmPerSecond": [
+        -0.5288985154991214,
+        26.934035096095254,
+        11.799689933871873
+      ],
+      "geometricPositionKm": [
+        -47021386.679270044,
+        -29222278.44251519,
+        -19670489.020875115
+      ],
+      "receptionPositionKm": [
+        -47023521.048439175,
+        -29228239.95744388,
+        -19673036.58152927
+      ]
+    },
+    {
+      "utc": "2026-09-23T12:01:00Z",
+      "station": {
+        "longitudeDeg": 0.0,
+        "latitudeDeg": 51.477811,
+        "heightMeters": 46.0
+      },
+      "bodyId": "naif:299",
+      "epochJdTdbParts": [
+        2461306.5,
+        0.5014951667005825
+      ],
+      "positionKm": [
+        149914523.67572135,
+        -434503.8571138432,
+        -168691.04320519132
+      ],
+      "velocityKmPerSecond": [
+        -0.5279812840132426,
+        26.9340806407339,
+        11.799685841823768
+      ],
+      "geometricPositionKm": [
+        -47020701.66395767,
+        -29222069.475666374,
+        -19670417.1067197
+      ],
+      "receptionPositionKm": [
+        -47022835.88381859,
+        -29228030.9571036,
+        -19672964.66174889
+      ]
+    },
+    {
+      "utc": "2026-09-23T04:00:00Z",
+      "station": {
+        "longitudeDeg": 103.851959,
+        "latitudeDeg": 1.29027,
+        "heightMeters": 0.0
+      },
+      "bodyId": "naif:10",
+      "epochJdTdbParts": [
+        2461306.5,
+        0.16746738894523955
+      ],
+      "positionKm": [
+        149925439.45506948,
+        -1218450.1306460875,
+        -514052.7127806047
+      ],
+      "velocityKmPerSecond": [
+        -0.4863292325724466,
+        26.774296692524274,
+        11.800216017373293
+      ],
+      "geometricPositionKm": [
+        -150118865.49803004,
+        504561.6931219428,
+        220143.44561890126
+      ],
+      "receptionPositionKm": [
+        -150118870.77571124,
+        504559.7010315487,
+        220142.70370616578
+      ]
+    },
+    {
+      "utc": "2026-09-23T04:01:00Z",
+      "station": {
+        "longitudeDeg": 103.851959,
+        "latitudeDeg": 1.29027,
+        "heightMeters": 0.0
+      },
+      "bodyId": "naif:10",
+      "epochJdTdbParts": [
+        2461306.5,
+        0.16816183338954022
+      ],
+      "positionKm": [
+        149925410.32387832,
+        -1216843.68810356,
+        -513344.70001602266
+      ],
+      "velocityKmPerSecond": [
+        -0.4847101535353791,
+        26.773792727887077,
+        11.800210859258767
+      ],
+      "geometricPositionKm": [
+        -150118835.73446184,
+        502955.4892763396,
+        219435.5217521675
+      ],
+      "receptionPositionKm": [
+        -150118841.0121397,
+        502953.49718243105,
+        219434.7798378887
+      ]
+    }
+  ]
+}

@@ -33,7 +33,7 @@ def state(kernel, target, jd):
     return p/AU_KM, v/AU_KM
 
 
-def evaluate_direction(kernel, rows, instant, station, target, *, dut1_override=None):
+def evaluate_direction(kernel, rows, instant, station, target, *, dut1_override=None, vectors=None):
     lon_deg, lat_deg, height_km = station["longitudeDeg"], station["latitudeDeg"], station["heightMeters"]/1000
     lon, lat = np.deg2rad([lon_deg, lat_deg])
     utc = erfa.dtf2d("UTC", instant.year, instant.month, instant.day, instant.hour, instant.minute, instant.second+instant.microsecond/1e6)
@@ -72,6 +72,22 @@ def evaluate_direction(kernel, rows, instant, station, target, *, dut1_override=
         tau = updated
     else:
         raise RuntimeError("Independent light-time iteration did not converge")
+    if vectors is not None:
+        # Separate station construction: terrestrial PV -> transpose CIRS
+        # rotation -> add the original Earth state. Do not read Apco's eb/v.
+        cirs_pv = erfa.pvtob(lon, lat, height_km*1000, xp, yp,
+                            erfa.sp00(*tt), erfa.era00(*ut1))
+        inverse = erfa.c2ixys(x, y, s).T
+        observer_position = ep+(inverse @ cirs_pv["p"])/(AU_KM*1000)
+        observer_velocity = ev*AU_KM/86400+(inverse @ cirs_pv["v"])/1000
+        simultaneous, _ = state(kernel, target, jd)
+        vectors.update({
+            "epochJdTdbParts": [float(v) for v in tdb],
+            "positionKm": (observer_position*AU_KM).tolist(),
+            "velocityKmPerSecond": observer_velocity.tolist(),
+            "geometricPositionKm": ((simultaneous-observer_position)*AU_KM).tolist(),
+            "receptionPositionKm": ((tp-observer_position)*AU_KM).tolist(),
+        })
     pnat = p
     if target != 10:
         delay = max(0, min(tau, np.dot(sun-a["eb"], p)*erfa.AULT))

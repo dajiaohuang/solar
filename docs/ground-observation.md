@@ -61,6 +61,38 @@ chains and different source solution sets retain their existing limitations.
 Library attribution and license notices are in
 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
 
+The result also exports `observerState`: the reception station's barycentric
+position (km), velocity (km/s), J2000 axes and two-part TDB epoch. These are the
+same SOFA-derived Apco values already used by the direction calculation, not a
+separate Earth-rotation approximation. Available targets include simultaneous
+`geometricPositionKm` and `receptionPositionKm` from that reception station.
+The reception vector uses the evaluated emission target before aberration,
+solar deflection, horizon rotation or refraction. Missing targets have no vectors.
+These inputs can support event geometry; they do not themselves calculate a
+ground contact, apparent limb or surface eclipse path.
+
+`lightTimeSeconds` now retains the iterate actually used for `emissionJdTdb`;
+`lightTimeResidualSeconds` separately reports its difference from range/c.
+Previously the exported light time was the next fixed-point estimate, even
+though the target was evaluated at the preceding iterate. The retained stopping
+threshold remains 50 microseconds. The scalar SPK JD still limits resolution;
+exporting the station's split epoch does not increase the source evaluator's
+resolution or establish physical accuracy.
+
+Six [independent vector cases](../tests/fixtures/ground-vectors-reference.json)
+use ERFA's terrestrial PV rotated by the transpose CIRS matrix plus the original
+jplephem Earth state, without reading Apco's stored observer position/velocity.
+They verify station components within 1e-6 km and 1e-10 km/s, simultaneous target
+vectors within 1e-6 km and reception vectors within 0.001 km. Tests also enforce
+vector/range consistency and exact association of the reported light time with
+the scalar emission JD. These are numerical thresholds for the pinned cases,
+not physical uncertainties. The [generator](../scripts/reference-ground-vectors.py)
+retains source and implementation hashes and refuses to overwrite an output.
+The model follows [ERFA Apco](https://github.com/liberfa/erfa/blob/master/src/apco.c)
+and excludes station motion/tides and an exact relativistic terrestrial/BCRS
+transformation. Older API replies without the additive vector bundle remain
+readable; a partial, nonfinite or mismatched-frame bundle is rejected.
+
 ## Rise, set and visibility windows
 
 **Orbit → Ground observer → Rise, set and visibility windows** reuses the

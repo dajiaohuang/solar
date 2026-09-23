@@ -48,17 +48,30 @@ type Direction struct {
 }
 
 type BodyResult struct {
-	BodyID           string     `json:"bodyId"`
-	Status           string     `json:"status"`
-	MissingReason    string     `json:"missingReason,omitempty"`
-	Geometric        *Direction `json:"geometric,omitempty"`
-	ApparentAirless  *Direction `json:"apparentAirless,omitempty"`
-	Refracted        *Direction `json:"refracted,omitempty"`
-	RangeKM          *float64   `json:"lightTimeRangeKm,omitempty"`
-	LightTimeSeconds *float64   `json:"lightTimeSeconds,omitempty"`
-	EmissionJDTDB    *float64   `json:"emissionJdTdb,omitempty"`
-	Iterations       int        `json:"lightTimeIterations,omitempty"`
-	Warnings         []string   `json:"warnings"`
+	BodyID                   string      `json:"bodyId"`
+	Status                   string      `json:"status"`
+	MissingReason            string      `json:"missingReason,omitempty"`
+	Geometric                *Direction  `json:"geometric,omitempty"`
+	ApparentAirless          *Direction  `json:"apparentAirless,omitempty"`
+	Refracted                *Direction  `json:"refracted,omitempty"`
+	RangeKM                  *float64    `json:"lightTimeRangeKm,omitempty"`
+	LightTimeSeconds         *float64    `json:"lightTimeSeconds,omitempty"`
+	EmissionJDTDB            *float64    `json:"emissionJdTdb,omitempty"`
+	Iterations               int         `json:"lightTimeIterations,omitempty"`
+	GeometricPositionKM      *[3]float64 `json:"geometricPositionKm,omitempty"`
+	ReceptionPositionKM      *[3]float64 `json:"receptionPositionKm,omitempty"`
+	LightTimeResidualSeconds *float64    `json:"lightTimeResidualSeconds,omitempty"`
+	Warnings                 []string    `json:"warnings"`
+}
+
+// Astrometric observer state in the original SPK's J2000 axes. It is not a
+// tectonic station solution or an exact relativistic terrestrial/BCRS transform.
+type ObserverState struct {
+	Frame               string     `json:"frame"`
+	Origin              string     `json:"origin"`
+	PositionKM          [3]float64 `json:"positionKm"`
+	VelocityKMPerSecond [3]float64 `json:"velocityKmPerSecond"`
+	EpochTDB            [2]float64 `json:"epochJdTdbParts"`
 }
 
 type Source struct {
@@ -81,6 +94,7 @@ type Result struct {
 	Sources           []Source                `json:"sources"`
 	Warnings          []string                `json:"warnings"`
 	Contract          map[string]any          `json:"contract"`
+	ObserverState     ObserverState           `json:"observerState"`
 }
 
 type Error struct{ Code, Message string }
@@ -273,6 +287,16 @@ func evaluateSession(ctx context.Context, req Request, eop *earthorientation.Tab
 	result := &Result{Model: Model, Request: req, JDTDB: jd, JDTT: tt1 + tt2, JDUT1: ut11 + ut12, TDBMinusTTSeconds: dtr, EOP: sample, Bodies: make([]BodyResult, 0, len(req.BodyIDs)), Sources: []Source{}, Warnings: []string{}, Contract: map[string]any{
 		"stationDatum": "WGS84-ellipsoidal-height", "azimuthConvention": "north-zero-east-positive", "angleUnit": "deg", "sourceFrame": "ECLIPJ2000", "sourceOrigin": "solar-system-barycenter", "astrometryLibrary": "github.com/hebl/gofa@v1.19.1", "precessionNutation": "IAU-2006/2000A", "timeConversion": "SOFA-UTC-TAI-TT-UT1; Fairhead-Bretagnon-topocentric-TDB", "lightDeflection": "finite-distance-solar-monopole", "lightTimeToleranceSeconds": lightTimeToleranceSeconds, "physicalUncertainty": "not-propagated", "leapSecondTableLastEffectiveUTC": "2017-01-01", "excludedEffects": []string{"planetary-light-deflection", "Shapiro-light-time", "station-tectonic-motion", "solid-earth-and-ocean-tides", "terrain-horizon", "finite-target-limb"},
 	}}
+	result.ObserverState = ObserverState{Frame: "J2000", Origin: "solar-system-barycenter", EpochTDB: [2]float64{tdb1, tdb2}}
+	for i := 0; i < 3; i++ {
+		result.ObserverState.PositionKM[i] = astrom.Eb[i] * auKM
+		result.ObserverState.VelocityKMPerSecond[i] = astrom.V[i] * gofa.CMPS / 1000
+	}
+	result.Contract["vectorFrame"] = "J2000"
+	result.Contract["vectorUnit"] = "km"
+	result.Contract["vectorOrigin"] = "observer-at-reception"
+	result.Contract["receptionVector"] = "target-at-iterated-emission-minus-observer-at-reception; no aberration or deflection"
+	result.Contract["observerStateModel"] = "SOFA-Apco; terrestrial rotation plus source Earth barycentric state"
 	if status > 0 {
 		result.Warnings = append(result.Warnings, "sofa-dubious-year")
 	}
@@ -311,13 +335,15 @@ func (s *session) body(id string, jd float64, states map[string]catalog.State, f
 	if !found[id] {
 		return missing("target-reception-spk-unavailable")
 	}
-	geometric, distance := unit(sub(equatorial(states[id].Position), astrom.Eb))
+	geometricVector := sub(equatorial(states[id].Position), astrom.Eb)
+	geometric, distance := unit(geometricVector)
 	if distance <= 0 {
 		return missing("zero-observer-target-distance")
 	}
 	g := direction(geometric, astrom)
 	tau, emission := distance*gofa.AULT, jd
 	var target, p [3]float64
+	var residual float64
 	converged := false
 	for i := 0; i < 16; i++ {
 		emission = jd - tau/gofa.DAYSEC
@@ -332,8 +358,8 @@ func (s *session) body(id string, jd float64, states map[string]catalog.State, f
 		p, distance = unit(sub(target, astrom.Eb))
 		next := distance * gofa.AULT
 		out.Iterations = i + 1
-		if math.Abs(next-tau) <= lightTimeToleranceSeconds {
-			tau = next
+		residual = math.Abs(next - tau)
+		if residual <= lightTimeToleranceSeconds {
 			converged = true
 			break
 		}
@@ -379,6 +405,14 @@ func (s *session) body(id string, jd float64, states map[string]catalog.State, f
 	out.RangeKM = &rangeKM
 	out.LightTimeSeconds = &tau
 	out.EmissionJDTDB = &emission
+	var geometricKM, receptionKM [3]float64
+	for i := 0; i < 3; i++ {
+		geometricKM[i] = geometricVector[i] * auKM
+		receptionKM[i] = (target[i] - astrom.Eb[i]) * auKM
+	}
+	out.GeometricPositionKM = &geometricKM
+	out.ReceptionPositionKM = &receptionKM
+	out.LightTimeResidualSeconds = &residual
 	if useRefraction {
 		// SOFA's limited low-altitude model is not evidence of a refracted
 		// direction below the horizon. Expose null and the model boundary.

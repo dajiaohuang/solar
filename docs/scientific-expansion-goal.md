@@ -913,3 +913,18 @@ was inspected without overflow. No full local tests ran. Topocentric contacts,
 oriented limbs, event distributions, native consumers and all other unfinished
 ledger requirements remain open. This batch remains local while candidate
 0320813 completes its existing remote run, without interrupting that run.
+
+### Checkpoint 35: source-backed station and reception vectors (2026-09-23)
+
+Ground observation exports now retain the actual SOFA/IERS station barycentric
+position/velocity and split TDB epoch, plus simultaneous and reception target
+vectors in explicit J2000/km conventions. The reported light time now belongs
+to the evaluated emission epoch; the next-iterate difference is a separate
+numerical residual. No empirical Horizons adjustment or new rotation model was
+introduced. Six independently assembled ERFA station/vector cases, five focused
+Go tests and fifteen transport/window unit checks passed; types and changed-file
+lint passed. No full local tests ran.
+
+The vector bundle is a reusable event input, not completed topocentric contact
+searches or apparent-limb modeling. Those and all other unfinished ledger rows
+remain open. This batch is local behind candidate 0320813 and browser 20714a1.
