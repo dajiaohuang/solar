@@ -4,10 +4,12 @@ import { createDe440Dynamics, DE440_DYNAMICS_SOURCE, DE440_FORCE_IDS } from '../
 import { integrateDynamicsExperiment, parseDynamicsInitial } from '../engine/dynamics/experiment'
 import { parseSbdbCovariance } from '../data/loaders/sbdbCovariance'
 import { propagateDynamicsCovariance } from '../engine/dynamics/covariancePropagation'
+import { propagateSourceOffsetEnsemble } from '../engine/dynamics/nonlinearEnsemble'
+import { sampleSbdbCovariance } from '../engine/ephemeris/covarianceSampling'
 
 const scope = self as DedicatedWorkerGlobalScope
 let started = false
-scope.onmessage = (event: MessageEvent<{ kind?: 'covariance'; initialBytes: ArrayBuffer; durationSeconds: number; exclusionKm: number; compareRefinement: boolean; solarRelativity: boolean }>) => {
+scope.onmessage = (event: MessageEvent<{ kind?: 'covariance' | 'ensemble'; sampleCount?: number; seed?: number; initialBytes: ArrayBuffer; durationSeconds: number; exclusionKm: number; compareRefinement: boolean; solarRelativity: boolean }>) => {
   if (started) return
   started = true
   void (async () => {
@@ -15,8 +17,10 @@ scope.onmessage = (event: MessageEvent<{ kind?: 'covariance'; initialBytes: Arra
       const { initialBytes, durationSeconds, exclusionKm, compareRefinement, solarRelativity } = event.data
       if (initialBytes.byteLength > 2 * 1024 * 1024 || !Number.isFinite(durationSeconds) || Math.abs(durationSeconds) > 365 * 86400 || !Number.isFinite(exclusionKm) || exclusionKm < 0) throw new RangeError('Invalid bounded experiment input')
       const payload = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(initialBytes))
-      const covariance = event.data.kind === 'covariance' ? parseSbdbCovariance(payload) : null
+      const covariance = ['covariance','ensemble'].includes(event.data.kind ?? '') ? parseSbdbCovariance(payload) : null
       if (covariance && covariance.labels.length !== 6) throw new RangeError('Additional source parameters require matched force derivatives; no axes will be dropped')
+      if (event.data.kind === 'ensemble' && (!Number.isSafeInteger(event.data.sampleCount) || event.data.sampleCount! < 1 || event.data.sampleCount! > 128)) throw new RangeError('Ensemble requires 1 to 128 samples')
+      const sampling = event.data.kind === 'ensemble' ? sampleSbdbCovariance(covariance!, event.data.sampleCount!, event.data.seed!) : null
       const input = covariance ? null : parseDynamicsInitial(payload)
       const inputHash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', initialBytes)), v => v.toString(16).padStart(2, '0')).join('')
       const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 30_000)
@@ -40,6 +44,12 @@ scope.onmessage = (event: MessageEvent<{ kind?: 'covariance'; initialBytes: Arra
       const dynamics = await createDe440Dynamics({ spkBytes: bytes.buffer, gmText, referenceEpochTdb: covariance ? covariance.solutionEpochTdb : input!.referenceEpochTdb,
         elapsedRangeSeconds: [Math.min(0, durationSeconds), Math.max(0, durationSeconds)], exclusionKm: Object.fromEntries(DE440_FORCE_IDS.map(id => [id, exclusionKm])), solarRelativity })
       if (covariance) {
+        if (sampling) {
+          const result = await propagateSourceOffsetEnsemble(dynamics, covariance, sampling.offsets, durationSeconds)
+          scope.postMessage({ type: 'done', receipt: { schemaVersion: 1, calculation: 'conditional-six-parameter-de440-nonlinear-ensemble',
+            sourceFile: { sha256: inputHash, bytes: initialBytes.byteLength, payload }, sampling, ...result } })
+          return
+        }
         const result = await propagateDynamicsCovariance(dynamics, covariance, durationSeconds)
         scope.postMessage({ type: 'done', receipt: { schemaVersion: 1, calculation: 'conditional-six-parameter-de440-covariance',
           sourceFile: { sha256: inputHash, bytes: initialBytes.byteLength, payload }, ...result } })

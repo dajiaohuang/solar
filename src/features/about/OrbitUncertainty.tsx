@@ -6,6 +6,7 @@ import { covarianceProjection } from '../../engine/ephemeris/covarianceProjectio
 import { covarianceEllipsoid } from '../../engine/ephemeris/covarianceEllipsoid'
 import { CovarianceEllipsoid } from './CovarianceEllipsoid'
 import { CovarianceTimePropagation } from './CovarianceTimePropagation'
+import { NonlinearOrbitEnsemble } from './NonlinearOrbitEnsemble'
 import { useI18n } from '../../i18n/context'
 import { saveTextExport } from '../../lib/platform'
 
@@ -93,6 +94,7 @@ export function OrbitUncertainty() {
       <button type="button" className="secondary-button" onClick={() => { void saveTextExport(JSON.stringify({ schemaVersion: 1, calculation: 'solution-epoch-coordinate-covariance', ...loaded, adoptedGmSourceSha256: GM_SHA, result, positionEllipsoid: ellipsoid ? { ...ellipsoid, units: 'km', frame: result.frame } : null }, null, 2), `solar-covariance-${loaded.source.designation.replace(/[^\w-]/g, '_')}.json`, 'application/json').catch(reason => setError(String(reason))) }}>{zh ? '导出协方差与来源 JSON' : 'Export covariance and source JSON'}</button>
     </div>}
     {loaded && inputBytes && <CovarianceTimePropagation key={loaded.sourceSha256} bytes={inputBytes} dimension={loaded.source.labels.length} zh={zh} />}
+    {loaded && inputBytes && <NonlinearOrbitEnsemble key={loaded.sourceSha256} bytes={inputBytes} dimension={loaded.source.labels.length} zh={zh} />}
   </section>
 }
 

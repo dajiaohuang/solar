@@ -1,0 +1,66 @@
+import { readFile } from 'node:fs/promises'
+import { expect, test } from './fixtures'
+import { parseSbdbCovariance } from '../../src/data/loaders/sbdbCovariance'
+import { sampleSbdbCovariance } from '../../src/engine/ephemeris/covarianceSampling'
+import eros from '../fixtures/sbdb-eros-covariance.json' with { type: 'json' }
+
+test.beforeEach(async ({ page }) => { await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1','complete')) })
+
+test('real worker propagates joint samples and exports reproducible complete draw identities', async ({ page }) => {
+  await page.goto('./?v=4&page=about&lang=en')
+  const panel = page.getByRole('region',{ name: 'Orbit uncertainty', exact: true })
+  await panel.getByLabel('SBDB covariance JSON file').setInputFiles('tests/fixtures/sbdb-eros-covariance.json')
+  await panel.getByText('Propagate nonlinear orbit samples',{ exact: true }).click()
+  await panel.getByLabel('Joint sample count',{ exact: true }).fill('8')
+  await panel.getByLabel('Sampling seed',{ exact: true }).fill('42')
+  await panel.getByLabel('Adopt solar 1PN for ensemble propagation').check()
+  await panel.getByRole('button',{ name: 'Adopt conditional model and propagate samples' }).click()
+  const result = panel.getByTestId('nonlinear-ensemble-result')
+  await expect(result).toContainText('8/8 valid endpoints')
+  await expect(result.getByRole('row')).toHaveCount(9)
+  expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth+1)).toBe(true)
+  await result.screenshot({ path: test.info().outputPath('nonlinear-samples.png') })
+  const pending = page.waitForEvent('download')
+  await result.getByRole('button',{ name: 'Export samples, settings and sources JSON' }).click()
+  const receipt = JSON.parse(await readFile((await (await pending).path())!,'utf8'))
+  expect(receipt.sampling.seed).toBe(42)
+  expect(receipt.initial.offsets).toEqual(Array.from(sampleSbdbCovariance(parseSbdbCovariance(eros),8,42).offsets))
+  expect(receipt.valid).toEqual(Array(8).fill(1))
+  expect(receipt.finalStates).toHaveLength(48)
+  expect(receipt.finalStates.every((value: unknown) => typeof value === 'number' && Number.isFinite(value))).toBe(true)
+  expect(receipt.forceModel.solarRelativity.model).toBe('solar-monopole-1pn')
+  expect(receipt.integrationSettings.relativeTolerance).toBe(1e-12)
+  expect(receipt.sourceFile.payload).toEqual(eros)
+  await panel.getByLabel('Sampling seed',{ exact: true }).fill('43')
+  await expect(result).toHaveCount(0)
+  await panel.getByLabel('SBDB covariance JSON file').setInputFiles('tests/fixtures/sbdb-bennu-covariance.json')
+  await panel.getByText('Propagate nonlinear orbit samples',{ exact: true }).click()
+  await expect(panel).toContainText('Additional fitted parameters have no matched force model')
+  await expect(panel.getByRole('button',{ name: 'Adopt conditional model and propagate samples' })).toHaveCount(0)
+})
+
+test('cancelling or replacing the source while the ensemble worker fetches prevents stale results', async ({ page }) => {
+  await page.goto('./?v=4&page=about&lang=zh')
+  let release: (() => void) | undefined
+  await page.route('**/data/ephemerides/de440s-2000-01-01-2051-01-01.bsp',async route => {
+    await new Promise<void>(resolve => { release = resolve })
+    await route.abort().catch(() => undefined)
+  })
+  const panel = page.getByRole('region',{ name: '轨道不确定性', exact: true })
+  await panel.getByLabel('SBDB 协方差 JSON 文件').setInputFiles('tests/fixtures/sbdb-eros-covariance.json')
+  await panel.getByText('非线性轨道样本传播',{ exact: true }).click()
+  const requested = page.waitForRequest('**/data/ephemerides/de440s-2000-01-01-2051-01-01.bsp')
+  await panel.getByRole('button',{ name: '采用条件模型并传播样本' }).click()
+  await requested
+  await panel.getByRole('button',{ name: '取消样本传播' }).click()
+  release?.()
+  await expect(panel.getByTestId('nonlinear-ensemble-result')).toHaveCount(0)
+  const second = page.waitForRequest('**/data/ephemerides/de440s-2000-01-01-2051-01-01.bsp')
+  await panel.getByRole('button',{ name: '采用条件模型并传播样本' }).click()
+  await second
+  await panel.getByLabel('SBDB 协方差 JSON 文件').setInputFiles('tests/fixtures/sbdb-bennu-covariance.json')
+  release?.()
+  await expect(panel).toContainText('101955 / 118')
+  await expect(panel.getByTestId('nonlinear-ensemble-result')).toHaveCount(0)
+  await expect(panel.getByRole('alert')).toHaveCount(0)
+})

@@ -2064,3 +2064,50 @@ existing bounded reveal helper to scroll to stellar.disclosure. This fixes the
 test's ordering without bypassing the real document picker or source importer.
 Native re-execution remains required; no picker/live stellar pass is claimed.
 No full local tests ran.
+
+### Checkpoint 95: bounded nonlinear propagation and Web workflow (2026-09-23)
+
+Connected joint source-offset coordinate samples to six-state restricted DE440
+integration, optionally including the solar 1PN term. Each run accepts at most
+128 samples and 365 days, checks the frozen source interval, and shares a hard
+250,000 force-evaluation budget. Budget exhaustion or cancellation rejects the
+whole run. Coordinate/integration failures keep original indices, offsets,
+validity masks and explicit failure reasons; survivors are never relabeled as
+the original distribution. Additional fitted force parameters remain refused.
+
+Added bilingual source-import → sample count/seed → worker calculation → readout
+and JSON export in Orbit uncertainty. Input edits, source replacement, unmount
+and cancellation terminate the worker. Exports retain all draws, source payload
+and hash, seed/algorithm, adopted force evidence, numerical settings and build
+identity. Typed arrays serialize as ordinary arrays; invalid values serialize
+as null with masks/reasons and an explicit packed-array convention.
+
+Nine focused engine tests passed. Twelve independent 80-digit-coordinate plus
+CSPICE/DOP853 cases cover three hand-selected joint offsets, -10/+30 days and
+both force choices; observed endpoint differences satisfy 2e-12 AU and 2e-14
+AU/day thresholds. Independent tolerance refinement differed by at most
+6.67e-16 in the output components. These are numerical comparison bounds for
+these cases, not physical orbit uncertainties. A synthetic budget test executes
+exactly 250,000 evaluations with virtual timers to avoid OS timer delays.
+
+Two focused desktop Chromium tests passed through the real worker, original
+SBDB file, pinned SPK, export, cancellation and source replacement. The positive
+workflow also passed in mobile Chromium; inspected the retained narrow-screen
+readout, with the wide numerical table contained in its horizontal scroller. TypeScript
+build and targeted ESLint passed. No full local tests ran. This still omits
+event searches/probabilities, full source-fit forces, native UI and long-term
+uncertainty calibration; the broader goal remains incomplete.
+
+### Checkpoint 96: repair reference-byte identity and Android test imports (2026-09-23)
+
+Candidate e1e39f9 / run 35848124469 Web failed eight reference tests before the
+numeric assertions: the older Windows working copy of the upstream reference
+contained CRLF despite its current LF Git attribute. Its LF hash exactly matches
+the CI-reported repository hash. Refreshed only that working-copy line ending,
+regenerated the new reference receipt and verified every numerical case unchanged.
+The generator now refuses CRLF input and writes explicit LF output across hosts.
+
+The same candidate Android failed Java instrumentation compilation because two
+new assertions lacked static JUnit imports. Added assertNotNull/assertArrayEquals
+imports; local Android compilation remains unavailable without the SDK. Native
+re-execution is still required. The iOS job remains live and was not replaced.
