@@ -497,7 +497,10 @@ original controls and default selection, and no state HTTP request was made.
 The real SPK/Web/Swift numerical golden checks passed. This evidence does not
 yet establish whether input delivery or application behavior caused the UI
 failures. Only failed iOS/gate jobs were retried on the same head; successful
-jobs and the first failed artifact remain evidence. Main promotion is pending.
+jobs and the first failed artifact remain evidence. The same-head retry passed
+iOS and the stable gate without assertion changes. All applicable jobs passed;
+`1e21bf2` was fast-forwarded to main. The initial UI failure cause remains
+unresolved rather than being declared fixed by a passing retry.
 
 ### Checkpoint 16: joint state covariance and reproducible offsets (2026-09-23)
 
@@ -524,6 +527,23 @@ for 1,000 seeded draws. Details, reproduction commands and numerical limits
 are in [orbit-uncertainty.md](orbit-uncertainty.md). No full local tests ran.
 Temporal force-model propagation, Web/native access, ellipsoids, event
 distributions and all other unfinished ledger requirements remain open.
+
+### Checkpoint 17: browser covariance inspection (2026-09-23)
+
+The Evidence page now imports bounded local SBDB covariance JSON, displays the
+source solution/standard epochs and all model axes, and explicitly adopts the
+verified DE440 GM for solution-epoch coordinate conversion. It shows coordinate
+standard deviations and three labeled 2D projected covariance contours; JSON
+export retains the original byte hash, parsed source audit and joint matrix.
+Replacement/clear invalidates old results. Mobile source hashes wrap within
+the panel, and controls use the existing application styles.
+
+Four projection unit checks and eight focused browser checks passed across all
+four profiles, including eight-axis Bennu export, invalid replacement, clearing
+and oversized input. Production build, type checking and changed-file lint were
+used; no full local suite ran. Remote validation of checkpoints 16 and 17 is
+still pending. Time propagation, source acquisition, native uncertainty access,
+3D ellipsoids and the other unfinished goal rows remain open.
 
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),

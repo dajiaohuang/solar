@@ -3,7 +3,8 @@
 The implementation ingests and audits SBDB covariance, converts an elliptic
 solution's joint covariance to Cartesian coordinates at its solution epoch, and
 generates reproducible Gaussian parameter offsets. It does not yet propagate
-uncertainty in time, draw uncertainty ellipsoids or calculate event probabilities.
+uncertainty in time, draw three-dimensional uncertainty ellipsoids or calculate
+event probabilities. The Evidence page displays two-coordinate projections.
 
 Run the development ingestion explicitly:
 
@@ -121,9 +122,32 @@ finite-sample tolerances; they do not establish statistical quality for every
 seed. Real Eros/Bennu CLI exports succeeded, including an eight-axis Bennu
 1,000-draw receipt. Full local test runs were not used.
 
+## Browser inspection
+
+The Evidence page accepts an existing SBDB JSON file up to 2 MiB. It parses and
+hashes the original bytes locally, shows both source epochs, the solution identity
+and every covariance axis, then requires an explicit action adopting the pinned
+DE440 solar GM before converting. Importing another file or clearing the panel
+invalidates previous calculations, including late asynchronous results.
+
+The result shows marginal coordinate standard deviations in km and km/s, with
+extra parameter units preserved. XY/XZ/YZ ellipses show the unit-Mahalanobis
+contour of each two-coordinate marginal covariance; the axis extent in km is
+shown independently for each plot. These are neither a three-dimensional
+confidence region nor a propagated orbit prediction. The JSON export retains
+the parsed source audit, original file hash/size/name, adopted GM hash and full
+joint transformed matrix. A file hash identifies bytes, not their authenticity
+or whether the original request used full precision.
+
+Four focused projection unit checks and eight checks across Chromium desktop,
+Chromium mobile, Firefox and WebKit verified import, explicit conversion,
+eight-axis export, invalid replacement, clearing, oversized-file rejection and
+Chinese copy. Mobile screenshots exposed an overflowing hash, which was fixed
+and covered by a panel-width assertion. No full local suite was run.
+
 Remaining work includes model-aware temporal propagation, singular/poorly
 conditioned sampling, source validity limits and force-model metadata in consumer
 contracts, independent propagated trajectory/covariance references, Web/native
-source access and uncertainty visualization. Additional parameters must not be
+source acquisition, native access and three-dimensional uncertainty visualization. Additional parameters must not be
 silently dropped when implementing propagation. The source covariance is a
 formal orbit-fit uncertainty, not a guarantee that every model error is covered.

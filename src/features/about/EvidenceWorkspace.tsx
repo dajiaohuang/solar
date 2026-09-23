@@ -10,6 +10,7 @@ import { DatasetCard } from '../catalog/DatasetCard'
 import { EPHEMERIS_MANIFEST } from '../../engine/ephemeris/kernelStore'
 import { PRODUCT_PROFILE } from '../../lib/productAvailability'
 import { SourceCoverageReport } from './SourceCoverageReport'
+import { OrbitUncertainty } from './OrbitUncertainty'
 
 type ValidationReport = {
   passed?: boolean
@@ -66,6 +67,7 @@ export function EvidenceWorkspace() {
     <div className="page-heading"><div><span className="eyebrow">{t('evidenceKicker')}</span><h1>{t('about')}</h1><p>{t('educationalWarning')}</p></div></div>
     <div className="evidence-grid">
       <SourceCoverageReport />
+      <OrbitUncertainty />
       <section className="evidence-module glass-panel">
         <div className="module-heading"><span>{t('physicalEphemerides')}</span><em>JPL SPK</em></div>
         <p>{t('ephemerisBoundary')}</p><p>{t('ephemerisTimeBoundary')}</p>
