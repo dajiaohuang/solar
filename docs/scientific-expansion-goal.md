@@ -1677,3 +1677,19 @@ analytic case now uses an exact identity matrix. No full local tests ran.
 The prototype is deliberately not exposed to users yet: independent cross-epoch
 covariance references and nonlinear-limit assessment are still absent. This
 checkpoint does not count propagated uncertainty as complete.
+
+### Checkpoint 73: independent covariance and nonlinear sampling references (2026-09-23)
+
+Executed pinned PyERFA/NumPy generators against original source bytes. The
+five-point, two-step-size oracle uses all-TCB coordinates independently of the
+Go scaled-TDB implementation and records 64 covariance cases. Maximum Go/oracle
+standard-deviation-product-normalized difference is 0.000119289142; reference
+step disagreement is at most 0.000013764132. Generator/source hashes are checked.
+
+A second independently executed seeded ERFA ensemble generator produced six
+cases with 32,768 draws each (196,608 total), three real sources at J1916/J2116.
+No draws were discarded. The maximum empirical/Go normalized difference is
+0.013741869, including sampling error. Two focused Go tests passed all matrices
+and provenance receipts. No full local tests ran. These are finite numerical
+and adopted-distribution checks, not a physical uncertainty or general nonlinear
+coverage guarantee. Public CLI/HTTP/UI covariance access remains outstanding.

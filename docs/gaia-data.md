@@ -352,3 +352,26 @@ missing errors, explicit assumptions, cancellation and one future-epoch
 variance-growth sanity check. Those tests do not establish cross-epoch accuracy:
 independent propagated covariance references and nonlinear-limit assessment
 remain required before exposing this prototype through CLI/HTTP/UI.
+
+Independent numerical evidence is now available in
+`gaia-covariance-reference.json`: 64 states from 16 original sources at J1916,
+J2016, J2026 and J2116. The pinned Python generator uses five-point differences
+at two step scales, and evaluates ERFA entirely in TCB-compatible coordinates
+instead of the Go adapter's scaled TDB coordinates. Reference step disagreement
+is at most 1.38e-5 after normalization by the output standard-deviation product;
+Go/reference disagreement is at most 1.193e-4 under the same normalization.
+This is a numerical comparison, not a relative error bound for near-zero entries.
+
+`gaia-covariance-ensemble.json` additionally records six nonlinear ERFA Gaussian
+ensembles: three real sources at J1916 and J2116, 32,768 draws per case, PCG64
+seed 20260923. No draws are filtered. The largest normalized empirical/linear
+covariance difference is 0.013742, including finite-sample error. This checks
+only those adopted Gaussian models and sources, not coverage for all possible
+parallaxes, large fractional errors, binaries or systematic offsets. Both
+generators preserve original source, generator and prerequisite SHA-256 receipts.
+
+    rtk proxy uv run --python 3.12 --with pyerfa==2.0.1.5 --with numpy==2.4.3 python scripts/reference-gaia-covariance.py --output .cache/new-gaia-covariance.json
+    rtk proxy uv run --python 3.12 --with pyerfa==2.0.1.5 --with numpy==2.4.3 python scripts/reference-gaia-covariance-ensemble.py --output .cache/new-gaia-covariance-ensemble.json
+
+Two focused Go tests validate every retained matrix and receipt. Public access
+and explicit user selection of the covariance assumptions remain to integrate.
