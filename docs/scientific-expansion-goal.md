@@ -658,8 +658,10 @@ independent-integration difference was `5.16e-8 km`. No physical-uncertainty,
 arbitrary-input accuracy or new rendering-performance claim follows. Production
 build/type checking and changed-file lint passed; no full local suite ran.
 
-This slice is held locally while run 35815461132 validates checkpoints 19–21
-on `4ccb540`. It requires a separate exact-head gate afterward. Additional
+Run 35815461132 passed every applicable gate, including four browser profiles
+and native Android/iOS, on `4ccb540`. That exact head was fast-forwarded to main,
+delivering checkpoints 19–21 and the catalog-test correction. Checkpoint 22
+requires its separate exact-head gate. Additional
 forces, joint parameter uncertainty, long-term diagnostics, native access and
 every other incomplete ledger row remain open.
 
