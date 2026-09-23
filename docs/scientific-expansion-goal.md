@@ -1453,3 +1453,21 @@ Complete status means all potential matches were handled; excluded shards are
 not counted as scanned source rows or as validated source payloads. Broader
 source priorities, continuous 3D/time updates and device capacity remain open.
 Candidate 002b1e6 continues remotely and is not replaced.
+
+### Checkpoint 60: browser proof of conservative shard exclusion (2026-09-23)
+
+One focused integration case passed desktop/mobile Chromium, Firefox and WebKit.
+It uses three distinct controlled source shards with a one-row default sample:
+the unknown-H filter independently loads Beta from only its matching shard,
+reports one scanned/drawn row, then a valid empty range completes with zero
+source requests, zero drawn/displayed rows and no stuck spatial selection.
+No page errors occurred. This verifies real worker/network/GPU integration
+against synthetic source fixtures, not public-network speed or scientific data
+coverage. Build and changed-file lint passed; no full local tests ran.
+
+Two test assumptions were corrected during development: the default sample table
+cannot contain unsampled Beta, and the empty-range minimum must not exceed the
+default maximum of 80 AU. The engine correctly rejected the invalid [100,80]
+range; the final empty selection uses [70,80]. Existing exact filters and source
+precision contracts were retained. Candidate 002b1e6 has all completed checks
+green and still awaits iOS; it remains undisturbed.

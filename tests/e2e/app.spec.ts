@@ -637,6 +637,40 @@ test('streams an expanded source snapshot beyond the sample and restores its act
   expect(errors).toEqual([])
 })
 
+test('excludes unmatched expanded shards and completes empty index selections', async ({ page }) => {
+  const requests: string[] = [], errors: string[] = []
+  page.on('request', request => { if (request.url().includes('/binary/chunk-')) requests.push(new URL(request.url()).pathname) })
+  page.on('pageerror', error => errors.push(error.message))
+  await installMockCatalog(page, { precomputed: true, sampleCount: 1, chunkSize: 1 })
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&page=catalog&lang=en&jd=2461287.5')
+  await expect(page.locator('.catalog-table')).toContainText('Alpha')
+  await page.getByRole('combobox', { name: 'H status', exact: true }).selectOption('unknown')
+  // The default table contains the one-row Alpha sample. Expanded loading
+  // must find Beta independently rather than borrowing that sample.
+  await expect(page.locator('.catalog-table')).not.toContainText('Alpha')
+  const before = requests.length
+  await page.getByRole('button', { name: /Load expanded snapshot/ }).click()
+  const canvas = page.getByTestId('catalog-stream-canvas')
+  await expect(canvas).toHaveAttribute('data-phase', 'complete')
+  await expect(canvas).toHaveAttribute('data-drawn-rows', '1')
+  await expect(canvas).toHaveAttribute('data-source-rows', '1')
+  await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
+  expect(requests.slice(before).map(path => path.split('/').at(-1))).toEqual(['chunk-0001.bin'])
+  await page.getByRole('spinbutton', { name: 'a (AU): Minimum', exact: true }).fill('70')
+  await expect(canvas).toHaveCount(0)
+  await expect(page.locator('.catalog-table')).not.toContainText('Beta')
+  const afterFilter = requests.length
+  await page.getByRole('button', { name: /Load expanded snapshot/ }).click()
+  await expect(canvas).toHaveAttribute('data-phase', 'complete')
+  await expect(canvas).toHaveAttribute('data-drawn-rows', '0')
+  await expect(canvas).toHaveAttribute('data-source-rows', '0')
+  await expect(canvas).toHaveAttribute('data-display-count', '0')
+  await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
+  expect(requests.length).toBe(afterFilter)
+  expect(errors).toEqual([])
+})
+
 test('updates spatial catalog representatives on zoom and detail changes without reloading source data', async ({ page }) => {
   const requests: string[] = [], errors: string[] = []
   page.on('request', request => { if (request.url().includes('/data/asteroids/')) requests.push(request.url()) })
