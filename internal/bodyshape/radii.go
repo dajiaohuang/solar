@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"math"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -22,6 +24,21 @@ type Radii struct {
 	UncertaintyKM  *float64   `json:"uncertaintyKm"`
 }
 type Table struct{ bodies map[int]Radii }
+
+// Load bounds disk reads before source validation; configuration failures must
+// prevent a configured service from starting with an implicit replacement.
+func Load(path string) (*Table, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	raw, err := io.ReadAll(io.LimitReader(f, Bytes+1))
+	if err != nil {
+		return nil, err
+	}
+	return Parse(raw)
+}
 
 // Get returns a value copy. PCK IDs are not silently aliased to SPK IDs.
 func (t *Table) Get(id int) (Radii, bool) {

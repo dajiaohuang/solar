@@ -21,6 +21,25 @@ No deployment or data publication is performed by the following local commands.
 4. Set `VITE_SOLAR_API_BASE_URL` for a full Web build. Preview builds cannot submit
    ground-observation requests, even when an API URL is present.
 
+For ground sphere contacts, also pass `--body-radii src/data/pck00011.tpc` to
+the backend. Configured PCK bytes must match the pinned original; validation
+failure stops startup. `POST /v1/observation/contacts` accepts the explicit
+station, UTC interval, foreground/background NAIF IDs and `aberration: "CN"`
+from [the Dallas example](../src/data/dallas-ground-contacts-example.json).
+The endpoint uses the existing long-computation admission class and shared
+compute queue, with a 20-second deadline and request cancellation. Missing
+PCK/IERS returns 503, invalid input 400, unsupported shape/source coverage 422.
+`GET /v1/observation/metadata` describes contact availability and numerical
+limits. Availability means configuration is installed, not that every requested
+target/date has coverage. The contact response retains catalog, SPK, PCK and
+IERS identity and keeps missed-event/physical-uncertainty limits explicit.
+
+The actual route was checked through a test-managed loopback HTTP server using
+original SPK/PCK/IERS data and all four independent Dallas contact references.
+Input, missing-configuration, unsupported-shape, cancellation and queue-class
+checks are targeted integration evidence, not deployment or native acceptance.
+Browser/native ground-contact forms remain pending.
+
 The IERS loader verifies source URL, retrieval timestamp, byte count, SHA-256,
 filename and dated fixed-width records before startup. It uses Bulletin A
 columns and preserves I/P flags and published errors for xp, yp, UT1, dX and dY.

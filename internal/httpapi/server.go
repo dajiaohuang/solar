@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/dajiaohuang/solar/backend/internal/bodyshape"
 	"github.com/dajiaohuang/solar/backend/internal/catalog"
 	"github.com/dajiaohuang/solar/backend/internal/coverage"
 	"github.com/dajiaohuang/solar/backend/internal/earthorientation"
@@ -35,6 +36,7 @@ type Server struct {
 	stateTileByteBudget int64
 	coverage            *coverage.Ledger
 	earthOrientation    *earthorientation.Table
+	bodyRadii           *bodyshape.Table
 	inFlight            atomic.Int64
 	cancelled           atomic.Uint64
 }
@@ -176,6 +178,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.observation(w, r)
 	case r.Method == "POST" && path == "observation/windows":
 		s.observationWindows(w, r)
+	case r.Method == "POST" && path == "observation/contacts":
+		s.observationContacts(w, r)
 	case r.Method == "GET" && path == "catalog/manifest":
 		s.catalogManifest(w, r)
 	case r.Method == "GET" && path == "coverage":

@@ -976,3 +976,19 @@ All 95 radii, six vector results and four ground contact times remain identical.
 Focused Go and TypeScript source/vector/contact checks passed after the repair.
 The still-running iOS job was not interrupted; the repaired candidate must pass
 new remote checks before main promotion.
+
+### Checkpoint 38: bounded ground-contact HTTP access (2026-09-23)
+
+Added explicit PCK startup configuration and contact metadata, and exposed
+POST /v1/observation/contacts through the existing long-computation admission
+class and shared compute queue. Required station fields, model, dates and IDs
+are validated before work; missing PCK/IERS, unsupported shapes and source
+failures remain distinct. The existing 20-second deadline and cancellation
+apply. A test-managed real loopback HTTP server returned the four independent
+Dallas reference contacts from original SPK/PCK/IERS inputs. Focused input,
+configuration, shape, cancellation and scheduler checks passed; the backend
+compiled. No full local tests ran and no deployment occurred.
+
+Browser/native ground-contact forms and the other unfinished ledger requirements
+remain pending. Candidate 4001499 is still awaiting its running iOS job before
+the repaired and expanded batch can replace it.

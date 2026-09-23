@@ -16,6 +16,14 @@ type OccultationRequest struct {
 	BackgroundID int     `json:"backgroundId"`
 	Aberration   string  `json:"aberration"`
 }
+
+func (req OccultationRequest) Validate() error {
+	if req.Aberration != "CN" || req.ForegroundID <= 0 || req.BackgroundID <= 0 || req.ForegroundID == req.BackgroundID || req.ForegroundID == 399 || req.BackgroundID == 399 {
+		return fail("invalid_occultation", "ground occultation requires explicit CN and distinct non-Earth NAIF target IDs")
+	}
+	return (Request{UTC: req.UTC, Station: req.Station, BodyIDs: []string{"naif:" + strconv.Itoa(req.ForegroundID), "naif:" + strconv.Itoa(req.BackgroundID)}}).Validate()
+}
+
 type SphereGeometry struct {
 	Classification                 string  `json:"classification"`
 	SeparationRadians              float64 `json:"separationRadians"`
@@ -46,8 +54,8 @@ func EvaluateOccultation(ctx context.Context, req OccultationRequest, shapes *bo
 }
 
 func evaluateOccultationSession(ctx context.Context, req OccultationRequest, shapes *bodyshape.Table, eop *earthorientation.Table, sess *session) (*OccultationResult, error) {
-	if req.Aberration != "CN" || req.ForegroundID <= 0 || req.BackgroundID <= 0 || req.ForegroundID == req.BackgroundID || req.ForegroundID == 399 || req.BackgroundID == 399 {
-		return nil, fail("invalid_occultation", "ground occultation requires explicit CN and distinct non-Earth NAIF target IDs")
+	if err := req.Validate(); err != nil {
+		return nil, err
 	}
 	front, okFront := shapes.Get(req.ForegroundID)
 	back, okBack := shapes.Get(req.BackgroundID)

@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/dajiaohuang/solar/backend/internal/bodyshape"
 	"github.com/dajiaohuang/solar/backend/internal/catalog"
 	"github.com/dajiaohuang/solar/backend/internal/coverage"
 	"github.com/dajiaohuang/solar/backend/internal/earthorientation"
@@ -34,6 +35,7 @@ func run() error {
 	inventoryDir := flag.String("inventory-dir", "", "optional audited source-inventory directory containing manifest.json and JSONL shards")
 	coverageReport := flag.String("coverage-report", "", "optional pinned coverage audit report; requires matching full catalog and inventory")
 	eopManifest := flag.String("earth-orientation", "", "optional SHA-256-pinned IERS manifest for ground observations")
+	pckPath := flag.String("body-radii", "", "optional original pck00011.tpc for ground sphere contact searches")
 	flag.Parse()
 
 	cat, inv, err := loadData(*dataDir, *inventoryDir)
@@ -53,6 +55,13 @@ func run() error {
 		}
 	}
 	var ledger *coverage.Ledger
+	var radii *bodyshape.Table
+	if *pckPath != "" {
+		radii, err = bodyshape.Load(*pckPath)
+		if err != nil {
+			return fmt.Errorf("body radii configuration failed: %w", err)
+		}
+	}
 	if *coverageReport != "" {
 		ledger, err = coverage.Load(*coverageReport, cat, inv)
 		if err != nil {
@@ -62,6 +71,7 @@ func run() error {
 	server := httpapi.NewWithCoverage(cat, *maxConcurrent, inv, ledger)
 	server.ConfigureComputeWorkers(*computeWorkers)
 	server.ConfigureEarthOrientation(eop)
+	server.ConfigureBodyRadii(radii)
 	return runServer(server, *listen, cat)
 }
 

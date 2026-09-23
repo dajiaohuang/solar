@@ -97,7 +97,9 @@ residuals are about 0.00046–0.00961 seconds. The real CLI used 521 geometry
 evaluations. This is agreement between numerical models, not observed eclipse
 contact timings or physical timing accuracy. Terrain, limb profile, exact
 apparent limb transformations, physical uncertainty and visibility remain absent.
-HTTP/browser/native access to this ground search remains unfinished.
+The backend now exposes `POST /v1/observation/contacts` when configured with
+both immutable IERS and PCK sources; see [ground observation setup](ground-observation.md).
+Browser/native access to this ground search remains unfinished.
 
 ## Browser experiment
 

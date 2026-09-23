@@ -22,6 +22,15 @@ type ContactRequest struct {
 	BackgroundID int     `json:"backgroundId"`
 	Aberration   string  `json:"aberration"`
 }
+
+func (req ContactRequest) Validate() error {
+	if err := (OccultationRequest{UTC: req.StartUTC, Station: req.Station, ForegroundID: req.ForegroundID, BackgroundID: req.BackgroundID, Aberration: req.Aberration}).Validate(); err != nil {
+		return err
+	}
+	_, err := (VisibilityRequest{StartUTC: req.StartUTC, EndUTC: req.EndUTC, Station: req.Station, BodyID: "naif:" + strconv.Itoa(req.ForegroundID)}).timeWindow()
+	return err
+}
+
 type GroundContact struct {
 	Boundary          string     `json:"boundary"`
 	Direction         string     `json:"direction"`
@@ -50,6 +59,9 @@ type ContactResult struct {
 // SearchGroundContacts freezes one SPK identity session across every reception,
 // emission and refinement epoch. Any failure rejects the whole job.
 func SearchGroundContacts(ctx context.Context, req ContactRequest, shapes *bodyshape.Table, eop *earthorientation.Table, evaluate Evaluator) (*ContactResult, error) {
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
 	w, err := (VisibilityRequest{StartUTC: req.StartUTC, EndUTC: req.EndUTC, Station: req.Station, BodyID: "naif:" + strconv.Itoa(req.ForegroundID)}).timeWindow()
 	if err != nil {
 		return nil, err
