@@ -141,7 +141,7 @@ cancels the experiment; a failed/cancelled integration does not emit a successfu
 partial result. An actual local Eros 30-day run completed with 122 accepted steps
 and 733 force evaluations. No source was downloaded, published or deployed.
 
-The laboratory still needs native access, trajectory visualization, richer force models,
+The laboratory still needs native access, richer force models,
 complete joint parameter covariance propagation, long-term diagnostics and
 model-validity/physical-error evidence. This CLI does not complete those goals.
 
@@ -172,3 +172,30 @@ corrupted source rejection and Chinese duration validation. Seven targeted
 source/CLI unit checks also passed after sharing the experiment function. Mobile
 screenshots were inspected and a panel-width assertion guards overflow. No full
 local suite ran. This is Web evidence, not native-device laboratory acceptance.
+
+## Trajectory nodes and numerical refinement
+
+Experiments now retain actual accepted integration nodes, including both
+endpoints. A bounded recorder keeps at most 2,048 nodes, doubling its stride
+when necessary. It does not interpolate missing nodes or preserve every short
+encounter. Each retained node exports elapsed TDB seconds, barycentric six-state
+and heliocentric position using the same pinned Sun state. The three browser
+projections use heliocentric J2000 coordinates and equal axis scales per panel,
+with AU width, Sun/start/end markers and explicit visual-only connecting lines.
+
+The optional refinement checkbox (CLI `--compare-refinement`) runs the same
+model again with tenfold tighter component/relative tolerances and half the
+initial/maximum step. Each run retains its separate 20,000-attempt bound.
+The export includes refined final state/transition entries, settings, work counts
+and endpoint/transition differences. This is a numerical setting comparison,
+not a proof of convergence to a physical orbit, a global numerical error bound,
+long-term stability or complete covariance propagation.
+
+Twelve targeted integrator/recorder/CLI tests passed, covering observer isolation,
+forward/backward decimation, exact endpoint retention, zero duration and refined
+exports. Four browser profiles passed the real-worker trajectory/refinement
+case and mobile plots were visually inspected. A real local Eros 30-day export
+retained all 123 nodes (stride one). Baseline/refined work was 122/192 accepted
+steps and 733/1,153 force evaluations. Endpoint differences were `1.49e-8` km
+and `3.97e-15` km/s; these tiny numerical differences do not reduce the about
+191 m source-orbit model discrepancy documented above. No full local suite ran.

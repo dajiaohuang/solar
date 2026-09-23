@@ -369,6 +369,11 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 .orbit-uncertainty button { max-width: 100%; white-space: normal; }
 .dynamics-laboratory dd { overflow-wrap: anywhere; }
 .dynamics-laboratory button { max-width: 100%; white-space: normal; }
+.dynamics-check { display: flex; gap: 8px; align-items: baseline; margin: 12px 0; font-size: 11px; }
+.dynamics-path { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+.dynamics-sun { fill: var(--accent-2); }
+.dynamics-start { fill: var(--bg); stroke: var(--accent); stroke-width: 1.5; }
+.dynamics-end { fill: var(--accent); }
 .uncertainty-table { overflow-x: auto; }
 .uncertainty-table table { width: 100%; border-collapse: collapse; text-align: left; }
 .uncertainty-table th, .uncertainty-table td { padding: 6px; border-bottom: 1px solid var(--line); }

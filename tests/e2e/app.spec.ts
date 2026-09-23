@@ -895,10 +895,13 @@ test(`stops a cancelled ${phase} download and immediately permits a new request`
     if (phase === 'name search') {
       // Make the initial sample finish after the search has started. Its
       // completion must not mark the unrelated pending search as finished.
-      const summary = page.waitForResponse(response => response.url().endsWith('/catalog-summary.json'))
+      const summary = page.locator('.dataset-card')
+      await expect(summary).not.toContainText('3 known · 0 unknown')
       releaseSample()
-      await (await summary).finished()
-      await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+      // A consumed response can be marked aborted during sample effect/cache
+      // cleanup. CI retained the parsed summary in the UI while finished()
+      // never settled. Observe the actual consumer before testing search state.
+      await expect(summary).toContainText('3 known · 0 unknown')
       await expect(scan).toBeDisabled()
     }
     if (phase === 'name search') await search.fill('Beta')

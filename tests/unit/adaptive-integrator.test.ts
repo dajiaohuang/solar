@@ -53,4 +53,13 @@ describe('bounded adaptive integration', () => {
     expect(result.state[0]).toBe(1)
     expect(result.smallestAcceptedStep).toBeNull()
   })
+  it('observes accepted nodes only and isolates observer mutations', async () => {
+    const times: number[] = []
+    const result = await integrateAdaptive(settings({ onAcceptedStep: (time, state) => { times.push(time); state.fill(NaN) } }))
+    expect(times).toHaveLength(result.accepted)
+    expect(result.rejected).toBeGreaterThan(0)
+    expect(times[times.length-1]).toBe(1)
+    expect(times.every((time, i) => i === 0 || time > times[i-1])).toBe(true)
+    expect(result.state[0]).toBeCloseTo(Math.E, 10)
+  })
 })

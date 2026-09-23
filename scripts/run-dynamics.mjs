@@ -9,7 +9,7 @@ import { integrateDynamicsExperiment, parseDynamicsInitial } from '../src/engine
 const root = new URL('../', import.meta.url)
 const sha = bytes => createHash('sha256').update(bytes).digest('hex')
 
-export async function runDynamicsFile(sourcePath, outputPath, { durationSeconds, exclusionKm, signal }) {
+export async function runDynamicsFile(sourcePath, outputPath, { durationSeconds, exclusionKm, signal, compareRefinement = false }) {
   if (!Number.isFinite(durationSeconds) || Math.abs(durationSeconds) > 365 * 86400 || !Number.isFinite(exclusionKm) || exclusionKm < 0) throw new RangeError('Experiment requires finite duration within 365 days and a nonnegative explicit exclusion distance')
   if ((await stat(sourcePath)).size > 2 * 1024 * 1024) throw new RangeError('Initial condition file exceeds 2 MiB')
   const bytes = await readFile(sourcePath)
@@ -20,9 +20,9 @@ export async function runDynamicsFile(sourcePath, outputPath, { durationSeconds,
   const dynamics = await createDe440Dynamics({ spkBytes: kernel.buffer.slice(kernel.byteOffset, kernel.byteOffset + kernel.byteLength), gmText,
     referenceEpochTdb: initial.referenceEpochTdb, elapsedRangeSeconds: [Math.min(0, durationSeconds), Math.max(0, durationSeconds)],
     exclusionKm: Object.fromEntries(DE440_FORCE_IDS.map(id => [id, exclusionKm])) })
-  const result = await integrateDynamicsExperiment(dynamics, initial.initial, durationSeconds, signal)
+  const result = await integrateDynamicsExperiment(dynamics, initial.initial, durationSeconds, signal, compareRefinement)
   const implementationSha256 = {}
-  for (const path of ['scripts/run-dynamics.mjs', 'src/engine/dynamics/experiment.ts', 'src/engine/dynamics/de440Dynamics.ts', 'src/engine/dynamics/adaptiveIntegrator.ts', 'src/engine/dynamics/pointMassGravity.ts', 'src/engine/ephemeris/spk.ts', 'src/engine/ephemeris/spkType17.ts', 'src/engine/ephemeris/spkType21.ts']) implementationSha256[path] = sha(await readFile(new URL(path, root)))
+  for (const path of ['scripts/run-dynamics.mjs', 'src/engine/dynamics/experiment.ts', 'src/engine/dynamics/trajectorySamples.ts', 'src/engine/dynamics/de440Dynamics.ts', 'src/engine/dynamics/adaptiveIntegrator.ts', 'src/engine/dynamics/pointMassGravity.ts', 'src/engine/ephemeris/spk.ts', 'src/engine/ephemeris/spkType17.ts', 'src/engine/ephemeris/spkType21.ts']) implementationSha256[path] = sha(await readFile(new URL(path, root)))
   const receipt = { schemaVersion: 1, calculation: 'restricted-newtonian-de440-experiment',
     initialFile: { sha256: sha(bytes), bytes: bytes.length, payload: initial.payload }, implementationSha256, ...result }
   if (signal?.aborted) throw new DOMException('Experiment cancelled', 'AbortError')
@@ -32,10 +32,10 @@ export async function runDynamicsFile(sourcePath, outputPath, { durationSeconds,
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [source, output, adoption, durationFlag, duration, exclusionFlag, exclusion, ...extra] = process.argv.slice(2)
-  if (!source || !output || adoption !== '--adopt-de440-point-masses' || durationFlag !== '--duration-seconds' || exclusionFlag !== '--exclusion-km' || !duration || !exclusion || extra.length) throw new Error('Usage: node --experimental-strip-types scripts/run-dynamics.mjs <initial.json> <new-output.json> --adopt-de440-point-masses --duration-seconds <signed-seconds> --exclusion-km <distance>')
+  if (!source || !output || adoption !== '--adopt-de440-point-masses' || durationFlag !== '--duration-seconds' || exclusionFlag !== '--exclusion-km' || !duration || !exclusion || extra.length && (extra.length !== 1 || extra[0] !== '--compare-refinement')) throw new Error('Usage: node --experimental-strip-types scripts/run-dynamics.mjs <initial.json> <new-output.json> --adopt-de440-point-masses --duration-seconds <signed-seconds> --exclusion-km <distance> [--compare-refinement]')
   const controller = new AbortController()
   const cancel = () => controller.abort()
   process.once('SIGINT', cancel)
-  try { console.log(JSON.stringify(await runDynamicsFile(source, output, { durationSeconds: Number(duration), exclusionKm: Number(exclusion), signal: controller.signal }), null, 2)) }
+  try { console.log(JSON.stringify(await runDynamicsFile(source, output, { durationSeconds: Number(duration), exclusionKm: Number(exclusion), signal: controller.signal, compareRefinement: extra.length === 1 }), null, 2)) }
   finally { process.off('SIGINT', cancel) }
 }

@@ -4,6 +4,7 @@ import { parseDynamicsInitial, type integrateDynamicsExperiment } from '../../en
 import { useI18n } from '../../i18n/context'
 import { saveTextExport } from '../../lib/platform'
 import { BUILD_INFO } from '../../lib/buildInfo'
+import { DynamicsTrajectory } from './DynamicsTrajectory'
 
 type Receipt = Awaited<ReturnType<typeof integrateDynamicsExperiment>> & { initialFile: { sha256: string; bytes: number; payload: Record<string, unknown> }; schemaVersion: number; calculation: string }
 type Input = { bytes: ArrayBuffer; parsed: ReturnType<typeof parseDynamicsInitial>; name: string }
@@ -12,6 +13,7 @@ export function DynamicsLaboratory() {
   const { language } = useI18n(), zh = language === 'zh'
   const [input, setInput] = useState<Input | null>(null), [result, setResult] = useState<Receipt | null>(null)
   const [days, setDays] = useState('30'), [exclusion, setExclusion] = useState('1')
+  const [compareRefinement, setCompareRefinement] = useState(false)
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
   const worker = useRef<Worker | null>(null), generation = useRef(0)
   const clear = () => { generation.current++; worker.current?.terminate(); worker.current = null; setBusy(false); setResult(null); setError('') }
@@ -47,7 +49,7 @@ export function DynamicsLaboratory() {
       }
       active.onerror = event => { if (worker.current === active) { active.terminate(); worker.current = null; setBusy(false); setError(event.message || 'Worker failed') } }
       const initialBytes = input.bytes.slice(0)
-      active.postMessage({ initialBytes, durationSeconds, exclusionKm }, [initialBytes])
+      active.postMessage({ initialBytes, durationSeconds, exclusionKm, compareRefinement }, [initialBytes])
     } catch (reason) { worker.current?.terminate(); worker.current = null; setBusy(false); setError(String(reason)) }
   }
   return <section className="evidence-module glass-panel dynamics-laboratory" aria-label={zh ? '动力学实验室' : 'Dynamics laboratory'}>
@@ -62,6 +64,7 @@ export function DynamicsLaboratory() {
     <label className="field"><span>{zh ? '积分时长（TDB 天）' : 'Duration (TDB days)'}</span><input type="number" min="-365" max="365" step="any" value={days} onChange={event => { clear(); setDays(event.target.value) }} /></label>
     <label className="field"><span>{zh ? '点质量排除距离（km）' : 'Point-mass exclusion distance (km)'}</span><input type="number" min="0" step="any" value={exclusion} onChange={event => { clear(); setExclusion(event.target.value) }} /></label>
     <p>{zh ? '排除距离在力计算时检查，不是连续碰撞检测。实验不计算完整拟合协方差或事件概率。' : 'Exclusion is checked at force evaluations, not by continuous collision detection. No complete fit covariance or event probability is calculated.'}</p>
+    <label className="dynamics-check"><input type="checkbox" checked={compareRefinement} onChange={event => { clear(); setCompareRefinement(event.target.checked) }} />{zh ? '追加更细数值设置比较（额外计算一次）' : 'Compare finer numerical settings (one additional integration)'}</label>
     <button type="button" className="primary-button" disabled={!input || busy} onClick={run}>{zh ? '采用 DE440 点质量模型并运行' : 'Adopt DE440 point masses and run'}</button>
     {busy && <><p role="status">{zh ? '正在校验星历并积分…' : 'Verifying ephemeris and integrating…'}</p><button type="button" className="secondary-button" onClick={clear}>{zh ? '取消实验' : 'Cancel experiment'}</button></>}
     {error && <p role="alert">{error}</p>}
@@ -69,6 +72,10 @@ export function DynamicsLaboratory() {
       <p>{zh ? '实验终点' : 'Experiment endpoint'}: JD {result.finalEpoch.referenceEpochTdb} TDB + {result.finalEpoch.elapsedTdbSeconds} s</p>
       <div className="uncertainty-table"><table><caption>{zh ? '模型积分状态 · J2000 / SSB' : 'Model-integrated state · J2000 / SSB'}</caption><thead><tr><th>{zh ? '分量' : 'Axis'}</th><th>{zh ? '值' : 'Value'}</th><th>{zh ? '单位' : 'Unit'}</th></tr></thead><tbody>{['x', 'y', 'z', 'vx', 'vy', 'vz'].map((label, i) => <tr key={label}><th>{label}</th><td>{result.finalStateKmKmPerSecond[i].toPrecision(12)}</td><td>{i < 3 ? 'km' : 'km/s'}</td></tr>)}</tbody></table></div>
       <p>{result.numerics.accepted} {zh ? '接受步数' : 'accepted steps'} · {result.numerics.evaluations} {zh ? '力计算次数' : 'force evaluations'}</p>
+      <p>{zh ? '日心 J2000 投影；金色为太阳，空心为起点，实心为终点。' : 'Heliocentric J2000 projections: gold Sun, open start, filled endpoint.'}</p>
+      <DynamicsTrajectory samples={result.trajectory.samples} zh={zh} />
+      <p>{result.trajectory.retainedNodes} {zh ? '个实际积分节点；抽样间隔' : 'actual integration nodes; sampling stride'} {result.trajectory.stride}. {zh ? '连线仅供显示，不保证中间没有碰撞或事件。' : 'Connecting lines are visual only and do not exclude intervening collisions or events.'}</p>
+      {result.refinement && <div data-testid="dynamics-refinement"><p>{zh ? '细化设置的终点差异' : 'Endpoint difference with finer settings'}: {result.refinement.endpointPositionDifferenceKm.toExponential(3)} km · {result.refinement.endpointVelocityDifferenceKmPerSecond.toExponential(3)} km/s</p><p>{zh ? '这是同一力模型的两次数值计算比较，不是全局误差界或物理不确定性。' : 'This compares two numerical settings of the same force model, not a global error bound or physical uncertainty.'}</p></div>}
       <p>{zh ? '太阳、分离的地球和月球、其他行星系统质心，共 11 个点质量；误差容差只控制数值计算。Eros 的已验证 30 天案例与原始 SPK 约相差 191 米，不能视为物理精度保证。' : 'Eleven point masses: Sun, separate Earth/Moon and other planetary system barycenters. Tolerances control numerical computation only. The verified 30-day Eros case differs from its original SPK by about 191 m; this is not a physical accuracy guarantee.'}</p>
       <button type="button" className="secondary-button" onClick={() => { void saveTextExport(JSON.stringify({ ...result, build: BUILD_INFO }, null, 2), 'solar-dynamics-experiment.json', 'application/json').catch(reason => setError(String(reason))) }}>{zh ? '导出实验与来源 JSON' : 'Export experiment and sources JSON'}</button>
     </div>}

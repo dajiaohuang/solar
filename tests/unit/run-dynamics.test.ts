@@ -11,11 +11,16 @@ test('offline experiment exports exact source/implementation evidence and refuse
   await writeFile(input, JSON.stringify({ schemaVersion: 1, frame: 'J2000', origin: 'SSB', timeScale: 'TDB',
     referenceEpochTdb: reference.referenceEpochTdb, initial: reference.initial,
     initialSource: 'Pinned CSPICE Eros reference', sourceFiles: reference.sources }))
-  const options = { durationSeconds: 864000, exclusionKm: 1 }
+  const options = { durationSeconds: 864000, exclusionKm: 1, compareRefinement: true }
   await runDynamicsFile(input, output, options)
   const bytes = await readFile(output, 'utf8'), receipt = JSON.parse(bytes)
   expect(receipt.forceModel.masses).toHaveLength(11)
   expect(receipt.transitionMatrix.values).toHaveLength(36)
+  expect(receipt.trajectory.samples[0].stateKmKmPerSecond).toEqual(reference.initial)
+  expect(receipt.trajectory.samples.at(-1).stateKmKmPerSecond).toEqual(receipt.finalStateKmKmPerSecond)
+  expect(receipt.trajectory.retainedNodes).toBeLessThanOrEqual(2048)
+  expect(receipt.refinement.relativeTolerance).toBe(1e-13)
+  expect(receipt.refinement.endpointPositionDifferenceKm).toBeLessThan(1e-4)
   expect(receipt.finalEpoch.elapsedTdbSeconds).toBe(options.durationSeconds)
   expect(receipt.initialFile.payload.sourceFiles).toEqual(reference.sources)
   expect(receipt.implementationSha256['src/engine/dynamics/adaptiveIntegrator.ts']).toMatch(/^[a-f0-9]{64}$/)

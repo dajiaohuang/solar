@@ -617,6 +617,31 @@ suite ran. The new source adapter and browser panel still need their exact-head
 remote gate. Native laboratory access, richer forces, full joint covariance,
 trajectory/long-term diagnostics and the other ledger requirements remain open.
 
+### Checkpoint 21: bounded trajectories and refinement comparison (2026-09-23)
+
+The shared experiment now retains at most 2,048 actual accepted nodes, preserving
+initial/final endpoints through progressive decimation. Exports include original
+SSB states and same-source heliocentric coordinates; Web shows three J2000
+projections with equal axis scaling and source/visual limitations. Optional
+refinement runs tighter tolerances and smaller steps, exporting both numerical
+results and their differences without claiming physical uncertainty or stability.
+
+Twelve targeted integrator/recorder/CLI checks and four real-worker browser
+checks passed. The actual Eros 30-day comparison retained 123 nodes and observed
+a `1.49e-8` km endpoint-setting difference; the roughly 191 m source-orbit
+model discrepancy is unchanged. Production build/type checking and changed-file
+lint passed. No full local suite ran.
+
+Remote run 35814538834 on `301e379` failed an existing Chromium catalog test
+after three attempts while other completed jobs passed. Its retained trace had
+an aborted summary response and its page snapshot already displayed the parsed
+summary. The test waited indefinitely on `Response.finished()`. It now waits
+for actual summary UI consumption before asserting the independent name search
+is still busy; real network disconnect and immediate re-request assertions are
+retained. All twelve targeted cancellation cases across four browser profiles
+passed locally. No application behavior or timeout was weakened. The failed
+head has not been promoted; do not replace it while healthy native jobs run.
+
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),
 [JPL SBDB](https://ssd-api.jpl.nasa.gov/doc/sbdb.html),

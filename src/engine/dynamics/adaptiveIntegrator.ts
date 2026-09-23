@@ -16,6 +16,8 @@ export type IntegrationOptions = {
   maxStep: number
   maxAttempts: number
   signal?: AbortSignal
+  /** Observes accepted endpoints only; receives an owned copy. */
+  onAcceptedStep?: (elapsed: number, state: Float64Array) => void
   /** Worker/event-loop cooperation; injectable for deterministic cancellation. */
   yieldControl?: () => Promise<void>
 }
@@ -29,7 +31,7 @@ const ERROR = [35/384 - 5179/57600, 0, 500/1113 - 7571/16695,
   125/192 - 393/640, -2187/6784 + 92097/339200, 11/84 - 187/2100, -1/40]
 
 export async function integrateAdaptive(options: IntegrationOptions) {
-  const { duration, relativeTolerance, maxStep, initialStep, maxAttempts, signal, derivative } = options
+  const { duration, relativeTolerance, maxStep, initialStep, maxAttempts, signal, derivative, onAcceptedStep } = options
   const n = options.initial.length
   if (!Number.isSafeInteger(n) || n < 1 || n > 512 || !Number.isFinite(duration) ||
       !Number.isFinite(relativeTolerance) || relativeTolerance < 1e-14 || relativeTolerance > 1 ||
@@ -95,6 +97,7 @@ export async function integrateAdaptive(options: IntegrationOptions) {
       smallestAcceptedStep = Math.min(smallestAcceptedStep, magnitude)
       largestAcceptedStep = Math.max(largestAcceptedStep, magnitude)
       maxAcceptedErrorRatio = Math.max(maxAcceptedErrorRatio, errorRatio)
+      onAcceptedStep?.(elapsed, state.slice())
     } else rejected++
     stepSize = magnitude * (errorRatio > 1 ? Math.min(1, factor) : factor)
   }
