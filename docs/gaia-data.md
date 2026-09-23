@@ -73,3 +73,8 @@ This view requires WebGL 2. Point sizes distinguish G magnitudes visually and
 are not angular diameters. It does not apply proper motion, observer parallax,
 aberration, deflection or parallax zero-point corrections. Chunk hashes establish
 consistency with the imported manifest, not independent ESA authentication.
+
+Stream cancellation/deadlines do not wait for an outstanding consumer upload
+acknowledgement. Late consumer failures remain observed. Consumer-owned effects
+still need their own cancellation and cleanup; the sky chart terminates its
+worker and clears retained display/source state.

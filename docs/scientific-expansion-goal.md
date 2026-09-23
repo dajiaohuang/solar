@@ -1195,3 +1195,17 @@ the test searched for an ungrouped value. Corrected the explicit en_US device
 assertions to include both the formatted duration and numerical bounds, and
 include the actual label in any failure. Scientific calculations are unchanged.
 Remote revalidation remains required; actual system-picker export remains open.
+
+### Checkpoint 47: cancellation independent of consumer acknowledgements (2026-09-23)
+
+Audit found that a consumer waiting forever for an upload acknowledgement could
+keep the loader's cancellation/deadline path waiting inside Promise.allSettled.
+Consumer waiting now observes the stream abort signal and settles independently
+while still handling late consumer rejection. Cancellation prevents queued
+publication and further admission; consumer-owned effects still require their
+own cancellation/cleanup (the chart terminates its worker and clears buffers).
+
+Six focused Gaia-loader tests passed, including cancellation before a held
+upload settles and an observed late upload error. Types and changed-file lint
+passed. No full local tests ran. Candidate a2635ac / run 35829908376 remains
+in progress and was not replaced. This fix is retained for the next candidate.

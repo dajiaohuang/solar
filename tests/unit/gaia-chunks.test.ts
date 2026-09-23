@@ -69,3 +69,18 @@ test('cancelling while a consumer is active prevents queued publication and late
   await expect(streamGaiaChunks({ manifest: m, region, baseUrl: 'https://example.test/gaia/', signal: controller.signal, concurrency: 2, fetcher, onChunk })).rejects.toMatchObject({ name: 'AbortError' })
   expect(fetcher).toHaveBeenCalledTimes(2); expect(onChunk).toHaveBeenCalledTimes(1)
 })
+test('cancellation settles even when an upload acknowledgement never arrives', async () => {
+  const { files, manifest: m } = await syntheticPartition(), controller = new AbortController()
+  const fetcher = vi.fn(async (url: URL | RequestInfo) => response(files.get(String(url).split('/').at(-1)!)!))
+  let rejectUpload!: (error: Error) => void
+  const onChunk = vi.fn(() => new Promise<void>((_, reject) => { rejectUpload = reject }))
+  const pending = streamGaiaChunks({ manifest: m, region, baseUrl: 'https://example.test/gaia/', signal: controller.signal, concurrency: 2, fetcher, onChunk })
+  const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+  await vi.waitFor(() => expect(onChunk).toHaveBeenCalledTimes(1))
+  controller.abort()
+  await rejected
+  expect(fetcher).toHaveBeenCalledTimes(2); expect(onChunk).toHaveBeenCalledTimes(1)
+  // A late GPU/consumer failure must remain observed after the stream terminates.
+  rejectUpload(new Error('late upload failure'))
+  await Promise.resolve()
+})

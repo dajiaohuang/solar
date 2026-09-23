@@ -11,6 +11,16 @@ const number = (v: unknown): v is number => typeof v === 'number' && Number.isFi
 const integer = (v: unknown, min: number, max: number): v is number => number(v) && Number.isInteger(v) && v >= min && v <= max
 const pair = (v: unknown): v is [number, number] => Array.isArray(v) && v.length === 2 && v.every(number)
 const cancelled = (signal: AbortSignal) => { if (signal.aborted) throw new DOMException('Gaia loading cancelled', 'AbortError') }
+/** Consumers may be waiting for a GPU acknowledgement that never arrives.
+ * Observe their eventual settlement, but do not let them prevent cancellation. */
+function consumeUntilAbort(consume: () => Promise<void>, signal: AbortSignal): Promise<void> {
+  cancelled(signal)
+  return new Promise<void>((resolve, reject) => {
+    const abort = () => reject(new DOMException('Gaia loading cancelled', 'AbortError'))
+    signal.addEventListener('abort', abort, { once: true })
+    Promise.resolve().then(() => { cancelled(signal); return consume() }).then(resolve, reject).finally(() => signal.removeEventListener('abort', abort))
+  })
+}
 export async function gaiaHash(bytes: Uint8Array) {
   return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>)), v => v.toString(16).padStart(2, '0')).join('')
 }
@@ -109,7 +119,7 @@ export async function streamGaiaChunks(options: {
           if (!response.ok) throw new Error(`Gaia chunk HTTP ${response.status}`)
           const bytes = new Uint8Array(await readBounded(response, 'application/json', descriptor.bytes))
           const chunk = await decodeChunk(bytes, descriptor, controller.signal)
-          consume = consume.then(async () => { cancelled(controller.signal); await onChunk(chunk); cancelled(controller.signal); verifiedRows += descriptor.rows; verifiedChunks++ })
+          consume = consume.then(async () => { cancelled(controller.signal); await consumeUntilAbort(() => onChunk(chunk), controller.signal); cancelled(controller.signal); verifiedRows += descriptor.rows; verifiedChunks++ })
           await consume
         } finally { clearTimeout(timeout) }
       })
