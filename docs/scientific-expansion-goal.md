@@ -545,6 +545,14 @@ used; no full local suite ran. Remote validation of checkpoints 16 and 17 is
 still pending. Time propagation, source acquisition, native uncertainty access,
 3D ellipsoids and the other unfinished goal rows remain open.
 
+Post-commit numerical follow-up: direct 2D determinant multiplication could
+underflow at `1e-200` variance and erase a real short axis. Normalized eigenvalues
+and correlation preserve it without clipping. Five focused units now cover
+tiny/large variance, extreme anisotropy and display-unit scaling, and the four
+browser import/export checks passed after the change. This follow-up is held
+locally while remote run 35812468105 validates `144b590`; do not replace its
+head during healthy native jobs. Neither checkpoint is on main yet.
+
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),
 [JPL SBDB](https://ssd-api.jpl.nasa.gov/doc/sbdb.html),

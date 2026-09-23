@@ -139,11 +139,17 @@ the parsed source audit, original file hash/size/name, adopted GM hash and full
 joint transformed matrix. A file hash identifies bytes, not their authenticity
 or whether the original request used full precision.
 
-Four focused projection unit checks and eight checks across Chromium desktop,
+Five focused projection unit checks and eight checks across Chromium desktop,
 Chromium mobile, Firefox and WebKit verified import, explicit conversion,
 eight-axis export, invalid replacement, clearing, oversized-file rejection and
 Chinese copy. Mobile screenshots exposed an overflowing hash, which was fixed
-and covered by a panel-width assertion. No full local suite was run.
+and covered by a panel-width assertion. A numerical follow-up reproduced raw
+determinant underflow turning a nonzero contour short axis into zero at variance
+`1e-200`. Normalized eigenvalues and correlation now avoid raw variance products
+and squared display conversions. Regression cases cover tiny/large, rotated,
+highly anisotropic and singular matrices without injecting variance. All four
+browser import/export checks passed again after that correction. No full local
+suite was run.
 
 Remaining work includes model-aware temporal propagation, singular/poorly
 conditioned sampling, source validity limits and force-model metadata in consumer
