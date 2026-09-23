@@ -896,3 +896,20 @@ and the final quality gate for exact head
 main, delivering source-backed PCK radii and geometric contact searches.
 Reception correction, DUT1 diagnostics and overlap windows form the next
 candidate. Deployment and publication remain paused.
+
+### Checkpoint 34: cancellable browser occultation experiments (2026-09-23)
+
+Extracted the existing offline experiment into one shared typed engine and
+connected the Evidence workspace to a dedicated bounded worker. Browser users
+can import settings, select NONE/CN, adjust scan/tolerance, inspect contacts and
+overlap durations, cancel, and export effective input with source/build evidence.
+Edits/replacement/unmount invalidate old results. Original PCK/SPK validation
+and numerical semantics remain shared with the CLI; a real-source comparison
+retains identical contacts, windows, requests and provenance.
+
+Sixteen focused unit/CLI checks and twelve browser checks across all four profiles
+passed. Types, changed-file lint and the production build passed; mobile layout
+was inspected without overflow. No full local tests ran. Topocentric contacts,
+oriented limbs, event distributions, native consumers and all other unfinished
+ledger requirements remain open. This batch remains local while candidate
+0320813 completes its existing remote run, without interrupting that run.

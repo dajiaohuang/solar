@@ -3,11 +3,8 @@ import { createHash } from 'node:crypto'
 import { readFile, stat, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createDe440Dynamics, DE440_DYNAMICS_SOURCE, DE440_FORCE_IDS } from '../src/engine/dynamics/de440Dynamics.ts'
-import { loadPckRadii } from '../src/data/loaders/pckRadii.ts'
-import { sphericalOccultation } from '../src/engine/events/sphericalOccultation.ts'
-import { findOccultationContacts } from '../src/engine/events/occultationContacts.ts'
-import { receptionLightTime } from '../src/engine/ephemeris/receptionLightTime.ts'
+import { DE440_DYNAMICS_SOURCE } from '../src/engine/dynamics/de440Dynamics.ts'
+import { parseOccultationInput, runOccultationExperiment } from '../src/engine/events/occultationExperiment.ts'
 
 const root = new URL('../', import.meta.url)
 const sha = bytes => createHash('sha256').update(bytes).digest('hex')
@@ -17,58 +14,17 @@ export async function findOccultationFile(sourcePath, outputPath, signal) {
   if ((await stat(sourcePath)).size > 65536) throw new RangeError('Contact experiment input exceeds 64 KiB')
   const bytes = await readFile(sourcePath)
   if (bytes.length > 65536) throw new RangeError('Contact experiment input exceeds 64 KiB')
-  const input = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))
-  const { foregroundId, backgroundId, observerId, referenceEpochTdb, startSeconds, endSeconds, maxStepSeconds, toleranceSeconds } = input ?? {}
-  const aberration = input?.aberration
-  const marginSeconds = aberration === 'CN' ? (input.maxLightTimeSeconds ?? 36000) : 0
-  if (input?.schemaVersion !== 1 || !['NONE', 'CN'].includes(aberration) || input.frame !== 'J2000' || input.timeScale !== 'TDB' ||
-      ![foregroundId, backgroundId, observerId].every(id => Number.isSafeInteger(id) && id >= 0) || new Set([foregroundId, backgroundId, observerId]).size !== 3 ||
-      ![referenceEpochTdb, startSeconds, endSeconds, maxStepSeconds, toleranceSeconds].every(Number.isFinite) || endSeconds < startSeconds ||
-      endSeconds-startSeconds > 365*86400 || maxStepSeconds <= 0 || toleranceSeconds <= 0 || toleranceSeconds > maxStepSeconds ||
-      !Number.isFinite(marginSeconds) || (aberration === 'CN' && (marginSeconds <= 0 || marginSeconds > 86400))) throw new RangeError('Expected explicit distinct NAIF IDs, J2000/NONE-or-CN/TDB and a finite bounded contact window within 365 days')
+  parseOccultationInput(buffer(bytes))
   if (signal?.aborted) throw new DOMException('Contact search cancelled', 'AbortError')
   const [spk, pck, gmText] = await Promise.all([readFile(new URL(`public/data/ephemerides/${DE440_DYNAMICS_SOURCE.path}`, root)),
     readFile(new URL('src/data/pck00011.tpc', root)), readFile(new URL('src/data/gm_de440.tpc', root), 'utf8')])
-  const shapes = await loadPckRadii(buffer(pck))
-  const front = shapes.get(foregroundId), back = shapes.get(backgroundId)
-  if (!front || !back || front.representation !== 'sphere' || back.representation !== 'sphere') throw new RangeError('Both targets require sourced equal-axis spheres; missing or triaxial shapes are not replaced by mean radii')
-  // Reuse the verified original state accessor only. No force integration or
-  // restricted-dynamics approximation is used to predict these source states.
-  const states = await createDe440Dynamics({ spkBytes: buffer(spk), gmText, referenceEpochTdb,
-    elapsedRangeSeconds: [Math.min(0, startSeconds-marginSeconds), Math.max(0, endSeconds)], exclusionKm: Object.fromEntries(DE440_FORCE_IDS.map(id => [id, 0])) })
-  let ephemerisStateRequests = 0, maximumIterations = 0, maximumResidualSeconds = 0, maximumLightTimeSeconds = 0
-  const position = (id, elapsed) => { ephemerisStateRequests++; return Array.from(states.state(id, elapsed).subarray(0, 3)) }
-  const result = await findOccultationContacts({ startSeconds, endSeconds, maxStepSeconds, toleranceSeconds, signal,
-    evaluate(elapsed) {
-      const observer = position(observerId, elapsed)
-      const body = shape => {
-        if (aberration === 'CN') {
-          const corrected = receptionLightTime({ observerPositionKm: observer, targetPositionKm: time => position(shape.naifPckId, time),
-            elapsedTdbSeconds: elapsed, maxLightTimeSeconds: marginSeconds })
-          maximumIterations = Math.max(maximumIterations, corrected.iterations)
-          maximumResidualSeconds = Math.max(maximumResidualSeconds, corrected.residualSeconds)
-          maximumLightTimeSeconds = Math.max(maximumLightTimeSeconds, corrected.lightTimeSeconds)
-          return { positionKm: corrected.positionKm, radiusKm: shape.radiiKm[0] }
-        }
-        const target = position(shape.naifPckId, elapsed)
-        return { positionKm: target.map((value, i) => value-observer[i]), radiusKm: shape.radiiKm[0] }
-      }
-      return sphericalOccultation(body(front), body(back))
-    } })
+  const result = await runOccultationExperiment({ inputBytes: buffer(bytes), spkBytes: buffer(spk), pckBytes: buffer(pck), gmText, signal })
   const implementationSha256 = {}
-  for (const path of ['scripts/find-occultation-contacts.mjs', 'src/engine/events/occultationContacts.ts', 'src/engine/events/sphericalOccultation.ts',
+  for (const path of ['scripts/find-occultation-contacts.mjs', 'src/engine/events/occultationExperiment.ts', 'src/engine/events/occultationContacts.ts', 'src/engine/events/sphericalOccultation.ts',
     'src/data/loaders/pckRadii.ts', 'src/engine/dynamics/de440Dynamics.ts', 'src/engine/ephemeris/spk.ts', 'src/engine/ephemeris/spkType17.ts', 'src/engine/ephemeris/spkType21.ts', 'src/engine/ephemeris/receptionLightTime.ts']) {
     implementationSha256[path] = sha(await readFile(new URL(path, root)))
   }
-  const receipt = { schemaVersion: 1, calculation: aberration === 'CN' ? 'reception-spherical-occultation-contacts' : 'geometric-spherical-occultation-contacts', inputFile: { sha256: sha(bytes), bytes: bytes.length, payload: input },
-    ephemeris: { frame: 'J2000', origin: 'SSB', timeScale: 'TDB', aberration, referenceEpochTdb, kernel: states.evidence.kernel },
-    ephemerisStateRequests,
-    reception: aberration === 'CN' ? { model: 'converged-newtonian-reception', sourceMarginSeconds: marginSeconds,
-      iterationToleranceSeconds: 1e-9, maxIterations: 12, observedMaximumIterations: maximumIterations,
-      observedMaximumResidualSeconds: maximumResidualSeconds, observedMaximumLightTimeSeconds: maximumLightTimeSeconds,
-      limitation: 'Center reception light time only; no stellar aberration, gravitational deflection or differential light time across limbs. Iteration residual is not physical timing uncertainty.' } : null,
-    shapes: { source: shapes.source, foreground: front, background: back, limitations: shapes.limitations }, implementationSha256, ...result,
-    physicalTimingUncertaintySeconds: null }
+  const receipt = { ...result, implementationSha256 }
   if (signal?.aborted) throw new DOMException('Contact search cancelled', 'AbortError')
   await writeFile(outputPath, `${JSON.stringify(receipt, null, 2)}\n`, { flag: 'wx' })
   return { outputPath: resolve(outputPath), contacts: result.contacts.length, evaluations: result.evaluations, possibleMissedEvents: result.possibleMissedEvents }

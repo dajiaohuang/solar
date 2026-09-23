@@ -12,6 +12,7 @@ import { PRODUCT_PROFILE } from '../../lib/productAvailability'
 import { SourceCoverageReport } from './SourceCoverageReport'
 import { OrbitUncertainty } from './OrbitUncertainty'
 import { DynamicsLaboratory } from './DynamicsLaboratory'
+import { OccultationLaboratory } from './OccultationLaboratory'
 
 type ValidationReport = {
   passed?: boolean
@@ -70,6 +71,7 @@ export function EvidenceWorkspace() {
       <SourceCoverageReport />
       <OrbitUncertainty />
       <DynamicsLaboratory />
+      <OccultationLaboratory />
       <section className="evidence-module glass-panel">
         <div className="module-heading"><span>{t('physicalEphemerides')}</span><em>JPL SPK</em></div>
         <p>{t('ephemerisBoundary')}</p><p>{t('ephemerisTimeBoundary')}</p>

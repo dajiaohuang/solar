@@ -47,6 +47,32 @@ astrometry and native/browser event consumers remain unfinished. It does not
 provide a photometric flux loss, uncertainty distribution, event probability,
 ground eclipse path or visibility prediction.
 
+## Browser experiment
+
+**Evidence → Occultation laboratory** runs the same experiment engine as the
+offline CLI in a dedicated worker. Load the Venus example or import a bounded
+64-KiB experiment JSON, inspect its IDs/epoch/window, select NONE or CN, and set
+scan spacing and root tolerance. The imported settings remain inspectable;
+the exported `inputFile` is the effective serialized input after these edits,
+not a claim to preserve the original imported file's bytes. All displayed times
+are relative TDB seconds, not UTC. The browser export includes source hashes,
+model, settings, numerical brackets/windows and build identity. CLI exports
+add individual implementation hashes.
+
+Source loading is bounded to the pinned DE440 byte size; oversized/truncated
+or checksum-mismatched sources fail. A 30-second deadline covers download and
+search. Cancel, parameter edits, replacement imports and unmount terminate the
+worker and invalidate prior results. No state from an old worker can publish
+after replacement. The actual SPK and PCK are checked again in the shared engine.
+
+Twelve focused checks passed across desktop Chromium, mobile Chromium, Firefox
+and WebKit: real CN calculation/export against the independent reference,
+parameter invalidation, cancellation during held source loading, invalid import
+and corrupted SPK rejection. The mobile screenshot was inspected without
+horizontal overflow. The shared CLI retains exactly the previous contacts,
+windows, state-request count and source receipt. This is browser model evidence;
+native event UI, topocentric contacts and the other precision limits remain open.
+
 ## Bounded contact search
 
 `findOccultationContacts` samples external and internal angular gaps, then bisects
