@@ -12,7 +12,7 @@ remain paused. Changes may go directly to main after the required checks.
 | Ground observer | Geodetic station, SOFA-compatible celestial/terrestrial transforms, versioned IERS EOP, vacuum/apparent altitude-azimuth, rise/set and visibility windows; source expiry and uncertainty remain visible | In progress |
 | Orbit uncertainty | Pinned SBDB covariance with labels, units and solution epoch; validated covariance propagation and sampling; uncertainty ellipsoids and event distributions, independent of numerical tolerance | In progress: source ingestion, solution-epoch Cartesian conversion, reproducible sampling and browser inspection; temporal propagation and 3D ellipsoids pending |
 | Occultations and eclipses | Source-backed radii/orientation and stellar astrometry; bounded contact/window search, missed-event and physical-error reporting, independent reference cases | Pending |
-| Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | In progress: bounded numerical integrator and prescribed Newtonian variational equations; actual SPK adapter, additional forces and laboratory UI pending |
+| Dynamics laboratory | Explicit initial conditions, force models and parameters; validated selected-target integration, non-gravitational terms where sourced, resonance/stability diagnostics and reproducible exports | In progress: bounded integration, variational equations, pinned DE440 adapter and offline source-bearing experiments; additional forces, full covariance and laboratory UI pending |
 | Scientific data | Audit and extend useful SPK windows, genuine spacecraft trajectories, non-elliptic comet support, physical parameters and spatially chunked Gaia data; never fabricate missing states or mutate immutable releases | Pending |
 | Catalog streaming | Replace the fixed 8k/30k-only cloud path with cancellable binary chunk loading, priority scheduling and independent byte/decode/compute/upload limits | In progress: full-inventory 2D snapshot, bounded upload batching and spatial display available; continuous/3D streaming and source-priority scheduling pending |
 | Rendering and time | Moving spatial bounds, visibility/LOD, selected-body retention, time/error-budgeted updates, reusable buffers and Float64-relative GPU coordinates; WebGL fallback and native contracts retained | In progress |
@@ -572,6 +572,28 @@ moving perturber. Details and limits are in
 [dynamics-laboratory.md](dynamics-laboratory.md). TypeScript and changed-file lint
 passed. No full local suite ran. Real SPK perturbations, full force models,
 source uncertainty, UI, diagnostics and every unfinished ledger item remain open.
+
+### Checkpoint 19: real SPK-driven restricted dynamics (2026-09-23)
+
+Added a byte-verified, owned DE440 kernel/GM adapter with geometric J2000/SSB/TDB
+states and a frozen full integration window. Its eleven-mass selection separates
+Earth/Moon and never adds their barycenter twice; other planetary systems use
+their explicitly labeled total-GM point-mass representation. Missing state,
+corrupt source, unknown exclusion or uncovered interval fails without fallback.
+
+Independent CSPICE/DOP853 references now include real Eros initial conditions,
+eleven actual perturbing source trajectories, and all 42 state/transition entries
+at backward/forward 10 and forward 30 days. Seven targeted adapter/export tests
+passed, along with TypeScript and changed-file lint. The actual offline CLI
+completed a 30-day Eros experiment in 122 accepted steps / 733 force evaluations
+and exported immutable source/implementation/model evidence. No full local test
+suite or deployment/publication was run.
+
+The source-orbit residual remains visible: about 22 m at 10 days and 191 m at
+30 days for this restricted model, distinct from its much smaller numerical
+disagreement with independent integration. See [dynamics-laboratory.md](dynamics-laboratory.md).
+Full source-fit dynamics, additional parameter covariance, physical uncertainty,
+UI/native access and long-term diagnostics are not delivered by this foundation.
 
 Primary design references: [SOFA](https://www.iausofa.org/cookbooks),
 [IERS EOP](https://data.iers.org/eop.php),

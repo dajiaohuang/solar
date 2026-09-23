@@ -2,9 +2,10 @@
 
 This workstream is incomplete. A bounded adaptive integrator and restricted
 Newtonian force/variational evaluator exist; a source-backed laboratory UI,
-SPK adapter, force-model selection, non-gravitational terms and complete joint
+force-model selection, non-gravitational terms and complete joint
 covariance propagation do not yet exist. Neither module replaces authoritative
 SPK states or reproduces a source orbit-fit model.
+The pinned DE440 adapter and offline experiment command are now implemented.
 
 ## Explicit numerical contract
 
@@ -38,7 +39,7 @@ additional row-major 6x6 matrix, it also integrates the first-order transition
 equation using the analytic acceleration gradient. The source masses are
 prescribed and do not react to the test particle. GM values and source orbits
 are fixed. System barycenters must not be combined with their constituent
-masses; the source adapter still needs to enforce that selection contract.
+masses. The pinned DE440 adapter enforces one non-overlapping selection.
 Relativity, harmonics and non-gravitational effects remain absent. In particular,
 this 6x6 transition matrix must not discard Bennu's RHO/AMRAT axes or be labeled
 as propagation of its complete eight-axis fitted covariance.
@@ -70,10 +71,76 @@ relative tolerance `1e-14` and component absolute tolerance `1e-15`, the three
 reference comparisons each meet `abs(delta)/(1+abs(reference)) < 3e-7`. This is
 an observed numerical agreement criterion for these test coordinates, not a
 unit-independent precision promise. The model has not yet been verified against
-a real perturbed trajectory or a full source force model. No full local suite ran.
+a full source force model. The real-source restricted-model comparison below
+is separate evidence. No full local suite ran.
 
 Reproduce the immutable reference into a new file:
 
 ```sh
 rtk proxy uv run --python 3.12 --with scipy==1.16.1 --with mpmath==1.3.0 python scripts/reference-dynamics.py --output .cache/dynamics-reference-new.json
 ```
+
+## Pinned DE440 dynamics source and offline experiment
+
+`createDe440Dynamics` verifies the original 5,558,272-byte packaged DE440 kernel
+and GM text against fixed SHA-256 values. It takes ownership of a copy before
+asynchronous hashing, so later caller mutations cannot change an experiment.
+The source window is frozen, must include the initial epoch and must fit the
+packaged 2000–2051 coverage. Every source state uses original J2000 segments and
+their complete SSB center chains; no ECLIPJ2000 rotation or UTC conversion is
+introduced. Caller-provided initial vectors must use km and km/s.
+
+The mass plan is fixed: Sun, Mercury and Venus systems, separate Earth and Moon,
+and the Mars-through-Pluto system barycenters. Earth–Moon barycenter 3 is not an
+additional mass; other planetary satellites are not separately added on top of
+their system GM. System point masses do not resolve close planetary-satellite
+encounters. Explicit exclusion distances are numerical experiment boundaries,
+not assumed physical radii. They are checked at force-evaluation instants;
+continuous collision detection is not implemented.
+
+The [CSPICE/DOP853 generator](../scripts/reference-de440-dynamics.py) reads the
+same checksum-pinned original DE440 and Eros SPK files. It independently evaluates
+all eleven perturbing source states in J2000/SSB, initializes Eros at TDB JD
+2461234.5, and integrates six coordinates plus the 36 transition coefficients
+with SciPy 1.16.1 DOP853. The [reference receipt](../tests/fixtures/de440-dynamics-reference.json)
+retains source hashes, CSPICE versions, force constants, all results and
+independent source-orbit states. CSPICE text-kernel parsing and JavaScript decimal
+conversion differ by a few last bits in some GM values; this difference is
+retained and tested within a relative `2e-15`, not hidden as bitwise identity.
+
+Seven focused source/experiment tests passed. The real-source state comparisons
+against CSPICE meet `2e-6` km and `1e-10` km/s per component. For backward 10,
+forward 10 and forward 30 days, application integrations agree with DOP853 within
+`1e-4` km in position norm and `3e-10` in the recorded normalized state/transition
+entry metric. DOP853 refinement from relative `1e-12` to `1e-13` changed that
+metric by at most `2.19e-15` in these examples.
+
+The restricted model does **not** reproduce Eros's source-fit trajectory:
+position residuals against the original SPK were 22.70 m (backward 10 days),
+21.79 m (forward 10 days) and 190.50 m (forward 30 days). These are model
+discrepancies for this comparison, not integration tolerances or a physical
+uncertainty estimate. Missing relativistic, harmonic, small-asteroid and sourced
+non-gravitational terms still need model-specific treatment and independent
+validation. No empirical correction is applied to hide the residuals.
+
+The offline CLI reads an explicit initial-condition JSON with `schemaVersion: 1`,
+`frame: "J2000"`, `origin: "SSB"`, `timeScale: "TDB"`, `referenceEpochTdb`, six
+`initial` coordinates in km/km/s, and an `initialSource` description. Extra source
+metadata remains in the receipt. This declaration identifies the caller's input;
+it does not authenticate arbitrary initial states. The command requires explicit
+model adoption, signed duration within 365 days and an exclusion distance:
+
+```sh
+rtk proxy node --experimental-strip-types scripts/run-dynamics.mjs initial.json new-experiment.json --adopt-de440-point-masses --duration-seconds 2592000 --exclusion-km 1
+```
+
+Outputs are exclusive-created JSON containing original input hash/bytes/payload,
+force/source evidence, implementation hashes, split reference epoch plus elapsed
+TDB seconds, final state, transition matrix and numerical diagnostics. SIGINT
+cancels the experiment; a failed/cancelled integration does not emit a successful
+partial result. An actual local Eros 30-day run completed with 122 accepted steps
+and 733 force evaluations. No source was downloaded, published or deployed.
+
+The laboratory still needs user-facing/native access, richer force models,
+complete joint parameter covariance propagation, long-term diagnostics and
+model-validity/physical-error evidence. This CLI does not complete those goals.

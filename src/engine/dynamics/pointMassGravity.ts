@@ -72,6 +72,7 @@ export function createPointMassGravity(inputMasses: readonly PointMass[], epheme
     limitations: ['Force parameters and prescribed mass trajectories are fixed.',
       'No relativistic, harmonic, non-gravitational or test-particle back-reaction forces.',
       'No physical uncertainty, event probability or full orbit-fit model equivalence is established.',
+      'Exclusion distances are checked at force evaluations; continuous collision detection is not implemented.',
       'Caller must avoid overlapping system-barycenter and constituent mass representations.'],
   } }
 }
