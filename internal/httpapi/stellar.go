@@ -12,8 +12,8 @@ import (
 	"github.com/dajiaohuang/solar/backend/internal/stellarmotion"
 )
 
-// Includes base64 expansion of the 1 MiB manifest and 8 MiB CSV plus wire metadata.
-const stellarRequestBytes = 13 << 20
+// Includes base64 expansion of the 1 MiB manifest and 16 MiB CSV plus wire metadata.
+const stellarRequestBytes = 26 << 20
 
 func (s *Server) stellarMotion(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
@@ -31,7 +31,7 @@ func (s *Server) stellarMotion(w http.ResponseWriter, r *http.Request) {
 	if err := decoder.Decode(&wire); err != nil {
 		var limit *http.MaxBytesError
 		if errors.As(err, &limit) {
-			s.error(w, 413, "stellar_request_too_large", "stellar request exceeds 13 MiB")
+			s.error(w, 413, "stellar_request_too_large", "stellar request exceeds 26 MiB")
 		} else {
 			s.error(w, 400, "invalid_stellar_request", "expected bounded original-source bytes and known fields")
 		}

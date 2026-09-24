@@ -1,18 +1,26 @@
+import capacity from '../data/gaiaCapacity.json'
+
 /** Session-only encoded source bytes. LRU limits exclude active decode/GPU memory. */
 export class GaiaSourceCache {
   private entries = new Map<string, Uint8Array>()
   private size = 0
   readonly maxBytes: number
   readonly maxEntries: number
-  constructor(maxBytes = 16*1024*1024, maxEntries = 128) {
-    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 64*1024*1024 || !Number.isSafeInteger(maxEntries) || maxEntries < 1 || maxEntries > 2592) throw new Error('Invalid Gaia cache budget')
+  constructor(maxBytes = capacity.defaultCacheBytes, maxEntries = 128) {
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > capacity.maxCacheBytes || !Number.isSafeInteger(maxEntries) || maxEntries < 1 || maxEntries > 2592) throw new Error('Invalid Gaia cache budget')
     this.maxBytes = maxBytes; this.maxEntries = maxEntries
   }
   get retainedBytes() { return this.size }
   get count() { return this.entries.size }
-  get(hash: string): Uint8Array | undefined {
+  get(hash: string, expectedBytes?: number): Uint8Array | undefined {
+    if (expectedBytes !== undefined && (!Number.isSafeInteger(expectedBytes) || expectedBytes < 1)) throw new Error('Invalid Gaia cache expected byte length')
     const bytes = this.entries.get(hash)
     if (!bytes) return
+    // Reject mismatched entries before allocating a copy outside the caller's reservation.
+    if (expectedBytes !== undefined && bytes.byteLength !== expectedBytes) {
+      this.delete(hash)
+      return
+    }
     this.entries.delete(hash); this.entries.set(hash,bytes)
     return bytes.slice()
   }

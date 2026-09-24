@@ -29,7 +29,7 @@ final class StellarSourceImport {
     static byte[] read(InputStream stream,int limit,BooleanSupplier cancelled) throws IOException {
         if(stream==null)throw new IOException("Source file unavailable");
         try(InputStream input=stream;ByteArrayOutputStream output=new ByteArrayOutputStream()){
-            if(limit!=1024*1024 && limit!=8*1024*1024)throw new IOException("Unsupported source byte budget");
+            if(limit!=1024*1024 && limit!=2*1024*1024 && limit!=16*1024*1024)throw new IOException("Unsupported source byte budget");
             byte[] chunk=new byte[16384];
             while(true){
                 check(cancelled);int count=input.read(chunk);check(cancelled);

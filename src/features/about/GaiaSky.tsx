@@ -1,56 +1,133 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../../i18n/context'
 import type { GaiaManifest, GaiaSource, streamGaiaChunks } from '../../lib/gaiaChunks'
 import { saveTextExport } from '../../lib/platform'
 import { BUILD_INFO } from '../../lib/buildInfo'
 import { GaiaPlot, type GaiaDisplayBatch } from './GaiaPlot'
+import capacity from '../../data/gaiaCapacity.json'
 import { gaiaAstrometricCovariance } from '../../lib/gaiaAstrometricCovariance'
 import { gaiaPositionUncertainty } from '../../lib/gaiaUncertainty'
+import { validateGaiaLoadRequest, type GaiaLoadRequest, type GaiaWorkerResponse } from '../../workers/gaia.protocol'
 
 type Summary = Awaited<ReturnType<typeof streamGaiaChunks>>
 export function GaiaSky() {
   const { language } = useI18n(), zh = language === 'zh'
   const [url, setUrl] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState('')
   const [manifest, setManifest] = useState<GaiaManifest | null>(null), [manifestHash, setManifestHash] = useState('')
+  const [originalManifest, setOriginalManifest] = useState<{ encoding: 'utf-8'; byteLength: number; text: string } | null>(null)
   const [batches, setBatches] = useState<GaiaDisplayBatch[]>([]), [summary, setSummary] = useState<Summary | null>(null)
   const [zoom, setZoom] = useState(1), [selected, setSelected] = useState(0), [count, setCount] = useState(0)
   const [source, setSource] = useState<GaiaSource | null>(null)
-  const sixParameterCovariance = source ? gaiaAstrometricCovariance(source,6) : null
-  const astrometricCovariance = source ? gaiaAstrometricCovariance(source) : null
-  const uncertainty = source ? gaiaPositionUncertainty(source) : null
+  const sixParameterCovariance = useMemo(() => source ? gaiaAstrometricCovariance(source,6) : null, [source])
+  const astrometricCovariance = useMemo(() => source ? gaiaAstrometricCovariance(source) : null, [source])
+  const uncertainty = useMemo(() => source ? gaiaPositionUncertainty(source) : null, [source])
   const worker = useRef<Worker | null>(null), generation = useRef(0), sources = useRef<GaiaSource[]>([])
   const idleWorker = useRef<Worker | null>(null)
+  const uploadState = useRef<{ pending: number | null; acknowledged: number }>({ pending: null, acknowledged: 0 })
   const clear = useCallback(() => {
     generation.current++; worker.current?.terminate(); worker.current = null; sources.current = []
+    uploadState.current = { pending: null, acknowledged: 0 }
+    setOriginalManifest(null)
     setBusy(false); setError(''); setManifest(null); setManifestHash(''); setBatches([]); setSummary(null); setZoom(1); setSelected(0); setCount(0); setSource(null)
   }, [])
   const fail = useCallback((message: string) => { clear(); setError(message) }, [clear])
-  const uploaded = useCallback((sequence: number) => { worker.current?.postMessage({ type:'ack', sequence }) }, [])
-  const select = (index: number) => { setSelected(index); setSource(sources.current[index]) }
+  const chartGeneration = generation.current
+  const uploaded = useCallback((sequence: number) => {
+    if (generation.current !== chartGeneration || !worker.current) return
+    const state = uploadState.current
+    // Effect replay can upload retained batches again. It must not release a
+    // different chunk's backpressure reservation.
+    if (Number.isSafeInteger(sequence) && sequence > 0 && sequence <= state.acknowledged) return
+    if (sequence !== state.pending) { fail('Gaia upload acknowledgement differs from pending chunk'); return }
+    try {
+      worker.current.postMessage({ type:'ack', sequence })
+      state.acknowledged = sequence; state.pending = null
+    } catch (error) { fail(String(error)) }
+  }, [chartGeneration, fail])
+  const chartError = useCallback((message: string) => {
+    if (generation.current === chartGeneration) fail(message)
+  }, [chartGeneration, fail])
+  const select = (index: number) => {
+    if (generation.current !== chartGeneration || !Number.isSafeInteger(index) || index < 0 || index >= sources.current.length) return
+    setSelected(index); setSource(sources.current[index])
+  }
   useEffect(() => () => { generation.current++; worker.current?.terminate(); idleWorker.current?.terminate() }, [])
-  const run = (input: { files: File[] } | { manifestUrl: string }) => {
+  const run = (input: GaiaLoadRequest) => {
     clear()
     try {
+      const request = validateGaiaLoadRequest(input)
       const active = idleWorker.current ?? new Worker(new URL('../../workers/gaia.worker.ts', import.meta.url), { type:'module' })
       idleWorker.current = null
       worker.current = active; setBusy(true)
+      let receivedManifest: GaiaManifest | null = null, lastSequence = 0, expectedBytes = 0
+      const expectedChunks = new Map<string, number>(), receivedChunks = new Set<string>()
       const onMessage = (event: MessageEvent) => {
         if (worker.current !== active) return
-        const message = event.data
-        if (message.type === 'manifest') { setManifest(message.manifest); setManifestHash(message.manifestSha256) }
+        const message = event.data as GaiaWorkerResponse
+        if (!message || typeof message !== 'object' || !['manifest','chunk','done','error'].includes(message.type)) {
+          fail('Invalid Gaia worker response'); return
+        }
+        if (message.type === 'manifest') {
+          const next = message.manifest as GaiaManifest | undefined
+          if (receivedManifest || !next || !Number.isSafeInteger(next.rows) || next.rows < 0 || next.rows > capacity.maxCatalogRows ||
+              !Array.isArray(next.chunks) || next.chunks.length > capacity.maxChunks ||
+              typeof message.originalManifestJson !== 'string' || message.originalManifestJson.length > 1024*1024 ||
+              !Number.isSafeInteger(message.manifestBytes) || message.manifestBytes < 1 || message.manifestBytes > 1024*1024 ||
+              new TextEncoder().encode(message.originalManifestJson).byteLength !== message.manifestBytes ||
+              typeof message.manifestSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(message.manifestSha256)) {
+            fail('Invalid Gaia manifest response'); return
+          }
+          let rows = 0
+          for (const chunk of next.chunks) {
+            if (!chunk || typeof chunk.path !== 'string' || expectedChunks.has(chunk.path) ||
+                !Number.isSafeInteger(chunk.rows) || chunk.rows < 1 || chunk.rows > capacity.maxChunkRows ||
+                !Number.isSafeInteger(chunk.bytes) || chunk.bytes < 1 || chunk.bytes > capacity.maxChunkBytes) {
+              fail('Invalid Gaia manifest chunk counts'); return
+            }
+            expectedChunks.set(chunk.path, chunk.rows); rows += chunk.rows; expectedBytes += chunk.bytes
+          }
+          if (rows !== next.rows) { fail('Gaia manifest response row count mismatch'); return }
+          receivedManifest = next; setManifest(next); setManifestHash(message.manifestSha256)
+          setOriginalManifest({ encoding: 'utf-8', byteLength: message.manifestBytes, text: message.originalManifestJson })
+        }
         else if (message.type === 'chunk') {
+          if (!receivedManifest || uploadState.current.pending !== null || message.sequence !== lastSequence+1 || !expectedChunks.has(message.path) || receivedChunks.has(message.path) ||
+              !Array.isArray(message.sources) || message.sources.length !== expectedChunks.get(message.path) ||
+              sources.current.length+message.sources.length > receivedManifest.rows ||
+              !(message.display instanceof Float32Array) || message.display.length !== message.sources.length*3 || !message.display.every(Number.isFinite)) {
+            fail('Gaia chunk response exceeds or differs from its manifest'); return
+          }
+          lastSequence = message.sequence; receivedChunks.add(message.path)
+          uploadState.current.pending = message.sequence
           if (!sources.current.length) setSource(message.sources[0] ?? null)
           sources.current.push(...message.sources); setCount(sources.current.length)
           setBatches(previous => [...previous, { sequence:message.sequence, display:message.display }])
         } else if (message.type === 'done') {
+          const complete = message.summary as Summary | undefined
+          if (!receivedManifest || uploadState.current.pending !== null || uploadState.current.acknowledged !== lastSequence ||
+              receivedChunks.size !== expectedChunks.size || sources.current.length !== receivedManifest.rows ||
+              !complete || complete.verifiedRows !== sources.current.length || complete.verifiedChunks !== receivedChunks.size ||
+              complete.totalBytes !== expectedBytes ||
+              ![complete.cacheHits, complete.cacheHitBytes, complete.sourceReadChunks, complete.sourceReadBytes].every(value => Number.isSafeInteger(value) && value >= 0) ||
+              complete.cacheHits+complete.sourceReadChunks !== receivedChunks.size || complete.cacheHitBytes+complete.sourceReadBytes !== expectedBytes ||
+              complete.sourceReadSemantics !== 'verified-chunk-source-bytes-excluding-manifest-and-transport-overhead' ||
+              complete.selectedChunks !== expectedChunks.size || complete.catalogCompletenessCertified !== false || complete.epochJulianYear !== 2016 ||
+              !complete.selection || complete.selection.allManifestChunksVerified !== true || complete.selection.omittedManifestChunks !== 0 ||
+              !Array.isArray(complete.selection.selectedPaths) || complete.selection.selectedPaths.length !== expectedChunks.size ||
+              new Set(complete.selection.selectedPaths).size !== expectedChunks.size || complete.selection.selectedPaths.some(path => !receivedChunks.has(path))) {
+            fail('Gaia completion response differs from received chunks'); return
+          }
           active.removeEventListener('message',onMessage); active.removeEventListener('error',onError)
+          active.removeEventListener('messageerror',onMessageError)
           idleWorker.current = active; worker.current = null; setBusy(false); setSummary(message.summary)
         }
         else if (message.type === 'error') fail(message.error)
       }
       const onError = (event: ErrorEvent) => { if (worker.current === active) fail(event.message || 'Gaia worker failed') }
+      const onMessageError = () => { if (worker.current === active) fail('Gaia worker response could not be decoded') }
       active.addEventListener('message',onMessage); active.addEventListener('error',onError)
-      active.postMessage(input)
+      active.addEventListener('messageerror',onMessageError)
+      active.postMessage(request)
     } catch (error) { fail(String(error)) }
   }
   const example = async () => {
@@ -74,7 +151,7 @@ export function GaiaSky() {
     {manifest && <>
       <figure style={{ margin:'1rem 0' }}>
         <div style={{ position:'relative', border:'1px solid #28485b', overflow:'hidden' }}>
-          <GaiaPlot capacity={manifest.rows} batches={batches} zoom={zoom} onUploaded={uploaded} onError={fail} onSelect={select} />
+          <GaiaPlot key={chartGeneration} capacity={manifest.rows} batches={batches} zoom={zoom} onUploaded={uploaded} onError={chartError} onSelect={select} />
           <div aria-hidden="true" style={{ position:'absolute', inset:0, pointerEvents:'none', background:'linear-gradient(transparent calc(50% - .5px),#28485b88 50%,transparent calc(50% + .5px)),linear-gradient(90deg,transparent calc(50% - .5px),#28485b88 50%,transparent calc(50% + .5px))' }} />
           <span style={{ position:'absolute', top:8, left:'50%', color:'#96b4c5', pointerEvents:'none' }}>{zh ? '北' : 'N'}</span>
           <span style={{ position:'absolute', left:8, top:'50%', color:'#96b4c5', pointerEvents:'none' }}>{zh ? '东' : 'E'}</span>
@@ -99,7 +176,10 @@ export function GaiaSky() {
         </div>
       </div>}
       {summary && <div data-testid="gaia-complete"><p>{summary.verifiedRows} {zh ? '条来源记录已加载' : 'source records loaded'} · {summary.verifiedChunks} {zh ? '个分块' : 'chunks'}</p>
-        <button className="secondary-button" onClick={() => { void saveTextExport(JSON.stringify({ manifest, manifestSha256:manifestHash, summary, build:BUILD_INFO, projection:'gnomonic-display-only', selectedSixParameterCovariance:source ? {sourceId:source.source_id,...sixParameterCovariance} : null, selectedAstrometricCovariance:source ? {sourceId:source.source_id,...astrometricCovariance} : null, selectedPositionUncertainty:source ? {sourceId:source.source_id,...uncertainty} : null, sources:sources.current },null,2),'solar-gaia-sky.json','application/json').catch(error => setError(String(error))) }}>{zh ? '导出 Gaia 记录与来源' : 'Export Gaia records and sources'}</button>
+        <p>{summary.selection.allManifestChunksVerified
+          ? (zh ? '已校验此清单的全部分块；不代表覆盖全天或完整星表。' : 'All chunks in this manifest were verified; this does not establish whole-sky or catalog completeness.')
+          : (zh ? '仅校验与筛选天区相交的分块；未检查其余分块。' : 'Only intersecting chunks were verified; omitted chunks were not inspected.')}</p>
+        <button className="secondary-button" onClick={() => { const exportGeneration = generation.current; void saveTextExport(JSON.stringify({ manifest, manifestSha256:manifestHash, originalManifest, summary, build:BUILD_INFO, projection:'gnomonic-display-only', selectedSixParameterCovariance:source ? {sourceId:source.source_id,...sixParameterCovariance} : null, selectedAstrometricCovariance:source ? {sourceId:source.source_id,...astrometricCovariance} : null, selectedPositionUncertainty:source ? {sourceId:source.source_id,...uncertainty} : null, sources:sources.current },null,2),'solar-gaia-sky.json','application/json').catch(error => { if (exportGeneration === generation.current) setError(String(error)) }) }}>{zh ? '导出 Gaia 记录与来源' : 'Export Gaia records and sources'}</button>
       </div>}
       <p>{zh ? '未应用自行传播、观测者视差、光行差、偏折或视差零点改正。星等筛选不是完整性保证；GPU 显示精度不是科学测量精度。' : 'No proper-motion propagation, observer parallax, aberration, deflection or parallax zero-point correction is applied. Magnitude selection is not a completeness guarantee; GPU display precision is not scientific measurement accuracy.'}</p>
       <p className="checksum">SHA-256 {manifestHash}</p>

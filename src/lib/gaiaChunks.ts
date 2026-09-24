@@ -1,10 +1,11 @@
 import { readBounded } from './stateTiles'
 import columns from '../data/gaiaColumns.json'
 import columnsV2 from '../data/gaiaColumnsV2.json'
+import capacity from '../data/gaiaCapacity.json'
 import type { GaiaSourceCache } from './gaiaCache'
 
 export type GaiaChunkDescriptor = { path: string; sha256: string; bytes: number; rows: number; raRangeDeg: [number, number]; decRangeDeg: [number, number] }
-export type GaiaManifest = { schemaVersion: 1 | 2; catalog: 'Gaia DR3'; frame: 'ICRS'; referenceEpochJulianYear: 2016; referenceEpochTimeScale: 'TCB'; rows: number; chunks: GaiaChunkDescriptor[]; catalogCompletenessCertified: false; settings: { raDeg: number; decDeg: number; radiusDeg: number; maxMagnitude: number; maxRows: number } }
+export type GaiaManifest = { schemaVersion: 1 | 2; catalog: 'Gaia DR3'; frame: 'ICRS'; referenceEpochJulianYear: 2016; referenceEpochTimeScale: 'TCB'; rows: number; chunks: GaiaChunkDescriptor[]; catalogCompletenessCertified: false; queryCountMatched?: true; rowCountEvidence?: { method: 'top-plus-one-sentinel'; limit: number; returnedRows: number; overflow: false }; settings: { raDeg: number; decDeg: number; radiusDeg: number; maxMagnitude: number; maxRows: number } }
 export type GaiaSkyRegion = { raStartDeg: number; raEndDeg: number; decMinDeg: number; decMaxDeg: number; epochJulianYear: 2016 }
 export type GaiaSource = { source_id: string; ref_epoch: number; ra: number; dec: number; phot_g_mean_mag: number; [field: string]: string | number | null }
 export type GaiaChunk = { descriptor: GaiaChunkDescriptor; sources: GaiaSource[]; directionsICRS: Float64Array }
@@ -19,27 +20,41 @@ const cancelled = (signal: AbortSignal) => { if (signal.aborted) throw new DOMEx
 function consumeUntilAbort(consume: () => Promise<void>, signal: AbortSignal): Promise<void> {
   cancelled(signal)
   return new Promise<void>((resolve, reject) => {
-    const abort = () => reject(new DOMException('Gaia loading cancelled', 'AbortError'))
+    let settled = false
+    const finish = (failed: boolean, error?: unknown) => {
+      if (settled) return
+      settled = true
+      signal.removeEventListener('abort', abort)
+      if (failed) reject(error)
+      else resolve()
+    }
+    const abort = () => finish(true, new DOMException('Gaia loading cancelled', 'AbortError'))
     signal.addEventListener('abort', abort, { once: true })
-    Promise.resolve().then(() => { cancelled(signal); return consume() }).then(resolve, reject).finally(() => signal.removeEventListener('abort', abort))
+    if (signal.aborted) { abort(); return }
+    Promise.resolve().then(() => { cancelled(signal); return consume() }).then(() => finish(false), error => finish(true, error))
   })
 }
 export async function gaiaHash(bytes: Uint8Array) {
   return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>)), v => v.toString(16).padStart(2, '0')).join('')
 }
 export function decodeGaiaManifest(bytes: Uint8Array): GaiaManifest {
-  if (bytes.byteLength < 1 || bytes.byteLength > 1024*1024) throw new Error('Gaia manifest size exceeds budget')
+  if (bytes.byteLength < 1 || bytes.byteLength > capacity.maxManifestBytes) throw new Error('Gaia manifest size exceeds budget')
   const m = object(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)))
   const settings = object(m.settings)
   if (!number(settings.raDeg) || settings.raDeg < 0 || settings.raDeg >= 360 || !number(settings.decDeg) || Math.abs(settings.decDeg) > 90 || !number(settings.radiusDeg) || settings.radiusDeg <= 0 || settings.radiusDeg > 2
-    || !number(settings.maxMagnitude) || settings.maxMagnitude < 3 || settings.maxMagnitude > 20 || !integer(settings.maxRows, 1, 10000)) throw new Error('Invalid Gaia cone selection')
+    || !number(settings.maxMagnitude) || settings.maxMagnitude < 3 || settings.maxMagnitude > 20 || !integer(settings.maxRows, 1, capacity.maxCatalogRows)) throw new Error('Invalid Gaia cone selection')
+  const rowCountEvidence = m.rowCountEvidence === undefined ? undefined : object(m.rowCountEvidence)
+  const completeBySentinel = rowCountEvidence?.method === 'top-plus-one-sentinel' && rowCountEvidence.limit === settings.maxRows+1
+    && rowCountEvidence.returnedRows === m.rows && rowCountEvidence.overflow === false
+  const countMatched = m.queryCountMatched === true
   if ((m.schemaVersion !== 1 && m.schemaVersion !== 2) || m.catalog !== 'Gaia DR3' || m.table !== 'gaiadr3.gaia_source' || m.frame !== 'ICRS' || m.referenceEpochJulianYear !== 2016 || m.referenceEpochTimeScale !== 'TCB'
-    || m.catalogCompletenessCertified !== false || m.queryCountMatched !== true || !integer(m.rows, 0, 10000) || !Array.isArray(m.chunks) || m.chunks.length > 2592) throw new Error('Gaia source frame or manifest contract mismatch')
+    || m.catalogCompletenessCertified !== false || !integer(m.rows, 0, capacity.maxCatalogRows) || (!countMatched && !completeBySentinel)
+    || (m.rowCountEvidence !== undefined && !completeBySentinel) || !Array.isArray(m.chunks) || m.chunks.length > capacity.maxChunks) throw new Error('Gaia source frame or manifest contract mismatch')
   if (JSON.stringify(m.columns) !== JSON.stringify(m.schemaVersion === 2 ? columnsV2 : columns)) throw new Error('Gaia manifest columns mismatch')
   const paths = new Set<string>(); let rows = 0
   for (const item of m.chunks) {
     const c = object(item), match = typeof c.path === 'string' && /^r(\d+)-d(\d+)\.json$/.exec(c.path)
-    if (!match || paths.has(c.path as string) || !integer(c.bytes, 1, 8*1024*1024) || !integer(c.rows, 1, 10000) || typeof c.sha256 !== 'string' || !hashPattern.test(c.sha256)
+    if (!match || paths.has(c.path as string) || !integer(c.bytes, 1, capacity.maxChunkBytes) || !integer(c.rows, 1, capacity.maxChunkRows) || typeof c.sha256 !== 'string' || !hashPattern.test(c.sha256)
       || !pair(c.raRangeDeg) || !pair(c.decRangeDeg)) throw new Error('Invalid Gaia chunk descriptor')
     const ra = Number(match[1]), dec = Number(match[2])
     if (ra > 71 || dec > 35 || c.raRangeDeg[0] !== ra*5 || c.raRangeDeg[1] !== (ra+1)*5 || c.decRangeDeg[0] !== dec*5-90 || c.decRangeDeg[1] !== (dec+1)*5-90) throw new Error('Gaia spatial bin mismatch')
@@ -60,11 +75,12 @@ export function selectGaiaChunks(manifest: GaiaManifest, region: GaiaSkyRegion) 
     || touchesSeam && (c.raRangeDeg[0] === 0 || c.raRangeDeg[1] === 360)
     || intervals.some(([start,end]) => c.raRangeDeg[0] <= end && c.raRangeDeg[1] >= start)))
 }
-async function decodeChunk(bytes: Uint8Array, descriptor: GaiaChunkDescriptor, settings: GaiaManifest['settings'], signal: AbortSignal, schemaVersion: 1 | 2): Promise<GaiaChunk> {
+/** Private decode path: the scheduler checks the owned bytes against the
+ * descriptor hash once before entering this parser, for cache and network alike. */
+async function decodeVerifiedChunk(bytes: Uint8Array, descriptor: GaiaChunkDescriptor, settings: GaiaManifest['settings'], signal: AbortSignal, schemaVersion: 1 | 2): Promise<GaiaChunk> {
   const expectedColumns = schemaVersion === 2 ? columnsV2 : columns
   cancelled(signal)
-  if (bytes.byteLength !== descriptor.bytes || await gaiaHash(bytes) !== descriptor.sha256) throw new Error('Gaia chunk source hash mismatch')
-  cancelled(signal)
+  if (bytes.byteLength !== descriptor.bytes) throw new Error('Gaia chunk source size mismatch')
   const data = object(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)))
   if (data.key !== descriptor.path.slice(0,-5) || JSON.stringify(data.raRangeDeg) !== JSON.stringify(descriptor.raRangeDeg) || JSON.stringify(data.decRangeDeg) !== JSON.stringify(descriptor.decRangeDeg)
     || !Array.isArray(data.sources) || data.sources.length !== descriptor.rows) throw new Error('Gaia chunk descriptor mismatch')
@@ -88,18 +104,29 @@ async function decodeChunk(bytes: Uint8Array, descriptor: GaiaChunkDescriptor, s
     directions[index*3] = cos*Math.cos(ra); directions[index*3+1] = cos*Math.sin(ra); directions[index*3+2] = Math.sin(dec)
   }
   cancelled(signal)
-  return { descriptor, sources: data.sources as GaiaSource[], directionsICRS: directions }
+  // Consumers own this copy. Mutating callback metadata must not alter the
+  // scheduler's reservation release, counts or the pinned manifest snapshot.
+  return { descriptor: { ...descriptor, raRangeDeg: [...descriptor.raRangeDeg], decRangeDeg: [...descriptor.decRangeDeg] }, sources: data.sources as GaiaSource[], directionsICRS: directions }
 }
 
-/** Bounded parallel waves. Awaiting the consumer is the decode/upload backpressure
- * boundary; retained consumer/GPU storage is outside these in-flight budgets. */
+/** Rolling bounded admission. Awaiting the consumer is the decode/upload backpressure
+ * boundary; retained consumer/GPU storage is outside these in-flight budgets.
+ * Consumers receive the batch signal so pending uploads can release their own
+ * callbacks immediately when another chunk fails or reaches its deadline. */
 export async function streamGaiaChunks(options: {
   manifest: GaiaManifest; region: GaiaSkyRegion; baseUrl: string; signal: AbortSignal
-  onChunk: (chunk: GaiaChunk) => Promise<void>; fetcher?: typeof fetch
+  onChunk: (chunk: GaiaChunk, signal: AbortSignal) => Promise<void>; fetcher?: typeof fetch
+  /** Return owned bytes that will not be mutated after resolution. Called only
+   * after reserving the descriptor budget; must honor the supplied signal. */
+  readChunk?: (path: string, expectedBytes: number, signal: AbortSignal) => Promise<Uint8Array>
   cache?: GaiaSourceCache
   concurrency?: number; maxInFlightBytes?: number; maxInFlightRows?: number; maxTotalBytes?: number
 }) {
-  const { region, signal, onChunk, cache, fetcher = fetch, concurrency = 2, maxInFlightBytes = 16*1024*1024, maxInFlightRows = 20000, maxTotalBytes = 64*1024*1024 } = options
+  // Let small shards overlap more; encoded-byte and row reservations still cap total in-flight work.
+  const { signal, onChunk, cache, readChunk, fetcher = fetch, concurrency = 4, maxInFlightBytes = capacity.defaultInFlightBytes, maxInFlightRows = capacity.defaultInFlightRows, maxTotalBytes = capacity.maxSelectedBytes } = options
+  cancelled(signal)
+  if (readChunk && options.fetcher) throw new Error('Choose one Gaia chunk source reader')
+  const region: GaiaSkyRegion = { ...options.region }
   // Own one validated snapshot so caller edits cannot change in-flight paths or budgets.
   const manifest = decodeGaiaManifest(new TextEncoder().encode(JSON.stringify(options.manifest)))
   if (!integer(concurrency, 1, 8) || !integer(maxInFlightBytes, 1, 64*1024*1024) || !integer(maxInFlightRows, 1, 100000) || !integer(maxTotalBytes, 1, 1024*1024*1024)) throw new Error('Invalid Gaia loading budget')
@@ -110,45 +137,101 @@ export async function streamGaiaChunks(options: {
   const controller = new AbortController(), abort = () => controller.abort()
   signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort()
   let verifiedRows = 0, verifiedChunks = 0, peakReservedBytes = 0, peakReservedRows = 0, cacheHits = 0
+  let cacheHitBytes = 0, sourceReadChunks = 0, sourceReadBytes = 0
   const sourceIds = new Set<string>()
+  const active = new Set<Promise<void>>()
+  let reservedBytes = 0, reservedRows = 0, peakActiveChunks = 0
+  let failed = false, failure: unknown
+  let consume = Promise.resolve()
+  const launch = (descriptor: GaiaChunkDescriptor) => {
+    reservedBytes += descriptor.bytes; reservedRows += descriptor.rows
+    peakReservedBytes = Math.max(peakReservedBytes, reservedBytes)
+    peakReservedRows = Math.max(peakReservedRows, reservedRows)
+    const job = (async () => {
+      const deadline = performance.now() + 30000
+      const check = () => {
+        if (performance.now() >= deadline) {
+          const error = new Error('Gaia chunk deadline exceeded')
+          controller.abort(error)
+          throw error
+        }
+        cancelled(controller.signal)
+      }
+      const timeout = setTimeout(abort, 30000)
+      try {
+        check()
+        let bytes = cache?.get(descriptor.sha256, descriptor.bytes)
+        if (bytes && (bytes.byteLength !== descriptor.bytes || await gaiaHash(bytes) !== descriptor.sha256)) { cache?.delete(descriptor.sha256); bytes = undefined }
+        check()
+        const cached = Boolean(bytes)
+        if (!bytes) {
+          if (readChunk) {
+            bytes = await readChunk(descriptor.path, descriptor.bytes, controller.signal)
+          } else {
+            const response = await fetcher(new URL(descriptor.path, base), { signal: controller.signal, redirect: 'error' })
+            try { check() } catch (error) { await response.body?.cancel().catch(() => undefined); throw error }
+            if (!response.ok) { await response.body?.cancel().catch(() => undefined); throw new Error(`Gaia chunk HTTP ${response.status}`) }
+            bytes = await readBounded(response, 'application/json', descriptor.bytes, controller.signal)
+          }
+          check()
+          if (!(bytes instanceof Uint8Array) || bytes.byteLength !== descriptor.bytes || await gaiaHash(bytes) !== descriptor.sha256) throw new Error('Gaia chunk source hash mismatch')
+        }
+        check()
+        const chunk = await decodeVerifiedChunk(bytes, descriptor, manifest.settings, controller.signal, manifest.schemaVersion)
+        check()
+        for (const source of chunk.sources) {
+          if (sourceIds.has(source.source_id)) throw new Error('Duplicate Gaia source across chunks')
+          sourceIds.add(source.source_id)
+        }
+        check()
+        if (cached) { cacheHits++; cacheHitBytes += descriptor.bytes }
+        else { sourceReadChunks++; sourceReadBytes += descriptor.bytes; cache?.put(descriptor.sha256,bytes) }
+        consume = consume.then(async () => { check(); await consumeUntilAbort(() => { check(); return onChunk(chunk, controller.signal) }, controller.signal); check(); verifiedRows += descriptor.rows; verifiedChunks++ })
+        await consume
+      } finally { clearTimeout(timeout) }
+    })().catch(error => {
+      if (!failed) { failed = true; failure = error }
+      abort()
+    }).finally(() => {
+      reservedBytes -= descriptor.bytes; reservedRows -= descriptor.rows
+      active.delete(job)
+    })
+    active.add(job)
+    peakActiveChunks = Math.max(peakActiveChunks, active.size)
+  }
   try {
     let offset = 0
-    while (offset < selected.length) {
+    while (offset < selected.length || active.size) {
+      if (failed) throw failure
       cancelled(controller.signal)
-      const wave: GaiaChunkDescriptor[] = []; let bytes = 0, rows = 0
-      while (offset < selected.length && wave.length < concurrency) {
+      while (offset < selected.length && active.size < concurrency) {
         const next = selected[offset]
-        if (bytes+next.bytes > maxInFlightBytes || rows+next.rows > maxInFlightRows) break
-        wave.push(next); offset++; bytes += next.bytes; rows += next.rows
+        if (reservedBytes+next.bytes > maxInFlightBytes || reservedRows+next.rows > maxInFlightRows) break
+        launch(next); offset++
       }
-      peakReservedBytes = Math.max(peakReservedBytes, bytes); peakReservedRows = Math.max(peakReservedRows, rows)
-      let consume = Promise.resolve()
-      const jobs = wave.map(async descriptor => {
-        const timeout = setTimeout(abort, 30000)
-        try {
-          let bytes = cache?.get(descriptor.sha256)
-          if (bytes && (bytes.byteLength !== descriptor.bytes || await gaiaHash(bytes) !== descriptor.sha256)) { cache?.delete(descriptor.sha256); bytes = undefined }
-          cancelled(controller.signal)
-          const cached = Boolean(bytes)
-          if (!bytes) {
-            const response = await fetcher(new URL(descriptor.path, base), { signal: controller.signal, redirect: 'error' })
-            if (!response.ok) throw new Error(`Gaia chunk HTTP ${response.status}`)
-            bytes = new Uint8Array(await readBounded(response, 'application/json', descriptor.bytes))
-          }
-          const chunk = await decodeChunk(bytes, descriptor, manifest.settings, controller.signal, manifest.schemaVersion)
-          for (const source of chunk.sources) {
-            if (sourceIds.has(source.source_id)) throw new Error('Duplicate Gaia source across chunks')
-            sourceIds.add(source.source_id)
-          }
-          if (cached) cacheHits++
-          else cache?.put(descriptor.sha256,bytes)
-          consume = consume.then(async () => { cancelled(controller.signal); await consumeUntilAbort(() => onChunk(chunk), controller.signal); cancelled(controller.signal); verifiedRows += descriptor.rows; verifiedChunks++ })
-          await consume
-        } finally { clearTimeout(timeout) }
-      })
-      try { await Promise.all(jobs) } catch (error) { abort(); await Promise.allSettled(jobs); throw error }
+      // Each descriptor fits an empty budget. Keep its reservation through
+      // decoding and serial consumption, releasing it only when the job ends.
+      if (active.size) await Promise.race(active)
     }
+    if (failed) throw failure
     cancelled(controller.signal)
-    return { selectedChunks: selected.length, verifiedChunks, verifiedRows, totalBytes, peakReservedBytes, peakReservedRows, cacheHits, cacheRetainedBytes: cache?.retainedBytes ?? 0, epochJulianYear: 2016 as const, catalogCompletenessCertified: false as const }
-  } finally { signal.removeEventListener('abort', abort) }
+    return {
+      selection: {
+        method: 'conservative-closed-spatial-bin-intersection' as const,
+        region, frame: 'ICRS' as const, epochTimeScale: 'TCB' as const,
+        rowFilterApplied: false as const,
+        selectedPaths: selected.map(chunk => chunk.path),
+        omittedManifestChunks: manifest.chunks.length-selected.length,
+        allManifestChunksVerified: verifiedChunks === manifest.chunks.length,
+        limitation: 'Entire intersecting bins are retained; rows may lie outside the requested rectangle. Omitted bins are not inspected. Loading all manifest chunks does not establish sky or catalog completeness.',
+      },
+      selectedChunks: selected.length, verifiedChunks, verifiedRows, totalBytes,
+      peakReservedBytes, peakReservedRows, peakActiveChunks,
+      loadingBudget: { concurrency, maxInFlightBytes, maxInFlightRows, maxTotalBytes },
+      cacheHits, cacheHitBytes, sourceReadChunks, sourceReadBytes,
+      sourceReadSemantics: 'verified-chunk-source-bytes-excluding-manifest-and-transport-overhead' as const,
+      cacheRetainedBytes: cache?.retainedBytes ?? 0,
+      epochJulianYear: 2016 as const, catalogCompletenessCertified: false as const,
+    }
+  } finally { abort(); await Promise.all(active); signal.removeEventListener('abort', abort) }
 }

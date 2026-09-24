@@ -77,6 +77,7 @@ public final class StellarMotionServiceTest {
         boolean[] closed={false};
         InputStream eof=new ByteArrayInputStream(new byte[]{7}){
             public synchronized int read(byte[] bytes,int offset,int length){int n=super.read(bytes,offset,length);if(n<0)service.close();return n;}
+            public synchronized int read(){int n=super.read();if(n<0)service.close();return n;}
             public void close(){closed[0]=true;}
         };
         try{service.readBody(eof,1);fail("Cancelled EOF published a body");}catch(IOException error){assertTrue(error.getMessage().contains("cancelled"));}

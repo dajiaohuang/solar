@@ -30,7 +30,7 @@ public final class StellarSourceImportTest {
         }
     }
     @Test public void exactLimitWorksAndLimitPlusOneIsNeverTruncated() throws Exception {
-        for(int limit:new int[]{1024*1024,8*1024*1024}) {
+        for(int limit:new int[]{1024*1024,16*1024*1024}) {
             byte[] bytes=new byte[limit];for(int i=0;i<limit;i++)bytes[i]=(byte)(i*19);
             AtomicBoolean closed=new AtomicBoolean();
             ByteArrayInputStream input=new ByteArrayInputStream(bytes){public void close(){closed.set(true);}};

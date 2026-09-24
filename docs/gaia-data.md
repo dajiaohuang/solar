@@ -7,17 +7,25 @@ rtk proxy node scripts/fetch-gaia-cone.mjs --ra 56.75 --dec 24.1167 --radius 0.1
 ```
 
 The output directory must be new. Angles are degrees; the magnitude limit is
-Gaia G. Each query has a 45-second deadline and an 8 MiB response ceiling. Cone
-radius is at most two degrees and the row budget at most 10,000. The script first
-requests COUNT, rejects oversized selections, then requests rows sequentially.
-The returned count must match exactly; a truncated CSV is not accepted as a
-complete selection. SIGINT aborts the current request. The manifest is written
-last, after the original CSV and hashed chunks; an interrupted output without
-a manifest is not a completed artifact. No data is published or deployed.
+Gaia G. Gaia TAP jobs use asynchronous UWS requests with an 85-minute local job
+deadline, bounded per-request timeouts and a 16 MiB streamed CSV ceiling. Cone
+radius is at most two degrees and the row budget at most 30,000. By default the
+script issues one `TOP maxRows+1` row query: seeing the extra sentinel row rejects
+an over-budget cone; fewer rows means the bounded CSV includes every match. Add
+`--verify-count` for an independent COUNT(*) query when auditing a cone is worth
+an additional full archive scan. Rows are sorted locally by decimal `source_id`
+after decoding, avoiding a server-side result sort while preserving deterministic
+chunk contents. Each job is destroyed before the next query;
+SIGINT cancels and cleans up the active job. The manifest is written last, after
+the original CSV and hashed chunks; an interrupted output without a manifest is
+not a completed artifact. No data is published or deployed.
 
-The manifest retains both ADQL queries, URLs, retrieval times, byte lengths,
-SHA-256 values, original CSV files and implementation identities. `source_id`
-stays a decimal string to preserve its 64-bit identity. The selected columns
+The manifest retains the ADQL query or queries that ran, URLs, retrieval times,
+byte lengths, SHA-256 values, original CSV files and implementation identities.
+Its `rowCountEvidence` records the `maxRows+1` sentinel limit and returned count;
+`queryCountMatched` is present only when `--verify-count` produced an independent
+matching count. `source_id` stays a decimal string to preserve its 64-bit
+identity. The selected columns
 include positions, proper motions, parallax, their errors and correlations,
 solution type, RUWE, G magnitude, BP-RP and radial velocity where supplied.
 Nulls and negative parallaxes remain unchanged; no distance inference or
@@ -49,8 +57,8 @@ hash-verified chunks with Float64 ICRS unit directions. Wrapping RA, the 0/360
 seam and polar directions are handled conservatively. Selection is limited to
 J2016.0; requesting a later epoch is rejected until motion-aware bounds exist.
 
-The loader defaults to two parallel requests, a 16 MiB in-flight encoded-byte
-reservation, 20,000 in-flight rows and 64 MiB total selected bytes. Each request
+The loader defaults to up to four parallel requests, a 32 MiB in-flight encoded-byte
+reservation, 30,000 in-flight rows and 64 MiB total selected bytes. Each request
 has a 30-second deadline. One wave waits for its asynchronous consumer callbacks
 before admitting more data. The consumer must resolve after accepting/uploading
 a chunk and clear its own retained state on cancellation. These counters are
@@ -89,24 +97,68 @@ consistency, not independent authentication of an externally supplied manifest.
 ## Session source cache
 
 Completed remote loads retain a worker with an LRU content-hash cache limited
-to 16 MiB and 128 encoded chunks. This is additional to active decode/GPU
+to 32 MiB and 128 encoded chunks. This is additional to active decode/GPU
 storage, not a bound on total process memory. Each new load fetches its manifest
 again and revalidates cached bytes against the current schema and selection.
 Exports report cacheHits and cacheRetainedBytes. Local files bypass the cache.
+`totalBytes` is the selected descriptors' source-byte sum, including cache hits.
+`cacheHitBytes` and `sourceReadBytes` partition that sum; `cacheHits` and
+`sourceReadChunks` partition verified chunks. Source reads mean successfully
+verified source bytes obtained through HTTP or the direct local-file reader.
+They exclude the manifest and transport overhead and are not measured
+network traffic. These counters do not measure decoded heap or GPU memory.
+
+Local chunks are read only after reserving their descriptor budget. Their owned
+FileReader buffer is viewed directly as bytes for the same size, hash and content
+checks used by remote chunks, without wrapping it in a Response and copying it
+through the HTTP body reader. The direct reader receives the batch abort signal.
+This removes an application-level copy path; it is not a measured total-memory
+bound or a claim about browser-internal file storage or digest allocations.
+
+### Display retention bounds from source inspection
+
+The current cone viewer accepts at most 30,000 source rows. Its retained
+Float32 display batches contain three values per row (at most 360,000 bytes),
+and GaiaPlot allocates a matching point buffer (360,000 bytes at that capacity;
+an empty chart still allocates 12 bytes). These CPU batches remain available for
+picking and effect replay. Source record objects are retained separately for
+inspection/export and are not included in those coordinate-byte figures.
+
+Canvas backing dimensions are capped at 2,048 pixels per side and further limited
+by the device's renderbuffer/viewport limits. This does not measure framebuffer,
+driver, compositor or total GPU memory. Reset changes the plot generation and
+unmounts its old resources; cleanup disconnects its resize observer and deletes
+the point buffer, program and shaders. Component unmount terminates active and
+cached idle workers. A completed idle worker intentionally retains the bounded
+encoded-source cache described above; resetting the chart alone does not clear it.
+
+These are allocation and lifecycle paths read from source, not runtime release
+evidence or sustained frame-rate measurements. No device or browser execution was
+performed for this audit.
 Active cancellation or failure terminates that worker; page unmount releases
 both active and idle workers. No disk persistence or full-catalog caching is
 performed.
 
-## Measured multi-chunk example
+## Capacity evidence
 
-The separate [4,460-row measurement](benchmarks/gaia-20260923/README.md) retains
-real ESA query/source receipts and three imports plus 120 zoom steps for each
-of desktop Chromium and mobile emulation on one Windows host. Four source chunks
-were loaded and a 53,520-byte star buffer was reused without zoom uploads or
-reallocation. The reports pin the measured implementation; they do not establish
-identical timings for later revisions. This is a short local-file experiment,
-not full-sky, sustained real-time, public-network, total-memory or real mobile
-hardware evidence. The bundled 19-row example remains an ingestion fixture.
+The optional [`tests/e2e/gaia-capacity.spec.ts`](../tests/e2e/gaia-capacity.spec.ts)
+measures three local imports and 120 zoom frames per import when
+`SOLAR_GAIA_CAPACITY_DIR` points to a real capture. It records loading time,
+frame intervals, buffer size, reallocations, uploads, draws, browser version and
+host details; it has no frame-rate acceptance threshold. The current renderer
+has a tracked desktop Chromium report for a real 4,460-row capture at
+[`desktop-chromium-4460.json`](benchmarks/gaia-20260924/desktop-chromium-4460.json);
+its manifest hash matches the source manifest at
+[`source-manifest.json`](benchmarks/gaia-20260923/source-manifest.json), and all
+recorded renderer implementation hashes match the files at capture time. Its
+three local import times were 600, 68 and 75 ms; 120-step zoom frame intervals
+were 16.7 ms median and 16.8 ms P95/max. The 53,520-byte GPU point buffer had no
+reallocations or extra uploads and rendered 119 draw calls per sample. This is a
+local 4,460-row desktop baseline, not a 30,000-row result. The 30,000-row public
+TAP query exceeded the local 85-minute job deadline before returning a result;
+no large capture was written. Neither that baseline nor this harness establishes
+full-sky, sustained real-time, public-network, total-memory or physical mobile
+capacity. The bundled 19-row example remains an ingestion fixture.
 
 ## Catalog position uncertainty
 
@@ -213,6 +265,167 @@ star state is exposed by this time-conversion module.
 
 ## Single-star computation core
 
+### Source-backed station direction API (unverified implementation)
+
+`POST /v1/stellar/observer` accepts `originalManifestBase64`,
+`originalRowsCsvBase64`, `sourceId`, `radialVelocityPolicy`, `utc` and
+`station: { longitudeDeg, latitudeDeg, heightMeters }`. All station numbers
+are required; UTC uses the existing explicit Z/leap-second parser. No target
+year is entered separately. The configured immutable IERS snapshot and SPK
+catalog produce the station state, from which a TCB propagation year is
+derived. Missing EOP/SPK coverage fails rather than inventing a station state.
+
+The response's `experiment` contains both the original-source stellar receipt
+and the ground observation receipt, plus `coordinateDirectionBcrs`, RA/Dec,
+two-part TDB epoch and the residual time after rounding the TCB Julian year.
+Top-level catalog and EOP identities are retained. Source/request/response
+byte bounds, one shared compute lease, batch scheduling, cancellation and the
+20-second compute deadline apply as for the existing stellar endpoint.
+
+The core first uses the existing Starpm propagation, then converts its rates
+and parallax to TDB-compatible parameters. GoFA `Pmpx` uses the station's SSB
+position and the split-date residual to apply parallax and its approximate
+observer Rømer term. See the primary [ERFA Pmpx documentation](https://raw.githubusercontent.com/liberfa/erfa/master/src/pmpx.c).
+The output is a coordinate direction: no aberration, light deflection,
+horizontal transform, refraction or uncertainty propagation is applied to it.
+Nested observation fields may include other body-specific corrected values;
+those do not change the separately labeled stellar direction.
+
+This adds neither an occultation event search nor a certified physical
+accuracy. The method treats the SPK J2000 observer axes as ICRS-aligned under
+the existing observer model. Stellar size, systematic errors, full iterative
+observer/star light time and direction covariance remain unresolved. Web and
+native controls, independent numeric references and real endpoint execution
+are still pending. No build/test/CI execution was performed for this addition.
+
+Web wiring now adds a station mode in the existing stellar panel, with blank
+required UTC/longitude/latitude/ellipsoidal-height fields. It reuses the source
+file selection and explicit RV assumption. Catalog covariance controls do not
+apply in station mode. Edits and mode changes clear/abort pending results.
+The response validator reuses original Gaia reconstruction and observation
+contracts, requires Earth/Sun source coverage at reception, and checks the
+observer model, matching split epochs, TCB-year conversion/residual and the
+unit-direction/RA/Dec relationship. These are consistency guards, not a second
+independent computation of the stellar direction.
+
+Station direction and underlying barycentric catalog state have separate
+readouts. The complete envelope, both nested receipts, SPK/IERS identities and
+original Gaia files are exported as `solar-gaia-observer.json`. This Web wiring
+has only source/diff inspection; browser, actual endpoint, numeric-reference
+and native-control verification remain pending under the testing hold.
+
+The implementation now also returns a separate `observed` record, using the
+same in-process Apco context: `Ldsun` applies distant-source solar deflection,
+`Ab` applies the total observer velocity, and the retained precession/nutation
+and Atioq transformation give CIRS and airless horizontal directions. Proper
+motion/parallax are not applied again. Apco's Diurab is zero because station
+velocity is already included. The record retains GCRS proper direction,
+CIRS RA/Dec, airless azimuth/altitude, coordinate solar elongation and the solar
+deflection-limiter flag. See [ERFA Atciqz](https://raw.githubusercontent.com/liberfa/erfa/master/src/atciqz.c)
+and [Ldsun](https://raw.githubusercontent.com/liberfa/erfa/master/src/ldsun.c)
+for the correction sequence and distant-source/limiter assumptions.
+
+The original `coordinateDirectionBcrs` remains unaltered. Coordinate solar
+elongation is measured before aberration/deflection, not between apparent
+positions. No planetary deflection, terrain, solar-disk visibility
+or physical uncertainty is supplied. Web displays separate corrected and
+coordinate readouts and checks the added record's shape/model/ranges. This
+additional path is also uncompiled/unexecuted; no SOFA parity or live acceptance
+is claimed. The retained astrometry context is not serialized and cannot be
+recreated by supplying an arbitrary JSON observation receipt.
+
+Optional `atmosphere` now accepts all four explicit fields `pressureHPa`,
+`temperatureC`, `relativeHumidity` and `wavelengthMicrometers`, using the
+existing ground-request domain. The Web fields start blank. Refco coefficients
+are retained in a separate private context, leaving airless calculations
+unchanged; non-finite coefficients are rejected. The observed model identifier
+is now `sofa-ldsun-ab-cirs-atioq-v1`. Its `refractionStatus` is `not-requested`,
+`outside-altitude-domain` or `applied`; `refracted` exists only when requested
+and airless altitude is at least 5 degrees. The client checks this relationship
+and the matching warning instead of treating a missing correction as zero.
+
+This 5-degree cutoff is an application policy, not a refraction accuracy
+certificate. [ERFA Refco](https://raw.githubusercontent.com/liberfa/erfa/master/src/refco.c)
+describes the pressure/temperature/humidity/wavelength model and limitations;
+local atmospheric structure is not supplied. Airless output, CIRS and the
+coordinate ray remain separate from the optional refracted direction. These
+changes have not been compiled, executed or tested under the current hold.
+
+Native request construction is now implemented as `StellarObserverRequest`
+(Android) and `NativeStellarObserverRequest` (iOS). Both share original-file,
+signed-64-bit source identity and explicit RV-policy validation with catalog
+propagation, but encode UTC/station instead of a placeholder target year.
+Station values must be finite and in the backend's domain. An optional
+atmosphere is validated as a complete value; omission preserves airless-only
+behavior. File and wire byte budgets and cancellation checks are retained.
+Calendar/leap-second validation remains in the authoritative SOFA backend.
+
+These are request types only at this stage. Native response validation,
+transport and controls for the observer route remain pending; this is not
+native endpoint acceptance. Neither language was compiled or executed.
+
+Android now additionally implements `StellarObserverReport` and
+`StellarMotionService.loadObserver`. The report checks original-source nested
+stellar receipts using the existing validator without serializing a second
+envelope, plus station/weather echoes, SPK/EOP identity, reception source
+coverage, matching split epochs, the derived TCB year, vector/RA/Dec coherence,
+observed coordinates and refraction status. Exact outer response bytes are
+retained for export; returned arrays are defensive copies. These checks do
+not independently recompute observer astrometry.
+
+The two stellar routes share the existing HTTPS-only transport and one-active
+request guard, including no redirects, bounded exact-length JSON reads,
+deadline, cancellation and lifecycle close. The observer method remains a
+separate entry point. Android UI and iOS report/transport wiring are pending.
+Neither the Java refactor nor the new route has been compiled, exercised or
+tested; no live native acceptance is asserted.
+
+Android panel wiring now offers station mode with blank UTC/WGS84 fields and
+optional blank weather fields. Catalog year/covariance controls are hidden in
+that mode. Every field or mode change uses the existing generation/close path
+to invalidate prior requests; source files are preserved. The bounded observer
+service feeds separate coordinate, CIRS, airless and optional refracted
+readouts, including limiter/domain warnings and source metadata. Export uses
+the existing document-provider flow with `solar-stellar-observer.json`, keeping
+the exact validated envelope. Added Chinese/English controls and limits.
+
+This completes Android source wiring, not acceptance. No Java/Android build,
+emulator, device, endpoint or export execution has run for the new station
+mode. iOS observer response/service/view remains pending.
+
+iOS now has `NativeStellarObserverReport` and
+`NativeStellarMotionService.loadObserver`. Its decoder keeps scientific numeric
+tokens on the existing direct-binary64 JSON path and validates the nested
+original Gaia receipt without serializing it again. It checks station/weather,
+SPK/EOP identities and reception coverage, split epochs and derived TCB year,
+coordinate/angle consistency, apparent ranges and refraction-state invariants.
+The immutable report retains exact outer bytes and model warnings. The two
+routes share the actor's single-active-call guard and bounded HTTPS transfer;
+task cancellation remains checked before and after validation.
+
+The new types remain in already registered source files. iOS view wiring and
+real execution are still pending. No Swift compile, protocol test, simulator,
+device or live HTTP request has run for this change.
+
+### Epoch receipt validation update (awaiting verification)
+
+Web, Android and iOS response validators now independently check that source
+and target two-part TDB dates correspond to J2016.0 TCB and the requested TCB
+Julian year. Previously those arrays were checked only for shape and finite
+values. The comparison keeps split dates and allows two microseconds for
+binary64 representation/arithmetic; this tolerance is not a physical timing
+accuracy. Web reuses the existing barycentric-time module, and native clients
+apply the same IAU affine relation. The relation and constants were inspected
+against [ERFA tcbtdb](https://raw.githubusercontent.com/liberfa/erfa/master/src/tcbtdb.c)
+and its defining constants. These new response guards have not been compiled
+or executed under the current user-requested testing hold.
+
+This does not make the propagated ICRS barycentric catalog direction an
+observer-relative SPK sightline. Observer parallax, compatible coordinate and
+time conventions, light-time treatment and common apparent-place corrections
+still need to be resolved before connecting Gaia propagation to ellipsoid
+intercepts. No direct automatic connection is currently claimed.
+
 internal/stellarmotion now implements an explicitly adopted catalog model with
 gofa v1.19.1 Starpm. Source inputs require J2016.0, valid five/six-parameter
 solution identity, positive measured parallax, both proper motions and a radial
@@ -254,7 +467,7 @@ row, build identity, explicit adopted RV policy and model result:
 
     rtk proxy go run ./cmd/gaia-motion --manifest tests/fixtures/gaia-six-20260923/manifest.json --rows tests/fixtures/gaia-six-20260923/rows.csv --source-id 65212004581252736 --epoch-tcb 2026 --rv-policy spectroscopic-as-astrometric --output .cache/new-gaia-motion.json
 
-The manifest is limited to 1 MiB and CSV to 8 MiB / 10,000 rows. Exact schema
+The manifest is limited to 1 MiB and CSV to 16 MiB / 30,000 rows. Exact schema
 columns, frame/epoch, CSV header, ordered unique 64-bit source IDs, declared row
 count and original CSV hash/size are checked. The selected source must satisfy
 the complete-input propagation contract. The evidence is copied before return;
@@ -282,8 +495,8 @@ refused. Browser/native integration and propagated covariance remain outstanding
 
 The response contains `apiVersion` and the same source-bearing `experiment`
 as the offline adapter. It does not imply configured SPK coverage or ESA
-authentication. The JSON body is capped at 13 MiB to cover base64 expansion;
-decoded source limits remain 1 MiB / 8 MiB / 10,000 rows. Unknown fields and
+authentication. The JSON body is capped at 26 MiB to cover base64 expansion;
+decoded source limits remain 1 MiB / 16 MiB / 30,000 rows. Unknown fields and
 trailing JSON are rejected. The route uses request admission and the weighted
 trajectory compute queue, with a 20-second context budget and cancellation
 checks between CSV rows. The production server also limits request reads to
@@ -318,7 +531,7 @@ covered separately by the Go test. Propagated covariance remains outstanding.
 The browser also parses the retained original CSV and compares every selected
 source field, including nulls and the exact decimal identity, with the returned
 selectedSource. Correct hashes alone are insufficient to accept a mismatched
-selected record. Parsing is bounded to 8 MiB and 10,000 data rows, supports
+selected record. Parsing is bounded to 16 MiB and 30,000 data rows, supports
 quoted fields, and rejects duplicate selected identities and malformed numeric
 values. These checks preserve the original bytes rather than rewriting them.
 The scan keeps only the header, current row and selected row, rather than an
@@ -423,8 +636,8 @@ Physical native covariance UI and device validation remain outstanding.
 StellarMotionRequest owns copies of the original manifest/CSV, preserves source
 IDs as decimal strings within signed-64-bit bounds, validates J1916–J2116 TCB,
 requires the RV approximation, and adds covariance only with its explicit policy.
-Its decoded input budgets match the backend and its wire output is capped at
-13 MiB. Two plain-JVM tests verify real fixture bytes, defensive copies, optional
+Its decoded input budgets match the backend and its wire request is capped at
+26 MiB. Two plain-JVM tests verify real fixture bytes, defensive copies, optional
 policy omission and invalid identities/epochs/budgets. They passed with javac
 --release 17 and cached JUnit. The targeted Android Gradle invocation could not
 start because no SDK path is configured on this host. Network response validation,
@@ -483,3 +696,63 @@ and handles zero-progress reads without a tight loop. Three targeted JVM tests
 passed at exact 1 MiB/8 MiB boundaries, one byte over, pre-read/EOF cancellation,
 stream closure and zero-progress input. Provider-specific blocking/cancellation
 behavior and system document-picker interaction still require Android execution.
+
+## Cross-platform covariance normalization follow-up
+
+Web and Android receipt checks formerly normalized covariance by the square
+root of a product of two variances. That intermediate product can exceed the
+Float64 range or underflow even when the intended correlation is representable.
+Web, Android and iOS now normalize by each standard deviation separately and
+explicitly reject nonfinite correlations, factor entries and scaled residuals.
+The source-matrix and Jacobian-consistency tolerance remains 1e-10; no covariance
+jitter, repaired eigenvalues or widened tolerance is introduced.
+
+These are client receipt-consistency checks, not an independent propagation or
+physical accuracy certificate. The change has only been source/diff reviewed;
+no numerical checks, compiler, test, browser or native device run was performed.
+Native Gaia covariance already has a service/UI chain. Native SBDB orbital
+propagation still lacks its shared backend service and remains separate work.
+
+Browser display backpressure has a 30-second per-chunk acknowledgement limit.
+A missing acknowledgement aborts loading; changing the load invalidates old
+chart upload, error and selection callbacks. Reported WebGL upload/draw errors
+or context loss prevent acknowledgement. This is a resource-lifetime policy,
+not measured frame throughput or confirmation of physical screen presentation.
+These changes have only been inspected at source level; runtime/device
+acceptance remains pending.
+
+Local Gaia imports use cancellable FileReader reads with a 25-second read
+limit. Manifests remain capped at 1 MiB; each chunk must match its declared
+byte size before reading and may not exceed 32 MiB. Chunk cancellation follows
+the scheduler signal. Upload waiters clean up timers/listeners at task exit.
+Session source-cache limits cover retained encoded bytes only, separately from
+active decoding, transferred records and GPU buffers. Source inspection does
+not establish browser-worker behavior or total resident-memory measurements.
+
+The Gaia chart bounds point capacity at 30,000 rows and the drawing surface
+at 2048 by 2048 pixels, further limited by device viewport/renderbuffer limits.
+It requests no depth, stencil or antialias buffers. The point allocation is
+12 bytes per row (with a one-row minimum, 360,000 bytes at full capacity); CPU picking retains the transferred
+Float32 batches, and source records remain available for export. An RGBA8
+2048-square surface alone is 16 MiB, but backing-buffer count, driver overhead
+and total resident memory are not measured or bounded by that figure.
+Selected-source covariance summaries are reused across chunk/zoom renders.
+These source changes await visual, resource and performance acceptance.
+
+Chunk admission is rolling rather than wave-barrier based: completed consumers
+release a slot and its source-byte/row reservation, allowing the next manifest
+descriptor to start if all budgets permit. Consumer callbacks remain serial;
+completion order is not promised to equal manifest order. Summary fields
+loadingBudget and peakActiveChunks expose configured limits and observed job
+reservations. They do not measure memory usage or throughput. This scheduler
+change awaits execution-based acceptance.
+
+Streaming summaries preserve the requested rectangle and selected manifest
+paths in selection. The method uses conservative closed spatial-bin
+intersection at J2016.0 ICRS/TCB, including wrap/seam and polar boundaries.
+rowFilterApplied is false: entire selected bins remain available, so returned
+rows need not lie inside a smaller requested rectangle. Omitted manifest bins
+are uninspected; even allManifestChunksVerified does not certify sky/catalog
+completeness. Callback descriptors are independent copies, so consumer edits
+cannot change the scheduler reservation accounting. Runtime acceptance remains
+pending.

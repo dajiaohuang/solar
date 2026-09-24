@@ -28,7 +28,7 @@ describe('original-source stellar client', () => {
   it('accepts the real Go experiment and preserves byte encoding', async () => {
     expect(await validateStellarMotion(envelope(), request)).toEqual(experiment)
     const bytes = Uint8Array.from(atob(request.originalRowsCsvBase64), v => v.charCodeAt(0))
-    expect(stellarSourceBase64(bytes, 8 << 20)).toBe(request.originalRowsCsvBase64)
+    expect(stellarSourceBase64(bytes, 16 << 20)).toBe(request.originalRowsCsvBase64)
     expect(() => stellarSourceBase64(bytes, 1)).toThrow('budget')
   })
   it('rejects wrong source, epoch, hashes, model, nonfinite states and missing limits', async () => {

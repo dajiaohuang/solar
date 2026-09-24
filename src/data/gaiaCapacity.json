@@ -1,0 +1,14 @@
+{
+  "maxManifestBytes": 1048576,
+  "maxCsvBytes": 16777216,
+  "maxCatalogRows": 30000,
+  "maxChunkRows": 30000,
+  "maxChunkBytes": 33554432,
+  "maxChunks": 2592,
+  "maxChartRows": 30000,
+  "defaultInFlightBytes": 33554432,
+  "defaultInFlightRows": 30000,
+  "maxSelectedBytes": 67108864,
+  "defaultCacheBytes": 33554432,
+  "maxCacheBytes": 67108864
+}
