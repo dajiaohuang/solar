@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { createGzip, constants as zlibConstants } from 'node:zlib'
 import { pipeline } from 'node:stream/promises'
 import { jsonDocument, productDelivery, sha256 } from './lib/product-delivery.ts'
-import { previewDatasetPlan } from './lib/preview-dataset.mjs'
+import { previewDatasetPlan, verifyPreviewSourceChecksums } from './lib/preview-dataset.mjs'
 import { verifyEphemerisAssets } from './lib/verify-ephemeris-assets.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -128,9 +128,11 @@ async function copyActiveDataset(buildInfo) {
   const sourceFiles = previewPlan ? previewPlan.sourcePaths.map(path => join(sourceRoot, path)) : await walkFiles(sourceRoot)
   if (previewPlan) {
     const checksums = await readJson(join(sourceRoot, 'checksums.json'))
+    verifyPreviewSourceChecksums(checksums, sourceManifest)
     // The preview delivery hash must not bless changed source bytes. Verify
     // each copied source artifact against the immutable release first.
     for (const path of previewPlan.sourcePaths) {
+      if (path === 'checksums.json') continue // Bound above; the descriptor cannot hash itself.
       if (!checksums.files?.[path] || await hashFile(join(sourceRoot, path)) !== checksums.files[path]) throw new Error(`Preview source checksum mismatch: ${path}`)
     }
   }

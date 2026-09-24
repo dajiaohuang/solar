@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { productDelivery, jsonDocument, sha256 } from '../../scripts/lib/product-delivery'
 // Build helper is deliberately executable directly by Node, without a bundler.
 // @ts-expect-error Build-only JavaScript helper has no declaration file.
-import { previewDatasetPlan } from '../../scripts/lib/preview-dataset.mjs'
+import { previewDatasetPlan, verifyPreviewSourceChecksums } from '../../scripts/lib/preview-dataset.mjs'
 
 const source = {
   schemaVersion: 3, version: 'fixture', source: 'fixture-not-scientific-data', totalCount: 1_500_000,
@@ -28,7 +28,7 @@ describe('physical preview artifact policy', () => {
   it('publishes only mobile sample and source evidence without advertising full resources', () => {
     const before = JSON.stringify(source)
     const plan = previewDatasetPlan(source, 'availability-hash')
-    expect(plan.sourcePaths).toEqual(['manifest.json', 'provenance.json', 'validation-report.json', 'catalog-summary.json', 'catalog-sample-mobile.json', 'catalog-sample-mobile.bin'])
+    expect(plan.sourcePaths).toEqual(['manifest.json', 'provenance.json', 'validation-report.json', 'checksums.json', 'catalog-summary.json', 'catalog-sample-mobile.json', 'catalog-sample-mobile.bin'])
     expect(plan.manifest.totalCount).toBe(1_500_000)
     expect(plan.manifest.contentSha256).toBe('source-hash')
     expect(plan.manifest.delivery.deliveredSampleCount).toBe(8000)
@@ -45,5 +45,14 @@ describe('physical preview artifact policy', () => {
       Object.assign(invalid.precomputedSamples.mobile, replacement)
       expect(() => previewDatasetPlan(invalid, 'hash')).toThrow(/pinned mobile/)
     }
+  })
+  it('rejects a modified sample or incomplete source descriptor before preview copying', () => {
+    const files = { 'binary/chunk-0000.bin': 'a'.repeat(64), 'catalog-sample-mobile.bin': 'b'.repeat(64) }
+    const manifest = { contentSha256: sha256(JSON.stringify(files)) }
+    const report = { schemaVersion: 1, algorithm: 'sha256', files }
+    expect(() => verifyPreviewSourceChecksums(report,manifest)).not.toThrow()
+    expect(() => verifyPreviewSourceChecksums({ ...report, files: { 'catalog-sample-mobile.bin': files['catalog-sample-mobile.bin'] } },manifest)).toThrow('identity')
+    expect(() => verifyPreviewSourceChecksums({ ...report, files: { ...files, 'catalog-sample-mobile.bin': 'c'.repeat(64) } },manifest)).toThrow('identity')
+    expect(() => verifyPreviewSourceChecksums({ ...report, files: [] },manifest)).toThrow('checksums')
   })
 })
