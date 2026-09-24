@@ -12,10 +12,10 @@ import { createBodyPositionResolver, createBodyVelocityResolver } from '../../sr
 
 const jd = 2461287.5
 const body = (id: string) => majorBodiesById.get(id)!
-beforeAll(() => {
+beforeAll(async () => {
   for (const file of EPHEMERIS_MANIFEST.files) {
     const bytes = readFileSync(`public/data/ephemerides/${file.path}`)
-    installKernel(file.id, bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
+    await installKernel(file.id, bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
   }
 })
 

@@ -1,14 +1,23 @@
 import { selectedEphemerisManifest as manifestData } from '../../data/selectedEphemerisManifest'
 import { bodyNaifId } from '../../data/ephemerisTargets'
+import { exactEphemerisFiles, selectEphemerisFiles } from '../../data/ephemerisSelection'
 import { SpkKernel } from './spk'
 import { createKernelResolver, kernelsCoveringInterval, type LoadedKernel } from './kernelPool'
 import { utcJulianDayToEt } from './timeScales'
 import type { CelestialBody } from '../../types'
 import type { RuntimeKernelFile } from './runtimeManifest'
+import { reserveKernelBuffers } from './kernelBufferBudget'
 
 export type KernelFile = RuntimeKernelFile & { sourceIdentity?: unknown }
 export const EPHEMERIS_MANIFEST = manifestData as { schemaVersion: number; id: string; profile?: string; files: KernelFile[] }
 const installed = new Map<string, LoadedKernel>()
+// Only successful byte verification may create these receipts. Weak keys do
+// not extend a kernel's lifetime, and an identical name cannot borrow a receipt.
+const verifiedSources = new WeakMap<SpkKernel, { id: string; sha256: string }>()
+export function verifiedKernelSha256(source: Pick<LoadedKernel, 'id' | 'kernel'>): string | null {
+  const receipt = verifiedSources.get(source.kernel)
+  return receipt?.id === source.id ? receipt.sha256 : null
+}
 let orderedSnapshot: { ids: readonly string[]; kernels: LoadedKernel[] } | null = null
 function orderedInstalled() {
   if (!orderedSnapshot) {
@@ -70,14 +79,43 @@ export const loadedKernelIds = () => [...orderedInstalled().ids]
 export const loadedKernels = () => [...orderedInstalled().kernels]
 export function kernelsForWindow(startUtcJd: number, endUtcJd: number, ids = loadedKernelIds()) {
   try {
-    return kernelsCoveringInterval(loadedKernels().filter((kernel) => ids.includes(kernel.id)), utcJulianDayToEt(startUtcJd), utcJulianDayToEt(endUtcJd))
+    const wanted = new Set(ids)
+    return kernelsCoveringInterval(loadedKernels().filter((kernel) => wanted.has(kernel.id)), utcJulianDayToEt(startUtcJd), utcJulianDayToEt(endUtcJd))
   } catch { return [] }
 }
 
-export function installKernel(id: string, buffer: ArrayBuffer, publishNow = true) {
-  const kernel = new SpkKernel(buffer)
-  const file = EPHEMERIS_MANIFEST.files.find(file => file.id === id)
-  installed.set(id, { id, kernel, solutionKernelIds: file?.solutionKernelIds, dependencyOnly: file?.dependencyOnly })
+export async function installKernel(id: string, buffer: ArrayBuffer, publishNow = true) {
+  // Replacements can remain referenced by existing resolvers. Do not treat
+  // their old buffer as reclaimable before those consumers have released it.
+  if (installed.has(id)) throw new Error(`Ephemeris ${id}: already installed`)
+  const source = EPHEMERIS_MANIFEST.files.find(file => file.id === id)
+  if (!source) throw new Error(`Unknown ephemeris file ${id}`)
+  const file = { ...source, solutionKernelIds: source.solutionKernelIds?.slice() }
+  if (!Number.isSafeInteger(file.bytes) || file.bytes <= 0 || file.bytes > 128 * 1024 * 1024 || buffer.byteLength !== file.bytes) throw new Error(`Ephemeris ${id}: unexpected size`)
+  const release = reserveKernelBuffers(buffer.byteLength)
+  let retained = false
+  try {
+    // Own the bytes before the first await: callers cannot mutate or detach
+    // the scientific source while hashing or after registration.
+    const owned = buffer.slice(0)
+    const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', owned))].map(byte => byte.toString(16).padStart(2, '0')).join('')
+    if (digest !== file.sha256) throw new Error(`Ephemeris ${id}: checksum mismatch`)
+    if (installed.has(id)) throw new Error(`Ephemeris ${id}: already installed`)
+    const kernel = new SpkKernel(owned)
+    registerKernel(file, kernel, digest, false)
+    retained = true
+    if (publishNow) publish({ error: failureMessage() }, true)
+  } finally {
+    if (!retained) release()
+  }
+}
+
+function registerKernel(file: KernelFile, kernel: SpkKernel, verifiedSha256: string, publishNow: boolean) {
+  const id = file.id
+  verifiedSources.set(kernel, { id, sha256: verifiedSha256 })
+  installed.set(id, Object.freeze({ id, kernel,
+    solutionKernelIds: file.solutionKernelIds === undefined ? undefined : Object.freeze(file.solutionKernelIds.slice()),
+    dependencyOnly: file.dependencyOnly }))
   orderedSnapshot = null
   currentResolver = null
   // A different successful file must not hide a still-missing dependency.
@@ -85,39 +123,74 @@ export function installKernel(id: string, buffer: ArrayBuffer, publishNow = true
   if (publishNow) publish({ error: failureMessage() }, true)
 }
 
-async function loadFile(file: KernelFile) {
-  const response = await fetch(`${import.meta.env.BASE_URL}data/ephemerides/${file.path}`, { signal: AbortSignal.timeout(60000) })
-  if (!response.ok) throw new Error(`Ephemeris ${file.id}: HTTP ${response.status}`)
+async function loadFile(source: KernelFile) {
+  const file = { ...source, solutionKernelIds: source.solutionKernelIds?.slice() }
   if (file.bytes <= 0 || file.bytes > 128 * 1024 * 1024 || !Number.isSafeInteger(file.bytes)) throw new Error('Invalid ephemeris size limit')
-  const reader = response.body?.getReader()
-  if (!reader) throw new Error(`Ephemeris ${file.id}: response body unavailable`)
-  const bytes = new Uint8Array(file.bytes)
-  let offset = 0
+  if (installed.has(file.id)) return
+  const controller = new AbortController()
+  const deadline = performance.now() + 60000
+  const timer = setTimeout(() => controller.abort(), 60000)
+  const checkDeadline = () => {
+    if (controller.signal.aborted || performance.now() >= deadline) {
+      controller.abort()
+      throw new Error(`Ephemeris ${file.id}: loading deadline exceeded`)
+    }
+  }
+  let response: Response | undefined
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  let consumed = false
+  let release: (() => void) | undefined
+  let retained = false
   try {
+    release = reserveKernelBuffers(file.bytes)
+    response = await fetch(`${import.meta.env.BASE_URL}data/ephemerides/${file.path}`, { signal: controller.signal })
+    checkDeadline()
+    if (!response.ok) throw new Error(`Ephemeris ${file.id}: HTTP ${response.status}`)
+    reader = response.body?.getReader()
+    if (!reader) throw new Error(`Ephemeris ${file.id}: response body unavailable`)
+    const bytes = new Uint8Array(file.bytes)
+    let offset = 0
     while (true) {
       const chunk = await reader.read()
-      if (chunk.done) break
+      checkDeadline()
+      if (chunk.done) { consumed = true; break }
       if (offset + chunk.value.length > bytes.length) throw new Error(`Ephemeris ${file.id}: oversized response`)
       bytes.set(chunk.value, offset)
       offset += chunk.value.length
     }
-  } catch (error) { await reader.cancel(); throw error }
-  if (offset !== bytes.length) throw new Error(`Ephemeris ${file.id}: truncated response`)
-  const buffer = bytes.buffer
-  if (buffer.byteLength !== file.bytes || buffer.byteLength > 128 * 1024 * 1024) throw new Error(`Ephemeris ${file.id}: unexpected size`)
-  const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', buffer))].map((byte) => byte.toString(16).padStart(2, '0')).join('')
-  if (digest !== file.sha256) throw new Error(`Ephemeris ${file.id}: checksum mismatch`)
-  installKernel(file.id, buffer, false)
-  publishSoon({ error: failureMessage() }, true)
+    if (offset !== bytes.length) throw new Error(`Ephemeris ${file.id}: truncated response`)
+    const buffer = bytes.buffer
+    const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', buffer))].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+    checkDeadline()
+    if (digest !== file.sha256) throw new Error(`Ephemeris ${file.id}: checksum mismatch`)
+    const kernel = new SpkKernel(buffer)
+    checkDeadline()
+    // A direct installer may have supplied this identity while fetch awaited.
+    if (installed.has(file.id)) return
+    registerKernel(file, kernel, digest, false)
+    retained = true
+    publishSoon({ error: failureMessage() }, true)
+  } finally {
+    clearTimeout(timer)
+    try {
+      if (!consumed) {
+        controller.abort()
+        // Cleanup must not replace the original fetch, size or parse failure.
+        try {
+          if (reader) await reader.cancel()
+          else await response?.body?.cancel()
+        } catch { /* An aborted transport may already have errored its stream. */ }
+      }
+      reader?.releaseLock()
+    } finally {
+      if (!retained) release?.()
+    }
+  }
 }
 
 /** Exact file set is sent to workers: no hidden high/low precision divergence. */
 export async function ensureKernelFiles(ids: string[]) {
-  const files = [...new Set(ids)].map(id => {
-    const file = EPHEMERIS_MANIFEST.files.find((item) => item.id === id)
-    if (!file) throw new Error(`Unknown ephemeris file ${id}`)
-    return file
-  })
+  const files = exactEphemerisFiles(EPHEMERIS_MANIFEST.files, ids)
   let cursor = 0
   let failed = false
   // Bound transient read/hash buffers. Hundreds of small per-body files should
@@ -157,15 +230,7 @@ export async function ensureKernelFiles(ids: string[]) {
 
 export function kernelFilesForBodies(bodies: { id: string; naifId?: number }[]) {
   const targets = new Set(bodies.map(bodyNaifId).filter((id) => id !== undefined))
-  const wanted = new Set(EPHEMERIS_MANIFEST.files.filter((file) => !file.dependencyOnly && (file.core || file.targets.some((target) => targets.has(target)))).map(file => file.id))
-  const byId = new Map(EPHEMERIS_MANIFEST.files.map(file => [file.id, file]))
-  for (const id of wanted) {
-    for (const dependency of byId.get(id)?.solutionKernelIds ?? []) {
-      if (!byId.has(dependency)) throw new Error(`Missing declared ephemeris dependency ${dependency}`)
-      wanted.add(dependency)
-    }
-  }
-  return EPHEMERIS_MANIFEST.files.filter(file => wanted.has(file.id)).map(file => file.id)
+  return selectEphemerisFiles(EPHEMERIS_MANIFEST.files, targets).map(file => file.id)
 }
 
 export function kernelStateForBody(body: { id: string; naifId?: number }, utcJd: number) {

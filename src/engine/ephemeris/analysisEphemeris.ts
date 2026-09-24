@@ -3,7 +3,7 @@ import { createBodyPositionResolver, MissingBodyStateError, scaleVector3, subtra
 import type { BodyId, CelestialBody, Vector3 } from '../../types'
 import { AU_IN_KM, SECONDS_PER_DAY } from '../units'
 import { createKernelResolver, kernelsCoveringInterval, type LoadedKernel } from './kernelPool'
-import { EPHEMERIS_MANIFEST } from './kernelStore'
+import { EPHEMERIS_MANIFEST, verifiedKernelSha256 } from './kernelStore'
 import { utcJulianDayToEt, utcTimeScaleQuality, type TimeScaleQuality } from './timeScales'
 
 export type AnalysisEphemerisPolicy = 'prefer-spk' | 'require-spk'
@@ -22,7 +22,8 @@ export type AnalysisEphemerisEvidence = {
   startJulianDay: number
   endJulianDay: number
   manifestId: string
-  /** Frozen eligible pool, not a claim that each file contributed to every body. */
+  /** Frozen eligible pool, not a claim that each file contributed to every body.
+   * Hash is null unless this instance was byte-verified by the kernel loader. */
   kernelPool: { id: string; sha256: string | null }[]
   bodies: AnalysisBodyEvidence[]
   physicalPredictionUncertainty: 'not-estimated'
@@ -40,6 +41,23 @@ const VELOCITY_STEP_DAYS = 0.01
 const MAX_CACHED_EPOCHS = 64
 const FIRST_SUPPORTED_UTC_JD = 2441317.5
 
+/** Check the declared time contract, not independent timing accuracy. */
+export function matchesAnalysisTimeEvidence(evidence: AnalysisEphemerisEvidence): boolean {
+  if (![evidence.startJulianDay, evidence.endJulianDay].every(Number.isFinite) || evidence.endJulianDay < evidence.startJulianDay) return false
+  if (evidence.startJulianDay < FIRST_SUPPORTED_UTC_JD) {
+    return evidence.dynamicalTimeScale === 'legacy-numeric-jd' && evidence.timeScaleQuality === null
+  }
+  const quality = evidence.timeScaleQuality
+  if (evidence.dynamicalTimeScale !== 'TDB' || !quality) return false
+  const expected = utcTimeScaleQuality(evidence.endJulianDay)
+  // Iterate the dense expected list: Array.every on received data skips holes,
+  // which could otherwise erase required assumptions while preserving length.
+  const same = (actual: readonly string[], values: readonly string[]) => Array.isArray(actual) &&
+    actual.length === values.length && values.every((value, index) => Object.hasOwn(actual, index) && actual[index] === value)
+  return quality.scale === expected.scale && quality.status === expected.status && quality.leapSeconds === expected.leapSeconds &&
+    same(quality.assumptions, expected.assumptions) && same(quality.sources, expected.sources)
+}
+
 /** One frozen model window for sampling, refinement and mission endpoints.
  * Position and velocity of precise bodies come from the same SPK evaluation.
  * The bounded epoch LRU also reuses departure states across porkchop rows. */
@@ -51,22 +69,29 @@ export function createAnalysisEphemeris(options: {
   policy?: AnalysisEphemerisPolicy
   needsVelocity?: boolean
 }) {
-  const { bodiesById, startJulianDay, endJulianDay } = options
+  const { startJulianDay, endJulianDay, needsVelocity } = options
   const policy = options.policy ?? 'prefer-spk'
   if (!['prefer-spk', 'require-spk'].includes(policy)) throw new RangeError('Unknown analysis ephemeris policy')
   if (![startJulianDay, endJulianDay].every(Number.isFinite) || endJulianDay < startJulianDay) {
     throw new RangeError('Analysis ephemeris window must be finite and ordered')
   }
+  // Body records contain structured data only. Copy nested orbital elements and
+  // identity metadata as well as the Map so later UI edits cannot change a scan.
+  const bodiesById = structuredClone(options.bodiesById)
+  const manifestId = EPHEMERIS_MANIFEST.id
   const modern = startJulianDay >= FIRST_SUPPORTED_UTC_JD
   // Preserve the documented exploratory numeric-JD contract for older models.
   // Strict SPK cannot pretend that this is a supported UTC conversion.
-  const margin = options.needsVelocity && policy === 'prefer-spk' ? VELOCITY_STEP_DAYS : 0
-  const kernels = modern && startJulianDay - margin >= FIRST_SUPPORTED_UTC_JD
+  const margin = needsVelocity && policy === 'prefer-spk' ? VELOCITY_STEP_DAYS : 0
+  const eligibleKernels = modern && startJulianDay - margin >= FIRST_SUPPORTED_UTC_JD
     ? kernelsCoveringInterval(options.kernels, utcJulianDayToEt(startJulianDay - margin), utcJulianDayToEt(endJulianDay + margin))
     : []
+  const kernels = Object.freeze(eligibleKernels.map(({ id, kernel, solutionKernelIds, dependencyOnly }) => Object.freeze({
+    id, kernel, dependencyOnly,
+    solutionKernelIds: solutionKernelIds === undefined ? undefined : Object.freeze(solutionKernelIds.slice()),
+  })))
   const bodyEvidence = new Map<BodyId, AnalysisBodyEvidence>()
-  const manifestFiles = new Map(EPHEMERIS_MANIFEST.files.map(file => [file.id, file]))
-  const kernelPool = kernels.map(kernel => ({ id: kernel.id, sha256: manifestFiles.get(kernel.id)?.sha256 ?? null }))
+  const kernelPool = kernels.map(kernel => ({ id: kernel.id, sha256: verifiedKernelSha256(kernel) }))
   const record = (body: CelestialBody, model: AnalysisBodyModel) => {
     const previous = bodyEvidence.get(body.id)
     if (previous && previous.model !== model) throw new Error(`Analysis model changed inside its frozen window for ${body.id}`)
@@ -75,7 +100,10 @@ export function createAnalysisEphemeris(options: {
 
   function createEpoch(julianDay: number) {
     const precise = kernels.length ? createKernelResolver(kernels, utcJulianDayToEt(julianDay)) : null
-    const fallback = createBodyPositionResolver(bodiesById, julianDay, kernels)
+    // Fully covered SPK epochs do not need a second resolver/pool cache.
+    // Construct fallback lazily; it must retain the same frozen kernel pool
+    // because approximate children may still have precisely covered parents.
+    let fallback: ReturnType<typeof createBodyPositionResolver> | undefined
     let before: ReturnType<typeof createBodyPositionResolver> | undefined
     let after: ReturnType<typeof createBodyPositionResolver> | undefined
     const positions = new Map<BodyId, Vector3>()
@@ -102,7 +130,8 @@ export function createAnalysisEphemeris(options: {
       if (cached) return cached
       const { body, state } = bodyAndState(bodyId)
       const value = bodyId === 'sun' ? { x: 0, y: 0, z: 0 } : state
-        ? scaleVector3(state.position, 1 / AU_IN_KM) : fallback(bodyId)
+        ? scaleVector3(state.position, 1 / AU_IN_KM)
+        : (fallback ??= createBodyPositionResolver(bodiesById, julianDay, kernels))(bodyId)
       if (bodyId !== 'sun') record(body, state ? 'jpl-spk' : 'approximate-fallback')
       positions.set(bodyId, value)
       return value
@@ -116,15 +145,26 @@ export function createAnalysisEphemeris(options: {
       if (bodyId === 'sun') value = { x: 0, y: 0, z: 0 }
       else if (state) value = scaleVector3(state.velocity, SECONDS_PER_DAY / AU_IN_KM)
       else {
-        if (!options.needsVelocity) throw new Error('Approximate velocity requires a velocity-enabled analysis window')
-        before ??= createBodyPositionResolver(bodiesById, julianDay - VELOCITY_STEP_DAYS, kernels)
-        after ??= createBodyPositionResolver(bodiesById, julianDay + VELOCITY_STEP_DAYS, kernels)
-        value = scaleVector3(subtractVector3(after(bodyId), before(bodyId)), 1 / (2 * VELOCITY_STEP_DAYS))
+        if (!needsVelocity) throw new Error('Approximate velocity requires a velocity-enabled analysis window')
+        const beforeJulianDay = julianDay - VELOCITY_STEP_DAYS
+        const afterJulianDay = julianDay + VELOCITY_STEP_DAYS
+        before ??= createBodyPositionResolver(bodiesById, beforeJulianDay, kernels)
+        after ??= createBodyPositionResolver(bodiesById, afterJulianDay, kernels)
+        const elapsedDays = modern
+          ? (utcJulianDayToEt(afterJulianDay) - utcJulianDayToEt(beforeJulianDay)) / SECONDS_PER_DAY
+          : afterJulianDay - beforeJulianDay
+        if (!Number.isFinite(elapsedDays) || elapsedDays <= 0) throw new RangeError('Approximate velocity samples have no positive dynamical time interval')
+        value = scaleVector3(subtractVector3(after(bodyId), before(bodyId)), 1 / elapsedDays)
       }
       velocities.set(bodyId, value)
       return value
     }
-    return { position, velocity }
+    // Keep cache entries private; callers own each returned vector. Freeze the
+    // cached query facade so one consumer cannot replace another's methods.
+    return Object.freeze({
+      position: (bodyId: BodyId): Vector3 => ({ ...position(bodyId) }),
+      velocity: (bodyId: BodyId): Vector3 => ({ ...velocity(bodyId) }),
+    })
   }
   const epochs = new Map<number, ReturnType<typeof createEpoch>>()
   const bodyModels = (ids?: readonly BodyId[]) => [...bodyEvidence.values()]
@@ -154,7 +194,7 @@ export function createAnalysisEphemeris(options: {
         schemaVersion: 1, policy, inputTimeScale: 'UTC', dynamicalTimeScale: modern ? 'TDB' : 'legacy-numeric-jd',
         timeScaleQuality: modern ? utcTimeScaleQuality(endJulianDay) : null,
         frame: 'ECLIPJ2000', origin: 'Sun', positionUnit: 'AU', velocityUnit: 'AU/d',
-        startJulianDay, endJulianDay, manifestId: EPHEMERIS_MANIFEST.id,
+        startJulianDay, endJulianDay, manifestId,
         kernelPool: kernelPool.map(file => ({ ...file })),
         bodies: bodyModels(),
         physicalPredictionUncertainty: 'not-estimated',
