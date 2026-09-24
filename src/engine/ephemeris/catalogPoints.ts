@@ -45,12 +45,29 @@ export function propagatePreparedCatalogPositions(prepared: PreparedCatalogEleme
 export function propagatePreparedCatalogPositions(prepared: PreparedCatalogElements, julianDay: number, mode: CatalogPointMode, output?: Float32Array, start?: number, end?: number): Float32Array
 export function propagatePreparedCatalogPositions(prepared: PreparedCatalogElements, julianDay: number, mode: CatalogPointMode, output?: Float32Array | Float64Array, start = 0, end = prepared.count) {
   if (mode !== '2d' && mode !== '3d') throw new Error('Invalid catalog point mode')
+  if (!Number.isFinite(julianDay) || !Number.isSafeInteger(prepared.count) || prepared.count < 0 || prepared.data.length !== prepared.count * PREPARED_CATALOG_STRIDE) throw new Error('Invalid catalog epoch or prepared capacity')
+  const stride = mode === '2d' ? 2 : 3, positions = output ?? new Float32Array(prepared.count * stride)
+  if (positions.length !== prepared.count * stride) throw new Error('Catalog point output has the wrong capacity')
+  return propagatePreparedRange(prepared, julianDay, mode, positions, start, end, start)
+}
+
+/** Recompute one source range into a reusable bounded Float64 tile. Output
+ * starts at row zero even when the retained source range starts elsewhere. */
+export function propagatePreparedCatalogTile(prepared: PreparedCatalogElements, julianDay: number, mode: CatalogPointMode,
+  start: number, end: number, output: Float64Array) {
+  const stride = mode === '2d' ? 2 : 3
+  if (output.length !== (end-start)*stride) throw new Error('Catalog temporal tile has the wrong capacity')
+  return propagatePreparedRange(prepared, julianDay, mode, output, start, end, 0)
+}
+
+function propagatePreparedRange<T extends Float32Array | Float64Array>(prepared: PreparedCatalogElements, julianDay: number,
+  mode: CatalogPointMode, positions: T, start: number, end: number, outputStart: number): T {
+  if (mode !== '2d' && mode !== '3d') throw new Error('Invalid catalog point mode')
   if (!Number.isFinite(julianDay)) throw new Error('Invalid catalog point epoch')
   if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || end > prepared.count || prepared.data.length !== prepared.count * PREPARED_CATALOG_STRIDE) throw new Error('Invalid catalog compute range')
-  const stride = mode === '2d' ? 2 : 3, positions = output ?? new Float32Array(prepared.count * stride), data = prepared.data
-  if (positions.length !== prepared.count * stride) throw new Error('Catalog point output has the wrong capacity')
+  const stride = mode === '2d' ? 2 : 3, data = prepared.data
   for (let index = start; index < end; index++) {
-    const offset = index * PREPARED_CATALOG_STRIDE, out = index * stride
+    const offset = index * PREPARED_CATALOG_STRIDE, out = (outputStart+index-start) * stride
     const meanAnomaly = (data[offset + 2] + data[offset + 3] * (julianDay - data[offset])) * RAD
     let eccentricAnomaly: number
     try { eccentricAnomaly = solveEllipticKeplerRadians(meanAnomaly, data[offset + 1]) }
