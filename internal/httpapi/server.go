@@ -29,6 +29,7 @@ type Server struct {
 	catalog             *catalog.Catalog
 	inventory           *inventory.Inventory
 	scheduler           *requestScheduler
+	windowStreams       *requestScheduler
 	compute             *requestScheduler
 	tileSlots           chan struct{}
 	plans               *statePlanCache
@@ -59,7 +60,8 @@ func newServer(c *catalog.Catalog, maxConcurrent int, inv *inventory.Inventory, 
 	if maxConcurrent < 1 {
 		maxConcurrent = 1
 	}
-	return &Server{catalog: c, inventory: inv, coverage: ledger, scheduler: newRequestScheduler(maxConcurrent, requestQueueCapacity, requestQueueTimeout), compute: newRequestScheduler(runtime.GOMAXPROCS(0), requestQueueCapacity, requestQueueTimeout), tileSlots: make(chan struct{}, 2), plans: newStatePlanCache(statePlanCacheItems), tiles: newStateTileCache(stateTileCacheBytes), stateTileByteBudget: maxStateTileBytes}
+	windowStreamLimit := min(maxConcurrent, maxConcurrentStateWindowStreams)
+	return &Server{catalog: c, inventory: inv, coverage: ledger, scheduler: newRequestScheduler(maxConcurrent, requestQueueCapacity, requestQueueTimeout), windowStreams: newRequestScheduler(windowStreamLimit, requestQueueCapacity, requestQueueTimeout), compute: newRequestScheduler(runtime.GOMAXPROCS(0), requestQueueCapacity, requestQueueTimeout), tileSlots: make(chan struct{}, 2), plans: newStatePlanCache(statePlanCacheItems), tiles: newStateTileCache(stateTileCacheBytes), stateTileByteBudget: maxStateTileBytes}
 }
 
 // ConfigureComputeWorkers sets the CPU block budget before serving requests.
@@ -75,6 +77,9 @@ func (s *Server) ComputeStats() map[string]uint64 { return s.compute.stats() }
 
 // SchedulerStats is local benchmark evidence, not a public metrics endpoint.
 func (s *Server) SchedulerStats() map[string]uint64 { return s.scheduler.stats() }
+
+// StateWindowStats isolates long-lived stream admission from ordinary requests.
+func (s *Server) StateWindowStats() map[string]uint64 { return s.windowStreams.stats() }
 
 // TileCacheStats exposes bounded runtime evidence to the local benchmark
 // harness without adding diagnostic state to the wire protocol.
@@ -143,7 +148,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
 		return
 	}
-	release, err := s.scheduler.acquire(r.Context(), classifyRequest(r))
+	requestAdmission := s.scheduler
+	if r.Method == http.MethodPost && r.URL.Path == "/v1/state/window" {
+		// Long-lived streaming responses have a separate bounded lane. Holding
+		// a general request slot until a slow client finishes would let history
+		// streams starve interactive API requests after CPU admission is released.
+		requestAdmission = s.windowStreams
+	}
+	release, err := requestAdmission.acquire(r.Context(), classifyRequest(r))
 	if err != nil {
 		if r.Context().Err() != nil {
 			s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")

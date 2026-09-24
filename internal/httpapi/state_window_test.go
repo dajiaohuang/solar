@@ -139,7 +139,7 @@ func TestWindowCancellationJoinsQueuedBlocks(t *testing.T) {
 	cancel()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if s.SchedulerStats()["active"] == 0 && s.ComputeStats()["queued"] == 0 {
+		if s.StateWindowStats()["active"] == 0 && s.ComputeStats()["queued"] == 0 {
 			return
 		}
 		time.Sleep(time.Millisecond)

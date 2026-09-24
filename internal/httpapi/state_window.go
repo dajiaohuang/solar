@@ -12,11 +12,12 @@ import (
 )
 
 const (
-	stateWindowMediaType = "application/vnd.solar.state-window+binary"
-	maxWindowIDs         = 1024
-	maxWindowEpochs      = 1024
-	maxWindowStates      = 262144
-	windowLookahead      = 4
+	stateWindowMediaType            = "application/vnd.solar.state-window+binary"
+	maxWindowIDs                    = 1024
+	maxWindowEpochs                 = 1024
+	maxWindowStates                 = 262144
+	windowLookahead                 = 4
+	maxConcurrentStateWindowStreams = 2
 )
 
 type stateWindowRequest struct {
