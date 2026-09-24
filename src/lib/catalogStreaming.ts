@@ -215,7 +215,7 @@ async function loadStreamMetadata(root: string, chunk: number, count: number, cl
         check()
       }
       const entry = records[row]
-      validateCatalogMetadataRow(entry, row, ids, id)
+      validateCatalogMetadataRow(entry, row, ids, id, chunk)
       const classIndex = classMap.get(entry.orbitClassCode)
       if (classIndex === undefined) throw new Error('Catalog stream metadata class is absent from index')
       magnitudes[row] = entry.absoluteMagnitude ?? NaN

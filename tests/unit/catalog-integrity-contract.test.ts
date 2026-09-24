@@ -38,6 +38,7 @@ it('refuses duplicate identities, displaced source rows and altered index labels
   validateCatalogMetadata([row], 'chunk-0000')
   expect(() => validateCatalogMetadata([row, { ...row, rowIndex: 1 }], 'chunk-0000')).toThrow('Duplicate')
   expect(() => validateCatalogMetadata([{ ...row, rowIndex: 1 }], 'chunk-0000')).toThrow('locator')
+  expect(() => validateCatalogMetadata([{ ...row, chunkIndex: 1 }], 'chunk-0000')).toThrow('locator')
   expect(() => bindCatalogIndexRecord({ ...row, label: 'another body' }, row, 0)).toThrow('differs')
   expect(() => bindCatalogIndexRecord(row, undefined, 0)).toThrow('missing')
   expect(bindCatalogIndexRecord({ ...row }, row, 0)).toBe(row)

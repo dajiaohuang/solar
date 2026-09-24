@@ -18,28 +18,44 @@ export function bindCatalogIndexRecord<T extends AsteroidIndexEntry>(entry: Aste
 export function validateCatalogMetadata(entries: AsteroidIndexEntry[], expectedChunk?: string): void {
   if (!Array.isArray(entries)) throw new Error('Catalog metadata must be an array')
   const ids = new Set<string>()
+  const expectedMatch = expectedChunk === undefined ? null : /^chunk-(\d{4,})$/.exec(expectedChunk)
+  const parsedExpectedChunk = expectedMatch ? Number(expectedMatch[1]) : NaN
+  const expectedChunkIndex = Number.isSafeInteger(parsedExpectedChunk) && parsedExpectedChunk >= 0 &&
+    expectedChunk === `chunk-${String(parsedExpectedChunk).padStart(4, '0')}` ? parsedExpectedChunk : undefined
   for (let row = 0; row < entries.length; row++) {
-    validateCatalogMetadataRow(entries[row], row, ids, expectedChunk)
+    validateCatalogMetadataRow(entries[row], row, ids, expectedChunk, expectedChunkIndex)
   }
 }
 
 /** Callers processing a shard incrementally must share the same identity set. */
-export function validateCatalogMetadataRow(entry: AsteroidIndexEntry, row: number, ids: Set<string>, expectedChunk?: string): void {
+export function validateCatalogMetadataRow(entry: AsteroidIndexEntry, row: number, ids: Set<string>, expectedChunk?: string, expectedChunkIndex?: number): void {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry) ||
-      ![entry.id, entry.label, entry.shortLabel, entry.searchKey, entry.orbitClassCode, entry.orbitClassName].every(value => typeof value === 'string' && value.length > 0) ||
+      typeof entry.id !== 'string' || !entry.id.length ||
+      typeof entry.label !== 'string' || !entry.label.length ||
+      typeof entry.shortLabel !== 'string' || !entry.shortLabel.length ||
+      typeof entry.searchKey !== 'string' || !entry.searchKey.length ||
+      typeof entry.orbitClassCode !== 'string' || !entry.orbitClassCode.length ||
+      typeof entry.orbitClassName !== 'string' || !entry.orbitClassName.length ||
       entry.packedDesignation !== undefined && (typeof entry.packedDesignation !== 'string' || !entry.packedDesignation.length) ||
       typeof entry.isNeo !== 'boolean' || typeof entry.isPha !== 'boolean' ||
       entry.absoluteMagnitude !== undefined && !Number.isFinite(entry.absoluteMagnitude) ||
       entry.permanentNumber !== undefined && (!Number.isSafeInteger(entry.permanentNumber) || entry.permanentNumber < 1)) {
     throw new Error(`Invalid catalog metadata in row ${row}`)
   }
-  const match = typeof entry.chunkId === 'string' && /^chunk-(\d{4,})$/.exec(entry.chunkId)
-  const chunk = match ? Number(match[1]) : NaN
-  if (!Number.isSafeInteger(chunk) || chunk < 0 || entry.chunkId !== `chunk-${String(chunk).padStart(4, '0')}` ||
-      entry.chunkIndex !== undefined && entry.chunkIndex !== chunk ||
-      entry.rowIndex !== undefined && (!Number.isSafeInteger(entry.rowIndex) || entry.rowIndex < 0) ||
-      expectedChunk !== undefined && (entry.chunkId !== expectedChunk || entry.rowIndex !== undefined && entry.rowIndex !== row)) {
-    throw new Error(`Catalog metadata locator does not match its source row ${row}`)
+  if (expectedChunk !== undefined && expectedChunkIndex !== undefined) {
+    if (entry.chunkId !== expectedChunk || entry.chunkIndex !== undefined && entry.chunkIndex !== expectedChunkIndex ||
+        entry.rowIndex !== undefined && (!Number.isSafeInteger(entry.rowIndex) || entry.rowIndex !== row)) {
+      throw new Error(`Catalog metadata locator does not match its source row ${row}`)
+    }
+  } else {
+    const match = typeof entry.chunkId === 'string' && /^chunk-(\d{4,})$/.exec(entry.chunkId)
+    const chunk = match ? Number(match[1]) : NaN
+    if (!Number.isSafeInteger(chunk) || chunk < 0 || entry.chunkId !== `chunk-${String(chunk).padStart(4, '0')}` ||
+        entry.chunkIndex !== undefined && entry.chunkIndex !== chunk ||
+        entry.rowIndex !== undefined && (!Number.isSafeInteger(entry.rowIndex) || entry.rowIndex < 0) ||
+        expectedChunk !== undefined && (entry.chunkId !== expectedChunk || entry.rowIndex !== undefined && entry.rowIndex !== row)) {
+      throw new Error(`Catalog metadata locator does not match its source row ${row}`)
+    }
   }
   if (ids.has(entry.id)) throw new Error(`Duplicate catalog identity in shard: ${entry.id}`)
   ids.add(entry.id)

@@ -35,6 +35,8 @@ export async function selectCatalogSpatialPoints(
   const { radius, aspect, maximumPoints, focusedRow } = view
   const stride = view.rotation ? 3 : 2
   const projection = view.rotation ? catalogProjection(view.rotation) : null
+  const horizontalExtent = radius * aspect
+  const hasFiniteHorizontalExtent = Number.isFinite(horizontalExtent) && horizontalExtent > 0
   if (!Number.isSafeInteger(count) || count < 0 || count * stride > positions.length ||
       !Number.isFinite(radius) || radius <= 0 || !Number.isFinite(aspect) || aspect <= 0 ||
       !Number.isSafeInteger(maximumPoints) || maximumPoints < 1 || maximumPoints > 1_000_000) throw new Error('Invalid spatial catalog view')
@@ -54,9 +56,12 @@ export async function selectCatalogSpatialPoints(
     const ay = projection ? projection[1][0]*positions[offset] : 0
     const by = projection ? projection[1][1]*positions[offset+1] : positions[offset+1]
     const cy = projection ? projection[1][2]*positions[offset+2] : 0
-    const x = (ax+bx)/radius/aspect, y = (ay+by+cy)/radius
+    const horizontal = ax+bx
+    const x = hasFiniteHorizontalExtent ? horizontal/horizontalExtent : horizontal/radius/aspect
+    const y = (ay+by+cy)/radius
     if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error('Invalid spatial catalog position')
-    const marginX = CATALOG_CLIP_RELATIVE_MARGIN*(1+(Math.abs(ax)+Math.abs(bx))/radius/aspect)
+    const horizontalMagnitude = Math.abs(ax)+Math.abs(bx)
+    const marginX = CATALOG_CLIP_RELATIVE_MARGIN*(1+(hasFiniteHorizontalExtent ? horizontalMagnitude/horizontalExtent : horizontalMagnitude/radius/aspect))
     const marginY = CATALOG_CLIP_RELATIVE_MARGIN*(1+(Math.abs(ay)+Math.abs(by)+Math.abs(cy))/radius)
     screenX = x; screenY = y
     return x >= -1-marginX && x <= 1+marginX && y >= -1-marginY && y <= 1+marginY
