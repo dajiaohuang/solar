@@ -75,10 +75,16 @@ export async function selectCatalogSpatialPoints(
   // otherwise visible bodies. Use one bounded slot per source row in this
   // case; only snapshots exceeding the display budget need representatives.
   const retainAll = count <= maximumPoints
-  const columns = Math.max(1, Math.min(cellBudget, Math.floor(Math.sqrt(cellBudget * aspect))))
-  const rows = Math.max(1, Math.floor(cellBudget / columns))
-  const winners = new Uint32Array(retainAll ? count : cellBudget ? columns * rows : 0).fill(0xffffffff)
-  const winnerInside = new Uint8Array(winners.length)
+  const columns = retainAll ? 1 : Math.max(1, Math.min(cellBudget, Math.floor(Math.sqrt(cellBudget * aspect))))
+  const rows = retainAll ? 1 : Math.max(1, Math.floor(cellBudget / columns))
+  const cellCount = retainAll ? count : cellBudget ? columns * rows : 0
+  // In retain-all mode each source row owns its own cell, so no winner
+  // arbitration is needed. Write visible rows directly into membership and
+  // avoid allocating a row-sized winners array and priority-byte array.
+  const winners = retainAll ? null : new Uint32Array(cellCount).fill(0xffffffff)
+  const winnerInside = winners ? new Uint8Array(winners.length) : null
+  let selected = retainAll ? new Uint32Array(Math.ceil(count / 32)) : null
+  if (selected) for (const index of pinned) selected[index >>> 5] |= 1 << (index & 31)
   let occupied = 0, visible = 0, edgeCandidates = 0, skippedRows = 0, testedRows = 0
   const sliceRows = spatialIndex ? spatialIndex.blockRows * 16 : 16_384
   for (let start = 0; start < count; start += sliceRows) {
@@ -103,18 +109,24 @@ export async function selectCatalogSpatialPoints(
       const inside = x >= -1 && x <= 1 && y >= -1 && y <= 1
       visible++
       if (!inside) edgeCandidates++
-      if (pinned.has(index) || !cellBudget) continue
+      if (pinned.has(index)) continue
+      if (retainAll) {
+        selected![index >>> 5] |= 1 << (index & 31)
+        occupied++
+        continue
+      }
+      if (!cellBudget) continue
       const column = Math.max(0, Math.min(columns - 1, Math.floor((x + 1) * .5 * columns)))
-      const row = Math.max(0, Math.min(rows - 1, Math.floor((y + 1) * .5 * rows))), cell = retainAll ? index : row * columns + column
-      const previous = winners[cell]
+      const row = Math.max(0, Math.min(rows - 1, Math.floor((y + 1) * .5 * rows))), cell = row * columns + column
+      const previous = winners![cell]
       // An allowance-only point may be clipped by the GPU. It must not evict
       // a mathematical-viewport point from an otherwise populated cell.
       // Explicit focus/selection pins keep their independent priority.
       if (previous === 0xffffffff) {
-        winners[cell] = index; winnerInside[cell] = Number(inside); occupied++
-      } else if (Number(inside) > winnerInside[cell] ||
-          Number(inside) === winnerInside[cell] && hash(index) < hash(previous)) {
-        winners[cell] = index; winnerInside[cell] = Number(inside)
+        winners![cell] = index; winnerInside![cell] = Number(inside); occupied++
+      } else if (Number(inside) > winnerInside![cell] ||
+          Number(inside) === winnerInside![cell] && hash(index) < hash(previous)) {
+        winners![cell] = index; winnerInside![cell] = Number(inside)
       }
     }
     if (end < count && await yieldSelection()) return null
@@ -123,9 +135,11 @@ export async function selectCatalogSpatialPoints(
   // Bit membership preserves exactly the same source-order output without a
   // potentially 500k-element synchronous sort. This scratch is budgeted by the
   // stream planner and both collection stages cooperate with cancellation.
-  const selected = new Uint32Array(Math.ceil(count / 32))
-  for (const index of pinned) selected[index >>> 5] |= 1 << (index&31)
-  for (let start = 0; start < winners.length; start += 16_384) {
+  if (!selected) {
+    selected = new Uint32Array(Math.ceil(count / 32))
+    for (const index of pinned) selected[index >>> 5] |= 1 << (index&31)
+  }
+  if (winners) for (let start = 0; start < winners.length; start += 16_384) {
     if (cancelled()) return null
     const end = Math.min(winners.length, start + 16_384)
     for (let cell = start; cell < end; cell++) {
@@ -159,5 +173,5 @@ export async function selectCatalogSpatialPoints(
   }
   if (cancelled()) return null
   if (offset !== occupied+pinned.size) throw new Error('Spatial catalog membership count mismatch')
-  return { indices, visible, edgeCandidates, cells: winners.length, testedRows, skippedRows }
+  return { indices, visible, edgeCandidates, cells: cellCount, testedRows, skippedRows }
 }

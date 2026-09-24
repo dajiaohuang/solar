@@ -83,11 +83,11 @@ export function planCatalogStream(manifest: AsteroidManifest, requestedRows: num
       new Set(compact.classCodes).size !== compact.classCodes.length || compact.classCodes.some(code => typeof code !== 'string' || !code) ||
       !/^[a-zA-Z0-9_-]+\.bin$/.test(compact.path) || !manifest.releasePath) throw new Error('Unsupported catalog streaming manifest')
   if (!Number.isSafeInteger(requestedRows) || requestedRows < 1 || !Number.isSafeInteger(budgetBytes) || budgetBytes < 1 || budgetBytes > 512 * MIB) throw new Error('Invalid catalog streaming budget')
-  // Explicit typed-array / GPU allocations, not total browser RSS: index read
-  // plus concatenation, optional query locators + bitset, four in-flight shards
-  // and their compute/transfer scratch, checksum parsing reserve. GPU attributes
-  // and a CPU copy for context restoration use 48 bytes per point. Spatial
-  // positions, index scratch and CPU/GPU selections reserve another 24 bytes.
+  // Explicit typed-array / GPU admission model, not total browser RSS: index
+  // read plus concatenation, optional query locators + bitset, four in-flight
+  // shards and compute/transfer scratch, metadata parsing and full-source
+  // render/culling headroom. The per-admitted-row term below accounts for the
+  // simultaneous resident and replacement selection buffers.
   const spatialIndexBytes = Math.ceil(totalCount/CATALOG_SPATIAL_BLOCK_ROWS)*((mode === '3d' ? 3 : 2)*2*8+5)
   const spatialMembershipBytes = Math.ceil(totalCount / 32) * 4
   // Source-row masks may coexist across the worker/main-thread handoff. Each
@@ -122,10 +122,15 @@ export function planCatalogStream(manifest: AsteroidManifest, requestedRows: num
     appendRows*(3*Math.ceil(chunkSize/8)+4096+128) : 0
   const maximumEpochBlocks = chunkCount+appendRows
   const fixed = totalCount * (48 + 9) + pipelineBytes + metadataBytes + 8 * MIB + spatialIndexBytes + spatialMembershipBytes + sourceSelectionBytes + appendReservedBytes + (retainEpochs ? 2 * MIB + chunkCount * 128 : 0)
+  // Worst-case admitted-row charge for spatial display. In 2D, the 72 B base
+  // is 48 B of CPU/GPU point attributes, 8 B of worker culling positions, and
+  // 16 B for worker winners/output indices plus the previous CPU selection and
+  // GPU index-buffer high-water mark that can coexist during replacement. The
+  // extra byte below is winnerInside; retain-all views skip winner arrays.
   // 3D adds one Float32 coordinate in both CPU/GPU attributes and worker culling.
-  // Ten Float64 prepared coefficients per retained row. This is additional
-  // resident storage, never hidden inside the static snapshot budget. One byte
-  // per admitted row bounds viewport-interior priority flags in the cell grid.
+  // Ten Float64 prepared coefficients per retained row are additional resident
+  // storage, never hidden inside the static snapshot budget. The packed source
+  // membership bitmap and spatial block bounds are separately reserved above.
   const perPoint = (mode === '3d' ? 84 : 72) + 1 + (retainEpochs ? 80 : 0)
   const capacity = Math.min(totalCount, requestedRows, Math.max(0, Math.floor((budgetBytes - fixed) / perPoint)))
   // Requested rows remain the total ceiling. Keep at least one initial row;
