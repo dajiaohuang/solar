@@ -37,7 +37,7 @@ export async function selectCatalogSpatialPoints(
   const projection = view.rotation ? catalogProjection(view.rotation) : null
   if (!Number.isSafeInteger(count) || count < 0 || count * stride > positions.length ||
       !Number.isFinite(radius) || radius <= 0 || !Number.isFinite(aspect) || aspect <= 0 ||
-      !Number.isSafeInteger(maximumPoints) || maximumPoints < 1 || maximumPoints > 500_000) throw new Error('Invalid spatial catalog view')
+      !Number.isSafeInteger(maximumPoints) || maximumPoints < 1 || maximumPoints > 1_000_000) throw new Error('Invalid spatial catalog view')
   if (focusedRow !== undefined && (!Number.isSafeInteger(focusedRow) || focusedRow < 0 || focusedRow >= count)) throw new Error('Focused catalog row is outside the uploaded snapshot')
   const requested = view.selectedRows?.slice() ?? []
   if (requested.length > 256 || requested.some(row => !Number.isSafeInteger(row) || row < 0 || row >= count)) throw new Error('Selected catalog rows exceed the bounded snapshot contract')

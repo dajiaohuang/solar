@@ -32,6 +32,8 @@ it('keeps all visible collocated bodies when the uploaded count fits the display
   const bounded = await selectCatalogSpatialPoints(positions,4,{ ...view, maximumPoints: 1 },() => false,noYield)
   expect(bounded?.indices).toHaveLength(1)
   expect(bounded?.visible).toBe(3)
+  const expanded = await selectCatalogSpatialPoints(positions,4,{ ...view, maximumPoints: 1_000_000 },() => false,noYield)
+  expect(expanded?.indices).toEqual(new Uint32Array([0,1,2]))
 })
 
 it('uses the same 3D display rotation for culling, including actual z coordinates', async () => {
@@ -78,7 +80,7 @@ it('rejects nonfinite source positions and invalid view or row contracts', async
   const positions = new Float32Array([0, 0, Infinity, 0])
   await expect(selectCatalogSpatialPoints(positions, 2, view, () => false, noYield)).rejects.toThrow('position')
   for (const count of [-1, .5, 3, NaN]) await expect(selectCatalogSpatialPoints(positions, count, view, () => false, noYield)).rejects.toThrow('view')
-  for (const invalid of [{ ...view, radius: 0 }, { ...view, aspect: Infinity }, { ...view, maximumPoints: 0 }, { ...view, maximumPoints: 500001 }]) {
+  for (const invalid of [{ ...view, radius: 0 }, { ...view, aspect: Infinity }, { ...view, maximumPoints: 0 }, { ...view, maximumPoints: 1_000_001 }]) {
     await expect(selectCatalogSpatialPoints(positions, 1, invalid, () => false, noYield)).rejects.toThrow('view')
   }
 })

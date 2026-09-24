@@ -488,7 +488,7 @@ export function CatalogWorkspace() {
               <option value="spatial">{t('catalogSpatialMode')}</option><option value="all">{t('catalogSpatialAll')}</option>
             </select></label>
             {streamDisplay === 'spatial' && <label className="field"><span>{t('catalogSpatialLimit')}</span><select value={streamDisplayLimit} onChange={event => setStreamDisplayLimit(Number(event.target.value))}>
-              {[10_000, 30_000, 100_000, 300_000, 500_000].map(value => <option value={value} key={value}>{value.toLocaleString()}</option>)}
+              {[10_000, 30_000, 100_000, 300_000, 500_000, 1_000_000].map(value => <option value={value} key={value}>{value.toLocaleString()}</option>)}
             </select></label>}
             <p className="catalog-result-note">{t('catalogStreamExplanation')}</p>
             {streamMetadataMaximumBytes > 0 && <p className="catalog-result-note">{language === 'zh'

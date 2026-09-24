@@ -15,13 +15,17 @@ if (!['default', 'd3d11'].includes(graphicsMode) || (graphicsMode === 'd3d11' &&
 const launchOptions = graphicsMode === 'd3d11' ? { channel: 'chromium', args: ['--use-angle=d3d11'] } : {}
 const width = 1280, height = 720, sha = value => createHash('sha256').update(value).digest('hex')
 const source = readFileSync('src/lib/catalogPointRenderer.ts', 'utf8')
-// This renderer has no runtime imports. Transpile syntax only, keeping its
-// shaders, allocation policy and draw calls identical to the application.
+const projectionSource = readFileSync('src/lib/catalogProjection.ts', 'utf8')
+// Serve the renderer's projection helper too. Transpile syntax only, keeping
+// its shaders, allocation policy and draw calls identical to the application.
 const javascript = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText
+const projectionJavascript = ts.transpileModule(projectionSource, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText
 const server = createServer((request, response) => {
-  const body = request.url === '/renderer.js' ? javascript : request.url === '/' ? '<!doctype html><title>Synthetic catalog GPU capacity</title><canvas></canvas>' : null
+  const body = request.url === '/renderer.js' ? javascript : ['/catalogProjection', '/catalogProjection.js'].includes(request.url) ? projectionJavascript
+    : request.url === '/' ? '<!doctype html><title>Synthetic catalog GPU capacity</title><canvas></canvas>' : null
   if (body === null) { response.writeHead(404); response.end(); return }
-  response.writeHead(200, { 'Content-Type': request.url === '/renderer.js' ? 'application/javascript' : 'text/html', 'Cache-Control': 'no-store' })
+  const isJavaScript = request.url === '/renderer.js' || request.url.startsWith('/catalogProjection')
+  response.writeHead(200, { 'Content-Type': isJavaScript ? 'application/javascript' : 'text/html', 'Cache-Control': 'no-store' })
   response.end(body)
 })
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
@@ -112,7 +116,8 @@ try {
   }
   const report = { schemaVersion: 1, generatedAt: new Date().toISOString(), graphicsMode, launchOptions,
     measurement: 'isolated-actual-2D-renderer-synthetic-dense-disk-not-application-streaming-or-display-FPS',
-    rendererSourceSha256: sha(source), servedJavaScriptSha256: sha(javascript), browser: browser.version(),
+    rendererSourceSha256: sha(source), servedJavaScriptSha256: sha(javascript), projectionSourceSha256: sha(projectionSource),
+    servedProjectionJavaScriptSha256: sha(projectionJavascript), browser: browser.version(),
     viewport: { width, height, pixelRatio: 1 }, requestedPositionUploadIntervalMs: 200,
     limits: ['Headless requestAnimationFrame intervals, not physical display presentation.',
       'Draw/upload submission times are CPU wall time, not GPU timer-query measurements.',

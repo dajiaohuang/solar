@@ -1,0 +1,248 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-24T16:48:42.845Z",
+  "graphicsMode": "d3d11",
+  "launchOptions": {
+    "channel": "chromium",
+    "args": [
+      "--use-angle=d3d11"
+    ]
+  },
+  "measurement": "isolated-actual-2D-renderer-synthetic-dense-disk-not-application-streaming-or-display-FPS",
+  "rendererSourceSha256": "739cbe45168a001c8dad9a8e5f048745e95177759cff52cc82e9c1e11afa2ee6",
+  "servedJavaScriptSha256": "ddd94a577d060d0b6676863868e0e62862f7d333304d39c7e4d1ca8a27094a84",
+  "projectionSourceSha256": "83d4feeb129511ca6e8dbdd6494195b0c3e8e7532f6570d2d6ad9d13c1621ef3",
+  "servedProjectionJavaScriptSha256": "59ed290436987a3c41f23dfb29193aa0bbacbec3dd978651086e1bd3347d3ade",
+  "browser": "151.0.7922.34",
+  "viewport": {
+    "width": 1280,
+    "height": 720,
+    "pixelRatio": 1
+  },
+  "requestedPositionUploadIntervalMs": 200,
+  "limits": [
+    "Headless requestAnimationFrame intervals, not physical display presentation.",
+    "Draw/upload submission times are CPU wall time, not GPU timer-query measurements.",
+    "Explicit finish measurements synchronize the GPU only at the first draw and final drain.",
+    "Reported buffer bytes exclude driver, browser, JS heap, orbital state and transient copies.",
+    "Synthetic disk geometry and fixed pixel size are not actual full-catalog application coverage."
+  ],
+  "graphics": {
+    "version": "WebGL 1.0 (OpenGL ES 2.0 Chromium)",
+    "shadingLanguage": "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)",
+    "vendor": "WebKit",
+    "renderer": "WebKit WebGL",
+    "unmaskedVendor": "Google Inc. (NVIDIA)",
+    "unmaskedRenderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Ti (0x00002C05) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "contextAttributes": {
+      "alpha": false,
+      "antialias": false,
+      "depth": true,
+      "desynchronized": false,
+      "failIfMajorPerformanceCaveat": false,
+      "powerPreference": "default",
+      "premultipliedAlpha": true,
+      "preserveDrawingBuffer": false,
+      "stencil": false,
+      "xrCompatible": false
+    }
+  },
+  "cases": [
+    {
+      "count": 30000,
+      "preparationMs": 4.5,
+      "initialUploadAndFinishMs": 2.5,
+      "finalDrainMs": 0,
+      "attributesBytes": 720000,
+      "cpuAttributeArraysBytes": 960000,
+      "frameIntervals": {
+        "samples": 180,
+        "p50Ms": 16.699999999999818,
+        "p95Ms": 16.799999999999955,
+        "p99Ms": 16.899999999999864,
+        "maxMs": 16.90000000000009
+      },
+      "drawSubmission": {
+        "samples": 180,
+        "p50Ms": 0.3999999761581421,
+        "p95Ms": 0.9000000059604645,
+        "p99Ms": 2.800000011920929,
+        "maxMs": 2.9000000059604645
+      },
+      "uploadSubmission": {
+        "samples": 14,
+        "p50Ms": 1.0999999940395355,
+        "p95Ms": 2.9000000059604645,
+        "p99Ms": 2.9000000059604645,
+        "maxMs": 2.9000000059604645
+      },
+      "observedLoopHz": 60.00400026668444,
+      "audit": {
+        "allocations": 3,
+        "allocationBytes": 720000,
+        "updates": 14,
+        "updateBytes": 3360000,
+        "draws": 189
+      },
+      "litProbePixels": 5,
+      "glError": 0
+    },
+    {
+      "count": 100000,
+      "preparationMs": 10.799999982118607,
+      "initialUploadAndFinishMs": 5.299999982118607,
+      "finalDrainMs": 0.10000002384185791,
+      "attributesBytes": 2400000,
+      "cpuAttributeArraysBytes": 3200000,
+      "frameIntervals": {
+        "samples": 180,
+        "p50Ms": 16.699999999999818,
+        "p95Ms": 16.800000000000182,
+        "p99Ms": 16.900000000000546,
+        "maxMs": 17
+      },
+      "drawSubmission": {
+        "samples": 180,
+        "p50Ms": 0.5,
+        "p95Ms": 2.5,
+        "p99Ms": 8,
+        "maxMs": 9.400000005960464
+      },
+      "uploadSubmission": {
+        "samples": 14,
+        "p50Ms": 2.7999999821186066,
+        "p95Ms": 9.400000005960464,
+        "p99Ms": 9.400000005960464,
+        "maxMs": 9.400000005960464
+      },
+      "observedLoopHz": 60.00400026668444,
+      "audit": {
+        "allocations": 3,
+        "allocationBytes": 2400000,
+        "updates": 14,
+        "updateBytes": 11200000,
+        "draws": 189
+      },
+      "litProbePixels": 17,
+      "glError": 0
+    },
+    {
+      "count": 300000,
+      "preparationMs": 52.5,
+      "initialUploadAndFinishMs": 29.5,
+      "finalDrainMs": 0.09999999403953552,
+      "attributesBytes": 7200000,
+      "cpuAttributeArraysBytes": 9600000,
+      "frameIntervals": {
+        "samples": 180,
+        "p50Ms": 16.69999999999891,
+        "p95Ms": 16.800000000000182,
+        "p99Ms": 16.899999999999636,
+        "maxMs": 16.899999999999636
+      },
+      "drawSubmission": {
+        "samples": 180,
+        "p50Ms": 0.5,
+        "p95Ms": 5.0999999940395355,
+        "p99Ms": 12.700000017881393,
+        "maxMs": 16.200000017881393
+      },
+      "uploadSubmission": {
+        "samples": 14,
+        "p50Ms": 6.800000011920929,
+        "p95Ms": 16.200000017881393,
+        "p99Ms": 16.200000017881393,
+        "maxMs": 16.200000017881393
+      },
+      "observedLoopHz": 60.00600060005999,
+      "audit": {
+        "allocations": 3,
+        "allocationBytes": 7200000,
+        "updates": 14,
+        "updateBytes": 33600000,
+        "draws": 189
+      },
+      "litProbePixels": 25,
+      "glError": 0
+    },
+    {
+      "count": 1000000,
+      "preparationMs": 107.5,
+      "initialUploadAndFinishMs": 59.19999998807907,
+      "finalDrainMs": 0,
+      "attributesBytes": 24000000,
+      "cpuAttributeArraysBytes": 32000000,
+      "frameIntervals": {
+        "samples": 180,
+        "p50Ms": 16.69999999999891,
+        "p95Ms": 16.799999999999272,
+        "p99Ms": 16.80000000000109,
+        "maxMs": 16.899999999999636
+      },
+      "drawSubmission": {
+        "samples": 180,
+        "p50Ms": 0.30000001192092896,
+        "p95Ms": 11.399999976158142,
+        "p99Ms": 12.599999994039536,
+        "maxMs": 25.900000005960464
+      },
+      "uploadSubmission": {
+        "samples": 14,
+        "p50Ms": 11.5,
+        "p95Ms": 25.900000005960464,
+        "p99Ms": 25.900000005960464,
+        "maxMs": 25.900000005960464
+      },
+      "observedLoopHz": 60.00600060005999,
+      "audit": {
+        "allocations": 3,
+        "allocationBytes": 24000000,
+        "updates": 14,
+        "updateBytes": 112000000,
+        "draws": 189
+      },
+      "litProbePixels": 25,
+      "glError": 0
+    },
+    {
+      "count": 1561171,
+      "preparationMs": 137.5,
+      "initialUploadAndFinishMs": 81,
+      "finalDrainMs": 0,
+      "attributesBytes": 37468104,
+      "cpuAttributeArraysBytes": 49957472,
+      "frameIntervals": {
+        "samples": 180,
+        "p50Ms": 16.69999999999891,
+        "p95Ms": 16.80000000000109,
+        "p99Ms": 33.100000000000364,
+        "maxMs": 33.29999999999927
+      },
+      "drawSubmission": {
+        "samples": 180,
+        "p50Ms": 0.4000000059604645,
+        "p95Ms": 18.099999994039536,
+        "p99Ms": 36.400000005960464,
+        "maxMs": 40
+      },
+      "uploadSubmission": {
+        "samples": 14,
+        "p50Ms": 18.19999998807907,
+        "p95Ms": 40,
+        "p99Ms": 40,
+        "maxMs": 40
+      },
+      "observedLoopHz": 59.347181008902076,
+      "audit": {
+        "allocations": 3,
+        "allocationBytes": 37468104,
+        "updates": 14,
+        "updateBytes": 174851152,
+        "draws": 189
+      },
+      "litProbePixels": 25,
+      "glError": 0
+    }
+  ],
+  "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/151.0.0.0 Safari/537.36"
+}
