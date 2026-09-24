@@ -301,6 +301,8 @@ async function installMockCatalog(page: Page | null, options: {
   profileSamples?: { desktop: number[]; mobile: number[] }
   presetDataset?: boolean
   chunkSize?: number
+  searchable?: boolean
+  searchDataset?: boolean
 } = {}) {
   const responses = new Map<string, MockCatalogResponse>()
   const register = async (pattern: string, response: MockCatalogResponse) => {
@@ -332,7 +334,10 @@ async function installMockCatalog(page: Page | null, options: {
         isPha: false,
       }
     })
-    : fixtureEntries
+    : options.searchDataset ? Array.from({ length: 8 }, (_, index) => ({ ...fixtureEntries[0],
+      id: `asteroid:mpc:${String(index+2000).padStart(5,'0')}`, packedDesignation: String(index+2000).padStart(5,'0'),
+      permanentNumber: index+2000, label: `${index+2000} Alpha ${index}`, shortLabel: `Alpha ${index}`, searchKey: `alpha ${index}`,
+    })) : fixtureEntries
   const chunkSize = options.chunkSize ?? 10_000
   const chunkId = (index: number) => `chunk-${String(Math.floor(index / chunkSize)).padStart(4, '0')}`
   entries.forEach((entry, index) => Object.assign(entry, {
@@ -348,7 +353,7 @@ async function installMockCatalog(page: Page | null, options: {
     datasetMode: options.presetDataset ? 'full' : 'lite',
     source: 'fixture', generatedAt: '2026-08-18T00:00:00Z',
     sourceSha256: 'a'.repeat(64), contentSha256: 'b'.repeat(64), parserVersion: 'test', totalCount: entries.length,
-    chunkCount: Math.ceil(entries.length / chunkSize), chunkSize, format: 'binary-v1', bucketCounts: { 'digit-1': entries.length }, categoryCounts: options.presetDataset ? { MBA: entries.length } : { MBA: 1, APO: 1, TNO: 1 }, featured: [],
+    chunkCount: Math.ceil(entries.length / chunkSize), chunkSize, format: 'binary-v1', bucketCounts: { 'digit-1': entries.length }, categoryCounts: options.presetDataset || options.searchDataset ? { MBA: entries.length } : { MBA: 1, APO: 1, TNO: 1 }, featured: [],
     selectionPolicy: { type: 'permanent-number-through-plus-featured', maxPermanentNumber: 30000, requiredFeaturedNames: [] },
   }
   if (precomputed) Object.assign(manifest, {
@@ -403,6 +408,16 @@ async function installMockCatalog(page: Page | null, options: {
     sourceSha256: manifest.sourceSha256,
   } })
   const prefix = `/data/asteroids/releases/${manifest.version}/`
+  if (options.searchable || options.searchDataset) {
+    const buckets = new Map<string, typeof entries>()
+    for (const entry of entries) {
+      const initial = entry.searchKey[0]
+      const bucket = buckets.get(initial) ?? []
+      bucket.push(entry); buckets.set(initial,bucket)
+    }
+    manifest.bucketCounts = Object.fromEntries([...buckets].map(([key, records]) => [key,records.length])) as typeof manifest.bucketCounts
+    for (const [key, records] of buckets) await register(`**${prefix}search/${key}.json`, { json: records })
+  }
   const files = Object.fromEntries([...responses].filter(([path]) => path.startsWith(prefix))
     .map(([path, response]) => [path.slice(prefix.length), createHash('sha256').update(response.body ?? JSON.stringify(response.json)).digest('hex')] as const)
     .filter(([path]) => /^(binary|meta|search|lookup)\//.test(path) || /^catalog-(index|sample|summary)/.test(path))
@@ -991,9 +1006,7 @@ test(`stops a cancelled ${phase} download and immediately permits a new request`
   let started = 0, disconnected = 0
   let releaseSample!: () => void
   const sampleGate = new Promise<void>(resolve => { releaseSample = resolve })
-  const responses = await installMockCatalog(null, { precomputed: true })
-  const root = '/data/asteroids/releases/mock-content-lite'
-  for (const bucket of ['a', 'b']) responses.set(`${root}/search/${bucket}.json`, responses.get(`${root}/meta/chunk-0000.json`)!)
+  const responses = await installMockCatalog(null, { precomputed: true, searchable: true })
   // Use an actual same-origin unfinished response, without routing this fetch
   // through Playwright's interception proxy. Test only the production bundle.
   const server = createServer(async (request, response) => {
@@ -1046,12 +1059,12 @@ test(`stops a cancelled ${phase} download and immediately permits a new request`
       // Make the initial sample finish after the search has started. Its
       // completion must not mark the unrelated pending search as finished.
       const summary = page.locator('.dataset-card')
-      await expect(summary).not.toContainText('3 known · 0 unknown')
+      await expect(summary).not.toContainText('2 known · 1 unknown')
       releaseSample()
       // A consumed response can be marked aborted during sample effect/cache
       // cleanup. CI retained the parsed summary in the UI while finished()
       // never settled. Observe the actual consumer before testing search state.
-      await expect(summary).toContainText('3 known · 0 unknown')
+      await expect(summary).toContainText('2 known · 1 unknown')
       await expect(scan).toBeDisabled()
     }
     if (phase === 'name search') await search.fill('Beta')
@@ -1078,24 +1091,17 @@ test(`stops a cancelled ${phase} download and immediately permits a new request`
 }
 
 test('bounds parallel shard hydration while preserving all search matches', async ({ page }) => {
-  const responses = await installMockCatalog(page, { precomputed: true })
+  const responses = await installMockCatalog(page, { precomputed: true, searchDataset: true, chunkSize: 1, sampleCount: 3 })
   const root = '/data/asteroids/releases/mock-content-lite'
-  const base = (responses.get(`${root}/meta/chunk-0000.json`)!.json as Array<Record<string, unknown>>)[0]
-  const entries = Array.from({ length: 8 }, (_, index) => ({ ...base,
-    id: `asteroid:mpc:${index + 2000}`, permanentNumber: index + 2000,
-    label: `${index + 2000} Alpha ${index}`, shortLabel: `Alpha ${index}`, searchKey: `alpha ${index}`,
-    chunkId: `chunk-${String(index + 1).padStart(4, '0')}`,
-  }))
-  const numeric = Buffer.from(new Float64Array([2451545, 2.4, 0.1, 5, 20, 40, 60, 0.25]).buffer)
+  const entries = responses.get(`${root}/search/a.json`)!.json as Array<{ chunkId: string; label: string }>
   let started = 0, active = 0, peak = 0, allowResponses = false
   const waiting: Array<() => void> = []
-  await page.route(`**${root}/search/a.json`, route => route.fulfill({ json: entries }))
   for (const entry of entries) for (const type of ['meta', 'binary']) {
     await page.route(`**${root}/${type}/${entry.chunkId}.${type === 'meta' ? 'json' : 'bin'}`, async route => {
       started++; active++; peak = Math.max(peak, active)
       if (!allowResponses) await new Promise<void>(resolve => waiting.push(resolve))
       try {
-        await route.fulfill(type === 'meta' ? { json: [entry] } : { body: numeric, contentType: 'application/octet-stream' })
+        await route.fulfill(responses.get(`${root}/${type}/${entry.chunkId}.${type === 'meta' ? 'json' : 'bin'}`)!)
       } finally { active-- }
     })
   }
