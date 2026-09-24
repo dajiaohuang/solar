@@ -1,12 +1,12 @@
 import { expect, it } from 'vitest'
-import { reserveKernelBuffers } from '../../src/engine/ephemeris/kernelBufferBudget'
+import { MAX_KERNEL_BUFFER_BYTES, reserveKernelBuffers } from '../../src/engine/ephemeris/kernelBufferBudget'
 
 it('enforces the shared raw-kernel reservation ceiling and releases idempotently', () => {
-  const release = reserveKernelBuffers(512 * 1024 * 1024)
-  expect(() => reserveKernelBuffers(1)).toThrow('512 MiB')
+  const release = reserveKernelBuffers(MAX_KERNEL_BUFFER_BYTES)
+  expect(() => reserveKernelBuffers(1)).toThrow('768 MiB')
   release()
   release()
-  const retry = reserveKernelBuffers(512 * 1024 * 1024)
+  const retry = reserveKernelBuffers(MAX_KERNEL_BUFFER_BYTES)
   retry()
 })
 
