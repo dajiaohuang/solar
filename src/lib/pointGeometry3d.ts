@@ -56,8 +56,20 @@ export function updatePointGeometry(
     writePosition(positions!.array as Float32Array, index)
     if (recolor) writeColor(colors!.array as Float32Array, index)
   }
-  if (positions) positions.needsUpdate = true
-  if (colors && recolor) colors.needsUpdate = true
+  // Both point layers disable frustum culling. Do not compute unused bounds.
+  // Capacity grows geometrically, but only live rows need subsequent uploads.
+  // Replace pending ranges because this update rewrites the entire live prefix;
+  // a shortened tail is outside drawRange and will be rewritten before reuse.
+  if (positions && count) {
+    positions.clearUpdateRanges(); positions.addUpdateRange(0,count*3)
+    positions.needsUpdate = true
+  }
+  // Preserve an earlier pending color range when this update changes positions
+  // only: the renderer may not have consumed the prior recolor yet.
+  if (colors && recolor && count) {
+    colors.clearUpdateRanges(); colors.addUpdateRange(0,count*3)
+    colors.needsUpdate = true
+  }
   geometry.userData.colorKey = colorKey
   geometry.userData.pointCount = count
   geometry.setDrawRange(0, count)

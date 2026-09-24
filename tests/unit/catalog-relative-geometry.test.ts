@@ -1,13 +1,45 @@
 import { expect, it } from 'vitest'
 import { BufferAttribute, BufferGeometry } from 'three'
 import { prepareCatalogElements, propagatePreparedCatalogPositions } from '../../src/engine/ephemeris/catalogPoints'
-import { updateCatalogPointGeometry } from '../../src/lib/pointGeometry3d'
+import { updateCatalogPointGeometry, updatePointGeometry } from '../../src/lib/pointGeometry3d'
 import { buildGeometry } from '../../src/lib/trajectoryGeometry2d'
 import { createProjection } from '../../src/lib/viewProjection'
 import { EMPTY_CURRENT_POSITIONS } from '../../src/lib/currentPositions'
 import type { AsteroidRecord, CelestialBody } from '../../src/types'
 
 const records = [{ isNeo: false, isPha: false }] as AsteroidRecord[]
+
+it('uploads only live point prefixes while preserving unconsumed color changes', () => {
+  const key = {}, writePosition = (values: Float32Array, index: number) => values.set([index,2,3],index*3)
+  const writeColor = (values: Float32Array, index: number) => values.set([1,0,0],index*3)
+  const geometry = updatePointGeometry(new BufferGeometry(),3,key,writePosition,writeColor)
+  const positions = geometry.getAttribute('position') as BufferAttribute
+  const colors = geometry.getAttribute('color') as BufferAttribute
+  expect(positions.count).toBe(256)
+  expect(positions.updateRanges).toEqual([{ start: 0, count: 9 }])
+  const colorVersion = colors.version
+  updatePointGeometry(geometry,3,key,writePosition,writeColor)
+  expect(colors.version).toBe(colorVersion)
+  expect(colors.updateRanges).toEqual([{ start: 0, count: 9 }])
+  // Simulate the renderer consuming the queued ranges, then another frame.
+  positions.clearUpdateRanges(); colors.clearUpdateRanges()
+  updatePointGeometry(geometry,3,key,writePosition,writeColor)
+  expect(positions.updateRanges).toEqual([{ start: 0, count: 9 }])
+  expect(colors.updateRanges).toEqual([])
+  updatePointGeometry(geometry,1,key,writePosition,writeColor)
+  expect(geometry.getAttribute('position')).toBe(positions)
+  expect(geometry.drawRange.count).toBe(1)
+  expect(positions.updateRanges).toEqual([{ start: 0, count: 3 }])
+  expect(colors.updateRanges).toEqual([{ start: 0, count: 3 }])
+  const version = positions.version
+  updatePointGeometry(geometry,0,key,writePosition,writeColor)
+  expect(geometry.drawRange.count).toBe(0)
+  expect(positions.version).toBe(version)
+  updatePointGeometry(geometry,2,key,writePosition,writeColor)
+  expect(positions.updateRanges).toEqual([{ start: 0, count: 6 }])
+  expect(colors.updateRanges).toEqual([{ start: 0, count: 6 }])
+  geometry.dispose()
+})
 
 it('preserves a small orbital separation at 100 AU through propagation and independent 3D reference panes', () => {
   const radius = 100 + 1e-7
