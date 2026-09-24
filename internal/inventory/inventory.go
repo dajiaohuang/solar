@@ -13,6 +13,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -122,7 +123,7 @@ func validIndexSnapshotEvidence(fields indexFields) bool {
 		return false
 	}
 	for _, segment := range e.Segments {
-		if segment.KernelID != "" && finiteIndex(segment.StartET) && finiteIndex(segment.EndET) && segment.EndET >= segment.StartET && segment.StartET <= e.AuditET && segment.EndET >= e.AuditET && segment.Frame == 1 && (segment.Type == 2 || segment.Type == 3 || segment.Type == 17 || segment.Type == 21) {
+		if segment.KernelID != "" && finiteIndex(segment.StartET) && finiteIndex(segment.EndET) && segment.EndET >= segment.StartET && segment.StartET <= e.AuditET && segment.EndET >= e.AuditET && segment.Frame == 1 && (segment.Type == 1 || segment.Type == 2 || segment.Type == 3 || segment.Type == 17 || segment.Type == 21) {
 			return true
 		}
 	}
@@ -179,20 +180,28 @@ type blockCacheEntry struct {
 	bytes int64
 }
 
+type blockFlight struct {
+	done  chan struct{}
+	block *decodedBlock
+	err   error
+}
+
 type blockCache struct {
 	mu          sync.Mutex
 	maxBytes    int64
 	bytes       int64
 	hits        uint64
 	misses      uint64
+	coalesced   uint64
 	loads       uint64
 	loadedBytes uint64
 	items       map[uint64]*list.Element
 	order       *list.List
+	flights     map[uint64]*blockFlight
 }
 
 func newBlockCache(maxBytes int64) *blockCache {
-	return &blockCache{maxBytes: maxBytes, items: make(map[uint64]*list.Element), order: list.New()}
+	return &blockCache{maxBytes: maxBytes, items: make(map[uint64]*list.Element), order: list.New(), flights: make(map[uint64]*blockFlight)}
 }
 
 func (c *blockCache) get(key uint64) (*decodedBlock, bool) {
@@ -209,12 +218,16 @@ func (c *blockCache) get(key uint64) (*decodedBlock, bool) {
 }
 
 func (c *blockCache) put(key uint64, value *decodedBlock) {
-	weight := int64(len(value.data) + len(value.starts)*4)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.putLocked(key, value)
+}
+
+func (c *blockCache) putLocked(key uint64, value *decodedBlock) {
+	weight := int64(cap(value.data) + cap(value.starts)*4)
 	if weight > c.maxBytes {
 		return
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.loads++
 	c.loadedBytes += uint64(len(value.data))
 	if e := c.items[key]; e != nil {
@@ -237,12 +250,72 @@ func (c *blockCache) put(key uint64, value *decodedBlock) {
 	}
 }
 
+// load coalesces concurrent misses for a block. Waiters can abandon their own
+// request without cancelling the shared loader; if the loader's request is
+// cancelled, a live waiter takes over instead of inheriting that cancellation.
+func (c *blockCache) load(ctx context.Context, key uint64, loader func(context.Context) (*decodedBlock, error)) (*decodedBlock, error) {
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		c.mu.Lock()
+		if e := c.items[key]; e != nil {
+			c.hits++
+			c.order.MoveToFront(e)
+			block := e.Value.(*blockCacheEntry).block
+			c.mu.Unlock()
+			return block, nil
+		}
+		c.misses++
+		if flight := c.flights[key]; flight != nil {
+			c.coalesced++
+			c.mu.Unlock()
+			select {
+			case <-flight.done:
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+				if errors.Is(flight.err, context.Canceled) || errors.Is(flight.err, context.DeadlineExceeded) {
+					continue
+				}
+				return flight.block, flight.err
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		flight := &blockFlight{done: make(chan struct{})}
+		c.flights[key] = flight
+		c.mu.Unlock()
+
+		block, err := loader(ctx)
+		if err == nil && block == nil {
+			err = fmt.Errorf("inventory block loader returned no block")
+		}
+		if err == nil {
+			if cancelled := ctx.Err(); cancelled != nil {
+				err, block = cancelled, nil
+			}
+		}
+		c.mu.Lock()
+		if err == nil {
+			c.putLocked(key, block)
+			flight.block = block
+		}
+		flight.err = err
+		delete(c.flights, key)
+		close(flight.done)
+		c.mu.Unlock()
+		return block, err
+	}
+}
+
 func (c *blockCache) clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.bytes = 0
 	c.hits = 0
 	c.misses = 0
+	c.coalesced = 0
 	c.loads = 0
 	c.loadedBytes = 0
 	c.items = make(map[uint64]*list.Element)
@@ -252,7 +325,7 @@ func (c *blockCache) clear() {
 func (c *blockCache) stats() map[string]int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return map[string]int64{"entries": int64(len(c.items)), "residentBytes": c.bytes, "maxResidentBytes": c.maxBytes, "hits": int64(c.hits), "misses": int64(c.misses), "loads": int64(c.loads), "loadedBytes": int64(c.loadedBytes)}
+	return map[string]int64{"entries": int64(len(c.items)), "residentBytes": c.bytes, "maxResidentBytes": c.maxBytes, "hits": int64(c.hits), "misses": int64(c.misses), "coalesced": int64(c.coalesced), "loads": int64(c.loads), "loadedBytes": int64(c.loadedBytes)}
 }
 
 func Load(dir string) (*Inventory, error) {
@@ -597,8 +670,12 @@ func (i *Inventory) pageRefs(cursor, query string, limit int) ([]recordRef, stri
 		return nil, "", fmt.Errorf("limit must be between 1 and 500")
 	}
 	q := normalize(query)
+	position, err := i.unwrapPageCursor(cursor, q)
+	if err != nil {
+		return nil, "", err
+	}
 	if q == "" {
-		shardID, row, err := decodeCursor(cursor)
+		shardID, row, err := decodeCursor(position)
 		if err != nil {
 			return nil, "", err
 		}
@@ -624,10 +701,10 @@ func (i *Inventory) pageRefs(cursor, query string, limit int) ([]recordRef, stri
 			return refs, "", nil
 		}
 		next := i.idx.records[end]
-		return refs, encodeCursor(int(next.Shard), int(next.Row)), nil
+		return refs, i.wrapPageCursor(encodeCursor(int(next.Shard), int(next.Row)), q), nil
 	}
 
-	offset, tokenHash, err := decodeSearchCursor(cursor)
+	offset, tokenHash, err := decodeSearchCursor(position)
 	if err != nil {
 		return nil, "", err
 	}
@@ -650,7 +727,7 @@ func (i *Inventory) pageRefs(cursor, query string, limit int) ([]recordRef, stri
 	if end == len(ordinals) {
 		return out, "", nil
 	}
-	return out, encodeSearchCursor(q, end), nil
+	return out, i.wrapPageCursor(encodeSearchCursor(q, end), q), nil
 }
 
 func (i *Inventory) postings(hash uint64) []uint32 {
@@ -909,45 +986,48 @@ func (i *Inventory) readBlock(ctx context.Context, si, bi int) (*decodedBlock, e
 		return nil, fmt.Errorf("inventory block out of range")
 	}
 	key := blockKey(si, bi)
-	if cached, ok := i.blocks.get(key); ok {
-		return cached, nil
-	}
-	b := i.m.Shards[si].Blocks[bi]
-	file, err := os.Open(filepath.Join(i.dir, i.m.Shards[si].File))
-	if err != nil {
-		return nil, fmt.Errorf("open inventory shard: %w", err)
-	}
-	compressed := make([]byte, b.Bytes)
-	_, readErr := file.ReadAt(compressed, b.Offset)
-	closeErr := file.Close()
-	if readErr != nil || closeErr != nil {
-		return nil, fmt.Errorf("read inventory block: %v", readErr)
-	}
-	sum := sha256.Sum256(compressed)
-	if hex.EncodeToString(sum[:]) != b.SHA256 {
-		return nil, fmt.Errorf("inventory block hash mismatch")
-	}
-	gz, err := gzip.NewReader(bytes.NewReader(compressed))
-	if err != nil {
-		return nil, fmt.Errorf("open inventory block gzip: %w", err)
-	}
-	data, readErr := io.ReadAll(io.LimitReader(gz, int64(MaxBlockRawBytes)+1))
-	closeErr = gz.Close()
-	if readErr != nil || closeErr != nil || len(data) != b.UncompressedBytes || len(data) > MaxBlockRawBytes || len(data) == 0 || data[len(data)-1] != '\n' {
-		return nil, fmt.Errorf("invalid inventory block payload")
-	}
-	starts := make([]uint32, 1, b.Count+1)
-	for n, value := range data {
-		if value == '\n' {
-			starts = append(starts, uint32(n+1))
+	return i.blocks.load(ctx, key, func(ctx context.Context) (*decodedBlock, error) {
+		b := i.m.Shards[si].Blocks[bi]
+		file, err := os.Open(filepath.Join(i.dir, i.m.Shards[si].File))
+		if err != nil {
+			return nil, fmt.Errorf("open inventory shard: %w", err)
 		}
-	}
-	if len(starts) != b.Count+1 {
-		return nil, fmt.Errorf("inventory block row count mismatch")
-	}
-	decoded := &decodedBlock{data: data, starts: starts}
-	i.blocks.put(key, decoded)
-	return decoded, nil
+		compressed := make([]byte, b.Bytes)
+		_, readErr := file.ReadAt(compressed, b.Offset)
+		closeErr := file.Close()
+		if readErr != nil || closeErr != nil {
+			return nil, fmt.Errorf("read inventory block: %v", readErr)
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		sum := sha256.Sum256(compressed)
+		if hex.EncodeToString(sum[:]) != b.SHA256 {
+			return nil, fmt.Errorf("inventory block hash mismatch")
+		}
+		gz, err := gzip.NewReader(bytes.NewReader(compressed))
+		if err != nil {
+			return nil, fmt.Errorf("open inventory block gzip: %w", err)
+		}
+		data, readErr := io.ReadAll(io.LimitReader(gz, int64(MaxBlockRawBytes)+1))
+		closeErr = gz.Close()
+		if readErr != nil || closeErr != nil || len(data) != b.UncompressedBytes || len(data) > MaxBlockRawBytes || len(data) == 0 || data[len(data)-1] != '\n' {
+			return nil, fmt.Errorf("invalid inventory block payload")
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		starts := make([]uint32, 1, b.Count+1)
+		for n, value := range data {
+			if value == '\n' {
+				starts = append(starts, uint32(n+1))
+			}
+		}
+		if len(starts) != b.Count+1 {
+			return nil, fmt.Errorf("inventory block row count mismatch")
+		}
+		return &decodedBlock{data: data, starts: starts}, nil
+	})
 }
 
 func normalize(value string) string {
@@ -992,6 +1072,29 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// Position encodings are internal. The public envelope binds both page modes
+// to the exact inventory manifest and normalized query, without keeping sessions.
+func (i *Inventory) wrapPageCursor(position, query string) string {
+	digest := sha256.Sum256([]byte(query))
+	return "v1." + i.hash + "." + hex.EncodeToString(digest[:]) + "." + position
+}
+
+func (i *Inventory) unwrapPageCursor(token, query string) (string, error) {
+	if token == "" {
+		return "", nil
+	}
+	if len(token) > 256 {
+		return "", fmt.Errorf("invalid inventory page token")
+	}
+	parts := strings.Split(token, ".")
+	digest := sha256.Sum256([]byte(query))
+	if len(parts) != 4 || parts[0] != "v1" || parts[1] != i.hash ||
+		parts[2] != hex.EncodeToString(digest[:]) || parts[3] == "" {
+		return "", fmt.Errorf("inventory page token does not match manifest or query; restart browsing")
+	}
+	return parts[3], nil
 }
 
 func encodeCursor(shard, row int) string {
