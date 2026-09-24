@@ -56,9 +56,9 @@ export function CatalogWorkspace() {
   const catalogEpoch = clock.isPlaying ? playingEpoch : clock.julianDay
   const [streamBudget, setStreamBudget] = useState(() => {
     const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory
-    return (memory !== undefined && memory <= 4 ? 64 : window.innerWidth <= 800 ? 128 : 256) * 1024 * 1024
+    return (memory !== undefined && memory <= 4 ? 256 : window.innerWidth <= 800 ? 256 : 512) * 1024 * 1024
   })
-  const [streamLimit, setStreamLimit] = useState(() => window.innerWidth <= 800 ? 30_000 : 100_000)
+  const [streamLimit, setStreamLimit] = useState(() => window.innerWidth <= 800 ? 30_000 : 1_000_000)
   const [streamRetainEpochs, setStreamRetainEpochs] = useState(false)
   const [streamAppend, setStreamAppend] = useState(false)
   const streamAppendRows = streamRetainEpochs && streamAppend ? 256 : 0
