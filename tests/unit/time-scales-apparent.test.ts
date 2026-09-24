@@ -28,7 +28,14 @@ describe('apparent position corrections', () => {
     const corrected = apparentPosition({ observer, target, julianDay: 2_451_545, mode: 'light-time' })
     expect(geometric.position[0]).toBe(0)
     expect(corrected.lightTimeSeconds).toBeCloseTo(1_000_000 / 299_792.458, 5)
+    expect(corrected.timeScale).toBe('TDB')
+    expect(corrected.residualSeconds).toBeLessThanOrEqual(corrected.toleranceSeconds)
+    expect(Math.abs((2_451_545 - corrected.emissionJulianDay) * 86400 - corrected.lightTimeSeconds)).toBeLessThanOrEqual(corrected.toleranceSeconds)
     expect(corrected.emissionJulianDay).toBeLessThan(2_451_545)
+  })
+  it('does not claim convergence below the representable JD epoch resolution', () => {
+    expect(() => apparentPosition({ observer: state([0, 0, 0]), target: state([1_000_000, 0, 0]),
+      julianDay: 2_451_545, mode: 'light-time', toleranceSeconds: 1e-9 })).toThrow('did not converge')
   })
   it('applies stellar aberration using observer velocity', () => {
     const result = apparentPosition({ target: state([1_000_000, 0, 0]), observer: state([0, 0, 0], [0, 29.78, 0]), julianDay: 2_451_545, mode: 'light-time+stellar-aberration' })

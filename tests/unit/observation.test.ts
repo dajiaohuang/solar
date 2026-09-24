@@ -12,6 +12,8 @@ describe('deriveParentRelativeObservation', () => {
       return null
     }
     const result = deriveParentRelativeObservation({ targetId: 'target', parentId: 'parent', observerId: 'observer', julianDay: jd, gmAU3PerDay2: 0.0002959122082855911, resolve, referenceFrame: 'eclipj2000', apparentMode: 'geometric' })!
+    expect(result.epochTimeScale).toBe('TDB')
+    expect(result.apparent.timeScale).toBe('TDB')
     expect(result.referenceFrame).toBe('eclipj2000')
     expect(result.centerId).toBe('parent')
     expect(result.state.positionAU).toEqual({ x: 0, y: 1, z: 0 })
