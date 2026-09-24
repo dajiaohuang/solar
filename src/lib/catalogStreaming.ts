@@ -37,10 +37,24 @@ export type CatalogReadEvidence = {
   artifacts: Record<'checksums' | 'index' | 'metadata' | 'binary', { attempts: number; completed: number; failed: number; completedBytes: number }>
   indexCacheHits: number; indexReusedBytes: number; binaryCacheHits: number; binaryReusedBytes: number
 }
+export type CatalogStreamPerformanceReceipt = {
+  artifactReadAndHashMs: Record<'checksums' | 'index' | 'metadata' | 'binary', number>
+  metadataDecodeAndValidateMs: number
+  binaryValidationMs: number
+  exactSourceFilteringMs: number
+  selectedAttributePackingMs: number
+  orbitalElementPreparationMs: number
+  keplerPropagationMs: number
+  tileDeliveryWaitMs: number
+  workerSetupMs: number
+  visualCoordinateInstallationMs: number
+  transferWindowDrainMs: number
+  workerTotalMs: number
+}
 export type CatalogStreamResult = { sourceRows: number; drawnRows: number; complete: boolean;
   reads: CatalogReadEvidence;
   screening: { admittedShards: number; completedShards: number; metadataOnlyRows: number; completionReason: 'exhausted' | 'capacity'; shards: CatalogScreenedShard[] };
-  maximumSpeedAUPerTtDay?: number | null; sourceSelection?: CatalogSourceSelection }
+  maximumSpeedAUPerTtDay?: number | null; sourceSelection?: CatalogSourceSelection; performanceMs?: CatalogStreamPerformanceReceipt }
 type Checksums = { schemaVersion: number; algorithm: string; files: Record<string, string> }
 
 export type CatalogStreamSourceCache = Readonly<{ kind: 'catalog-stream-source-cache' }>
@@ -189,7 +203,7 @@ async function fetchArtifact(url: string, maximumBytes: number, expectedHash: st
   }
 }
 
-async function loadStreamMetadata(root: string, chunk: number, count: number, classes: string[], query: string, expectedHash: string, maximumBytes: number, signal: AbortSignal, read = fetchArtifact) {
+async function loadStreamMetadata(root: string, chunk: number, count: number, classes: string[], query: string, expectedHash: string, maximumBytes: number, signal: AbortSignal, read = fetchArtifact, performanceReceipt?: CatalogStreamPerformanceReceipt, yieldControl: () => Promise<void> = () => new Promise<void>(resolve => setTimeout(resolve, 0))) {
   signal.throwIfAborted()
   const controller = new AbortController(), abort = () => controller.abort(signal.reason)
   const deadline = performance.now() + CATALOG_STREAM_ARTIFACT_TIMEOUT_MS
@@ -204,15 +218,20 @@ async function loadStreamMetadata(root: string, chunk: number, count: number, cl
     const id = `chunk-${String(chunk).padStart(4, '0')}`
     const bytes = await read(`${root}/meta/${id}.json`, maximumBytes, expectedHash, controller.signal)
     check()
+    const parseStarted = performanceReceipt ? performance.now() : 0
     const records = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as AsteroidIndexEntry[]
+    if (performanceReceipt) performanceReceipt.metadataDecodeAndValidateMs += performance.now() - parseStarted
     check()
     if (!Array.isArray(records) || records.length !== count) throw new Error('Catalog stream metadata count differs from source shard')
     const magnitudes = new Float64Array(count), classIndices = new Uint8Array(count), flags = new Uint8Array(count), queryMatches = new Uint8Array(count)
     const ids = new Set<string>(), classMap = new Map(classes.map((code, index) => [code, index] as const))
+    let validationStarted = performanceReceipt ? performance.now() : 0
     for (let row = 0; row < count; row++) {
       if (row % 1024 === 0) {
-        await new Promise<void>(resolve => setTimeout(resolve, 0))
+        if (row && performanceReceipt) performanceReceipt.metadataDecodeAndValidateMs += performance.now() - validationStarted
+        await yieldControl()
         check()
+        if (performanceReceipt) validationStarted = performance.now()
       }
       const entry = records[row]
       validateCatalogMetadataRow(entry, row, ids, id, chunk)
@@ -223,6 +242,7 @@ async function loadStreamMetadata(root: string, chunk: number, count: number, cl
       flags[row] = (entry.isNeo ? 1 : 0) | (entry.isPha ? 2 : 0) | (entry.absoluteMagnitude !== undefined ? 4 : 0)
       queryMatches[row] = !query || entry.searchKey.includes(query) ? 1 : 0
     }
+    if (performanceReceipt) performanceReceipt.metadataDecodeAndValidateMs += performance.now() - validationStarted
     check()
     return { magnitudes, classIndices, flags, queryMatches }
   } finally {
@@ -250,6 +270,7 @@ type StreamOptions = {
   requestedRows: number
   budgetBytes: number
   candidateLocators?: Uint32Array
+  capturePerformanceReceipt?: boolean
   signal: AbortSignal
   // Awaiting this callback is the backpressure boundary: the worker's bounded
   // transfer window admits further work only while upload credits remain.
@@ -311,14 +332,22 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
   const reads: CatalogReadEvidence = { method: 'catalog-application-reads-v1',
     artifacts: { checksums: counter(), index: counter(), metadata: counter(), binary: counter() },
     indexCacheHits: 0, indexReusedBytes: 0, binaryCacheHits: 0, binaryReusedBytes: 0 }
+  const performanceMs: CatalogStreamPerformanceReceipt | undefined = options.capturePerformanceReceipt ? {
+    artifactReadAndHashMs: { checksums: 0, index: 0, metadata: 0, binary: 0 },
+    metadataDecodeAndValidateMs: 0, binaryValidationMs: 0, exactSourceFilteringMs: 0, selectedAttributePackingMs: 0,
+    orbitalElementPreparationMs: 0, keplerPropagationMs: 0, tileDeliveryWaitMs: 0,
+    workerSetupMs: 0, visualCoordinateInstallationMs: 0, transferWindowDrainMs: 0, workerTotalMs: 0,
+  } : undefined
   const read = async (kind: keyof CatalogReadEvidence['artifacts'], ...args: Parameters<typeof fetchArtifact>) => {
     const counters = reads.artifacts[kind]
     counters.attempts++
+    const started = performanceMs ? performance.now() : 0
     try {
       const bytes = await fetchArtifact(...args)
       counters.completed++; counters.completedBytes += bytes.byteLength
       return bytes
     } catch (error) { counters.failed++; throw error }
+    finally { if (performanceMs) performanceMs.artifactReadAndHashMs[kind] += performance.now() - started }
   }
   const readMetadata: typeof fetchArtifact = (...args) => read('metadata',...args)
   try {
@@ -439,7 +468,7 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
       signal.throwIfAborted()
       const count = Math.min(manifest.chunkSize, manifest.totalCount - chunk * manifest.chunkSize)
       const metadataPath = `meta/chunk-${String(chunk).padStart(4, '0')}.json`
-      const metadata = await loadStreamMetadata(root, chunk, count, compact.classCodes, query, hash(metadataPath), plan.metadataMaximumBytes, controller.signal, readMetadata)
+      const metadata = await loadStreamMetadata(root, chunk, count, compact.classCodes, query, hash(metadataPath), plan.metadataMaximumBytes, controller.signal, readMetadata, performanceMs, yieldControl)
       const reuseFirst = priorityByChunk.size === 1 && chunk === chunks[0]
       if (reuseFirst) firstPriorityMetadata = metadata
       if ([...rows].some(row => metadata.queryMatches[row] && hasCandidate(chunk*manifest.chunkSize+row))) {
@@ -499,13 +528,13 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
     const sourceSelection: CatalogSourceSelection = { contentSha256: manifest.contentSha256!, indexSha256: hash(compact.path), shards: [] }
     const result = (complete: boolean): CatalogStreamResult => ({ sourceRows, drawnRows, complete, reads,
       screening: { admittedShards: chunks.length, completedShards, metadataOnlyRows, completionReason: complete ? 'exhausted' : 'capacity', shards: screenedShards },
-      maximumSpeedAUPerTtDay: options.retainEpochs && drawnRows > 0 ? maximumSpeed : null, sourceSelection })
+      maximumSpeedAUPerTtDay: options.retainEpochs && drawnRows > 0 ? maximumSpeed : null, sourceSelection, performanceMs })
     for (let sequence = 0; sequence < chunks.length; sequence++) {
       const chunk = chunks[sequence]
       const count = Math.min(manifest.chunkSize, manifest.totalCount - chunk * manifest.chunkSize)
       const metadataHash = hash(`meta/chunk-${String(chunk).padStart(4, '0')}.json`)
       const metadata = sequence === 0 && firstPriorityMetadata ? firstPriorityMetadata
-        : await loadStreamMetadata(root, chunk, count, compact.classCodes, query, metadataHash, plan.metadataMaximumBytes, controller.signal, readMetadata)
+        : await loadStreamMetadata(root, chunk, count, compact.classCodes, query, metadataHash, plan.metadataMaximumBytes, controller.signal, readMetadata, performanceMs, yieldControl)
       firstPriorityMetadata = undefined
       signal.throwIfAborted()
       if (query) {
@@ -535,15 +564,22 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
       if (!query && plan.initialCapacity-drawnRows > count) enqueue(refill)
       if (elements.length !== count * 8) throw new Error('Incomplete catalog element shard')
       for (let start = 0; start < count; start += 4096) {
+        const validationStarted = performanceMs ? performance.now() : 0
         validateBinaryElements(loaded.buffer, start, Math.min(count, start+4096))
+        if (performanceMs) performanceMs.binaryValidationMs += performance.now() - validationStarted
         await cooperate()
       }
       const selectedRows = new Uint8Array(Math.ceil(count/8))
       // Reserve membership across shards, keeping output in source-row order.
       const remaining = plan.initialCapacity - drawnRows
       let used = 0, examinedRows = 0
+      let filteringStarted = performanceMs ? performance.now() : 0
       for (let row = 0; row < count; row++) {
-        if (row > 0 && row % 2048 === 0) await cooperate()
+        if (row > 0 && row % 2048 === 0) {
+          if (performanceMs) performanceMs.exactSourceFilteringMs += performance.now() - filteringStarted
+          await cooperate()
+          if (performanceMs) filteringStarted = performance.now()
+        }
         const sourceRow = chunk * manifest.chunkSize + row
         sourceRows++
         examinedRows++
@@ -554,13 +590,19 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
         selectedRows[row >>> 3] |= 1 << (row & 7)
         used++
       }
+      if (performanceMs) performanceMs.exactSourceFilteringMs += performance.now() - filteringStarted
       if (examinedRows === count) completedShards++
       // Allocate only admitted rows. Sparse filters and nearly-full budgets
       // need not retain a full-shard orbital/appearance scratch allocation.
+      let packingStarted = performanceMs ? performance.now() : 0
       const selectedElements = new Float64Array(used * 8), appearance = new Uint8Array(used * 2)
       let copied = 0
       for (let byte = 0; byte < selectedRows.length && copied < used; byte++) {
-        if (byte > 0 && byte % 256 === 0) await cooperate()
+        if (byte > 0 && byte % 256 === 0) {
+          if (performanceMs) performanceMs.selectedAttributePackingMs += performance.now() - packingStarted
+          await cooperate()
+          if (performanceMs) packingStarted = performance.now()
+        }
         let bits = selectedRows[byte]
         while (bits) {
           const bit = 31 - Math.clz32(bits & -bits), row = byte * 8 + bit
@@ -575,6 +617,7 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
         }
       }
       if (copied !== used) throw new Error('Catalog admitted row mask count mismatch')
+      if (performanceMs) performanceMs.selectedAttributePackingMs += performance.now() - packingStarted
       const prepared: PreparedCatalogElements = { count: used, data: new Float64Array(used*PREPARED_CATALOG_STRIDE) }
       const positions = options.acquirePositions?.(used*stride) ?? new Float64Array(used*stride)
       if (!(positions instanceof Float64Array) || positions.length !== used*stride || positions.byteOffset !== 0 ||
@@ -582,12 +625,16 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
       let speed: number | null = options.retainEpochs && used ? 0 : null
       for (let start = 0; start < used; start += 256) {
         const end = Math.min(used, start+256)
+        const preparationStarted = performanceMs ? performance.now() : 0
         prepareCatalogElementRange(selectedElements, prepared, start, end)
         if (speed !== null) {
           const sliceSpeed = catalogMaximumSpeedAUPerTtDay(selectedElements.subarray(start*8, end*8))
           speed = sliceSpeed === null ? null : Math.max(speed, sliceSpeed)
         }
+        if (performanceMs) performanceMs.orbitalElementPreparationMs += performance.now() - preparationStarted
+        const propagationStarted = performanceMs ? performance.now() : 0
         propagatePreparedCatalogPositions(prepared, epochTt, mode, positions, start, end)
+        if (performanceMs) performanceMs.keplerPropagationMs += performance.now() - propagationStarted
         await cooperate()
       }
       signal.throwIfAborted()
@@ -598,7 +645,9 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
       if (used) sourceSelection.shards.push({ chunk,
         sha256: hash(`binary/chunk-${String(chunk).padStart(4, '0')}.bin`), metadataSha256: metadataHash, selectedRows })
       drawnRows += used
+      const deliveryStarted = performanceMs ? performance.now() : 0
       await onTile({ sourceChunk: chunk, sourceRowMask: selectedRows, positions, appearance, sourceRows, drawnRows })
+      if (performanceMs) performanceMs.tileDeliveryWaitMs += performance.now() - deliveryStarted
       signal.throwIfAborted()
       if (drawnRows >= plan.initialCapacity) {
         if (reservedRows.size) throw new Error('Catalog capacity exhausted before priority admission')

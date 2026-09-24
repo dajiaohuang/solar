@@ -55,6 +55,12 @@ const discardFailedSnapshot = () => {
 const channel = new MessageChannel(), continuations: (() => void)[] = []
 channel.port1.onmessage = () => continuations.shift()?.()
 const yieldToMessages = () => new Promise<void>(resolve => { continuations.push(resolve); channel.port2.postMessage(null) })
+const CATALOG_STREAM_COOPERATIVE_SLICE_MS = 4
+let lastCatalogStreamYieldAt = -Infinity
+const yieldCatalogStreamMessages = () => {
+  if (performance.now() - lastCatalogStreamYieldAt < CATALOG_STREAM_COOPERATIVE_SLICE_MS) return Promise.resolve()
+  return yieldToMessages().then(() => { lastCatalogStreamYieldAt = performance.now() })
+}
 
 const failRequestChannel = () => {
   const requestId = epochGeneration, temporal = computingEpoch || pendingEpoch !== null
@@ -76,9 +82,11 @@ async function selectViews() {
         if (!spatialCoherent) throw new Error('Spatial view requires a completed catalog epoch')
         if (request.count > availablePoints) throw new Error('Spatial view exceeds computed source rows')
         if (Boolean(request.view.rotation) !== (dimensions === 3)) throw new Error('Spatial view dimension does not match its source snapshot')
+        const selectionStarted = performance.now()
         const result = await selectCatalogSpatialPoints(spatialPositions, request.count, request.view, () => generation !== viewGeneration, yieldToMessages, spatialIndex)
+        const selectionMs = performance.now() - selectionStarted
         if (result && generation === viewGeneration) scope.postMessage({ type: 'selection', requestId: request.requestId, count: request.count, indices: result.indices, visible: result.visible,
-          edgeCandidates: result.edgeCandidates, testedRows: result.testedRows, skippedRows: result.skippedRows } satisfies CatalogStreamResponse, [result.indices.buffer])
+          edgeCandidates: result.edgeCandidates, selectionMs, testedRows: result.testedRows, skippedRows: result.skippedRows } satisfies CatalogStreamResponse, [result.indices.buffer])
       } catch (error) {
         if (generation === viewGeneration) scope.postMessage({ type: 'selection-error', requestId: request.requestId, count: request.count,
           error: error instanceof Error ? error.message : String(error) } satisfies CatalogStreamResponse)
@@ -249,7 +257,7 @@ scope.onmessage = (event: MessageEvent<CatalogStreamRequest>) => {
   if (terminalFailure) return
   const request = event.data
   if (!request || typeof request !== 'object' || ![
-    'start', 'ack', 'cancel', 'view', 'epoch', 'epoch-ack', 'epoch-reuse-ack', 'append', 'append-ack',
+    'start', 'ack', 'cancel', 'view-cancel', 'view', 'epoch', 'epoch-ack', 'epoch-reuse-ack', 'append', 'append-ack',
   ].includes(request.type)) { failRequestChannel(); return }
   if (request.type === 'append') { void appendSources(request); return }
   if (request.type === 'append-ack') {
@@ -285,6 +293,7 @@ scope.onmessage = (event: MessageEvent<CatalogStreamRequest>) => {
     viewGeneration++; pendingView = null; spatialCoherent = false
     void computeEpochs(); return
   }
+  if (request.type === 'view-cancel') { viewGeneration++; pendingView = null; return }
   if (request.type === 'view') { viewGeneration++; pendingView = request; void selectViews(); return }
   if (request.type === 'cancel') { controller?.abort(); if (appendState) clearCatalogStreamSourceCache(appendState.sourceCache); appendState = null; recycledPositions = null; transferredPositions.clear(); epochs = null; pendingEpoch = null; viewGeneration++; pendingView = null; return }
   if (request.type === 'ack') {
@@ -311,6 +320,9 @@ scope.onmessage = (event: MessageEvent<CatalogStreamRequest>) => {
   const active = controller
   const window = createCatalogTransferWindow(active.signal)
   transfers = window
+  const capturePerformance = request.capturePerformanceReceipt === true
+  const workerStartedAt = performance.now()
+  let workerSetupMs = 0, visualCoordinateInstallationMs = 0, transferWindowDrainMs = 0
   void (async () => {
     try {
       requireCatalogAccess('scan')
@@ -322,8 +334,10 @@ scope.onmessage = (event: MessageEvent<CatalogStreamRequest>) => {
       spatialIndex = createCatalogSpatialIndex(spatialPositions, mode === '3d' ? 3 : 2)
       epochs = request.retainEpochs ? createCatalogEpochStore(plan.capacity, mode, plan.maximumEpochBlocks) : null
       const sourceCache = plan.appendCapacity ? createCatalogStreamSourceCache(request.manifest.totalCount*24,request.manifest.chunkSize*64) : undefined
+      if (capturePerformance) workerSetupMs = performance.now() - workerStartedAt
+      lastCatalogStreamYieldAt = -Infinity
       const result = await streamCatalogPoints({
-        ...request, signal: active.signal, yieldControl: yieldToMessages, sourceCache,
+        ...request, capturePerformanceReceipt: capturePerformance, signal: active.signal, yieldControl: yieldCatalogStreamMessages, sourceCache,
         acquirePositions: elements => {
           const returned = recycledPositions
           recycledPositions = null
@@ -333,7 +347,9 @@ scope.onmessage = (event: MessageEvent<CatalogStreamRequest>) => {
         onTile: tile => {
           // This Float32 copy is exclusively for visual culling. Scientific
           // propagation and the transferred source snapshot remain Float64.
+          const installStarted = capturePerformance ? performance.now() : 0
           installSpatialPositions(tile.positions,tile.drawnRows-tile.positions.length/dimensions)
+          if (capturePerformance) visualCoordinateInstallationMs += performance.now() - installStarted
           availablePoints = tile.drawnRows
           return window.publish(tileId => {
             transferredPositions.set(tileId, tile.positions.length)
@@ -343,13 +359,21 @@ scope.onmessage = (event: MessageEvent<CatalogStreamRequest>) => {
           })
         },
       })
+      const drainStarted = capturePerformance ? performance.now() : 0
       await window.drain()
+      if (capturePerformance) transferWindowDrainMs = performance.now() - drainStarted
       active.signal.throwIfAborted()
       epochs?.seal(result.drawnRows, request.julianDay)
       completedJulianDay = request.julianDay
       if (plan.appendCapacity && result.sourceSelection && sourceCache) {
         appendState = { start: structuredClone(request), lookup: createCatalogSourceAppendLookup(result.sourceSelection,plan.capacity),
           contentSha256: result.sourceSelection.contentSha256, indexSha256: result.sourceSelection.indexSha256, remaining: plan.appendCapacity, sourceCache }
+      }
+      if (capturePerformance && result.performanceMs) {
+        result.performanceMs.workerSetupMs = workerSetupMs
+        result.performanceMs.visualCoordinateInstallationMs = visualCoordinateInstallationMs
+        result.performanceMs.transferWindowDrainMs = transferWindowDrainMs
+        result.performanceMs.workerTotalMs = performance.now() - workerStartedAt
       }
       scope.postMessage({ type: 'done', retainedEpochs: epochs !== null, ...result } satisfies CatalogStreamResponse)
     } catch (error) {

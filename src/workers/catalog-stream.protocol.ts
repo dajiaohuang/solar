@@ -11,12 +11,14 @@ export type CatalogStreamRequest = {
   appendRows?: number
   priority?: CatalogStreamPriority
   priorityLocators?: readonly CatalogLocator[]
+  /** Benchmark-only phase timing receipt; normal application requests omit it. */
+  capturePerformanceReceipt?: boolean
   manifest: AsteroidManifest
   filters: CatalogFilters
   julianDay: number
   requestedRows: number
   budgetBytes: number
-} | { type: 'ack'; tileId: number; positions?: Float64Array } | { type: 'cancel' }
+} | { type: 'ack'; tileId: number; positions?: Float64Array } | { type: 'cancel' } | { type: 'view-cancel' }
   | { type: 'view'; requestId: number; count: number; view: CatalogSpatialView }
   | { type: 'epoch'; requestId: number; julianDay: number; maximumDriftAU?: number }
   | { type: 'epoch-ack'; requestId: number; startRow: number; positions: Float64Array }
@@ -30,7 +32,7 @@ export type CatalogStreamResponse =
   | { type: 'error'; error: string }
   | { type: 'cancelled' }
   | { type: 'selection-error'; requestId: number; count: number; error: string }
-  | { type: 'selection'; requestId: number; count: number; indices: Uint32Array; visible: number; edgeCandidates: number; testedRows?: number; skippedRows?: number }
+  | { type: 'selection'; requestId: number; count: number; indices: Uint32Array; visible: number; edgeCandidates: number; selectionMs: number; testedRows?: number; skippedRows?: number }
   | { type: 'epoch-start'; requestId: number; julianDay: number; count: number }
   | { type: 'epoch-tile'; requestId: number; julianDay: number; startRow: number; count: number; positions: Float64Array }
   | ({ type: 'epoch-reuse'; requestId: number } & CatalogEpochReuse)
