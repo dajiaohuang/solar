@@ -2,6 +2,7 @@ import { SpkKernel } from '../ephemeris/spk.ts'
 import { createPointMassGravity, type PrescribedEphemeris } from './pointMassGravity.ts'
 import { SOLAR_1PN, withSolarRelativity } from './solarRelativity.ts'
 import { SOLAR_RADIATION_PRESSURE, parseSolarRadiationPressure, withSolarRadiationPressure, type SolarRadiationPressure } from './solarRadiationPressure.ts'
+import { parseDe440MassPlan } from './de440Gm.ts'
 
 import { DE440_DYNAMICS_SOURCE, DE440_FORCE_IDS } from './de440Source.ts'
 export { DE440_DYNAMICS_SOURCE, DE440_FORCE_IDS } from './de440Source.ts'
@@ -37,11 +38,7 @@ export async function createDe440Dynamics(options: {
   if (spkHash !== DE440_DYNAMICS_SOURCE.sha256 || gmHash !== DE440_DYNAMICS_SOURCE.gmSha256) throw new Error('DE440 dynamics source checksum mismatch')
   const kernel = new SpkKernel(bytes)
   if (kernel.segments.some(segment => segment.frame !== 1)) throw new Error('Dynamics source requires original J2000 segments')
-  const masses = DE440_FORCE_IDS.map(naifId => {
-    const value = gmText.match(new RegExp(`BODY${naifId}_GM\\s*=\\s*\\(\\s*([\\d.EeDd+-]+)`))?.[1]
-    return { naifId, gmKm3PerSecond2: Number(value?.replace(/[dD]/, 'E')),
-      gmSource: `${DE440_DYNAMICS_SOURCE.gmSource} SHA-256 ${gmHash}`, exclusionKm: exclusions[naifId] }
-  })
+  const masses = parseDe440MassPlan(gmText, exclusions)
   function epoch(elapsed: number, offsetSeconds = 0) {
     if (!Number.isFinite(elapsed) || !Number.isFinite(offsetSeconds)) throw new RangeError('Dynamics epoch outside frozen source window')
     // Normalize relative parts before adding the reference. Large cancelling
