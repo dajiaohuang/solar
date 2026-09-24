@@ -5,6 +5,24 @@ import { fetchImmutableArrayBuffer, parseMaybeGzipJson } from '../../src/data/ca
 
 afterEach(() => vi.unstubAllGlobals())
 
+it('retains the reader until asynchronous cancellation cleanup finishes', async () => {
+  let release!: () => void, settled = false
+  const cleanup = new Promise<void>(resolve => { release = resolve })
+  const cancel = vi.fn(() => cleanup), controller = new AbortController()
+  const stream = new ReadableStream<Uint8Array>({ cancel })
+  const outcome = readBoundedStream(stream, 16, controller.signal)
+    .then(() => { settled = true; return null }, error => { settled = true; return error })
+  controller.abort()
+  await new Promise(resolve => setTimeout(resolve, 0))
+  const settledBeforeCleanup = settled, lockedBeforeCleanup = stream.locked
+  release()
+  expect(await outcome).toMatchObject({ name: 'AbortError' })
+  expect(settledBeforeCleanup).toBe(false)
+  expect(lockedBeforeCleanup).toBe(true)
+  expect(cancel).toHaveBeenCalledTimes(1)
+  expect(stream.locked).toBe(false)
+})
+
 it('interrupts a stalled stream read, discards its partial bytes and releases the lock', async () => {
   const cancelled = vi.fn(), controller = new AbortController()
   const stream = new ReadableStream<Uint8Array>({ start(c) { c.enqueue(new Uint8Array([1, 2])) }, cancel: cancelled })

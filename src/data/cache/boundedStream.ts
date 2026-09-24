@@ -11,7 +11,9 @@ export async function readBoundedStream(stream: ReadableStream<Uint8Array>, maxi
   let buffer = new Uint8Array(0)
   let size = 0
   let complete = false
-  const abort = () => { void reader.cancel(signal?.reason).catch(() => undefined) }
+  let cancellation: Promise<void> | undefined
+  const cancelRead = () => cancellation ??= reader.cancel(signal?.reason).catch(() => undefined)
+  const abort = () => { void cancelRead() }
   signal?.addEventListener('abort', abort, { once: true })
   try {
     signal?.throwIfAborted()
@@ -33,7 +35,9 @@ export async function readBoundedStream(stream: ReadableStream<Uint8Array>, maxi
     return size === buffer.length ? buffer.buffer : buffer.slice(0, size).buffer
   } finally {
     signal?.removeEventListener('abort', abort)
-    if (!complete) void reader.cancel().catch(() => undefined)
+    // Abort closes pending reads before underlying cancellation necessarily
+    // finishes. Keep caller admission until that original cleanup settles.
+    if (!complete) await cancelRead()
     reader.releaseLock()
   }
 }
