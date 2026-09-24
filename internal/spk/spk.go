@@ -352,7 +352,7 @@ func (k *Kernel) evaluate(target int, et float64) (State, bool, error) {
 		if s.Target != target || et < s.StartET || et > s.EndET {
 			continue
 		}
-		if (s.Frame != 1 && s.Frame != 17) || (s.Type != 2 && s.Type != 3 && s.Type != 17 && s.Type != 21) {
+		if (s.Frame != 1 && s.Frame != 17) || (s.Type != 1 && s.Type != 2 && s.Type != 3 && s.Type != 17 && s.Type != 21) {
 			unsupported = s
 			break
 		}
@@ -399,7 +399,7 @@ func (k *Kernel) eval21Correct(s Segment, et float64) ([6]float64, error) {
 		return out, fmt.Errorf("SPK type 21 epoch outside coverage")
 	}
 	off, delta := s.Start+lo*m.RecordSize, et-k.addr(s.Start+lo*m.RecordSize)
-	if err := k.validateType21Record(off, m); err != nil {
+	if err := k.validateType21Record(off, m, s.Type); err != nil {
 		return out, err
 	}
 	max := int(k.addr(off + 4*m.Dimension + 7))
@@ -457,15 +457,19 @@ func (k *Kernel) eval21Correct(s Segment, et float64) ([6]float64, error) {
 	return out, nil
 }
 
-func (k *Kernel) validateType21Record(off int, m type21Meta) error {
+func (k *Kernel) validateType21Record(off int, m type21Meta, segmentType int) error {
 	for j := 0; j < m.RecordSize; j++ {
 		if !finite(k.addr(off + j)) {
 			return fmt.Errorf("invalid SPK type 21 record")
 		}
 	}
 	max := k.addr(off + 4*m.Dimension + 7)
-	if max != math.Trunc(max) || max < 3 || max > float64(m.Dimension+1) {
-		return fmt.Errorf("invalid SPK type 21 order")
+	limit := m.Dimension + 1
+	if segmentType == 1 {
+		limit = 15
+	}
+	if max != math.Trunc(max) || max < 3 || max > float64(limit) {
+		return fmt.Errorf("invalid SPK type %d order", segmentType)
 	}
 	for axis := 0; axis < 3; axis++ {
 		order := k.addr(off + 4*m.Dimension + 8 + axis)
@@ -497,7 +501,7 @@ func (k *Kernel) parseSegment(d, i []float64) (Segment, error) {
 		s.type17 = true
 		return s, nil
 	}
-	if s.Type == 21 {
+	if s.Type == 1 || s.Type == 21 {
 		m, err := k.inspect21(s)
 		if err != nil {
 			return Segment{}, err
@@ -661,16 +665,43 @@ func (k *Kernel) eval17(s Segment, et float64) ([6]float64, error) {
 }
 
 func (k *Kernel) inspect21(s Segment) (type21Meta, error) {
-	dim, n := k.addr(s.End-1), k.addr(s.End)
-	if dim != math.Trunc(dim) || n != math.Trunc(n) || dim < 15 || dim > 25 || n < 1 || n > 1e7 {
-		return type21Meta{}, fmt.Errorf("invalid SPK type 21 dimensions")
+	// Type 1 is the fixed dimension-15 MDA format. Its footer contains
+	// only N, whereas type 21 stores MAXDIM,N. The evaluator is shared.
+	dim, n, tail := 15.0, k.addr(s.End), 1
+	if s.Type == 21 {
+		dim, tail = k.addr(s.End-1), 2
+	}
+	if !finite(dim) || !finite(n) || dim != math.Trunc(dim) || n != math.Trunc(n) || dim < 15 || dim > 25 || n < 1 || n > 1e7 {
+		return type21Meta{}, fmt.Errorf("invalid SPK type %d dimensions", s.Type)
 	}
 	rs := 4*int(dim) + 11
 	dc := int(n) / 100
-	if s.End-s.Start+1 != int(n)*(rs+1)+dc+2 {
-		return type21Meta{}, fmt.Errorf("invalid SPK type 21 layout")
+	if s.End-s.Start+1 != int(n)*(rs+1)+dc+tail {
+		return type21Meta{}, fmt.Errorf("invalid SPK type %d layout", s.Type)
 	}
 	epochs := s.Start + int(n)*rs
+	previous := math.Inf(-1)
+	for index := 0; index < int(n); index++ {
+		if err := k.contextError(); err != nil {
+			return type21Meta{}, err
+		}
+		epoch := k.addr(epochs + index)
+		if !finite(epoch) || epoch <= previous {
+			return type21Meta{}, fmt.Errorf("invalid SPK type %d record epochs", s.Type)
+		}
+		previous = epoch
+	}
+	if previous < s.EndET {
+		return type21Meta{}, fmt.Errorf("invalid SPK type %d record coverage", s.Type)
+	}
+	for index := 0; index < dc; index++ {
+		if err := k.contextError(); err != nil {
+			return type21Meta{}, err
+		}
+		if k.addr(epochs+int(n)+index) != k.addr(epochs+(index+1)*100-1) {
+			return type21Meta{}, fmt.Errorf("invalid SPK type %d epoch directory", s.Type)
+		}
+	}
 	return type21Meta{int(dim), rs, int(n), epochs}, nil
 }
 func (k *Kernel) f64(off int) float64 {
