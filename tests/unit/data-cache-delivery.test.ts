@@ -3,7 +3,21 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); vi.resetModules() })
 
 describe('optional immutable persistence', () => {
-  it('bounds distinct acquisitions through validation while shared consumers bypass the queue', async () => {
+  it('isolates a validator that transfers its input from sibling consumers', async () => {
+    const fetcher = vi.fn(async () => new Response(new Uint8Array([8, 9])))
+    vi.stubGlobal('fetch', fetcher)
+    const { fetchImmutableArrayBuffer } = await import('../../src/data/cache/indexedDb')
+    const detached = fetchImmutableArrayBuffer('/validator-owned.bin', buffer => {
+      structuredClone(buffer, { transfer: [buffer] })
+    })
+    const rejected = expect(detached).rejects.toThrow('detached or resized')
+    const sibling = fetchImmutableArrayBuffer('/validator-owned.bin')
+    expect(new Uint8Array(await sibling)).toEqual(new Uint8Array([8, 9]))
+    await rejected
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
+  it('bounds acquisitions and validation copies while sharing transport bytes', async () => {
     const fetcher = vi.fn(async () => new Response(new Uint8Array([42])))
     vi.stubGlobal('fetch', fetcher)
     const { fetchImmutableArrayBuffer } = await import('../../src/data/cache/indexedDb')
@@ -14,13 +28,21 @@ describe('optional immutable persistence', () => {
     const controller = new AbortController()
     const cancelled = expect(fetchImmutableArrayBuffer('/cancel-before-admission.bin', undefined, controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
     const next = fetchImmutableArrayBuffer('/admitted-later.bin')
-    await vi.waitFor(() => expect(finishes.size).toBe(limit))
+    await vi.waitFor(() => expect(finishes.size).toBe(2))
     expect(fetcher).toHaveBeenCalledTimes(limit)
-    expect(new Uint8Array(await fetchImmutableArrayBuffer('/limited-0.bin'))).toEqual(new Uint8Array([42]))
+    let sharedFinished = false
+    const shared = fetchImmutableArrayBuffer('/limited-0.bin').then(value => { sharedFinished = true; return value })
+    await Promise.resolve()
+    expect(sharedFinished).toBe(false)
     expect(fetcher).toHaveBeenCalledTimes(limit)
     controller.abort()
     await cancelled
     finishes.get(0)!()
+    finishes.get(1)!()
+    await vi.waitFor(() => expect(finishes.size).toBe(limit))
+    finishes.get(2)!()
+    finishes.get(3)!()
+    expect(new Uint8Array(await shared)).toEqual(new Uint8Array([42]))
     expect(new Uint8Array(await next)).toEqual(new Uint8Array([42]))
     expect(fetcher).toHaveBeenCalledTimes(limit + 1)
     expect(fetcher.mock.calls.some(call => String(call[0]).includes('cancel-before-admission'))).toBe(false)
