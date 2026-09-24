@@ -35,7 +35,9 @@ function text(value: unknown, name: string) {
   return value.trim()
 }
 function number(value: unknown, name: string) {
-  if ((typeof value !== 'number' && typeof value !== 'string') || (typeof value === 'string' && !value.trim()) || !Number.isFinite(Number(value))) {
+  if ((typeof value !== 'number' && typeof value !== 'string') ||
+      (typeof value === 'string' && !/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value.trim())) ||
+      !Number.isFinite(Number(value))) {
     throw new SbdbCovarianceError(`Nonfinite or missing ${name}`)
   }
   return Number(value)
@@ -77,6 +79,8 @@ export function parseSbdbCovariance(payload: unknown): SbdbCovariance {
   }
   const body = object(root.object, 'object'), orbit = object(root.orbit, 'orbit')
   const cov = object(orbit.covariance, 'orbit.covariance')
+  if (!Array.isArray(cov.labels) || cov.labels.length < 6 || cov.labels.length > 16) throw new SbdbCovarianceError('Covariance exceeds supported audit dimension 6 to 16')
+  if (orbit.model_pars != null && (!Array.isArray(orbit.model_pars) || orbit.model_pars.length > 64)) throw new SbdbCovarianceError('Estimated model parameters exceed supported list size 64 or are not an array')
   if (orbit.equinox !== 'J2000') throw new SbdbCovarianceError('Unsupported covariance reference equinox')
   const solutionId = text(orbit.orbit_id, 'orbit solution identifier')
   if (body.orbit_id !== undefined && body.orbit_id !== solutionId) throw new SbdbCovarianceError('Conflicting SBDB orbit solution identifiers')
@@ -86,19 +90,18 @@ export function parseSbdbCovariance(payload: unknown): SbdbCovariance {
   }
   const rawElements = cov.elements ?? (standardElementEpochTdb === solutionEpochTdb ? orbit.elements : null)
   if (!Array.isArray(rawElements)) throw new SbdbCovarianceError('Missing elements at the covariance solution epoch; standard-epoch elements cannot be substituted')
+  if (rawElements.length > 64) throw new SbdbCovarianceError('Solution elements exceed supported list size 64')
   const elements = new Map<string, Record<string, unknown>>()
   for (const raw of rawElements) {
     const element = object(raw, 'solution element'), name = text(element.name, 'element name')
     if (elements.has(name)) throw new SbdbCovarianceError(`Duplicate solution element ${name}`)
     elements.set(name, element)
   }
-  if (!Array.isArray(cov.labels) || cov.labels.length < 6 || cov.labels.length > 16) throw new SbdbCovarianceError('Covariance exceeds supported audit dimension 6 to 16')
   const labels = cov.labels.map((value, i) => text(value, `covariance label ${i}`)), n = labels.length
   if (new Set(labels).size !== n || labels.slice(0, 6).some(label => !Object.hasOwn(definition, label))) {
     throw new SbdbCovarianceError('Covariance must uniquely label all six orbital elements before additional parameters')
   }
   const models = new Map<string, Record<string, unknown>>()
-  if (orbit.model_pars != null && !Array.isArray(orbit.model_pars)) throw new SbdbCovarianceError('Invalid estimated model parameters')
   for (const raw of (orbit.model_pars ?? []) as unknown[]) {
     const model = object(raw, 'model parameter'), name = text(model.name, 'model parameter name')
     if (models.has(name)) throw new SbdbCovarianceError(`Duplicate model parameter ${name}`)
@@ -111,7 +114,9 @@ export function parseSbdbCovariance(payload: unknown): SbdbCovariance {
     if (def && (entry.units ?? null) !== def.units) throw new SbdbCovarianceError(`Unexpected units for covariance parameter ${label}`)
     if (!def && entry.kind !== 'EST' && entry.kind !== 'CON') throw new SbdbCovarianceError(`Covariance parameter ${label} is not estimated or considered`)
     // tp's nominal value is a TDB Julian date; covariance differences are days.
-    units.push(def ? label === 'tp' ? 'd' : def.units : optionalText(entry.units))
+    // Missing/null units retain the source convention; malformed units must not
+    // silently become dimensionless in readouts or exported covariance axes.
+    units.push(def ? label === 'tp' ? 'd' : def.units : entry.units == null ? null : text(entry.units, `units for covariance parameter ${label}`))
     nominal.push(number(entry.value, `nominal ${label}`))
   }
   const e = nominal[labels.indexOf('e')], q = nominal[labels.indexOf('q')], inclination = nominal[labels.indexOf('i')]
@@ -125,7 +130,10 @@ export function parseSbdbCovariance(payload: unknown): SbdbCovariance {
     if (row[i] <= 0) throw new SbdbCovarianceError('This audit requires strictly positive marginal variances')
     return Math.sqrt(row[i])
   })
-  const correlation = matrix.map((row, i) => row.map((value, j) => value / marginalSigmas[i] / marginalSigmas[j]))
+  // For a valid covariance, |Cij| / min(sigma_i,sigma_j) <= max(sigma_i,sigma_j).
+  // Dividing by the larger scale first can underflow a representable correlation.
+  const correlation = matrix.map((row, i) => row.map((value, j) =>
+    value / Math.min(marginalSigmas[i], marginalSigmas[j]) / Math.max(marginalSigmas[i], marginalSigmas[j])))
   for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
     if (!Number.isFinite(correlation[i][j]) || Math.abs(correlation[i][j] - correlation[j][i]) > 1e-12 || Math.abs(correlation[i][j]) > 1 + 1e-12) {
       throw new SbdbCovarianceError('Covariance is asymmetric or violates pairwise variance bounds')

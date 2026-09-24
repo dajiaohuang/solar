@@ -76,6 +76,18 @@ describe('SBDB solution-epoch covariance', () => {
     expect(() => parseSbdbCovariance(source)).toThrow(/not estimated or considered/)
   })
 
+  it('accepts decimal covariance syntax without JavaScript radix or suffix coercions', () => {
+    const source = clone()
+    source.orbit.covariance.elements.find(element => element.name === 'e')!.value = ' +2.228078944584026e-1 '
+    source.orbit.covariance.data[0][0] = '.00000000000000008824897647015303'
+    expect(parseSbdbCovariance(source).nominal[0]).toBe(0.2228078944584026)
+    for (const value of ['0x1', '0b1', '1_000', '5 au', 'Infinity', 'NaN', '--1', '.', '1e', '']) {
+      const invalid = clone()
+      invalid.orbit.covariance.elements.find(element => element.name === 'e')!.value = value
+      expect(() => parseSbdbCovariance(invalid), `accepted non-decimal value ${JSON.stringify(value)}`).toThrow(/Nonfinite or missing/)
+    }
+  })
+
   it('rejects a globally indefinite matrix even when all pairwise correlations are allowed', () => {
     const source = clone()
     source.orbit.covariance.data = identity(6)
