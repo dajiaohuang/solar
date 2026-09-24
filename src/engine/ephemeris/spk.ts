@@ -168,13 +168,11 @@ export class SpkKernel {
         this.f64(terminal + 16) !== s.recordSize || this.f64(terminal + 24) !== s.recordCount) fail('invalid segment terminal metadata');
     let index = Math.floor(((et - init) + offsetSeconds) / interval);
     if (index < 0) index = 0; if (index >= s.recordCount) index = s.recordCount - 1;
-    // A quotient near an exact record boundary can round away the low part.
-    // Compare against the nearby boundary before choosing its coefficient set.
-    if (offsetSeconds !== 0) {
-      const start = init + index * interval;
-      if (index > 0 && (et - start) + offsetSeconds < 0) index--;
-      else if (index + 1 < s.recordCount && (et - (start + interval)) + offsetSeconds >= 0) index++;
-    }
+    // Subtraction or division can round across a record boundary even for a
+    // scalar epoch. Compare the nearby boundary before selecting coefficients.
+    const start = init + index * interval;
+    if (index > 0 && (et - start) + offsetSeconds < 0) index--;
+    else if (index + 1 < s.recordCount && (et - (start + interval)) + offsetSeconds >= 0) index++;
     const offset = this.addressOffset(s.startAddress + index * s.recordSize);
     const mid = this.f64(offset), radius = this.f64(offset + 8), x = ((et - mid) + offsetSeconds) / radius;
     if (!Number.isFinite(x) || Math.abs(x) > 1 + 1e-10) fail('epoch falls outside selected record');

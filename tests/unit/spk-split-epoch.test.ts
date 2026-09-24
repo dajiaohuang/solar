@@ -4,28 +4,34 @@ import { SpkKernel } from '../../src/engine/ephemeris/spk'
 const base = 2 ** 30, low = 2 ** -30
 // Two deliberately discontinuous linear records distinguish the selected
 // coefficient set. These are analytic fixtures, not physical ephemerides.
-function kernel(type: 2 | 3) {
+function kernel(type: 2 | 3, initial = base, interval = 10) {
   const bytes = new ArrayBuffer(4096), view = new DataView(bytes)
   const ascii = (at: number, value: string) => new Uint8Array(bytes).set(new TextEncoder().encode(value), at)
   ascii(0, 'DAF/SPK '); ascii(88, 'LTL-IEEE')
   for (const [at, value] of [[8, 2], [12, 6], [76, 3], [80, 3]]) view.setInt32(at, value, true)
   const summary = 2048, start = 385, recordSize = type === 2 ? 8 : 14
   view.setFloat64(summary + 16, 1, true)
-  view.setFloat64(summary + 24, base, true); view.setFloat64(summary + 32, base + 20, true)
+  view.setFloat64(summary + 24, initial, true); view.setFloat64(summary + 32, initial + 2 * interval, true)
   ;[499, 0, 1, type, start, start + 2 * recordSize + 3].forEach((value, i) => view.setInt32(summary + 40 + 4 * i, value, true))
   const write = (address: number, value: number) => view.setFloat64((address - 1) * 8, value, true)
   for (let record = 0; record < 2; record++) {
     const at = start + record * recordSize
-    write(at, base + 5 + 10 * record); write(at + 1, 5)
+    write(at, initial + interval * (record + 0.5)); write(at + 1, interval / 2)
     write(at + 2, record * 100); write(at + 3, 5)
     if (type === 3) { write(at + 8, record * 200); write(at + 9, 10) }
   }
   const terminal = start + 2 * recordSize
-  ;[base, 10, recordSize, 2].forEach((value, i) => write(terminal + i, value))
+  ;[initial, interval, recordSize, 2].forEach((value, i) => write(terminal + i, value))
   return new SpkKernel(bytes)
 }
 
 for (const type of [2, 3] as const) {
+  test(`Type ${type} scalar epochs retain the record side when subtraction rounds across zero`, () => {
+    const source = kernel(type, -(2 ** 30), 2 ** 30)
+    expect(source.evaluate(499, -1e-8)!.position.x).toBe(5)
+    expect(source.evaluateChebyshevAtOffset(499, -1e-8, 0)!.position.x).toBe(5)
+    expect(source.evaluate(499, 0)!.position.x).toBe(95)
+  })
   test(`Type ${type} normalizes large cancelling absolute epoch parts`, () => {
     const source = kernel(type), high = 1e20, offset = base - high
     expect(high + offset).toBe(base)
