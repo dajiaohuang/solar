@@ -335,7 +335,9 @@ async function installMockCatalog(page: Page | null, options: {
     : fixtureEntries
   const chunkSize = options.chunkSize ?? 10_000
   const chunkId = (index: number) => `chunk-${String(Math.floor(index / chunkSize)).padStart(4, '0')}`
-  entries.forEach((entry, index) => { entry.chunkId = chunkId(index) })
+  entries.forEach((entry, index) => Object.assign(entry, {
+    chunkId: chunkId(index), chunkIndex: Math.floor(index / chunkSize), rowIndex: index % chunkSize,
+  }))
   const numeric = new Float64Array(entries.length * 8)
   entries.forEach((_, index) => numeric.set([2451545, 2.1 + index % 600 / 500, 0.05 + index % 20 / 100, index % 30, 20, 40, 60, 0.25], index * 8))
   const defaultSampleIndexes = entries.slice(0, options.sampleCount ?? entries.length).map((_, index) => index)
@@ -362,12 +364,10 @@ async function installMockCatalog(page: Page | null, options: {
   await register('**/data/asteroids/dataset-version.json', { json: { schemaVersion: 1, activeVersion: manifest.version, mode: manifest.datasetMode, manifestPath: `releases/${manifest.version}/manifest.json`, generatedAt: manifest.generatedAt, sourceSha256: manifest.sourceSha256, contentSha256: manifest.contentSha256 } })
   await register(`**/data/asteroids/releases/${manifest.version}/manifest.json`, { json: manifest })
   await register(`**/data/asteroids/releases/${manifest.version}/provenance.json`, { json: { datasetVersion: manifest.version, downloadedAt: manifest.generatedAt, mode: manifest.datasetMode, totalObjects: entries.length, orbitModel: 'fixture', precision: 'fixture', parserVersion: 'test', ...manifest } })
-  const binaryChecksums: Record<string, string> = {}
   for (let start = 0; start < entries.length; start += chunkSize) {
     const end = Math.min(entries.length, start + chunkSize), binary = Buffer.from(numeric.slice(start * 8, end * 8).buffer)
     await register(`**/data/asteroids/releases/${manifest.version}/meta/${chunkId(start)}.json`, { json: entries.slice(start, end) })
     await register(`**/data/asteroids/releases/${manifest.version}/binary/${chunkId(start)}.bin`, { body: binary, contentType: 'application/octet-stream' })
-    binaryChecksums[`binary/${chunkId(start)}.bin`] = createHash('sha256').update(binary).digest('hex')
   }
   const compact = Buffer.alloc(entries.length * 24)
   entries.forEach((entry, index) => {
@@ -382,12 +382,6 @@ async function installMockCatalog(page: Page | null, options: {
     compact.writeUInt16LE(index % chunkSize, offset + 22)
   })
   await register(`**/data/asteroids/releases/${manifest.version}/catalog-index.bin`, { body: compact, contentType: 'application/octet-stream' })
-  await register(`**/data/asteroids/releases/${manifest.version}/checksums.json`, { json: {
-    schemaVersion: 1, algorithm: 'sha256', files: {
-      'catalog-index.bin': createHash('sha256').update(compact).digest('hex'),
-      ...binaryChecksums,
-    },
-  } })
   for (const size of ['desktop', 'mobile'] as const) {
     const profileEntries = sampleIndexes[size].map((index) => entries[index])
     const profileNumeric = new Float64Array(profileEntries.length * 8)
@@ -399,10 +393,24 @@ async function installMockCatalog(page: Page | null, options: {
   }
   await register(`**/data/asteroids/releases/${manifest.version}/catalog-summary.json`, { json: {
     schemaVersion: 2, datasetMode: manifest.datasetMode, totalCount: entries.length,
-    categoryCounts: manifest.categoryCounts, magnitudeKnownCount: entries.length, magnitudeUnknownCount: 0,
-    numericRanges: { semiMajorAxisAU: [2.1, 2.5], eccentricity: [0.08, 0.14], inclinationDeg: [4, 6], epochJd: [2451545, 2451545] },
+    categoryCounts: manifest.categoryCounts,
+    magnitudeKnownCount: entries.filter(entry => entry.absoluteMagnitude !== undefined).length,
+    magnitudeUnknownCount: entries.filter(entry => entry.absoluteMagnitude === undefined).length,
+    numericRanges: Object.fromEntries([['epochJd', 0], ['semiMajorAxisAU', 1], ['eccentricity', 2], ['inclinationDeg', 3]].map(([name, column]) => {
+      const values = entries.map((_, index) => numeric[index * 8 + Number(column)])
+      return [name, [Math.min(...values), Math.max(...values)]]
+    })),
     sourceSha256: manifest.sourceSha256,
   } })
+  const prefix = `/data/asteroids/releases/${manifest.version}/`
+  const files = Object.fromEntries([...responses].filter(([path]) => path.startsWith(prefix))
+    .map(([path, response]) => [path.slice(prefix.length), createHash('sha256').update(response.body ?? JSON.stringify(response.json)).digest('hex')] as const)
+    .filter(([path]) => /^(binary|meta|search|lookup)\//.test(path) || /^catalog-(index|sample|summary)/.test(path))
+    .sort(([left], [right]) => left.localeCompare(right)))
+  manifest.contentSha256 = createHash('sha256').update(JSON.stringify(files)).digest('hex')
+  await register(`**${prefix}checksums.json`, { json: { schemaVersion: 1, algorithm: 'sha256', files } })
+  await register('**/data/asteroids/dataset-version.json', { json: { schemaVersion: 1, activeVersion: manifest.version, mode: manifest.datasetMode, manifestPath: `releases/${manifest.version}/manifest.json`, generatedAt: manifest.generatedAt, sourceSha256: manifest.sourceSha256, contentSha256: manifest.contentSha256 } })
+  await register(`**${prefix}provenance.json`, { json: { datasetVersion: manifest.version, downloadedAt: manifest.generatedAt, mode: manifest.datasetMode, totalObjects: entries.length, orbitModel: 'fixture', precision: 'fixture', parserVersion: 'test', ...manifest } })
   return responses
 }
 
