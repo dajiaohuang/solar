@@ -8,8 +8,9 @@ rtk proxy node scripts/fetch-gaia-cone.mjs --ra 56.75 --dec 24.1167 --radius 0.1
 
 The output directory must be new. Angles are degrees; the magnitude limit is
 Gaia G. Gaia TAP jobs use asynchronous UWS requests with an 85-minute local job
-deadline, bounded per-request timeouts and a 16 MiB streamed CSV ceiling. Cone
-radius is at most two degrees and the row budget at most 30,000. By default the
+deadline, bounded per-request timeouts and a 64 MiB streamed CSV ceiling. Cone
+radius is at most two degrees and the configured row budget at most 100,000.
+Spatial chunks remain capped at 30,000 rows each. By default the
 script issues one `TOP maxRows+1` row query: seeing the extra sentinel row rejects
 an over-budget cone; fewer rows means the bounded CSV includes every match. Add
 `--verify-count` for an independent COUNT(*) query when auditing a cone is worth
@@ -57,10 +58,11 @@ hash-verified chunks with Float64 ICRS unit directions. Wrapping RA, the 0/360
 seam and polar directions are handled conservatively. Selection is limited to
 J2016.0; requesting a later epoch is rejected until motion-aware bounds exist.
 
-The loader defaults to up to four parallel requests, a 32 MiB in-flight encoded-byte
-reservation, 30,000 in-flight rows and 64 MiB total selected bytes. Each request
-has a 30-second deadline. One wave waits for its asynchronous consumer callbacks
-before admitting more data. The consumer must resolve after accepting/uploading
+The loader defaults to up to four parallel requests, a 64 MiB in-flight encoded-byte
+reservation, 60,000 in-flight rows and 128 MiB total selected bytes. Each request
+has a 30-second deadline. Admission rolls forward as in-flight jobs release
+their encoded-byte and row reservations. Consumer callbacks remain serial and
+must resolve after accepting/uploading
 a chunk and clear its own retained state on cancellation. These counters are
 admission limits, not measurements of JavaScript heap or GPU allocations. The
 loader does not own retained consumer storage. A failed/cancelled stream never
@@ -97,7 +99,7 @@ consistency, not independent authentication of an externally supplied manifest.
 ## Session source cache
 
 Completed remote loads retain a worker with an LRU content-hash cache limited
-to 32 MiB and 128 encoded chunks. This is additional to active decode/GPU
+to 64 MiB and 128 encoded chunks. This is additional to active decode/GPU
 storage, not a bound on total process memory. Each new load fetches its manifest
 again and revalidates cached bytes against the current schema and selection.
 Exports report cacheHits and cacheRetainedBytes. Local files bypass the cache.
@@ -117,9 +119,9 @@ bound or a claim about browser-internal file storage or digest allocations.
 
 ### Display retention bounds from source inspection
 
-The current cone viewer accepts at most 30,000 source rows. Its retained
-Float32 display batches contain three values per row (at most 360,000 bytes),
-and GaiaPlot allocates a matching point buffer (360,000 bytes at that capacity;
+The current cone viewer admits at most 100,000 source rows. Its retained
+Float32 display batches contain three values per row (at most 1,200,000 bytes),
+and GaiaPlot allocates a matching point buffer (1,200,000 bytes at that capacity;
 an empty chart still allocates 12 bytes). These CPU batches remain available for
 picking and effect replay. Source record objects are retained separately for
 inspection/export and are not included in those coordinate-byte figures.
@@ -145,17 +147,22 @@ The optional [`tests/e2e/gaia-capacity.spec.ts`](../tests/e2e/gaia-capacity.spec
 measures three local imports and 120 zoom frames per import when
 `SOLAR_GAIA_CAPACITY_DIR` points to a real capture. It records loading time,
 frame intervals, buffer size, reallocations, uploads, draws, browser version and
-host details; it has no frame-rate acceptance threshold. The current renderer
-has a tracked desktop Chromium report for a real 4,460-row capture at
-[`desktop-chromium-4460.json`](benchmarks/gaia-20260924/desktop-chromium-4460.json);
-its manifest hash matches the source manifest at
-[`source-manifest.json`](benchmarks/gaia-20260923/source-manifest.json), and all
-recorded renderer implementation hashes match the files at capture time. Its
-three local import times were 600, 68 and 75 ms; 120-step zoom frame intervals
-were 16.7 ms median and 16.8 ms P95/max. The 53,520-byte GPU point buffer had no
-reallocations or extra uploads and rendered 119 draw calls per sample. This is a
-local 4,460-row desktop baseline, not a 30,000-row result. The 30,000-row public
-TAP query exceeded the local 85-minute job deadline before returning a result;
+host details; it has no frame-rate acceptance threshold. The current 100,000-row
+admission profile has a tracked desktop Chromium report for a real 4,460-row
+capture at
+[`desktop-chromium-4460-budget-expanded.json`](benchmarks/gaia-20260924/desktop-chromium-4460-budget-expanded.json);
+the earlier 30,000-row-profile report remains at
+[`desktop-chromium-4460.json`](benchmarks/gaia-20260924/desktop-chromium-4460.json).
+Both use the source manifest at
+[`source-manifest.json`](benchmarks/gaia-20260923/source-manifest.json); all
+recorded renderer and capacity-profile hashes match their capture-time files.
+The expanded-profile run's three local import times were 538, 69 and 65 ms;
+120-step zoom frame intervals had 16.7 ms median, 16.7–16.8 ms P95 and 16.8 ms
+maximum. The 53,520-byte GPU point buffer had no reallocations or extra uploads
+and rendered 119 draw calls per sample. This is a local 4,460-row desktop
+baseline, not a 30,000- or 100,000-row result. The 100,000-row limit is an
+admission ceiling, not demonstrated device capacity. The 30,000-row public TAP
+query exceeded the local 85-minute job deadline before returning a result;
 no large capture was written. Neither that baseline nor this harness establishes
 full-sky, sustained real-time, public-network, total-memory or physical mobile
 capacity. The bundled 19-row example remains an ingestion fixture.
@@ -531,7 +538,7 @@ covered separately by the Go test. Propagated covariance remains outstanding.
 The browser also parses the retained original CSV and compares every selected
 source field, including nulls and the exact decimal identity, with the returned
 selectedSource. Correct hashes alone are insufficient to accept a mismatched
-selected record. Parsing is bounded to 16 MiB and 30,000 data rows, supports
+selected record. Parsing is bounded to 64 MiB and 100,000 data rows, supports
 quoted fields, and rejects duplicate selected identities and malformed numeric
 values. These checks preserve the original bytes rather than rewriting them.
 The scan keeps only the header, current row and selected row, rather than an
@@ -729,10 +736,10 @@ Session source-cache limits cover retained encoded bytes only, separately from
 active decoding, transferred records and GPU buffers. Source inspection does
 not establish browser-worker behavior or total resident-memory measurements.
 
-The Gaia chart bounds point capacity at 30,000 rows and the drawing surface
+The Gaia chart bounds point capacity at 100,000 rows and the drawing surface
 at 2048 by 2048 pixels, further limited by device viewport/renderbuffer limits.
 It requests no depth, stencil or antialias buffers. The point allocation is
-12 bytes per row (with a one-row minimum, 360,000 bytes at full capacity); CPU picking retains the transferred
+12 bytes per row (with a one-row minimum, 1,200,000 bytes at full capacity); CPU picking retains the transferred
 Float32 batches, and source records remain available for export. An RGBA8
 2048-square surface alone is 16 MiB, but backing-buffer count, driver overhead
 and total resident memory are not measured or bounded by that figure.
