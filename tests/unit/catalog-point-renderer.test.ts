@@ -142,6 +142,22 @@ describe('persistent catalog GPU ownership', () => {
     expect(calls.bufferData).not.toHaveBeenCalled()
     expect(calls.drawArrays).not.toHaveBeenCalled()
   })
+  it('rejects non-finite display coordinates before GPU upload', () => {
+    const { gl, calls } = context(), renderer = createCatalogPointRenderer(gl)
+    const invalidFrame = frame(1)
+    invalidFrame.positions[1] = Number.NaN
+    expect(() => renderer.draw(invalidFrame, 800, 600, 1)).toThrow('Invalid catalog GPU display attributes')
+    expect(calls.bufferData).not.toHaveBeenCalled()
+
+    const retained = createCatalogPointRenderer(gl, 1)
+    retained.append(frame(1))
+    retained.beginPositionUpdate()
+    calls.bufferSubData.mockClear()
+    expect(() => retained.replacePositions(0, new Float32Array([0, Number.POSITIVE_INFINITY])))
+      .toThrow('Invalid contiguous catalog position update')
+    expect(calls.bufferSubData).not.toHaveBeenCalled()
+    renderer.dispose(); retained.dispose()
+  })
   it('releases partial initialization after allocation failure', () => {
     const { gl, calls } = context()
     calls.createBuffer.mockReturnValueOnce({}).mockReturnValueOnce(null)

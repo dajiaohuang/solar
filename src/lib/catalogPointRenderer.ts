@@ -8,6 +8,13 @@ export type CatalogPointFrame = {
   opacity: number
 }
 
+function hasOnlyFiniteValues(values: Float32Array) {
+  for (let index = 0; index < values.length; index++) {
+    if (!Number.isFinite(values[index])) return false
+  }
+  return true
+}
+
 function createProgram(gl: WebGLRenderingContext, dimensions: 2 | 3) {
   const program = gl.createProgram()
   if (!program) throw new Error('Unable to create catalog program')
@@ -68,7 +75,7 @@ export function createCatalogPointRenderer(gl: WebGLRenderingContext, capacity?:
     if (gl.getError() !== gl.NO_ERROR) throw new Error('Catalog GPU allocation, upload or draw failed')
   }
   const validateAttribute = (data: Float32Array) => {
-    if (!(data instanceof Float32Array) || !data.every(Number.isFinite)) throw new Error('Invalid catalog GPU display attributes')
+    if (!(data instanceof Float32Array) || !hasOnlyFiniteValues(data)) throw new Error('Invalid catalog GPU display attributes')
   }
   const program = createProgram(gl, dimensions)
   const buffers: { handle: WebGLBuffer; data: Float32Array | null }[] = []
@@ -179,7 +186,7 @@ export function createCatalogPointRenderer(gl: WebGLRenderingContext, capacity?:
         if (!(positions instanceof Float32Array)) throw new Error('Catalog GPU positions must be Float32 display coordinates')
         const rows = positions.length/dimensions
         if (!Number.isSafeInteger(startRow) || startRow !== updatedRows || !Number.isSafeInteger(rows) || rows < 1 || startRow+rows > retainedCount ||
-            !positions.every(Number.isFinite)) throw new Error('Invalid contiguous catalog position update')
+            !hasOnlyFiniteValues(positions)) throw new Error('Invalid contiguous catalog position update')
         gl.bindBuffer(gl.ARRAY_BUFFER, buffers[0].handle)
         gl.bufferSubData(gl.ARRAY_BUFFER, startRow*dimensions*4, positions as Float32Array<ArrayBuffer>)
         updatedRows += rows
