@@ -1,4 +1,4 @@
-import { evaluateType21, inspectType1, inspectType21, type Type21Metadata } from './spkType21.ts';
+import { createType21Scratch, evaluateType21, inspectType1, inspectType21, type Type21Metadata } from './spkType21.ts';
 import { evaluateType17, inspectType17, type Type17Metadata } from './spkType17.ts';
 
 /**
@@ -50,6 +50,11 @@ export class SpkKernel {
   private readonly view: DataView;
   private readonly little: boolean;
   private readonly bytes: number;
+  private readonly segmentsByTarget: ReadonlyMap<number, readonly SpkSegment[]>;
+  private coverageIntervalsByTarget: ReadonlyMap<number, readonly Readonly<{ startEt: number; endEt: number }>[]> | undefined;
+  // evaluate() and the recurrence helpers are synchronous and do not invoke
+  // caller code, so this per-kernel workspace cannot be concurrently re-entered.
+  private readonly type21Scratch = createType21Scratch();
 
   constructor(buffer: ArrayBuffer) {
     this.bytes = buffer.byteLength;
@@ -93,16 +98,27 @@ export class SpkKernel {
       if (segment.type21) Object.freeze(segment.type21);
       return Object.freeze(segment);
     }));
+    const mutableIndex = new Map<number, SpkSegment[]>();
+    for (const segment of this.segments) {
+      const group = mutableIndex.get(segment.target);
+      if (group) group.push(segment);
+      else mutableIndex.set(segment.target, [segment]);
+    }
+    const index = new Map<number, readonly SpkSegment[]>();
+    for (const [target, group] of mutableIndex) index.set(target, Object.freeze(group));
+    this.segmentsByTarget = index;
     Object.defineProperty(this, 'segments', { writable: false, configurable: false });
+    Object.defineProperty(this, 'segmentsByTarget', { writable: false, configurable: false });
   }
 
   evaluate(target: number, et: number): SpkState | null {
     if (!Number.isFinite(target) || !Number.isFinite(et)) fail('target and epoch must be finite');
     let unsupported: SpkSegment | undefined;
     // DAF/SPK precedence is last matching segment (later segments override).
-    for (let n = this.segments.length - 1; n >= 0; n--) {
-      const s = this.segments[n];
-      if (s.target !== target || et < s.startEt || et > s.endEt) continue;
+    const candidates = this.segmentsByTarget.get(target) ?? [];
+    for (let n = candidates.length - 1; n >= 0; n--) {
+      const s = candidates[n];
+      if (et < s.startEt || et > s.endEt) continue;
       if (s.frame !== 1 && s.frame !== 17 || s.type !== 1 && s.type !== 2 && s.type !== 3 && s.type !== 17 && s.type !== 21) { unsupported = s; break; }
       if (s.type17) {
         const v = evaluateType17((address) => this.f64(this.addressOffset(address)), s.startAddress, et);
@@ -110,7 +126,7 @@ export class SpkKernel {
       }
       const differenceLines = s.type1 ?? s.type21;
       if (differenceLines) {
-        const v = evaluateType21((address) => this.f64(this.addressOffset(address)), s.startAddress, differenceLines, et);
+        const v = evaluateType21((address) => this.f64(this.addressOffset(address)), s.startAddress, differenceLines, et, this.type21Scratch);
         return { position: { x: v[0], y: v[1], z: v[2] }, velocity: { x: v[3], y: v[4], z: v[5] }, center: s.center, frame: s.frame };
       }
       return this.evaluateSegment(s, et);
@@ -130,13 +146,55 @@ export class SpkKernel {
     if (!Number.isFinite(high)) fail('invalid split Chebyshev epoch');
     offsetSeconds = (et - (high - carried)) + (offsetSeconds - carried);
     et = high;
-    for (let n = this.segments.length - 1; n >= 0; n--) {
-      const s = this.segments[n];
-      if (s.target !== target || (et - s.startEt) + offsetSeconds < 0 || (et - s.endEt) + offsetSeconds > 0) continue;
+    const candidates = this.segmentsByTarget.get(target) ?? [];
+    for (let n = candidates.length - 1; n >= 0; n--) {
+      const s = candidates[n];
+      if ((et - s.startEt) + offsetSeconds < 0 || (et - s.endEt) + offsetSeconds > 0) continue;
       if ((s.frame !== 1 && s.frame !== 17) || (s.type !== 2 && s.type !== 3)) fail('split epoch requires a selected Type 2 or 3 segment');
       return this.evaluateSegment(s, et, offsetSeconds);
     }
     return null;
+  }
+
+  /** Whether this target has any segment covering the scalar epoch. */
+  coversTargetAt(target: number, et: number): boolean {
+    if (!Number.isFinite(target) || !Number.isFinite(et)) return false;
+    return (this.segmentsByTarget.get(target) ?? []).some(segment => segment.startEt <= et && segment.endEt >= et);
+  }
+
+  /** Whether every target in this kernel continuously covers the full interval. */
+  coversAllTargetsForInterval(startEt: number, endEt: number): boolean {
+    if (!Number.isFinite(startEt) || !Number.isFinite(endEt) || endEt < startEt || !this.segmentsByTarget.size) return false;
+    const coverage = this.coverageIntervalsByTarget ?? (this.coverageIntervalsByTarget = this.buildCoverageIndex());
+    for (const intervals of coverage.values()) {
+      // Find the merged interval whose start is the last one at or before the
+      // query start. One interval can cover the request only if it also reaches
+      // the query end; gaps remain distinct components.
+      let low = 0;
+      let high = intervals.length;
+      while (low < high) {
+        const middle = (low + high) >>> 1;
+        if (intervals[middle].startEt <= startEt) low = middle + 1;
+        else high = middle;
+      }
+      const interval = intervals[low - 1];
+      if (!interval || interval.endEt < endEt) return false;
+    }
+    return true;
+  }
+
+  private buildCoverageIndex(): ReadonlyMap<number, readonly Readonly<{ startEt: number; endEt: number }>[]> {
+    const index = new Map<number, readonly Readonly<{ startEt: number; endEt: number }>[]>();
+    for (const [target, segments] of this.segmentsByTarget) {
+      const intervals: Array<{ startEt: number; endEt: number }> = [];
+      for (const segment of [...segments].sort((a, b) => a.startEt - b.startEt)) {
+        const previous = intervals[intervals.length - 1];
+        if (previous && segment.startEt <= previous.endEt) previous.endEt = Math.max(previous.endEt, segment.endEt);
+        else intervals.push({ startEt: segment.startEt, endEt: segment.endEt });
+      }
+      index.set(target, Object.freeze(intervals.map(interval => Object.freeze(interval))));
+    }
+    return index;
   }
 
   getRecordData(segment: SpkSegment): SpkRecordData {
