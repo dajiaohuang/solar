@@ -729,6 +729,46 @@ test('does not acknowledge a catalog upload when the post-draw GPU check fails',
   await expect(page.getByRole('button', { name: /Export (block epochs|screening) and sources JSON/ })).toHaveCount(0)
 })
 
+test('advances retained epochs without source reloads and discards an interrupted replacement', async ({ page }) => {
+  type EpochAudit = Window & { holdEpochAck: boolean; heldEpochAcks: number }
+  const requests: string[] = [], errors: string[] = []
+  page.on('request', request => { if (request.url().includes('/data/asteroids/')) requests.push(request.url()) })
+  page.on('pageerror', error => errors.push(error.message))
+  await installMockCatalog(page,{ precomputed: true, chunkSize: 1 })
+  await page.addInitScript(() => {
+    localStorage.setItem('solar-atlas-first-run-v1','complete')
+    const audit = window as EpochAudit
+    audit.holdEpochAck = false; audit.heldEpochAcks = 0
+    const post = Worker.prototype.postMessage
+    Worker.prototype.postMessage = function (...args: Parameters<typeof post>) {
+      if (audit.holdEpochAck && args[0]?.type === 'epoch-ack') { audit.heldEpochAcks++; return }
+      return Reflect.apply(post,this,args)
+    }
+  })
+  await page.goto('./?v=4&page=explorer&lang=en&jd=2461287.5&speed=0.001')
+  await page.getByRole('button',{ name: '▶ Play', exact: true }).click()
+  await openCatalog(page)
+  await page.getByRole('checkbox',{ name: 'Retain orbits and follow time changes' }).check()
+  await page.getByRole('button',{ name: /Load expanded snapshot/ }).click()
+  const canvas = page.getByTestId('catalog-stream-canvas'), epoch = page.getByTestId('catalog-point-epoch')
+  await expect(canvas).toHaveAttribute('data-phase','complete')
+  await expect(epoch).toHaveCount(1)
+  const firstEpoch = Number(await epoch.getAttribute('data-utc-jd')), reads = requests.length
+  await expect.poll(async () => Number(await epoch.getAttribute('data-utc-jd')),{ timeout: 15_000 }).toBeGreaterThan(firstEpoch)
+  await expect(page.getByTestId('catalog-block-epochs')).toContainText('Rows recomputed / reused: 3 / 0')
+  expect(requests.length).toBe(reads)
+  await page.evaluate(() => { (window as EpochAudit).holdEpochAck = true })
+  await expect.poll(() => page.evaluate(() => (window as EpochAudit).heldEpochAcks),{ timeout: 15_000 }).toBeGreaterThan(0)
+  await expect(canvas).toHaveAttribute('data-phase','updating')
+  await page.getByTestId('catalog-stream-cancel').click()
+  await expect(canvas).toHaveAttribute('data-phase','cancelled')
+  await expect(canvas).toHaveAttribute('data-drawn-rows','0')
+  await expect(epoch).toHaveCount(0)
+  await expect(page.getByRole('button',{ name: /Export (block epochs|screening) and sources JSON/ })).toHaveCount(0)
+  expect(requests.length).toBe(reads)
+  expect(errors).toEqual([])
+})
+
 test('appends selected catalog bodies while retaining uploaded rows and bounded capacity', async ({ page }) => {
   const errors: string[] = [], requests: string[] = []
   page.on('pageerror', error => errors.push(error.message))
