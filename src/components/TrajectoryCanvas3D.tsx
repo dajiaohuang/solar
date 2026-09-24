@@ -422,11 +422,15 @@ export function TrajectoryCanvas3D({
     const detailedIds = new Set(detailBodyIds?.slice(0, 160) ?? Array.from({ length: Math.min(160, currentPositions.length) }, (_, index) => currentPositions.bodyAt(index).id))
     detailedIds.add(referenceBody.id)
     const bodyPositions = new Map<string, RenderedBodyPosition>()
+    const bodyPositionOrdinals = new Map<string, number>()
     const pointOrdinals = new Uint32Array(currentPositions.length)
     let pointCount = 0
     for (let index = 0; index < currentPositions.length; index++) {
       const id = currentPositions.bodyAt(index).id
-      if (detailedIds.has(id)) bodyPositions.set(id, currentPositions.rowAt(index))
+      if (detailedIds.has(id)) {
+        bodyPositions.set(id, currentPositions.rowAt(index))
+        bodyPositionOrdinals.set(id, index)
+      }
       else pointOrdinals[pointCount++] = index
     }
     bodyPositions.set(referenceBody.id, {
@@ -445,6 +449,7 @@ export function TrajectoryCanvas3D({
         resources.scene.add(mesh)
       }
       mesh.userData.markerRadius = radiusFor(item.body)
+      mesh.userData.positionOrdinal = bodyPositionOrdinals.get(id) ?? -1
       mesh.scale.setScalar(mesh.userData.markerRadius * resources.bodyScale)
       if (item.position3D) mesh.position.copy(toThree(item.position3D))
     }
@@ -576,7 +581,10 @@ export function TrajectoryCanvas3D({
     resources.camera.updateMatrixWorld()
     raycasterRef.current.setFromCamera(pointer, resources.camera)
     const hits = raycasterRef.current.intersectObjects([...resources.bodyMeshes.values()], false)
-    if (hits[0]) return hits[0].object.userData.bodyId as string
+    if (hits[0]) return {
+      id: hits[0].object.userData.bodyId as string,
+      positionIndex: hits[0].object.userData.positionOrdinal as number,
+    }
     // Pixel-distance picking matches the fixed-pixel points at every zoom.
     const positions = resources.currentPoints.geometry.getAttribute('position')
     const version = positions instanceof THREE.BufferAttribute ? positions.version : positions.data.version
@@ -593,7 +601,9 @@ export function TrajectoryCanvas3D({
       picking = { key, positions, index }; pickingRef.current = picking
     }
     const nearest = picking.index.nearest(event.clientX - rect.left, event.clientY - rect.top)
-    return nearest < 0 ? undefined : positionsRef.current.bodyAt(resources.pointBodyOrdinals[nearest]).id
+    if (nearest < 0) return null
+    const positionIndex = resources.pointBodyOrdinals[nearest]
+    return { id: positionsRef.current.bodyAt(positionIndex).id, positionIndex }
   }, [])
 
   return (
@@ -603,8 +613,8 @@ export function TrajectoryCanvas3D({
       data-testid="trajectory-canvas-3d"
       role="img"
       aria-label={ariaLabel}
-      onClick={(event) => { const id = intersectBody(event); if (id) onBodySelect?.(id) }}
-      onDoubleClick={(event) => { const id = intersectBody(event); if (id) onReferenceChange?.(id) }}
+      onClick={(event) => { const hit = intersectBody(event); if (hit) onBodySelect?.(hit.id) }}
+      onDoubleClick={(event) => { const hit = intersectBody(event); if (hit) onReferenceChange?.(hit.id) }}
       onPointerDown={(event) => {
         if (event.pointerType !== 'touch') return
         activeTouchPointersRef.current.add(event.pointerId)
@@ -635,18 +645,18 @@ export function TrajectoryCanvas3D({
         const gesture = touchGestureRef.current
         touchGestureRef.current = null
         if (!gesture || gesture.pointerId !== event.pointerId || gesture.moved) return
-        const id = intersectBody(event)
-        if (!id) {
+        const hit = intersectBody(event)
+        if (!hit) {
           lastTouchTapRef.current = null
           return
         }
         const now = performance.now()
         const previous = lastTouchTapRef.current
-        if (previous?.bodyId === id && now - previous.timestamp < 420) {
-          onReferenceChange?.(id)
+        if (previous?.bodyId === hit.id && now - previous.timestamp < 420) {
+          onReferenceChange?.(hit.id)
           lastTouchTapRef.current = null
         } else {
-          lastTouchTapRef.current = { bodyId: id, timestamp: now }
+          lastTouchTapRef.current = { bodyId: hit.id, timestamp: now }
         }
       }}
       onPointerCancel={(event) => {
@@ -656,9 +666,8 @@ export function TrajectoryCanvas3D({
         lastTouchTapRef.current = null
       }}
       onMouseMove={(event) => {
-        const id = intersectBody(event)
-        const index = positionsRef.current.indexOf(id)
-        const position = index >= 0 ? positionsRef.current.rowAt(index) : null
+        const hit = intersectBody(event)
+        const position = hit && hit.positionIndex >= 0 ? positionsRef.current.rowAt(hit.positionIndex) : null
         if (position) onHover?.(position.body, position.distance, event.clientX, event.clientY)
         else onHover?.(null, 0, 0, 0)
       }}
