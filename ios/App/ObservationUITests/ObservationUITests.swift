@@ -133,7 +133,7 @@ final class ObservationUITests: XCTestCase {
                 if browse.exists && browse.isHittable { browse.tap() }
                 let local = app.staticTexts["On My iPhone"].firstMatch
                 if local.waitForExistence(timeout: 5) { local.tap() }
-                let folder = app.staticTexts["Solar Atlas"].firstMatch
+                let folder = app.staticTexts["Solar Gaia Fixtures"].firstMatch
                 if folder.waitForExistence(timeout: 5) { folder.tap() }
                 file = app.cells.matching(match).firstMatch
             }

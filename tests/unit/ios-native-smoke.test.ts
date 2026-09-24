@@ -3,11 +3,25 @@ import { readFileSync } from 'node:fs'
 import { access, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { bootOwnedSimulator, command, removeOwnedTemporary, selectSimulatorTemplate, testArguments, verifyPointPixelEvidence, verifyTraffic } from '../../scripts/ios-native-smoke.mjs'
+import { bootOwnedSimulator, command, localFilesContainer, removeOwnedTemporary, selectSimulatorTemplate, testArguments, verifyPointPixelEvidence, verifyTraffic } from '../../scripts/ios-native-smoke.mjs'
 
 const iphone = { isAvailable: true, name: 'iPhone 17', deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17' }
 
 describe('isolated native iOS runtime validation', () => {
+  it('stages external files only in the unique local provider of the owned device', () => {
+    const device = '12345678-1234-1234-1234-123456789abc'
+    const container = `/Users/CI Runner/Library/Developer/CoreSimulator/Devices/${device}/data/Containers/Shared/AppGroup/abcdefab-1234-1234-1234-123456789abc`
+    const group = 'group.com.apple.FileProvider.LocalStorage'
+    const listing = `${group}\t${container}`
+    expect(localFilesContainer(device, `group.com.apple.DocumentManager /unrelated\n${listing}\n`)).toBe(container)
+    for (const invalid of ['', `${listing}\n${listing}`, `${group} ${container}/../outside`,
+      `${group} ${container}/child`, `${group} ${container.replace(device, '87654321-1234-1234-1234-123456789abc')}`,
+      `${group} relative/path`, `${group} ${container.replace('/Shared/AppGroup/', '/Data/Application/')}`]) {
+      expect(() => localFilesContainer(device, invalid)).toThrow()
+    }
+    expect(() => localFilesContainer('booted', listing)).toThrow('Invalid owned')
+  })
+
   it('flushes the full log before returning a bounded in-memory tail', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'solar-ios-smoke-'))
     const log = join(directory, 'command.log')

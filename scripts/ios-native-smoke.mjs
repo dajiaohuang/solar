@@ -7,13 +7,29 @@ import http from 'node:http'
 import https from 'node:https'
 import net from 'node:net'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, posix, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { stageBackendProfile } from './stage-backend-profile.mjs'
 import { createNativeCoverageResponder, verifyNativeCoverageTraffic } from './native-coverage-fixture.mjs'
 import { createNativeIdentityResponder, verifyNativeIdentityTraffic } from './native-identity-fixture.mjs'
 
 const uuidPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i
+
+export function localFilesContainer(device, groups) {
+  if (!uuidPattern.test(device)) throw new Error('Invalid owned simulator ID')
+  const matches = groups.split(/\r?\n/).map(line =>
+    /^group\.com\.apple\.FileProvider\.LocalStorage\s+(\/[^\r\n]+)$/.exec(line.trim()))
+    .filter(Boolean)
+  if (matches.length !== 1) throw new Error('Expected one Files local-storage container')
+  const container = matches[0][1]
+  const suffix = `/Devices/${device}/data/Containers/Shared/AppGroup/`
+  const offset = container.indexOf(suffix)
+  if (offset < 0 || posix.normalize(container) !== container ||
+      !uuidPattern.test(container.slice(offset + suffix.length))) {
+    throw new Error('Files container is outside the owned simulator')
+  }
+  return container
+}
 
 export function selectSimulatorTemplate(snapshot) {
   const candidates = Object.entries(snapshot.devices ?? {}).flatMap(([runtime, devices]) =>
@@ -209,13 +225,21 @@ export async function nativeSmoke() {
     await bootOwnedSimulator(device, artifact, report)
     await command('xcrun', ['simctl', 'keychain', device, 'add-root-cert', join(temporary, 'root.crt')])
 
-    // Only the freshly created simulator is populated. The production document
-    // picker reads these originals; no test-specific app import bypass is used.
+    // Use Files' independent local provider, not the tested app's Documents:
+    // XCTest installs/relaunches that app, and importing its own provider URL
+    // failed bookmark resolution before the production callback in CI.
+    // The production picker still reads the original bytes across containers.
     await command('xcrun', ['simctl', 'install', device, resolve('build/ios-derived-data/Build/Products/Debug-iphonesimulator/App.app')])
-    const container = await command('xcrun', ['simctl', 'get_app_container', device, 'io.github.dajiaohuang.solaratlas', 'data'])
-    if (!container.includes(`/Devices/${device}/data/Containers/Data/Application/`) || !container.startsWith('/')) throw new Error('Unexpected owned simulator app container')
-    const documents = join(container, 'Documents')
-    await mkdir(documents, { recursive: true })
+    await command('xcrun', ['simctl', 'launch', device, 'com.apple.DocumentsApp'])
+    const groups = await command('xcrun', ['simctl', 'get_app_container', device, 'com.apple.DocumentsApp', 'groups'])
+    const container = localFilesContainer(device, groups)
+    if (await realpath(container) !== container) throw new Error('Files container resolves through an unexpected link')
+    const storage = join(container, 'File Provider Storage')
+    await mkdir(storage, { recursive: true })
+    if (await realpath(storage) !== storage) throw new Error('Files storage resolves through an unexpected link')
+    const documents = join(storage, 'Solar Gaia Fixtures')
+    await mkdir(documents) // Fresh owned device: never overwrite an earlier fixture.
+    report.stellarSourceLocation = 'Files local provider / Solar Gaia Fixtures'
     report.stellarSources = {}
     for (const name of ['manifest.json', 'rows.csv']) {
       const bytes = await readFile(resolve('tests/fixtures/gaia-six-20260923', name))
