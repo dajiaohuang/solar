@@ -122,19 +122,27 @@ final class ObservationUITests: XCTestCase {
             let button = app.buttons["stellar.\(control)"]
             reveal(app, button); button.tap()
             // UIDocumentPicker may reopen its last folder. Otherwise navigate
-            // via its normal Browse / On My iPhone / Solar Atlas hierarchy.
+            // via its normal Browse / On My iPhone / Solar Gaia Fixtures hierarchy.
             let stem = String(filename.split(separator: ".")[0])
             // Files icon-mode cells append type/date/size to the filename.
             // Match that observed cell, rather than its non-opening text label.
             let match = NSPredicate(format: "label == %@ OR label == %@ OR label BEGINSWITH %@ OR label BEGINSWITH %@", filename, stem, filename + ", ", stem + ", ")
             var file = app.cells.matching(match).firstMatch
             if !file.waitForExistence(timeout: 3) {
-                let browse = app.buttons["Browse"].firstMatch
-                if browse.exists && browse.isHittable { browse.tap() }
+                // The remote Files tab bar can arrive after the initial file
+                // query on a cold simulator. Do not silently skip navigation:
+                // the captured failure remained on the empty Recents screen.
+                let browse = app.tabBars["DOC.browsingModeTabBar"].buttons["Browse"]
+                XCTAssertTrue(browse.waitForExistence(timeout: 10), app.debugDescription)
+                let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: browse)
+                XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed, app.debugDescription)
+                browse.tap()
                 let local = app.staticTexts["On My iPhone"].firstMatch
-                if local.waitForExistence(timeout: 5) { local.tap() }
+                XCTAssertTrue(local.waitForExistence(timeout: 5), app.debugDescription)
+                local.tap()
                 let folder = app.staticTexts["Solar Gaia Fixtures"].firstMatch
-                if folder.waitForExistence(timeout: 5) { folder.tap() }
+                XCTAssertTrue(folder.waitForExistence(timeout: 5), app.debugDescription)
+                folder.tap()
                 file = app.cells.matching(match).firstMatch
             }
             XCTAssertTrue(file.waitForExistence(timeout: 5), app.debugDescription)
