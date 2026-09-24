@@ -32,6 +32,7 @@ export function createPointMassGravity(inputMasses: readonly PointMass[], epheme
       ![start, end, ephemeris.referenceEpochTdb].every(Number.isFinite) || start > end || !ephemeris.source.trim() ||
       ephemeris.frame !== 'J2000' || ephemeris.origin !== 'SSB' || ephemeris.timeScale !== 'TDB' || ephemeris.aberration !== 'NONE') throw new RangeError('Invalid inertial point-mass model contract')
   const positions = new Float64Array(3 * masses.length), gradient = new Float64Array(9)
+  const delta = new Float64Array(3), unit = new Float64Array(3)
   // Bind metadata and evaluator once; caller changes cannot silently switch a run.
   const positionsAt = ephemeris.positions.bind(ephemeris)
   const derivative: Derivative = (elapsed, state, output) => {
@@ -45,10 +46,10 @@ export function createPointMassGravity(inputMasses: readonly PointMass[], epheme
     output.set(state.subarray(3, 6))
     for (let index = 0; index < masses.length; index++) {
       const mass = masses[index]
-      const d = [positions[3*index] - state[0], positions[3*index+1] - state[1], positions[3*index+2] - state[2]]
-      const distance = Math.hypot(...d)
+      for (let axis = 0; axis < 3; axis++) delta[axis] = positions[3*index+axis] - state[axis]
+      const distance = Math.hypot(delta[0], delta[1], delta[2])
       if (!Number.isFinite(distance) || distance <= mass.exclusionKm || distance === 0) throw new DynamicsSampleError(`Point-mass exclusion reached for NAIF ${mass.naifId}`)
-      const unit = d.map(value => value / distance)
+      for (let axis = 0; axis < 3; axis++) unit[axis] = delta[axis] / distance
       const acceleration = mass.gmKm3PerSecond2 / distance / distance, curvature = acceleration / distance
       for (let row = 0; row < 3; row++) {
         output[row+3] += acceleration * unit[row]
