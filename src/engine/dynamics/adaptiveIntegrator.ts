@@ -80,7 +80,10 @@ export async function integrateAdaptive(options: IntegrationOptions) {
     const step = direction * magnitude, timeIncrement = step - timeCompensation
     const nextTime = magnitude === remaining ? duration : elapsed + timeIncrement
     const nextTimeCompensation = magnitude === remaining ? 0 : (nextTime - elapsed) - timeIncrement
-    if (elapsed + step === elapsed || !(magnitude > 0)) throw new DynamicsSampleError('Integration step is below elapsed-time resolution')
+    // Judge progress using the compensated endpoint actually used by the
+    // stages. The uncorrected elapsed+step can round to elapsed even when the
+    // retained time correction makes nextTime advance representably.
+    if (!(direction * (nextTime - elapsed) > 0) || !(magnitude > 0)) throw new DynamicsSampleError('Integration step is below elapsed-time resolution')
     for (let stage = 1; stage < 7; stage++) {
       for (let i = 0; i < n; i++) {
         let slope = 0
