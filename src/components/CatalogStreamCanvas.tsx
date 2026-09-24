@@ -19,6 +19,7 @@ import { checkCatalogAppendReceipt } from '../lib/catalogAppendReceipt'
 import { CATALOG_APPEND_TIMEOUT_MS } from '../lib/catalogAppendLimits'
 import { checkCatalogReadEvidence } from '../lib/catalogReadEvidence'
 import { CATALOG_CLIP_RELATIVE_MARGIN } from '../lib/catalogProjection'
+import { hasOnlyFiniteValues } from '../lib/finiteFloatArray'
 
 type Props = {
   manifest: AsteroidManifest
@@ -429,7 +430,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
           const end = Math.min(tile.count, epochTileOffset+UPLOAD_SLICE_ROWS), rows = end-epochTileOffset
           if (displayScratch.length !== rows*dimensions) displayScratch = new Float32Array(rows*dimensions)
           displayScratch.set(tile.positions.subarray(epochTileOffset*dimensions, end*dimensions))
-          if (!displayScratch.every(Number.isFinite)) throw new Error('Catalog epoch exceeds GPU coordinates')
+          if (!hasOnlyFiniteValues(displayScratch)) throw new Error('Catalog epoch exceeds GPU coordinates')
           renderer.replacePositions(updatedRows, displayScratch); checkGl()
           advanceCpuSnapshot(rows, displayScratch)
           recordEpochRows(rows, tile.julianDay, 0)
@@ -474,7 +475,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
           }
           const end = Math.min(points, pendingTileOffset+UPLOAD_SLICE_ROWS), rows = end-pendingTileOffset
           const tile: Attributes = { positions: new Float32Array(response.positions.subarray(pendingTileOffset*dimensions, end*dimensions)), colors: new Float32Array(rows * 3), sizes: new Float32Array(rows) }
-          if (!tile.positions.every(Number.isFinite)) throw new Error('Catalog position exceeds GPU coordinates')
+          if (!hasOnlyFiniteValues(tile.positions)) throw new Error('Catalog position exceeds GPU coordinates')
           for (let row = 0; row < rows; row++) {
             const sourceRow = pendingTileOffset+row
             const orbitClass = manifest.compactIndex!.classCodes[response.appearance[sourceRow * 2]], flags = response.appearance[sourceRow * 2 + 1]
@@ -613,7 +614,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
             if (response.type === 'append-tile') {
               if (pending.result || response.count < 1 || response.count !== response.result.drawnRows ||
                   count.drawnRows+response.count > plan.capacity || !(response.positions instanceof Float64Array) ||
-                  response.positions.length !== response.count*dimensions || !response.positions.every(Number.isFinite) ||
+                  response.positions.length !== response.count*dimensions || !hasOnlyFiniteValues(response.positions) ||
                   !(response.appearance instanceof Uint8Array) || response.appearance.length !== response.count*2) {
                 throw new Error('Invalid catalog append upload')
               }
@@ -621,7 +622,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
               if (pending.reservation.count !== response.count) throw new Error('Catalog append mask count differs from upload')
               const attributes: Attributes = { positions: new Float32Array(response.positions),
                 colors: new Float32Array(response.count*3), sizes: new Float32Array(response.count) }
-              if (!attributes.positions.every(Number.isFinite)) throw new Error('Catalog append exceeds GPU coordinates')
+              if (!hasOnlyFiniteValues(attributes.positions)) throw new Error('Catalog append exceeds GPU coordinates')
               for (let row=0;row<response.count;row++) {
                 const orbitClass = manifest.compactIndex!.classCodes[response.appearance[row*2]], flags = response.appearance[row*2+1]
                 if (!orbitClass || flags > 7) throw new Error('Invalid appended catalog appearance')

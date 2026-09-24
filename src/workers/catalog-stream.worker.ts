@@ -8,6 +8,7 @@ import { createCatalogSpatialIndex } from '../lib/catalogSpatialIndex'
 import { prepareCatalogAppendBatch } from '../lib/catalogAppendBatch'
 import { createCatalogSourceAppendLookup } from '../lib/catalogSourceAppendLookup'
 import { CATALOG_APPEND_TIMEOUT_MS } from '../lib/catalogAppendLimits'
+import { hasOnlyFiniteValues } from '../lib/finiteFloatArray'
 import type { CatalogStreamRequest, CatalogStreamResponse } from './catalog-stream.protocol'
 
 const scope = self as DedicatedWorkerGlobalScope
@@ -37,7 +38,7 @@ const installSpatialPositions = (positions: Float64Array, startRow: number) => {
   if (!Number.isSafeInteger(startRow) || startRow < 0 || positions.length % dimensions !== 0 ||
       offset+positions.length > spatialPositions.length) throw new Error('Catalog spatial upload exceeds its admitted layout')
   spatialPositions.set(positions,offset)
-  if (!spatialPositions.subarray(offset,offset+positions.length).every(Number.isFinite)) {
+  if (!hasOnlyFiniteValues(spatialPositions.subarray(offset,offset+positions.length))) {
     throw new Error('Catalog coordinates exceed spatial coordinate representation')
   }
   spatialIndex?.invalidate(startRow,positions.length/dimensions)

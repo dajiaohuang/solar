@@ -1,4 +1,5 @@
 import { catalogProjection, type CatalogRotation } from './catalogProjection'
+import { hasOnlyFiniteValues } from './finiteFloatArray'
 
 export type CatalogPointFrame = {
   positions: Float32Array
@@ -6,13 +7,6 @@ export type CatalogPointFrame = {
   sizes: Float32Array
   radius: number
   opacity: number
-}
-
-function hasOnlyFiniteValues(values: Float32Array) {
-  for (let index = 0; index < values.length; index++) {
-    if (!Number.isFinite(values[index])) return false
-  }
-  return true
 }
 
 function createProgram(gl: WebGLRenderingContext, dimensions: 2 | 3) {
