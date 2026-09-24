@@ -42,6 +42,56 @@ function binaryValues(metadata: AsteroidIndexEntry[], buffer: ArrayBuffer) {
   return values
 }
 
+const MAX_SCAN_RECORD_TRANSFER_WEIGHT = 4 * 1024 * 1024
+
+function scannedRecord(locator: CatalogLocator, entry: AsteroidIndexEntry, values: Float64Array): AsteroidRecord {
+  const offset = locator.rowIndex * 8
+  return {
+    ...entry,
+    chunkIndex: locator.chunkIndex,
+    rowIndex: locator.rowIndex,
+    epochJd: values[offset],
+    semiMajorAxisAU: values[offset + 1],
+    eccentricity: values[offset + 2],
+    inclinationDeg: values[offset + 3],
+    ascendingNodeDeg: values[offset + 4],
+    argPeriapsisDeg: values[offset + 5],
+    meanAnomalyDeg: values[offset + 6],
+    meanMotionDegPerDay: values[offset + 7],
+  }
+}
+
+function scannedRecordWeight(record: AsteroidRecord) {
+  let weight = 128
+  for (const [key, value] of Object.entries(record)) {
+    weight += 32 + key.length * 2 + (typeof value === 'string' ? value.length * 2 : 8)
+  }
+  return weight
+}
+
+/** Retain only the current bounded sample for direct delivery to the UI. */
+function refreshScannedRecords(sampler: StratifiedCatalogSampler<CatalogLocator>, retained: Map<string, AsteroidRecord>,
+  chunkIndex: number, metadata: AsteroidIndexEntry[], values: Float64Array) {
+  const next = new Map<string, AsteroidRecord>()
+  let weight = 0
+  for (const locator of sampler.values()) {
+    const key = `${locator.chunkIndex}:${locator.rowIndex}`
+    let record = retained.get(key)
+    if (!record && locator.chunkIndex === chunkIndex) {
+      const entry = metadata[locator.rowIndex]
+      if (!entry) return false
+      record = scannedRecord(locator, entry, values)
+    }
+    if (!record) return false
+    weight += scannedRecordWeight(record)
+    if (!Number.isSafeInteger(weight) || weight > MAX_SCAN_RECORD_TRANSFER_WEIGHT) return false
+    next.set(key, record)
+  }
+  retained.clear()
+  for (const [key, record] of next) retained.set(key, record)
+  return true
+}
+
 async function loadBinaryChunk(request: CatalogScanWorkerRequest, index: number, signal: AbortSignal, checksum?: (path: string) => string) {
   const id = chunkId(index)
   const root = request.manifest.releasePath ?? `${import.meta.env.BASE_URL}data/asteroids`
@@ -70,15 +120,18 @@ async function loadJsonChunk(request: CatalogScanWorkerRequest, index: number, s
   return validateCatalogRecords(records, id)
 }
 
-function postLocatorResult(request: CatalogScanWorkerRequest, total: number, sampled: CatalogLocator[]) {
+function postLocatorResult(request: CatalogScanWorkerRequest, total: number, sampled: CatalogLocator[], retained?: Map<string, AsteroidRecord>) {
   const locators = new Uint32Array(sampled.length * 2)
   sampled.forEach((locator, index) => {
     locators[index * 2] = locator.chunkIndex
     locators[index * 2 + 1] = locator.rowIndex
   })
+  const records = retained?.size === sampled.length
+    ? sampled.map(locator => retained.get(`${locator.chunkIndex}:${locator.rowIndex}`)!)
+    : undefined
   workerScope.postMessage({
     type: 'result', requestId: request.requestId, scanKey: request.scanKey,
-    progress: 1, total, locators,
+    progress: 1, total, locators, ...(records ? { records } : {}),
   } satisfies CatalogScanWorkerResponse, [locators.buffer])
 }
 
@@ -133,6 +186,8 @@ async function scanCompactIndex(request: CatalogScanWorkerRequest, signal: Abort
     inclination: [0, 180], perihelion: [0, Infinity], absoluteMagnitude: [-Infinity, Infinity], magnitudeStatus: 'all' })
   const matches = createCatalogFieldMatcher(request.filters)
   const sampler = new StratifiedCatalogSampler<CatalogLocator>(Math.max(1, request.sampleLimit))
+  const retainedRecords = new Map<string, AsteroidRecord>()
+  let retainRecords = true
   const view = new DataView(buffer)
   const candidateCount = request.candidateLocators ? request.candidateLocators.length / 2 : compactIndex.count
   const progressInterval = Math.max(1, Math.floor(candidateCount / 100))
@@ -204,12 +259,16 @@ async function scanCompactIndex(request: CatalogScanWorkerRequest, signal: Abort
       const decision = sampler.consider(entry.id, entry.orbitClassCode, values[offset+1], values[offset+2], values[offset+3], entry.absoluteMagnitude)
       if (decision) sampler.commit(decision, { chunkIndex, rowIndex })
     }
+    if (retainRecords && !refreshScannedRecords(sampler, retainedRecords, chunkIndex, metadata, values)) {
+      retainRecords = false
+      retainedRecords.clear()
+    }
     completedChunks++
     workerScope.postMessage({ type: 'progress', requestId: request.requestId, scanKey: request.scanKey,
       progress: .25+.75*completedChunks/Math.max(1, admittedChunks.size) } satisfies CatalogScanWorkerResponse)
     await yieldToWorker()
   }
-  if (!isCancelled(request)) postLocatorResult(request, total, sampler.values())
+  if (!isCancelled(request)) postLocatorResult(request, total, sampler.values(), retainRecords ? retainedRecords : undefined)
   return true
 }
 
@@ -227,6 +286,8 @@ async function scan(request: CatalogScanWorkerRequest, signal: AbortSignal) {
   if (request.manifest.format === 'binary-v1') {
     const checksum = request.manifest.contentSha256 !== undefined ? await loadScanChecksums(request, signal) : undefined
     const sampler = new StratifiedCatalogSampler<CatalogLocator>(Math.max(1, request.sampleLimit))
+    const retainedRecords = new Map<string, AsteroidRecord>()
+    let retainRecords = true
     for (let index = 0; index < request.manifest.chunkCount; index += 1) {
       if (isCancelled(request)) return
       const { metadata, values } = await loadBinaryChunk(request, index, signal, checksum)
@@ -250,13 +311,17 @@ async function scan(request: CatalogScanWorkerRequest, signal: AbortSignal) {
         )
         if (decision) sampler.commit(decision, { chunkIndex: index, rowIndex: recordIndex })
       }
+      if (retainRecords && !refreshScannedRecords(sampler, retainedRecords, index, metadata, values)) {
+        retainRecords = false
+        retainedRecords.clear()
+      }
       workerScope.postMessage({
         type: 'progress', requestId: request.requestId, scanKey: request.scanKey,
         progress: (index + 1) / Math.max(request.manifest.chunkCount, 1),
       } satisfies CatalogScanWorkerResponse)
       await yieldToWorker()
     }
-    if (!isCancelled(request)) postLocatorResult(request, total, sampler.values())
+    if (!isCancelled(request)) postLocatorResult(request, total, sampler.values(), retainRecords ? retainedRecords : undefined)
     return
   }
 

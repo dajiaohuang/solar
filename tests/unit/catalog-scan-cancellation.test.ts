@@ -10,7 +10,8 @@ vi.mock('../../src/lib/catalogLoader', () => ({
 const hydrate = vi.mocked(loadAsteroidRecordsByLocators)
 const search = vi.mocked(loadAsteroidSearchLocators)
 const manifest = { version: 'fixture', chunkCount: 100, chunkSize: 5000 } as AsteroidManifest
-const locators = Uint32Array.from(Array.from({ length: 600 }, (_, row) => [0, row]).flat())
+const locators = Uint32Array.from(Array.from({ length: 15 }, (_, row) =>
+  Array.from({ length: 40 }, (_, chunk) => [chunk, row])).flat(2))
 const workers: FakeWorker[] = []
 class FakeWorker {
   onmessage?: (event: MessageEvent<CatalogScanWorkerResponse>) => void
@@ -19,10 +20,10 @@ class FakeWorker {
   constructor() { workers.push(this) }
   postMessage(request: CatalogScanWorkerRequest) { this.requests.push(request) }
   terminate() {}
-  result(index: number) {
+  result(index: number, records?: AsteroidRecord[]) {
     const request = this.requests.filter(item => item.type === 'scan')[index]
     this.onmessage?.({ data: { type: 'result', requestId: request.requestId, scanKey: request.scanKey,
-      total: 600, locators } } as MessageEvent<CatalogScanWorkerResponse>)
+      total: 600, locators, ...(records === undefined ? {} : { records }) } } as MessageEvent<CatalogScanWorkerResponse>)
   }
 }
 const scan = (signal?: AbortSignal) => scanAsteroidCatalog({ manifest, filters: DEFAULT_CATALOG_FILTERS, sampleLimit: 2000, signal })
@@ -31,6 +32,27 @@ beforeEach(() => { workers.length = 0; vi.stubGlobal('Worker', FakeWorker); hydr
 afterEach(() => { resetCatalogScanWorker(); vi.unstubAllGlobals() })
 
 describe('catalog result hydration lifetime', () => {
+  it('uses bounded scanned records for the first page and keeps locator paging', async () => {
+    const records = Array.from({ length: 600 }, (_, index) => {
+      const chunkIndex = locators[index * 2], rowIndex = locators[index * 2 + 1]
+      return {
+        id: `asteroid:${chunkIndex}:${rowIndex}`, label: `Body ${chunkIndex}:${rowIndex}`,
+        shortLabel: `Body ${chunkIndex}:${rowIndex}`, searchKey: `body ${chunkIndex} ${rowIndex}`,
+        chunkId: `chunk-${String(chunkIndex).padStart(4, '0')}`, chunkIndex, rowIndex,
+        orbitClassCode: 'MBA', orbitClassName: 'Main-belt Asteroid', isNeo: false, isPha: false,
+        epochJd: 2_451_545, semiMajorAxisAU: 2.5, eccentricity: 0.1, inclinationDeg: 4,
+        ascendingNodeDeg: 20, argPeriapsisDeg: 30, meanAnomalyDeg: 40, meanMotionDegPerDay: 0.5,
+      } satisfies AsteroidRecord
+    })
+    const request = scan()
+    workers.at(-1)!.result(0, records)
+    const result = await request
+    const expected = records.filter(record => record.chunkIndex! < 32).slice(0, 480)
+    expect(result.records).toEqual(expected)
+    expect(result.hasMore).toBe(true)
+    expect(hydrate).not.toHaveBeenCalled()
+  })
+
   it('keeps cancellation active after the worker returns and prevents late hydration from replacing a new queue', async () => {
     let finishOld!: (records: AsteroidRecord[]) => void
     let oldSignal!: AbortSignal

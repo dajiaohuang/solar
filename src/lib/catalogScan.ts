@@ -39,6 +39,26 @@ export function takeCatalogLocatorPage(
   return { locators: Uint32Array.from(selected), remaining: Uint32Array.from(remaining) }
 }
 
+function recordsForLocatorPage(sampleLocators: Uint32Array, pageLocators: Uint32Array, records: AsteroidRecord[]) {
+  if (sampleLocators.length !== records.length * 2) throw new Error('Catalog scan records do not match their source locators')
+  const byLocator = new Map<string, AsteroidRecord>()
+  for (let index = 0; index < records.length; index += 1) {
+    const chunkIndex = sampleLocators[index * 2], rowIndex = sampleLocators[index * 2 + 1]
+    const record = records[index]
+    if (record.chunkIndex !== chunkIndex || record.rowIndex !== rowIndex) throw new Error('Catalog scan record identity differs from its source locator')
+    const key = `${chunkIndex}:${rowIndex}`
+    if (byLocator.has(key)) throw new Error('Catalog scan contains a duplicate source locator')
+    byLocator.set(key, record)
+  }
+  const page: AsteroidRecord[] = []
+  for (let index = 0; index < pageLocators.length; index += 2) {
+    const record = byLocator.get(`${pageLocators[index]}:${pageLocators[index + 1]}`)
+    if (!record) throw new Error('Catalog result page does not match its scanned records')
+    page.push(record)
+  }
+  return page
+}
+
 type PendingScan = {
   controller: AbortController
   hydrating?: boolean
@@ -69,8 +89,17 @@ function ensureCatalogWorker() {
       if (pending.hydrating) return
       pending.hydrating = true
       const page = event.data.locators ? takeCatalogLocatorPage(event.data.locators) : null
+      let transferredPage: AsteroidRecord[] | undefined
+      if (page && event.data.records) {
+        try { transferredPage = recordsForLocatorPage(event.data.locators!, page.locators, event.data.records) }
+        catch (error) {
+          pending.reject(error instanceof Error ? error : new Error(String(error)))
+          return
+        }
+      }
       const hydrate = page
-        ? loadAsteroidRecordsByLocators(pending.manifest, page.locators, pending.controller.signal)
+        ? transferredPage ? Promise.resolve(transferredPage)
+          : loadAsteroidRecordsByLocators(pending.manifest, page.locators, pending.controller.signal)
         : Promise.resolve(event.data.records ?? [])
       void hydrate.then((records) => {
         pending.controller.signal.throwIfAborted()
