@@ -6,8 +6,8 @@
   "maxChunkBytes": 33554432,
   "maxChunks": 2592,
   "maxChartRows": 100000,
-  "defaultInFlightBytes": 67108864,
-  "defaultInFlightRows": 60000,
+  "defaultInFlightBytes": 100663296,
+  "defaultInFlightRows": 90000,
   "maxSelectedBytes": 134217728,
   "defaultCacheBytes": 67108864,
   "maxCacheBytes": 134217728

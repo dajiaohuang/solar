@@ -62,6 +62,23 @@ test('parallel waves respect consumer backpressure and independent row admission
   expect(result.verifiedChunks).toBe(3); expect(result.peakReservedRows).toBe(2)
   expect(fetcher).toHaveBeenCalledTimes(3)
 })
+test('expanded default byte and row reservations overlap up to three small shards', async () => {
+  const { files, manifest: m } = await syntheticPartition()
+  const fetcher = vi.fn(async (url: URL | RequestInfo) => response(files.get(String(url).split('/').at(-1)!)!))
+  const result = await streamGaiaChunks({ manifest:m, region, baseUrl:'https://example.test/gaia/', signal:new AbortController().signal,
+    fetcher, onChunk:async () => {} })
+  expect(result.loadingBudget).toEqual({ concurrency:4, maxInFlightBytes:96*1024*1024,
+    maxInFlightRows:90_000, maxTotalBytes:128*1024*1024 })
+  expect(result.peakActiveChunks).toBe(3)
+})
+test('expanded in-flight budget ceilings remain bounded and reject before reads', async () => {
+  const { manifest:m } = await syntheticPartition(), fetcher = vi.fn()
+  const options = { manifest:m, region, baseUrl:'https://example.test/gaia/', signal:new AbortController().signal,
+    fetcher:fetcher as typeof fetch, onChunk:async () => {} }
+  await expect(streamGaiaChunks({ ...options, maxInFlightBytes:128*1024*1024+1 })).rejects.toThrow(/budget/)
+  await expect(streamGaiaChunks({ ...options, maxInFlightRows:120_001 })).rejects.toThrow(/budget/)
+  expect(fetcher).not.toHaveBeenCalled()
+})
 test('cancelling while a consumer is active prevents queued publication and later requests', async () => {
   const { files, manifest: m } = await syntheticPartition(), controller = new AbortController()
   const fetcher = vi.fn(async (url: URL | RequestInfo) => response(files.get(String(url).split('/').at(-1)!)!))

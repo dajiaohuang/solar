@@ -129,7 +129,7 @@ export async function streamGaiaChunks(options: {
   const region: GaiaSkyRegion = { ...options.region }
   // Own one validated snapshot so caller edits cannot change in-flight paths or budgets.
   const manifest = decodeGaiaManifest(new TextEncoder().encode(JSON.stringify(options.manifest)))
-  if (!integer(concurrency, 1, 8) || !integer(maxInFlightBytes, 1, 64*1024*1024) || !integer(maxInFlightRows, 1, 100000) || !integer(maxTotalBytes, 1, 1024*1024*1024)) throw new Error('Invalid Gaia loading budget')
+  if (!integer(concurrency, 1, 8) || !integer(maxInFlightBytes, 1, 128*1024*1024) || !integer(maxInFlightRows, 1, 120000) || !integer(maxTotalBytes, 1, 1024*1024*1024)) throw new Error('Invalid Gaia loading budget')
   const base = new URL(options.baseUrl)
   if (!['https:', 'http:'].includes(base.protocol) || base.username || base.password || base.search || base.hash || !base.pathname.endsWith('/')) throw new Error('Invalid Gaia chunk base URL')
   const selected = selectGaiaChunks(manifest, region), totalBytes = selected.reduce((sum,c) => sum+c.bytes, 0)
@@ -177,16 +177,22 @@ export async function streamGaiaChunks(options: {
           if (!(bytes instanceof Uint8Array) || bytes.byteLength !== descriptor.bytes || await gaiaHash(bytes) !== descriptor.sha256) throw new Error('Gaia chunk source hash mismatch')
         }
         check()
-        const chunk = await decodeVerifiedChunk(bytes, descriptor, manifest.settings, controller.signal, manifest.schemaVersion)
-        check()
-        for (const source of chunk.sources) {
-          if (sourceIds.has(source.source_id)) throw new Error('Duplicate Gaia source across chunks')
-          sourceIds.add(source.source_id)
-        }
-        check()
-        if (cached) { cacheHits++; cacheHitBytes += descriptor.bytes }
-        else { sourceReadChunks++; sourceReadBytes += descriptor.bytes; cache?.put(descriptor.sha256,bytes) }
-        consume = consume.then(async () => { check(); await consumeUntilAbort(() => { check(); return onChunk(chunk, controller.signal) }, controller.signal); check(); verifiedRows += descriptor.rows; verifiedChunks++ })
+        // Reads and hashes overlap, but only the serialized consumer constructs
+        // parsed objects/directions and retains a decoded chunk during GPU ACK.
+        consume = consume.then(async () => {
+          check()
+          const chunk = await decodeVerifiedChunk(bytes!, descriptor, manifest.settings, controller.signal, manifest.schemaVersion)
+          check()
+          for (const source of chunk.sources) {
+            if (sourceIds.has(source.source_id)) throw new Error('Duplicate Gaia source across chunks')
+            sourceIds.add(source.source_id)
+          }
+          check()
+          if (cached) { cacheHits++; cacheHitBytes += descriptor.bytes }
+          else { sourceReadChunks++; sourceReadBytes += descriptor.bytes; cache?.put(descriptor.sha256,bytes!) }
+          await consumeUntilAbort(() => { check(); return onChunk(chunk, controller.signal) }, controller.signal)
+          check(); verifiedRows += descriptor.rows; verifiedChunks++
+        })
         await consume
       } finally { clearTimeout(timeout) }
     })().catch(error => {
