@@ -50,6 +50,6 @@ test('freezes the source before yielding and rejects unmatched parameters, epoch
   await expect(propagateDynamicsCovariance(dynamics, { ...original, solutionEpochTdb: original.solutionEpochTdb+1 }, 0)).rejects.toThrow('solution epoch')
   const controller = new AbortController()
   controller.abort()
-  await expect(propagateDynamicsCovariance(dynamics, original, 86400, controller.signal)).rejects.toThrow('Integration cancelled')
+  await expect(propagateDynamicsCovariance(dynamics, original, 86400, controller.signal)).rejects.toBe(controller.signal.reason)
   await expect(propagateDynamicsCovariance(dynamics, original, 366*86400)).rejects.toThrow('365 days')
 })
