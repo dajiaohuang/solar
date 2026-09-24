@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import capacity from '../../data/gaiaCapacity.json'
+import { buildGaiaScreenPointIndex } from '../../lib/gaiaPointPicking'
 
 // These are allocation policies, not measured total GPU/driver memory bounds.
 const MAX_DISPLAY_ROWS = capacity.maxChartRows
@@ -10,7 +11,8 @@ export function GaiaPlot({ capacity, batches, zoom, onUploaded, onError, onSelec
   capacity: number; batches: GaiaDisplayBatch[]; zoom: number; onUploaded: (sequence: number) => void; onError: (error: string) => void; onSelect: (index: number) => void
 }) {
   const canvas = useRef<HTMLCanvasElement>(null)
-  const state = useRef<{ gl: WebGL2RenderingContext; buffer: WebGLBuffer; program: WebGLProgram; count: number; processed: number; drawnZoom: number; draw: () => boolean; dispose: () => void } | null>(null)
+  const state = useRef<{ gl: WebGL2RenderingContext; buffer: WebGLBuffer; program: WebGLProgram; count: number; processed: number; drawnZoom: number;
+    picking: { key: string; index: ReturnType<typeof buildGaiaScreenPointIndex> } | null; draw: () => boolean; dispose: () => void } | null>(null)
   const latest = useRef({ zoom, onUploaded, onError }); latest.current = { zoom, onUploaded, onError }
   useEffect(() => {
     if (!Number.isSafeInteger(capacity) || capacity < 0 || capacity > MAX_DISPLAY_ROWS) {
@@ -74,7 +76,7 @@ export function GaiaPlot({ capacity, batches, zoom, onUploaded, onError, onSelec
           return true
         } catch (error) { fail(error); return false }
       }
-      state.current = { gl, buffer, program, count: 0, processed: 0, drawnZoom: Math.fround(latest.current.zoom), draw, dispose }
+      state.current = { gl, buffer, program, count: 0, processed: 0, drawnZoom: Math.fround(latest.current.zoom), picking: null, draw, dispose }
       observer = new ResizeObserver(draw); observer.observe(element); element.addEventListener('webglcontextlost',lost); draw()
     } catch (error) { fail(error) }
     return dispose
@@ -98,17 +100,11 @@ export function GaiaPlot({ capacity, batches, zoom, onUploaded, onError, onSelec
     const s = state.current, rect = event.currentTarget.getBoundingClientRect()
     if (!s || s.gl.isContextLost() || rect.width <= 0 || rect.height <= 0) return
     const clickX = event.clientX-rect.left, clickY = event.clientY-rect.top
-    let index = 0, best = -1, distance = 12**2 // CSS pixels, independent of density and zoom.
-    for (let batchIndex = 0; batchIndex < s.processed; batchIndex++) {
-      const batch = batches[batchIndex]
-      for (let i = 0; i < batch.display.length; i += 3, index++) {
-        const x = Math.fround(batch.display[i]*s.drawnZoom), y = Math.fround(batch.display[i+1]*s.drawnZoom)
-        // Point centers outside clip space are not drawn, even near an edge.
-        if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > 1 || Math.abs(y) > 1) continue
-        const d = ((x+1)*rect.width/2-clickX)**2+((1-y)*rect.height/2-clickY)**2
-        if (d < distance) { distance = d; best = index }
-      }
+    const key = `${rect.width}:${rect.height}:${s.drawnZoom}:${s.count}`
+    if (s.picking?.key !== key) {
+      s.picking = { key, index: buildGaiaScreenPointIndex(batches.slice(0, s.processed).map(batch => batch.display), rect.width, rect.height, s.drawnZoom, s.count) }
     }
-    if (best >= 0) onSelect(best)
+    const nearest = s.picking.index.nearest(clickX, clickY, 12) // CSS pixels, independent of density.
+    if (nearest >= 0) onSelect(nearest)
   }} />
 }
