@@ -638,7 +638,8 @@ test('streams an expanded source snapshot beyond the sample and restores its act
   await expect(stream).toHaveAttribute('data-drawn-rows', '3')
   await expect(stream).toHaveAttribute('data-source-rows', '3')
   await expect(page.getByTestId('catalog-point-epoch')).toHaveAttribute('data-utc-jd', '2461287.5')
-  expect(requests.slice(before).some(url => /\/meta\/|catalog-sample-/.test(url))).toBe(false)
+  expect(requests.slice(before).some(url => /catalog-sample-/.test(url))).toBe(false)
+  expect(requests.slice(before).filter(url => url.endsWith('/meta/chunk-0000.json'))).toHaveLength(1)
   expect(requests.slice(before).filter(url => url.endsWith('/binary/chunk-0000.bin'))).toHaveLength(1)
   const afterLoad = requests.length
   await page.getByRole('spinbutton', { name: 'Map radius (AU)', exact: true }).fill('20')
@@ -681,7 +682,7 @@ test('streams an expanded source snapshot beyond the sample and restores its act
   expect(errors).toEqual([])
 })
 
-test('excludes unmatched expanded shards and completes empty index selections', async ({ page }) => {
+test('filters source magnitudes exactly and excludes shards using exact orbital index fields', async ({ page }) => {
   const requests: string[] = [], errors: string[] = []
   page.on('request', request => { if (request.url().includes('/binary/chunk-')) requests.push(new URL(request.url()).pathname) })
   page.on('pageerror', error => errors.push(error.message))
@@ -698,9 +699,11 @@ test('excludes unmatched expanded shards and completes empty index selections', 
   const canvas = page.getByTestId('catalog-stream-canvas')
   await expect(canvas).toHaveAttribute('data-phase', 'complete')
   await expect(canvas).toHaveAttribute('data-drawn-rows', '1')
-  await expect(canvas).toHaveAttribute('data-source-rows', '1')
+  // H filtering validates source metadata and orbital rows instead of treating
+  // the compact magnitude column as source-precision scientific evidence.
+  await expect(canvas).toHaveAttribute('data-source-rows', '3')
   await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
-  expect(requests.slice(before).map(path => path.split('/').at(-1))).toEqual(['chunk-0001.bin'])
+  expect(requests.slice(before).map(path => path.split('/').at(-1)).sort()).toEqual(['chunk-0000.bin', 'chunk-0001.bin', 'chunk-0002.bin'])
   await page.getByRole('spinbutton', { name: 'a (AU): Minimum', exact: true }).fill('70')
   await expect(canvas).toHaveCount(0)
   await expect(page.locator('.catalog-table')).not.toContainText('Beta')
@@ -715,7 +718,7 @@ test('excludes unmatched expanded shards and completes empty index selections', 
   expect(errors).toEqual([])
 })
 
-test('updates spatial catalog representatives on zoom and detail changes without reloading source data', async ({ page }) => {
+test('keeps an under-budget catalog complete and updates visibility without reloading source data', async ({ page }) => {
   const requests: string[] = [], errors: string[] = []
   page.on('request', request => { if (request.url().includes('/data/asteroids/')) requests.push(request.url()) })
   page.on('pageerror', error => errors.push(error.message))
@@ -728,7 +731,7 @@ test('updates spatial catalog representatives on zoom and detail changes without
   await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
   await expect(canvas).toHaveAttribute('data-drawn-rows', '8000')
   const displayed = Number(await canvas.getAttribute('data-display-count'))
-  expect(displayed).toBeGreaterThan(0); expect(displayed).toBeLessThan(8000)
+  expect(displayed).toBe(8000)
   const before = requests.length
   await page.getByRole('spinbutton', { name: 'Map radius (AU)', exact: true }).fill('0.01')
   await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
@@ -886,7 +889,9 @@ test('stops expanded source loading without installing a late tile and permits r
 
 test('rejects a corrupt expanded source before drawing and retains the independent sample map', async ({ page }) => {
   await installMockCatalog(page, { precomputed: true, sampleCount: 1 })
-  await page.route('**/checksums.json', route => route.fulfill({ json: { schemaVersion: 1, algorithm: 'sha256', files: { 'catalog-index.bin': '0'.repeat(64) } } }))
+  // Corrupt only the expanded index. A corrupt common descriptor correctly
+  // rejects both sample and expanded loads and cannot exercise sample recovery.
+  await page.route('**/catalog-index.bin', route => route.fulfill({ body: Buffer.alloc(3 * 24), contentType: 'application/octet-stream' }))
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=4&page=catalog&lang=en&jd=2461287.5')
   await page.getByRole('button', { name: /Load expanded snapshot/ }).click()

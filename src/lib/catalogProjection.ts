@@ -1,5 +1,9 @@
 export type CatalogRotation = { azimuthDegrees: number; tiltDegrees: number }
 
+// Outward display screening for Float32 shader uniforms/arithmetic. This is
+// a conservative engineering policy, not a certified GPU precision bound.
+export const CATALOG_CLIP_RELATIVE_MARGIN = 64 * 2 ** -23
+
 /** Orthographic display basis only; source heliocentric ecliptic states stay unchanged. */
 export function catalogProjection(rotation: CatalogRotation) {
   const { azimuthDegrees: yaw, tiltDegrees: tilt } = rotation

@@ -1,8 +1,38 @@
 import { expect, it } from 'vitest'
 import { selectCatalogSpatialPoints } from '../../src/lib/catalogSpatialSelection'
+import { createCatalogSpatialIndex } from '../../src/lib/catalogSpatialIndex'
 
 const noYield = async () => {}
 const view = { radius: 1, aspect: 1, maximumPoints: 4 }
+
+it('preserves direct selection across indexed clipping, partial blocks, rotation and invalidation', async () => {
+  const count = 2051, positions = new Float32Array(count*3)
+  for (let row=0; row<count; row++) positions.set(row<1024 ? [30,30,30] : [Math.sin(row),Math.cos(row),.25],row*3)
+  const index = createCatalogSpatialIndex(positions,3)
+  for (const tiltDegrees of [0,45,90]) {
+    const camera = { ...view, maximumPoints: 100, rotation: { azimuthDegrees: 17, tiltDegrees } }
+    const direct = await selectCatalogSpatialPoints(positions,count,camera,() => false,noYield)
+    const indexed = await selectCatalogSpatialPoints(positions,count,camera,() => false,noYield,index)
+    expect(indexed?.indices).toEqual(direct?.indices)
+    expect(indexed?.visible).toBe(direct?.visible)
+    expect(indexed?.skippedRows).toBeGreaterThanOrEqual(1024)
+  }
+  positions.set([0,0,0],0); index.invalidate(0,1)
+  const camera = { ...view, maximumPoints: count, rotation: { azimuthDegrees: 0, tiltDegrees: 0 } }
+  const after = await selectCatalogSpatialPoints(positions,count,camera,() => false,noYield,index)
+  expect(after?.indices[0]).toBe(0)
+  expect(after?.indices).toEqual((await selectCatalogSpatialPoints(positions,count,camera,() => false,noYield))?.indices)
+})
+
+it('keeps all visible collocated bodies when the uploaded count fits the display budget', async () => {
+  const positions = new Float32Array([0,0, 0,0, 0,0, 3,3])
+  const selected = await selectCatalogSpatialPoints(positions,4,{ ...view, focusedRow: 1 },() => false,noYield)
+  expect(selected?.indices).toEqual(new Uint32Array([0,1,2]))
+  expect(selected?.visible).toBe(3)
+  const bounded = await selectCatalogSpatialPoints(positions,4,{ ...view, maximumPoints: 1 },() => false,noYield)
+  expect(bounded?.indices).toHaveLength(1)
+  expect(bounded?.visible).toBe(3)
+})
 
 it('uses the same 3D display rotation for culling, including actual z coordinates', async () => {
   const positions = new Float32Array([-.5,0,4, 0,4,0, .5,0,.5]), original = positions.slice()

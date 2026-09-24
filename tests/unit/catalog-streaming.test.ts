@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CATALOG_STREAM_ARTIFACT_TIMEOUT_MS, planCatalogStream, streamCatalogPoints, type CatalogStreamTile } from '../../src/lib/catalogStreaming'
+import { CATALOG_STREAM_ARTIFACT_TIMEOUT_MS, createCatalogStreamSourceCache, clearCatalogStreamSourceCache, planCatalogStream, streamCatalogPoints, type CatalogStreamTile } from '../../src/lib/catalogStreaming'
 import { utcJulianDayToTt } from '../../src/engine/ephemeris/timeScales'
-import type { AsteroidManifest, CatalogFilters } from '../../src/types'
+import { prepareCatalogAppendBatch } from '../../src/lib/catalogAppendBatch'
+import { checkCatalogAppendReceipt } from '../../src/lib/catalogAppendReceipt'
+import type { AsteroidIndexEntry, AsteroidManifest, CatalogFilters } from '../../src/types'
 
 const filters: CatalogFilters = { query: '', orbitClass: 'all', semiMajorAxis: [0, 100], eccentricity: [0, 1], inclination: [0, 180], absoluteMagnitude: [-10, 40], magnitudeStatus: 'all', perihelion: [0, 100] }
 const hash = (buffer: ArrayBuffer) => createHash('sha256').update(new Uint8Array(buffer)).digest('hex')
@@ -25,9 +27,32 @@ function fixture(count = 13, chunkSize = 2) {
       index.setUint16(offset + 20, chunk, true); index.setUint16(offset + 22, row, true)
     }
     files.set(`binary/chunk-${String(chunk).padStart(4, '0')}.bin`, elements.buffer)
+    const chunkId = `chunk-${String(chunk).padStart(4, '0')}`
+    const metadata: AsteroidIndexEntry[] = Array.from({ length: rows }, (_, row) => {
+      const i = chunk*chunkSize+row
+      return { id: `synthetic-${i}`, label: `Synthetic ${i}`, shortLabel: `S${i}`,
+        searchKey: `synthetic ${i} named exact selection`, chunkId, chunkIndex: chunk, rowIndex: row,
+        orbitClassCode: i%2 ? 'APO' : 'MBA', orbitClassName: i%2 ? 'Apollo' : 'Main belt',
+        ...(i%2 ? {} : { absoluteMagnitude: 12 }), isNeo: Boolean(i%2), isPha: Boolean(i%2) }
+    })
+    files.set(`meta/${chunkId}.json`,new TextEncoder().encode(JSON.stringify(metadata)).buffer)
   }
   files.set('catalog-index.bin', compact)
-  const rehash = () => files.set('checksums.json', new TextEncoder().encode(JSON.stringify({ schemaVersion: 1, algorithm: 'sha256', files: Object.fromEntries([...files].filter(([key]) => key !== 'checksums.json').map(([key, value]) => [key, hash(value)])) })).buffer)
+  // Rehash bytes only; never repair intentionally inconsistent source metadata.
+  const rehash = () => {
+    const descriptor = Object.fromEntries([...files].filter(([key]) => key !== 'checksums.json')
+      .sort(([a],[b]) => a.localeCompare(b)).map(([key,value]) => [key,hash(value)]))
+    manifest.contentSha256 = hash(new TextEncoder().encode(JSON.stringify(descriptor)).buffer)
+    files.set('checksums.json',new TextEncoder().encode(JSON.stringify({ schemaVersion: 1, algorithm: 'sha256', files: descriptor })).buffer)
+  }
+  const setSourceFlags = (sourceRow: number, flags: number) => {
+    index.setUint8(sourceRow*24+19,flags)
+    const path = `meta/chunk-${String(Math.floor(sourceRow/chunkSize)).padStart(4,'0')}.json`
+    const metadata = JSON.parse(new TextDecoder().decode(files.get(path)!)) as AsteroidIndexEntry[]
+    const entry = metadata[sourceRow%chunkSize]
+    entry.isNeo = Boolean(flags&1); entry.isPha = Boolean(flags&2)
+    files.set(path,new TextEncoder().encode(JSON.stringify(metadata)).buffer)
+  }
   rehash()
   const requests: string[] = []
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
@@ -36,7 +61,7 @@ function fixture(count = 13, chunkSize = 2) {
     if (!files.has(key)) throw new Error(`Unexpected artifact ${key}`)
     return new Response(files.get(key)!.slice(0))
   }))
-  return { manifest, files, requests, rehash }
+  return { manifest, files, requests, rehash, setSourceFlags }
 }
 
 function run(manifest: AsteroidManifest, onTile: (tile: CatalogStreamTile) => Promise<void>, overrides: Partial<Parameters<typeof streamCatalogPoints>[0]> = {}) {
@@ -44,17 +69,161 @@ function run(manifest: AsteroidManifest, onTile: (tile: CatalogStreamTile) => Pr
 }
 
 describe('bounded source catalog streaming', () => {
+  it('prepares selected append rows in priority-shard order and reports capacity omissions', async () => {
+    const { manifest,files } = fixture(6,2)
+    const request = { manifest, filters, mode: '2d' as const, julianDay: 2461287.5,
+      budgetBytes: 32*1024*1024, maximumRows: 1,
+      locators: [{ chunkIndex: 2, rowIndex: 1 },{ chunkIndex: 0, rowIndex: 1 }],
+      contentSha256: manifest.contentSha256!, indexSha256: hash(files.get('catalog-index.bin')!),
+      signal: new AbortController().signal }
+    const limited = await prepareCatalogAppendBatch(request)
+    expect([...limited.positions]).toEqual([2.05,0])
+    expect(limited.prepared.count).toBe(1)
+    expect(limited.result).toMatchObject({ drawnRows: 1, complete: false, screening: { completionReason: 'capacity' } })
+    expect(limited.result.sourceSelection!.shards.map(shard => [shard.chunk,...shard.selectedRows])).toEqual([[2,2]])
+    const complete = await prepareCatalogAppendBatch({ ...request,maximumRows: 2 })
+    expect([...complete.positions]).toEqual([2.05,0,2.01,0])
+    expect(complete.prepared.count).toBe(2)
+    expect(complete.result).toMatchObject({ drawnRows: 2, complete: true })
+  })
+
+  it('returns an empty checked append when source names reject every candidate', async () => {
+    const { manifest,files,requests } = fixture(3,3)
+    const batch = await prepareCatalogAppendBatch({ manifest, filters: { ...filters,query: 'absent name' },
+      mode: '3d', julianDay: 2461287.5, budgetBytes: 32*1024*1024, maximumRows: 2,
+      locators: [{ chunkIndex: 0,rowIndex: 1 }], contentSha256: manifest.contentSha256!,
+      indexSha256: hash(files.get('catalog-index.bin')!), signal: new AbortController().signal })
+    expect(batch.positions).toHaveLength(0)
+    expect(batch.appearance).toHaveLength(0)
+    expect(batch.prepared.count).toBe(0)
+    expect(batch.result).toMatchObject({ drawnRows: 0, complete: true, screening: { metadataOnlyRows: 3 } })
+    expect(requests.some(path => path.startsWith('binary/'))).toBe(false)
+  })
+
+  it('rejects a receipt that places an admitted row beyond its examined source prefix', async () => {
+    const { manifest,files } = fixture(4,4)
+    const request = { manifest, filters, mode: '2d' as const, julianDay: 2461287.5,
+      budgetBytes: 32*1024*1024, maximumRows: 1,
+      locators: [0,1,3].map(rowIndex => ({ chunkIndex: 0,rowIndex })),
+      contentSha256: manifest.contentSha256!, indexSha256: hash(files.get('catalog-index.bin')!),
+      signal: new AbortController().signal }
+    const batch = await prepareCatalogAppendBatch(request)
+    expect(batch.result.screening.shards[0].examinedRows).toBe(2)
+    const tampered = structuredClone(batch.result)
+    tampered.sourceSelection!.shards[0].selectedRows[0] = 8
+    expect(() => checkCatalogAppendReceipt(tampered,request)).toThrow('requested sources')
+  })
+
+  it('rejects cancellation during capacity-result prefetch drain and releases the source cache', async () => {
+    const { manifest, files } = fixture(4,1)
+    const sourceCache = createCatalogStreamSourceCache(96,64)
+    const controller = new AbortController(), originalFetch = globalThis.fetch
+    let published = false, cancelledDuringDrain = false
+    vi.stubGlobal('fetch',vi.fn((url: string, options: RequestInit) => {
+      if (!url.endsWith('/binary/chunk-0001.bin')) return originalFetch(url,options)
+      // Hold one speculative fetch until the loader cancels its own prefetch
+      // controller on reaching capacity. Deliver caller cancellation only then.
+      return new Promise<Response>(resolve => {
+        options.signal!.addEventListener('abort',() => {
+          queueMicrotask(() => {
+            cancelledDuringDrain = published
+            controller.abort()
+            resolve(new Response(files.get('binary/chunk-0001.bin')!.slice(0)))
+          })
+        },{ once: true })
+      })
+    }))
+    await expect(run(manifest,async () => { published = true },
+      { requestedRows: 1, sourceCache, signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' })
+    expect(cancelledDuringDrain).toBe(true)
+    vi.stubGlobal('fetch',originalFetch)
+    const recovered = await run(manifest,async () => {},{ sourceCache })
+    expect(recovered).toMatchObject({ drawnRows: 4, complete: true,
+      reads: { indexCacheHits: 0, binaryCacheHits: 0 } })
+  })
+
+  it('rejects a concurrent cache lease without invalidating its owning load', async () => {
+    const { manifest, requests } = fixture(3,3)
+    const sourceCache = createCatalogStreamSourceCache(72,192)
+    let release!: () => void, arrive!: () => void
+    const held = new Promise<void>(resolve => { release = resolve })
+    const arrived = new Promise<void>(resolve => { arrive = resolve })
+    const first = run(manifest,async () => { arrive(); await held },{ sourceCache })
+    try {
+      await Promise.race([arrived,first.then(() => { throw new Error('Expected a held source tile') })])
+      const before = requests.length
+      await expect(run(manifest,async () => {},{ sourceCache })).rejects.toThrow('busy')
+      expect(requests).toHaveLength(before)
+    } finally { release(); await first }
+    const reused = await run(manifest,async () => {},{ sourceCache })
+    expect(reused.reads).toMatchObject({ indexCacheHits: 1, binaryCacheHits: 1 })
+  })
+
+  it('reuses checked source bytes but rechecks metadata and reapplies changed filters', async () => {
+    const { manifest, requests, files } = fixture(3,3)
+    const sourceCache = createCatalogStreamSourceCache(72,192)
+    await run(manifest,async () => {},{ sourceCache })
+    requests.length = 0
+    const positions: number[] = []
+    const result = await run(manifest,async tile => { positions.push(...tile.positions) },
+      { sourceCache, filters: { ...filters, magnitudeStatus: 'unknown' } })
+    expect(requests).toEqual(['meta/chunk-0000.json'])
+    expect(positions).toEqual([2.01,0])
+    expect(result.sourceSelection!.shards.map(shard => [...shard.selectedRows])).toEqual([[2]])
+    const zero = { attempts: 0, completed: 0, failed: 0, completedBytes: 0 }
+    expect(result.reads).toEqual({ method: 'catalog-application-reads-v1',
+      indexCacheHits: 1, indexReusedBytes: 72, binaryCacheHits: 1, binaryReusedBytes: 192,
+      artifacts: { checksums: zero, index: zero, binary: zero,
+        metadata: { attempts: 1, completed: 1, failed: 0, completedBytes: files.get('meta/chunk-0000.json')!.byteLength } } })
+    expect(Object.isFrozen(result.reads)).toBe(true)
+    expect(Object.isFrozen(result.reads.artifacts)).toBe(true)
+    expect(Object.values(result.reads.artifacts).every(Object.isFrozen)).toBe(true)
+  })
+
+  it.each(['clear','source-change'] as const)('refetches retained bytes after %s', async reason => {
+    const { manifest, requests, setSourceFlags, rehash } = fixture(3,3)
+    const sourceCache = createCatalogStreamSourceCache(72,192)
+    const first = await run(manifest,async () => {},{ sourceCache })
+    if (reason === 'clear') clearCatalogStreamSourceCache(sourceCache)
+    else { setSourceFlags(1,1); rehash() }
+    requests.length = 0
+    const result = await run(manifest,async () => {},{ sourceCache })
+    expect(new Set(requests)).toEqual(new Set(['checksums.json','catalog-index.bin','meta/chunk-0000.json','binary/chunk-0000.bin']))
+    expect(requests).toHaveLength(4)
+    expect(result.reads).toMatchObject({ indexCacheHits: 0, binaryCacheHits: 0,
+      artifacts: { checksums: { completed: 1 }, index: { completed: 1 }, binary: { completed: 1 }, metadata: { completed: 1 } } })
+    if (reason === 'source-change') expect(result.sourceSelection!.contentSha256).not.toBe(first.sourceSelection!.contentSha256)
+    else expect(result.sourceSelection).toEqual(first.sourceSelection)
+  })
+
+  it('rejects changed metadata on a cache hit and drops the cache before recovery', async () => {
+    const { manifest, requests, files } = fixture(3,3)
+    const sourceCache = createCatalogStreamSourceCache(72,192)
+    await run(manifest,async () => {},{ sourceCache })
+    const path = 'meta/chunk-0000.json', original = files.get(path)!
+    const changed = original.slice(0)
+    new Uint8Array(changed)[0] ^= 1
+    files.set(path,changed) // Keep the trusted descriptor unchanged.
+    const publish = vi.fn(async () => {})
+    await expect(run(manifest,publish,{ sourceCache })).rejects.toThrow()
+    expect(publish).not.toHaveBeenCalled()
+    files.set(path,original); requests.length = 0
+    const recovered = await run(manifest,async () => {},{ sourceCache })
+    expect(recovered).toMatchObject({ drawnRows: 3, complete: true,
+      reads: { indexCacheHits: 0, binaryCacheHits: 0 } })
+    expect(requests).toHaveLength(4)
+  })
+
   it.each(['neo-first', 'pha-first'] as const)('prioritizes %s shards stably while retaining ordinary rows and every source exactly once', async priority => {
-    const { manifest, files, requests, rehash } = fixture(13, 2)
-    const index = new DataView(files.get('catalog-index.bin')!)
-    for (let row = 0; row < 13; row++) index.setUint8(row * 24 + 19, row % 2 ? 0 : 4)
+    const { manifest, requests, rehash, setSourceFlags } = fixture(13, 2)
+    for (let row = 0; row < 13; row++) setSourceFlags(row,row % 2 ? 0 : 4)
     // Only a late shard has the requested tag; an earlier shard has the other tag.
-    index.setUint8(11 * 24 + 19, priority === 'neo-first' ? 1 : 2)
-    index.setUint8(3 * 24 + 19, priority === 'neo-first' ? 2 : 1)
+    setSourceFlags(11, priority === 'neo-first' ? 1 : 2)
+    setSourceFlags(3, priority === 'neo-first' ? 2 : 1)
     rehash()
     const values: number[] = []
     const result = await run(manifest, async tile => { for (let i = 0; i < tile.positions.length; i += 2) values.push(tile.positions[i]) }, { priority })
-    expect(result).toEqual({ sourceRows: 13, drawnRows: 13, complete: true })
+    expect(result).toMatchObject({ sourceRows: 13, drawnRows: 13, complete: true })
     expect(values).toEqual([10, 11, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12].map(row => 2 + row / 100))
     expect(requests.filter(path => path.startsWith('binary/'))).toEqual([5, 0, 1, 2, 3, 4, 6].map(chunk => `binary/chunk-${String(chunk).padStart(4, '0')}.bin`))
     const limited: number[] = []
@@ -67,10 +236,9 @@ describe('bounded source catalog streaming', () => {
     expect(requests).toEqual([])
   })
   it('does not elevate a shard for a tagged row excluded by exact name locators or index filters', async () => {
-    const { manifest, files, requests, rehash } = fixture(13, 2)
-    const index = new DataView(files.get('catalog-index.bin')!)
-    for (let row = 0; row < 13; row++) index.setUint8(row * 24 + 19, row % 2 ? 0 : 4)
-    index.setUint8(11 * 24 + 19, 1)
+    const { manifest, requests, rehash, setSourceFlags } = fixture(13, 2)
+    for (let row = 0; row < 13; row++) setSourceFlags(row,row % 2 ? 0 : 4)
+    setSourceFlags(11,1)
     rehash()
     const values: number[] = []
     await run(manifest, async tile => { for (let i = 0; i < tile.positions.length; i += 2) values.push(tile.positions[i]) }, {
@@ -96,39 +264,53 @@ describe('bounded source catalog streaming', () => {
       expect(positions[row*3+2]).toBe(2+row/100)
     }
     const two = planCatalogStream(manifest,3,32*1024*1024), three = planCatalogStream(manifest,3,32*1024*1024,'3d')
-    expect(three.reservedBytes-two.reservedBytes).toBe(3*12)
+    // Three extra display coordinates (CPU/GPU/culling) per row, plus one
+    // additional min/max Float64 axis in this fixture's single spatial block.
+    expect(three.reservedBytes-two.reservedBytes).toBe(3*12+2*8)
   })
   it('uses every source row once in source order, preserving flags and an independently known circular state', async () => {
-    const { manifest, requests } = fixture(), positions: number[] = [], flags: number[] = []
+    const { manifest, requests, files } = fixture(), positions: number[] = [], flags: number[] = []
     const result = await run(manifest, async tile => {
       expect(tile.positions).toBeInstanceOf(Float64Array)
       positions.push(...tile.positions); flags.push(...tile.appearance)
     })
-    expect(result).toEqual({ sourceRows: 13, drawnRows: 13, complete: true })
+    expect(result).toMatchObject({ sourceRows: 13, drawnRows: 13, complete: true,
+      screening: { admittedShards: 7, completedShards: 7, metadataOnlyRows: 0, completionReason: 'exhausted' },
+      sourceSelection: { contentSha256: manifest.contentSha256, indexSha256: hash(files.get('catalog-index.bin')!) } })
+    const completed = (paths: string[]) => ({ attempts: paths.length, completed: paths.length, failed: 0,
+      completedBytes: paths.reduce((total,path) => total+files.get(path)!.byteLength,0) })
+    expect(result.reads).toEqual({ method: 'catalog-application-reads-v1', indexCacheHits: 0, indexReusedBytes: 0,
+      binaryCacheHits: 0, binaryReusedBytes: 0, artifacts: {
+        checksums: completed(['checksums.json']), index: completed(['catalog-index.bin']),
+        metadata: completed([...files.keys()].filter(path => path.startsWith('meta/'))),
+        binary: completed([...files.keys()].filter(path => path.startsWith('binary/'))),
+      } })
+    expect(result.sourceSelection!.shards.map(shard => [...shard.selectedRows])).toEqual([[3],[3],[3],[3],[3],[3],[1]])
     for (let row = 0; row < 13; row++) {
       expect(positions[row * 2]).toBe(2 + row / 100); expect(positions[row * 2 + 1]).toBe(0)
       expect(flags.slice(row * 2, row * 2 + 2)).toEqual([row % 2, row % 2 ? 3 : 4])
     }
-    expect(requests).toHaveLength(9)
-    expect(requests.some(path => path.includes('meta') || path.includes('sample'))).toBe(false)
+    expect(requests).toHaveLength(16)
+    expect(requests.filter(path => path.startsWith('meta/'))).toHaveLength(7)
+    expect(requests.some(path => path.includes('sample'))).toBe(false)
   })
 
-  it('holds admission at four shards until upload acknowledgement and cancels before admitting a fifth', async () => {
+  it('holds four prefetched shards plus one active compute shard until upload acknowledgement', async () => {
     const { manifest, requests } = fixture(), controller = new AbortController()
     let acknowledge!: () => void, arrived!: () => void
     const tileReady = new Promise<void>(resolve => { arrived = resolve })
     const result = run(manifest, () => new Promise<void>(resolve => { acknowledge = resolve; arrived() }), { signal: controller.signal })
     const rejection = expect(result).rejects.toMatchObject({ name: 'AbortError' })
     await tileReady
-    expect(requests.filter(path => path.startsWith('binary/'))).toHaveLength(4)
+    expect(requests.filter(path => path.startsWith('binary/'))).toHaveLength(5)
     controller.abort(); acknowledge()
     await rejection
-    expect(requests.filter(path => path.startsWith('binary/'))).toHaveLength(4)
+    expect(requests.filter(path => path.startsWith('binary/'))).toHaveLength(5)
   })
 
   it('reports a one-row truncation as partial even when the truncated row is the end of the last shard', async () => {
     const { manifest } = fixture(3, 3), counts: number[] = []
-    expect(await run(manifest, async tile => { counts.push(tile.drawnRows) }, { requestedRows: 2 })).toEqual({ sourceRows: 3, drawnRows: 2, complete: false })
+    expect(await run(manifest, async tile => { counts.push(tile.drawnRows) }, { requestedRows: 2 })).toMatchObject({ sourceRows: 3, drawnRows: 2, complete: false })
     expect(counts).toEqual([2])
     expect(await run(manifest, async () => {}, { requestedRows: 3 })).toMatchObject({ drawnRows: 3, complete: true })
   })
@@ -176,8 +358,8 @@ describe('bounded source catalog streaming', () => {
     expect(published).not.toHaveBeenCalled()
     expect(vi.getTimerCount()).toBe(0)
     vi.stubGlobal('fetch', original)
+    vi.useRealTimers()
     await expect(run(manifest, async () => {})).resolves.toMatchObject({ drawnRows: 13, complete: true })
-    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('aborts a request that never returns headers and can reload afterwards', async () => {
@@ -197,6 +379,7 @@ describe('bounded source catalog streaming', () => {
     expect(aborted).toBe(1)
     expect(vi.getTimerCount()).toBe(0)
     vi.stubGlobal('fetch', original)
+    vi.useRealTimers()
     await expect(run(manifest, async () => {})).resolves.toMatchObject({ complete: true })
   })
 
@@ -206,21 +389,22 @@ describe('bounded source catalog streaming', () => {
       candidateLocators: new Uint32Array([0, 1, 0, 1, 6, 0]), filters: { ...filters, query: 'named', magnitudeStatus: 'unknown' },
     })
     expect(result).toMatchObject({ drawnRows: 1, complete: true })
-    // The last named source has known H and can now be excluded from the index.
-    expect(requests.filter(path => path.startsWith('binary/'))).toEqual(['binary/chunk-0000.bin'])
-    await expect(run(manifest, async () => {}, { filters: { ...filters, query: 'named' } })).rejects.toThrow('exact source locators')
+    // Both candidate shards match the name. Magnitude eligibility is checked
+    // against source metadata alongside their original orbital records.
+    expect(requests.filter(path => path.startsWith('binary/'))).toEqual(['binary/chunk-0000.bin','binary/chunk-0006.bin'])
+    await expect(run(manifest, async () => {}, { filters: { ...filters, query: 'named' } })).resolves.toMatchObject({ drawnRows: 13, complete: true })
   })
 
   it('skips shards excluded by exact indexed fields without claiming their source rows were scanned', async () => {
     const { manifest, requests } = fixture()
     const result = await run(manifest, async () => {}, { filters: { ...filters, semiMajorAxis: [2.12, 3], orbitClass: 'MBA', magnitudeStatus: 'known' } })
     expect(requests.filter(path => path.startsWith('binary/'))).toEqual(['binary/chunk-0006.bin'])
-    expect(result).toEqual({ sourceRows: 1, drawnRows: 1, complete: true })
+    expect(result).toMatchObject({ sourceRows: 1, drawnRows: 1, complete: true })
   })
 
   it('finishes an index-excluded query without fetching source shards or publishing empty tiles', async () => {
     const { manifest, requests } = fixture(), published = vi.fn(async () => {})
-    expect(await run(manifest, published, { filters: { ...filters, semiMajorAxis: [10, 20] } })).toEqual({ sourceRows: 0, drawnRows: 0, complete: true })
+    expect(await run(manifest, published, { filters: { ...filters, semiMajorAxis: [10, 20] } })).toMatchObject({ sourceRows: 0, drawnRows: 0, complete: true })
     expect(requests).toEqual(['checksums.json', 'catalog-index.bin'])
     expect(published).not.toHaveBeenCalled()
   })
@@ -267,9 +451,13 @@ describe('bounded source catalog streaming', () => {
     await expect(run(manifest, async () => {}, { budgetBytes: 1024 })).rejects.toThrow('budget')
     expect(requests).toHaveLength(0)
     const full = { ...manifest, totalCount: 1_561_171, chunkSize: 5000, chunkCount: 313, compactIndex: { ...manifest.compactIndex!, count: 1_561_171 } }
-    const plan = planCatalogStream(full, full.totalCount, 256 * 1024 * 1024)
+    const plan = planCatalogStream(full, full.totalCount, 512 * 1024 * 1024)
     expect(plan.capacity).toBe(full.totalCount)
     expect(plan.reservedBytes).toBeLessThanOrEqual(plan.budgetBytes)
+    const constrained = planCatalogStream(full,full.totalCount,256*1024*1024)
+    expect(constrained.capacity).toBeGreaterThan(0)
+    expect(constrained.capacity).toBeLessThan(full.totalCount)
+    expect(constrained.reservedBytes).toBeLessThanOrEqual(constrained.budgetBytes)
     expect(planCatalogStream(full, full.totalCount, 64 * 1024 * 1024).capacity).toBe(0)
   })
 })
