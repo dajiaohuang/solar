@@ -17,7 +17,21 @@ const SOURCES = ['https://naif.jpl.nasa.gov/pub/naif/generic_kernels/lsk/naif001
 export interface TimeScaleQuality { scale: 'TDB' | 'ET'; status: 'supported' | 'future-uncertain'; leapSeconds: number; assumptions: readonly string[]; sources: readonly string[] }
 function finiteJd(jd: number) { if (!Number.isFinite(jd)) throw new RangeError('Julian day must be finite') }
 function leapSecondsAt(jd: number) { if (jd < LEAPS[0][0]) throw new RangeError('UTC conversion supports 1972-01-01 onward'); let value = LEAPS[0][1]; for (const [date, seconds] of LEAPS) if (jd >= date) value = seconds; return value }
-export function utcTimeScaleQuality(jd: number, scale: 'TDB' | 'ET' = 'TDB'): TimeScaleQuality { finiteJd(jd); const leapSeconds = leapSecondsAt(jd); const future = jd >= calendarJulianDay('2027-01-01'); return { scale, status: future ? 'future-uncertain' : 'supported', leapSeconds, assumptions: ['Numeric UTC Julian days cannot represent the UTC leap-second label itself.', ...(future ? ['Beyond the IERS Bulletin C 72 confirmation window, unknown future leap seconds are held at the last value.'] : []), 'TDB-TT uses the NAIF DELTET periodic approximation, not a full relativistic time ephemeris.'], sources: SOURCES } }
+export function utcTimeScaleQuality(jd: number, scale: 'TDB' | 'ET' = 'TDB'): TimeScaleQuality {
+  finiteJd(jd)
+  const leapSeconds = leapSecondsAt(jd)
+  const future = jd >= calendarJulianDay('2027-01-01')
+  return {
+    scale, status: future ? 'future-uncertain' : 'supported', leapSeconds,
+    assumptions: [
+      'Numeric UTC Julian days cannot represent the UTC leap-second label itself.',
+      ...(future ? ['Beyond the IERS Bulletin C 72 confirmation window, unknown future leap seconds are held at the last value.'] : []),
+      'TDB-TT uses the NAIF DELTET periodic approximation, not a full relativistic time ephemeris.',
+    ],
+    // Exported receipts must not expose the module's reference source list.
+    sources: [...SOURCES],
+  }
+}
 /** Seconds TDB past J2000 (NOT a Julian date). NAIF naif0012.tls DELTET constants. */
 export function utcJulianDayToEt(jd: number): number {
   finiteJd(jd)
@@ -35,4 +49,15 @@ export function utcJulianDayToTdb(jd: number): number {
 export function utcJulianDayToTt(jd: number): number {
   finiteJd(jd)
   return jd + (leapSecondsAt(jd) + 32.184) / SECONDS_PER_DAY
+}
+
+/** Elapsed TT days under the same frozen leap table, without first rounding
+ * each endpoint to a large absolute TT Julian day. The constant 32.184 s
+ * cancels. Numeric UTC still cannot encode the leap-second label itself. */
+export function utcJulianDayIntervalTtDays(fromUtc: number, toUtc: number): number {
+  finiteJd(fromUtc); finiteJd(toUtc)
+  const leapDifference = leapSecondsAt(toUtc)-leapSecondsAt(fromUtc)
+  const elapsed = (toUtc-fromUtc)+leapDifference/SECONDS_PER_DAY
+  if (!Number.isFinite(elapsed)) throw new RangeError('UTC interval to TT produced a non-finite result')
+  return elapsed
 }

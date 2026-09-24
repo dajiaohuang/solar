@@ -1,8 +1,36 @@
 import { describe, expect, it } from 'vitest'
 import { catalogMaximumSpeedAUPerTtDay, catalogTemporalDisplacementAU } from '../../src/engine/ephemeris/catalogTemporalBudget'
 import { prepareCatalogElements, propagatePreparedCatalogPositions } from '../../src/engine/ephemeris/catalogPoints'
+import { utcJulianDayIntervalTtDays, utcJulianDayToTt, utcTimeScaleQuality } from '../../src/engine/ephemeris/timeScales'
 
 describe('catalog temporal model displacement', () => {
+  it('preserves represented UTC intervals and bounds both TT rounding paths', () => {
+    // NAIF naif0012.tls: TAI-UTC changes from 36 to 37 s at 2017-JAN-1.
+    // Use exactly representable UTC day endpoints, not rounded date strings.
+    const midnight = 2457754.5
+    for (const delta of [2 ** -31, 2 ** -20, 0.5, 1]) {
+      const before = midnight - delta
+      const expected = delta + 1 / 86400
+      expect(utcJulianDayIntervalTtDays(before, midnight)).toBe(expected)
+      expect(utcJulianDayIntervalTtDays(midnight, before)).toBe(-expected)
+      const bound = catalogTemporalDisplacementAU(before, midnight, 1)!
+      expect(bound).toBeGreaterThanOrEqual(expected)
+      expect(bound).toBeGreaterThanOrEqual(Math.abs(utcJulianDayToTt(midnight) - utcJulianDayToTt(before)))
+    }
+    expect(utcJulianDayIntervalTtDays(midnight, midnight + 2 ** -31)).toBe(2 ** -31)
+    expect(catalogTemporalDisplacementAU(2400000, 2400000, null)).toBeNull()
+  })
+
+  it('keeps source receipts independently owned and rejects invalid TT intervals', () => {
+    const quality = utcTimeScaleQuality(2457754.5)
+    const original = [...quality.sources]
+    ;(quality.sources as string[]).fill('changed by receipt consumer')
+    expect(utcTimeScaleQuality(2457754.5).sources).toEqual(original)
+    for (const endpoint of [NaN, Infinity, -Infinity, 2400000]) {
+      expect(() => utcJulianDayIntervalTtDays(endpoint, 2457754.5)).toThrow(RangeError)
+      expect(() => utcJulianDayIntervalTtDays(2457754.5, endpoint)).toThrow(RangeError)
+    }
+  })
   it('uses source mean motion and periapsis speed, independently of adopted solar GM', () => {
     const circular = new Float64Array([2451545, 2, 0, 0, 0, 0, 0, 180 / Math.PI])
     expect(catalogMaximumSpeedAUPerTtDay(circular)).toBeCloseTo(2, 12)
