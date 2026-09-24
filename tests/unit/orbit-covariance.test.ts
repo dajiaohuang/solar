@@ -9,13 +9,21 @@ import reference from '../fixtures/orbit-covariance-reference.json'
 
 const gm = reference.adoptedSolarGM
 
+it('binds the independent reference to the exact high-precision generator', () => {
+  expect(createHash('sha256').update(readFileSync(reference.generatorPath)).digest('hex')).toBe(reference.generatorSha256)
+  expect(createHash('sha256').update(readFileSync('src/data/gm_de440.tpc')).digest('hex')).toBe(reference.gmFileSha256)
+})
+
 it.each(reference.cases)('matches independent 80-digit state, Jacobian and covariance for $name', sample => {
   const source = parseSbdbCovariance(sample.name === 'bennu' ? bennu : eros)
-  if ('sourceSha256' in sample) {
+  if (sample.sourceSha256) {
     expect(createHash('sha256').update(readFileSync(sample.sourcePath!)).digest('hex')).toBe(sample.sourceSha256)
+  }
+  if (sample.name === 'eros' || sample.name === 'bennu') {
     expect(source.nominal).toEqual(sample.nominal)
     expect(source.matrix).toEqual(sample.matrix)
   } else {
+    if (sample.covarianceEvidence) expect(sample.covarianceEvidence).toMatch(/^Synthetic positive-definite matrix;/)
     source.nominal = sample.nominal
     source.solutionEpochTdb = sample.epochTdb
     source.matrix = sample.matrix
@@ -27,7 +35,7 @@ it.each(reference.cases)('matches independent 80-digit state, Jacobian and covar
   expect(result.adoptedSolarGM).toEqual(gm)
   for (let row = 0; row < source.labels.length; row++) {
     expect(Math.abs(result.nominal[row] - sample.referenceNominal[row])).toBeLessThan(1e-11 * Math.max(1, Math.abs(sample.referenceNominal[row])))
-    if (row < 6) expect(Math.abs(result.nominal[row] - sample.cspiceNominal[row])).toBeLessThan(1e-10 * Math.max(1, Math.abs(sample.cspiceNominal[row])))
+    if (sample.cspiceNominal && row < 6) expect(Math.abs(result.nominal[row] - sample.cspiceNominal[row])).toBeLessThan(1e-10 * Math.max(1, Math.abs(sample.cspiceNominal[row])))
     for (let column = 0; column < source.labels.length; column++) {
       const derivativeScale = Math.max(...sample.referenceJacobian.slice(row < 3 ? 0 : 3, row < 3 ? 3 : 6).map(values => Math.abs(values[column])), 1e-12)
       expect(Math.abs(result.jacobian[row][column] - sample.referenceJacobian[row][column])).toBeLessThan(1e-9 * derivativeScale)
@@ -61,14 +69,12 @@ it('maps permuted source axes consistently and cannot substitute the standard ep
   expect(expected.epochTdb).not.toBe(source.standardElementEpochTdb)
 })
 
-it('requires an explicit GM and rejects unsupported conics, malformed axes and nonfinite values', () => {
+it('requires an explicit GM and rejects physically invalid conics, malformed axes and nonfinite values', () => {
   const source = parseSbdbCovariance(eros)
   for (const invalid of [{ ...gm, au3PerDay2: 0 }, { ...gm, au3PerDay2: NaN }, { ...gm, source: '' }]) {
     expect(() => cartesianCovarianceAtSolutionEpoch(source, invalid)).toThrow(/GM/)
   }
-  for (const e of [-.1, .99999, 1, 1.1]) {
-    expect(() => cartesianCovarianceAtSolutionEpoch({ ...source, nominal: [e, ...source.nominal.slice(1)] }, gm)).toThrow(/requires 0 <= e/)
-  }
+  expect(() => cartesianCovarianceAtSolutionEpoch({ ...source, nominal: [-.1, ...source.nominal.slice(1)] }, gm)).toThrow(/requires e >= 0/)
   expect(() => cartesianCovarianceAtSolutionEpoch({ ...source, solutionEpochTdb: NaN }, gm)).toThrow(/contract/)
   expect(() => cartesianCovarianceAtSolutionEpoch({ ...source, matrix: [[NaN]] }, gm)).toThrow(/contract/)
   expect(() => cartesianCovarianceAtSolutionEpoch({ ...source, units: ['rad', ...source.units.slice(1)] }, gm)).toThrow(/contract/)

@@ -1,10 +1,32 @@
 import type { SbdbCovariance } from '../../data/loaders/sbdbCovariance'
 import { solveEllipticKeplerRadians } from './kepler.ts'
+import { conicCovariancePlane } from './conicCovariancePlane.ts'
 
 export type AdoptedSolarGM = { au3PerDay2: number; source: string }
 const orbitalLabels = ['e', 'q', 'tp', 'node', 'peri', 'i']
 const orbitalUnits = [null, 'au', 'd', 'deg', 'deg', 'deg']
 const DEG = Math.PI / 180
+
+function ellipticPlane(e: number, q: number, elapsed: number, mu: number) {
+  const a = q/(1-e), motion = Math.sqrt(mu/a**3), mean = motion*elapsed
+  if (!Number.isFinite(a) || !(motion > 0) || !Number.isFinite(mean) || Math.abs(mean) > 1e6) throw new RangeError('Orbital scale or accumulated phase exceeds the conversion domain')
+  const eccentric = solveEllipticKeplerRadians(mean,e), sinE = Math.sin(eccentric), cosE = Math.cos(eccentric)
+  const beta = Math.sqrt((1-e)*(1+e)), denominator = (1-e)+2*e*Math.sin(eccentric/2)**2
+  const x = a*((1-e)-2*Math.sin(eccentric/2)**2), y = a*beta*sinE
+  const speed = motion*a/denominator, vx = -speed*sinE, vy = speed*beta*cosE
+  const derivatives = [0,1,2].map(axis => {
+    const de = axis === 0 ? 1 : 0, da = axis === 0 ? a/(1-e) : axis === 1 ? 1/(1-e) : 0
+    const dn = -1.5*motion*da/a
+    // Preserve complete-revolution sensitivity; only the scalar root wraps.
+    const dMean = dn*elapsed-(axis === 2 ? motion : 0)
+    const dE = (dMean+sinE*de)/denominator, dBeta = -e*de/beta
+    const dx = da*((1-e)-2*Math.sin(eccentric/2)**2)-a*(sinE*dE+de)
+    const dy = da*beta*sinE+a*dBeta*sinE+a*beta*cosE*dE
+    const dd = -cosE*de+e*sinE*dE, dSpeed = (dn*a+motion*da)/denominator-speed*dd/denominator
+    return [dx,dy,-dSpeed*sinE-speed*cosE*dE,dSpeed*beta*cosE+speed*dBeta*cosE-speed*beta*sinE*dE]
+  })
+  return { x,y,vx,vy,derivatives }
+}
 
 /** Coordinate conversion at the solution epoch only. The adopted central GM
  * is explicit: SBDB does not supply it with cov=mat. This is not an integration
@@ -19,16 +41,11 @@ export function cartesianCovarianceAtSolutionEpoch(source: SbdbCovariance, gm: A
     throw new RangeError('Invalid audited SBDB covariance contract')
   }
   const [e, q, tp, node, peri, inclination] = axes.map(axis => source.nominal[axis])
-  // Near-parabolic/non-elliptic conversion needs a different nonsingular
-  // formulation. Reject it explicitly instead of substituting an ellipse.
-  if (e < 0 || e > .9999 || q <= 0 || inclination < 0 || inclination > 180) throw new RangeError('Cartesian covariance currently requires 0 <= e <= 0.9999, q > 0 and 0 <= i <= 180')
-  const a = q / (1 - e), motion = Math.sqrt(gm.au3PerDay2 / a ** 3)
-  const elapsed = source.solutionEpochTdb - tp, mean = motion * elapsed
-  if (!Number.isFinite(a) || !(motion > 0) || !Number.isFinite(mean) || Math.abs(mean) > 1e6) throw new RangeError('Orbital scale or accumulated phase exceeds the conversion domain')
-  const eccentric = solveEllipticKeplerRadians(mean, e), sinE = Math.sin(eccentric), cosE = Math.cos(eccentric)
-  const beta = Math.sqrt((1 - e) * (1 + e)), denominator = (1 - e) + 2 * e * Math.sin(eccentric / 2) ** 2
-  const x = a * ((1 - e) - 2 * Math.sin(eccentric / 2) ** 2), y = a * beta * sinE
-  const speed = motion * a / denominator, vx = -speed * sinE, vy = speed * beta * cosE
+  if (e < 0 || q <= 0 || inclination < 0 || inclination > 180) throw new RangeError('Cartesian covariance requires e >= 0, q > 0 and 0 <= i <= 180')
+  const universal = e > .9999
+  const elapsedDays = source.solutionEpochTdb-tp
+  const plane = (universal ? conicCovariancePlane : ellipticPlane)(e,q,elapsedDays,gm.au3PerDay2)
+  const { x,y,vx,vy } = plane
   const O = node * DEG, w = peri * DEG, i = inclination * DEG
   const cO = Math.cos(O), sO = Math.sin(O), cw = Math.cos(w), sw = Math.sin(w), ci = Math.cos(i), si = Math.sin(i)
   const p = [cO * cw - sO * sw * ci, sO * cw + cO * sw * ci, sw * si]
@@ -39,19 +56,7 @@ export function cartesianCovarianceAtSolutionEpoch(source: SbdbCovariance, gm: A
   const nominal = [...p.map((v, k) => x * v + y * r[k]), ...p.map((v, k) => vx * v + vy * r[k]), ...source.nominal.slice(6)]
   const jacobian = Array.from({ length: n }, () => Array<number>(n).fill(0))
   for (let axis = 0; axis < 6; axis++) {
-    const de = axis === 0 ? 1 : 0
-    const da = axis === 0 ? a / (1 - e) : axis === 1 ? 1 / (1 - e) : 0
-    const dn = -1.5 * motion * da / a
-    // Differentiate the unwrapped phase; dropping complete revolutions would
-    // lose semimajor-axis/phase sensitivity. Only the scalar root is wrapped.
-    const dMean = dn * elapsed - (axis === 2 ? motion : 0)
-    const dE = (dMean + sinE * de) / denominator, dBeta = -e * de / beta
-    const dx = da * ((1 - e) - 2 * Math.sin(eccentric / 2) ** 2) - a * (sinE * dE + de)
-    const dy = da * beta * sinE + a * dBeta * sinE + a * beta * cosE * dE
-    const dd = -cosE * de + e * sinE * dE
-    const dSpeed = (dn * a + motion * da) / denominator - speed * dd / denominator
-    const dvx = -dSpeed * sinE - speed * cosE * dE
-    const dvy = dSpeed * beta * cosE + speed * dBeta * cosE - speed * beta * sinE * dE
+    const [dx,dy,dvx,dvy] = axis < 3 ? plane.derivatives[axis] : [0,0,0,0]
     for (let k = 0; k < 3; k++) {
       const dp = axis === 3 ? dNodeP[k] * DEG : axis === 4 ? r[k] * DEG : axis === 5 ? dInclinationP[k] * DEG : 0
       const dr = axis === 3 ? dNodeR[k] * DEG : axis === 4 ? -p[k] * DEG : axis === 5 ? dInclinationR[k] * DEG : 0
@@ -63,7 +68,13 @@ export function cartesianCovarianceAtSolutionEpoch(source: SbdbCovariance, gm: A
   // At this epoch the coordinate map has an identity block for those axes;
   // their state cross-correlations are transformed, never discarded.
   for (let axis = 6; axis < n; axis++) jacobian[axis][axis] = 1
-  const symmetric = source.matrix.map((row, k) => row.map((value, j) => (value + source.matrix[j][k]) / 2))
+  const symmetric = source.matrix.map((row, k) => row.map((value, j) => {
+    const other = source.matrix[j][k]
+    const low = Math.min(value, other), high = Math.max(value, other)
+    // Avoid both same-sign sum overflow and underflow from halving identical
+    // tiny variances. The original source matrix remains untouched.
+    return (low < 0) === (high < 0) ? low + (high - low) / 2 : (low + high) / 2
+  }))
   const left = jacobian.map(row => row.map((_, j) => row.reduce((sum, value, k) => sum + value * symmetric[k][j], 0)))
   const matrix = Array.from({ length: n }, () => Array<number>(n).fill(0))
   for (let row = 0; row < n; row++) for (let column = row; column < n; column++) {
@@ -74,7 +85,12 @@ export function cartesianCovarianceAtSolutionEpoch(source: SbdbCovariance, gm: A
     throw new RangeError('Cartesian covariance conversion lost numerical validity')
   }
   return {
-    model: 'elliptic-osculating-coordinate-transform' as const,
+    model: universal ? 'universal-conic-osculating-coordinate-transform' as const : 'elliptic-osculating-coordinate-transform' as const,
+    numericalDomain: universal
+      ? { formulation: 'unwrapped-universal-periapsis', maximumAbsoluteDimensionlessTime: 1e6 }
+      : { formulation: 'elliptic-anomaly', maximumAbsoluteMeanAnomalyRadians: 1e6 },
+    nominalConic: { eccentricity: e, periapsisAU: q, elapsedTdbDaysFromPeriapsis: elapsedDays,
+      classification: e < 1 ? 'elliptic' as const : e === 1 ? 'parabolic' as const : 'hyperbolic' as const },
     epochTdb: source.solutionEpochTdb, frame: source.frame,
     labels: ['x', 'y', 'z', 'vx', 'vy', 'vz', ...source.labels.slice(6)],
     units: ['au', 'au', 'au', 'au/d', 'au/d', 'au/d', ...source.units.slice(6)],
