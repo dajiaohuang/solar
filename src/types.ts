@@ -334,6 +334,8 @@ export type DatasetSelectionPolicy = {
 }
 
 export type DatasetProvenance = {
+  /** Local loader classification, never trusted from the fetched document. */
+  recordOrigin?: 'provenance-file' | 'manifest-derived'
   datasetVersion: string
   source: string
   downloadedAt?: string
