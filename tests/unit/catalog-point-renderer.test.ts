@@ -3,6 +3,7 @@ import { createCatalogPointRenderer, type CatalogPointFrame } from '../../src/li
 
 function context() {
   const calls = {
+    isContextLost: vi.fn(() => false), getError: vi.fn(() => 0), NO_ERROR: 0,
     createProgram: vi.fn(() => ({})), createShader: vi.fn(() => ({})), createBuffer: vi.fn((): object | null => ({})),
     getShaderParameter: vi.fn(() => true), getProgramParameter: vi.fn(() => true),
     getShaderInfoLog: vi.fn(() => 'compile error'), getProgramInfoLog: vi.fn(() => 'link error'),
@@ -21,6 +22,40 @@ function context() {
 const frame = (count = 3): CatalogPointFrame => ({ positions: new Float32Array(count * 2), colors: new Float32Array(count * 3), sizes: new Float32Array(count), radius: 10, opacity: 0.82 })
 
 describe('persistent catalog GPU ownership', () => {
+  it('keeps a partially replaced epoch hidden and rejects failed GPU completion', () => {
+    const { gl,calls } = context(), renderer = createCatalogPointRenderer(gl,3)
+    renderer.append(frame(3))
+    renderer.drawRetained(10,.8,800,600,1)
+    calls.drawArrays.mockClear()
+    renderer.beginPositionUpdate()
+    renderer.replacePositions(0,new Float32Array([1,2]))
+    renderer.drawRetained(10,.8,800,600,1)
+    expect(calls.drawArrays).not.toHaveBeenCalled()
+    expect(() => renderer.finishPositionUpdate()).toThrow('every row')
+    renderer.retainPositions(1,2)
+    calls.getError.mockReturnValueOnce(1285)
+    expect(() => renderer.finishPositionUpdate()).toThrow('GPU')
+    renderer.drawRetained(10,.8,800,600,1)
+    expect(calls.drawArrays).not.toHaveBeenCalled()
+    renderer.beginPositionUpdate()
+    renderer.replacePositions(0,new Float32Array(6))
+    renderer.finishPositionUpdate()
+    renderer.drawRetained(10,.8,800,600,1)
+    expect(calls.drawArrays).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not cache failed sample attribute uploads and reports context loss', () => {
+    const { gl,calls } = context(), renderer = createCatalogPointRenderer(gl)
+    const snapshot = frame(2)
+    calls.getError.mockReturnValueOnce(1285)
+    expect(() => renderer.draw(snapshot,800,600,1)).toThrow('GPU')
+    calls.bufferData.mockClear()
+    renderer.draw(snapshot,800,600,1)
+    expect(calls.bufferData).toHaveBeenCalledTimes(3)
+    calls.isContextLost.mockReturnValue(true)
+    expect(() => renderer.draw(snapshot,800,600,1)).toThrow('context is lost')
+  })
+
   it('retains all three coordinates and rotates only display uniforms without reuploading attributes', () => {
     const { gl,calls } = context(), renderer = createCatalogPointRenderer(gl,3,3)
     expect(calls.bufferData.mock.calls.map(call => call[1])).toEqual([36,36,12])

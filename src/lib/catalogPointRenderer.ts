@@ -63,17 +63,29 @@ function createProgram(gl: WebGLRenderingContext, dimensions: 2 | 3) {
 export function createCatalogPointRenderer(gl: WebGLRenderingContext, capacity?: number, dimensions: 2 | 3 = 2) {
   if (capacity !== undefined && (!Number.isSafeInteger(capacity) || capacity < 0)) throw new Error('Invalid catalog GPU capacity')
   if (dimensions !== 2 && dimensions !== 3) throw new Error('Invalid catalog GPU coordinate dimension')
+  const checkGpu = () => {
+    if (gl.isContextLost()) throw new Error('Catalog WebGL context is lost')
+    if (gl.getError() !== gl.NO_ERROR) throw new Error('Catalog GPU allocation, upload or draw failed')
+  }
+  const validateAttribute = (data: Float32Array) => {
+    if (!(data instanceof Float32Array) || !data.every(Number.isFinite)) throw new Error('Invalid catalog GPU display attributes')
+  }
   const program = createProgram(gl, dimensions)
   const buffers: { handle: WebGLBuffer; data: Float32Array | null }[] = []
   let disposed = false
   let retainedCount = 0
+  let positionsCoherent = true, updatingPositions = false, updatedRows = 0
   let elementBuffer: WebGLBuffer | null = null
+  // -1 distinguishes a new buffer from an allocated zero-length selection.
+  let elementCapacityBytes = -1
   let selection: Uint32Array | null = null
   const dispose = () => {
     if (disposed) return
     disposed = true
     for (const buffer of buffers) { gl.deleteBuffer(buffer.handle); buffer.data = null }
     if (elementBuffer) gl.deleteBuffer(elementBuffer)
+    elementBuffer = null; elementCapacityBytes = -1; selection = null
+    retainedCount = 0; updatedRows = 0; positionsCoherent = false; updatingPositions = false
     gl.deleteProgram(program)
   }
   try {
@@ -85,8 +97,9 @@ export function createCatalogPointRenderer(gl: WebGLRenderingContext, capacity?:
       const location = gl.getAttribLocation(program, name)
       gl.bindBuffer(gl.ARRAY_BUFFER, handle)
       gl.enableVertexAttribArray(location); gl.vertexAttribPointer(location, size, gl.FLOAT, false, 0, 0)
-      if (capacity !== undefined) gl.bufferData(gl.ARRAY_BUFFER, capacity * size * 4, gl.STATIC_DRAW)
+      if (capacity !== undefined) gl.bufferData(gl.ARRAY_BUFFER, capacity * size * 4, name === 'a_position' ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW)
     }
+    checkGpu()
     const uniforms = ['u_radius', 'u_aspect', 'u_pixel_ratio', 'u_opacity'].map(name => gl.getUniformLocation(program, name))
     const projectionUniforms = dimensions === 3 ? ['u_projection_x','u_projection_y'].map(name => gl.getUniformLocation(program,name)) : []
     const drawRetained = (radius: number, opacity: number, width: number, height: number, pixelRatio: number, count: number, rotation?: CatalogRotation) => {
@@ -94,6 +107,9 @@ export function createCatalogPointRenderer(gl: WebGLRenderingContext, capacity?:
       gl.useProgram(program)
       gl.viewport(0, 0, width, height)
       gl.clearColor(0.018, 0.028, 0.043, 1); gl.clear(gl.COLOR_BUFFER_BIT)
+      // An in-place epoch update cannot preserve the former full frame. Keep
+      // it blank until every retained row belongs to one completed epoch.
+      if (!positionsCoherent) { checkGpu(); return }
       gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
       gl.uniform1f(uniforms[0], Math.max(radius, 0.001))
       gl.uniform1f(uniforms[1], width / Math.max(height, 1))
@@ -104,12 +120,16 @@ export function createCatalogPointRenderer(gl: WebGLRenderingContext, capacity?:
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, elementBuffer)
         gl.drawElements(gl.POINTS, selection.length, gl.UNSIGNED_INT, 0)
       } else gl.drawArrays(gl.POINTS, 0, count)
+      // Camera/resize redraws may upload nothing. Validate the actual draw
+      // before callers mark a frame presented or acknowledge restoration.
+      checkGpu()
     }
     return {
       setSpatialSelection(indices: Uint32Array | null) {
         if (disposed) return
         if (capacity === undefined) throw new Error('Spatial selection requires a retained catalog')
         if (indices === null) { selection = null; return }
+        if (!positionsCoherent) throw new Error('Spatial selection requires a coherent catalog epoch')
         for (let i = 0; i < indices.length; i++) {
           if (indices[i] >= retainedCount || i > 0 && indices[i] <= indices[i - 1]) throw new Error('Invalid catalog spatial indices')
         }
@@ -119,13 +139,23 @@ export function createCatalogPointRenderer(gl: WebGLRenderingContext, capacity?:
           if (!elementBuffer) throw new Error('Unable to allocate catalog spatial indices')
         }
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, elementBuffer)
-        if (selection?.byteLength === indices.byteLength) gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER, 0, indices as Uint32Array<ArrayBuffer>)
-        else gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices as Uint32Array<ArrayBuffer>, gl.DYNAMIC_DRAW)
+        // Clearing a view or beginning an epoch invalidates its selection, not
+        // the allocation. Keep the high-water capacity across smaller views;
+        // drawElements below still uses only the current selection's length.
+        // Strictly increasing indices below retainedCount bound this storage
+        // to capacity * 4 bytes, already reserved by the stream planner.
+        if (indices.byteLength > elementCapacityBytes) {
+          gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices as Uint32Array<ArrayBuffer>, gl.DYNAMIC_DRAW)
+          elementCapacityBytes = indices.byteLength
+        } else if (indices.byteLength) {
+          gl.bufferSubData(gl.ELEMENT_ARRAY_BUFFER, 0, indices as Uint32Array<ArrayBuffer>)
+        }
         selection = indices
       },
       /** Fixed-capacity streaming: append only the newly computed shard. */
       append(attributes: Pick<CatalogPointFrame, 'positions' | 'colors' | 'sizes'>) {
         if (disposed) throw new Error('Catalog GPU renderer is disposed')
+        if (!positionsCoherent || updatingPositions) throw new Error('Cannot append during an incomplete catalog epoch')
         const count = attributes.sizes.length
         if (capacity === undefined || retainedCount + count > capacity) throw new Error('Catalog GPU capacity exceeded')
         if (attributes.positions.length !== count * dimensions || attributes.colors.length !== count * 3) throw new Error('Mismatched catalog point attributes')
@@ -135,6 +165,41 @@ export function createCatalogPointRenderer(gl: WebGLRenderingContext, capacity?:
         }
         retainedCount += count
         return retainedCount
+      },
+      /** Starts/restarts an in-place replacement. No full-size second GPU
+       * frame is allocated; incomplete frames are hidden, never rolled back. */
+      beginPositionUpdate() {
+        if (disposed || capacity === undefined) throw new Error('Position updates require a retained catalog renderer')
+        positionsCoherent = false; updatingPositions = true; updatedRows = 0
+        selection = null
+        gl.clearColor(0.018, 0.028, 0.043, 1); gl.clear(gl.COLOR_BUFFER_BIT)
+      },
+      replacePositions(startRow: number, positions: Float32Array) {
+        if (disposed || !updatingPositions || capacity === undefined) throw new Error('No catalog position update is active')
+        if (!(positions instanceof Float32Array)) throw new Error('Catalog GPU positions must be Float32 display coordinates')
+        const rows = positions.length/dimensions
+        if (!Number.isSafeInteger(startRow) || startRow !== updatedRows || !Number.isSafeInteger(rows) || rows < 1 || startRow+rows > retainedCount ||
+            !positions.every(Number.isFinite)) throw new Error('Invalid contiguous catalog position update')
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffers[0].handle)
+        gl.bufferSubData(gl.ARRAY_BUFFER, startRow*dimensions*4, positions as Float32Array<ArrayBuffer>)
+        updatedRows += rows
+      },
+      finishPositionUpdate() {
+        if (disposed || !updatingPositions || updatedRows !== retainedCount) throw new Error('Catalog epoch ended before every row was replaced')
+        checkGpu()
+        updatingPositions = false; positionsCoherent = true
+      },
+      /** An explicitly admitted temporal approximation may retain this range.
+       * The caller owns its source epoch/error receipt and must verify it. */
+      retainPositions(startRow: number, rows: number) {
+        if (disposed || !updatingPositions || !Number.isSafeInteger(startRow) || startRow !== updatedRows ||
+            !Number.isSafeInteger(rows) || rows < 1 || startRow+rows > retainedCount) throw new Error('Invalid contiguous catalog reused range')
+        updatedRows += rows
+      },
+      invalidatePositions() {
+        if (disposed || capacity === undefined) return
+        positionsCoherent = false; updatingPositions = false; updatedRows = 0; selection = null
+        gl.clearColor(0.018, 0.028, 0.043, 1); gl.clear(gl.COLOR_BUFFER_BIT)
       },
       drawRetained(radius: number, opacity: number, width: number, height: number, pixelRatio: number, rotation?: CatalogRotation) {
         if (!disposed) drawRetained(radius, opacity, width, height, pixelRatio, retainedCount, rotation)
@@ -146,16 +211,24 @@ export function createCatalogPointRenderer(gl: WebGLRenderingContext, capacity?:
         if (frame.positions.length !== count * dimensions || frame.colors.length !== count * 3) throw new Error('Mismatched catalog point attributes')
         gl.useProgram(program)
         const attributes = [frame.positions, frame.colors, frame.sizes]
+        let uploaded = false
         buffers.forEach((buffer, index) => {
           const data = attributes[index]
           if (buffer.data === data) return
+          validateAttribute(data)
           gl.bindBuffer(gl.ARRAY_BUFFER, buffer.handle)
           // Retain objects across epochs. A resized dataset gets an exact-sized
           // store, so a large former selection cannot pin excess GPU capacity.
           if (buffer.data?.byteLength !== data.byteLength) gl.bufferData(gl.ARRAY_BUFFER, data as Float32Array<ArrayBuffer>, index === 0 ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW)
           else gl.bufferSubData(gl.ARRAY_BUFFER, 0, data as Float32Array<ArrayBuffer>)
-          buffer.data = data
+          uploaded = true
         })
+        // One check per changed snapshot, not per attribute or camera redraw.
+        // Failed uploads must not enter the immutable-array identity cache.
+        if (uploaded) {
+          checkGpu()
+          buffers.forEach((buffer, index) => { buffer.data = attributes[index] })
+        }
         drawRetained(frame.radius, frame.opacity, width, height, pixelRatio, count)
       },
       dispose,
