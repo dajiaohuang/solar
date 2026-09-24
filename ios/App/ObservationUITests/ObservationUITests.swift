@@ -148,12 +148,14 @@ final class ObservationUITests: XCTestCase {
                     XCTAssertTrue(local.waitForExistence(timeout: 5), app.debugDescription)
                     local.tap()
                 }
-                let folder = app.staticTexts["Solar Gaia Fixtures"].firstMatch
+                // In icon mode the label is a child of the file-provider cell;
+                // activate the folder cell itself so Files enters the directory.
+                let folder = app.cells.matching(NSPredicate(format: "label BEGINSWITH %@", "Solar Gaia Fixtures")).firstMatch
                 XCTAssertTrue(folder.waitForExistence(timeout: 5), app.debugDescription)
                 folder.tap()
                 file = app.cells.matching(match).firstMatch
             }
-            XCTAssertTrue(file.waitForExistence(timeout: 5), app.debugDescription)
+            XCTAssertTrue(file.waitForExistence(timeout: 15), app.debugDescription)
             let icon = file.images.firstMatch
             if icon.exists && icon.isHittable { icon.tap() } else { file.tap() }
             let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.collectionViews["File View"])
