@@ -393,7 +393,9 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 .map-caption { height: 38px; padding: 0 12px; border-bottom: 1px solid var(--line); font: 9px var(--font-mono); color: var(--muted); letter-spacing: .08em; }
 .map-caption strong { color: var(--accent); }
 .catalog-stream-controls { padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.catalog-stream-status { position: absolute; z-index: 1; top: 48px; left: 12px; right: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-solid); font: 11px/1.5 var(--font-mono); }
+.catalog-stream-overlay { position: absolute; z-index: 1; top: 48px; left: 12px; right: 12px; max-height: 45%; overflow: auto; overscroll-behavior: contain; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-solid); }
+.catalog-stream-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; font: 11px/1.5 var(--font-mono); }
+.catalog-stream-overlay .catalog-point-epoch { position: static; padding: 8px 0; }
 .catalog-stream-status span { color: var(--muted); }
 .catalog-stream-status [role="alert"] { flex-basis: 100%; overflow-wrap: anywhere; color: var(--danger); }
 .catalog-point-epoch { position: absolute; z-index: 1; bottom: 0; left: 0; right: 0; margin: 0; padding: 8px 12px; color: var(--muted); background: var(--panel-solid); font: 10px/1.5 var(--font-mono); pointer-events: none; }

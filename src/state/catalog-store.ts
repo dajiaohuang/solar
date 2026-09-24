@@ -27,6 +27,7 @@ type CatalogState = {
   loadProgress: number
   selectionScope: {
     datasetVersion: string
+    manifestIdentity: string
     filters: CatalogFilters
     count: number
   } | null
@@ -124,14 +125,19 @@ export const catalogActions = {
       isLoading: false,
     }))
   },
-  selectAllFiltered(datasetVersion: string, filters: CatalogFilters, count: number) {
+  selectAllFiltered(manifest: AsteroidManifest, filters: CatalogFilters, count: number) {
+    const state = catalogStore.getState()
+    if (state.manifest !== manifest || JSON.stringify(state.filters) !== JSON.stringify(filters) ||
+        state.exactFilteredTotal !== count || !state.activeResultScanKey || !Number.isSafeInteger(count) || count < 0) return false
     catalogStore.setState({
       selectionScope: {
-        datasetVersion,
+        datasetVersion: manifest.version,
+        manifestIdentity: JSON.stringify(manifest),
         filters: structuredClone(filters),
         count,
       },
     })
+    return true
   },
   clearCatalogSelection() {
     catalogStore.setState({ selectionScope: null })

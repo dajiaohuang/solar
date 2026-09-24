@@ -16,7 +16,7 @@ export const EXACT_HYDRATION_RECORD_LIMIT = 480
 export const EXACT_HYDRATION_CHUNK_LIMIT = 32
 
 type LocatorPage = { locators: Uint32Array; remaining: Uint32Array }
-type HydrationQueue = { manifestVersion: string; remaining: Uint32Array; controller: AbortController; loading: boolean }
+type HydrationQueue = { manifestIdentity: string; remaining: Uint32Array; controller: AbortController; loading: boolean }
 const hydrationQueues = new Map<string, HydrationQueue>()
 
 export function takeCatalogLocatorPage(
@@ -51,8 +51,11 @@ type PendingScan = {
 
 const pendingScans = new Map<number, PendingScan>()
 
-export function createCatalogScanKey(datasetVersion: string, filters: CatalogFilters, sampleLimit: number) {
-  return JSON.stringify({ datasetVersion, filters, sampleLimit })
+export function createCatalogScanKey(source: string | AsteroidManifest, filters: CatalogFilters, sampleLimit: number) {
+  // Legacy callers may still supply a version string. Production scans supply
+  // their complete manifest so same-name releases cannot share retained results.
+  const datasetVersion = typeof source === 'string' ? source : source.version
+  return JSON.stringify({ datasetVersion, ...(typeof source === 'string' ? {} : { manifest: source }), filters, sampleLimit })
 }
 
 function ensureCatalogWorker() {
@@ -72,7 +75,7 @@ function ensureCatalogWorker() {
       void hydrate.then((records) => {
         pending.controller.signal.throwIfAborted()
         if (page?.remaining.length) {
-          hydrationQueues.set(pending.scanKey, { manifestVersion: pending.manifest.version, remaining: page.remaining,
+          hydrationQueues.set(pending.scanKey, { manifestIdentity: JSON.stringify(pending.manifest), remaining: page.remaining,
             controller: pending.controller, loading: false })
         }
         pending.resolve({ scanKey: pending.scanKey, total: event.data.total ?? 0,
@@ -112,8 +115,10 @@ export function discardCatalogScanPages(scanKey: string) {
 
 export async function loadNextCatalogScanPage(scanKey: string, manifest: AsteroidManifest, signal?: AbortSignal) {
   requireCatalogAccess('scan')
+  manifest = structuredClone(manifest)
   const queue = hydrationQueues.get(scanKey)
-  if (!queue || queue.manifestVersion !== manifest.version) return { records: [], hasMore: false }
+  if (!queue) return { records: [], hasMore: false }
+  if (queue.manifestIdentity !== JSON.stringify(manifest)) throw new Error('Catalog page manifest differs from its scan snapshot')
   if (queue.loading) throw new Error('Catalog page is already loading')
   queue.loading = true
   const page = takeCatalogLocatorPage(queue.remaining)
@@ -134,7 +139,8 @@ export async function scanAsteroidCatalog(params: {
   signal?: AbortSignal
   onProgress?: (progress: number) => void
 }) {
-  const scanKey = createCatalogScanKey(params.manifest.version, params.filters, params.sampleLimit)
+  params = { ...params, manifest: structuredClone(params.manifest), filters: structuredClone(params.filters) }
+  const scanKey = createCatalogScanKey(params.manifest, params.filters, params.sampleLimit)
   requireCatalogAccess('scan')
   if (params.signal?.aborted) throw new DOMException('Catalog scan was cancelled', 'AbortError')
   const candidateLocators = params.filters.query.trim()

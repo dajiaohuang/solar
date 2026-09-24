@@ -697,6 +697,77 @@ test('streams an expanded source snapshot beyond the sample and restores its act
   expect(errors).toEqual([])
 })
 
+test('does not acknowledge a catalog upload when the post-draw GPU check fails', async ({ page }) => {
+  await installMockCatalog(page, { precomputed: true, sampleCount: 1 })
+  await page.addInitScript(() => {
+    localStorage.setItem('solar-atlas-first-run-v1', 'complete')
+    const audit = window as Window & { uploadAcks: number }
+    audit.uploadAcks = 0
+    const post = Worker.prototype.postMessage
+    Worker.prototype.postMessage = function (...args: Parameters<typeof post>) {
+      if (args[0]?.type === 'ack') audit.uploadAcks++
+      return Reflect.apply(post, this, args)
+    }
+    const failed = new WeakSet<WebGLRenderingContext>()
+    const upload = WebGLRenderingContext.prototype.bufferSubData
+    WebGLRenderingContext.prototype.bufferSubData = function (...args: Parameters<typeof upload>) {
+      const result = Reflect.apply(upload, this, args)
+      if ((this.canvas as HTMLCanvasElement).dataset.testid === 'catalog-stream-canvas') failed.add(this)
+      return result
+    }
+    const getError = WebGLRenderingContext.prototype.getError
+    WebGLRenderingContext.prototype.getError = function () {
+      if (failed.delete(this)) return this.OUT_OF_MEMORY
+      return getError.call(this)
+    }
+  })
+  await page.goto('./?v=4&page=catalog&lang=en&jd=2461287.5')
+  await page.getByRole('button', { name: /Load expanded snapshot/ }).click()
+  await expect(page.getByTestId('catalog-stream-canvas')).toHaveAttribute('data-phase', 'error')
+  await expect(page.getByRole('alert')).toContainText('GPU allocation, upload or draw failed')
+  expect(await page.evaluate(() => (window as Window & { uploadAcks: number }).uploadAcks)).toBe(0)
+  await expect(page.getByRole('button', { name: /Export (block epochs|screening) and sources JSON/ })).toHaveCount(0)
+})
+
+test('appends selected catalog bodies while retaining uploaded rows and bounded capacity', async ({ page }) => {
+  const errors: string[] = [], requests: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('request', request => { if (request.url().includes('/data/asteroids/')) requests.push(request.url()) })
+  await installMockCatalog(page, { precomputed: true })
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&page=catalog&lang=en&jd=2461287.5')
+  await page.getByRole('checkbox', { name: 'Retain orbits and follow time changes' }).check()
+  await page.getByRole('checkbox', { name: 'Reserve space to append selected bodies' }).check()
+  await page.getByRole('button', { name: /Load expanded snapshot/ }).click()
+  const canvas = page.getByTestId('catalog-stream-canvas')
+  await expect(canvas).toHaveAttribute('data-phase', 'limited')
+  await expect(canvas).toHaveAttribute('data-drawn-rows', '1')
+  await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
+  const append = page.getByRole('button', { name: 'Append missing selected bodies', exact: true })
+  for (const [name, count] of [['Beta', 2], ['Gamma', 3]] as const) {
+    await page.locator('.catalog-table').getByRole('button', { name: new RegExp(name) }).click()
+    await expect(canvas).toHaveAttribute('data-drawn-rows', String(count - 1))
+    await append.click()
+    await expect(canvas).toHaveAttribute('data-drawn-rows', String(count))
+    await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
+    await expect(page.locator('.catalog-stream-status')).toContainText(`Loaded located selections: ${count - 1} / ${count - 1}`)
+  }
+  await expect(append).toBeDisabled()
+  await expect(page.locator('.catalog-stream-status')).toContainText('Remaining append slots: 0 / 2')
+  const downloaded = page.waitForEvent('download')
+  await page.getByRole('button', { name: /Export (block epochs|screening) and sources JSON/ }).click()
+  const downloadPath = await (await downloaded).path()
+  expect(downloadPath).not.toBeNull()
+  const receipt = JSON.parse(await readFile(downloadPath!, 'utf8'))
+  expect(receipt).toMatchObject({ schemaVersion: 4, totalLoadedRows: 3, source: { loadedRows: 1 },
+    budget: { admittedRows: 3, initialRows: 1, appendRows: 2 },
+    display: { focusedUploadedRow: 2, selectedUploadedRows: [1, 2] } })
+  expect(receipt.additions).toMatchObject([{ startRow: 1, addedRows: 1 }, { startRow: 2, addedRows: 1 }])
+  expect(requests.filter(url => url.endsWith('/catalog-index.bin'))).toHaveLength(1)
+  expect(await canvas.evaluate(element => (element as HTMLCanvasElement).getContext('webgl')!.getError())).toBe(0)
+  expect(errors).toEqual([])
+})
+
 test('filters source magnitudes exactly and excludes shards using exact orbital index fields', async ({ page }) => {
   const requests: string[] = [], errors: string[] = []
   page.on('request', request => { if (request.url().includes('/binary/chunk-')) requests.push(new URL(request.url()).pathname) })
