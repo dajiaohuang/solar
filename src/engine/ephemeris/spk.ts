@@ -1,4 +1,4 @@
-import { evaluateType21, inspectType21, type Type21Metadata } from './spkType21.ts';
+import { evaluateType21, inspectType1, inspectType21, type Type21Metadata } from './spkType21.ts';
 import { evaluateType17, inspectType17, type Type17Metadata } from './spkType17.ts';
 
 /**
@@ -20,6 +20,8 @@ export interface SpkSegment {
   recordSize: number;
   /** Present only for validated extended modified-difference records. */
   type21?: Type21Metadata;
+  /** Fixed dimension-15 modified-difference records (71 words). */
+  type1?: Type21Metadata;
   type17?: Type17Metadata;
 }
 
@@ -44,7 +46,7 @@ const MAX_SUMMARY_RECORDS = 1_000_000;
 function fail(message: string): never { throw new Error(`Invalid SPK: ${message}`); }
 
 export class SpkKernel {
-  readonly segments: SpkSegment[];
+  readonly segments: readonly SpkSegment[];
   private readonly view: DataView;
   private readonly little: boolean;
   private readonly bytes: number;
@@ -82,7 +84,16 @@ export class SpkKernel {
       previous = rec; rec = next;
     }
     if (previous !== last) fail('summary chain does not terminate at final summary record');
-    this.segments = summaries.map(s => this.parseSegment(s.d, s.i));
+    this.segments = Object.freeze(summaries.map(s => {
+      const segment = this.parseSegment(s.d, s.i);
+      // Descriptor order and validated control metadata are scientific input,
+      // shared by coverage queries and evaluation. Do not expose mutable forms.
+      if (segment.type1) Object.freeze(segment.type1);
+      if (segment.type17) Object.freeze(segment.type17);
+      if (segment.type21) Object.freeze(segment.type21);
+      return Object.freeze(segment);
+    }));
+    Object.defineProperty(this, 'segments', { writable: false, configurable: false });
   }
 
   evaluate(target: number, et: number): SpkState | null {
@@ -92,13 +103,14 @@ export class SpkKernel {
     for (let n = this.segments.length - 1; n >= 0; n--) {
       const s = this.segments[n];
       if (s.target !== target || et < s.startEt || et > s.endEt) continue;
-      if (s.frame !== 1 && s.frame !== 17 || s.type !== 2 && s.type !== 3 && s.type !== 17 && s.type !== 21) { unsupported = s; break; }
+      if (s.frame !== 1 && s.frame !== 17 || s.type !== 1 && s.type !== 2 && s.type !== 3 && s.type !== 17 && s.type !== 21) { unsupported = s; break; }
       if (s.type17) {
         const v = evaluateType17((address) => this.f64(this.addressOffset(address)), s.startAddress, et);
         return { position: v.position, velocity: v.velocity, center: s.center, frame: s.frame };
       }
-      if (s.type21) {
-        const v = evaluateType21((address) => this.f64(this.addressOffset(address)), s.startAddress, s.type21, et);
+      const differenceLines = s.type1 ?? s.type21;
+      if (differenceLines) {
+        const v = evaluateType21((address) => this.f64(this.addressOffset(address)), s.startAddress, differenceLines, et);
         return { position: { x: v[0], y: v[1], z: v[2] }, velocity: { x: v[3], y: v[4], z: v[5] }, center: s.center, frame: s.frame };
       }
       return this.evaluateSegment(s, et);
@@ -189,6 +201,10 @@ export class SpkKernel {
     if (type === 17) {
       const type17 = inspectType17((address) => this.f64(this.addressOffset(address)), startAddress, endAddress);
       return { target, center, frame, type, startEt, endEt, startAddress, endAddress, coefficientCount: 0, recordCount: 1, recordSize: 12, type17 };
+    }
+    if (type === 1) {
+      const type1 = inspectType1((address) => this.f64(this.addressOffset(address)), startAddress, endAddress, endEt);
+      return { target, center, frame, type, startEt, endEt, startAddress, endAddress, coefficientCount: 0, recordCount: type1.recordCount, recordSize: type1.recordSize, type1 };
     }
     if (type === 21) {
       if (endAddress - startAddress + 1 < 2) fail('truncated type 21 directory');

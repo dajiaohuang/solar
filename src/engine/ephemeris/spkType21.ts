@@ -9,10 +9,29 @@ const fail = (message: string): never => { throw new Error(`Invalid SPK type 21:
 
 export function inspectType21(read: ReadWord, start: number, end: number, endEt: number): Type21Metadata {
   const dimension = read(end - 1), recordCount = read(end);
+  return inspectDifferenceLines(read, start, end, endEt, dimension, recordCount, 2);
+}
+
+/** Type 1 uses the same dimension-15 difference lines, but only N in its tail.
+ * Never read a MAXDIM word from the epoch directory or append synthetic data.
+ * https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/spk.html#Type%201:%20Modified%20Difference%20Arrays
+ */
+export function inspectType1(read: ReadWord, start: number, end: number, endEt: number): Type21Metadata {
+  try { return inspectDifferenceLines(read, start, end, endEt, 15, read(end), 1, 15); }
+  catch (error) {
+    if (error instanceof Error && error.message.startsWith('Invalid SPK type 21:')) {
+      throw new Error(error.message.replace('Invalid SPK type 21:', 'Invalid SPK type 1:'), { cause: error });
+    }
+    throw error;
+  }
+}
+
+function inspectDifferenceLines(read: ReadWord, start: number, end: number, endEt: number,
+  dimension: number, recordCount: number, tailWords: number, maximumOrderLimit = dimension + 1): Type21Metadata {
   if (!Number.isInteger(dimension) || dimension < 15 || dimension > 25) fail('unsupported difference-table dimension');
   if (!Number.isInteger(recordCount) || recordCount < 1 || recordCount > 1e7) fail('invalid record count');
   const recordSize = 4 * dimension + 11, directoryCount = Math.floor(recordCount / 100);
-  if (end - start + 1 !== recordCount * (recordSize + 1) + directoryCount + 2) fail('inconsistent segment layout');
+  if (end - start + 1 !== recordCount * (recordSize + 1) + directoryCount + tailWords) fail('inconsistent segment layout');
   const epochsAddress = start + recordCount * recordSize;
   let previous = -Infinity;
   for (let index = 0; index < recordCount; index++) {
@@ -22,7 +41,7 @@ export function inspectType21(read: ReadWord, start: number, end: number, endEt:
     const address = start + index * recordSize;
     for (let word = 0; word < recordSize; word++) if (!Number.isFinite(read(address + word))) fail('nonfinite difference-line word');
     const maximumOrderPlusOne = read(address + 4 * dimension + 7);
-    if (!Number.isInteger(maximumOrderPlusOne) || maximumOrderPlusOne < 3 || maximumOrderPlusOne > dimension + 1) fail('invalid maximum integration order');
+    if (!Number.isInteger(maximumOrderPlusOne) || maximumOrderPlusOne < 3 || maximumOrderPlusOne > maximumOrderLimit) fail('invalid maximum integration order');
     for (let axis = 0; axis < 3; axis++) {
       const order = read(address + 4 * dimension + 8 + axis);
       if (!Number.isInteger(order) || order < 0 || order >= maximumOrderPlusOne || order > dimension) fail('invalid component integration order');
