@@ -1,4 +1,5 @@
 import type { Derivative } from './adaptiveIntegrator'
+import { DynamicsSampleError } from './sampleFailure.ts'
 
 export type PointMass = {
   naifId: number
@@ -46,7 +47,7 @@ export function createPointMassGravity(inputMasses: readonly PointMass[], epheme
       const mass = masses[index]
       const d = [positions[3*index] - state[0], positions[3*index+1] - state[1], positions[3*index+2] - state[2]]
       const distance = Math.hypot(...d)
-      if (!Number.isFinite(distance) || distance <= mass.exclusionKm || distance === 0) throw new RangeError(`Point-mass exclusion reached for NAIF ${mass.naifId}`)
+      if (!Number.isFinite(distance) || distance <= mass.exclusionKm || distance === 0) throw new DynamicsSampleError(`Point-mass exclusion reached for NAIF ${mass.naifId}`)
       const unit = d.map(value => value / distance)
       const acceleration = mass.gmKm3PerSecond2 / distance / distance, curvature = acceleration / distance
       for (let row = 0; row < 3; row++) {
@@ -63,7 +64,7 @@ export function createPointMassGravity(inputMasses: readonly PointMass[], epheme
         for (let k = 0; k < 3; k++) output[6 + (row+3)*6 + column] += gradient[3*row+k] * state[6 + k*6 + column]
       }
     }
-    if (!output.every(Number.isFinite)) throw new RangeError('Point-mass force or variational derivative became nonfinite')
+    if (!output.every(Number.isFinite)) throw new DynamicsSampleError('Point-mass force or variational derivative became nonfinite')
   }
   return { derivative, evidence: {
     model: 'restricted-newtonian-prescribed-point-masses' as const,

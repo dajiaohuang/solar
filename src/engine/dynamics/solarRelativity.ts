@@ -1,4 +1,5 @@
 import type { Derivative } from './adaptiveIntegrator'
+import { DynamicsSampleError } from './sampleFailure.ts'
 
 export const SOLAR_1PN = Object.freeze({
   model: 'solar-monopole-1pn' as const,
@@ -20,11 +21,12 @@ export function withSolarRelativity(base: Derivative, sunState: (elapsed: number
   return (elapsed, state, output) => {
     if (![6, 42].includes(state.length) || output.length !== state.length || !state.every(Number.isFinite)) throw new RangeError('Solar 1PN requires a finite six-state or 42-state')
     base(elapsed, state, output)
+    if (!output.every(Number.isFinite)) throw new RangeError('Solar 1PN base derivative did not supply every finite component')
     const sun = sunState(elapsed)
     if (sun.length !== 6 || !sun.every(Number.isFinite)) throw new RangeError('Solar 1PN requires a finite prescribed Sun six-state')
     for (let i = 0; i < 3; i++) { r[i] = state[i]-sun[i]; v[i] = state[i+3]-sun[i+3] }
     const radius = Math.hypot(...r), speed2 = v[0]**2 + v[1]**2 + v[2]**2
-    if (!(radius > 0) || !Number.isFinite(radius) || gm/radius/c2 > SOLAR_1PN.maxExpansionParameter || speed2/c2 > SOLAR_1PN.maxExpansionParameter) throw new RangeError('Solar 1PN weak-field/slow-motion domain exceeded')
+    if (!(radius > 0) || !Number.isFinite(radius) || gm/radius/c2 > SOLAR_1PN.maxExpansionParameter || speed2/c2 > SOLAR_1PN.maxExpansionParameter) throw new DynamicsSampleError('Solar 1PN weak-field/slow-motion domain exceeded')
     const k = gm/c2/radius/radius/radius, a = 4*gm/radius-speed2, b = r[0]*v[0]+r[1]*v[1]+r[2]*v[2]
     for (let i = 0; i < 3; i++) {
       force[i] = a*r[i] + 4*b*v[i]
@@ -37,6 +39,6 @@ export function withSolarRelativity(base: Derivative, sunState: (elapsed: number
     if (state.length === 42) for (let i = 0; i < 3; i++) for (let j = 0; j < 6; j++) {
       for (let q = 0; q < 3; q++) output[6+(i+3)*6+j] += dr[3*i+q]*state[6+q*6+j] + dv[3*i+q]*state[6+(q+3)*6+j]
     }
-    if (!output.every(Number.isFinite)) throw new RangeError('Solar 1PN derivative became nonfinite')
+    if (!output.every(Number.isFinite)) throw new DynamicsSampleError('Solar 1PN derivative became nonfinite')
   }
 }
