@@ -107,6 +107,26 @@ export class SpkKernel {
     return null;
   }
 
+  /** Split ET for Chebyshev sources. Keep the low part through record-relative
+   * subtraction rather than rounding it into a large seconds-since-J2000 value.
+   * Other segment types require their own split-time evaluators. */
+  evaluateChebyshevAtOffset(target: number, et: number, offsetSeconds: number): SpkState | null {
+    if (!Number.isSafeInteger(target) || !Number.isFinite(et) || !Number.isFinite(offsetSeconds)) fail('invalid split Chebyshev epoch');
+    // Error-free normalization before subtracting descriptor/record epochs.
+    // Otherwise a large cancelling pair can select a different record.
+    const high = et + offsetSeconds, carried = high - et;
+    if (!Number.isFinite(high)) fail('invalid split Chebyshev epoch');
+    offsetSeconds = (et - (high - carried)) + (offsetSeconds - carried);
+    et = high;
+    for (let n = this.segments.length - 1; n >= 0; n--) {
+      const s = this.segments[n];
+      if (s.target !== target || (et - s.startEt) + offsetSeconds < 0 || (et - s.endEt) + offsetSeconds > 0) continue;
+      if ((s.frame !== 1 && s.frame !== 17) || (s.type !== 2 && s.type !== 3)) fail('split epoch requires a selected Type 2 or 3 segment');
+      return this.evaluateSegment(s, et, offsetSeconds);
+    }
+    return null;
+  }
+
   getRecordData(segment: SpkSegment): SpkRecordData {
     if (!this.segments.includes(segment)) fail('segment does not belong to this kernel');
     if (segment.type !== 2 && segment.type !== 3) fail('Chebyshev accessor requires type 2 or 3');
@@ -129,15 +149,22 @@ export class SpkKernel {
       } };
   }
 
-  private evaluateSegment(s: SpkSegment, et: number): SpkState {
+  private evaluateSegment(s: SpkSegment, et: number, offsetSeconds = 0): SpkState {
     const terminal = this.addressOffset(s.endAddress - 3);
     const init = this.f64(terminal), interval = this.f64(terminal + 8);
     if (!Number.isFinite(init) || !Number.isFinite(interval) || interval <= 0 ||
         this.f64(terminal + 16) !== s.recordSize || this.f64(terminal + 24) !== s.recordCount) fail('invalid segment terminal metadata');
-    let index = Math.floor((et - init) / interval);
+    let index = Math.floor(((et - init) + offsetSeconds) / interval);
     if (index < 0) index = 0; if (index >= s.recordCount) index = s.recordCount - 1;
+    // A quotient near an exact record boundary can round away the low part.
+    // Compare against the nearby boundary before choosing its coefficient set.
+    if (offsetSeconds !== 0) {
+      const start = init + index * interval;
+      if (index > 0 && (et - start) + offsetSeconds < 0) index--;
+      else if (index + 1 < s.recordCount && (et - (start + interval)) + offsetSeconds >= 0) index++;
+    }
     const offset = this.addressOffset(s.startAddress + index * s.recordSize);
-    const mid = this.f64(offset), radius = this.f64(offset + 8), x = (et - mid) / radius;
+    const mid = this.f64(offset), radius = this.f64(offset + 8), x = ((et - mid) + offsetSeconds) / radius;
     if (!Number.isFinite(x) || Math.abs(x) > 1 + 1e-10) fail('epoch falls outside selected record');
     const pos = [0, 0, 0], vel = [0, 0, 0], c = s.coefficientCount;
     for (let axis = 0; axis < 3; axis++) {

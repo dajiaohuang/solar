@@ -6,6 +6,11 @@ import { SOLAR_RADIATION_PRESSURE, parseSolarRadiationPressure, withSolarRadiati
 import { DE440_DYNAMICS_SOURCE, DE440_FORCE_IDS } from './de440Source.ts'
 export { DE440_DYNAMICS_SOURCE, DE440_FORCE_IDS } from './de440Source.ts'
 const digest = async (bytes: ArrayBuffer) => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), value => value.toString(16).padStart(2, '0')).join('')
+// Error-free addition of two finite doubles (provided the sum stays finite).
+function twoSum(a: number, b: number): readonly [number, number] {
+  const high = a + b, carried = high - a
+  return [high, (a - (high - carried)) + (b - carried)]
+}
 
 /** Owns verified bytes for one immutable DE440 snapshot. No global installed
  * pool, UTC conversion, ecliptic rotation or approximate fallback enters it. */
@@ -37,16 +42,22 @@ export async function createDe440Dynamics(options: {
     return { naifId, gmKm3PerSecond2: Number(value?.replace(/[dD]/, 'E')),
       gmSource: `${DE440_DYNAMICS_SOURCE.gmSource} SHA-256 ${gmHash}`, exclusionKm: exclusions[naifId] }
   })
-  function epoch(elapsed: number) {
-    if (!Number.isFinite(elapsed) || elapsed < start || elapsed > end) throw new RangeError('Dynamics epoch outside frozen source window')
-    return referenceEt + elapsed
+  function epoch(elapsed: number, offsetSeconds = 0) {
+    if (!Number.isFinite(elapsed) || !Number.isFinite(offsetSeconds)) throw new RangeError('Dynamics epoch outside frozen source window')
+    // Normalize relative parts before adding the reference. Large cancelling
+    // inputs must not erase reference-epoch bits or evade the window check.
+    const [relativeHigh, relativeLow] = twoSum(elapsed, offsetSeconds)
+    if (!Number.isFinite(relativeHigh) || (relativeHigh-start)+relativeLow < 0 || (relativeHigh-end)+relativeLow > 0) throw new RangeError('Dynamics epoch outside frozen source window')
+    const [high, low] = twoSum(referenceEt, relativeHigh)
+    return twoSum(high, low + relativeLow)
   }
   let cachedEpoch: number | undefined
+  let cachedOffset: number | undefined
   let cachedResolver: ((id: number) => Float64Array) | undefined
-  function resolver(et: number) {
+  function resolver([et, offsetSeconds]: readonly [number, number]) {
     // One epoch only: Newtonian forces, optional 1PN and accepted-node sampling
     // can share the same center chains without an unbounded trajectory cache.
-    if (et === cachedEpoch && cachedResolver) return cachedResolver
+    if (et === cachedEpoch && offsetSeconds === cachedOffset && cachedResolver) return cachedResolver
     const cache = new Map<number, Float64Array>([[0, new Float64Array(6)]])
     const visiting = new Set<number>()
     const resolve = (id: number): Float64Array => {
@@ -55,7 +66,7 @@ export async function createDe440Dynamics(options: {
       if (!Number.isSafeInteger(id) || visiting.has(id) || visiting.size > 8) throw new Error('Invalid DE440 center chain')
       visiting.add(id)
       try {
-        const value = kernel.evaluate(id, et)
+        const value = kernel.evaluateChebyshevAtOffset(id, et, offsetSeconds)
         if (!value) throw new Error(`Missing pinned DE440 state for NAIF ${id}`)
         const center = resolve(value.center)
         const state = Float64Array.of(value.position.x, value.position.y, value.position.z, value.velocity.x, value.velocity.y, value.velocity.z)
@@ -64,7 +75,7 @@ export async function createDe440Dynamics(options: {
         return state
       } finally { visiting.delete(id) }
     }
-    cachedEpoch = et; cachedResolver = resolve
+    cachedEpoch = et; cachedOffset = offsetSeconds; cachedResolver = resolve
     return resolve
   }
   const ephemeris: PrescribedEphemeris = {
@@ -86,7 +97,9 @@ export async function createDe440Dynamics(options: {
   let derivative = solarRelativity ? withSolarRelativity(force.derivative, sunState, masses.find(mass => mass.naifId === 10)!.gmKm3PerSecond2) : force.derivative
   if (solarRadiationPressure) derivative = withSolarRadiationPressure(derivative, sunState, solarRadiationPressure)
   return { derivative,
+    epochParts: (elapsed: number, offsetSeconds = 0) => epoch(elapsed, offsetSeconds),
     state: (naifId: number, elapsed = 0) => resolver(epoch(elapsed))(naifId).slice(),
+    stateAtOffset: (naifId: number, elapsed: number, offsetSeconds: number) => resolver(epoch(elapsed, offsetSeconds))(naifId).slice(),
     evidence: { ...force.evidence, model: solarRadiationPressure ? (solarRelativity ? 'restricted-newtonian-plus-solar-1pn-and-radial-srp' as const : 'restricted-newtonian-plus-radial-srp' as const) : solarRelativity ? 'restricted-newtonian-plus-solar-1pn' as const : force.evidence.model,
       solarRadiationPressure: solarRadiationPressure ? { ...SOLAR_RADIATION_PRESSURE, parameters: solarRadiationPressure } : null,
       solarRelativity: solarRelativity ? SOLAR_1PN : null, kernel: { ...DE440_DYNAMICS_SOURCE },
