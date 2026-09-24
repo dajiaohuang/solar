@@ -137,9 +137,17 @@ final class ObservationUITests: XCTestCase {
                 let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: browse)
                 XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed, app.debugDescription)
                 browse.tap()
-                let local = app.staticTexts["On My iPhone"].firstMatch
-                XCTAssertTrue(local.waitForExistence(timeout: 5), app.debugDescription)
-                local.tap()
+                // Browse resumes its last directory, not necessarily Locations.
+                // The captured hierarchy resumed Solar Atlas with this parent
+                // navigation button; a StaticText query cannot find that button.
+                let localParent = app.navigationBars["FullDocumentManagerViewControllerNavigationBar"].buttons["On My iPhone"]
+                if localParent.waitForExistence(timeout: 3) {
+                    localParent.tap()
+                } else {
+                    let local = app.staticTexts["On My iPhone"].firstMatch
+                    XCTAssertTrue(local.waitForExistence(timeout: 5), app.debugDescription)
+                    local.tap()
+                }
                 let folder = app.staticTexts["Solar Gaia Fixtures"].firstMatch
                 XCTAssertTrue(folder.waitForExistence(timeout: 5), app.debugDescription)
                 folder.tap()
