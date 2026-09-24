@@ -31,7 +31,9 @@ export async function findOccultationContacts(options: {
   const duration = endSeconds-startSeconds
   if (![startSeconds, endSeconds, duration, maxStepSeconds, toleranceSeconds].every(Number.isFinite) || duration < 0 || maxStepSeconds <= 0 || toleranceSeconds <= 0 || toleranceSeconds > maxStepSeconds ||
       !Number.isSafeInteger(maxEvaluations) || maxEvaluations < 2 || maxEvaluations > 200000 || !Number.isSafeInteger(maxContacts) || maxContacts < 1 || maxContacts > 4096) throw new RangeError('Invalid bounded occultation search settings')
-  const intervals = Math.ceil(duration/maxStepSeconds)
+  // A positive duration/max-step ratio can underflow to zero. Every nonempty
+  // window still needs both endpoint evaluations and one scan interval.
+  const intervals = duration === 0 ? 0 : Math.max(1, Math.ceil(duration/maxStepSeconds))
   if (!Number.isSafeInteger(intervals) || intervals+1 > maxEvaluations) throw new RangeError('Occultation scan exceeds the evaluation budget')
   let evaluations = 0, maximumScanIntervalSeconds = 0
   const cancelled = () => { if (signal?.aborted) throw new DOMException('Occultation search cancelled', 'AbortError') }
