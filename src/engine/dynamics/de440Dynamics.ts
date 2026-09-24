@@ -1,6 +1,7 @@
 import { SpkKernel } from '../ephemeris/spk.ts'
 import { createPointMassGravity, type PrescribedEphemeris } from './pointMassGravity.ts'
 import { SOLAR_1PN, withSolarRelativity } from './solarRelativity.ts'
+import { SOLAR_RADIATION_PRESSURE, parseSolarRadiationPressure, withSolarRadiationPressure, type SolarRadiationPressure } from './solarRadiationPressure.ts'
 
 export const DE440_DYNAMICS_SOURCE = Object.freeze({
   id: 'de440s-2000-01-01-2051-01-01',
@@ -23,9 +24,11 @@ export async function createDe440Dynamics(options: {
   elapsedRangeSeconds: readonly [number, number];
   exclusionKm: Readonly<Record<number, number>>;
   solarRelativity?: boolean;
+  solarRadiationPressure?: SolarRadiationPressure;
 }) {
   const { referenceEpochTdb, gmText } = options
   const solarRelativity = options.solarRelativity ?? false
+  const solarRadiationPressure = options.solarRadiationPressure === undefined ? undefined : parseSolarRadiationPressure(options.solarRadiationPressure)
   if (typeof solarRelativity !== 'boolean') throw new RangeError('Solar relativity adoption must be boolean')
   const [start, end] = options.elapsedRangeSeconds
   const exclusions = { ...options.exclusionKm }
@@ -89,13 +92,19 @@ export async function createDe440Dynamics(options: {
     const resolve = resolver(epoch(time))
     for (const id of DE440_FORCE_IDS) resolve(id)
   }
-  return { derivative: solarRelativity ? withSolarRelativity(force.derivative, elapsed => resolver(epoch(elapsed))(10), masses.find(mass => mass.naifId === 10)!.gmKm3PerSecond2) : force.derivative,
+  const sunState = (elapsed: number) => resolver(epoch(elapsed))(10)
+  let derivative = solarRelativity ? withSolarRelativity(force.derivative, sunState, masses.find(mass => mass.naifId === 10)!.gmKm3PerSecond2) : force.derivative
+  if (solarRadiationPressure) derivative = withSolarRadiationPressure(derivative, sunState, solarRadiationPressure)
+  return { derivative,
     state: (naifId: number, elapsed = 0) => resolver(epoch(elapsed))(naifId).slice(),
-    evidence: { ...force.evidence, model: solarRelativity ? 'restricted-newtonian-plus-solar-1pn' as const : force.evidence.model,
+    evidence: { ...force.evidence, model: solarRadiationPressure ? (solarRelativity ? 'restricted-newtonian-plus-solar-1pn-and-radial-srp' as const : 'restricted-newtonian-plus-radial-srp' as const) : solarRelativity ? 'restricted-newtonian-plus-solar-1pn' as const : force.evidence.model,
+      solarRadiationPressure: solarRadiationPressure ? { ...SOLAR_RADIATION_PRESSURE, parameters: solarRadiationPressure } : null,
       solarRelativity: solarRelativity ? SOLAR_1PN : null, kernel: { ...DE440_DYNAMICS_SOURCE },
       representation: 'Sun; separate Earth and Moon; other planetary systems as single barycentric point masses',
-      limitations: [...force.evidence.limitations.filter(value => !solarRelativity || !value.startsWith('No relativistic,')),
-        ...(solarRelativity ? ['Solar monopole 1PN only; no planetary/mixed relativistic terms, spin, harmonics, non-gravitational forces or back-reaction.', SOLAR_1PN.approximation] : []),
+      limitations: [...force.evidence.limitations.filter(value => !value.startsWith('No relativistic,')),
+        'No harmonics, spin or test-particle back-reaction.',
+        ...(solarRelativity ? ['Solar monopole 1PN only; no planetary/mixed relativistic terms.', SOLAR_1PN.approximation] : ['No relativistic forces.']),
+        ...(solarRadiationPressure ? [SOLAR_RADIATION_PRESSURE.limitation, 'Imported force parameter sources are declarations, not independent authentication.'] : ['No non-gravitational forces.']),
         'Planetary-system point masses do not resolve non-lunar satellites.',
         'This restricted force model is not the DE440 or Horizons orbit-fit force model.'] } }
 }
