@@ -1,24 +1,42 @@
 /** A permit covers one tile's HTTP body and integrity decoding, not retained
  * scientific snapshots or display budgets. Release only after that work ends. */
-export type AcquireStateTile = (signal: AbortSignal) => Promise<() => void>
+export type StateTileWorkload = 'interactive' | 'trajectory' | 'bulk'
+export type AcquireStateTile = (signal: AbortSignal, workload?: StateTileWorkload) => Promise<() => void>
 
 export const WEB_STATE_TILE_IN_FLIGHT = 2
 export const WEB_STATE_TILE_QUEUED = 32
 export type StateTileAdmissionInit = { type: 'init-tile-admission'; port: MessagePort }
-type AdmissionRequest = { type: 'acquire' | 'cancel' | 'release'; id: number }
+type AdmissionRequest = { type: 'acquire'; id: number; workload?: StateTileWorkload } | { type: 'cancel' | 'release'; id: number }
 type AdmissionResponse = { type: 'granted'; id: number } | { type: 'rejected'; id: number; error: string }
 type Waiting = { signal: AbortSignal; abort: () => void; resolve: (release: () => void) => void; reject: (error: unknown) => void }
 const aborted = () => new DOMException('Aborted', 'AbortError')
+const WORKLOADS: readonly StateTileWorkload[] = ['interactive', 'trajectory', 'bulk']
+const ADMISSION_SCHEDULE: readonly StateTileWorkload[] = ['interactive', 'interactive', 'interactive', 'interactive', 'trajectory', 'trajectory', 'bulk']
 
-/** FIFO admission across current/history workers. Each producer already has
- * at most two tile tasks; FIFO prevents its retries from jumping other work. */
+function isWorkload(value: unknown): value is StateTileWorkload {
+  return value === 'interactive' || value === 'trajectory' || value === 'bulk'
+}
+
+/** Weighted FIFO admission across current/history workers. Interactive state
+ * gets four grants per two trajectory grants and one bulk grant under load. */
 export function createStateTileAdmissionPool(capacity = WEB_STATE_TILE_IN_FLIGHT, maxQueued = WEB_STATE_TILE_QUEUED) {
   if (!Number.isInteger(capacity) || capacity < 1 || !Number.isInteger(maxQueued) || maxQueued < 0) throw new Error('Invalid tile admission limits')
-  const queue: Waiting[] = []
-  let active = 0, peakActive = 0, admitted = 0, rejected = 0
+  const queues: Record<StateTileWorkload, Waiting[]> = { interactive: [], trajectory: [], bulk: [] }
+  let active = 0, peakActive = 0, admitted = 0, rejected = 0, cursor = 0
+  const queued = () => WORKLOADS.reduce((sum, workload) => sum + queues[workload].length, 0)
+  function dequeue() {
+    for (let checked = 0; checked < ADMISSION_SCHEDULE.length; checked++) {
+      const workload = ADMISSION_SCHEDULE[cursor]
+      cursor = (cursor + 1) % ADMISSION_SCHEDULE.length
+      const next = queues[workload].shift()
+      if (next) return next
+    }
+    return undefined
+  }
   function drain() {
-    while (active < capacity && queue.length) {
-      const next = queue.shift()!
+    while (active < capacity) {
+      const next = dequeue()
+      if (!next) return
       next.signal.removeEventListener('abort', next.abort)
       if (next.signal.aborted) { next.reject(next.signal.reason ?? aborted()); continue }
       active++; admitted++; peakActive = Math.max(peakActive, active)
@@ -26,9 +44,11 @@ export function createStateTileAdmissionPool(capacity = WEB_STATE_TILE_IN_FLIGHT
       next.resolve(() => { if (released) return; released = true; active--; drain() })
     }
   }
-  const acquire: AcquireStateTile = signal => {
+  const acquire: AcquireStateTile = (signal, workload = 'interactive') => {
     if (signal.aborted) return Promise.reject(signal.reason ?? aborted())
-    if (active >= capacity && queue.length >= maxQueued) { rejected++; return Promise.reject(new Error('Web state-tile admission queue is full')) }
+    if (!isWorkload(workload)) return Promise.reject(new Error('Invalid state-tile workload'))
+    const queue = queues[workload]
+    if (active >= capacity && queued() >= maxQueued) { rejected++; return Promise.reject(new Error('Web state-tile admission queue is full')) }
     return new Promise((resolve, reject) => {
       const next: Waiting = { signal, resolve, reject, abort: () => {
         const index = queue.indexOf(next)
@@ -39,7 +59,8 @@ export function createStateTileAdmissionPool(capacity = WEB_STATE_TILE_IN_FLIGHT
       queue.push(next); drain()
     })
   }
-  return { acquire, snapshot: () => ({ capacity, maxQueued, active, queued: queue.length, peakActive, admitted, rejected }) }
+  return { acquire, snapshot: () => ({ capacity, maxQueued, active, queued: queued(), interactiveQueued: queues.interactive.length,
+    trajectoryQueued: queues.trajectory.length, bulkQueued: queues.bulk.length, peakActive, admitted, rejected }) }
 }
 
 /** Main-thread endpoint. Only integer permit messages cross this channel;
@@ -57,9 +78,15 @@ export function serveStateTileAdmission(port: MessagePort, pool: ReturnType<type
     if (closed || !message || !Number.isSafeInteger(message.id) || message.id < 1) return
     if (message.type === 'cancel' || message.type === 'release') { retire(message.id); return }
     if (message.type !== 'acquire' || requests.has(message.id)) return
+    if (message.workload !== undefined && !isWorkload(message.workload)) {
+      try { port.postMessage({ type: 'rejected', id: message.id, error: 'Invalid state-tile workload' } satisfies AdmissionResponse) }
+      catch { /* No request was admitted; the worker can retire during teardown. */ }
+      return
+    }
+    const workload = message.workload ?? 'interactive'
     const request: { controller: AbortController; release?: () => void } = { controller: new AbortController() }
     requests.set(message.id, request)
-    void pool.acquire(request.controller.signal).then(release => {
+    void pool.acquire(request.controller.signal, workload).then(release => {
       if (closed || requests.get(message.id) !== request) { release(); return }
       request.release = release
       try { port.postMessage({ type: 'granted', id: message.id } satisfies AdmissionResponse) }
@@ -67,7 +94,8 @@ export function serveStateTileAdmission(port: MessagePort, pool: ReturnType<type
     }, error => {
       if (closed || requests.get(message.id) !== request) return
       requests.delete(message.id)
-      port.postMessage({ type: 'rejected', id: message.id, error: error instanceof Error ? error.message : String(error) } satisfies AdmissionResponse)
+      try { port.postMessage({ type: 'rejected', id: message.id, error: error instanceof Error ? error.message : String(error) } satisfies AdmissionResponse) }
+      catch { /* The request has already left the pool; owner teardown closes the channel. */ }
     })
   }
   return () => {
@@ -83,8 +111,11 @@ export function createWorkerTileAdmission(port: MessagePort) {
   const waiting = new Map<number, { resolve: (release: () => void) => void; reject: (error: unknown) => void; removeAbort: () => void }>()
   let nextId = 0, closed = false
   port.onmessage = (event: MessageEvent<AdmissionResponse>) => {
-    const response = event.data, request = waiting.get(response.id)
-    if (closed) return
+    const response = event.data
+    if (closed || !response || !Number.isSafeInteger(response.id) || response.id < 1 ||
+        (response.type !== 'granted' && response.type !== 'rejected') ||
+        (response.type === 'rejected' && typeof response.error !== 'string')) return
+    const request = waiting.get(response.id)
     if (!request) { if (response.type === 'granted') port.postMessage({ type: 'release', id: response.id } satisfies AdmissionRequest); return }
     waiting.delete(response.id); request.removeAbort()
     if (response.type === 'rejected') { request.reject(new Error(response.error)); return }
@@ -95,19 +126,22 @@ export function createWorkerTileAdmission(port: MessagePort) {
       if (!closed) port.postMessage({ type: 'release', id: response.id } satisfies AdmissionRequest)
     })
   }
-  const acquire: AcquireStateTile = signal => {
+  const acquire: AcquireStateTile = (signal, workload = 'interactive') => {
     if (closed) return Promise.reject(new Error('Web state-tile admission is closed'))
     if (signal.aborted) return Promise.reject(signal.reason ?? aborted())
+    if (nextId >= Number.MAX_SAFE_INTEGER) return Promise.reject(new Error('Web state-tile admission identifiers exhausted'))
+    if (!isWorkload(workload)) return Promise.reject(new Error('Invalid state-tile workload'))
     return new Promise((resolve, reject) => {
       const id = ++nextId
       const abort = () => {
         if (!waiting.delete(id)) return
-        port.postMessage({ type: 'cancel', id } satisfies AdmissionRequest)
-        reject(signal.reason ?? aborted())
+        try { port.postMessage({ type: 'cancel', id } satisfies AdmissionRequest) }
+        catch { /* Owner teardown retires remote permits if the channel has failed. */ }
+        finally { reject(signal.reason ?? aborted()) }
       }
       signal.addEventListener('abort', abort, { once: true })
       waiting.set(id, { resolve, reject, removeAbort: () => signal.removeEventListener('abort', abort) })
-      try { port.postMessage({ type: 'acquire', id } satisfies AdmissionRequest) }
+      try { port.postMessage({ type: 'acquire', id, workload } satisfies AdmissionRequest) }
       catch (error) { waiting.delete(id); signal.removeEventListener('abort', abort); reject(error) }
     })
   }
@@ -116,7 +150,8 @@ export function createWorkerTileAdmission(port: MessagePort) {
     closed = true
     for (const [id, request] of waiting) {
       request.removeAbort(); request.reject(new DOMException('Disposed', 'AbortError'))
-      port.postMessage({ type: 'cancel', id } satisfies AdmissionRequest)
+      try { port.postMessage({ type: 'cancel', id } satisfies AdmissionRequest) }
+      catch { /* Continue rejecting other waiters even when this port cannot send. */ }
     }
     waiting.clear(); port.onmessage = null; port.close()
   } }
