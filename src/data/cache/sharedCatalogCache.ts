@@ -4,13 +4,26 @@ type Pending<T> = { controller: AbortController; promise: Promise<T>; consumers:
 export class SharedCatalogCache<T> {
   private readonly values = new Map<string, T>()
   private readonly pending = new Map<string, Pending<T>>()
+  private readonly weights = new Map<string, number>()
+  private retainedWeight = 0
 
   private readonly maximumEntries: number
+  private readonly prepare: (value: T) => T
+  private readonly budget?: { maximumWeight: number; weigh: (value: T) => number }
 
-  constructor(maximumEntries: number) { this.maximumEntries = maximumEntries }
+  constructor(maximumEntries: number, prepare: (value: T) => T = value => value,
+    budget?: { maximumWeight: number; weigh: (value: T) => number }) {
+    if (!Number.isSafeInteger(maximumEntries) || maximumEntries < 0) throw new RangeError('Invalid decoded catalog cache entry budget')
+    if (budget && (!Number.isSafeInteger(budget.maximumWeight) || budget.maximumWeight < 0)) throw new RangeError('Invalid decoded catalog cache weight budget')
+    this.maximumEntries = maximumEntries
+    this.prepare = prepare
+    this.budget = budget ? { ...budget } : undefined
+  }
 
   clear() {
     this.values.clear()
+    this.weights.clear()
+    this.retainedWeight = 0
     for (const entry of this.pending.values()) entry.controller.abort()
     this.pending.clear()
   }
@@ -31,9 +44,23 @@ export class SharedCatalogCache<T> {
         return load(controller.signal)
       }).then(value => {
         controller.signal.throwIfAborted()
+        value = this.prepare(value)
+        controller.signal.throwIfAborted()
         if (this.pending.get(key) === created) {
-          this.values.set(key, value)
-          while (this.values.size > this.maximumEntries) this.values.delete(this.values.keys().next().value!)
+          const weight = this.budget ? this.budget.weigh(value) : 0
+          if (!Number.isSafeInteger(weight) || weight < 0) throw new RangeError('Invalid decoded catalog cache value weight')
+          if (this.maximumEntries > 0 && (!this.budget || weight <= this.budget.maximumWeight)) {
+            while (this.values.size && (this.values.size >= this.maximumEntries ||
+                this.budget && this.retainedWeight + weight > this.budget.maximumWeight)) {
+              const oldest = this.values.keys().next().value!
+              this.retainedWeight -= this.weights.get(oldest) ?? 0
+              this.weights.delete(oldest)
+              this.values.delete(oldest)
+            }
+            this.values.set(key, value)
+            this.weights.set(key, weight)
+            this.retainedWeight += weight
+          }
         }
         return value
       }).finally(() => {
@@ -82,4 +109,41 @@ export async function catalogBatch<T>(signal: AbortSignal | readonly AbortSignal
     for (const source of signals) source.removeEventListener('abort', abort)
     controller.abort()
   }
+}
+
+/** Bound decoded-result lifetimes as well as network admission. Consumers must
+ * retain only requested records; returning whole shards defeats this bound.
+ * A failed task aborts siblings before another queue item can be acquired. */
+export async function catalogForEachBounded<T>(items: readonly T[], signal: AbortSignal | undefined,
+  consume: (item: T, signal: AbortSignal) => Promise<void>) {
+  const queue = [...items]
+  return catalogBatch(signal, async batchSignal => {
+    const controller = new AbortController()
+    const abort = () => controller.abort(batchSignal.reason)
+    batchSignal.addEventListener('abort', abort, { once: true })
+    let next = 0
+    const worker = async () => {
+      try {
+        while (next < queue.length) {
+          controller.signal.throwIfAborted()
+          const item = queue[next++]
+          await consume(item, controller.signal)
+          controller.signal.throwIfAborted()
+          // Cache hits may otherwise form an uninterrupted microtask chain,
+          // preventing input events (including cancellation) from running.
+          if (next < queue.length) await new Promise<void>(resolve => setTimeout(resolve, 0))
+        }
+      } catch (error) { controller.abort(error); throw error }
+    }
+    try {
+      batchSignal.throwIfAborted()
+      // Cancellation is a request, not proof that acquired resources have
+      // finished cleanup. Drain all active consumers before allowing a retry.
+      await Promise.allSettled(Array.from({ length: Math.min(4, queue.length) }, worker))
+      controller.signal.throwIfAborted()
+    } finally {
+      batchSignal.removeEventListener('abort', abort)
+      controller.abort()
+    }
+  })
 }
