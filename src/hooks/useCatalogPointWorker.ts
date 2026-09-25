@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createCatalogPointWorkerScheduler, type CatalogPointResult } from '../lib/catalogPointWorkerScheduler'
 import { CATALOG_ELEMENT_STRIDE, type CatalogPointMode } from '../engine/ephemeris/catalogPoints'
 import type { AsteroidRecord } from '../types'
-import { catalogTemporalDisplacementAU } from '../engine/ephemeris/catalogTemporalBudget'
+import { catalogOrbitMaximumSpeedAUPerTtDay, catalogSpeedUpperBoundAUPerTtDay, catalogTemporalDisplacementAU } from '../engine/ephemeris/catalogTemporalBudget'
 
 const EMPTY_POSITIONS = new Float64Array()
 
@@ -78,6 +78,7 @@ export function useCatalogPointWorker(records: AsteroidRecord[], julianDay: numb
     worker.onmessageerror = () => fail('Catalog point worker response could not be decoded')
     try {
       const elements = new Float64Array(records.length * CATALOG_ELEMENT_STRIDE)
+      let maximumSpeed = 0, hasCompleteSpeedBound = true
       for (let index = 0; index < records.length; index++) {
         const record = records[index], offset = index * CATALOG_ELEMENT_STRIDE
         elements[offset] = record.epochJd
@@ -88,8 +89,12 @@ export function useCatalogPointWorker(records: AsteroidRecord[], julianDay: numb
         elements[offset + 5] = record.argPeriapsisDeg
         elements[offset + 6] = record.meanAnomalyDeg
         elements[offset + 7] = record.meanMotionDegPerDay
+        const speed = catalogOrbitMaximumSpeedAUPerTtDay(record.semiMajorAxisAU, record.eccentricity, record.meanMotionDegPerDay)
+        if (speed === null) hasCompleteSpeedBound = false
+        else maximumSpeed = Math.max(maximumSpeed, speed)
       }
-      scheduler.setElements(elements)
+      const speedBound = hasCompleteSpeedBound ? catalogSpeedUpperBoundAUPerTtDay(maximumSpeed) : null
+      scheduler.setElements(elements, speedBound)
       if (!failed) {
         scheduler.setTemporalBudget(temporalBudgetRef.current)
         scheduler.requestJulianDay(julianDayRef.current)

@@ -1,9 +1,23 @@
 import { describe, expect, it } from 'vitest'
-import { catalogMaximumSpeedAUPerTtDay, catalogTemporalDisplacementAU } from '../../src/engine/ephemeris/catalogTemporalBudget'
+import { catalogMaximumSpeedAUPerTtDay, catalogOrbitMaximumSpeedAUPerTtDay, catalogSpeedUpperBoundAUPerTtDay, catalogTemporalDisplacementAU } from '../../src/engine/ephemeris/catalogTemporalBudget'
 import { prepareCatalogElements, propagatePreparedCatalogPositions } from '../../src/engine/ephemeris/catalogPoints'
 import { utcJulianDayIntervalTtDays, utcJulianDayToTt, utcTimeScaleQuality } from '../../src/engine/ephemeris/timeScales'
 
 describe('catalog temporal model displacement', () => {
+  it('accumulates the same padded speed during a record-packing pass', () => {
+    const elements = new Float64Array([
+      2451545, 1, .2, 0, 0, 0, 0, 1,
+      2451545, 2, .5, 0, 0, 0, 0, 2,
+    ])
+    const accumulated = catalogSpeedUpperBoundAUPerTtDay(Math.max(
+      catalogOrbitMaximumSpeedAUPerTtDay(1, .2, 1)!,
+      catalogOrbitMaximumSpeedAUPerTtDay(2, .5, 2)!,
+    ))
+    expect(accumulated).toBe(catalogMaximumSpeedAUPerTtDay(elements))
+    expect(catalogOrbitMaximumSpeedAUPerTtDay(1, 0, 0)).toBeNull()
+    expect(catalogSpeedUpperBoundAUPerTtDay(0)).toBeNull()
+  })
+
   it('preserves represented UTC intervals and bounds both TT rounding paths', () => {
     // NAIF naif0012.tls: TAI-UTC changes from 36 to 37 s at 2017-JAN-1.
     // Use exactly representable UTC day endpoints, not rounded date strings.

@@ -64,8 +64,10 @@ export function createCatalogPointWorkerScheduler(
   }
 
   return {
-    setElements(elements: Float64Array) {
-      maximumSpeed = catalogMaximumSpeedAUPerTtDay(elements)
+    setElements(elements: Float64Array, knownMaximumSpeedAUPerTtDay?: number | null) {
+      maximumSpeed = knownMaximumSpeedAUPerTtDay === undefined
+        ? catalogMaximumSpeedAUPerTtDay(elements)
+        : knownMaximumSpeedAUPerTtDay
       completedEpoch = null
       elementCount = elements.length / CATALOG_ELEMENT_STRIDE
       generation += 1
