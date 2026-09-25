@@ -12,6 +12,7 @@ vi.mock('react', async importOriginal => ({
     return [value, (next: unknown) => { hooks.values[index] = next }]
   },
 }))
+vi.mock('../../src/engine/events/eventResultBinding', () => ({ assertEventResultBinding: vi.fn() }))
 import { useConjunctionWorker, type RunEventAnalysisParams } from '../../src/hooks/useConjunctionWorker'
 
 class ControlledWorker {
@@ -29,8 +30,11 @@ describe('event worker publication ownership', () => {
   it('prevents a superseded worker from replacing a newer cached result', () => {
     vi.stubGlobal('Worker', ControlledWorker)
     const api = useConjunctionWorker()
-    const first: RunEventAnalysisParams = { bodies: [], resolutionBodies: [], referenceId: 'sun', centerJulianDay: 2460000,
-      windowDays: 1, thresholdAU: .1, eventKinds: [] }
+    const earth: RunEventAnalysisParams['bodies'][number] = { id: 'earth', name: 'Earth', kind: 'planet', color: '#fff', size: 1,
+      source: 'custom', naifId: 399, orbit: { model: 'keplerian', epochJd: 2451545, semiMajorAxisAU: 1, eccentricity: .01,
+        inclinationDeg: 0, ascendingNodeDeg: 0, argPeriapsisDeg: 0, meanAnomalyDeg: 0, meanMotionDegPerDay: .9856 } }
+    const first: RunEventAnalysisParams = { bodies: [earth], resolutionBodies: [earth], referenceId: 'sun', centerJulianDay: 2460000,
+      windowDays: 1, thresholdAU: .1, eventKinds: ['perihelion'] }
     api.run(first)
     ControlledWorker.instances[0].deliver([{ id: 'verified-A' }])
     api.run({ ...first, centerJulianDay: first.centerJulianDay + 1 })

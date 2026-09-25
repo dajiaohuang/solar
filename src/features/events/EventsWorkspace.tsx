@@ -10,23 +10,22 @@ import type { AnalysisEvent, EventKind } from '../../workers/conjunction.worker'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { catalogStore } from '../../state/catalog-store'
 import { jplApproxWindowWarning } from '../../engine/ephemeris/modelValidity'
-import { eventSamplingPlan } from '../../engine/events/eventSampling'
+import { eventSamplingBodies, eventSamplingPlan } from '../../engine/events/eventSampling'
+import { angularSeparationDeg } from '../../engine/events/angularSeparation'
 import { BUILD_INFO } from '../../lib/buildInfo'
-import { dotVector3, subtractVector3, vector3Magnitude } from '../../lib/ephemeris'
-import type { CelestialBody, Vector3 } from '../../types'
+import { subtractVector3, vector3Magnitude } from '../../lib/ephemeris'
+import type { CelestialBody } from '../../types'
 import { saveTextExport } from '../../lib/platform'
 import { EPHEMERIS_MANIFEST, kernelsForWindow } from '../../engine/ephemeris/kernelStore'
 import { createAnalysisEphemeris, type AnalysisEphemerisPolicy } from '../../engine/ephemeris/analysisEphemeris'
 import { AnalysisPolicySelect, AnalysisSourceSummary } from '../../components/AnalysisSourceSummary'
 
 const ALL_KINDS: EventKind[] = ['close-approach', 'conjunction', 'opposition', 'perihelion', 'aphelion']
-const EVENT_ALGORITHM_VERSION = 'event-search-v5'
+const EVENT_ALGORITHM_VERSION = 'event-search-v7'
 
-function angularSeparation(a: Vector3, b: Vector3) {
-  const denominator = vector3Magnitude(a) * vector3Magnitude(b)
-  if (denominator < 1e-15) return Number.NaN
-  return Math.acos(Math.max(-1, Math.min(1, dotVector3(a, b) / denominator))) * 180 / Math.PI
-}
+// Keep nonzero numerical intervals visible even below fixed-decimal precision.
+const formatIntervalDays = (value: number) => !Number.isFinite(value) || value < 0 ? '—'
+  : value === 0 ? '0' : value.toPrecision(4)
 
 function EventDetailCurve({ event, bodies, referenceId, searchCenter, searchWindow, onOpen, label }: { event: AnalysisEvent; bodies: CelestialBody[]; referenceId: string; searchCenter: number; searchWindow: number; onOpen: () => void; label: string }) {
   const curve = useMemo(() => {
@@ -41,7 +40,7 @@ function EventDetailCurve({ event, bodies, referenceId, searchCenter, searchWind
       const resolve = ephemeris.at(julianDay).position
       if (event.kind === 'conjunction' || event.kind === 'opposition') {
         const reference = resolve(referenceId)
-        return angularSeparation(subtractVector3(resolve(event.bodyAId), reference), subtractVector3(resolve(event.bodyBId!), reference))
+        return angularSeparationDeg(subtractVector3(resolve(event.bodyAId), reference), subtractVector3(resolve(event.bodyBId!), reference))
       }
       const otherId = event.bodyBId ?? event.centralBodyId ?? 'sun'
       return vector3Magnitude(subtractVector3(resolve(event.bodyAId), resolve(otherId)))
@@ -83,9 +82,13 @@ export function EventsWorkspace() {
   const analysisBodies = useMemo(() => selectedBodies.filter((body) => body.id !== simulation.referenceId).slice(0, 48), [selectedBodies, simulation.referenceId])
   const contractCenter = analysis.lastRun?.centerJulianDay ?? clock.julianDay
   const contractWindow = analysis.lastRun?.windowDays ?? windowDays
-  const samplingPlan = eventSamplingPlan(analysis.lastRun?.bodies ?? analysisBodies, contractWindow, analysis.lastRun?.sampleCount)
+  const samplingBodies = eventSamplingBodies({ bodies: analysis.lastRun?.bodies ?? analysisBodies,
+    resolutionBodies: analysis.lastRun?.resolutionBodies ?? allBodies,
+    referenceId: analysis.lastRun?.referenceId ?? simulation.referenceId,
+    eventKinds: analysis.lastRun?.eventKinds ?? eventKinds })
+  const samplingPlan = eventSamplingPlan(samplingBodies, contractWindow, analysis.lastRun?.sampleCount)
   const contractSamples = samplingPlan.actualSamples
-  const sampleIntervalDays = contractWindow / Math.max(contractSamples - 1, 1)
+  const sampleIntervalDays = analysis.sampling?.nominalIntervalDays ?? contractWindow / Math.max(contractSamples - 1, 1)
   const validityWarning = jplApproxWindowWarning(
     contractCenter - contractWindow / 2,
     contractCenter + contractWindow / 2,
@@ -97,9 +100,9 @@ export function EventsWorkspace() {
     generatedAt: new Date().toISOString(),
     datasetVersion: catalog.datasetVersion !== 'unavailable' ? catalog.datasetVersion : catalog.requestedDatasetVersion,
     algorithmVersion: EVENT_ALGORITHM_VERSION,
-    model: 'sampled-ephemeris-local-refinement-v5',
-    ephemerisManifest: EPHEMERIS_MANIFEST.id,
-    ephemerisFiles: analysis.events[0]?.ephemerisFiles ?? [],
+    model: 'sampled-ephemeris-local-refinement-v7',
+    ephemerisManifest: analysis.ephemeris?.manifestId ?? EPHEMERIS_MANIFEST.id,
+    ephemerisFiles: analysis.ephemeris?.kernelPool.map(file => file.id) ?? [],
     ephemeris: analysis.ephemeris,
     build: BUILD_INFO,
     inputs: analysis.lastRun ? {
@@ -112,6 +115,7 @@ export function EventsWorkspace() {
       sampleCount: contractSamples,
       sampleIntervalDays,
       samplingPlan,
+      samplingReceipt: analysis.sampling,
       ephemerisPolicy: analysis.lastRun.ephemerisPolicy ?? 'prefer-spk',
     } : null,
   }
@@ -158,7 +162,7 @@ export function EventsWorkspace() {
         {!analysis.events.length && analysis.status !== 'running' && <div className="empty-state"><span>⌁</span><p>{t('noEvents')}</p></div>}
         <div className="event-timeline">{analysis.events.map((event, index) => <button className={index === activeEventIndex ? 'selected' : ''} key={`${event.kind}-${event.bodyAId}-${event.bodyBId}-${index}`} onClick={() => setSelectedEventIndex(index)}>
           <time>{formatJulianDayAsDate(event.julianDay)}</time><i className={`event-${event.kind}`} />
-          <div><strong>{eventLabels[event.kind]}</strong><span>{event.bodyAName}{event.bodyBName ? ` ↔ ${event.bodyBName}` : event.centralBodyName ? ` · ${event.centralBodyName} ${t('centered')}` : ''}</span><small>{event.value.toFixed(event.unit === 'AU' ? 5 : 2)} {event.unit} · {t('numericalInterval')} ±{event.numericalRefinementHalfWidthDays.toFixed(4)} d · {t('physicalUncertaintyMissing')}</small></div>
+          <div><strong>{eventLabels[event.kind]}</strong><span>{event.bodyAName}{event.bodyBName ? ` ↔ ${event.bodyBName}` : event.centralBodyName ? ` · ${event.centralBodyName} ${t('centered')}` : ''}</span><small>{event.value.toFixed(event.unit === 'AU' ? 5 : 2)} {event.unit} · {t('numericalInterval')} ±{formatIntervalDays(event.numericalRefinementHalfWidthDays)} d · {t('physicalUncertaintyMissing')}</small></div>
         </button>)}</div>
       </section>
 
@@ -168,7 +172,7 @@ export function EventsWorkspace() {
         {validityWarning && <div className="error-banner">{validityWarning}</div>}
         <p className="fine-print">{t('analysisExplanation')}</p>
         <AnalysisSourceSummary evidence={analysis.ephemeris} />
-        <div className="export-actions"><button disabled={!analysis.events.length} onClick={() => void saveTextExport(JSON.stringify({ ...exportMetadata, events: analysis.events }, null, 2), 'solar-atlas-events.json', 'application/json').catch((error: unknown) => uiActions.toast(error instanceof Error ? error.message : String(error)))}>{t('exportJson')}</button><button disabled={!analysis.events.length} onClick={() => {
+        <div className="export-actions"><button disabled={analysis.status !== 'complete' || !analysis.ephemeris || !analysis.lastRun} onClick={() => void saveTextExport(JSON.stringify({ ...exportMetadata, events: analysis.events }, null, 2), 'solar-atlas-events.json', 'application/json').catch((error: unknown) => uiActions.toast(error instanceof Error ? error.message : String(error)))}>{t('exportJson')}</button><button disabled={!analysis.events.length} onClick={() => {
           const header = 'appVersion,commitSha,datasetVersion,algorithmVersion,kind,bodyA,bodyB,centralBodyId,julianDay,value,unit,model,sampleIntervalDays,numericalRefinementHalfWidthDays,physicalPredictionUncertainty,ephemerisPolicy,stateSources\n'
           const rows = analysis.events.map((event) => [BUILD_INFO.version, BUILD_INFO.commitSha, exportMetadata.datasetVersion ?? '', EVENT_ALGORITHM_VERSION, event.kind, event.bodyAName, event.bodyBName ?? '', event.centralBodyId ?? '', event.julianDay, event.value, event.unit, event.model, event.sampleIntervalDays, event.numericalRefinementHalfWidthDays, event.physicalPredictionUncertainty, event.ephemeris.policy, JSON.stringify(event.ephemeris.bodies)].map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n')
           void saveTextExport(header + rows, 'solar-atlas-events.csv', 'text/csv').catch((error: unknown) => uiActions.toast(error instanceof Error ? error.message : String(error)))

@@ -1,12 +1,14 @@
 /// <reference lib="webworker" />
 
 import {
-  dotVector3,
   subtractVector3,
   vector3Magnitude,
 } from '../lib/ephemeris'
-import { findSampledExtrema, refineBracketedExtremum, type ExtremumMode } from '../engine/events/sampledExtrema'
-import { adaptiveEventSampleCount } from '../engine/events/eventSampling'
+import { angularSeparationDeg } from '../engine/events/angularSeparation'
+import { eventSamplingReceipt, type EventSamplingReceipt } from '../engine/events/eventSampling'
+import { findSampledExtrema, refineBracketedExtremum, type ExtremumMode, type SampledExtremum } from '../engine/events/sampledExtrema'
+import { admitEventAnalysis, MAX_ANALYSIS_EVENTS, MAX_EVENT_REFINEMENTS } from '../engine/events/eventAnalysisLimits'
+import { assertEventRequestBudget } from '../engine/events/eventRequestBudget'
 import type { BodyId, CelestialBody, Vector3 } from '../types'
 import { ensureKernelFiles, kernelsForWindow } from '../engine/ephemeris/kernelStore'
 import { createAnalysisEphemeris, type AnalysisEphemerisEvidence, type AnalysisEphemerisPolicy } from '../engine/ephemeris/analysisEphemeris'
@@ -41,7 +43,7 @@ export type AnalysisEvent = {
   value: number
   unit: 'AU' | 'deg'
   julianDay: number
-  model: 'sampled-ephemeris-local-refinement-v5'
+  model: 'sampled-ephemeris-local-refinement-v7'
   ephemerisFiles: string[]
   ephemeris: Pick<AnalysisEphemerisEvidence, 'policy' | 'bodies'>
   sampleIntervalDays: number
@@ -56,6 +58,7 @@ export type EventAnalysisResponse = {
   progress?: number
   events?: AnalysisEvent[]
   ephemeris?: AnalysisEphemerisEvidence
+  sampling?: EventSamplingReceipt
   error?: string
 }
 
@@ -72,39 +75,52 @@ function yieldToWorker() {
   return new Promise<void>((resolve) => setTimeout(resolve, 0))
 }
 
-function angleDeg(a: Vector3, b: Vector3) {
-  const denominator = vector3Magnitude(a) * vector3Magnitude(b)
-  if (denominator < 1e-15) return Number.NaN
-  const cosine = Math.max(-1, Math.min(1, dotVector3(a, b) / denominator))
-  return Math.acos(cosine) * 180 / Math.PI
+function apsisKinds(body: Pick<CelestialBody, 'parentId'>) {
+  const centralBodyId = body.parentId ?? 'sun'
+  return {
+    centralBodyId,
+    minimumKind: centralBodyId === 'sun' ? 'perihelion' as const : 'periapsis' as const,
+    maximumKind: centralBodyId === 'sun' ? 'aphelion' as const : 'apoapsis' as const,
+  }
 }
 
 async function runAnalysis(request: EventAnalysisRequest) {
   activeRequestId = request.requestId
+  assertEventRequestBudget(request)
+  const sampleCount = admitEventAnalysis(request)
+  const sampling = eventSamplingReceipt(request.centerJulianDay, request.windowDays, sampleCount)
   await ensureKernelFiles(request.ephemerisFiles ?? [])
+  if (cancelledRequestId === request.requestId || activeRequestId !== request.requestId) {
+    workerScope.postMessage({ type: 'cancelled', requestId: request.requestId } satisfies EventAnalysisResponse)
+    return
+  }
   const kernels = kernelsForWindow(request.centerJulianDay - request.windowDays / 2, request.centerJulianDay + request.windowDays / 2, request.ephemerisFiles ?? [])
   const bodiesById = new Map<BodyId, CelestialBody>(request.resolutionBodies.map((body) => [body.id, body]))
   const ephemeris = createAnalysisEphemeris({ bodiesById, kernels, policy: request.ephemerisPolicy,
     startJulianDay: request.centerJulianDay - request.windowDays / 2,
     endJulianDay: request.centerJulianDay + request.windowDays / 2 })
   const createBodyPositionResolver = (_bodies: Map<BodyId, CelestialBody>, jd: number) => ephemeris.at(jd).position
-  const sampleCount = adaptiveEventSampleCount(request.bodies, request.windowDays, request.sampleCount)
   const needsDistances = request.eventKinds.includes('close-approach')
   const needsAngles = request.eventKinds.some(kind => kind === 'conjunction' || kind === 'opposition')
   const needsPairs = needsDistances || needsAngles
   const needsApsides = request.eventKinds.some(kind => ['perihelion', 'aphelion', 'periapsis', 'apoapsis'].includes(kind))
-  const startJulianDay = request.centerJulianDay - request.windowDays / 2
+  const startJulianDay = sampling.startJulianDay
   const positions = new Map<BodyId, Vector3[]>(request.bodies.map((body) => [body.id, []]))
-  const centralBodyIds = new Set(needsApsides ? request.bodies.filter((body) => body.id !== 'sun').map((body) => body.parentId ?? 'sun') : [])
+  const centralBodyIds = new Set(needsApsides ? request.bodies.filter(body => body.id !== 'sun').flatMap(body => {
+    const { centralBodyId, minimumKind, maximumKind } = apsisKinds(body)
+    return request.eventKinds.includes(minimumKind) || request.eventKinds.includes(maximumKind) ? [centralBodyId] : []
+  }) : [])
   const centralPositions = new Map<BodyId, Vector3[]>([...centralBodyIds].map((bodyId) => [bodyId, []]))
   const referencePositions: Vector3[] = []
   const julianDays: number[] = []
-  const sampleIntervalDays = request.windowDays / Math.max(sampleCount - 1, 1)
+  const sampleIntervalDays = sampling.nominalIntervalDays
 
-  const refine = (sampleIndex: number, mode: ExtremumMode, evaluate: (julianDay: number) => number) => {
+  let refinements = 0
+  const refine = (candidate: SampledExtremum, mode: ExtremumMode, evaluate: (julianDay: number) => number) => {
+    if (++refinements > MAX_EVENT_REFINEMENTS) throw new RangeError('Event refinement budget exceeded; request fewer bodies or a shorter window')
     const refined = refineBracketedExtremum(
-      julianDays[sampleIndex - 1],
-      julianDays[sampleIndex + 1],
+      julianDays[candidate.bracketStartIndex],
+      julianDays[candidate.bracketEndIndex],
       mode,
       evaluate,
     )
@@ -123,7 +139,8 @@ async function runAnalysis(request: EventAnalysisRequest) {
       workerScope.postMessage({ type: 'cancelled', requestId: request.requestId } satisfies EventAnalysisResponse)
       return
     }
-    const jd = startJulianDay + sample / (sampleCount - 1) * request.windowDays
+    const jd = sample === sampleCount - 1 ? sampling.endJulianDay
+      : startJulianDay + sample / (sampleCount - 1) * request.windowDays
     const resolve = createBodyPositionResolver(bodiesById, jd)
     julianDays.push(jd)
     if (needsAngles) referencePositions.push(resolve(request.referenceId))
@@ -140,6 +157,10 @@ async function runAnalysis(request: EventAnalysisRequest) {
   }
 
   const events: AnalysisEvent[] = []
+  const appendEvent = (event: AnalysisEvent) => {
+    if (events.length >= MAX_ANALYSIS_EVENTS) throw new RangeError('Event result budget exceeded; request fewer bodies or a shorter window')
+    events.push(event)
+  }
   const pairCount = request.bodies.length * Math.max(0, request.bodies.length - 1) / 2
   let processedPairs = 0
   for (let first = 0; needsPairs && first < request.bodies.length; first += 1) {
@@ -159,7 +180,7 @@ async function runAnalysis(request: EventAnalysisRequest) {
         if (needsAngles) {
           const relativeA = subtractVector3(trackA[sample], referencePositions[sample])
           const relativeB = subtractVector3(trackB[sample], referencePositions[sample])
-          angles.push(angleDeg(relativeA, relativeB))
+          angles.push(angularSeparationDeg(relativeA, relativeB))
         }
       }
 
@@ -168,42 +189,42 @@ async function runAnalysis(request: EventAnalysisRequest) {
         bodyAName: bodyA.name,
         bodyBId: bodyB.id,
         bodyBName: bodyB.name,
-        model: 'sampled-ephemeris-local-refinement-v5' as const,
+        model: 'sampled-ephemeris-local-refinement-v7' as const,
         ephemerisFiles: kernels.map((kernel) => kernel.id),
         ephemeris: { policy: request.ephemerisPolicy ?? 'prefer-spk', bodies: ephemeris.bodyModels([bodyA.id, bodyB.id, ...(needsAngles ? [request.referenceId] : [])]) },
       }
       if (request.eventKinds.includes('close-approach')) {
         for (const extremum of findSampledExtrema(distances, 'minimum')) {
-          const refined = refine(extremum.sampleIndex, 'minimum', (julianDay) => {
+          const refined = refine(extremum, 'minimum', (julianDay) => {
             const resolve = createBodyPositionResolver(bodiesById, julianDay)
             return vector3Magnitude(subtractVector3(resolve(bodyA.id), resolve(bodyB.id)))
           })
           if (refined.value <= request.thresholdAU) {
-            events.push({ ...base, kind: 'close-approach', unit: 'AU', ...refined })
+            appendEvent({ ...base, kind: 'close-approach', unit: 'AU', ...refined })
           }
         }
       }
       if (request.eventKinds.includes('conjunction')) {
         for (const extremum of findSampledExtrema(angles, 'minimum')) {
-          const refined = refine(extremum.sampleIndex, 'minimum', (julianDay) => {
+          const refined = refine(extremum, 'minimum', (julianDay) => {
             const resolve = createBodyPositionResolver(bodiesById, julianDay)
             const reference = resolve(request.referenceId)
-            return angleDeg(subtractVector3(resolve(bodyA.id), reference), subtractVector3(resolve(bodyB.id), reference))
+            return angularSeparationDeg(subtractVector3(resolve(bodyA.id), reference), subtractVector3(resolve(bodyB.id), reference))
           })
           if (refined.value <= 2) {
-            events.push({ ...base, kind: 'conjunction', unit: 'deg', ...refined })
+            appendEvent({ ...base, kind: 'conjunction', unit: 'deg', ...refined })
           }
         }
       }
       if (request.eventKinds.includes('opposition')) {
         for (const extremum of findSampledExtrema(angles, 'maximum')) {
-          const refined = refine(extremum.sampleIndex, 'maximum', (julianDay) => {
+          const refined = refine(extremum, 'maximum', (julianDay) => {
             const resolve = createBodyPositionResolver(bodiesById, julianDay)
             const reference = resolve(request.referenceId)
-            return angleDeg(subtractVector3(resolve(bodyA.id), reference), subtractVector3(resolve(bodyB.id), reference))
+            return angularSeparationDeg(subtractVector3(resolve(bodyA.id), reference), subtractVector3(resolve(bodyB.id), reference))
           })
           if (refined.value >= 178) {
-            events.push({ ...base, kind: 'opposition', unit: 'deg', ...refined })
+            appendEvent({ ...base, kind: 'opposition', unit: 'deg', ...refined })
           }
         }
       }
@@ -227,7 +248,10 @@ async function runAnalysis(request: EventAnalysisRequest) {
         return
       }
       if (body.id === 'sun') continue
-      const centralBodyId = body.parentId ?? 'sun'
+      const { centralBodyId, minimumKind, maximumKind } = apsisKinds(body)
+      const findMinimum = request.eventKinds.includes(minimumKind)
+      const findMaximum = request.eventKinds.includes(maximumKind)
+      if (!findMinimum && !findMaximum) continue
       const centralBody = bodiesById.get(centralBodyId)
       const centralTrack = centralPositions.get(centralBodyId) ?? []
       const track = positions.get(body.id) ?? []
@@ -237,26 +261,26 @@ async function runAnalysis(request: EventAnalysisRequest) {
       }
       const base = {
         bodyAId: body.id, bodyAName: body.name, centralBodyId, centralBodyName: centralBody?.name ?? centralBodyId,
-        model: 'sampled-ephemeris-local-refinement-v5' as const,
+        model: 'sampled-ephemeris-local-refinement-v7' as const,
         ephemerisFiles: kernels.map((kernel) => kernel.id),
         ephemeris: { policy: request.ephemerisPolicy ?? 'prefer-spk', bodies: ephemeris.bodyModels([body.id, centralBodyId]) },
       }
-      if (request.eventKinds.includes('perihelion') || request.eventKinds.includes('periapsis')) {
+      if (findMinimum) {
         for (const extremum of findSampledExtrema(radii, 'minimum')) {
-          const refined = refine(extremum.sampleIndex, 'minimum', (julianDay) => {
+          const refined = refine(extremum, 'minimum', (julianDay) => {
             const resolve = createBodyPositionResolver(bodiesById, julianDay)
             return vector3Magnitude(subtractVector3(resolve(body.id), resolve(centralBodyId)))
           })
-          events.push({ ...base, kind: body.parentId ? 'periapsis' : 'perihelion', unit: 'AU', ...refined })
+          appendEvent({ ...base, kind: minimumKind, unit: 'AU', ...refined })
         }
       }
-      if (request.eventKinds.includes('aphelion') || request.eventKinds.includes('apoapsis')) {
+      if (findMaximum) {
         for (const extremum of findSampledExtrema(radii, 'maximum')) {
-          const refined = refine(extremum.sampleIndex, 'maximum', (julianDay) => {
+          const refined = refine(extremum, 'maximum', (julianDay) => {
             const resolve = createBodyPositionResolver(bodiesById, julianDay)
             return vector3Magnitude(subtractVector3(resolve(body.id), resolve(centralBodyId)))
           })
-          events.push({ ...base, kind: body.parentId ? 'apoapsis' : 'aphelion', unit: 'AU', ...refined })
+          appendEvent({ ...base, kind: maximumKind, unit: 'AU', ...refined })
         }
       }
       await yieldToWorker()
@@ -268,7 +292,7 @@ async function runAnalysis(request: EventAnalysisRequest) {
     return
   }
   events.sort((a, b) => a.julianDay - b.julianDay)
-  workerScope.postMessage({ type: 'result', requestId: request.requestId, progress: 1, events, ephemeris: ephemeris.evidence() } satisfies EventAnalysisResponse)
+  workerScope.postMessage({ type: 'result', requestId: request.requestId, progress: 1, events, ephemeris: ephemeris.evidence(), sampling } satisfies EventAnalysisResponse)
 }
 
 workerScope.onmessage = (event: MessageEvent<EventAnalysisRequest | EventAnalysisCancel>) => {

@@ -3,12 +3,16 @@ export type ExtremumMode = 'minimum' | 'maximum'
 export type SampledExtremum = {
   sampleIndex: number
   sampleOffset: number
+  /** Samples just outside the whole plateau, or adjacent to a single peak. */
+  bracketStartIndex: number
+  bracketEndIndex: number
   value: number
 }
 
 /**
  * Finds strict, non-endpoint local extrema and refines each one with the
- * parabola through the neighboring samples. Endpoint extrema are deliberately
+ * parabola through the neighboring samples for single-point peaks. Plateaus
+ * retain both outside neighbors as their refinement bracket. Endpoint extrema are deliberately
  * excluded because they only describe the boundary of the requested window.
  */
 export function findSampledExtrema(values: readonly number[], mode: ExtremumMode): SampledExtremum[] {
@@ -37,7 +41,8 @@ export function findSampledExtrema(values: readonly number[], mode: ExtremumMode
       ? candidateOffset
       : 0
     const refinedValue = current - 0.25 * (before - after) * sampleOffset
-    extrema.push({ sampleIndex, sampleOffset, value: refinedValue })
+    extrema.push({ sampleIndex, sampleOffset, value: refinedValue,
+      bracketStartIndex: plateauStart - 1, bracketEndIndex: plateauEnd + 1 })
   }
   return extrema
 }
@@ -63,9 +68,10 @@ export type RefinedExtremum = {
 
 /**
  * Refines a coarse candidate bracket and re-evaluates the physical model at
- * every candidate time. The remaining bracket width is a conservative timing
- * numerical refinement interval for this exploratory result. It is not an
- * estimate of physical prediction uncertainty.
+ * every candidate time. The reported radius encloses the remaining numerical
+ * search interval around the returned time. Golden-section localization assumes
+ * a unimodal objective inside the initial bracket; this is not a certificate
+ * that a physical extremum lies there or a physical prediction uncertainty.
  */
 export function refineBracketedExtremum(
   startJulianDay: number,
@@ -75,6 +81,8 @@ export function refineBracketedExtremum(
   iterations = 16,
 ): RefinedExtremum {
   if (![startJulianDay, endJulianDay, iterations].every(Number.isFinite) || !(endJulianDay > startJulianDay)) throw new RangeError('Extremum bracket and iterations must be finite with positive width')
+  if (!Number.isFinite(endJulianDay - startJulianDay)) throw new RangeError('Extremum bracket width must be finite')
+  if (mode !== 'minimum' && mode !== 'maximum') throw new RangeError('Unknown extremum mode')
   const boundedIterations = Math.max(1, Math.min(Math.trunc(iterations), 64))
   const checkedValue = (julianDay: number) => {
     const value = evaluate(julianDay)
@@ -87,28 +95,34 @@ export function refineBracketedExtremum(
   let right = endJulianDay
   let innerLeft = right - ratio * (right - left)
   let innerRight = left + ratio * (right - left)
-  let leftValue = objective(innerLeft)
-  let rightValue = objective(innerRight)
-  for (let iteration = 0; iteration < boundedIterations; iteration += 1) {
-    if (leftValue <= rightValue) {
+  const hasInterior = () => left < innerLeft && innerLeft < innerRight && innerRight < right
+  let leftValue = hasInterior() ? objective(innerLeft) : 0
+  let rightValue = hasInterior() ? objective(innerRight) : 0
+  let completedIterations = 0
+  for (; completedIterations < boundedIterations && hasInterior(); completedIterations += 1) {
+    // Equal values supply no directional information: this can be a plateau,
+    // rounded evaluations or a symmetric extremum. Keep the current interval
+    // instead of repeatedly preferring the left side and implying localization.
+    if (leftValue === rightValue) break
+    if (leftValue < rightValue) {
       right = innerRight
       innerRight = innerLeft
       rightValue = leftValue
       innerLeft = right - ratio * (right - left)
-      leftValue = objective(innerLeft)
+      if (hasInterior()) leftValue = objective(innerLeft)
     } else {
       left = innerLeft
       innerLeft = innerRight
       leftValue = rightValue
       innerRight = left + ratio * (right - left)
-      rightValue = objective(innerRight)
+      if (hasInterior()) rightValue = objective(innerRight)
     }
   }
-  const julianDay = (left + right) / 2
+  const julianDay = left + (right - left) / 2
   return {
     julianDay,
     value: checkedValue(julianDay),
-    numericalRefinementHalfWidthDays: (right - left) / 2,
-    iterations: boundedIterations,
+    numericalRefinementHalfWidthDays: Math.max(julianDay - left, right - julianDay),
+    iterations: completedIterations,
   }
 }
