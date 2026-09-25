@@ -218,6 +218,7 @@ export function buildGeometry(
     const clipX = (value: number) => ((projection.centerX + (value - projection.offsetXAU) * projection.scale) / projection.width) * 2 - 1
     const clipY = (value: number) => 1 - ((projection.centerY - (value - projection.offsetYAU) * projection.scale) / projection.height) * 2
     for (let offset = 3; offset < coordinates.length; offset += 3) {
+      if (trajectory.breakBefore?.[offset / 3]) continue
       writeLine(clipX(coordinates[offset - 3]), clipY(coordinates[offset - 2]), clipX(coordinates[offset]), clipY(coordinates[offset + 1]), color)
     }
   }

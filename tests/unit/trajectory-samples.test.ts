@@ -133,6 +133,14 @@ describe('packed historical trajectory samples', () => {
     resized.dispose()
   })
 
+  it('keeps 3D trajectory segments disconnected at source transitions', () => {
+    const geometry = updateTrajectoryLineGeometry(new THREE.BufferGeometry(),
+      new Float64Array([0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3]), new Uint8Array([0, 0, 1, 0]))
+    expect(geometry.drawRange).toEqual({ start: 0, count: 4 })
+    expect(Array.from(geometry.getIndex()!.array.slice(0, geometry.drawRange.count))).toEqual([0, 1, 2, 3])
+    geometry.dispose()
+  })
+
   it('writes schematic spacecraft source points directly without upgrading their model', () => {
     const sun = body('sun'), probe = { ...body('probe'), kind: 'spacecraft' as const,
       trajectoryPoints: [{ jd: 2451544, x: 1, y: 2, z: 3 }, { jd: 2451545, x: 4, y: 5, z: 6 }] }

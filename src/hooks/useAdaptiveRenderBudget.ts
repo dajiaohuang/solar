@@ -57,10 +57,15 @@ export function useAdaptiveRenderBudget(options: Options) {
   const windowStartedAt = useRef(0)
 
   useEffect(() => {
-    const now = performance.now()
-    frameTimes.current = []
-    startedAt.current = now
-    windowStartedAt.current = now
+    const resetWindow = () => {
+      const now = performance.now()
+      frameTimes.current = []
+      startedAt.current = now
+      windowStartedAt.current = now
+    }
+    resetWindow()
+    document.addEventListener('visibilitychange', resetWindow)
+    return () => document.removeEventListener('visibilitychange', resetWindow)
   }, [policyKey])
 
   const onFrameDuration = useCallback((durationMs: number) => {
@@ -75,6 +80,8 @@ export function useAdaptiveRenderBudget(options: Options) {
     const sorted = [...frameTimes.current].sort((a, b) => a - b)
     const p90Index = Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))
     const p90FrameTimeMs = sorted[p90Index] ?? 0
+    const p99Index = Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.99) - 1)
+    const p99FrameTimeMs = sorted[p99Index] ?? 0
     const longFrameRatio = sorted.length
       ? sorted.filter((value) => value > 33).length / sorted.length
       : 0
@@ -89,6 +96,7 @@ export function useAdaptiveRenderBudget(options: Options) {
         state: advanceAdaptiveRenderBudget(currentState, {
           nowMs: now,
           p90FrameTimeMs,
+          p99FrameTimeMs,
           longFrameRatio,
           visible: !document.hidden,
           warmedUp: now - startedAt.current >= 2_000,

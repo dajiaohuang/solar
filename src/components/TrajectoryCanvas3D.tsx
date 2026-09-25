@@ -48,7 +48,7 @@ type SceneResources = {
   controls: OrbitControls
   bodyGeometry: THREE.SphereGeometry
   bodyMeshes: Map<string, THREE.Mesh>
-  trajectoryLines: Map<string, THREE.Line>
+  trajectoryLines: Map<string, THREE.LineSegments>
   auxiliaryGroup: THREE.Group
   lagrangeGeometry: THREE.SphereGeometry
   lagrangeMeshes: Map<string, THREE.Mesh>
@@ -351,15 +351,16 @@ export function TrajectoryCanvas3D({
   useEffect(() => {
     if (!continuous) return
     let animationFrame = 0
-    let previous = performance.now()
+    let previous: number | null = null
     const renderFrame = (timestamp: number) => {
       const resources = resourcesRef.current
       if (!resources) return
-      if (!document.hidden) {
+      if (document.hidden) previous = null
+      else {
         resources.invalidate()
-        onFrameDuration?.(timestamp - previous)
+        if (previous !== null) onFrameDuration?.(timestamp - previous)
+        previous = timestamp
       }
-      previous = timestamp
       animationFrame = window.requestAnimationFrame(renderFrame)
     }
     animationFrame = window.requestAnimationFrame(renderFrame)
@@ -369,22 +370,20 @@ export function TrajectoryCanvas3D({
   useEffect(() => {
     const resources = resourcesRef.current
     if (!resources) return
-    const count = Math.min(catalogRecords.length, Math.floor(catalogPositions3D.length / 3))
     resources.catalogPoints.geometry = updateCatalogPointGeometry(resources.catalogPoints.geometry, catalogPositions3D, catalogRecords,
       { x: catalogOrigin.x, y: catalogOrigin.y, z: catalogOrigin.z })
-    resources.catalogPoints.geometry.setDrawRange(0, Math.min(catalogDrawCount, count))
-    resources.catalogPoints.visible = count > 0
-    resources.invalidate()
-  }, [catalogPositions3D, catalogRecords, catalogDrawCount, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z])
+  }, [catalogPositions3D, catalogRecords, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z])
 
   useEffect(() => {
     const resources = resourcesRef.current
     if (!resources) return
+    // Run after every geometry rewrite, including same-length source/origin
+    // changes: the writer resets drawRange. Count-only changes skip that writer.
     const available = Math.min(catalogRecords.length, Math.floor(catalogPositions3D.length / 3))
     resources.catalogPoints.geometry.setDrawRange(0, Math.min(catalogDrawCount, available))
     resources.catalogPoints.visible = catalogDrawCount > 0 && available > 0
     resources.invalidate()
-  }, [catalogDrawCount, catalogPositions3D.length, catalogRecords.length])
+  }, [catalogDrawCount, catalogPositions3D, catalogRecords, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z])
 
   useEffect(() => {
     const resources = resourcesRef.current
@@ -399,8 +398,8 @@ export function TrajectoryCanvas3D({
       activeLineIds.add(trajectory.body.id)
       let line = resources.trajectoryLines.get(trajectory.body.id)
       if (!line) {
-        const geometry = updateTrajectoryLineGeometry(new THREE.BufferGeometry(), source)
-        line = new THREE.Line(geometry, new THREE.LineBasicMaterial({
+        const geometry = updateTrajectoryLineGeometry(new THREE.BufferGeometry(), source, trajectory.breakBefore)
+        line = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({
           color: trajectory.body.color,
           transparent: true,
           opacity: trajectory.body.kind === 'asteroid' ? 0.3 : 0.68,
@@ -408,7 +407,7 @@ export function TrajectoryCanvas3D({
         resources.trajectoryLines.set(trajectory.body.id, line)
         resources.scene.add(line)
       } else {
-        line.geometry = updateTrajectoryLineGeometry(line.geometry, source)
+        line.geometry = updateTrajectoryLineGeometry(line.geometry, source, trajectory.breakBefore)
       }
     }
     for (const [id, line] of resources.trajectoryLines) {
@@ -486,7 +485,7 @@ export function TrajectoryCanvas3D({
         if (distance > 0) nearest = Math.min(nearest, distance)
       }
       for (const trajectory of trajectories) {
-        if (trajectory.body.kind === 'spacecraft') continue
+        if (trajectory.body.source === 'schematic') continue
         const coordinates = trajectory.coordinates
         for (let offset = 0; offset < coordinates.length; offset += 3) radius = Math.max(radius, Math.hypot(coordinates[offset], coordinates[offset + 1], coordinates[offset + 2]))
       }

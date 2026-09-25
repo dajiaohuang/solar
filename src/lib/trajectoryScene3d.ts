@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 
 /** Derive only the active renderer's Float32 XZY buffer, reusing it on ticks. */
-export function updateTrajectoryLineGeometry(geometry: THREE.BufferGeometry, coordinates: Float64Array) {
+export function updateTrajectoryLineGeometry(geometry: THREE.BufferGeometry, coordinates: Float64Array, breakBefore?: Uint8Array) {
   let attribute = geometry.getAttribute('position') as THREE.BufferAttribute | undefined
   if (!attribute || attribute.array.length !== coordinates.length) {
     geometry.dispose()
@@ -16,6 +16,20 @@ export function updateTrajectoryLineGeometry(geometry: THREE.BufferGeometry, coo
     values[offset + 2] = coordinates[offset + 1]
   }
   attribute.needsUpdate = true
+  // Indexed independent edges retain one vertex buffer and never join across
+  // an explicitly reported source transition. Used with THREE.LineSegments.
+  const capacity = Math.max(0, coordinates.length / 3 - 1) * 2
+  let edges = geometry.getIndex()
+  if (!edges || edges.array.length !== capacity) {
+    edges = new THREE.BufferAttribute(new Uint32Array(capacity), 1)
+    geometry.setIndex(edges)
+  }
+  let edgeCount = 0
+  for (let vertex = 1; vertex < coordinates.length / 3; vertex++) {
+    if (!breakBefore?.[vertex]) { edges.setX(edgeCount++, vertex - 1); edges.setX(edgeCount++, vertex) }
+  }
+  edges.needsUpdate = true
+  geometry.setDrawRange(0, edgeCount)
   geometry.computeBoundingSphere()
   return geometry
 }

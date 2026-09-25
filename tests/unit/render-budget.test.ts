@@ -17,6 +17,7 @@ function performanceWindow(update: Partial<RenderPerformanceWindow> = {}): Rende
   return {
     nowMs: 10_000,
     p90FrameTimeMs: 20,
+    p99FrameTimeMs: 20,
     longFrameRatio: 0,
     visible: true,
     warmedUp: true,
@@ -119,6 +120,14 @@ describe('adaptive render budget', () => {
     let state = createAdaptiveRenderBudgetState(policy)
     state = advance(state, policy, { nowMs: 2_000, p90FrameTimeMs: 20, longFrameRatio: 0.16 })
     state = advance(state, policy, { nowMs: 4_000, p90FrameTimeMs: 20, longFrameRatio: 0.16 })
+    expect(state.count).toBe(185_000)
+  })
+
+  it('reduces after repeated P99 frame pressure even when P90 remains fast', () => {
+    let state = createAdaptiveRenderBudgetState(policy)
+    state = advance(state, policy, { nowMs: 2_000, p90FrameTimeMs: 18, p99FrameTimeMs: 34 })
+    expect(state.consecutiveSlowWindows).toBe(1)
+    state = advance(state, policy, { nowMs: 4_000, p90FrameTimeMs: 18, p99FrameTimeMs: 34 })
     expect(state.count).toBe(185_000)
   })
 

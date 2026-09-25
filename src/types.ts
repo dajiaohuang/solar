@@ -2,7 +2,7 @@ export type BodyId = string
 
 export type BodyKind = 'star' | 'planet' | 'moon' | 'dwarfPlanet' | 'asteroid' | 'spacecraft' | 'sourceRecord'
 
-export type OrbitSource = 'jpl-approx' | 'jpl-satellite-mean' | 'jpl-satellite-inventory' | 'jpl-sbdb' | 'mpcorb' | 'horizons' | 'curated-approx' | 'schematic' | 'custom' | 'jpl-spk-osculating-fallback' | 'source-inventory'
+export type OrbitSource = 'jpl-approx' | 'jpl-satellite-mean' | 'jpl-satellite-inventory' | 'jpl-sbdb' | 'mpcorb' | 'horizons' | 'curated-approx' | 'schematic' | 'custom' | 'jpl-spk' | 'jpl-spk-osculating-fallback' | 'source-inventory'
 
 export type SatelliteOrbitEvidence = {
   sourceFrame: 'jpl-ecliptic' | 'undocumented-illustrative'
@@ -145,6 +145,8 @@ export type TrajectorySample = {
   body: CelestialBody
   /** One interleaved AU xyz source; 2D reads xy without a second buffer. */
   coordinates: Float64Array
+  /** Nonzero at a vertex means no display edge from the previous vertex. */
+  breakBefore?: Uint8Array
 }
 
 export type TrajectoryFrameData = {
@@ -178,6 +180,7 @@ export type PackedTrajectoryData = {
   trajectoryUnavailableBodyIds: BodyId[]
   offsets: Uint32Array
   coordinates: Float64Array
+  breakBefore?: Uint8Array
 }
 
 export type TrajectoryWorkerResponse = {
