@@ -83,18 +83,22 @@ type Source struct {
 }
 
 type Result struct {
-	Model             string                  `json:"model"`
-	Request           Request                 `json:"request"`
-	JDTDB             float64                 `json:"jdTdb"`
-	JDTT              float64                 `json:"jdTt"`
-	JDUT1             float64                 `json:"jdUt1"`
-	TDBMinusTTSeconds float64                 `json:"tdbMinusTtSeconds"`
-	EOP               earthorientation.Sample `json:"earthOrientation"`
-	Bodies            []BodyResult            `json:"bodies"`
-	Sources           []Source                `json:"sources"`
-	Warnings          []string                `json:"warnings"`
-	Contract          map[string]any          `json:"contract"`
-	ObserverState     ObserverState           `json:"observerState"`
+	// In-process only: preserve the same source/EOP context for stellar
+	// transforms. A decoded JSON receipt cannot recreate this authority.
+	astrometry          *gofa.ASTROM
+	refractedAstrometry *gofa.ASTROM
+	Model               string                  `json:"model"`
+	Request             Request                 `json:"request"`
+	JDTDB               float64                 `json:"jdTdb"`
+	JDTT                float64                 `json:"jdTt"`
+	JDUT1               float64                 `json:"jdUt1"`
+	TDBMinusTTSeconds   float64                 `json:"tdbMinusTtSeconds"`
+	EOP                 earthorientation.Sample `json:"earthOrientation"`
+	Bodies              []BodyResult            `json:"bodies"`
+	Sources             []Source                `json:"sources"`
+	Warnings            []string                `json:"warnings"`
+	Contract            map[string]any          `json:"contract"`
+	ObserverState       ObserverState           `json:"observerState"`
 }
 
 type Error struct{ Code, Message string }
@@ -283,11 +287,18 @@ func evaluateSession(ctx context.Context, req Request, eop *earthorientation.Tab
 	if req.Atmosphere != nil {
 		a := req.Atmosphere
 		gofa.Refco(a.PressureHPa, a.TemperatureC, a.RelativeHumidity, a.WavelengthMicrometers, &refracted.Refa, &refracted.Refb)
+		if !finite(refracted.Refa) || !finite(refracted.Refb) {
+			return nil, fail("invalid_atmosphere", "atmosphere produces non-finite refraction coefficients")
+		}
 	}
 	result := &Result{Model: Model, Request: req, JDTDB: jd, JDTT: tt1 + tt2, JDUT1: ut11 + ut12, TDBMinusTTSeconds: dtr, EOP: sample, Bodies: make([]BodyResult, 0, len(req.BodyIDs)), Sources: []Source{}, Warnings: []string{}, Contract: map[string]any{
 		"stationDatum": "WGS84-ellipsoidal-height", "azimuthConvention": "north-zero-east-positive", "angleUnit": "deg", "sourceFrame": "ECLIPJ2000", "sourceOrigin": "solar-system-barycenter", "astrometryLibrary": "github.com/hebl/gofa@v1.19.1", "precessionNutation": "IAU-2006/2000A", "timeConversion": "SOFA-UTC-TAI-TT-UT1; Fairhead-Bretagnon-topocentric-TDB", "lightDeflection": "finite-distance-solar-monopole", "lightTimeToleranceSeconds": lightTimeToleranceSeconds, "physicalUncertainty": "not-propagated", "leapSecondTableLastEffectiveUTC": "2017-01-01", "excludedEffects": []string{"planetary-light-deflection", "Shapiro-light-time", "station-tectonic-motion", "solid-earth-and-ocean-tides", "terrain-horizon", "finite-target-limb"},
 	}}
 	result.ObserverState = ObserverState{Frame: "J2000", Origin: "solar-system-barycenter", EpochTDB: [2]float64{tdb1, tdb2}}
+	result.astrometry = &astrom
+	if req.Atmosphere != nil {
+		result.refractedAstrometry = &refracted
+	}
 	for i := 0; i < 3; i++ {
 		result.ObserverState.PositionKM[i] = astrom.Eb[i] * auKM
 		result.ObserverState.VelocityKMPerSecond[i] = astrom.V[i] * gofa.CMPS / 1000
@@ -358,12 +369,14 @@ func (s *session) body(id string, jd float64, states map[string]catalog.State, f
 		p, distance = unit(sub(target, astrom.Eb))
 		next := distance * gofa.AULT
 		out.Iterations = i + 1
-		residual = math.Abs(next - tau)
+		// Check the equation at the representable emission JD, not just
+		// stagnation of successive delays on the one-part JD time grid.
+		residual = math.Max(math.Abs(next-tau), math.Abs((jd-emission)*gofa.DAYSEC-next))
+		tau = next
 		if residual <= lightTimeToleranceSeconds {
 			converged = true
 			break
 		}
-		tau = next
 	}
 	if !converged {
 		return missing("light-time-not-converged")
