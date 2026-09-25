@@ -18,6 +18,7 @@ export function GaiaSky() {
   const [batches, setBatches] = useState<GaiaDisplayBatch[]>([]), [summary, setSummary] = useState<Summary | null>(null)
   const [zoom, setZoom] = useState(1), [selected, setSelected] = useState(0), [count, setCount] = useState(0)
   const [source, setSource] = useState<GaiaSource | null>(null)
+  const [chartGeneration, setChartGeneration] = useState(0)
   const sixParameterCovariance = useMemo(() => source ? gaiaAstrometricCovariance(source,6) : null, [source])
   const astrometricCovariance = useMemo(() => source ? gaiaAstrometricCovariance(source) : null, [source])
   const uncertainty = useMemo(() => source ? gaiaPositionUncertainty(source) : null, [source])
@@ -25,13 +26,14 @@ export function GaiaSky() {
   const idleWorker = useRef<Worker | null>(null)
   const uploadState = useRef<{ pending: number | null; acknowledged: number }>({ pending: null, acknowledged: 0 })
   const clear = useCallback(() => {
-    generation.current++; worker.current?.terminate(); worker.current = null; sources.current = []
+    generation.current++
+    setChartGeneration(generation.current)
+    worker.current?.terminate(); worker.current = null; sources.current = []
     uploadState.current = { pending: null, acknowledged: 0 }
     setOriginalManifest(null)
     setBusy(false); setError(''); setManifest(null); setManifestHash(''); setBatches([]); setSummary(null); setZoom(1); setSelected(0); setCount(0); setSource(null)
   }, [])
   const fail = useCallback((message: string) => { clear(); setError(message) }, [clear])
-  const chartGeneration = generation.current
   const uploaded = useCallback((sequence: number) => {
     if (generation.current !== chartGeneration || !worker.current) return
     const state = uploadState.current
