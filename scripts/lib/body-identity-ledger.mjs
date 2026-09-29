@@ -1,13 +1,18 @@
 /** Only records explicitly reattached by the audited identity mapping enter a
  * NAIF target group. Everything else remains a source record, not a new body. */
 export function createIdentityLedger() {
-  const groups = new Map(), unresolvedReasons = {}, sourceCounts = {}, coverageCounts = new Map()
+  // Match internal/coverage admission before retaining a report it cannot load.
+  const maxTargetGroups = 2048, maxSourceRefs = 4096, maxSourceRefsTotal = 8192, maxCoverageBuckets = 256
+  const groups = new Map(), unresolvedReasons = Object.create(null), sourceCounts = Object.create(null), coverageCounts = new Map()
   let total = 0, mapped = 0
   function addCoverage(source, status, model) {
     const key = JSON.stringify([source, status, model])
     const current = coverageCounts.get(key)
     if (current) current.count++
-    else coverageCounts.set(key, { source, status, model, count: 1 })
+    else {
+      if (coverageCounts.size >= maxCoverageBuckets) throw new RangeError('Coverage status buckets exceed the backend 256-bucket budget')
+      coverageCounts.set(key, { source, status, model, count: 1 })
+    }
   }
   return {
     add(record, ordinal) {
@@ -27,6 +32,9 @@ export function createIdentityLedger() {
           !['state-available-at-audit-epoch', 'no-state-at-audit-epoch'].includes(record.ephemerisStatus)) throw new Error('Unsubstantiated explicit identity')
       const evaluatedState = record.kernelEvidence.stateAtAuditEpoch
       if (record.ephemerisStatus === 'state-available-at-audit-epoch') {
+        if (typeof record.kernelEvidence.sourceSegment?.kernelId !== 'string' || !record.kernelEvidence.sourceSegment.kernelId ||
+            !/^[a-f0-9]{64}$/.test(record.kernelEvidence.sourceKernelSha256 ?? '') ||
+            !/^[a-f0-9]{64}$/.test(record.kernelEvidence.sourceChainSha256 ?? '')) throw new Error('Exact identity lacks checksum-bound recursive source-chain evidence')
         for (const part of ['position', 'velocity']) for (const axis of ['x', 'y', 'z']) {
           if (!Number.isFinite(evaluatedState?.[part]?.[axis])) throw new Error('Nonfinite evaluated identity state')
         }
@@ -36,11 +44,13 @@ export function createIdentityLedger() {
         record.ephemerisStatus === 'state-available-at-audit-epoch' ? 'spk-at-audit-epoch' : 'no-exact-state-at-audit-epoch')
       let group = groups.get(record.naifId)
       if (!group) {
+        if (groups.size >= maxTargetGroups) throw new RangeError('Coverage targets exceed the backend 2048-target budget')
         group = { target: record.naifId, key: `naif:${record.naifId}`, parentId: record.parentId ?? null,
           stateAtAuditEpoch: record.ephemerisStatus, evaluatedState, sourceRecords: [] }
         groups.set(record.naifId, group)
       }
       if (group.parentId !== (record.parentId ?? null) || group.stateAtAuditEpoch !== record.ephemerisStatus || JSON.stringify(group.evaluatedState) !== JSON.stringify(evaluatedState)) throw new Error('Conflicting explicit target identity or state')
+      if (group.sourceRecords.length >= maxSourceRefs || mapped >= maxSourceRefsTotal) throw new RangeError('Coverage source references exceed the backend 4096-per-target or 8192-total budget')
       group.sourceRecords.push({ ordinal, id: record.id, source: record.source, sourceRow: record.sourceRow,
         ...(record.identityMappingEvidence ? { mappingEvidence: record.identityMappingEvidence } : {}) })
       mapped++

@@ -10,6 +10,10 @@
     "bytes": 3767520,
     "path": "finals2000A-c672540e026d3cd4840c0858d4ce2bc4a18c3bc9751f9636c3285e11950d58a1.all"
   },
+  "earthOrientationCoverageMjdUtc": [
+    41684,
+    61673
+  ],
   "result": {
     "model": "earth-station-airless-windows-v1",
     "request": {
@@ -90,7 +94,6 @@
     ],
     "warnings": [
       "iers-predicted-earth-orientation",
-      "no-leap-seconds-after-2017-assumed",
       "sub-step-events-and-tangent-contacts-may-be-missed"
     ],
     "contract": {
@@ -110,7 +113,8 @@
       "searchCompleteness": "sign-changes-only-sub-step-and-tangent-events-not-guaranteed",
       "stationDatum": "WGS84-ellipsoidal-height",
       "stepSeconds": 30,
-      "timeAxis": "TAI-elapsed-SI-seconds"
+      "timeAxis": "TAI-elapsed-SI-seconds",
+      "futureLeapSecondUncertaintyStartUTC": "2027-07-01"
     }
   }
 }

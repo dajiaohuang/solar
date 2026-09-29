@@ -480,6 +480,7 @@ async function writeManifestsAndCapacity(buildInfo, dataset) {
   }))
   const datasetEntries = entries.filter((entry) => entry.path.startsWith('data/asteroids/'))
   const ephemerisEntries = entries.filter((entry) => entry.path.startsWith('data/ephemerides/'))
+  const gaiaEntries = entries.filter((entry) => entry.path.startsWith('data/gaia/'))
   const shellEntries = entries.filter((entry) => !entry.path.startsWith('data/'))
   const bytes = (items) => items.reduce((sum, item) => sum + item.bytes, 0)
   const coldLoadEntries = entries.filter((entry) => entry.path === 'index.html' || entry.path === 'manifest.webmanifest' || entry.path.startsWith('assets/'))
@@ -503,6 +504,8 @@ async function writeManifestsAndCapacity(buildInfo, dataset) {
     applicationShellBytes: bytes(shellEntries),
     datasetTotalBytes: bytes(datasetEntries),
     ephemerisTotalBytes: bytes(ephemerisEntries),
+    gaiaSkyBytes: bytes(gaiaEntries),
+    gaiaSkyFileCount: gaiaEntries.length,
     coldLoadTransferBytes: bytes(coldLoadEntries),
     typicalCatalogSessionBytes: bytes(coldLoadEntries) + bytes(typicalExtra),
     fileCount: entries.length,

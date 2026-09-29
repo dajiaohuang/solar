@@ -17,7 +17,7 @@ const LEGACY_LITE_LIMIT = process.env.MPCORB_LIMIT
 const LITE_MAX_PERMANENT_NUMBER = Number(process.env.MPCORB_LITE_MAX_NUMBER ?? LEGACY_LITE_LIMIT ?? 30_000)
 const DATASET_MODE = process.env.MPCORB_MODE === 'lite' || LEGACY_LITE_LIMIT ? 'lite' : 'full'
 const REQUIRE_FEATURED = process.env.MPCORB_REQUIRE_FEATURED !== '0'
-const PARSER_VERSION = '3.2.0'
+const PARSER_VERSION = '3.3.0'
 const PERMANENT_NUMBER_BUCKET_SIZE = 10_000
 const COMPACT_INDEX_STRIDE_BYTES = 24
 const DESKTOP_SAMPLE_LIMIT = 30_000
@@ -176,7 +176,10 @@ export function parseMpcorbLine(line, chunkId = 'chunk-0000') {
   if (numeric.semiMajorAxisAU <= 0 || numeric.meanMotionDegPerDay <= 0) return { error: 'non-positive-orbit' }
   if (numeric.inclinationDeg < 0 || numeric.inclinationDeg > 180) return { error: 'inclination-range' }
 
-  const absoluteMagnitude = finiteNumberOrNull(line.slice(8, 13)) ?? undefined
+  // Treat this exact value as unavailable per the pinned MPCORB snapshot; the
+  // public fixed-width specification does not document the sentinel.
+  const parsedMagnitude = finiteNumberOrNull(line.slice(8, 13))
+  const absoluteMagnitude = parsedMagnitude === 99.99 ? undefined : parsedMagnitude ?? undefined
   const flagsText = line.slice(161, 165).trim()
   const flags = flagsText ? Number.parseInt(flagsText, 16) : 0
   const classification = classifyOrbit(flags)
@@ -539,7 +542,7 @@ async function main() {
     writeArtifact('catalog-sample-mobile.json', mobileSample.metadata),
     writeArtifact('catalog-sample-mobile.bin', mobileSample.binary),
     writeArtifact('catalog-summary.json', {
-      schemaVersion: 2,
+      schemaVersion: 3,
       datasetMode: DATASET_MODE,
       totalCount,
       categoryCounts,

@@ -178,18 +178,30 @@ function readGm(file) {
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
 const gm = readGm(gmPath)
-const previousBodies = fs.existsSync(outputPath) ? JSON.parse(fs.readFileSync(outputPath, 'utf8')).bodies ?? [] : []
-const previousById = new Map(previousBodies.map((body) => [body.id, body]))
-const bodyIndexById = new Map()
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
 const manifestBytes = fs.readFileSync(manifestPath)
 const gmBytes = fs.readFileSync(gmPath)
+const generatorInputs = [
+  { path: 'scripts/generate-ephemeris-bodies.mjs', bytes: fs.readFileSync(fileURLToPath(import.meta.url)) },
+  ...['src/engine/ephemeris/kernelPool.ts', 'src/engine/ephemeris/osculating.ts', 'src/engine/ephemeris/spk.ts',
+    'src/engine/ephemeris/spkType17.ts', 'src/engine/ephemeris/spkType21.ts']
+    .map((input) => ({ path: input, bytes: fs.readFileSync(path.join(sourceRoot, input)) })),
+]
+const generatorFiles = generatorInputs.map(({ path: input, bytes }) => ({ path: input, sha256: sha256(bytes) }))
+const generatorSha256 = sha256(Buffer.from(JSON.stringify(generatorFiles)))
+const previousOutput = fs.existsSync(outputPath) ? JSON.parse(fs.readFileSync(outputPath, 'utf8')) : null
+const previousBodies = previousOutput?.bodies ?? []
+const previousById = new Map(previousBodies.map((body) => [body.id, body]))
+const bodyIndexById = new Map()
+const canReusePreviousBodies = previousOutput?.source?.manifestSha256 === sha256(manifestBytes)
+  && previousOutput?.source?.gmSha256 === sha256(gmBytes)
+  && previousOutput?.source?.generatorSha256 === generatorSha256
 const kernels = manifest.files.map((file) => {
   const filePath = path.resolve(sourceRoot, 'public/data/ephemerides', file.path)
   if (!fs.existsSync(filePath)) throw new Error(`Kernel missing: ${filePath}`)
   const bytes = fs.readFileSync(filePath)
   if (file.sha256 && sha256(bytes) !== file.sha256) throw new Error(`SHA-256 mismatch: ${file.path}`)
-  return { id: file.id, source: file.source, targets: file.targets, solutionKernelIds: file.solutionKernelIds, dependencyOnly: file.dependencyOnly, kernel: new SpkKernel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)) }
+  return { id: file.id, source: file.source, sha256: file.sha256, targets: file.targets, solutionKernelIds: file.solutionKernelIds, dependencyOnly: file.dependencyOnly, kernel: new SpkKernel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)) }
 })
 const [kernelPoolModule, osculatingModule] = await Promise.all([
   import(pathToFileURL(path.join(sourceRoot, 'src/engine/ephemeris/kernelPool.ts')).href),
@@ -229,15 +241,18 @@ for (const target of [...new Set(manifest.files.flatMap((f) => f.targets))].sort
     orbit: { model: 'keplerian', epochJd, ...orbit },
     parentRelativeStateKm: relative,
     fallback: { label: 'instantaneous two-body osculating ellipse; not an operational ephemeris', gmKm3S2: gmUsed, gmApproximation: satelliteGm == null ? 'parent-only (satellite GM unavailable)' : 'parent-plus-satellite', centerNaifId: parentNaifId },
-    sourceUrl: source.source, sourceKernelId: source.id }
-  // Existing fallback seeds are stable only while they represent the same
-  // target. When an exact numbered-body kernel arrives with a distinct NAIF
-  // target but the same human-facing designation, replace the fallback rather
-  // than preserving a stale SB441 state under the shared asteroid:<n> ID.
+    sourceUrl: source.source, sourceKernelId: source.id, sourceKernelSha256: source.sha256 }
+  // Preserve a generated seed only while its full computation inputs and
+  // selected source bytes are unchanged. A new profile may prefer a newer
+  // kernel for the same NAIF target; retain that source's evaluated state.
   const previous = previousById.get(generated.id)
   const replacesFallback = generated.sourceKernelId?.startsWith('horizons-asteroids-') === true
     && previous?.sourceKernelId?.startsWith('sb441-') === true
-  const preservesBody = previous?.naifId === generated.naifId && !replacesFallback
+  const preservesBody = canReusePreviousBodies && previous?.naifId === generated.naifId
+    && previous?.sourceKernelId === generated.sourceKernelId
+    && previous?.sourceUrl === generated.sourceUrl
+    && previous?.sourceKernelSha256 === generated.sourceKernelSha256
+    && !replacesFallback
   const selected = preservesBody && previous.name !== generated.name
     ? { ...previous, name: generated.name, shortName: generated.shortName }
     : preservesBody ? previous : generated
@@ -253,7 +268,7 @@ for (const target of [...new Set(manifest.files.flatMap((f) => f.targets))].sort
 }
 const result = { schemaVersion: 1, generatedAt: new Date().toISOString(), epochJd, epochTimeScale: 'TDB', source: {
   manifestPath: 'src/data/ephemeris-manifest.json', manifestId: manifest.id, manifestSha256: sha256(manifestBytes), gmUrl: GM_URL, gmFile: 'src/data/gm_de440.tpc', gmSha256: sha256(gmBytes), gmKm3S2: Object.fromEntries(gm),
-  kernelContract: manifest.contract }, bodies }
+  generatorSha256, generatorFiles, kernelContract: manifest.contract }, bodies }
 fs.mkdirSync(path.dirname(outputPath), { recursive: true })
 fs.writeFileSync(outputPath, `${JSON.stringify(result, null, 2)}\n`)
 console.log(`Wrote ${bodies.length} optional ephemeris bodies to ${outputPath}`)

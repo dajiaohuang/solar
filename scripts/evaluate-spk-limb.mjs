@@ -15,8 +15,8 @@ export async function evaluateSpkLimbFile(input, output, signal) {
   const [spk, pck, gmText] = await Promise.all([readFile(new URL(`public/data/ephemerides/${DE440_DYNAMICS_SOURCE.path}`, root)),
     readFile(new URL('src/data/pck00011.tpc', root)), readFile(new URL('src/data/gm_de440.tpc', root), 'utf8')])
   const report = await runSpkLimbExperiment({ inputBytes: buffer(bytes), spkBytes: buffer(spk), pckBytes: buffer(pck), gmText, signal })
-  const paths = ['scripts/evaluate-spk-limb.mjs', 'src/engine/events/spkLimbExperiment.ts', 'src/engine/events/ellipsoidLimb.ts',
-    'src/data/loaders/pckOrientation.ts', 'src/data/loaders/pckRadii.ts', 'src/engine/dynamics/de440Dynamics.ts',
+  const paths = ['scripts/evaluate-spk-limb.mjs', 'src/engine/events/spkLimbExperiment.ts', 'src/engine/events/ellipsoidLimb.ts', 'src/engine/events/ellipsoidRay.ts',
+    'src/data/loaders/pckOrientation.ts', 'src/data/loaders/pckRadii.ts', 'src/engine/dynamics/de440Dynamics.ts', 'src/engine/dynamics/de440Source.ts',
     'src/engine/ephemeris/spk.ts', 'src/engine/ephemeris/spkType17.ts', 'src/engine/ephemeris/spkType21.ts', 'src/engine/ephemeris/receptionLightTime.ts']
   const implementationSha256 = Object.fromEntries(await Promise.all(paths.map(async path => [path, createHash('sha256').update(await readFile(new URL(path, root))).digest('hex')])))
   if (signal?.aborted) throw new DOMException('Limb calculation cancelled', 'AbortError')

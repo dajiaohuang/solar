@@ -18,6 +18,39 @@ if output.exists():
 manifest_bytes = (pack / 'prepared-manifest.json').read_bytes()
 manifest = json.loads(manifest_bytes)
 start, end = (manifest['requestedWindow'][key] for key in ['startEt', 'endEt'])
+sources = manifest.get('sources')
+if sources is None:
+    source = manifest.get('source')
+    sources = [source] if isinstance(source, dict) else []
+if not isinstance(sources, list) or not sources:
+    raise ValueError('Prepared manifest has no spacecraft source records')
+repository_root = Path(__file__).resolve().parent.parent
+
+
+def external_dependencies():
+    dependencies = manifest.get('externalDependencies', [])
+    if not dependencies:
+        return []
+    runtime_manifest = json.loads((repository_root / 'src/data/ephemeris-manifest-full.json').read_text(encoding='utf8'))
+    result = []
+    for dependency in dependencies:
+        if not isinstance(dependency, dict) or not isinstance(dependency.get('id'), str) or not isinstance(dependency.get('sha256'), str):
+            raise ValueError('Invalid external dependency receipt')
+        entry = next((row for row in runtime_manifest['files'] if row.get('id') == dependency['id']), None)
+        if entry is None or entry.get('sha256') != dependency['sha256'] or entry.get('bytes') != dependency.get('bytes'):
+            raise ValueError(f"Runtime manifest dependency differs: {dependency['id']}")
+        base = (repository_root / 'public/data/ephemerides').resolve()
+        path = (base / entry['path']).resolve()
+        if not path.is_relative_to(base):
+            raise ValueError('External dependency path escapes the ephemeris directory')
+        data = path.read_bytes()
+        if len(data) != dependency['bytes'] or hashlib.sha256(data).hexdigest() != dependency['sha256']:
+            raise ValueError(f"External dependency bytes differ: {dependency['id']}")
+        result.append(dict(id=dependency['id'], sha256=dependency['sha256'], path=path))
+    return result
+
+
+dependencies = external_dependencies()
 
 
 def verified(relative, digest):
@@ -60,7 +93,7 @@ def boundaries(data):
 
 
 results = []
-for source in manifest['sources']:
+for source in sources:
     original, _ = verified(source['originalPath'], source['sha256'])
     files = [entry for entry in manifest['files'] if entry['sourceIdentity']['sha256'] == source['sha256']]
     paths, times = [], {start, end}
@@ -70,10 +103,14 @@ for source in manifest['sources']:
         times.update(boundaries(data))
     times = sorted(times)
     spice.kclear()
+    for dependency in dependencies:
+        spice.furnsh(str(dependency['path']))
     spice.furnsh(str(original))
     expected = [spice.spkgeo(source['target'], et, 'J2000', 0)[0].tolist() for et in times]
     spice.kclear()
-    # The manifest orders explicit dependencies before the spacecraft root.
+    # Load independently identified center/origin dependencies before the root.
+    for dependency in dependencies:
+        spice.furnsh(str(dependency['path']))
     for path in paths:
         spice.furnsh(str(path))
     maximum = [0.0] * 6
@@ -88,7 +125,8 @@ for source in manifest['sources']:
 report = dict(schemaVersion=1, frame='J2000', origin='SSB', aberration='NONE',
               software=dict(spiceypy=spice.__version__, cspice=spice.tkvrsn('TOOLKIT')),
               manifestSha256=hashlib.sha256(manifest_bytes).hexdigest(),
-              generatorSha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), sources=results,
+              generatorSha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+              externalDependencies=[dict(id=item['id'], sha256=item['sha256']) for item in dependencies], sources=results,
               limitation='Sampled original/crop equivalence only; not a physical accuracy bound or production admission.')
 with output.open('x', encoding='utf8', newline='\n') as handle:
     json.dump(report, handle, indent=2, allow_nan=False)

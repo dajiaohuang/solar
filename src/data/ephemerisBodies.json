@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-14T17:03:15.642Z",
+  "generatedAt": "2026-09-28T18:23:37.781Z",
   "epochJd": 2461287.5,
   "epochTimeScale": "TDB",
   "source": {
     "manifestPath": "src/data/ephemeris-manifest.json",
     "manifestId": "jpl-satellite-expansion-20260904-pages",
-    "manifestSha256": "93e3733dd2d4b673e85bae5f55c1aa4eb8d4af3e95ccc3cc1cc8a3a54d064d1c",
+    "manifestSha256": "fa450ad8d2b60a4b3a136750c80b085d1838b4b03a529d49790805b0aaaae890",
     "gmUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
     "gmFile": "src/data/gm_de440.tpc",
     "gmSha256": "924ddf4fb9ead9fe8a1aa55780bcabde40b09d00065d58226e24b68d8092f140",
@@ -126,7 +126,34 @@
       "953031823": 0.177,
       "953092511": 0.149
     },
-    "kernelContract": "Original SPK types 2/3/17/21; geometric states in declared frames and TDB windows. Explicit source dependency pools; cross-solution comparisons are not a single global dynamical fit. No refitting or duplicated force corrections."
+    "generatorSha256": "a501774a1813e0618370102c99d394055992e4f5211c3a1827537cdcda38792b",
+    "generatorFiles": [
+      {
+        "path": "scripts/generate-ephemeris-bodies.mjs",
+        "sha256": "69395d2b19978b222e35985f2474bffd79ddf9102ba9cef7d5df32fc21ba359b"
+      },
+      {
+        "path": "src/engine/ephemeris/kernelPool.ts",
+        "sha256": "bf71e32c57accf13b2c7f3ab2e07189ee66795422b9033d27589d9abac27e60e"
+      },
+      {
+        "path": "src/engine/ephemeris/osculating.ts",
+        "sha256": "b121c7e9d4552c3850c306139650b8faf8f95b836764eb0a47cd4c80f2fbd4ca"
+      },
+      {
+        "path": "src/engine/ephemeris/spk.ts",
+        "sha256": "2f6e21a3e4a9d1e16b2d43f763d3dd3b1b418f8ba67af580ea8a03f69c35437f"
+      },
+      {
+        "path": "src/engine/ephemeris/spkType17.ts",
+        "sha256": "5c05fecf43c5500ccf216983adb3072828a531c4c4f34972493674845a42ced9"
+      },
+      {
+        "path": "src/engine/ephemeris/spkType21.ts",
+        "sha256": "c8f0238ee95d66dce61b543e133e7d9f87be0a24a7f502f56759bddec1e24471"
+      }
+    ],
+    "kernelContract": "Original SPK types 2/3/17/21; geometric states in declared frames and TDB windows. Explicit source dependency pools; cross-solution comparisons are not a single global dynamical fit. No refitting or duplicated force corrections. Added spacecraft use original Type 1 records with explicit center dependencies; tracking cutoffs and source windows do not establish numerical error bounds. Added spacecraft use original Type 1 records with explicit center dependencies; tracking cutoffs and source windows do not establish numerical error bounds."
   },
   "bodies": [
     {
@@ -167,7 +194,8 @@
         "centerNaifId": 499
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/mar099s.bsp",
-      "sourceKernelId": "mar099s-401-2020-01-01-2031-01-01"
+      "sourceKernelId": "mar099s-401-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "a418527d1048c13cbdae6d6e8f550761aa5ced6a708af3aad119a909b9ab4d0f"
     },
     {
       "id": "naif:402",
@@ -207,7 +235,8 @@
         "centerNaifId": 499
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/mar099s.bsp",
-      "sourceKernelId": "mar099s-402-2020-01-01-2031-01-01"
+      "sourceKernelId": "mar099s-402-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "5e7d6d5b2b6f6db7427c90e9ee4c1d2b3e8f6d71bc80d22d7d2b309fcd96fb32"
     },
     {
       "id": "naif:505",
@@ -247,7 +276,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/jup365.bsp",
-      "sourceKernelId": "jup365-505-2020-01-01-2031-01-01"
+      "sourceKernelId": "jup365-505-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "347fec0b9abc5401ab69215381587cc7424e76e96b3e17096710f0e6f0d5934b"
     },
     {
       "id": "naif:506",
@@ -287,7 +317,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-506-2020-2031"
+      "sourceKernelId": "satellite-jup347-506-2020-2031",
+      "sourceKernelSha256": "6437ea7bd21af03dc16f7946534709967dc90e9f0b761ccd7428c9326965e72c"
     },
     {
       "id": "naif:507",
@@ -327,7 +358,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-507-2020-2031"
+      "sourceKernelId": "satellite-jup347-507-2020-2031",
+      "sourceKernelSha256": "9bb448e356ac92e9525fc7df91e9626343543512f23ffcf2dc70bfd404b60225"
     },
     {
       "id": "naif:508",
@@ -367,7 +399,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-508-2020-2031"
+      "sourceKernelId": "satellite-jup347-508-2020-2031",
+      "sourceKernelSha256": "0f1afa2a8be510554b489dbfde3fe5b850747aceb304b643faf4581e8eed03c3"
     },
     {
       "id": "naif:509",
@@ -383,7 +416,7 @@
         "semiMajorAxisAU": 0.15503715424705286,
         "eccentricity": 0.2515002411302001,
         "inclinationDeg": 158.85658840434047,
-        "ascendingNodeDeg": 49.776637086332414,
+        "ascendingNodeDeg": 49.77663708633247,
         "argPeriapsisDeg": 69.9431055621414,
         "meanAnomalyDeg": 135.07743318821912,
         "meanMotionDegPerDay": 0.49883830883477054
@@ -407,7 +440,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-509-2020-2031"
+      "sourceKernelId": "satellite-jup347-509-2020-2031",
+      "sourceKernelSha256": "0f2d4699a54f5bae6d8d182c441da590181be7ecd2496bbbba0f40cf9ed5285b"
     },
     {
       "id": "naif:510",
@@ -447,7 +481,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-510-2020-2031"
+      "sourceKernelId": "satellite-jup347-510-2020-2031",
+      "sourceKernelSha256": "5dc75bbd32e36b6cd5770846e8e52be72e64e9f72160abff1174b1a76a6c3761"
     },
     {
       "id": "naif:511",
@@ -463,8 +498,8 @@
         "semiMajorAxisAU": 0.15782558564360294,
         "eccentricity": 0.2698400073160919,
         "inclinationDeg": 162.35810996666007,
-        "ascendingNodeDeg": 231.64058044985742,
-        "argPeriapsisDeg": 158.96864528110427,
+        "ascendingNodeDeg": 231.6405804498574,
+        "argPeriapsisDeg": 158.96864528110416,
         "meanAnomalyDeg": 315.55882122154713,
         "meanMotionDegPerDay": 0.4856768086594754
       },
@@ -487,7 +522,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-511-2020-2031"
+      "sourceKernelId": "satellite-jup347-511-2020-2031",
+      "sourceKernelSha256": "f7c4ca75a291465bd6a7abf042fda08b752b990eb72b4436388a268697af19db"
     },
     {
       "id": "naif:512",
@@ -527,7 +563,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-512-2020-2031"
+      "sourceKernelId": "satellite-jup347-512-2020-2031",
+      "sourceKernelSha256": "f7b947d1e5db204cb84a629a7113c0c99b4218bd4ae89b1a5f3ea95c04c09b72"
     },
     {
       "id": "naif:513",
@@ -567,7 +604,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-513-2020-2031"
+      "sourceKernelId": "satellite-jup347-513-2020-2031",
+      "sourceKernelSha256": "d7f239d98a9d90808657bc00c8ce838dcd82c1ae5fe92a63dd5e0eba65be7f3d"
     },
     {
       "id": "naif:514",
@@ -607,7 +645,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/jup365.bsp",
-      "sourceKernelId": "jup365-514-2020-01-01-2031-01-01"
+      "sourceKernelId": "jup365-514-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "8ba8ffe57611ecf0f1e926c632f9c26a83fdf45dd34d5510b1574449706815f3"
     },
     {
       "id": "naif:515",
@@ -647,7 +686,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/jup365.bsp",
-      "sourceKernelId": "jup365-515-2020-01-01-2031-01-01"
+      "sourceKernelId": "jup365-515-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "a82c2146c0c9e97dd6e1095f69934953c0229a07a42e63d642508b3a1827b545"
     },
     {
       "id": "naif:516",
@@ -687,7 +727,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/jup365.bsp",
-      "sourceKernelId": "jup365-516-2020-01-01-2031-01-01"
+      "sourceKernelId": "jup365-516-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "6c56adcf753ec6fc1d6872a2c607453931e367139eb6ba766b3d611a6092d966"
     },
     {
       "id": "naif:517",
@@ -727,7 +768,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-517-2020-2031"
+      "sourceKernelId": "satellite-jup347-517-2020-2031",
+      "sourceKernelSha256": "68ee1fa32175cb32eea6af30b2f3b2582a5f1709ee2b9db2b843dd69d89eafa3"
     },
     {
       "id": "naif:518",
@@ -767,7 +809,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-518-2020-2031"
+      "sourceKernelId": "satellite-jup347-518-2020-2031",
+      "sourceKernelSha256": "2401ea8f185844c387928222e2fd2e072afd6457eb5bd53a651274a56883a485"
     },
     {
       "id": "naif:519",
@@ -807,7 +850,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-519-2020-2031"
+      "sourceKernelId": "satellite-jup347-519-2020-2031",
+      "sourceKernelSha256": "ff2a4479094a04081dbbbff2ad1c50a0b57f0f5d4d19ae3102c1248f25008f6a"
     },
     {
       "id": "naif:520",
@@ -847,7 +891,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-520-2020-2031"
+      "sourceKernelId": "satellite-jup347-520-2020-2031",
+      "sourceKernelSha256": "2f52b462618bd058b7293cd5be429f058d31c06b9c2e49e1fb6a78cc046490aa"
     },
     {
       "id": "naif:521",
@@ -887,7 +932,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-521-2020-2031"
+      "sourceKernelId": "satellite-jup347-521-2020-2031",
+      "sourceKernelSha256": "bc7581ce0a608d2b741aa9c5066bc7734db93e5a4fdcef92180dd789a6a8806d"
     },
     {
       "id": "naif:522",
@@ -927,7 +973,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-522-2020-2031"
+      "sourceKernelId": "satellite-jup347-522-2020-2031",
+      "sourceKernelSha256": "3a62f83b2f342f874fb95a687b9c9974b051a63cc4368ba4a5c417c1349ab467"
     },
     {
       "id": "naif:523",
@@ -967,7 +1014,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-523-2020-2031"
+      "sourceKernelId": "satellite-jup347-523-2020-2031",
+      "sourceKernelSha256": "ed008bee795c50af11af264a56406417ef519902bd0f6e3a25bf6f30262a3434"
     },
     {
       "id": "naif:524",
@@ -1007,7 +1055,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-524-2020-2031"
+      "sourceKernelId": "satellite-jup347-524-2020-2031",
+      "sourceKernelSha256": "e0564d452987aa73f5baffab07c4784c1a70e8608f438973368368ef28828d07"
     },
     {
       "id": "naif:525",
@@ -1047,7 +1096,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-525-2020-2031"
+      "sourceKernelId": "satellite-jup347-525-2020-2031",
+      "sourceKernelSha256": "3ba66178a869069314ee4967a2364b6fd661eb86d343dffe1f491b324d3ca075"
     },
     {
       "id": "naif:526",
@@ -1087,7 +1137,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-526-2020-2031"
+      "sourceKernelId": "satellite-jup347-526-2020-2031",
+      "sourceKernelSha256": "94412b295c6c2d8a6cf8fab01e4510ad1453978e6667b56453a6fbcc827c0ee8"
     },
     {
       "id": "naif:527",
@@ -1104,7 +1155,7 @@
         "eccentricity": 0.29518473189197314,
         "inclinationDeg": 149.37771370907507,
         "ascendingNodeDeg": 6.085156254671176,
-        "argPeriapsisDeg": 266.9852679664074,
+        "argPeriapsisDeg": 266.98526796640743,
         "meanAnomalyDeg": 335.2702832960506,
         "meanMotionDegPerDay": 0.5737513511115574
       },
@@ -1127,7 +1178,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-527-2020-2031"
+      "sourceKernelId": "satellite-jup347-527-2020-2031",
+      "sourceKernelSha256": "1573f43f6c789a05658a752218cd97e4c2535d9692c9dc2ce6800590ddd79290"
     },
     {
       "id": "naif:528",
@@ -1167,7 +1219,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-528-2020-2031"
+      "sourceKernelId": "satellite-jup347-528-2020-2031",
+      "sourceKernelSha256": "f46c106758886563adaee5b60ec0b15affb046c0aa7dcfd74980d818a57f5623"
     },
     {
       "id": "naif:529",
@@ -1207,7 +1260,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-529-2020-2031"
+      "sourceKernelId": "satellite-jup347-529-2020-2031",
+      "sourceKernelSha256": "24cf0c6a62e1267b1d4f6903b84e240655662a9216d1b813cc9df8961f9c7755"
     },
     {
       "id": "naif:530",
@@ -1247,7 +1301,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-530-2020-2031"
+      "sourceKernelId": "satellite-jup347-530-2020-2031",
+      "sourceKernelSha256": "44aa5a85118f23b6e707bdee41375e20818de7c64e71aadc65de5e5a484ffa09"
     },
     {
       "id": "naif:531",
@@ -1287,7 +1342,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-531-2020-2031"
+      "sourceKernelId": "satellite-jup347-531-2020-2031",
+      "sourceKernelSha256": "dcc8ec8f72e8cf5419dfb6c6eb3cac7ba5cea21adae6443cd3b5b0eb4e13586e"
     },
     {
       "id": "naif:532",
@@ -1304,7 +1360,7 @@
         "eccentricity": 0.206663591842009,
         "inclinationDeg": 149.24335337539688,
         "ascendingNodeDeg": 53.816128076374014,
-        "argPeriapsisDeg": 316.61975620859926,
+        "argPeriapsisDeg": 316.6197562085993,
         "meanAnomalyDeg": 151.53118350456361,
         "meanMotionDegPerDay": 0.4854001008154088
       },
@@ -1327,7 +1383,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-532-2020-2031"
+      "sourceKernelId": "satellite-jup347-532-2020-2031",
+      "sourceKernelSha256": "233cbcca4f78f7fa277ef4dbcd08a8e32cc949e303e99daa9cadd8a2c62dbef3"
     },
     {
       "id": "naif:533",
@@ -1367,7 +1424,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-533-2020-2031"
+      "sourceKernelId": "satellite-jup347-533-2020-2031",
+      "sourceKernelSha256": "dac822086928a8c4481964ca89678d0f5387c62b994541c8a2bc262ad07dc036"
     },
     {
       "id": "naif:534",
@@ -1407,7 +1465,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-534-2020-2031"
+      "sourceKernelId": "satellite-jup347-534-2020-2031",
+      "sourceKernelSha256": "1ae6486f2fe8b2a317992d476e5d6b7286d1e611ebc98ef7fcdb53502c4768f0"
     },
     {
       "id": "naif:535",
@@ -1447,7 +1506,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-535-2020-2031"
+      "sourceKernelId": "satellite-jup347-535-2020-2031",
+      "sourceKernelSha256": "027f413b3c2906976b7e90c3832332d6fbec1d84075676596d3797ca879f1208"
     },
     {
       "id": "naif:536",
@@ -1464,7 +1524,7 @@
         "eccentricity": 0.2770571140859478,
         "inclinationDeg": 142.92863407903613,
         "ascendingNodeDeg": 234.94638372267121,
-        "argPeriapsisDeg": 176.22406072827528,
+        "argPeriapsisDeg": 176.2240607282754,
         "meanAnomalyDeg": 179.32651765756566,
         "meanMotionDegPerDay": 0.5034765634595754
       },
@@ -1487,7 +1547,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-536-2020-2031"
+      "sourceKernelId": "satellite-jup347-536-2020-2031",
+      "sourceKernelSha256": "709160191ceef4b7bb0596ac56773f0525be1f32f3ee39a2610eedd076b4e542"
     },
     {
       "id": "naif:537",
@@ -1527,7 +1588,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-537-2020-2031"
+      "sourceKernelId": "satellite-jup347-537-2020-2031",
+      "sourceKernelSha256": "5198a24422ea258ee1fb4f12ad1f7bf7996218924e67a96b8cbba5ffeaa612ca"
     },
     {
       "id": "naif:538",
@@ -1567,7 +1629,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-538-2020-2031"
+      "sourceKernelId": "satellite-jup347-538-2020-2031",
+      "sourceKernelSha256": "92b1e8535e7f4a2f56c13d1ba7f6f3299597819337a02dd42f3c770020252130"
     },
     {
       "id": "naif:539",
@@ -1607,7 +1670,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-539-2020-2031"
+      "sourceKernelId": "satellite-jup347-539-2020-2031",
+      "sourceKernelSha256": "8d67ce2ce5aa1e520d1370659026f950657d91b1f759ebdac313f27eb16ef6c5"
     },
     {
       "id": "naif:540",
@@ -1647,7 +1711,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-540-2020-2031"
+      "sourceKernelId": "satellite-jup347-540-2020-2031",
+      "sourceKernelSha256": "d6b007f32ba071a021f599e392c249ce976c713988062eb9f30e04672488d34b"
     },
     {
       "id": "naif:541",
@@ -1687,7 +1752,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-541-2020-2031"
+      "sourceKernelId": "satellite-jup347-541-2020-2031",
+      "sourceKernelSha256": "2ded73568afee83906ecbc89df740db0694bf9b40dd35d63276494b62a70dd09"
     },
     {
       "id": "naif:542",
@@ -1727,7 +1793,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-542-2020-2031"
+      "sourceKernelId": "satellite-jup347-542-2020-2031",
+      "sourceKernelSha256": "ffd99e9344fd3c81337a4d15f3dcddf65fdd57a7da5286383d694681ae4e4990"
     },
     {
       "id": "naif:543",
@@ -1767,7 +1834,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-543-2020-2031"
+      "sourceKernelId": "satellite-jup347-543-2020-2031",
+      "sourceKernelSha256": "b77cc02c337cd1170bb5fdd6a9095ad43e79ed2c1e3bbb4c07988c950205f07f"
     },
     {
       "id": "naif:544",
@@ -1807,7 +1875,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-544-2020-2031"
+      "sourceKernelId": "satellite-jup347-544-2020-2031",
+      "sourceKernelSha256": "4b2d3b8a7f5ed840a76264ad37848f1eef55cbd0b1bf5f565071d281de5c6823"
     },
     {
       "id": "naif:545",
@@ -1847,7 +1916,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-545-2020-2031"
+      "sourceKernelId": "satellite-jup347-545-2020-2031",
+      "sourceKernelSha256": "09f2d19e9f2f7c29ba895399d36f879d2dc7ee7442c7771c71fb1a5366df0d9e"
     },
     {
       "id": "naif:546",
@@ -1887,7 +1957,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-546-2020-2031"
+      "sourceKernelId": "satellite-jup347-546-2020-2031",
+      "sourceKernelSha256": "a14bc7140893dc4394d7bb2e90edf0ec546040143f58567fce8e94689325efdc"
     },
     {
       "id": "naif:547",
@@ -1927,7 +1998,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-547-2020-2031"
+      "sourceKernelId": "satellite-jup347-547-2020-2031",
+      "sourceKernelSha256": "87ce49efc59180e2471dbc217a3a699126ff4985fa9374ade35a82b600e7ab6f"
     },
     {
       "id": "naif:548",
@@ -1967,7 +2039,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-548-2020-2031"
+      "sourceKernelId": "satellite-jup347-548-2020-2031",
+      "sourceKernelSha256": "eb866aea0d8f7da702e5ae50d8e7131597a85db572fd06fdad7805727427489c"
     },
     {
       "id": "naif:549",
@@ -2007,7 +2080,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-549-2020-2031"
+      "sourceKernelId": "satellite-jup347-549-2020-2031",
+      "sourceKernelSha256": "c33d393536430da2550f471f9c8dd01c6f20338260ae3701cef281c9ee9ca23f"
     },
     {
       "id": "naif:550",
@@ -2047,7 +2121,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-550-2020-2031"
+      "sourceKernelId": "satellite-jup347-550-2020-2031",
+      "sourceKernelSha256": "019211fad1ee6733895a23f6e7b23aa24866111c55497b258f8922bf13c57762"
     },
     {
       "id": "naif:551",
@@ -2087,7 +2162,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-551-2020-2031"
+      "sourceKernelId": "satellite-jup347-551-2020-2031",
+      "sourceKernelSha256": "d5efbbb3413256df1ad7d36dccb61e351eccdb80ec782e0c44bfc5a16d9e6618"
     },
     {
       "id": "naif:552",
@@ -2127,7 +2203,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-552-2020-2031"
+      "sourceKernelId": "satellite-jup347-552-2020-2031",
+      "sourceKernelSha256": "2860a1c5ced4aa9982daa2dc70c04c39ba5cb8e886822fbfa908130da0f6aeda"
     },
     {
       "id": "naif:553",
@@ -2167,7 +2244,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-553-2020-2031"
+      "sourceKernelId": "satellite-jup347-553-2020-2031",
+      "sourceKernelSha256": "9dedba1448b70d7c396408c617aba3a24356e50665522fdf830d305b7b239372"
     },
     {
       "id": "naif:554",
@@ -2207,7 +2285,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-554-2020-2031"
+      "sourceKernelId": "satellite-jup347-554-2020-2031",
+      "sourceKernelSha256": "ca47a216d0fd39f1727a74b7a2d70a716cb54f4f0ac5a07609af2019b114c413"
     },
     {
       "id": "naif:555",
@@ -2247,7 +2326,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-555-2020-2031"
+      "sourceKernelId": "satellite-jup347-555-2020-2031",
+      "sourceKernelSha256": "cf05568740ffbc64a2a9e32bca10121239d0cca02c7bc093b362234962b9ce20"
     },
     {
       "id": "naif:556",
@@ -2287,7 +2367,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-556-2020-2031"
+      "sourceKernelId": "satellite-jup347-556-2020-2031",
+      "sourceKernelSha256": "e357bab05006cf81be445ad757050021f722df37251659ad4e789c786725e190"
     },
     {
       "id": "naif:557",
@@ -2327,7 +2408,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-557-2020-2031"
+      "sourceKernelId": "satellite-jup347-557-2020-2031",
+      "sourceKernelSha256": "fda697f37826b05729fbd2d5c1fff09201480510d05cc8d3e33c739f29e939d7"
     },
     {
       "id": "naif:558",
@@ -2367,7 +2449,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-558-2020-2031"
+      "sourceKernelId": "satellite-jup347-558-2020-2031",
+      "sourceKernelSha256": "27bbe0301b325a468b34903a093181bf08dd1932d8138532675231dabb5a4f3f"
     },
     {
       "id": "naif:559",
@@ -2407,7 +2490,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-559-2020-2031"
+      "sourceKernelId": "satellite-jup347-559-2020-2031",
+      "sourceKernelSha256": "985ba6088822640067c5d217ad6465fc1e0f0a7c1bb2240899fc7bbd53df7ef9"
     },
     {
       "id": "naif:560",
@@ -2447,7 +2531,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-560-2020-2031"
+      "sourceKernelId": "satellite-jup347-560-2020-2031",
+      "sourceKernelSha256": "45d282c0060ba99814ca6ded55f60064e950bbd5b58b980e04707a649efe2a47"
     },
     {
       "id": "naif:561",
@@ -2487,7 +2572,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-561-2020-2031"
+      "sourceKernelId": "satellite-jup347-561-2020-2031",
+      "sourceKernelSha256": "582ae84b0c744c683ca25df64305aaefecc00dcb6d154154cf8ff2f26ede589a"
     },
     {
       "id": "naif:562",
@@ -2527,7 +2613,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-562-2020-2031"
+      "sourceKernelId": "satellite-jup347-562-2020-2031",
+      "sourceKernelSha256": "64399e6a8bb36344851d096c9a0095deca976c98670eedbc5341cd5085966678"
     },
     {
       "id": "naif:563",
@@ -2567,7 +2654,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-563-2020-2031"
+      "sourceKernelId": "satellite-jup347-563-2020-2031",
+      "sourceKernelSha256": "99a310f794e18d2727a4afbfe7b907fd3484bb7b081a3c6d394f1c061ff3b67a"
     },
     {
       "id": "naif:564",
@@ -2607,7 +2695,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-564-2020-2031"
+      "sourceKernelId": "satellite-jup347-564-2020-2031",
+      "sourceKernelSha256": "1861ecef963561fc8699d2e3f8d3be636743bfb24c26cc073481c9034b8d1037"
     },
     {
       "id": "naif:565",
@@ -2647,7 +2736,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-565-2020-2031"
+      "sourceKernelId": "satellite-jup347-565-2020-2031",
+      "sourceKernelSha256": "f5ef9bb62800bac9fe09ea0ef80301eaea5976ce6d0c5080e74463fdb4770a7b"
     },
     {
       "id": "naif:566",
@@ -2687,7 +2777,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-566-2020-2031"
+      "sourceKernelId": "satellite-jup347-566-2020-2031",
+      "sourceKernelSha256": "5481cba4d675d923641cebfb591f99b8430568de4bf1b8d52f4503277598f639"
     },
     {
       "id": "naif:567",
@@ -2727,7 +2818,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-567-2020-2031"
+      "sourceKernelId": "satellite-jup347-567-2020-2031",
+      "sourceKernelSha256": "606ac4735b32b12f3eadb89783ba932cbbde38455119e3ec95df8cb564704331"
     },
     {
       "id": "naif:568",
@@ -2767,7 +2859,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-568-2020-2031"
+      "sourceKernelId": "satellite-jup347-568-2020-2031",
+      "sourceKernelSha256": "9d705907518ed790c985b4f435a6ca19190b494553b5e6ba1ad0858c78f533ed"
     },
     {
       "id": "naif:569",
@@ -2807,7 +2900,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-569-2020-2031"
+      "sourceKernelId": "satellite-jup347-569-2020-2031",
+      "sourceKernelSha256": "a49b577f72dbab65131eaecfe54b9750162971291ae95e84bd0e66d0bc5bedb1"
     },
     {
       "id": "naif:570",
@@ -2847,7 +2941,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-570-2020-2031"
+      "sourceKernelId": "satellite-jup347-570-2020-2031",
+      "sourceKernelSha256": "2838b9643bb50c52ef75d9b3c9c32e3a004fa564918b21649ef936af35f4d0da"
     },
     {
       "id": "naif:571",
@@ -2887,7 +2982,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-571-2020-2031"
+      "sourceKernelId": "satellite-jup347-571-2020-2031",
+      "sourceKernelSha256": "1b515d108b6505d725cc595681192d1110fcad8ac068b8f362c35f3b3a9ae4c4"
     },
     {
       "id": "naif:572",
@@ -2927,7 +3023,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-572-2020-2031"
+      "sourceKernelId": "satellite-jup347-572-2020-2031",
+      "sourceKernelSha256": "041f04707afd52420c4c2659422eb4309aea46f62905257a464445f39cecb68f"
     },
     {
       "id": "naif:601",
@@ -2967,7 +3064,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat441.bsp",
-      "sourceKernelId": "sat441-601-2020-01-01-2031-01-01"
+      "sourceKernelId": "sat441-601-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "24a22980569ffeb11dbf9967b8d345f725643737d9f2639c070dcbb86fab2421"
     },
     {
       "id": "naif:602",
@@ -3007,7 +3105,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat441.bsp",
-      "sourceKernelId": "sat441-602-2020-01-01-2031-01-01"
+      "sourceKernelId": "sat441-602-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "1bad7692d1afccd0f0b4c580cb346d5d885298e3015f9751af2717492ff698bc"
     },
     {
       "id": "naif:603",
@@ -3047,7 +3146,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat441.bsp",
-      "sourceKernelId": "sat441-603-2020-01-01-2031-01-01"
+      "sourceKernelId": "sat441-603-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "95a0779a4f4f3dc216174da3d6ddb00fa8a857d544e91fca1940e4666335bfd2"
     },
     {
       "id": "naif:604",
@@ -3087,7 +3187,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat441.bsp",
-      "sourceKernelId": "sat441-604-2020-01-01-2031-01-01"
+      "sourceKernelId": "sat441-604-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "c91f932c899c6726e85c537ac9db54cdf4ca56071b9ca10e7928c005a2a70fe0"
     },
     {
       "id": "naif:605",
@@ -3127,7 +3228,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat441.bsp",
-      "sourceKernelId": "sat441-605-2020-01-01-2031-01-01"
+      "sourceKernelId": "sat441-605-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "08a141f5e152d0b5fc24680d9eb2ddab2d495b10f5048a376e7ffca07faaccab"
     },
     {
       "id": "naif:607",
@@ -3167,7 +3269,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat441.bsp",
-      "sourceKernelId": "sat441-607-2020-01-01-2031-01-01"
+      "sourceKernelId": "sat441-607-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "3a8409fb691debaa3e470c9a6c7c45fdba09c3b14befaea8b398f9527199590d"
     },
     {
       "id": "naif:608",
@@ -3207,7 +3310,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat441.bsp",
-      "sourceKernelId": "sat441-608-2020-01-01-2031-01-01"
+      "sourceKernelId": "sat441-608-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "6287305d5f4545e7838753356589242f3312e26cdf5c59299701e66820ce20d2"
     },
     {
       "id": "naif:609",
@@ -3247,7 +3351,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat441.bsp",
-      "sourceKernelId": "sat441-609-2020-01-01-2031-01-01"
+      "sourceKernelId": "sat441-609-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "21e76f0da7661ee9aa6c66087d218ef4bda2fefd1d059fea0a4232433005f812"
     },
     {
       "id": "naif:610",
@@ -3287,7 +3392,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
-      "sourceKernelId": "satellite-naif-sat415-610-2026-2027"
+      "sourceKernelId": "satellite-naif-sat415-610-2026-2027",
+      "sourceKernelSha256": "ad251c7111e7deb64e6cbc732095b522641151efd9d9033308fd047a911f05ab"
     },
     {
       "id": "naif:611",
@@ -3327,7 +3433,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
-      "sourceKernelId": "satellite-naif-sat415-611-2026-2027"
+      "sourceKernelId": "satellite-naif-sat415-611-2026-2027",
+      "sourceKernelSha256": "e47bb0361afab1eca7d008f031a775fa4fbd30bc5679f852e0bb3b4b8f0c68f9"
     },
     {
       "id": "naif:612",
@@ -3367,7 +3474,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat441.bsp",
-      "sourceKernelId": "sat441-612-2020-01-01-2031-01-01"
+      "sourceKernelId": "sat441-612-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "84a0f349421320cddb91775258504d1b05679531da36739828aa828e5e4fc3ce"
     },
     {
       "id": "naif:613",
@@ -3407,7 +3515,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat441.bsp",
-      "sourceKernelId": "sat441-613-2020-01-01-2031-01-01"
+      "sourceKernelId": "sat441-613-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "b28bfd0f81ef871dbdf30c39a0f5b7051780d8c299d7dbe23784e0f7de1053bc"
     },
     {
       "id": "naif:614",
@@ -3447,7 +3556,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat441.bsp",
-      "sourceKernelId": "sat441-614-2020-01-01-2031-01-01"
+      "sourceKernelId": "sat441-614-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "dfd08dea3a5814992ed07b2f426ee20c4602772289c7ef17bf583de9aa3fb472"
     },
     {
       "id": "naif:615",
@@ -3487,7 +3597,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
-      "sourceKernelId": "satellite-naif-sat415-615-2026-2027"
+      "sourceKernelId": "satellite-naif-sat415-615-2026-2027",
+      "sourceKernelSha256": "09606bdfcc61f63af413cd89686f464e42dd23749e6777c43a71757c560d4b86"
     },
     {
       "id": "naif:616",
@@ -3527,7 +3638,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
-      "sourceKernelId": "satellite-naif-sat415-616-2026-2027"
+      "sourceKernelId": "satellite-naif-sat415-616-2026-2027",
+      "sourceKernelSha256": "e818c4b8cfdab348b0b6aab1bb82756304c5f8b252bd8c1048bb9076e2a8609d"
     },
     {
       "id": "naif:617",
@@ -3567,7 +3679,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
-      "sourceKernelId": "satellite-naif-sat415-617-2026-2027"
+      "sourceKernelId": "satellite-naif-sat415-617-2026-2027",
+      "sourceKernelSha256": "3163350085ef26ca91cb5216750d4a54acaa47b74b5d62ac58eb45d2a6ec95c9"
     },
     {
       "id": "naif:618",
@@ -3607,7 +3720,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
-      "sourceKernelId": "satellite-naif-sat415-618-2026-2027"
+      "sourceKernelId": "satellite-naif-sat415-618-2026-2027",
+      "sourceKernelSha256": "ac2e9028ee2583f51f4cbc7d9958ec9dedbbfa07594c89d61da8f3951425f2b8"
     },
     {
       "id": "naif:619",
@@ -3647,7 +3761,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/sat456.bsp",
-      "sourceKernelId": "satellite-sat456-619-2020-2031"
+      "sourceKernelId": "satellite-sat456-619-2020-2031",
+      "sourceKernelSha256": "3a8bedccccf30c76287dc13c682e199e14ee32a781c42461412f1490ff45d078"
     },
     {
       "id": "naif:620",
@@ -3687,7 +3802,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/sat456.bsp",
-      "sourceKernelId": "satellite-sat456-620-2020-2031"
+      "sourceKernelId": "satellite-sat456-620-2020-2031",
+      "sourceKernelSha256": "bb33146687421ffe8b313004b2c8406548c2fd9002d07a928feeadfb3487bb00"
     },
     {
       "id": "naif:621",
@@ -3704,7 +3820,7 @@
         "eccentricity": 0.5620516139085856,
         "inclinationDeg": 40.88743884958355,
         "ascendingNodeDeg": 57.55337100281844,
-        "argPeriapsisDeg": 316.3813514459737,
+        "argPeriapsisDeg": 316.38135144597373,
         "meanAnomalyDeg": 97.38023317568019,
         "meanMotionDegPerDay": 0.39164547258489596
       },
@@ -3727,7 +3843,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/sat456.bsp",
-      "sourceKernelId": "satellite-sat456-621-2020-2031"
+      "sourceKernelId": "satellite-sat456-621-2020-2031",
+      "sourceKernelSha256": "e66291d7febabdeb0a0e099c669f148d9e2f51ad87117849c5cea1ea8c966e58"
     },
     {
       "id": "naif:622",
@@ -3767,7 +3884,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/sat456.bsp",
-      "sourceKernelId": "satellite-sat456-622-2020-2031"
+      "sourceKernelId": "satellite-sat456-622-2020-2031",
+      "sourceKernelSha256": "b7228d812e7833c3449c00728368233ac50af1b1e8f3bacea8096bc77fb5842c"
     },
     {
       "id": "naif:632",
@@ -3807,7 +3925,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat441.bsp",
-      "sourceKernelId": "sat441-632-2020-01-01-2031-01-01"
+      "sourceKernelId": "sat441-632-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "ac614a13680fd6faa1e2fcb8d618e955b71ed6be723229bc7a7631df65bd19ec"
     },
     {
       "id": "naif:633",
@@ -3847,7 +3966,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
-      "sourceKernelId": "satellite-naif-sat415-633-2020-2031"
+      "sourceKernelId": "satellite-naif-sat415-633-2020-2031",
+      "sourceKernelSha256": "6feeb54216540bb18f10b0ec3afa09818497fcf1186c9c5d2e0082994ba9d1da"
     },
     {
       "id": "naif:634",
@@ -3887,7 +4007,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat441.bsp",
-      "sourceKernelId": "sat441-634-2020-01-01-2031-01-01"
+      "sourceKernelId": "sat441-634-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "4c483350a1022760129476caff8050aafb6a3d81dc2b9b6fc2e915425a05db6f"
     },
     {
       "id": "naif:649",
@@ -3927,7 +4048,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
-      "sourceKernelId": "satellite-naif-sat415-649-2020-2031"
+      "sourceKernelId": "satellite-naif-sat415-649-2020-2031",
+      "sourceKernelSha256": "dc25743a460c105495d09524b346575a4531633718fe051de5106d7d55187a5c"
     },
     {
       "id": "naif:653",
@@ -3967,7 +4089,8 @@
         "centerNaifId": 699
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/sat415.bsp",
-      "sourceKernelId": "satellite-naif-sat415-653-2020-2031"
+      "sourceKernelId": "satellite-naif-sat415-653-2020-2031",
+      "sourceKernelSha256": "6e916f97b15980801115e94f5f7a0bf2c41f17e1cfcf190336f337e864173d6e"
     },
     {
       "id": "naif:701",
@@ -3980,24 +4103,24 @@
       "orbit": {
         "model": "keplerian",
         "epochJd": 2461287.5,
-        "semiMajorAxisAU": 0.0012763890859184153,
-        "eccentricity": 0.0005353167605859151,
-        "inclinationDeg": 97.71226094387907,
-        "ascendingNodeDeg": 167.686371878312,
-        "argPeriapsisDeg": 241.4485977100772,
-        "meanAnomalyDeg": 132.90552094033416,
-        "meanMotionDegPerDay": 142.81182875818314
+        "semiMajorAxisAU": 0.0012763891870861731,
+        "eccentricity": 0.0005516162136020266,
+        "inclinationDeg": 97.71767438736902,
+        "ascendingNodeDeg": 167.6657388161043,
+        "argPeriapsisDeg": 246.43153134506696,
+        "meanAnomalyDeg": 127.94191264559504,
+        "meanMotionDegPerDay": 142.811811779092
       },
       "parentRelativeStateKm": {
         "position": {
-          "x": -179398.71810936928,
-          "y": 45684.50254917145,
-          "z": 47070.631151448935
+          "x": -179354.89869379997,
+          "y": 45758.27032375336,
+          "z": 47146.411483416334
         },
         "velocity": {
-          "x": 1.48844274419832,
-          "y": 0.40777720727380284,
-          "z": 5.285841609402161
+          "x": 1.490699927155199,
+          "y": 0.40723787822021906,
+          "z": 5.285391624758934
         }
       },
       "fallback": {
@@ -4006,8 +4129,9 @@
         "gmApproximation": "parent-plus-satellite",
         "centerNaifId": 799
       },
-      "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/a_old_versions/ura111.bsp",
-      "sourceKernelId": "ura111-701-2020-01-01-2031-01-01"
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/ura182.bsp",
+      "sourceKernelId": "satellite-ura182-701-2020-2031",
+      "sourceKernelSha256": "67a2518248255c89e9cc73af80d81e7c46aab13d0873e3e971f2ee88d0bbd595"
     },
     {
       "id": "naif:702",
@@ -4020,24 +4144,24 @@
       "orbit": {
         "model": "keplerian",
         "epochJd": 2461287.5,
-        "semiMajorAxisAU": 0.0017779763380766861,
-        "eccentricity": 0.004366759802396823,
-        "inclinationDeg": 97.71544823460535,
-        "ascendingNodeDeg": 167.70411178822928,
-        "argPeriapsisDeg": 60.744118499470574,
-        "meanAnomalyDeg": 145.48408698191713,
-        "meanMotionDegPerDay": 86.86601511378471
+        "semiMajorAxisAU": 0.0017779777667646557,
+        "eccentricity": 0.0043790532818798545,
+        "inclinationDeg": 97.71401904943384,
+        "ascendingNodeDeg": 167.72517050757926,
+        "argPeriapsisDeg": 60.983485901226686,
+        "meanAnomalyDeg": 145.22731733593037,
+        "meanMotionDegPerDay": 86.86591041247054
       },
       "parentRelativeStateKm": {
         "position": {
-          "x": 229985.95591068268,
-          "y": -66499.84721136093,
-          "z": -118073.09363470692
+          "x": 230042.73703479767,
+          "y": -66410.87976455688,
+          "z": -118012.4746294329
         },
         "velocity": {
-          "x": -2.1372818502808935,
-          "y": -0.10667338675910099,
-          "z": -4.128897707264069
+          "x": -2.136095177145065,
+          "y": -0.1076830785101004,
+          "z": -4.129488229129512
         }
       },
       "fallback": {
@@ -4046,8 +4170,9 @@
         "gmApproximation": "parent-plus-satellite",
         "centerNaifId": 799
       },
-      "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/a_old_versions/ura111.bsp",
-      "sourceKernelId": "ura111-702-2020-01-01-2031-01-01"
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/ura182.bsp",
+      "sourceKernelId": "satellite-ura182-702-2020-2031",
+      "sourceKernelSha256": "1a06f9ace4c24f72be1ce6e7d3e39a83be2723f0122d1e0585ad4953e63a73b9"
     },
     {
       "id": "naif:703",
@@ -4060,24 +4185,24 @@
       "orbit": {
         "model": "keplerian",
         "epochJd": 2461287.5,
-        "semiMajorAxisAU": 0.0029163343882714736,
-        "eccentricity": 0.0014003935927484556,
-        "inclinationDeg": 97.76473908755611,
-        "ascendingNodeDeg": 167.6373621883622,
-        "argPeriapsisDeg": 285.1541085142162,
-        "meanAnomalyDeg": 17.536030687649145,
-        "meanMotionDegPerDay": 41.35120811145154
+        "semiMajorAxisAU": 0.002916320397346899,
+        "eccentricity": 0.0013293461314258857,
+        "inclinationDeg": 97.7623042545005,
+        "ascendingNodeDeg": 167.64358630333447,
+        "argPeriapsisDeg": 288.34414474421374,
+        "meanAnomalyDeg": 14.289461914046285,
+        "meanMotionDegPerDay": 41.35150568283369
       },
       "parentRelativeStateKm": {
         "position": {
-          "x": -240763.92437291145,
-          "y": 2081.3882484436035,
-          "z": -363123.2137985928
+          "x": -240358.30863952637,
+          "y": 1941.7440853118896,
+          "z": -363414.6908269869
         },
         "velocity": {
-          "x": -2.9420816413480777,
-          "y": 0.9176285431502742,
-          "z": 1.9541171569537137
+          "x": -2.9442439019854314,
+          "y": 0.9172046691697289,
+          "z": 1.9507525040973865
         }
       },
       "fallback": {
@@ -4086,8 +4211,9 @@
         "gmApproximation": "parent-plus-satellite",
         "centerNaifId": 799
       },
-      "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/a_old_versions/ura111.bsp",
-      "sourceKernelId": "ura111-703-2020-01-01-2031-01-01"
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/ura182.bsp",
+      "sourceKernelId": "satellite-ura182-703-2020-2031",
+      "sourceKernelSha256": "466bcff8e7f5019a40a055ac437338749a787fdd13a0d3e526cecbf3550f9928"
     },
     {
       "id": "naif:704",
@@ -4100,24 +4226,24 @@
       "orbit": {
         "model": "keplerian",
         "epochJd": 2461287.5,
-        "semiMajorAxisAU": 0.0039008742626059235,
-        "eccentricity": 0.0026409294933775218,
-        "inclinationDeg": 97.91067730023757,
-        "ascendingNodeDeg": 167.70801584439664,
-        "argPeriapsisDeg": 199.05457568414428,
-        "meanAnomalyDeg": 17.89666942493392,
-        "meanMotionDegPerDay": 26.730091332252407
+        "semiMajorAxisAU": 0.003900869341934294,
+        "eccentricity": 0.0025560903514225426,
+        "inclinationDeg": 97.90568761060167,
+        "ascendingNodeDeg": 167.70838360377513,
+        "argPeriapsisDeg": 199.12310045240997,
+        "meanAnomalyDeg": 17.807657605344787,
+        "meanMotionDegPerDay": 26.730141909456616
       },
       "parentRelativeStateKm": {
         "position": {
-          "x": 443684.3855314255,
-          "y": -146069.3632311821,
-          "z": -347338.4564960748
+          "x": 443875.29526257515,
+          "y": -146053.49949026108,
+          "z": -347177.6639723759
         },
         "velocity": {
-          "x": -1.9313537125835305,
-          "y": 0.06544638905213818,
-          "z": -2.4989092165696647
+          "x": -1.930221527488917,
+          "y": 0.06533424968688362,
+          "z": -2.4994720696357886
         }
       },
       "fallback": {
@@ -4126,8 +4252,9 @@
         "gmApproximation": "parent-plus-satellite",
         "centerNaifId": 799
       },
-      "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/a_old_versions/ura111.bsp",
-      "sourceKernelId": "ura111-704-2020-01-01-2031-01-01"
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/ura182.bsp",
+      "sourceKernelId": "satellite-ura182-704-2020-2031",
+      "sourceKernelSha256": "5903f2285bfe20172024a554d13b6db95a58f219cb9045e304ffc7167ef240b7"
     },
     {
       "id": "naif:705",
@@ -4140,24 +4267,24 @@
       "orbit": {
         "model": "keplerian",
         "epochJd": 2461287.5,
-        "semiMajorAxisAU": 0.000868146244542045,
-        "eccentricity": 0.0014249083420965014,
-        "inclinationDeg": 98.12949687993626,
-        "ascendingNodeDeg": 163.21730029634466,
-        "argPeriapsisDeg": 71.22013209198701,
-        "meanAnomalyDeg": 95.63740319667062,
-        "meanMotionDegPerDay": 254.5930248351878
+        "semiMajorAxisAU": 0.000868145864867539,
+        "eccentricity": 0.001434154021168178,
+        "inclinationDeg": 98.15903487264485,
+        "ascendingNodeDeg": 163.19985398750816,
+        "argPeriapsisDeg": 70.15882339240551,
+        "meanAnomalyDeg": 96.72335501261256,
+        "meanMotionDegPerDay": 254.59319185059744
       },
       "parentRelativeStateKm": {
         "position": {
-          "x": 122372.48000454903,
-          "y": -32596.90958070755,
-          "z": 28881.81910256017
+          "x": 122380.26919460297,
+          "y": -32632.15303993225,
+          "z": 28825.030675677583
         },
         "velocity": {
-          "x": 1.1793334446459438,
-          "y": -1.3165543926895158,
-          "z": -6.440164676138111
+          "x": 1.175195866401582,
+          "y": -1.3193240787260367,
+          "z": -6.4401621885642
         }
       },
       "fallback": {
@@ -4166,8 +4293,9 @@
         "gmApproximation": "parent-plus-satellite",
         "centerNaifId": 799
       },
-      "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/a_old_versions/ura111.bsp",
-      "sourceKernelId": "ura111-705-2020-01-01-2031-01-01"
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/ura182.bsp",
+      "sourceKernelId": "satellite-ura182-705-2020-2031",
+      "sourceKernelSha256": "ad64947572d766da81a36485d47019bc838e5d8c23707d17be2a3a18513b273b"
     },
     {
       "id": "naif:801",
@@ -4180,24 +4308,24 @@
       "orbit": {
         "model": "keplerian",
         "epochJd": 2461287.5,
-        "semiMajorAxisAU": 0.002371468984595039,
-        "eccentricity": 0.000027236254023698403,
-        "inclinationDeg": 129.12272109287358,
-        "ascendingNodeDeg": 222.83341142569608,
-        "argPeriapsisDeg": 328.01110965796073,
-        "meanAnomalyDeg": 31.086045305650543,
-        "meanMotionDegPerDay": 61.25478181483594
+        "semiMajorAxisAU": 0.00237147221435708,
+        "eccentricity": 0.00011980916989096374,
+        "inclinationDeg": 129.12911461961224,
+        "ascendingNodeDeg": 222.8397691958735,
+        "argPeriapsisDeg": 99.76343941261644,
+        "meanAnomalyDeg": 259.3094747043938,
+        "meanMotionDegPerDay": 61.25465667845404
       },
       "parentRelativeStateKm": {
         "position": {
-          "x": -257730.35634422302,
-          "y": -243741.40346884727,
-          "z": -4328.896464332938
+          "x": -257607.68313026428,
+          "y": -243891.84514263272,
+          "z": -4517.657209381461
         },
         "velocity": {
-          "x": -1.9336623221111315,
-          "y": 1.9840722456453745,
-          "z": 3.4052614599975013
+          "x": -1.93582043477778,
+          "y": 1.9823705093582848,
+          "z": 3.4047646548552515
         }
       },
       "fallback": {
@@ -4206,8 +4334,9 @@
         "gmApproximation": "parent-plus-satellite",
         "centerNaifId": 899
       },
-      "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/nep097.bsp",
-      "sourceKernelId": "nep097-801-2020-01-01-2031-01-01"
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/nep098.bsp",
+      "sourceKernelId": "satellite-nep098-801-2020-2031",
+      "sourceKernelSha256": "b4e6aad4d045d51b5570615de23ceb1ecfa4cb117aa0146da006816c5fd410d9"
     },
     {
       "id": "naif:802",
@@ -4220,24 +4349,24 @@
       "orbit": {
         "model": "keplerian",
         "epochJd": 2461287.5,
-        "semiMajorAxisAU": 0.03685995122119067,
-        "eccentricity": 0.7454250556760451,
-        "inclinationDeg": 4.988158053207169,
-        "ascendingNodeDeg": 320.1311284078514,
-        "argPeriapsisDeg": 295.94076749601857,
-        "meanAnomalyDeg": 235.9387595133923,
-        "meanMotionDegPerDay": 0.9995134875906347
+        "semiMajorAxisAU": 0.03685998063080746,
+        "eccentricity": 0.7454337946506038,
+        "inclinationDeg": 4.98817524292473,
+        "ascendingNodeDeg": 320.1327264174425,
+        "argPeriapsisDeg": 295.9408471413051,
+        "meanAnomalyDeg": 235.93945830849657,
+        "meanMotionDegPerDay": 0.9995122913622748
       },
       "parentRelativeStateKm": {
         "position": {
-          "x": 155373.39422035217,
-          "y": 8947190.635819167,
-          "z": 608055.4620743543
+          "x": 155134.19843673706,
+          "y": 8947231.972859949,
+          "z": 608060.6260982603
         },
         "velocity": {
-          "x": -0.4602768281066077,
-          "y": -0.26613081267035454,
-          "z": -0.04358011112561162
+          "x": -0.4602613652363736,
+          "y": -0.2661474653651661,
+          "z": -0.043580067836996195
         }
       },
       "fallback": {
@@ -4246,8 +4375,9 @@
         "gmApproximation": "parent-only (satellite GM unavailable)",
         "centerNaifId": 899
       },
-      "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/nep105.bsp",
-      "sourceKernelId": "nep105-802-2020-01-01-2031-01-01"
+      "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/nep098.bsp",
+      "sourceKernelId": "satellite-nep098-802-2020-2031",
+      "sourceKernelSha256": "7d543b651adaa03e3c3428ed4a0999b9be2d8fc1c1f4d7568572fada7fa92d7b"
     },
     {
       "id": "naif:901",
@@ -4287,7 +4417,8 @@
         "centerNaifId": 999
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/plu060.bsp",
-      "sourceKernelId": "plu060-901-2020-01-01-2031-01-01"
+      "sourceKernelId": "plu060-901-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "62cdddcf1547dce2362003135d1060ef5212ca9df2635347ce45644fd3697b39"
     },
     {
       "id": "naif:902",
@@ -4327,7 +4458,8 @@
         "centerNaifId": 999
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/plu060.bsp",
-      "sourceKernelId": "plu060-902-2020-01-01-2031-01-01"
+      "sourceKernelId": "plu060-902-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "f02247ae1acc66a3bb725e37a05252dfc9f96fc01dd05fdad67aea89e53473ea"
     },
     {
       "id": "naif:903",
@@ -4367,7 +4499,8 @@
         "centerNaifId": 999
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/plu060.bsp",
-      "sourceKernelId": "plu060-903-2020-01-01-2031-01-01"
+      "sourceKernelId": "plu060-903-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "5dd4ea3c4b42fed0524d6071cfc98293ce15d81308f4dcd23604efbbec23247d"
     },
     {
       "id": "naif:904",
@@ -4383,7 +4516,7 @@
         "semiMajorAxisAU": 0.00029565701270040676,
         "eccentricity": 0.2686695928734476,
         "inclinationDeg": 113.32118277912723,
-        "ascendingNodeDeg": 227.3228328701726,
+        "ascendingNodeDeg": 227.32283287017256,
         "argPeriapsisDeg": 64.19085075668318,
         "meanAnomalyDeg": 165.3365824265751,
         "meanMotionDegPerDay": 15.693849126346677
@@ -4407,7 +4540,8 @@
         "centerNaifId": 999
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/plu060.bsp",
-      "sourceKernelId": "plu060-904-2020-01-01-2031-01-01"
+      "sourceKernelId": "plu060-904-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "75e832f8e7fcbdf5278283d65ac8354a8bed6ba3f199000ad60ebc6aa8e7401c"
     },
     {
       "id": "naif:905",
@@ -4447,7 +4581,8 @@
         "centerNaifId": 999
       },
       "sourceUrl": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/satellites/plu060.bsp",
-      "sourceKernelId": "plu060-905-2020-01-01-2031-01-01"
+      "sourceKernelId": "plu060-905-2020-01-01-2031-01-01",
+      "sourceKernelSha256": "522dcad434c23c4e1db6e72279bbd7ef63b2ebaf975f9124302fa788fe009a55"
     },
     {
       "id": "naif:55501",
@@ -4487,7 +4622,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55501-2020-2031"
+      "sourceKernelId": "satellite-jup347-55501-2020-2031",
+      "sourceKernelSha256": "4f090b077dbe635a361fabf18505f16cfa5146f984c601d68019ef81310508af"
     },
     {
       "id": "naif:55502",
@@ -4527,7 +4663,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55502-2020-2031"
+      "sourceKernelId": "satellite-jup347-55502-2020-2031",
+      "sourceKernelSha256": "2c7d859b171262e9fec261d28238d471a0d3310e94500ef7a86fd8480f51a03a"
     },
     {
       "id": "naif:55503",
@@ -4567,7 +4704,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55503-2020-2031"
+      "sourceKernelId": "satellite-jup347-55503-2020-2031",
+      "sourceKernelSha256": "23035746fada29e3fb83fe918d9ca4269686d8039ceb4758c3339b24154c3136"
     },
     {
       "id": "naif:55504",
@@ -4607,7 +4745,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55504-2020-2031"
+      "sourceKernelId": "satellite-jup347-55504-2020-2031",
+      "sourceKernelSha256": "fdf17f4dadb7d8de96aa7453134bc9e86ab274ef16c406db12bcc61bd3005b39"
     },
     {
       "id": "naif:55505",
@@ -4647,7 +4786,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55505-2020-2031"
+      "sourceKernelId": "satellite-jup347-55505-2020-2031",
+      "sourceKernelSha256": "c9c1d10c0918f8784b06a977fb430792bf605afb1ff5711ba11898066c00350a"
     },
     {
       "id": "naif:55506",
@@ -4687,7 +4827,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55506-2020-2031"
+      "sourceKernelId": "satellite-jup347-55506-2020-2031",
+      "sourceKernelSha256": "980395a89a9aaa5d04f2f61dde55da82653c1d9ca0bbcdfe6c69c1400bd84a08"
     },
     {
       "id": "naif:55507",
@@ -4727,7 +4868,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55507-2020-2031"
+      "sourceKernelId": "satellite-jup347-55507-2020-2031",
+      "sourceKernelSha256": "234df6eb623eb8ed85e0e14d4530d6840b76a10985da86af8e725bdb41209020"
     },
     {
       "id": "naif:55508",
@@ -4767,7 +4909,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55508-2020-2031"
+      "sourceKernelId": "satellite-jup347-55508-2020-2031",
+      "sourceKernelSha256": "c2b92b6d964a47bcc13e08fc7d0b727e8a645e1b5688baadf48207f4502f2ab0"
     },
     {
       "id": "naif:55509",
@@ -4807,7 +4950,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55509-2020-2031"
+      "sourceKernelId": "satellite-jup347-55509-2020-2031",
+      "sourceKernelSha256": "3f714a7b2418d1916eb101599173d39ef86dfd9759f86d6ce6e18eee2bf2e2c2"
     },
     {
       "id": "naif:55510",
@@ -4847,7 +4991,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55510-2020-2031"
+      "sourceKernelId": "satellite-jup347-55510-2020-2031",
+      "sourceKernelSha256": "7b630268ff3ded4d3f07c543217ab335648a883cd1c71958cf0988c6735aad7c"
     },
     {
       "id": "naif:55511",
@@ -4887,7 +5032,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55511-2020-2031"
+      "sourceKernelId": "satellite-jup347-55511-2020-2031",
+      "sourceKernelSha256": "f23cc8b5042574fa76cbfd4c8696cdd70c89a79e73b449e3b43c337efad5024d"
     },
     {
       "id": "naif:55512",
@@ -4927,7 +5073,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55512-2020-2031"
+      "sourceKernelId": "satellite-jup347-55512-2020-2031",
+      "sourceKernelSha256": "ba3032403a6a02d5bdda09337e113bc70350b65ab0f31198bb505071c3b6f02c"
     },
     {
       "id": "naif:55513",
@@ -4967,7 +5114,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55513-2020-2031"
+      "sourceKernelId": "satellite-jup347-55513-2020-2031",
+      "sourceKernelSha256": "40704eb9a35e47c381817703f32d52115815cdefae56d2f02afdce49ac4435a2"
     },
     {
       "id": "naif:55514",
@@ -5007,7 +5155,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55514-2020-2031"
+      "sourceKernelId": "satellite-jup347-55514-2020-2031",
+      "sourceKernelSha256": "31da520f224dddf90cda067f92a2e7bf61214da7fae400142f7e53d5c7fe9912"
     },
     {
       "id": "naif:55515",
@@ -5047,7 +5196,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55515-2020-2031"
+      "sourceKernelId": "satellite-jup347-55515-2020-2031",
+      "sourceKernelSha256": "7f24ee2418c518c2e4edfa2f14955d8b1b3b16c1e25eade7214aae97422611e8"
     },
     {
       "id": "naif:55516",
@@ -5087,7 +5237,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55516-2020-2031"
+      "sourceKernelId": "satellite-jup347-55516-2020-2031",
+      "sourceKernelSha256": "6f0d01d56b328980e2799277aa22026e92d65712f8d09b2937b4e84871bfb030"
     },
     {
       "id": "naif:55517",
@@ -5127,7 +5278,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55517-2020-2031"
+      "sourceKernelId": "satellite-jup347-55517-2020-2031",
+      "sourceKernelSha256": "6d62734c04a24475f6c1fb96c3cfe6a473c835b73cb9c1bcecc4b5e72fe5a1f1"
     },
     {
       "id": "naif:55518",
@@ -5167,7 +5319,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55518-2020-2031"
+      "sourceKernelId": "satellite-jup347-55518-2020-2031",
+      "sourceKernelSha256": "91d971816dc9cb231fbe55db0e36275b0e4f89f8be8633d6744d178639cb6c6d"
     },
     {
       "id": "naif:55519",
@@ -5207,7 +5360,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55519-2020-2031"
+      "sourceKernelId": "satellite-jup347-55519-2020-2031",
+      "sourceKernelSha256": "65f3f6be55d1e4517cf2b922037ea68f77a0b585d6113aec29e49c81e10a8ea6"
     },
     {
       "id": "naif:55520",
@@ -5247,7 +5401,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55520-2020-2031"
+      "sourceKernelId": "satellite-jup347-55520-2020-2031",
+      "sourceKernelSha256": "df382591c5278e3af371789f5c1811c289c20c6f6aff742cea08c795b09035df"
     },
     {
       "id": "naif:55521",
@@ -5287,7 +5442,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55521-2020-2031"
+      "sourceKernelId": "satellite-jup347-55521-2020-2031",
+      "sourceKernelSha256": "05a6782abcfcf54df3299ac2b66017c8af8279ef9810a2b200f9c153aa497b56"
     },
     {
       "id": "naif:55522",
@@ -5327,7 +5483,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55522-2020-2031"
+      "sourceKernelId": "satellite-jup347-55522-2020-2031",
+      "sourceKernelSha256": "fc71c59a8a2d6502c52922066b93a002e52e3b8ab26b5e6e15c66d6e26137761"
     },
     {
       "id": "naif:55523",
@@ -5367,7 +5524,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55523-2020-2031"
+      "sourceKernelId": "satellite-jup347-55523-2020-2031",
+      "sourceKernelSha256": "591bc9b784535eb1d1083fb5b3cd6a3923b1ee569efd88feead9f2d82b3014e9"
     },
     {
       "id": "naif:55524",
@@ -5407,7 +5565,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55524-2020-2031"
+      "sourceKernelId": "satellite-jup347-55524-2020-2031",
+      "sourceKernelSha256": "1a115ea274d723e274a45503bb3f14ce579595640ea2313782c5d9629f69ef8d"
     },
     {
       "id": "naif:55525",
@@ -5447,7 +5606,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55525-2020-2031"
+      "sourceKernelId": "satellite-jup347-55525-2020-2031",
+      "sourceKernelSha256": "e3285487f99bb34b87bf371a2fb9ed5fcdd3dd4a484d5d14e2db16910d09917a"
     },
     {
       "id": "naif:55526",
@@ -5487,7 +5647,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup347.bsp",
-      "sourceKernelId": "satellite-jup347-55526-2020-2031"
+      "sourceKernelId": "satellite-jup347-55526-2020-2031",
+      "sourceKernelSha256": "11fa4400987d771e180ec67fbe18393990966f5176172e2b85c5a05c446ace7f"
     },
     {
       "id": "naif:55527",
@@ -5527,7 +5688,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup348.bsp",
-      "sourceKernelId": "satellite-jup348-55527-2020-2031"
+      "sourceKernelId": "satellite-jup348-55527-2020-2031",
+      "sourceKernelSha256": "247f0047effee91d403776570f087dd526d3e85886b0793f545b196be784c285"
     },
     {
       "id": "naif:55528",
@@ -5567,7 +5729,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup348.bsp",
-      "sourceKernelId": "satellite-jup348-55528-2020-2031"
+      "sourceKernelId": "satellite-jup348-55528-2020-2031",
+      "sourceKernelSha256": "c709aaf8b7fb182a688e94fc79042c6d8f796b12fa25a6bb612962c14545347f"
     },
     {
       "id": "naif:55529",
@@ -5607,7 +5770,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup348.bsp",
-      "sourceKernelId": "satellite-jup348-55529-2020-2031"
+      "sourceKernelId": "satellite-jup348-55529-2020-2031",
+      "sourceKernelSha256": "90da4eac19bf367ddafc404799867d8454a3b5b5915fd879d1b2aa3025e354be"
     },
     {
       "id": "naif:55530",
@@ -5647,7 +5811,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup348.bsp",
-      "sourceKernelId": "satellite-jup348-55530-2020-2031"
+      "sourceKernelId": "satellite-jup348-55530-2020-2031",
+      "sourceKernelSha256": "1cf55d7470685f3228dfe20e632a025c0034da3ad0b949b0be9101d10593f816"
     },
     {
       "id": "naif:55531",
@@ -5687,7 +5852,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup349.bsp",
-      "sourceKernelId": "satellite-jup349-55531-2020-2031"
+      "sourceKernelId": "satellite-jup349-55531-2020-2031",
+      "sourceKernelSha256": "1e0a3d1d7806cfff6e8ee62ba39ea33039104b6e9d14af4a943aa24d2ef7f983"
     },
     {
       "id": "naif:55532",
@@ -5727,7 +5893,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup349.bsp",
-      "sourceKernelId": "satellite-jup349-55532-2020-2031"
+      "sourceKernelId": "satellite-jup349-55532-2020-2031",
+      "sourceKernelSha256": "66f3a7e9e291f2db6a26ee99773b25e0be79bdd618c8de1903a37d93d15fde7f"
     },
     {
       "id": "naif:55533",
@@ -5767,7 +5934,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup349.bsp",
-      "sourceKernelId": "satellite-jup349-55533-2020-2031"
+      "sourceKernelId": "satellite-jup349-55533-2020-2031",
+      "sourceKernelSha256": "7167b3dee29beb9f03a363f56fe2f1f52971a3f976e260e22b826742de5117fa"
     },
     {
       "id": "naif:55534",
@@ -5807,7 +5975,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup349.bsp",
-      "sourceKernelId": "satellite-jup349-55534-2020-2031"
+      "sourceKernelId": "satellite-jup349-55534-2020-2031",
+      "sourceKernelSha256": "3eebbe355132cc3b27acfb81c2a4d376ff6f21eade6c739aeb28f6bd6eef9bf1"
     },
     {
       "id": "naif:55535",
@@ -5847,7 +6016,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup349.bsp",
-      "sourceKernelId": "satellite-jup349-55535-2020-2031"
+      "sourceKernelId": "satellite-jup349-55535-2020-2031",
+      "sourceKernelSha256": "98bf5158b2fe39d6116ba4f1714ac62883e5f5402e6a6008dccae7b6a72a691b"
     },
     {
       "id": "naif:55536",
@@ -5887,7 +6057,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup349.bsp",
-      "sourceKernelId": "satellite-jup349-55536-2020-2031"
+      "sourceKernelId": "satellite-jup349-55536-2020-2031",
+      "sourceKernelSha256": "63229f0aa20568373b78ced7a716a6a2404625ef51f3706097156f550dfb3b10"
     },
     {
       "id": "naif:55537",
@@ -5927,7 +6098,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup349.bsp",
-      "sourceKernelId": "satellite-jup349-55537-2020-2031"
+      "sourceKernelId": "satellite-jup349-55537-2020-2031",
+      "sourceKernelSha256": "c5f0b628c351fa79de1ddebeea709422448f6cae74c8bed8903ff12c3b664888"
     },
     {
       "id": "naif:55538",
@@ -5967,7 +6139,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup349.bsp",
-      "sourceKernelId": "satellite-jup349-55538-2020-2031"
+      "sourceKernelId": "satellite-jup349-55538-2020-2031",
+      "sourceKernelSha256": "1b88553474c3761cbd141f51e9a2318cdb358810f02f5b51c77431cd4a928a59"
     },
     {
       "id": "naif:55539",
@@ -6007,7 +6180,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup349.bsp",
-      "sourceKernelId": "satellite-jup349-55539-2020-2031"
+      "sourceKernelId": "satellite-jup349-55539-2020-2031",
+      "sourceKernelSha256": "a2200b78807013029c5c811ae183afa1e70a30c1a5b99c1b7fe2c130e4efa5e0"
     },
     {
       "id": "naif:55540",
@@ -6047,7 +6221,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup349.bsp",
-      "sourceKernelId": "satellite-jup349-55540-2020-2031"
+      "sourceKernelId": "satellite-jup349-55540-2020-2031",
+      "sourceKernelSha256": "ed605f70dc3cd4e38d5120e015eb8e89ccbc27d6fabffb28edee6ddcf73bfdd4"
     },
     {
       "id": "naif:55541",
@@ -6087,7 +6262,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup349.bsp",
-      "sourceKernelId": "satellite-jup349-55541-2020-2031"
+      "sourceKernelId": "satellite-jup349-55541-2020-2031",
+      "sourceKernelSha256": "55538e6a2b91a6b708878599758f5d8b895551ae9346ab5a82b318d53bf57b3e"
     },
     {
       "id": "naif:55542",
@@ -6127,7 +6303,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup349.bsp",
-      "sourceKernelId": "satellite-jup349-55542-2020-2031"
+      "sourceKernelId": "satellite-jup349-55542-2020-2031",
+      "sourceKernelSha256": "ebcf70b0eb1fc998711f9842e1a73a075cb5a0b596f29676827a245e4845dc69"
     },
     {
       "id": "naif:55543",
@@ -6143,7 +6320,7 @@
         "semiMajorAxisAU": 0.154270324235531,
         "eccentricity": 0.2622658707083487,
         "inclinationDeg": 150.3849334512718,
-        "ascendingNodeDeg": 38.9774015353002,
+        "ascendingNodeDeg": 38.97740153530026,
         "argPeriapsisDeg": 116.55646422529844,
         "meanAnomalyDeg": 219.8802908051038,
         "meanMotionDegPerDay": 0.5025622831045122
@@ -6167,7 +6344,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup349.bsp",
-      "sourceKernelId": "satellite-jup349-55543-2020-2031"
+      "sourceKernelId": "satellite-jup349-55543-2020-2031",
+      "sourceKernelSha256": "e54bbd47860cb9c45d2983ec827352933616dd5740c75b64e49c50516ba9d265"
     },
     {
       "id": "naif:55544",
@@ -6207,7 +6385,8 @@
         "centerNaifId": 599
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/ftp/eph/satellites/bsp/jup349.bsp",
-      "sourceKernelId": "satellite-jup349-55544-2020-2031"
+      "sourceKernelId": "satellite-jup349-55544-2020-2031",
+      "sourceKernelSha256": "102930f9c254cd32569c86ef2c52cb2669d9c3dfe75870361c330bd8fb9cb083"
     },
     {
       "id": "asteroid:3",
@@ -6247,7 +6426,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%273%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch10-20260909-juno-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch10-20260909-juno-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "cf34a4c6355c4ced3fa3945a949322317cc20beb10ab775f095543c2f7547b25"
     },
     {
       "id": "asteroid:7",
@@ -6287,7 +6467,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%277%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch10-20260909-iris-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch10-20260909-iris-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "bc0cd17a2a96ead78dc6e56ac239a9f9fa6d6c78ece3c00ffa0c38fd8a39db37"
     },
     {
       "id": "asteroid:15",
@@ -6327,7 +6508,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2715%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch15-20260909-eunomia-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch15-20260909-eunomia-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "b985223557adbc689fb0501d18bf3cf3823b534ee60da21b70f08893e25c050f"
     },
     {
       "id": "asteroid:31",
@@ -6367,7 +6549,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2731%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch10-20260909-euphrosyne-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch10-20260909-euphrosyne-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "26c48c7f7c39ba90dadd5ddef0a48e7aa0f70284505292053f4d635ff39e29c9"
     },
     {
       "id": "asteroid:52",
@@ -6407,7 +6590,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2752%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch10-20260909-europa-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch10-20260909-europa-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "843029fb37980cd0f3268fcf32080287463dafc3262f52272b42341602e6e522"
     },
     {
       "id": "asteroid:65",
@@ -6447,7 +6631,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2765%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch10-20260909-cybele-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch10-20260909-cybele-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "8496f25462849d6c39c9d0c2212765feed7ea39dd16b475c1ae78ea4bc5c9221"
     },
     {
       "id": "asteroid:87",
@@ -6487,7 +6672,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2787%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch12-20260909-sylvia-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch12-20260909-sylvia-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "32b1f75158afdd83f5e729c77b08ddb5fc06f26777c24f8f5e637ae3dc51d4bf"
     },
     {
       "id": "asteroid:88",
@@ -6527,7 +6713,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2788%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch15-20260909-thisbe-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch15-20260909-thisbe-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "e7b5b3de5efa16798433ed83841aac0f1b7843393326ee0e4fc4ebc66d60926c"
     },
     {
       "id": "asteroid:107",
@@ -6567,7 +6754,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27107%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch12-20260909-camilla-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch12-20260909-camilla-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "74432498a1aafac2de727d7edd511a6c1b95e78f75af441475aae8eea02e07ae"
     },
     {
       "id": "asteroid:511",
@@ -6607,7 +6795,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27511%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch12-20260909-davida-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch12-20260909-davida-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "8f33ccaabbe3e9a3e5d20647048f14c9a022df77326e9eb4ce3a938a3951e0f0"
     },
     {
       "id": "asteroid:704",
@@ -6647,7 +6836,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27704%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch12-20260909-interamnia-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch12-20260909-interamnia-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "3599b5f1e3c56698c1b23b4e525c0f25dfa300a995b5b1190f2e16f44fd7e719"
     },
     {
       "id": "asteroid:2",
@@ -6687,7 +6877,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%272%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch18-20260910-pallas-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch18-20260910-pallas-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "4e38971c9809312c1b7def7e1ae7d11633bcb850098aca287849c0c2e6dbf741"
     },
     {
       "id": "asteroid:4",
@@ -6727,7 +6918,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%274%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch18-20260910-vesta-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch18-20260910-vesta-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "ee57223a5fea8e94363bf8b4c600374ffb7325ca84534fb0b6e51d1090cc492f"
     },
     {
       "id": "asteroid:5",
@@ -6767,7 +6959,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%275%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch7-20260909-astraea-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch7-20260909-astraea-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "b9df224ea1acbfcd3cc37c77b386016be5c11e6ca6c475d83cc112b1ee29e47c"
     },
     {
       "id": "asteroid:6",
@@ -6807,7 +7000,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%276%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch3-20260909-hebe-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch3-20260909-hebe-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "85666ba5c11a9de0462cac56bc27257b8633a24d4d120828fd566c4af4eb14eb"
     },
     {
       "id": "asteroid:8",
@@ -6847,7 +7041,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%278%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch7-20260909-flora-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch7-20260909-flora-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "48b125c65353dfcd66f54c98ca7d93be15d2f222f4386bef76096679da970d76"
     },
     {
       "id": "asteroid:9",
@@ -6887,7 +7082,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%279%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch3-20260909-metis-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch3-20260909-metis-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "4caebf91c44fa9e290081e5e964abd3eff441f0faf4f44e534d6b83ac20a2683"
     },
     {
       "id": "asteroid:10",
@@ -6927,7 +7123,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2710%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch18-20260910-hygiea-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch18-20260910-hygiea-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "c5792f6b62a0427f5df5af35205dbc3d4d42086edb29229cf351aa2a02aaf41c"
     },
     {
       "id": "asteroid:11",
@@ -6944,7 +7141,7 @@
         "eccentricity": 0.1009722936073729,
         "inclinationDeg": 4.636204131236866,
         "ascendingNodeDeg": 125.46987323936224,
-        "argPeriapsisDeg": 196.4729862956736,
+        "argPeriapsisDeg": 196.47298629567356,
         "meanAnomalyDeg": 247.26042614714248,
         "meanMotionDegPerDay": 0.25668482980189217
       },
@@ -6967,7 +7164,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2711%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch4-20260909-parthenope-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch4-20260909-parthenope-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "1cc11eb2caa7994a3f9d2c8599058d4377889d93842fe3a4a2f142c38d55e5cb"
     },
     {
       "id": "asteroid:12",
@@ -7007,7 +7205,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2712%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch7-20260909-victoria-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch7-20260909-victoria-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "daeb3bc5dcedc169bcaf2bc69dcd92f3bb2745d8e47ecd6be3f6ed812a627044"
     },
     {
       "id": "asteroid:13",
@@ -7047,7 +7246,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2713%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch4-20260909-egeria-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch4-20260909-egeria-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "c71622fdff435f803d6a6b6cc4042488e0c1d64269c09b42435b138910f93c6e"
     },
     {
       "id": "asteroid:14",
@@ -7087,7 +7287,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2714%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch3-20260909-irene-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch3-20260909-irene-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "bd506a87779b9dfa6bac6436056ff485a56a27780ad6b18eedbb7bd9ae289f0f"
     },
     {
       "id": "asteroid:16",
@@ -7127,7 +7328,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2716%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch18-20260910-psyche-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch18-20260910-psyche-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "fb8ed1cb7761fb500cf3a61d1787d4dbe8439cc2d2fee0b02ea5e3ca1c61f2ee"
     },
     {
       "id": "asteroid:17",
@@ -7167,7 +7369,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2717%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch13-20260909-thetis-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch13-20260909-thetis-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "e2aa2254f65404e35eadb5cad56fe845c9177747e87f04f09eeaeb8edb71ae95"
     },
     {
       "id": "asteroid:18",
@@ -7207,7 +7410,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2718%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch3-20260909-melpomene-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch3-20260909-melpomene-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "c7488f6b3677c3b632717b23a3c43657a136f2a1cae4b1a9e48dd0874fb24c47"
     },
     {
       "id": "asteroid:19",
@@ -7247,7 +7451,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2719%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch3-20260909-fortuna-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch3-20260909-fortuna-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "7a126cf20c05094c3f4abbd1ba57e6f6deab3fc8fe7a7796c12b013d44c5d141"
     },
     {
       "id": "asteroid:20",
@@ -7287,7 +7492,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2720%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch7-20260909-massalia-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch7-20260909-massalia-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "3d93eae9c42ecaeff2d8cafe4d12cf9f53a4272da262529fba8707f3b1ec0b56"
     },
     {
       "id": "asteroid:21",
@@ -7327,7 +7533,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2721%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch4-20260909-lutetia-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch4-20260909-lutetia-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "38bd912407d7758915af57837696fbf89c75b2fd0fae197ea35772eefb9f2e86"
     },
     {
       "id": "asteroid:22",
@@ -7367,7 +7574,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2722%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch9-20260909-kalliope-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch9-20260909-kalliope-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "9b6a536d9f99e893c04ef106c80b80c7a923f02b75dcd02f9fe6830becc62d99"
     },
     {
       "id": "asteroid:23",
@@ -7384,7 +7592,7 @@
         "eccentricity": 0.23132008904326273,
         "inclinationDeg": 10.107753252262494,
         "ascendingNodeDeg": 66.47606905138457,
-        "argPeriapsisDeg": 61.68508993383472,
+        "argPeriapsisDeg": 61.685089933834774,
         "meanAnomalyDeg": 236.50765853674574,
         "meanMotionDegPerDay": 0.23127157775773555
       },
@@ -7407,7 +7615,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2723%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch13-20260909-thalia-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch13-20260909-thalia-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "85dfb50eae4e8b234207594ab62d7043cb60b971c412e238aa3e6550b032cfde"
     },
     {
       "id": "asteroid:24",
@@ -7447,7 +7656,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2724%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch4-20260909-themis-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch4-20260909-themis-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "f0b1ca06029d8906db891f030cbaacfdd7a3f36d26a5a6b19215f03ab9c67ef0"
     },
     {
       "id": "asteroid:25",
@@ -7487,7 +7697,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2725%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch11-20260909-phocaea-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch11-20260909-phocaea-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "ec151ef2b7d92362180064fb33013ed876d5d857aaab74c6a54f729a5674a1c8"
     },
     {
       "id": "asteroid:26",
@@ -7527,7 +7738,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2726%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch13-20260909-proserpina-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch13-20260909-proserpina-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "f6e35273c808a308cb22a0c3f8a9d8f8635f4f92c9890a34866b6ef0b2b9bd0b"
     },
     {
       "id": "asteroid:27",
@@ -7567,7 +7779,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2727%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch11-20260909-euterpe-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch11-20260909-euterpe-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "a4c6b05b6eb096c11088f3f7151ecec9720224c5eabce89ee74b22ce5d6452cd"
     },
     {
       "id": "asteroid:28",
@@ -7607,7 +7820,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2728%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch13-20260909-bellona-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch13-20260909-bellona-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "7d9850a9907a232c64473f553d4ceceba2dd1754e2aadc194dd4f0fbf498ae7f"
     },
     {
       "id": "asteroid:29",
@@ -7647,7 +7861,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2729%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch4-20260909-amphitrite-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch4-20260909-amphitrite-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "8c98a74e9dd46353aff84c60218b3da29b9aaba99c18df16f1c88b2886976c5c"
     },
     {
       "id": "asteroid:30",
@@ -7687,7 +7902,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2730%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch11-20260909-urania-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch11-20260909-urania-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "efadd09165d80610a1ba87d6a2cf89adc5dd9f636a57e3b7a9e9724dcd0ea51b"
     },
     {
       "id": "asteroid:32",
@@ -7727,7 +7943,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2732%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch13-20260909-pomona-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch13-20260909-pomona-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "9e76954c418ace836837f731985506cedc12106745600d16849670e92329d45e"
     },
     {
       "id": "asteroid:33",
@@ -7767,7 +7984,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2733%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch16-20260910-polyhymnia-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch16-20260910-polyhymnia-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "1c9b88f8bfd914ab79792193dd624f901d9e1c6e606e0f43e68d23b930a3545e"
     },
     {
       "id": "asteroid:34",
@@ -7807,7 +8025,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2734%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch11-20260909-circe-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch11-20260909-circe-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "17d67488eebb93927e71ba6cee3f3d8ada902a42f89e43ec902f3c0211aabd10"
     },
     {
       "id": "asteroid:35",
@@ -7847,7 +8066,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2735%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch16-20260910-leukothea-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch16-20260910-leukothea-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "729e7deea372ffd831c0677ab48d31bdfe143099400f426b7f6372ca6e257065"
     },
     {
       "id": "asteroid:36",
@@ -7887,7 +8107,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2736%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch16-20260910-atalante-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch16-20260910-atalante-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "ec122880279640dceac0becb4da773c3fbfd0a4a7e80698f0225bb08438894d1"
     },
     {
       "id": "asteroid:37",
@@ -7927,7 +8148,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2737%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch11-20260909-fides-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch11-20260909-fides-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "923adb33e57dddd2bc50e0a7b97c276d55a98690c54263bc459cc54599679db5"
     },
     {
       "id": "asteroid:38",
@@ -7967,7 +8189,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2738%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch16-20260910-leda-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch16-20260910-leda-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "78e72f55fd5d18bd47b62b2d7f40aecb9b73a95ba5fd591baea4f0f28eed1d46"
     },
     {
       "id": "asteroid:39",
@@ -8007,7 +8230,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2739%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch4-20260909-laetitia-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch4-20260909-laetitia-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "6f5651783277708509916c0505c2b06952a15acfbe40bc0168e2abe30eb4aa47"
     },
     {
       "id": "asteroid:40",
@@ -8047,7 +8271,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2740%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch7-20260909-harmonia-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch7-20260909-harmonia-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "bed0b0d49f871f52098891b152c53ae36ee8a78764bd95fc1ee7de660538fb4b"
     },
     {
       "id": "asteroid:41",
@@ -8087,7 +8312,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2741%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch17-20260910-daphne-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch17-20260910-daphne-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "5ff891f98c437f156ae3e3499e1ee9469b75fd6c7e1a21ab08541b3682746178"
     },
     {
       "id": "asteroid:44",
@@ -8127,7 +8353,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2744%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch4-20260909-nysa-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch4-20260909-nysa-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "dec86a1fc3cf9c111742dd521b769d90e8c40da878107f5b750b9de170a57225"
     },
     {
       "id": "asteroid:45",
@@ -8167,7 +8394,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2745%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch9-20260909-eugenia-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch9-20260909-eugenia-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "750fc422e32e49d556f9e2872fba98c2b393b2aa71a6e2670a2d620f4769a259"
     },
     {
       "id": "asteroid:46",
@@ -8207,7 +8435,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2746%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch17-20260910-hestia-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch17-20260910-hestia-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "54443ff4cfd94f92c722f4550097b42df35a97b2c7e8f49224fbe56ba73d80e9"
     },
     {
       "id": "asteroid:48",
@@ -8247,7 +8476,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2748%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch17-20260910-doris-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch17-20260910-doris-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "c8214bc3494c27adf930667f9dbf05ea850fc3ad68c72a03c06bd820a56a5eb8"
     },
     {
       "id": "asteroid:49",
@@ -8287,7 +8517,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2749%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch17-20260910-pales-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch17-20260910-pales-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "d5c039f8418083e6131b1b068e90ca932d480c1052daa2e3a8bb44c48470d6c5"
     },
     {
       "id": "asteroid:51",
@@ -8327,7 +8558,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2751%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch14-20260909-nemausa-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch14-20260909-nemausa-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "7559e864e7d9702abc52291ea112dbb28abccd74351b45a9d9830a7177c7465e"
     },
     {
       "id": "asteroid:90",
@@ -8367,7 +8599,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2790%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch3-20260909-antiope-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch3-20260909-antiope-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "8b6e496ac06cd23b52f869e027d083605171201dbf363e10f59ff78a48d7f3a9"
     },
     {
       "id": "asteroid:93",
@@ -8407,7 +8640,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2793%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch9-20260909-minerva-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch9-20260909-minerva-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "7c7b142a9d3027623e4cd33c893604c47633cdd5ba0f11ada932e03f40c6b67a"
     },
     {
       "id": "asteroid:121",
@@ -8447,7 +8681,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27121%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch9-20260909-hermione-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch9-20260909-hermione-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "01ab853b1c9a5aaab0cf0f2362866559bce866d855647f9dcc13c2a0c297d3fb"
     },
     {
       "id": "asteroid:130",
@@ -8487,7 +8722,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27130%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch9-20260909-elektra-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch9-20260909-elektra-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "8fb0bdd889d07bd030abb100f0777c429757a56030a744e564016364112cfd70"
     },
     {
       "id": "asteroid:216",
@@ -8527,7 +8763,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27216%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch3-20260909-kleopatra-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch3-20260909-kleopatra-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "0c39674d4012f6bff650b15e43b01589fe516b919fb401b342589b4321c44955"
     },
     {
       "id": "asteroid:243",
@@ -8567,7 +8804,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27243%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-ida-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-ida-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "52c5209da9ee09b992c2196ea45d1ccf4013c602e57e3849a18fb808f068aade"
     },
     {
       "id": "asteroid:433",
@@ -8607,7 +8845,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27433%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-eros-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-eros-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "c9240dfdbe410ed08705306c01276b70ec54f34dbb9f135759f5734e16f74f6d"
     },
     {
       "id": "asteroid:624",
@@ -8647,7 +8886,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27624%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch15-20260909-hektor-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch15-20260909-hektor-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "c7ab99d0da336c91e07c1348e3d3291bd94f120a265f4089c1a91340b2d46a85"
     },
     {
       "id": "asteroid:911",
@@ -8687,7 +8927,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27911%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch15-20260909-agamemnon-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch15-20260909-agamemnon-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "3c6348838961253ef18bdbf8c787a08e209244dc3134231b438021d4ed619d7b"
     },
     {
       "id": "asteroid:944",
@@ -8727,7 +8968,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27944%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-centaur-batch26-20260914-hidalgo-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-centaur-batch26-20260914-hidalgo-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "16b994e3b946cf4154bf33195f94686f86e256fed812c878d249960fb0760008"
     },
     {
       "id": "asteroid:951",
@@ -8767,7 +9009,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27951%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-gaspra-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-gaspra-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "ba2c7509bc7b10b4938b3ddaa6650315f4e6e0c591f4f8d1f1e9054d0ae8b522"
     },
     {
       "id": "asteroid:1036",
@@ -8783,7 +9026,7 @@
         "semiMajorAxisAU": 2.6637119654508314,
         "eccentricity": 0.5336673711300971,
         "inclinationDeg": 26.69312941488286,
-        "ascendingNodeDeg": 215.3787471122446,
+        "ascendingNodeDeg": 215.37874711224458,
         "argPeriapsisDeg": 132.5136529557834,
         "meanAnomalyDeg": 162.70665987250572,
         "meanMotionDegPerDay": 0.2267113074528108
@@ -8807,7 +9050,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%271036%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-followup-20260909-ganymed-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-followup-20260909-ganymed-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "73812a07ff8d6ef28582cfef314540da8ff00f60752e32c9cdd7406ee19e6eb7"
     },
     {
       "id": "asteroid:1580",
@@ -8847,7 +9091,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%271580%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-followup-20260909-betulia-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-followup-20260909-betulia-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "6f38e81cb93c17afdfa51dc7e853eb61a126ee64ca90a713ce9dff50299b5365"
     },
     {
       "id": "asteroid:2060",
@@ -8887,7 +9132,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%272060%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch14-20260909-chiron-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch14-20260909-chiron-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "6de12caf7903a17cf99350a00bd7364fae2540ddd4ba84766e6fc429ffdcdc82"
     },
     {
       "id": "asteroid:2867",
@@ -8927,7 +9173,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%272867%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-followup-20260909-steins-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-followup-20260909-steins-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "c20bd7a80d70e1f518274ce003e840fcd7bcd2f68ecf7a68102b16b36436d9bb"
     },
     {
       "id": "asteroid:3122",
@@ -8967,7 +9214,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%273122%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-florence-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-florence-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "40e8a13c15e22fd40f762ce5d865f98ec824047ab752dd59fa82d611e28ddbba"
     },
     {
       "id": "asteroid:3200",
@@ -9007,7 +9255,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%273200%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-phaethon-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-phaethon-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "563f1223893f8c2d90629b3dcfb1ed7b24a216f7353d68cff559251d782f5105"
     },
     {
       "id": "asteroid:3753",
@@ -9047,7 +9296,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%273753%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch8-20260909-cruithne-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch8-20260909-cruithne-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "9210d049b805a0a524a3301e312249fc08fc3169880598942ce757f29894700a"
     },
     {
       "id": "asteroid:4179",
@@ -9087,7 +9337,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%274179%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-followup-20260909-toutatis-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-followup-20260909-toutatis-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "3c735828082d0483b14ac0b070933fc6edbe521ec77ac35577286848a1790520"
     },
     {
       "id": "asteroid:5145",
@@ -9103,8 +9354,8 @@
         "semiMajorAxisAU": 20.292726119465144,
         "eccentricity": 0.5745915259766311,
         "inclinationDeg": 24.759847764426652,
-        "ascendingNodeDeg": 119.2871152586165,
-        "argPeriapsisDeg": 354.79900590904526,
+        "ascendingNodeDeg": 119.28711525861644,
+        "argPeriapsisDeg": 354.7990059090453,
         "meanAnomalyDeg": 137.39467433302184,
         "meanMotionDegPerDay": 0.010781854901810908
       },
@@ -9127,7 +9378,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%275145%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch14-20260909-pholus-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch14-20260909-pholus-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "768a6d37b6f0300ae8ac47bd6ccb7e916cad7350038b2ef14b2ce53c26ef1b22"
     },
     {
       "id": "asteroid:5335",
@@ -9167,7 +9419,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%275335%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-centaur-batch27-20260914-damocles-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-centaur-batch27-20260914-damocles-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "62caba05dd8e12a26c0922921338d6af4178019c21f816d8cb6eacd5bdf43203"
     },
     {
       "id": "asteroid:6178",
@@ -9207,7 +9460,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%276178%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch8-20260909-1986-da-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch8-20260909-1986-da-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "e931b9e8786bc31d23d185967a54851a4da24d3e3cb1132ee9d3e3f8ec35cc0f"
     },
     {
       "id": "asteroid:6489",
@@ -9247,7 +9501,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%276489%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch8-20260909-golevka-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch8-20260909-golevka-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "8002eccad39003888ea72e241d825051f08f6eb0851432e0636c79a2be6dff2d"
     },
     {
       "id": "asteroid:7066",
@@ -9287,7 +9542,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%277066%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch25-20260914-nessus-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch25-20260914-nessus-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "d20db371d3a1f643710bc782994b3025e80f37d6ee852b594acc48892888fe16"
     },
     {
       "id": "asteroid:8405",
@@ -9304,7 +9560,7 @@
         "eccentricity": 0.6174235844520598,
         "inclinationDeg": 17.6180448741198,
         "ascendingNodeDeg": 6.087142544114556,
-        "argPeriapsisDeg": 290.4537476986677,
+        "argPeriapsisDeg": 290.45374769866766,
         "meanAnomalyDeg": 113.48192929804247,
         "meanMotionDegPerDay": 0.012850572270863893
       },
@@ -9327,7 +9583,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%278405%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch25-20260914-asbolus-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch25-20260914-asbolus-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "b650135329ba097db30508c8a93e4aea74e51661745535898ba8499a43d2d9bd"
     },
     {
       "id": "asteroid:10199",
@@ -9367,7 +9624,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2710199%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch14-20260909-chariklo-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch14-20260909-chariklo-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "c7b826f4f44c0d780d570f82164b0f3e31664447382c906bede595adfb2fdd78"
     },
     {
       "id": "asteroid:10370",
@@ -9407,7 +9665,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2710370%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch25-20260914-hylonome-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch25-20260914-hylonome-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "ec480297dbb81f5d8252abf229fa767b8dd6c8d5e25437ebc94da590cb5d1724"
     },
     {
       "id": "asteroid:15760",
@@ -9447,7 +9706,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2715760%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch22-20260914-albion-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch22-20260914-albion-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "33f20ede098ae5282215c6fc2818098c2e2e288010b80fb3ce82527a8d706765"
     },
     {
       "id": "asteroid:15789",
@@ -9487,7 +9747,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2715789%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-tno-batch35-20260914-1993-sb-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-tno-batch35-20260914-1993-sb-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "42283ac5b4f588a7cd86e51d5143eb175ce630e6ca6cacc8df1db8e9fa8ccce8"
     },
     {
       "id": "asteroid:15810",
@@ -9527,7 +9788,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2715810%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch19-20260914-arawn-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch19-20260914-arawn-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "b35040fb953b120dde070e81ff26e4c640f5840b12aed93284737728ef8efdab"
     },
     {
       "id": "asteroid:15874",
@@ -9544,7 +9806,7 @@
         "eccentricity": 0.5851869506804521,
         "inclinationDeg": 23.968054266584705,
         "ascendingNodeDeg": 217.74167553376986,
-        "argPeriapsisDeg": 185.1227423707109,
+        "argPeriapsisDeg": 185.12274237071088,
         "meanAnomalyDeg": 11.558333215520236,
         "meanMotionDegPerDay": 0.00126596182126121
       },
@@ -9567,7 +9829,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2715874%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch24-20260914-tl66-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch24-20260914-tl66-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "00eaeb44cdc7066a2b59660da5bef47773661109045e10b431184eddaf6ae543"
     },
     {
       "id": "asteroid:19308",
@@ -9607,7 +9870,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2719308%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch24-20260914-to66-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch24-20260914-to66-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "8f52b77cbf705b599fad928fa4a1f360265d474b7161400dc45e111dcbf084dc"
     },
     {
       "id": "asteroid:19521",
@@ -9647,7 +9911,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2719521%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch22-20260914-chaos-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch22-20260914-chaos-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "3e79cded7bfbcd9e9fe550f874798bee5dd7870f99a03659e2e49af1aa85df90"
     },
     {
       "id": "asteroid:20000",
@@ -9687,7 +9952,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2720000%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch14-20260909-varuna-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch14-20260909-varuna-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "b850c7fd329f29aac3695913911819336b04114d6510ca57bffb6f1e343fe90c"
     },
     {
       "id": "asteroid:25143",
@@ -9727,7 +9993,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2725143%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-itokawa-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-itokawa-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "a92b59a83b51ef94ba11d684cfaf8dcbbcb7e49e1cc71488b8dcd55833fd5735"
     },
     {
       "id": "asteroid:28978",
@@ -9767,7 +10034,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2728978%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch19-20260914-ixion-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch19-20260914-ixion-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "c72f3dd64d4454e0bac155d006262fa22e19e2f4dd596efeea4353f086999b93"
     },
     {
       "id": "asteroid:29075",
@@ -9807,7 +10075,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2729075%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-followup-20260909-da-1950-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-followup-20260909-da-1950-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "62312adba45dc419cca9b1632cd09355bfed1a78e40309ed355578b08e862012"
     },
     {
       "id": "asteroid:29981",
@@ -9847,7 +10116,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2729981%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-centaur-batch28-20260914-29981-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-centaur-batch28-20260914-29981-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "faa2f0f00212da070753431a757555f9f7bd0f08732643fef577edee1fea0031"
     },
     {
       "id": "asteroid:31824",
@@ -9887,7 +10157,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2731824%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-centaur-batch27-20260914-elatus-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-centaur-batch27-20260914-elatus-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "195b1224a647c93fa10a0a569da823480c58072ab91cb467df358dd45b94c5b6"
     },
     {
       "id": "asteroid:32532",
@@ -9927,7 +10198,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2732532%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-centaur-batch27-20260914-thereus-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-centaur-batch27-20260914-thereus-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "cf84e8609ee081e5cd528b424bfa2979656ef0f66b8a8bdfbe0ad411124230c8"
     },
     {
       "id": "asteroid:37117",
@@ -9967,7 +10239,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2737117%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-centaur-batch30-20260914-narcissus-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-centaur-batch30-20260914-narcissus-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "ea5d833bf3c7462a1cb62aa8d0551d3e88d641b0bb23510124d27bde9ecd5214"
     },
     {
       "id": "asteroid:38083",
@@ -10007,7 +10280,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2738083%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch22-20260914-rhadamanthus-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch22-20260914-rhadamanthus-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "010712c2c2cfe2e02a94f3e16c891c48fb3ce7030ec1f2eee10e68a9f4943bc0"
     },
     {
       "id": "asteroid:38628",
@@ -10047,7 +10321,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2738628%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch22-20260914-huya-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch22-20260914-huya-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "9eb6b1583f42a70bbdf9741bff8cf213452625507584260b7abce324bb15d2d6"
     },
     {
       "id": "asteroid:42301",
@@ -10087,7 +10362,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2742301%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch24-20260914-ur163-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch24-20260914-ur163-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "5201828850621a5bbd591c50dd838f48ebdf6f723f22bea2027a930587ea365d"
     },
     {
       "id": "asteroid:42355",
@@ -10127,7 +10403,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2742355%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-centaur-batch31-20260914-typhon-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-centaur-batch31-20260914-typhon-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "5d6dee5a63814261e979dc108706ca318d9ae8ec4bd011ebb178e6d56d9f69df"
     },
     {
       "id": "asteroid:46610",
@@ -10167,7 +10444,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2746610%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch8-20260909-besixdouze-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch8-20260909-besixdouze-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "0b3cf1e1c8b2ed7974ccd0094f734d98dd1468711b89aaf9324ff9a3fc666b61"
     },
     {
       "id": "asteroid:47171",
@@ -10207,7 +10485,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2747171%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch24-20260914-lempo-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch24-20260914-lempo-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "01243964e9f62167a263b4cc16f502023258fba2b4c97ac0f81891cf4b9e2c58"
     },
     {
       "id": "asteroid:52768",
@@ -10247,7 +10526,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2752768%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-followup-20260909-or2-1998-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-followup-20260909-or2-1998-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "50e5785d4dca2c4171b5242c099149d1bc9f4be4bcd434b49097a0dab0312a77"
     },
     {
       "id": "asteroid:52872",
@@ -10287,7 +10567,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2752872%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-centaur-batch28-20260914-okyrhoe-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-centaur-batch28-20260914-okyrhoe-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "dc29aa6b81a57714cb1614a0957cca25ce575cd37d17903ba8cf564e374d9563"
     },
     {
       "id": "asteroid:52975",
@@ -10327,7 +10608,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2752975%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-centaur-batch28-20260914-cyllarus-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-centaur-batch28-20260914-cyllarus-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "99abfaab8af46daccb714e519fc2bf6aa837ee5a1f00a22dab618d5497da85c2"
     },
     {
       "id": "asteroid:53311",
@@ -10367,7 +10649,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2753311%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch22-20260914-deucalion-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch22-20260914-deucalion-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "877888bb86f16d825acc073844d6a774d91ac88433c0c1fd02976186a06a72e4"
     },
     {
       "id": "asteroid:54598",
@@ -10407,7 +10690,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2754598%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-centaur-batch26-20260914-bienor-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-centaur-batch26-20260914-bienor-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "833c939e204d99a07a7b8940267c40b4417eef989c009694acb828f4eb0df131"
     },
     {
       "id": "asteroid:55565",
@@ -10447,7 +10731,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2755565%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch21-20260914-aw197-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch21-20260914-aw197-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "402a89ed562b78d37341e4e6646b3dee41e80a9c39cf8a72c0201c0ce9c03726"
     },
     {
       "id": "asteroid:55576",
@@ -10487,7 +10772,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2755576%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-centaur-batch29-20260914-amycus-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-centaur-batch29-20260914-amycus-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "be85ce35f6cb4adb32e1591e2e5430334cbf05beb2e43551e8a271d87c49086d"
     },
     {
       "id": "asteroid:55636",
@@ -10504,7 +10790,7 @@
         "eccentricity": 0.1210824768203912,
         "inclinationDeg": 25.859872680261713,
         "ascendingNodeDeg": 324.70525678400304,
-        "argPeriapsisDeg": 341.69372891777545,
+        "argPeriapsisDeg": 341.6937289177754,
         "meanAnomalyDeg": 84.59753051019163,
         "meanMotionDegPerDay": 0.003448580418385553
       },
@@ -10527,7 +10813,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2755636%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch21-20260914-tx300-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch21-20260914-tx300-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "5caf49503c9cc62196221e6a09a8ec66a06d560c999decdcee123ba6277516a0"
     },
     {
       "id": "asteroid:55637",
@@ -10567,7 +10854,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2755637%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch20-20260914-ux25-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch20-20260914-ux25-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "3f412d70312d25ef2e0374d4438c9264853abd40d5d048ce7a26bdfe0921b5e7"
     },
     {
       "id": "asteroid:58534",
@@ -10607,7 +10895,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2758534%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-tno-batch33-20260914-logos-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-tno-batch33-20260914-logos-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "626231eb9e77dda2fa5c022b6cef0a7b4c9553e5a8f33223a265ea7033b9f4e5"
     },
     {
       "id": "asteroid:60558",
@@ -10647,7 +10936,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2760558%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-centaur-batch26-20260914-echeclus-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-centaur-batch26-20260914-echeclus-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "f49d7db7b8b5335066afad74ba6b0125ee5cd27996b680a27b43b60cc2c6b4de"
     },
     {
       "id": "asteroid:65489",
@@ -10687,7 +10977,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2765489%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-tno-batch33-20260914-ceto-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-tno-batch33-20260914-ceto-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "652ab8b6ac3b4d00b0843af8c52b7b192045bb4a5f8de585323388bbf585c455"
     },
     {
       "id": "asteroid:65803",
@@ -10727,7 +11018,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2765803%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-didymos-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-didymos-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "8992d4e387156ab3be8917423c4fcc6ab5bc698db45eb67807b1b4b57c720b76"
     },
     {
       "id": "asteroid:66652",
@@ -10767,7 +11059,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2766652%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-tno-batch33-20260914-borasisi-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-tno-batch33-20260914-borasisi-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "30c38059062b96c36883cbca11c5c4935ce0a707d5277b7bca33709fb707494f"
     },
     {
       "id": "asteroid:78799",
@@ -10784,7 +11077,7 @@
         "eccentricity": 0.2436726438210367,
         "inclinationDeg": 14.34615665963947,
         "ascendingNodeDeg": 46.7813169192317,
-        "argPeriapsisDeg": 248.0849647021641,
+        "argPeriapsisDeg": 248.08496470216406,
         "meanAnomalyDeg": 156.20859122088564,
         "meanMotionDegPerDay": 0.004263212145342827
       },
@@ -10807,7 +11100,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2778799%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-centaur-batch32-20260914-xewioso-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-centaur-batch32-20260914-xewioso-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "350b862a103b3e2528c123764cf2a800762f7e7109a524675375616ccbf0e6b9"
     },
     {
       "id": "asteroid:79360",
@@ -10847,7 +11141,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2779360%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch24-20260914-silanunam-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch24-20260914-silanunam-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "aa9437bb558387af018cc28c4e0ca1836a2430c550fe6c74ae3f8ab6bd410d13"
     },
     {
       "id": "asteroid:83982",
@@ -10887,7 +11182,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2783982%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-centaur-batch30-20260914-crantor-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-centaur-batch30-20260914-crantor-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "4d0fe83ee421441b722ce2c2c6459837952727cafff146786110acec4bfb685c"
     },
     {
       "id": "asteroid:84522",
@@ -10927,7 +11223,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2784522%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch20-20260914-tc302-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch20-20260914-tc302-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "f211ea07f37843d1c3e12bfb80e82931d52c6bbe2174510be98c04e5a5975d61"
     },
     {
       "id": "asteroid:84922",
@@ -10967,7 +11264,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2784922%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch24-20260914-vs2-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch24-20260914-vs2-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "5545ffe11e6ed1503206b74184f4b129d8bf50ec198d649b9dde4c5f2e78d0f4"
     },
     {
       "id": "asteroid:88611",
@@ -11007,7 +11305,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2788611%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-tno-batch34-20260914-teharonhiawako-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-tno-batch34-20260914-teharonhiawako-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "bc7aea6e2c4a755959b2382ea282644a9ed29366d7b8e3d67ca4745a14adb8a5"
     },
     {
       "id": "asteroid:90377",
@@ -11047,7 +11346,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2790377%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch19-20260914-sedna-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch19-20260914-sedna-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "c4b13d3dcfe1bf2b007e90f2ca8929fc800ccf71b0b31c956ff5a32d29aaab14"
     },
     {
       "id": "asteroid:90568",
@@ -11087,7 +11387,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2790568%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-centaur-batch32-20260914-goibniu-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-centaur-batch32-20260914-goibniu-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "86fbfc4c7eb762f2437606d79c98050b0265e02aab48bfbe055b6878c729b8db"
     },
     {
       "id": "asteroid:98943",
@@ -11127,7 +11428,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2798943%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch8-20260909-torifune-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch8-20260909-torifune-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "2d3df13438c2f2f4ccc5a4a895e9006d59a730a9a4de4b15142554a02c733598"
     },
     {
       "id": "asteroid:99942",
@@ -11167,7 +11469,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2799942%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-apophis-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-apophis-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "9048e718db00a10dd7d1795049b6a449b75045d6a46104ee42b8829a67435364"
     },
     {
       "id": "asteroid:120132",
@@ -11184,7 +11487,7 @@
         "eccentricity": 0.25211534038563843,
         "inclinationDeg": 11.767926177763302,
         "ascendingNodeDeg": 341.6751144326784,
-        "argPeriapsisDeg": 174.18048541744372,
+        "argPeriapsisDeg": 174.18048541744383,
         "meanAnomalyDeg": 40.24192966597872,
         "meanMotionDegPerDay": 0.002837546259469215
       },
@@ -11207,7 +11510,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27120132%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch21-20260914-gv9-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch21-20260914-gv9-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "30252f152bc85a9d44790ad46180da111515cd13aba7177bb238cde6c655b5f2"
     },
     {
       "id": "asteroid:127546",
@@ -11247,7 +11551,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27127546%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-tno-batch35-20260914-2002-xu93-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-tno-batch35-20260914-2002-xu93-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "22758a8731fba9bec6bf6589be428893903fc9f817fa06562b21875f8d4e0b93"
     },
     {
       "id": "asteroid:132524",
@@ -11287,7 +11592,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27132524%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch5-20260909-apl-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch5-20260909-apl-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "810e704a3e239036bdae760f2b5c10c26b329a6b49d0e491110b9c9d92231376"
     },
     {
       "id": "asteroid:136472",
@@ -11327,7 +11633,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27136472%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch20-20260914-makemake-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch20-20260914-makemake-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "57457a1341e056437e67309ca3e1c92ab4f03a04827b74937621d78c9172e1d9"
     },
     {
       "id": "asteroid:145451",
@@ -11367,7 +11674,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27145451%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch20-20260914-rm43-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch20-20260914-rm43-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "dbeafc62dcbf8c365373d0374ad2acc576ff17ba614b5693caaebc4171098af8"
     },
     {
       "id": "asteroid:145452",
@@ -11407,7 +11715,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27145452%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch20-20260914-rn43-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch20-20260914-rn43-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "d6a0217803df0745b0dc6f274457acfd13203956a0f445a35a4f9f57f0c53c8e"
     },
     {
       "id": "asteroid:145453",
@@ -11447,7 +11756,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27145453%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch24-20260914-rr43-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch24-20260914-rr43-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "b2cce9943c06f7d8bf73786d493a53e9977e9b8ae63616390eb030a700324172"
     },
     {
       "id": "asteroid:148780",
@@ -11487,7 +11797,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27148780%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-tno-batch36-20260915-altjira-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-tno-batch36-20260915-altjira-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "c67a63207c00c6c2e47b814c1dbf4ed26e783120d0e2487690acf896cf7da556"
     },
     {
       "id": "asteroid:152830",
@@ -11527,7 +11838,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27152830%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch5-20260909-dinkinesh-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch5-20260909-dinkinesh-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "36bbff254e1a044135b83439589de9fb63bef78be2a594cd2bdf5fa8756accce"
     },
     {
       "id": "asteroid:153591",
@@ -11567,7 +11879,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27153591%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch6-20260909-sn263-2001-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch6-20260909-sn263-2001-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "56c142979d3622dbb74636c514898f4b7c60c75ba17a4c2b7e5207f3c9b7dcbf"
     },
     {
       "id": "asteroid:162173",
@@ -11607,7 +11920,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27162173%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-ryugu-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-ryugu-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "703512bcaca000ba5b03d6073d363becf38cf48b7c919bc7014f009e58bbddfd"
     },
     {
       "id": "asteroid:162421",
@@ -11647,7 +11961,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27162421%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch5-20260909-et70-2000-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch5-20260909-et70-2000-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "6cc79ff87be16c0e5d65e77af310287b86d31384c56a55c95348577d8992ffa8"
     },
     {
       "id": "asteroid:163899",
@@ -11687,7 +12002,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27163899%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch6-20260909-sd220-2003-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch6-20260909-sd220-2003-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "b484079ec0a22c9473b903b42acd2815640523af455e3bfdc7b3e4d1fd766e6a"
     },
     {
       "id": "asteroid:174567",
@@ -11727,7 +12043,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27174567%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch19-20260914-varda-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch19-20260914-varda-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "c7a94308ebe70cb881e4427fca9fd2a003a36e289bfc44ac6f615ac512b75768"
     },
     {
       "id": "asteroid:184314",
@@ -11767,7 +12084,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27184314%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-tno-batch36-20260915-mbabamwanawaresa-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-tno-batch36-20260915-mbabamwanawaresa-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "da136aefd4b91ea184372abe380e7e634867ceb46d2040d5a187f0f5e8db69bd"
     },
     {
       "id": "asteroid:208996",
@@ -11807,7 +12125,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27208996%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch21-20260914-az84-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch21-20260914-az84-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "39831acc9c6a2d8c7f58251de2ef43349c3c5548a1e09f42a0b945b862f568fc"
     },
     {
       "id": "asteroid:225088",
@@ -11847,7 +12166,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27225088%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch19-20260914-gonggong-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch19-20260914-gonggong-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "ab98f57b4feca034ccc99782e14ce1f5da5e10cef69684df850bba4bb9b1fbb2"
     },
     {
       "id": "asteroid:229762",
@@ -11887,7 +12207,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27229762%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch24-20260914-gkunhomdima-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch24-20260914-gkunhomdima-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "102e8064b279a8194f79e6d4715f41d6a62a30b3d2b20d9cee783a0cc648030e"
     },
     {
       "id": "asteroid:231937",
@@ -11927,7 +12248,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27231937%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-followup-20260909-fo32-2001-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-followup-20260909-fo32-2001-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "04a74e4f5eadb1e58a57e617ce807c3cfa5769fd2ce411f682c91df4f8107cd0"
     },
     {
       "id": "asteroid:307261",
@@ -11967,7 +12289,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27307261%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch21-20260914-ms4-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch21-20260914-ms4-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "c9e1bdb296dc7908e0960478e3b790448f2d3a2db52e26e8d9d16d20e0c4d3f8"
     },
     {
       "id": "asteroid:308635",
@@ -12007,7 +12330,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27308635%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch6-20260909-yu55-2005-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch6-20260909-yu55-2005-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "ddd37f9c64bdba15cccbe616e42fe08d099e26a9886fc30af1f1594cdddb05f5"
     },
     {
       "id": "asteroid:330836",
@@ -12024,7 +12348,7 @@
         "eccentricity": 0.4184688238594073,
         "inclinationDeg": 17.876972115897935,
         "ascendingNodeDeg": 50.42521504905022,
-        "argPeriapsisDeg": 140.16829904208726,
+        "argPeriapsisDeg": 140.1682990420873,
         "meanAnomalyDeg": 71.65219129689734,
         "meanMotionDegPerDay": 0.009981873373862341
       },
@@ -12047,7 +12371,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27330836%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-centaur-batch31-20260914-orius-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-centaur-batch31-20260914-orius-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "c0e15401920b5fc212b4a457d2e91737db68abca49396ee6255b0c90b0eaf694"
     },
     {
       "id": "asteroid:341520",
@@ -12087,7 +12412,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27341520%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-tno-batch34-20260914-mors-somnus-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-tno-batch34-20260914-mors-somnus-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "f5b37aec40665ae2f46c8b9d85aad1c4c395fd89ed20bd19c2e2e686b15c2c93"
     },
     {
       "id": "asteroid:341843",
@@ -12127,7 +12453,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27341843%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch5-20260909-ev5-2008-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch5-20260909-ev5-2008-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "cdfb3e7ee4c85997944878e8add6d6d88f6a883bc97f0b3034554f2acdb1f84f"
     },
     {
       "id": "asteroid:346889",
@@ -12167,7 +12494,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27346889%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-centaur-batch30-20260914-rhiphonos-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-centaur-batch30-20260914-rhiphonos-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "60659739736fab9092e740904834d820e9d6b43b00b8c9db679aadea633035bf"
     },
     {
       "id": "asteroid:357439",
@@ -12207,7 +12535,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27357439%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch6-20260909-bl86-2004-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch6-20260909-bl86-2004-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "e6924a8948de91290c28ba805ce775183a5b69b32aa9e3ef18a157e8141c32e0"
     },
     {
       "id": "asteroid:367943",
@@ -12247,7 +12576,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27367943%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch6-20260909-duende-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch6-20260909-duende-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "5dae59220c631dabc1ccd93106752bfdbf06a236d7473dd0ed2b34175d80f50c"
     },
     {
       "id": "asteroid:463368",
@@ -12287,7 +12617,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27463368%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-centaur-batch31-20260914-eurytus-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-centaur-batch31-20260914-eurytus-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "3ba942779eb347ee852e1cbe24415307d383bccdefd486b4f19c6ce7939922e7"
     },
     {
       "id": "asteroid:469219",
@@ -12327,7 +12658,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27469219%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch5-20260909-kamo-oalewa-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch5-20260909-kamo-oalewa-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "bfd023ad6551200737ec37eb100fec08fd23cc461ec7c767d036f192200d622c"
     },
     {
       "id": "asteroid:471143",
@@ -12367,7 +12699,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27DES%3D20471143%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch23-20260914-dziewanna-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch23-20260914-dziewanna-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "7ef04eca82432ca6265ff4a14912874148d1ba07012f68b4f6f9e28e34c34f50"
     },
     {
       "id": "asteroid:486958",
@@ -12407,7 +12740,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27486958%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch5-20260909-arrokoth-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch5-20260909-arrokoth-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "7bc79586e0da62691bf08df4fcaab7549cee909d76ce5732b05f09daa177278f"
     },
     {
       "id": "asteroid:523794",
@@ -12423,7 +12757,7 @@
         "semiMajorAxisAU": 82.39652701772869,
         "eccentricity": 0.589053281918158,
         "inclinationDeg": 7.5447361491029765,
-        "ascendingNodeDeg": 211.7836945004978,
+        "ascendingNodeDeg": 211.78369450049783,
         "argPeriapsisDeg": 260.6844680558445,
         "meanAnomalyDeg": 328.28889215314604,
         "meanMotionDegPerDay": 0.0013177733301267495
@@ -12447,7 +12781,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27523794%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch23-20260914-rr245-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch23-20260914-rr245-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "528da352cf6708fecacb079c91d2672854cdf8945ee99f93a3ae0fd50d3c0974"
     },
     {
       "id": "asteroid:532037",
@@ -12463,7 +12798,7 @@
         "semiMajorAxisAU": 58.91486486999769,
         "eccentricity": 0.390736275818671,
         "inclinationDeg": 33.094841763930084,
-        "ascendingNodeDeg": 187.06820397028503,
+        "ascendingNodeDeg": 187.068203970285,
         "argPeriapsisDeg": 139.24711033641427,
         "meanAnomalyDeg": 218.97236842947083,
         "meanMotionDegPerDay": 0.002179549541500348
@@ -12487,7 +12822,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27DES%3D20532037%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch23-20260914-chiminigagua-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch23-20260914-chiminigagua-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "4ef20d1c7e9ad4c33dec4d87bf249d76f0358b7c9484777f4fd58c099519e646"
     },
     {
       "id": "asteroid:541132",
@@ -12504,7 +12840,7 @@
         "eccentricity": 0.9510672709187409,
         "inclinationDeg": 11.678766810022655,
         "ascendingNodeDeg": 301.1326002782449,
-        "argPeriapsisDeg": 118.2567760249907,
+        "argPeriapsisDeg": 118.25677602499076,
         "meanAnomalyDeg": 359.61000528051613,
         "meanMotionDegPerDay": 0.000020511210337601093
       },
@@ -12527,7 +12863,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27DES%3D20541132%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch23-20260914-leleakuhonua-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch23-20260914-leleakuhonua-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "bfee7b68db484dc82b9a93d2f6a5f4c2c947694657d85182351fedec9037a344"
     },
     {
       "id": "asteroid:612911",
@@ -12567,7 +12904,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27DES%3D20612911%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch23-20260914-xr190-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch23-20260914-xr190-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "9bde3080a5d9fb8a6424343603053c91fd7b5869b2ef71427669348b9b686ffb"
     },
     {
       "id": "asteroid:696315",
@@ -12607,7 +12945,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27696315%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-centaur-batch32-20260914-petraios-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-centaur-batch32-20260914-petraios-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "3322681cc045e650273f22c8e53a0f438bd926fadb0b6db8593a3b7464d513a3"
     },
     {
       "id": "asteroid:762135",
@@ -12647,7 +12986,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27762135%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-tno-batch35-20260914-2010-wg9-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-tno-batch35-20260914-2010-wg9-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "12ea4241b358690f7dccc0af60903fe4060d845a94067be774de8ea179876057"
     },
     {
       "id": "asteroid:50666516",
@@ -12687,7 +13027,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27DES%3D50666516%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch23-20260914-vp113-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch23-20260914-vp113-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "0eb6328dc8a12599bdab5cf9d1980d232c6a203daec04e6e0ae72ec20cec008c"
     },
     {
       "id": "asteroid:50760674",
@@ -12727,7 +13068,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27DES%3D50760674%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch23-20260914-uz224-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch23-20260914-uz224-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "3276937df00e5acab099146ac0b97127841bea0f6f3aadcb15e6935a97cfe58d"
     },
     {
       "id": "asteroid:50773852",
@@ -12767,7 +13109,8 @@
         "centerNaifId": 10
       },
       "sourceUrl": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27DES%3D50773852%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
-      "sourceKernelId": "horizons-asteroids-batch23-20260914-sy99-2026-01-01-2027-01-01"
+      "sourceKernelId": "horizons-asteroids-batch23-20260914-sy99-2026-01-01-2027-01-01",
+      "sourceKernelSha256": "cb6cfd76ecc93866941271cd02618a7e7302bb58609477c6a09a2f00ece05ca2"
     }
   ]
 }

@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "catalog": "Gaia DR3",
+  "table": "gaiadr3.gaia_source",
+  "frame": "ICRS",
+  "referenceEpochJulianYear": 2016,
+  "referenceEpochTimeScale": "TCB",
+  "implementation": {
+    "node": "v24.14.1",
+    "generatorSha256": "4913e37477c2131d6e07177b038104ac916b516f55e4706d5a506f8198b3f961",
+    "parserSha256": "2505cd8ee265a4e9f2b954939ee021b515040bbe78c4dacec96a1797d3247ad3",
+    "columnsSha256": "e4d9f897d13ea9184165b58694f060fe1745d76e54e4a30b943f96a3cd04bbaa"
+  },
+  "settings": {
+    "raDeg": 130.1,
+    "decDeg": 19.67,
+    "radiusDeg": 1,
+    "maxMagnitude": 18,
+    "maxRows": 100000
+  },
+  "columns": [
+    "source_id",
+    "ref_epoch",
+    "ra",
+    "dec",
+    "ra_error",
+    "dec_error",
+    "parallax",
+    "parallax_error",
+    "pmra",
+    "pmra_error",
+    "pmdec",
+    "pmdec_error",
+    "ra_dec_corr",
+    "ra_parallax_corr",
+    "ra_pmra_corr",
+    "ra_pmdec_corr",
+    "dec_parallax_corr",
+    "dec_pmra_corr",
+    "dec_pmdec_corr",
+    "parallax_pmra_corr",
+    "parallax_pmdec_corr",
+    "pmra_pmdec_corr",
+    "astrometric_params_solved",
+    "ruwe",
+    "phot_g_mean_mag",
+    "bp_rp",
+    "radial_velocity",
+    "radial_velocity_error"
+  ],
+  "rows": 5555,
+  "rowCountEvidence": {
+    "method": "top-plus-one-sentinel",
+    "limit": 100001,
+    "returnedRows": 5555,
+    "overflow": false
+  },
+  "catalogCompletenessCertified": false,
+  "units": {
+    "ra": "degree",
+    "dec": "degree",
+    "ra_error": "mas; alpha*cos(delta)",
+    "dec_error": "mas",
+    "parallax": "mas",
+    "pmra": "mas/Julian year; mu_alpha*cos(delta)",
+    "pmdec": "mas/Julian year",
+    "radial_velocity": "km/s"
+  },
+  "limitations": [
+    "A magnitude-limited cone is not full-sky data or a completeness guarantee.",
+    "Missing fields remain null. Negative parallax is retained; no inverse-parallax distances are inferred.",
+    "No proper-motion propagation, observer parallax, aberration, deflection, zero-point correction or occultation uncertainty model is applied.",
+    "Spatial bins describe returned coordinates at J2016.0, not bounds at arbitrary epochs."
+  ],
+  "documentation": [
+    "https://www.cosmos.esa.int/web/gaia/dr3",
+    "https://www.cosmos.esa.int/web/gaia-users/archive/programmatic-access",
+    "https://gea.esac.esa.int/archive/documentation/GDR3/Gaia_archive/chap_datamodel/sec_dm_main_source_catalogue/ssec_dm_gaia_source.html"
+  ],
+  "sources": [
+    {
+      "path": "rows.csv",
+      "bytes": 1830790,
+      "sha256": "6000dacd38696960fc19979f86346e6efdbea5694590a625ec71335b26dc5798",
+      "query": "SELECT TOP 100001 source_id,ref_epoch,ra,dec,ra_error,dec_error,parallax,parallax_error,pmra,pmra_error,pmdec,pmdec_error,ra_dec_corr,ra_parallax_corr,ra_pmra_corr,ra_pmdec_corr,dec_parallax_corr,dec_pmra_corr,dec_pmdec_corr,parallax_pmra_corr,parallax_pmdec_corr,pmra_pmdec_corr,astrometric_params_solved,ruwe,phot_g_mean_mag,bp_rp,radial_velocity,radial_velocity_error FROM gaiadr3.gaia_source WHERE CONTAINS(POINT('ICRS',ra,dec),CIRCLE('ICRS',130.1,19.67,1))=1 AND phot_g_mean_mag<=18",
+      "url": "https://gea.esac.esa.int/tap-server/tap/async/a24c6f7e-ba68-11f1-924c-bc97e148b76b-O/results/result",
+      "jobUrl": "https://gea.esac.esa.int/tap-server/tap/async/a24c6f7e-ba68-11f1-924c-bc97e148b76b-O",
+      "jobReceiptSha256": "5f3f70929c905da0338bfd2b096bc994835379b1ea7f83c1c15ee707bc412452",
+      "retrievedAt": "2026-09-27T12:35:19.171Z"
+    }
+  ],
+  "chunks": [
+    {
+      "path": "r25-d21.json",
+      "sha256": "eee31e34a6e46be59e431cf765c3eea826725b49cde5456253dc90c6e6cf6668",
+      "bytes": 1295037,
+      "rows": 1732,
+      "raRangeDeg": [
+        125,
+        130
+      ],
+      "decRangeDeg": [
+        15,
+        20
+      ]
+    },
+    {
+      "path": "r25-d22.json",
+      "sha256": "9499eceb7c63b3a6acddfb63add0cb3b0d945208e6882717736ae328dd0f8e1e",
+      "bytes": 581527,
+      "rows": 777,
+      "raRangeDeg": [
+        125,
+        130
+      ],
+      "decRangeDeg": [
+        20,
+        25
+      ]
+    },
+    {
+      "path": "r26-d21.json",
+      "sha256": "da2e85ae01294507f71585c324f2014af199f97b0bca2b9962e18429e16746e0",
+      "bytes": 1592587,
+      "rows": 2130,
+      "raRangeDeg": [
+        130,
+        135
+      ],
+      "decRangeDeg": [
+        15,
+        20
+      ]
+    },
+    {
+      "path": "r26-d22.json",
+      "sha256": "507020a0640bb80f38502c796154472584fa73409d0a683a648f68c855f9370c",
+      "bytes": 684034,
+      "rows": 916,
+      "raRangeDeg": [
+        130,
+        135
+      ],
+      "decRangeDeg": [
+        20,
+        25
+      ]
+    }
+  ]
+}

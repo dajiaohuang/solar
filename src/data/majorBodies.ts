@@ -357,6 +357,36 @@ majorBodies.push(...ephemerisBodies.bodies.map((entry): CelestialBody => ({
   dataEpochLabel: `JD ${ephemerisBodies.epochJd} TDB · fixed osculating fallback`,
 })))
 
+majorBodies.push({
+  id: '67p',
+  naifId: 1000012,
+  name: '67P/丘留莫夫－格拉西缅科彗星',
+  shortName: '67P/Churyumov–Gerasimenko',
+  kind: 'comet',
+  color: '#57d6dc',
+  size: 2.4,
+  source: 'jpl-spk',
+  parentId: 'sun',
+  orbitClassCode: 'JFc',
+  orbitClassName: 'Jupiter-family Comet',
+  dataEpochLabel: 'JPL Horizons K284/1 (2026-09-04); observation arc through 2025-06-21; no propagation fallback',
+})
+
+majorBodies.push({
+  id: 'borisov',
+  naifId: 1003639,
+  name: '2I/鲍里索夫彗星（C/2019 Q4）',
+  shortName: '2I/Borisov',
+  kind: 'comet',
+  color: '#c5a4ff',
+  size: 2.5,
+  source: 'jpl-spk',
+  parentId: 'sun',
+  orbitClassCode: 'HYP',
+  orbitClassName: 'Hyperbolic Comet',
+  dataEpochLabel: 'JPL Horizons JPL #54 (2024-06-24); 964 observations through 2020-09-30; mapped 1σ source samples at 30-day intervals',
+})
+
 majorBodies.push(...additionalSatelliteBodies(majorBodies))
 
 export const majorBodiesById = new Map(majorBodies.map((body) => [body.id, body]))

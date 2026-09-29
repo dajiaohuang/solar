@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "jpl-satellite-expansion-20260904-full",
   "profile": "full",
-  "contract": "Original SPK types 2/3/17/21; geometric states in declared frames and TDB windows. Explicit source dependency pools; cross-solution comparisons are not a single global dynamical fit. No refitting or duplicated force corrections.",
+  "contract": "Original SPK types 2/3/17/21; geometric states in declared frames and TDB windows. Explicit source dependency pools; cross-solution comparisons are not a single global dynamical fit. No refitting or duplicated force corrections. Added spacecraft use original Type 1 records with explicit center dependencies; tracking cutoffs and source windows do not establish numerical error bounds. Juno SPK crops retain original Type 1 records and explicitly pin the DE440S center/origin kernel; source coverage is not a numerical accuracy or uncertainty bound.",
   "files": [
     {
       "id": "de440s-2000-01-01-2051-01-01",
@@ -1050,6 +1050,82 @@
       "bytes": 29696,
       "targets": [
         2000704
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/small_bodies/asteroids_de441/sb441-n16.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/small_bodies/asteroids_de441/sb441-n16.bsp",
+        "bytes": 645727232,
+        "etag": "\"6064e842-267d0400\"",
+        "lastModified": "Wed, 31 Mar 2021 21:23:14 GMT"
+      },
+      "core": false
+    },
+    {
+      "id": "sb441-n16-2000002-2020-01-01-2031-01-01",
+      "path": "sb441-n16-2000002-2020-01-01-2031-01-01.bsp",
+      "sha256": "59f8a07fd1d0bb91574c61da62df57bb9427ab0d9e975e2c41e76542c5432b31",
+      "bytes": 29696,
+      "targets": [
+        2000002
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/small_bodies/asteroids_de441/sb441-n16.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/small_bodies/asteroids_de441/sb441-n16.bsp",
+        "bytes": 645727232,
+        "etag": "\"6064e842-267d0400\"",
+        "lastModified": "Wed, 31 Mar 2021 21:23:14 GMT"
+      },
+      "core": false
+    },
+    {
+      "id": "sb441-n16-2000004-2020-01-01-2031-01-01",
+      "path": "sb441-n16-2000004-2020-01-01-2031-01-01.bsp",
+      "sha256": "b73a3074c3c5b53c9857e7a9dfa691bb2e5ebbda431b7e5e2112ea44d80f7e50",
+      "bytes": 29696,
+      "targets": [
+        2000004
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/small_bodies/asteroids_de441/sb441-n16.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/small_bodies/asteroids_de441/sb441-n16.bsp",
+        "bytes": 645727232,
+        "etag": "\"6064e842-267d0400\"",
+        "lastModified": "Wed, 31 Mar 2021 21:23:14 GMT"
+      },
+      "core": false
+    },
+    {
+      "id": "sb441-n16-2000010-2020-01-01-2031-01-01",
+      "path": "sb441-n16-2000010-2020-01-01-2031-01-01.bsp",
+      "sha256": "1e437be20fc4e80454ddb50f7a3742e90fd2c29130562a03c943430509188fa5",
+      "bytes": 29696,
+      "targets": [
+        2000010
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/ftp/eph/small_bodies/asteroids_de441/sb441-n16.bsp",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/ftp/eph/small_bodies/asteroids_de441/sb441-n16.bsp",
+        "bytes": 645727232,
+        "etag": "\"6064e842-267d0400\"",
+        "lastModified": "Wed, 31 Mar 2021 21:23:14 GMT"
+      },
+      "core": false
+    },
+    {
+      "id": "sb441-n16-2000016-2020-01-01-2031-01-01",
+      "path": "sb441-n16-2000016-2020-01-01-2031-01-01.bsp",
+      "sha256": "4c114aec492fea323db932fee7ac243f14ee68e5c852e77a932615c4897b59fb",
+      "bytes": 29696,
+      "targets": [
+        2000016
       ],
       "startEt": 631108800,
       "endEt": 978264000,
@@ -21406,6 +21482,1406 @@
           "retrievedAt": "2026-09-14T17:00:49.470Z"
         },
         "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
+      }
+    },
+    {
+      "id": "newhorizons-b676f0053ee02f6e-ca39378054c6-dependencies",
+      "path": "newhorizons-b676f0053ee02f6e-ca39378054c6-dependencies.bsp",
+      "bytes": 1271808,
+      "sha256": "566b8ce3d02fa85ea01c65681da3c30dfc08745fc5f8c542e978c14365c247ec",
+      "targets": [
+        499,
+        299,
+        199,
+        399,
+        301,
+        10,
+        9,
+        8,
+        7,
+        6,
+        5,
+        4,
+        3,
+        2,
+        1,
+        2486958
+      ],
+      "startEt": 686318470,
+      "endEt": 1041465600,
+      "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/nh-j_p_ss-spice-6-v1.0/nhsp_1000/data/spk/nh_pred_alleph_od164.bsp",
+      "sourceIdentity": {
+        "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/nh-j_p_ss-spice-6-v1.0/nhsp_1000/data/spk/nh_pred_alleph_od164.bsp",
+        "bytes": 13074432,
+        "sha256": "b676f0053ee02f6e32f7e2b23ca2e865ec9f424caa3f2710e87aa06621adc050",
+        "startedAt": "2026-09-27T18:16:38.446Z",
+        "completedAt": "2026-09-27T18:16:40.815Z",
+        "etag": null,
+        "lastModified": "Wed, 10 Jun 2026 20:22:06 GMT",
+        "notesSha256": "8c588dd29a5057de348829f324a4486917b22e303e590beed4db73c7d9e51d4c",
+        "label": {
+          "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/nh-j_p_ss-spice-6-v1.0/nhsp_1000/data/spk/nh_pred_alleph_od164.lbl",
+          "bytes": 2640,
+          "sha256": "c52b3c9d9fb8ca09d0978dda78220e735c1de8407e87580fcc064f67fc515876",
+          "startedAt": "2026-09-27T18:16:38.248Z",
+          "completedAt": "2026-09-27T18:16:38.442Z",
+          "etag": null,
+          "lastModified": "Fri, 31 Jul 2026 18:17:00 GMT"
+        }
+      },
+      "core": false,
+      "dependencyOnly": true,
+      "solution": "newhorizons-od164-with-embedded-de433",
+      "integrationBatch": "spacecraft-48262080b4841b14",
+      "selectionEvidence": {
+        "preparedSha256": "48262080b4841b14afbade51bfcc7e25684bdb07d8e9ed1e7f9a32c04be73067",
+        "baselineSha256": "4d600f46c1b0d35ee440d416b19489e3de145058c3aa7f5744d64c480251a1c2",
+        "requestedWindow": {
+          "startEt": 686318470,
+          "endEt": 1041465600,
+          "timeScale": "TDB seconds past J2000"
+        },
+        "sources": [
+          {
+            "id": "newhorizons",
+            "target": -98,
+            "name": "New Horizons",
+            "originalPath": "originals/nh_pred_alleph_od164.bsp",
+            "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/nh-j_p_ss-spice-6-v1.0/nhsp_1000/data/spk/nh_pred_alleph_od164.bsp",
+            "bytes": 13074432,
+            "sha256": "b676f0053ee02f6e32f7e2b23ca2e865ec9f424caa3f2710e87aa06621adc050",
+            "startedAt": "2026-09-27T18:16:38.446Z",
+            "completedAt": "2026-09-27T18:16:40.815Z",
+            "etag": null,
+            "lastModified": "Wed, 10 Jun 2026 20:22:06 GMT",
+            "notesSha256": "8c588dd29a5057de348829f324a4486917b22e303e590beed4db73c7d9e51d4c",
+            "label": {
+              "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/nh-j_p_ss-spice-6-v1.0/nhsp_1000/data/spk/nh_pred_alleph_od164.lbl",
+              "bytes": 2640,
+              "sha256": "c52b3c9d9fb8ca09d0978dda78220e735c1de8407e87580fcc064f67fc515876",
+              "startedAt": "2026-09-27T18:16:38.248Z",
+              "completedAt": "2026-09-27T18:16:38.442Z",
+              "etag": null,
+              "lastModified": "Fri, 31 Jul 2026 18:17:00 GMT"
+            },
+            "reviewedNotes": {
+              "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/nh-j_p_ss-spice-6-v1.0/nhsp_1000/extras/mk/nh_v10.tm",
+              "consultedOn": "2026-09-23",
+              "trackingDataCutoff": "2025-04-18 08:06:50 ET",
+              "reviewedDescriptorWindow": {
+                "startEt": 686318469.1823477,
+                "endEt": 1041465600,
+                "openness": "(start,end]"
+              }
+            },
+            "sourceSet": {
+              "id": "newhorizons-od164-de433",
+              "memberTargets": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                199,
+                299,
+                301,
+                399,
+                499,
+                2486958
+              ]
+            },
+            "boundary": "Published trajectory extension; coverage is not an observational accuracy or uncertainty bound."
+          }
+        ],
+        "notes": [
+          {
+            "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/nh-j_p_ss-spice-6-v1.0/nhsp_1000/extras/mk/nh_v10.tm",
+            "bytes": 4989,
+            "sha256": "8c588dd29a5057de348829f324a4486917b22e303e590beed4db73c7d9e51d4c",
+            "startedAt": "2026-09-27T18:16:37.429Z",
+            "completedAt": "2026-09-27T18:16:38.247Z",
+            "etag": null,
+            "lastModified": "Thu, 30 Jul 2026 23:24:09 GMT",
+            "path": "originals/newhorizons-source-notes.txt"
+          }
+        ],
+        "implementation": [
+          {
+            "path": "scripts/prepare-spacecraft-pack.mjs",
+            "sha256": "4ac5b53f58126e252929a3b1538d9ae23c82ee0e6b27f0a1cd786c638405bf4d"
+          },
+          {
+            "path": "scripts/crop-spk.mjs",
+            "sha256": "d23e171d8f7f940c3e2dcc5bd7b6a1ca23d99b975e626b74d988a4990f98ab58"
+          },
+          {
+            "path": "scripts/lib/kernel-window-coverage.mjs",
+            "sha256": "64e793cb1ce31a88d1d16182252d626a81c06ba1512c23ee20106bcfca26b8a6"
+          },
+          {
+            "path": "scripts/lib/spacecraft-source-sets.mjs",
+            "sha256": "1e9f079a3adede1c9d229df6c28d0eb31a7192d6c3e8787b82a7dc3c62718f27"
+          },
+          {
+            "path": "src/engine/ephemeris/spk.ts",
+            "sha256": "2f6e21a3e4a9d1e16b2d43f763d3dd3b1b418f8ba67af580ea8a03f69c35437f"
+          },
+          {
+            "path": "src/engine/ephemeris/spkType21.ts",
+            "sha256": "c8f0238ee95d66dce61b543e133e7d9f87be0a24a7f502f56759bddec1e24471"
+          },
+          {
+            "path": "src/engine/ephemeris/spkType17.ts",
+            "sha256": "5c05fecf43c5500ccf216983adb3072828a531c4c4f34972493674845a42ced9"
+          },
+          {
+            "path": "src/data/spacecraftIdentities.ts",
+            "sha256": "733b2ad56ec77cc43de2c19c892101e745d0e6b684f9a24fe907aa6ad39ce0df"
+          }
+        ],
+        "integrator": {
+          "path": "scripts/integrate-spacecraft-pack.mjs",
+          "sha256": "806878b843745b458d97b8ad839b7441462136b385774601ff9c8c7ab640b6e7"
+        },
+        "acceptance": "source-integrated; numerical acceptance and derived-data regeneration remain separate"
+      },
+      "sourceBoundary": {
+        "sourceId": "newhorizons",
+        "sourceSetId": "newhorizons-od164-de433",
+        "trackingDataCutoff": "2025-04-18 08:06:50 ET",
+        "description": "Published trajectory extension; coverage is not an observational accuracy or uncertainty bound."
+      }
+    },
+    {
+      "id": "newhorizons-b676f0053ee02f6e-ca39378054c6-trajectory",
+      "path": "newhorizons-b676f0053ee02f6e-ca39378054c6-trajectory.bsp",
+      "bytes": 5080064,
+      "sha256": "2fea6e7b6739c86a60551c056bbb5f8efaa13690e8a0969a90681a1f5e76f4ff",
+      "targets": [
+        -98
+      ],
+      "startEt": 686318470,
+      "endEt": 1041465600,
+      "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/nh-j_p_ss-spice-6-v1.0/nhsp_1000/data/spk/nh_pred_alleph_od164.bsp",
+      "sourceIdentity": {
+        "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/nh-j_p_ss-spice-6-v1.0/nhsp_1000/data/spk/nh_pred_alleph_od164.bsp",
+        "bytes": 13074432,
+        "sha256": "b676f0053ee02f6e32f7e2b23ca2e865ec9f424caa3f2710e87aa06621adc050",
+        "startedAt": "2026-09-27T18:16:38.446Z",
+        "completedAt": "2026-09-27T18:16:40.815Z",
+        "etag": null,
+        "lastModified": "Wed, 10 Jun 2026 20:22:06 GMT",
+        "notesSha256": "8c588dd29a5057de348829f324a4486917b22e303e590beed4db73c7d9e51d4c",
+        "label": {
+          "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/nh-j_p_ss-spice-6-v1.0/nhsp_1000/data/spk/nh_pred_alleph_od164.lbl",
+          "bytes": 2640,
+          "sha256": "c52b3c9d9fb8ca09d0978dda78220e735c1de8407e87580fcc064f67fc515876",
+          "startedAt": "2026-09-27T18:16:38.248Z",
+          "completedAt": "2026-09-27T18:16:38.442Z",
+          "etag": null,
+          "lastModified": "Fri, 31 Jul 2026 18:17:00 GMT"
+        }
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "newhorizons-b676f0053ee02f6e-ca39378054c6-dependencies"
+      ],
+      "solution": "newhorizons-od164-with-embedded-de433",
+      "integrationBatch": "spacecraft-48262080b4841b14",
+      "selectionEvidence": {
+        "preparedSha256": "48262080b4841b14afbade51bfcc7e25684bdb07d8e9ed1e7f9a32c04be73067",
+        "baselineSha256": "4d600f46c1b0d35ee440d416b19489e3de145058c3aa7f5744d64c480251a1c2",
+        "requestedWindow": {
+          "startEt": 686318470,
+          "endEt": 1041465600,
+          "timeScale": "TDB seconds past J2000"
+        },
+        "sources": [
+          {
+            "id": "newhorizons",
+            "target": -98,
+            "name": "New Horizons",
+            "originalPath": "originals/nh_pred_alleph_od164.bsp",
+            "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/nh-j_p_ss-spice-6-v1.0/nhsp_1000/data/spk/nh_pred_alleph_od164.bsp",
+            "bytes": 13074432,
+            "sha256": "b676f0053ee02f6e32f7e2b23ca2e865ec9f424caa3f2710e87aa06621adc050",
+            "startedAt": "2026-09-27T18:16:38.446Z",
+            "completedAt": "2026-09-27T18:16:40.815Z",
+            "etag": null,
+            "lastModified": "Wed, 10 Jun 2026 20:22:06 GMT",
+            "notesSha256": "8c588dd29a5057de348829f324a4486917b22e303e590beed4db73c7d9e51d4c",
+            "label": {
+              "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/nh-j_p_ss-spice-6-v1.0/nhsp_1000/data/spk/nh_pred_alleph_od164.lbl",
+              "bytes": 2640,
+              "sha256": "c52b3c9d9fb8ca09d0978dda78220e735c1de8407e87580fcc064f67fc515876",
+              "startedAt": "2026-09-27T18:16:38.248Z",
+              "completedAt": "2026-09-27T18:16:38.442Z",
+              "etag": null,
+              "lastModified": "Fri, 31 Jul 2026 18:17:00 GMT"
+            },
+            "reviewedNotes": {
+              "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/nh-j_p_ss-spice-6-v1.0/nhsp_1000/extras/mk/nh_v10.tm",
+              "consultedOn": "2026-09-23",
+              "trackingDataCutoff": "2025-04-18 08:06:50 ET",
+              "reviewedDescriptorWindow": {
+                "startEt": 686318469.1823477,
+                "endEt": 1041465600,
+                "openness": "(start,end]"
+              }
+            },
+            "sourceSet": {
+              "id": "newhorizons-od164-de433",
+              "memberTargets": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+                7,
+                8,
+                9,
+                10,
+                199,
+                299,
+                301,
+                399,
+                499,
+                2486958
+              ]
+            },
+            "boundary": "Published trajectory extension; coverage is not an observational accuracy or uncertainty bound."
+          }
+        ],
+        "notes": [
+          {
+            "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/nh-j_p_ss-spice-6-v1.0/nhsp_1000/extras/mk/nh_v10.tm",
+            "bytes": 4989,
+            "sha256": "8c588dd29a5057de348829f324a4486917b22e303e590beed4db73c7d9e51d4c",
+            "startedAt": "2026-09-27T18:16:37.429Z",
+            "completedAt": "2026-09-27T18:16:38.247Z",
+            "etag": null,
+            "lastModified": "Thu, 30 Jul 2026 23:24:09 GMT",
+            "path": "originals/newhorizons-source-notes.txt"
+          }
+        ],
+        "implementation": [
+          {
+            "path": "scripts/prepare-spacecraft-pack.mjs",
+            "sha256": "4ac5b53f58126e252929a3b1538d9ae23c82ee0e6b27f0a1cd786c638405bf4d"
+          },
+          {
+            "path": "scripts/crop-spk.mjs",
+            "sha256": "d23e171d8f7f940c3e2dcc5bd7b6a1ca23d99b975e626b74d988a4990f98ab58"
+          },
+          {
+            "path": "scripts/lib/kernel-window-coverage.mjs",
+            "sha256": "64e793cb1ce31a88d1d16182252d626a81c06ba1512c23ee20106bcfca26b8a6"
+          },
+          {
+            "path": "scripts/lib/spacecraft-source-sets.mjs",
+            "sha256": "1e9f079a3adede1c9d229df6c28d0eb31a7192d6c3e8787b82a7dc3c62718f27"
+          },
+          {
+            "path": "src/engine/ephemeris/spk.ts",
+            "sha256": "2f6e21a3e4a9d1e16b2d43f763d3dd3b1b418f8ba67af580ea8a03f69c35437f"
+          },
+          {
+            "path": "src/engine/ephemeris/spkType21.ts",
+            "sha256": "c8f0238ee95d66dce61b543e133e7d9f87be0a24a7f502f56759bddec1e24471"
+          },
+          {
+            "path": "src/engine/ephemeris/spkType17.ts",
+            "sha256": "5c05fecf43c5500ccf216983adb3072828a531c4c4f34972493674845a42ced9"
+          },
+          {
+            "path": "src/data/spacecraftIdentities.ts",
+            "sha256": "733b2ad56ec77cc43de2c19c892101e745d0e6b684f9a24fe907aa6ad39ce0df"
+          }
+        ],
+        "integrator": {
+          "path": "scripts/integrate-spacecraft-pack.mjs",
+          "sha256": "806878b843745b458d97b8ad839b7441462136b385774601ff9c8c7ab640b6e7"
+        },
+        "acceptance": "source-integrated; numerical acceptance and derived-data regeneration remain separate"
+      },
+      "sourceBoundary": {
+        "sourceId": "newhorizons",
+        "sourceSetId": "newhorizons-od164-de433",
+        "trackingDataCutoff": "2025-04-18 08:06:50 ET",
+        "description": "Published trajectory extension; coverage is not an observational accuracy or uncertainty bound."
+      }
+    },
+    {
+      "id": "voyager1-aa8f37673b5ef602-d09ba9eca827-dependencies",
+      "path": "voyager1-aa8f37673b5ef602-d09ba9eca827-dependencies.bsp",
+      "bytes": 73728,
+      "sha256": "f0d860e8f031bf8f902ed6ba2b22d1262781aefb019e8d6cf6862d3062c0dde9",
+      "targets": [
+        10
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/spk/vgr1.x2100.bsp",
+      "sourceIdentity": {
+        "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/spk/vgr1.x2100.bsp",
+        "bytes": 16286720,
+        "sha256": "aa8f37673b5ef60296d210566d01cc49f7b32711f37003393c3327616c9fc6d0",
+        "startedAt": "2026-09-28T17:33:24.237Z",
+        "completedAt": "2026-09-28T17:33:26.778Z",
+        "etag": null,
+        "lastModified": "Sun, 21 Aug 2022 16:08:36 GMT",
+        "notesSha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3"
+      },
+      "core": false,
+      "dependencyOnly": true,
+      "solution": "voyager1-x2100-with-embedded-de440",
+      "sourceBoundary": {
+        "sourceId": "voyager1",
+        "trackingFitThroughMonth": "1992-04",
+        "description": "Published trajectory extension; coverage is not an observational accuracy or uncertainty bound."
+      },
+      "integrationBatch": "spacecraft-f0fb0526744ce07d",
+      "selectionEvidence": {
+        "preparedSha256": "f0fb0526744ce07dafda63a32e4ae4ffa9d95dd349f5d688b521a991ca230976",
+        "baselineSha256": "1bef7b8b06007f66fcafb9ab7de4cbe65f9a4682c2c7dd6e667b4c34514cf7f7",
+        "requestedWindow": {
+          "startEt": 631108800,
+          "endEt": 978264000,
+          "timeScale": "TDB seconds past J2000"
+        },
+        "sources": [
+          {
+            "id": "voyager1",
+            "target": -31,
+            "name": "Voyager 1",
+            "originalPath": "originals/vgr1.x2100.bsp",
+            "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/spk/vgr1.x2100.bsp",
+            "bytes": 16286720,
+            "sha256": "aa8f37673b5ef60296d210566d01cc49f7b32711f37003393c3327616c9fc6d0",
+            "startedAt": "2026-09-28T17:33:24.237Z",
+            "completedAt": "2026-09-28T17:33:26.778Z",
+            "etag": null,
+            "lastModified": "Sun, 21 Aug 2022 16:08:36 GMT",
+            "notesSha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3",
+            "reviewedNotes": {
+              "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/aareadme.txt",
+              "consultedOn": "2026-09-23",
+              "trackingFitThroughMonth": "1992-04"
+            },
+            "boundary": "Published trajectory extension; coverage is not an observational accuracy or uncertainty bound."
+          },
+          {
+            "id": "voyager2",
+            "target": -32,
+            "name": "Voyager 2",
+            "originalPath": "originals/vgr2.x2100.bsp",
+            "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/spk/vgr2.x2100.bsp",
+            "bytes": 15744000,
+            "sha256": "391f5361773322e2242fb1c81578aeb1fbf9134c3878b2f325e9b8b5f46ad7cb",
+            "startedAt": "2026-09-28T17:33:27.013Z",
+            "completedAt": "2026-09-28T17:33:28.207Z",
+            "etag": null,
+            "lastModified": "Sun, 21 Aug 2022 16:08:36 GMT",
+            "notesSha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3",
+            "reviewedNotes": {
+              "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/aareadme.txt",
+              "consultedOn": "2026-09-23",
+              "trackingFitThroughMonth": "1992-10"
+            },
+            "boundary": "Published trajectory extension; coverage is not an observational accuracy or uncertainty bound."
+          }
+        ],
+        "notes": [
+          {
+            "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/aareadme.txt",
+            "bytes": 7092,
+            "sha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3",
+            "startedAt": "2026-09-28T17:33:23.367Z",
+            "completedAt": "2026-09-28T17:33:24.236Z",
+            "etag": null,
+            "lastModified": "Tue, 30 Aug 2022 15:15:58 GMT",
+            "path": "originals/voyager1-source-notes.txt"
+          },
+          {
+            "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/aareadme.txt",
+            "bytes": 7092,
+            "sha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3",
+            "startedAt": "2026-09-28T17:33:26.810Z",
+            "completedAt": "2026-09-28T17:33:27.013Z",
+            "etag": null,
+            "lastModified": "Tue, 30 Aug 2022 15:15:58 GMT",
+            "path": "originals/voyager2-source-notes.txt"
+          }
+        ],
+        "implementation": [
+          {
+            "path": "scripts/prepare-spacecraft-pack.mjs",
+            "sha256": "4ac5b53f58126e252929a3b1538d9ae23c82ee0e6b27f0a1cd786c638405bf4d"
+          },
+          {
+            "path": "scripts/crop-spk.mjs",
+            "sha256": "d23e171d8f7f940c3e2dcc5bd7b6a1ca23d99b975e626b74d988a4990f98ab58"
+          },
+          {
+            "path": "scripts/lib/kernel-window-coverage.mjs",
+            "sha256": "64e793cb1ce31a88d1d16182252d626a81c06ba1512c23ee20106bcfca26b8a6"
+          },
+          {
+            "path": "scripts/lib/spacecraft-source-sets.mjs",
+            "sha256": "1e9f079a3adede1c9d229df6c28d0eb31a7192d6c3e8787b82a7dc3c62718f27"
+          },
+          {
+            "path": "src/engine/ephemeris/spk.ts",
+            "sha256": "2f6e21a3e4a9d1e16b2d43f763d3dd3b1b418f8ba67af580ea8a03f69c35437f"
+          },
+          {
+            "path": "src/engine/ephemeris/spkType21.ts",
+            "sha256": "c8f0238ee95d66dce61b543e133e7d9f87be0a24a7f502f56759bddec1e24471"
+          },
+          {
+            "path": "src/engine/ephemeris/spkType17.ts",
+            "sha256": "5c05fecf43c5500ccf216983adb3072828a531c4c4f34972493674845a42ced9"
+          },
+          {
+            "path": "src/data/spacecraftIdentities.ts",
+            "sha256": "733b2ad56ec77cc43de2c19c892101e745d0e6b684f9a24fe907aa6ad39ce0df"
+          }
+        ],
+        "integrator": {
+          "path": "scripts/integrate-spacecraft-pack.mjs",
+          "sha256": "dcad6725a74fa774bfd34d38ef3966afd11c28dbaaf37b3fb038354eaa77b670"
+        },
+        "acceptance": "source-integrated; numerical acceptance and derived-data regeneration remain separate"
+      }
+    },
+    {
+      "id": "voyager1-aa8f37673b5ef602-d09ba9eca827-trajectory",
+      "path": "voyager1-aa8f37673b5ef602-d09ba9eca827-trajectory.bsp",
+      "bytes": 156672,
+      "sha256": "60ce9d21f9f1d2a24cdc5a49b87666fdb4028b31fc4caa4d9300481aa73e7d5e",
+      "targets": [
+        -31
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/spk/vgr1.x2100.bsp",
+      "sourceIdentity": {
+        "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/spk/vgr1.x2100.bsp",
+        "bytes": 16286720,
+        "sha256": "aa8f37673b5ef60296d210566d01cc49f7b32711f37003393c3327616c9fc6d0",
+        "startedAt": "2026-09-28T17:33:24.237Z",
+        "completedAt": "2026-09-28T17:33:26.778Z",
+        "etag": null,
+        "lastModified": "Sun, 21 Aug 2022 16:08:36 GMT",
+        "notesSha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3"
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "voyager1-aa8f37673b5ef602-d09ba9eca827-dependencies"
+      ],
+      "solution": "voyager1-x2100-with-embedded-de440",
+      "sourceBoundary": {
+        "sourceId": "voyager1",
+        "trackingFitThroughMonth": "1992-04",
+        "description": "Published trajectory extension; coverage is not an observational accuracy or uncertainty bound."
+      },
+      "integrationBatch": "spacecraft-f0fb0526744ce07d",
+      "selectionEvidence": {
+        "preparedSha256": "f0fb0526744ce07dafda63a32e4ae4ffa9d95dd349f5d688b521a991ca230976",
+        "baselineSha256": "1bef7b8b06007f66fcafb9ab7de4cbe65f9a4682c2c7dd6e667b4c34514cf7f7",
+        "requestedWindow": {
+          "startEt": 631108800,
+          "endEt": 978264000,
+          "timeScale": "TDB seconds past J2000"
+        },
+        "sources": [
+          {
+            "id": "voyager1",
+            "target": -31,
+            "name": "Voyager 1",
+            "originalPath": "originals/vgr1.x2100.bsp",
+            "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/spk/vgr1.x2100.bsp",
+            "bytes": 16286720,
+            "sha256": "aa8f37673b5ef60296d210566d01cc49f7b32711f37003393c3327616c9fc6d0",
+            "startedAt": "2026-09-28T17:33:24.237Z",
+            "completedAt": "2026-09-28T17:33:26.778Z",
+            "etag": null,
+            "lastModified": "Sun, 21 Aug 2022 16:08:36 GMT",
+            "notesSha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3",
+            "reviewedNotes": {
+              "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/aareadme.txt",
+              "consultedOn": "2026-09-23",
+              "trackingFitThroughMonth": "1992-04"
+            },
+            "boundary": "Published trajectory extension; coverage is not an observational accuracy or uncertainty bound."
+          },
+          {
+            "id": "voyager2",
+            "target": -32,
+            "name": "Voyager 2",
+            "originalPath": "originals/vgr2.x2100.bsp",
+            "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/spk/vgr2.x2100.bsp",
+            "bytes": 15744000,
+            "sha256": "391f5361773322e2242fb1c81578aeb1fbf9134c3878b2f325e9b8b5f46ad7cb",
+            "startedAt": "2026-09-28T17:33:27.013Z",
+            "completedAt": "2026-09-28T17:33:28.207Z",
+            "etag": null,
+            "lastModified": "Sun, 21 Aug 2022 16:08:36 GMT",
+            "notesSha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3",
+            "reviewedNotes": {
+              "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/aareadme.txt",
+              "consultedOn": "2026-09-23",
+              "trackingFitThroughMonth": "1992-10"
+            },
+            "boundary": "Published trajectory extension; coverage is not an observational accuracy or uncertainty bound."
+          }
+        ],
+        "notes": [
+          {
+            "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/aareadme.txt",
+            "bytes": 7092,
+            "sha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3",
+            "startedAt": "2026-09-28T17:33:23.367Z",
+            "completedAt": "2026-09-28T17:33:24.236Z",
+            "etag": null,
+            "lastModified": "Tue, 30 Aug 2022 15:15:58 GMT",
+            "path": "originals/voyager1-source-notes.txt"
+          },
+          {
+            "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/aareadme.txt",
+            "bytes": 7092,
+            "sha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3",
+            "startedAt": "2026-09-28T17:33:26.810Z",
+            "completedAt": "2026-09-28T17:33:27.013Z",
+            "etag": null,
+            "lastModified": "Tue, 30 Aug 2022 15:15:58 GMT",
+            "path": "originals/voyager2-source-notes.txt"
+          }
+        ],
+        "implementation": [
+          {
+            "path": "scripts/prepare-spacecraft-pack.mjs",
+            "sha256": "4ac5b53f58126e252929a3b1538d9ae23c82ee0e6b27f0a1cd786c638405bf4d"
+          },
+          {
+            "path": "scripts/crop-spk.mjs",
+            "sha256": "d23e171d8f7f940c3e2dcc5bd7b6a1ca23d99b975e626b74d988a4990f98ab58"
+          },
+          {
+            "path": "scripts/lib/kernel-window-coverage.mjs",
+            "sha256": "64e793cb1ce31a88d1d16182252d626a81c06ba1512c23ee20106bcfca26b8a6"
+          },
+          {
+            "path": "scripts/lib/spacecraft-source-sets.mjs",
+            "sha256": "1e9f079a3adede1c9d229df6c28d0eb31a7192d6c3e8787b82a7dc3c62718f27"
+          },
+          {
+            "path": "src/engine/ephemeris/spk.ts",
+            "sha256": "2f6e21a3e4a9d1e16b2d43f763d3dd3b1b418f8ba67af580ea8a03f69c35437f"
+          },
+          {
+            "path": "src/engine/ephemeris/spkType21.ts",
+            "sha256": "c8f0238ee95d66dce61b543e133e7d9f87be0a24a7f502f56759bddec1e24471"
+          },
+          {
+            "path": "src/engine/ephemeris/spkType17.ts",
+            "sha256": "5c05fecf43c5500ccf216983adb3072828a531c4c4f34972493674845a42ced9"
+          },
+          {
+            "path": "src/data/spacecraftIdentities.ts",
+            "sha256": "733b2ad56ec77cc43de2c19c892101e745d0e6b684f9a24fe907aa6ad39ce0df"
+          }
+        ],
+        "integrator": {
+          "path": "scripts/integrate-spacecraft-pack.mjs",
+          "sha256": "dcad6725a74fa774bfd34d38ef3966afd11c28dbaaf37b3fb038354eaa77b670"
+        },
+        "acceptance": "source-integrated; numerical acceptance and derived-data regeneration remain separate"
+      }
+    },
+    {
+      "id": "voyager2-391f5361773322e2-d09ba9eca827-dependencies",
+      "path": "voyager2-391f5361773322e2-d09ba9eca827-dependencies.bsp",
+      "bytes": 73728,
+      "sha256": "f0d860e8f031bf8f902ed6ba2b22d1262781aefb019e8d6cf6862d3062c0dde9",
+      "targets": [
+        10
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/spk/vgr2.x2100.bsp",
+      "sourceIdentity": {
+        "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/spk/vgr2.x2100.bsp",
+        "bytes": 15744000,
+        "sha256": "391f5361773322e2242fb1c81578aeb1fbf9134c3878b2f325e9b8b5f46ad7cb",
+        "startedAt": "2026-09-28T17:33:27.013Z",
+        "completedAt": "2026-09-28T17:33:28.207Z",
+        "etag": null,
+        "lastModified": "Sun, 21 Aug 2022 16:08:36 GMT",
+        "notesSha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3"
+      },
+      "core": false,
+      "dependencyOnly": true,
+      "solution": "voyager2-x2100-with-embedded-de440",
+      "sourceBoundary": {
+        "sourceId": "voyager2",
+        "trackingFitThroughMonth": "1992-10",
+        "description": "Published trajectory extension; coverage is not an observational accuracy or uncertainty bound."
+      },
+      "integrationBatch": "spacecraft-f0fb0526744ce07d",
+      "selectionEvidence": {
+        "preparedSha256": "f0fb0526744ce07dafda63a32e4ae4ffa9d95dd349f5d688b521a991ca230976",
+        "baselineSha256": "1bef7b8b06007f66fcafb9ab7de4cbe65f9a4682c2c7dd6e667b4c34514cf7f7",
+        "requestedWindow": {
+          "startEt": 631108800,
+          "endEt": 978264000,
+          "timeScale": "TDB seconds past J2000"
+        },
+        "sources": [
+          {
+            "id": "voyager1",
+            "target": -31,
+            "name": "Voyager 1",
+            "originalPath": "originals/vgr1.x2100.bsp",
+            "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/spk/vgr1.x2100.bsp",
+            "bytes": 16286720,
+            "sha256": "aa8f37673b5ef60296d210566d01cc49f7b32711f37003393c3327616c9fc6d0",
+            "startedAt": "2026-09-28T17:33:24.237Z",
+            "completedAt": "2026-09-28T17:33:26.778Z",
+            "etag": null,
+            "lastModified": "Sun, 21 Aug 2022 16:08:36 GMT",
+            "notesSha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3",
+            "reviewedNotes": {
+              "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/aareadme.txt",
+              "consultedOn": "2026-09-23",
+              "trackingFitThroughMonth": "1992-04"
+            },
+            "boundary": "Published trajectory extension; coverage is not an observational accuracy or uncertainty bound."
+          },
+          {
+            "id": "voyager2",
+            "target": -32,
+            "name": "Voyager 2",
+            "originalPath": "originals/vgr2.x2100.bsp",
+            "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/spk/vgr2.x2100.bsp",
+            "bytes": 15744000,
+            "sha256": "391f5361773322e2242fb1c81578aeb1fbf9134c3878b2f325e9b8b5f46ad7cb",
+            "startedAt": "2026-09-28T17:33:27.013Z",
+            "completedAt": "2026-09-28T17:33:28.207Z",
+            "etag": null,
+            "lastModified": "Sun, 21 Aug 2022 16:08:36 GMT",
+            "notesSha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3",
+            "reviewedNotes": {
+              "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/aareadme.txt",
+              "consultedOn": "2026-09-23",
+              "trackingFitThroughMonth": "1992-10"
+            },
+            "boundary": "Published trajectory extension; coverage is not an observational accuracy or uncertainty bound."
+          }
+        ],
+        "notes": [
+          {
+            "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/aareadme.txt",
+            "bytes": 7092,
+            "sha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3",
+            "startedAt": "2026-09-28T17:33:23.367Z",
+            "completedAt": "2026-09-28T17:33:24.236Z",
+            "etag": null,
+            "lastModified": "Tue, 30 Aug 2022 15:15:58 GMT",
+            "path": "originals/voyager1-source-notes.txt"
+          },
+          {
+            "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/aareadme.txt",
+            "bytes": 7092,
+            "sha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3",
+            "startedAt": "2026-09-28T17:33:26.810Z",
+            "completedAt": "2026-09-28T17:33:27.013Z",
+            "etag": null,
+            "lastModified": "Tue, 30 Aug 2022 15:15:58 GMT",
+            "path": "originals/voyager2-source-notes.txt"
+          }
+        ],
+        "implementation": [
+          {
+            "path": "scripts/prepare-spacecraft-pack.mjs",
+            "sha256": "4ac5b53f58126e252929a3b1538d9ae23c82ee0e6b27f0a1cd786c638405bf4d"
+          },
+          {
+            "path": "scripts/crop-spk.mjs",
+            "sha256": "d23e171d8f7f940c3e2dcc5bd7b6a1ca23d99b975e626b74d988a4990f98ab58"
+          },
+          {
+            "path": "scripts/lib/kernel-window-coverage.mjs",
+            "sha256": "64e793cb1ce31a88d1d16182252d626a81c06ba1512c23ee20106bcfca26b8a6"
+          },
+          {
+            "path": "scripts/lib/spacecraft-source-sets.mjs",
+            "sha256": "1e9f079a3adede1c9d229df6c28d0eb31a7192d6c3e8787b82a7dc3c62718f27"
+          },
+          {
+            "path": "src/engine/ephemeris/spk.ts",
+            "sha256": "2f6e21a3e4a9d1e16b2d43f763d3dd3b1b418f8ba67af580ea8a03f69c35437f"
+          },
+          {
+            "path": "src/engine/ephemeris/spkType21.ts",
+            "sha256": "c8f0238ee95d66dce61b543e133e7d9f87be0a24a7f502f56759bddec1e24471"
+          },
+          {
+            "path": "src/engine/ephemeris/spkType17.ts",
+            "sha256": "5c05fecf43c5500ccf216983adb3072828a531c4c4f34972493674845a42ced9"
+          },
+          {
+            "path": "src/data/spacecraftIdentities.ts",
+            "sha256": "733b2ad56ec77cc43de2c19c892101e745d0e6b684f9a24fe907aa6ad39ce0df"
+          }
+        ],
+        "integrator": {
+          "path": "scripts/integrate-spacecraft-pack.mjs",
+          "sha256": "dcad6725a74fa774bfd34d38ef3966afd11c28dbaaf37b3fb038354eaa77b670"
+        },
+        "acceptance": "source-integrated; numerical acceptance and derived-data regeneration remain separate"
+      }
+    },
+    {
+      "id": "voyager2-391f5361773322e2-d09ba9eca827-trajectory",
+      "path": "voyager2-391f5361773322e2-d09ba9eca827-trajectory.bsp",
+      "bytes": 152576,
+      "sha256": "03087463b418660e9cdb6f5b8da56bc427af29065e29b09e4535740645f44a37",
+      "targets": [
+        -32
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/spk/vgr2.x2100.bsp",
+      "sourceIdentity": {
+        "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/spk/vgr2.x2100.bsp",
+        "bytes": 15744000,
+        "sha256": "391f5361773322e2242fb1c81578aeb1fbf9134c3878b2f325e9b8b5f46ad7cb",
+        "startedAt": "2026-09-28T17:33:27.013Z",
+        "completedAt": "2026-09-28T17:33:28.207Z",
+        "etag": null,
+        "lastModified": "Sun, 21 Aug 2022 16:08:36 GMT",
+        "notesSha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3"
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "voyager2-391f5361773322e2-d09ba9eca827-dependencies"
+      ],
+      "solution": "voyager2-x2100-with-embedded-de440",
+      "sourceBoundary": {
+        "sourceId": "voyager2",
+        "trackingFitThroughMonth": "1992-10",
+        "description": "Published trajectory extension; coverage is not an observational accuracy or uncertainty bound."
+      },
+      "integrationBatch": "spacecraft-f0fb0526744ce07d",
+      "selectionEvidence": {
+        "preparedSha256": "f0fb0526744ce07dafda63a32e4ae4ffa9d95dd349f5d688b521a991ca230976",
+        "baselineSha256": "1bef7b8b06007f66fcafb9ab7de4cbe65f9a4682c2c7dd6e667b4c34514cf7f7",
+        "requestedWindow": {
+          "startEt": 631108800,
+          "endEt": 978264000,
+          "timeScale": "TDB seconds past J2000"
+        },
+        "sources": [
+          {
+            "id": "voyager1",
+            "target": -31,
+            "name": "Voyager 1",
+            "originalPath": "originals/vgr1.x2100.bsp",
+            "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/spk/vgr1.x2100.bsp",
+            "bytes": 16286720,
+            "sha256": "aa8f37673b5ef60296d210566d01cc49f7b32711f37003393c3327616c9fc6d0",
+            "startedAt": "2026-09-28T17:33:24.237Z",
+            "completedAt": "2026-09-28T17:33:26.778Z",
+            "etag": null,
+            "lastModified": "Sun, 21 Aug 2022 16:08:36 GMT",
+            "notesSha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3",
+            "reviewedNotes": {
+              "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/aareadme.txt",
+              "consultedOn": "2026-09-23",
+              "trackingFitThroughMonth": "1992-04"
+            },
+            "boundary": "Published trajectory extension; coverage is not an observational accuracy or uncertainty bound."
+          },
+          {
+            "id": "voyager2",
+            "target": -32,
+            "name": "Voyager 2",
+            "originalPath": "originals/vgr2.x2100.bsp",
+            "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/spk/vgr2.x2100.bsp",
+            "bytes": 15744000,
+            "sha256": "391f5361773322e2242fb1c81578aeb1fbf9134c3878b2f325e9b8b5f46ad7cb",
+            "startedAt": "2026-09-28T17:33:27.013Z",
+            "completedAt": "2026-09-28T17:33:28.207Z",
+            "etag": null,
+            "lastModified": "Sun, 21 Aug 2022 16:08:36 GMT",
+            "notesSha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3",
+            "reviewedNotes": {
+              "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/aareadme.txt",
+              "consultedOn": "2026-09-23",
+              "trackingFitThroughMonth": "1992-10"
+            },
+            "boundary": "Published trajectory extension; coverage is not an observational accuracy or uncertainty bound."
+          }
+        ],
+        "notes": [
+          {
+            "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/aareadme.txt",
+            "bytes": 7092,
+            "sha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3",
+            "startedAt": "2026-09-28T17:33:23.367Z",
+            "completedAt": "2026-09-28T17:33:24.236Z",
+            "etag": null,
+            "lastModified": "Tue, 30 Aug 2022 15:15:58 GMT",
+            "path": "originals/voyager1-source-notes.txt"
+          },
+          {
+            "source": "https://naif.jpl.nasa.gov/pub/naif/VOYAGER/kernels/aareadme.txt",
+            "bytes": 7092,
+            "sha256": "75289b3fd20846e13e3bc540ef9bf9d8929e1109add11f89d6360a371886b8d3",
+            "startedAt": "2026-09-28T17:33:26.810Z",
+            "completedAt": "2026-09-28T17:33:27.013Z",
+            "etag": null,
+            "lastModified": "Tue, 30 Aug 2022 15:15:58 GMT",
+            "path": "originals/voyager2-source-notes.txt"
+          }
+        ],
+        "implementation": [
+          {
+            "path": "scripts/prepare-spacecraft-pack.mjs",
+            "sha256": "4ac5b53f58126e252929a3b1538d9ae23c82ee0e6b27f0a1cd786c638405bf4d"
+          },
+          {
+            "path": "scripts/crop-spk.mjs",
+            "sha256": "d23e171d8f7f940c3e2dcc5bd7b6a1ca23d99b975e626b74d988a4990f98ab58"
+          },
+          {
+            "path": "scripts/lib/kernel-window-coverage.mjs",
+            "sha256": "64e793cb1ce31a88d1d16182252d626a81c06ba1512c23ee20106bcfca26b8a6"
+          },
+          {
+            "path": "scripts/lib/spacecraft-source-sets.mjs",
+            "sha256": "1e9f079a3adede1c9d229df6c28d0eb31a7192d6c3e8787b82a7dc3c62718f27"
+          },
+          {
+            "path": "src/engine/ephemeris/spk.ts",
+            "sha256": "2f6e21a3e4a9d1e16b2d43f763d3dd3b1b418f8ba67af580ea8a03f69c35437f"
+          },
+          {
+            "path": "src/engine/ephemeris/spkType21.ts",
+            "sha256": "c8f0238ee95d66dce61b543e133e7d9f87be0a24a7f502f56759bddec1e24471"
+          },
+          {
+            "path": "src/engine/ephemeris/spkType17.ts",
+            "sha256": "5c05fecf43c5500ccf216983adb3072828a531c4c4f34972493674845a42ced9"
+          },
+          {
+            "path": "src/data/spacecraftIdentities.ts",
+            "sha256": "733b2ad56ec77cc43de2c19c892101e745d0e6b684f9a24fe907aa6ad39ce0df"
+          }
+        ],
+        "integrator": {
+          "path": "scripts/integrate-spacecraft-pack.mjs",
+          "sha256": "dcad6725a74fa774bfd34d38ef3966afd11c28dbaaf37b3fb038354eaa77b670"
+        },
+        "acceptance": "source-integrated; numerical acceptance and derived-data regeneration remain separate"
+      }
+    },
+    {
+      "id": "horizons-comet-67p-2020-01-01-2031-01-01",
+      "path": "horizons-comet-67p-2020-01-01-2031-01-01.bsp",
+      "sha256": "3e82eba349bca868373e03b7a3ed3361689965d58e7d774b5e1648cf954fde57",
+      "bytes": 207872,
+      "targets": [
+        1000012
+      ],
+      "startEt": 631108800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2790000703%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%2790000703%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272020-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-28T18:05:07.035Z",
+        "bytes": 269312,
+        "sha256": "f9777d9cfe0f9ad95e648d82352ee36872fa252c62d231576cfe2d5580b8e532",
+        "responseSha256": "c0f175eca1ba6b6eea28ab73961dde5734857ba265bd561528c0b10744f72abf",
+        "signature": {
+          "source": "NASA/JPL Horizons API",
+          "version": "1.2"
+        },
+        "target": 1000012,
+        "designation": "90000703",
+        "from": "2020-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS              67P/Churyumov-Gerasimenko        2026-Sep-28 11:05:10\nRec #:90000703 (+COV) Soln.date: 2026-Sep-04_10:25:07   # obs: 8610 (2008-2025)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2457305.5 ! 2015-Oct-10.0000000 (TDB)    RMSW= n.a.\n   EC= .6409081308996354   QR= 1.243265640702404   TP= 2457247.5886578122\n   OM= 50.13557377155012   W= 12.79824970228189    IN= 7.040294937543767\n   A= 3.462249490129549    MA= 8.859927425222466   ADIST= 5.681233339556694\n   PER= 6.44237116469175   N= .152991229           ANGMOM= .024570022\n   DAN= 1.25545            DDN= 5.44002            L= 62.8404706\n   B= 1.5558267            MOID= .25693199         TP= 2015-Aug-13.0886578122\n \nComet physical (GM= km^3/s^2; RAD= km):\n   GM= 6.622E-7            RAD= 1.7\n   M1=  12.9     M2=  n.a.     k1=  7.5    k2= n.a.     PHCOF= n.a.\nComet non-gravitational force model (AMRAT=m^2/kg;A1-A3=au/d^2;DT=days;R0=au):\n   AMRAT=  0.                                      DT=  45.66665\n   A1= 1.042562574148E-9   A2= -6.733588408679E-11 A3= 2.960397861898E-10\n Non-standard or simulated/proxy model:\n   ALN=  .1112620426   NK=  4.6142   NM=  2.15     NN=  5.093    R0=  2.808\n\nCOMET comments \n1: soln ref.= JPL#K284/1, data arc: 2008-06-01 to 2025-06-21\n2: k1=7.5;\n*******************************************************************************\n\nID= '1000012'\n\n"
+      },
+      "core": false,
+      "solution": "JPL Horizons type-21 heliocentric SPK; 67P K284/1 from record 90000703",
+      "integrationBatch": "horizons-comet-67p-k284-1-20260929",
+      "sourceBoundary": {
+        "sourceId": "horizons-record-90000703",
+        "trackingDataCutoff": "2025-06-21",
+        "description": "JPL solution K284/1 dated 2026-09-04; observation arc 2008-06-01 to 2025-06-21. SPK interpolation precision does not encode orbital uncertainty or guarantee physical accuracy across the requested interval."
+      },
+      "selectionEvidence": {
+        "sourceSelection": "67P/Churyumov-Gerasimenko, uniquely selected Horizons record 90000703; the Horizons solution identifies SBDB K284/1 and target NAIF 1000012. Original type-21 records are cropped without refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "c0f175eca1ba6b6eea28ab73961dde5734857ba265bd561528c0b10744f72abf",
+          "binarySha256": "f9777d9cfe0f9ad95e648d82352ee36872fa252c62d231576cfe2d5580b8e532",
+          "retrievedAt": "2026-09-28T18:05:07.035Z"
+        },
+        "sbdbSolution": {
+          "orbitId": "K284/1",
+          "solutionDate": "2026-09-04 10:25:07",
+          "sourceModel": "SB441-N16",
+          "dataArcStart": "2008-06-01",
+          "dataArcEnd": "2025-06-21"
+        },
+        "nongravitationalFit": {
+          "A1": 1.042562555200506e-9,
+          "A2": -6.733588284934391e-11,
+          "A3": 2.960397918052828e-10,
+          "DT": 45.66665437504378
+        },
+        "windowPolicy": "2020-01-01 to 2031-01-01 TDB"
+      }
+    },
+    {
+      "id": "horizons-comet-borisov-2019-01-01-2031-01-01",
+      "path": "horizons-comet-borisov-2019-01-01-2031-01-01.bsp",
+      "sha256": "f61a72eab622841148966da23693544b05e0fc0533d45463e5bde19fa6922f3d",
+      "bytes": 231424,
+      "targets": [
+        1003639
+      ],
+      "startEt": 599572800,
+      "endEt": 978264000,
+      "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27DES%3D1003639%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272019-01-01%27&STOP_TIME=%272031-01-01%27",
+      "sourceIdentity": {
+        "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27DES%3D1003639%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272019-01-01%27&STOP_TIME=%272031-01-01%27",
+        "retrievedAt": "2026-09-28T21:15:22.744Z",
+        "bytes": 292864,
+        "sha256": "8e2931d03595c01ab5c50d9d268376ee0024ebf881846dc1def6f2c1559e1705",
+        "responseSha256": "6e77026ca9792963aa3298b977485a9abcbf0bfcb0b96958cbf75aeb3f72c8b2",
+        "signature": {
+          "version": "1.2",
+          "source": "NASA/JPL Horizons API"
+        },
+        "target": 1003639,
+        "designation": "DES=1003639",
+        "from": "2019-01-01",
+        "to": "2031-01-01",
+        "timeScale": "TDB",
+        "solution": "*******************************************************************************\nJPL/HORIZONS                 Borisov (C/2019 Q4)           2026-Sep-28 14:15:26\nRec #:90004568 (+COV) Soln.date: 2024-Jun-24_15:49:04    # obs: 964 (2019-2020)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458853.5 ! 2020-Jan-05.0000000 (TDB)    RMSW= n.a.\n   EC= 3.356475782676596   QR= 2.006520878500843   TP= 2458826.052845906\n   OM= 308.1477292269942   W= 209.1236864378081    IN= 44.05264247909138\n   A= -.8514922551937886   MA= 34.42947030737667   ADIST= 9.999999E99\n   PER= 9.999999E99        N= 1.254391264          ANGMOM= .050859365\n   DAN= -4.52423           DDN= 2.22307            L= 149.9695468\n   B= -19.7799936          MOID= 1.09291995        TP= 2019-Dec-08.5528459060\n \nComet physical (GM= km^3/s^2; RAD= km):\n   GM= n.a.                RAD= n.a.\n   M1=  13.8     M2=  n.a.     k1=  4.5    k2= n.a.     PHCOF= n.a.\nComet non-gravitational force model (AMRAT=m^2/kg;A1-A3=au/d^2;DT=days;R0=au):\n   AMRAT=  0.                                      DT=  -65.1301\n   A1= 4.85958814621E-8    A2= 1.879898667336E-8   A3= 2.835503220558E-9\n Non-standard or simulated/proxy model:\n   ALN=  1.            NK=  0.       NM=  2.       NN=  0.       R0=  1.\n\nCOMET comments \n1: soln ref.= JPL#54, data arc: 2019-02-24 to 2020-09-30\n2: k1=4.5;\n*******************************************************************************\n\nID= '1003639'\n\n"
+      },
+      "core": false,
+      "solution": "JPL Horizons type-21 heliocentric SPK; Borisov JPL #54 from record 90004568",
+      "integrationBatch": "horizons-comet-borisov-jpl54-20260929",
+      "sourceBoundary": {
+        "sourceId": "horizons-record-90004568",
+        "trackingDataCutoff": "2020-09-30",
+        "description": "JPL solution 54 dated 2024-06-24; observation arc 2019-02-24 to 2020-09-30. Numerical integration outside this arc is model-based extrapolation; SPK interpolation precision does not encode orbit uncertainty or guarantee physical accuracy."
+      },
+      "selectionEvidence": {
+        "sourceSelection": "C/2019 Q4 (Borisov), explicitly selected by DES=1003639; Horizons record 90004568 identifies JPL orbit solution 54 and target NAIF 1003639. Original type-21 records are cropped without refitting.",
+        "sourceSnapshot": {
+          "responseSha256": "6e77026ca9792963aa3298b977485a9abcbf0bfcb0b96958cbf75aeb3f72c8b2",
+          "binarySha256": "8e2931d03595c01ab5c50d9d268376ee0024ebf881846dc1def6f2c1559e1705",
+          "retrievedAt": "2026-09-28T21:15:22.744Z"
+        },
+        "sbdbSolution": {
+          "orbitId": "54",
+          "solutionDate": "2024-06-24 15:49:04",
+          "covarianceSourceSha256": "c9024403ab74ad1863cca2d1b481ac1976c4f6954c0515f99320949c46d60987",
+          "covarianceLabels": [
+            "e",
+            "q",
+            "tp",
+            "node",
+            "peri",
+            "i",
+            "A1",
+            "A2",
+            "A3",
+            "DT"
+          ],
+          "covarianceBoundary": "Full joint solution-epoch matrix is retained as source data; this SPK package does not propagate that covariance.",
+          "planetaryEphemeris": "DE441",
+          "smallBodyEphemeris": "SB441-N16",
+          "dataArcStart": "2019-02-24",
+          "dataArcEnd": "2020-09-30",
+          "observationsUsed": 964,
+          "parameterReconciliation": {
+            "EC": {
+              "horizonsNominal": 3.356475782676596,
+              "sbdbNominal": 3.356475782676596,
+              "absoluteDifference": 0,
+              "sbdbFormalSigma": 0.00001903926960497498,
+              "standardizedDifference": 0
+            },
+            "QR": {
+              "horizonsNominal": 2.006520878500843,
+              "sbdbNominal": 2.006520878500843,
+              "absoluteDifference": 0,
+              "sbdbFormalSigma": 0.0000032903899666753954,
+              "standardizedDifference": 0
+            },
+            "TP": {
+              "horizonsNominal": 2458826.052845906,
+              "sbdbNominal": 2458826.052845906,
+              "absoluteDifference": 0,
+              "sbdbFormalSigma": 0.00014205889449981957,
+              "standardizedDifference": 0
+            },
+            "OM": {
+              "horizonsNominal": 308.1477292269942,
+              "sbdbNominal": 308.1477292269942,
+              "absoluteDifference": 0,
+              "sbdbFormalSigma": 0.00004502115265983375,
+              "standardizedDifference": 0
+            },
+            "W": {
+              "horizonsNominal": 209.1236864378081,
+              "sbdbNominal": 209.1236864378081,
+              "absoluteDifference": 0,
+              "sbdbFormalSigma": 0.0001101185124463294,
+              "standardizedDifference": 0
+            },
+            "IN": {
+              "horizonsNominal": 44.05264247909138,
+              "sbdbNominal": 44.05264247909138,
+              "absoluteDifference": 0,
+              "sbdbFormalSigma": 0.00001667331502693419,
+              "standardizedDifference": 0
+            },
+            "A1": {
+              "horizonsNominal": 4.85958814621e-8,
+              "sbdbNominal": 4.859588264027485e-8,
+              "absoluteDifference": 1.1781748465377588e-15,
+              "sbdbFormalSigma": 4.051090127502585e-9,
+              "standardizedDifference": 2.9082908783964273e-7
+            },
+            "A2": {
+              "horizonsNominal": 1.879898667336e-8,
+              "sbdbNominal": 1.879898690951361e-8,
+              "absoluteDifference": 2.3615360956638904e-16,
+              "sbdbFormalSigma": 5.998783685515161e-9,
+              "standardizedDifference": 3.936691535262598e-8
+            },
+            "A3": {
+              "horizonsNominal": 2.835503220558e-9,
+              "sbdbNominal": 2.835503220128475e-9,
+              "absoluteDifference": 4.2952511359673536e-19,
+              "sbdbFormalSigma": 7.186086761312443e-10,
+              "standardizedDifference": 5.977176839961898e-10
+            },
+            "DT": {
+              "horizonsNominal": -65.1301,
+              "sbdbNominal": -65.13009704907404,
+              "absoluteDifference": 0.0000029509259604765248,
+              "sbdbFormalSigma": 10.960360016800479,
+              "standardizedDifference": 2.692362254481812e-7
+            }
+          },
+          "parameterReconciliationBoundary": "Horizons and SBDB nominal fit values are reconciled within one SBDB formal marginal sigma. This is not bitwise equality, proof of a shared covariance propagation, or a bound on systematic/model error.",
+          "maxStandardizedParameterDifference": 2.9082908783964273e-7,
+          "maxDifferenceParameter": "A1"
+        },
+        "nongravitationalFit": {
+          "A1": 4.859588264027485e-8,
+          "A2": 1.879898690951361e-8,
+          "A3": 2.835503220128475e-9,
+          "ALN": 1,
+          "DT": -65.13009704907404,
+          "NK": 0,
+          "NM": 2,
+          "NN": 0,
+          "R0": 1
+        },
+        "windowPolicy": "2019-01-01 to 2031-01-01 TDB"
+      }
+    },
+    {
+      "id": "juno-13c8c7c431a67af6-420e39ce8df2-trajectory",
+      "path": "juno-13c8c7c431a67af6-420e39ce8df2-trajectory.bsp",
+      "bytes": 91458560,
+      "sha256": "a35de1849693a31464b86631cdd4d8f2ce5661e17352644b755db83fd9106c43",
+      "targets": [
+        -61
+      ],
+      "startEt": 694267269.1839212,
+      "endEt": 840884700,
+      "source": "https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/spk/juno_rec_orbit.bsp",
+      "sourceIdentity": {
+        "source": "https://naif.jpl.nasa.gov/pub/naif/JUNO/kernels/spk/juno_rec_orbit.bsp",
+        "bytes": 146816000,
+        "sha256": "13c8c7c431a67af69485b272ebde740f3135585925a454134eb3b80283a4a487",
+        "startedAt": "2026-09-29T02:10:16.079Z",
+        "completedAt": "2026-09-29T02:10:28.514Z",
+        "etag": null,
+        "lastModified": "Tue, 01 Sep 2026 18:17:23 GMT",
+        "notesSha256": "0990977a8ee42f1ac57ce4f14a42a63e935af4f9c6e618cb5a7f45432d419740",
+        "orbitEventsSha256": "bf2f3292883786e11344fb1f60a72cad42696578a8d19d182b6caa4050a87875"
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "de440s-2000-01-01-2051-01-01"
+      ],
+      "solution": "juno-reconstruction-2022-2026-with-de440s-origin",
+      "sourceBoundary": {
+        "sourceId": "juno",
+        "description": "Reconstructed target -61 relative to Jupiter system barycenter 5. The packaged window ends at the latest source descriptor recorded here; coverage is not an accuracy or uncertainty bound."
+      },
+      "integrationBatch": "juno-rec-8ca97c16c2b17f80",
+      "selectionEvidence": {
+        "preparedSha256": "8ca97c16c2b17f8054a12cbfbbbaa9730a49256fcc02de73c77bd036f535b3ed",
+        "originalSha256": "13c8c7c431a67af69485b272ebde740f3135585925a454134eb3b80283a4a487",
+        "coreKernelId": "de440s-2000-01-01-2051-01-01",
+        "coreKernelSha256": "8724d2d1bac115a75ad1f984c5b474ca778c96ee8be2df83e624cef61c001069",
+        "coverageGaps": 0,
+        "acceptance": "source-integrated; numerical acceptance and derived-data regeneration remain separate"
+      }
+    },
+    {
+      "id": "cassini-02eb41ad1f107e9d-d3db6708b74c-dependencies",
+      "path": "cassini-02eb41ad1f107e9d-d3db6708b74c-dependencies.bsp",
+      "bytes": 5120,
+      "sha256": "494b205a5c662b1745b89fb576d40a688b10a322ae9b28122982f6e50fa535ea",
+      "targets": [
+        10,
+        6
+      ],
+      "startEt": 555782400,
+      "endEt": 558743640,
+      "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/co-s_j_e_v-spice-6-v1.0/cosp_1000/data/spk/171214R_SCPSE_17224_17258.bsp",
+      "sourceIdentity": {
+        "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/co-s_j_e_v-spice-6-v1.0/cosp_1000/data/spk/171214R_SCPSE_17224_17258.bsp",
+        "bytes": 14168064,
+        "sha256": "02eb41ad1f107e9d4c9c6fd4edd4b89c8305d937f7d46d3f097ea109e268a3e5",
+        "startedAt": "2026-09-29T03:07:48.260Z",
+        "completedAt": "2026-09-29T03:07:50.228Z",
+        "etag": null,
+        "lastModified": "Fri, 29 Dec 2017 01:09:24 GMT",
+        "notesSha256": "840cfcdd5d5ebc9208d469e89fdf02c59a041cb938c535bdad16d09cc0e6d921"
+      },
+      "core": false,
+      "dependencyOnly": true,
+      "solution": "cassini-171214r-grand-finale-nav-reconstruction",
+      "sourceBoundary": {
+        "sourceId": "cassini",
+        "description": "Cassini operations-era NAV reconstruction for the 2017 Grand Finale; source coverage is not an accuracy or uncertainty bound."
+      },
+      "integrationBatch": "spacecraft-48a2ef1f2742f018",
+      "selectionEvidence": {
+        "preparedSha256": "48a2ef1f2742f018eb217d331f75d5b4030ae26320eaa892e8c7917d5da0a2b0",
+        "baselineSha256": "9ab2e8a87c83614958d89a5a14b5f7fc9be0b3113fbcb1a2676dd0b10fe1ad1e",
+        "requestedWindow": {
+          "startEt": 555782400,
+          "endEt": 558743640,
+          "timeScale": "TDB seconds past J2000"
+        },
+        "sources": [
+          {
+            "id": "cassini",
+            "target": -82,
+            "name": "Cassini",
+            "originalPath": "originals/171214R_SCPSE_17224_17258.bsp",
+            "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/co-s_j_e_v-spice-6-v1.0/cosp_1000/data/spk/171214R_SCPSE_17224_17258.bsp",
+            "bytes": 14168064,
+            "sha256": "02eb41ad1f107e9d4c9c6fd4edd4b89c8305d937f7d46d3f097ea109e268a3e5",
+            "startedAt": "2026-09-29T03:07:48.260Z",
+            "completedAt": "2026-09-29T03:07:50.228Z",
+            "etag": null,
+            "lastModified": "Fri, 29 Dec 2017 01:09:24 GMT",
+            "notesSha256": "840cfcdd5d5ebc9208d469e89fdf02c59a041cb938c535bdad16d09cc0e6d921",
+            "reviewedNotes": {
+              "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/co-s_j_e_v-spice-6-v1.0/cosp_1000/data/spk/spkinfo.txt",
+              "consultedOn": "2026-09-23"
+            },
+            "originTargets": [
+              10
+            ],
+            "boundary": "Cassini operations-era NAV reconstruction for the 2017 Grand Finale; source coverage is not an accuracy or uncertainty bound."
+          }
+        ],
+        "notes": [
+          {
+            "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/co-s_j_e_v-spice-6-v1.0/cosp_1000/data/spk/spkinfo.txt",
+            "bytes": 9542,
+            "sha256": "840cfcdd5d5ebc9208d469e89fdf02c59a041cb938c535bdad16d09cc0e6d921",
+            "startedAt": "2026-09-29T03:07:47.528Z",
+            "completedAt": "2026-09-29T03:07:48.259Z",
+            "etag": null,
+            "lastModified": "Fri, 02 Feb 2024 22:10:21 GMT",
+            "path": "originals/cassini-source-notes.txt"
+          }
+        ],
+        "implementation": [
+          {
+            "path": "scripts/prepare-spacecraft-pack.mjs",
+            "sha256": "6d1660bb08aeec2fad05296ef4be6133f99407df7ae6d1f1edfa70eaa70ac6c6"
+          },
+          {
+            "path": "scripts/crop-spk.mjs",
+            "sha256": "d23e171d8f7f940c3e2dcc5bd7b6a1ca23d99b975e626b74d988a4990f98ab58"
+          },
+          {
+            "path": "scripts/lib/kernel-window-coverage.mjs",
+            "sha256": "64e793cb1ce31a88d1d16182252d626a81c06ba1512c23ee20106bcfca26b8a6"
+          },
+          {
+            "path": "scripts/lib/spacecraft-source-sets.mjs",
+            "sha256": "10346cccb3f13465b67834dab0111e240955db91291cdceafe3bf31b7fc9afee"
+          },
+          {
+            "path": "src/engine/ephemeris/spk.ts",
+            "sha256": "2f6e21a3e4a9d1e16b2d43f763d3dd3b1b418f8ba67af580ea8a03f69c35437f"
+          },
+          {
+            "path": "src/engine/ephemeris/spkType21.ts",
+            "sha256": "c8f0238ee95d66dce61b543e133e7d9f87be0a24a7f502f56759bddec1e24471"
+          },
+          {
+            "path": "src/engine/ephemeris/spkType17.ts",
+            "sha256": "5c05fecf43c5500ccf216983adb3072828a531c4c4f34972493674845a42ced9"
+          },
+          {
+            "path": "src/data/spacecraftIdentities.ts",
+            "sha256": "807c7a9e1805c782d2f641503f11baa9c6ae23ee395faccac9c2287fbbd1dd70"
+          }
+        ],
+        "integrator": {
+          "path": "scripts/integrate-spacecraft-pack.mjs",
+          "sha256": "5a07cc679d117a402731d8eb57dbf2321e9e24099076f567529b869403e97273"
+        },
+        "acceptance": "source-integrated; numerical acceptance and derived-data regeneration remain separate"
+      }
+    },
+    {
+      "id": "cassini-02eb41ad1f107e9d-d3db6708b74c-trajectory",
+      "path": "cassini-02eb41ad1f107e9d-d3db6708b74c-trajectory.bsp",
+      "bytes": 13662208,
+      "sha256": "a7c4819d9cb6eff268578e2fc0e40d214f8ae8fea30e29dd8b442336b46d72cf",
+      "targets": [
+        -82
+      ],
+      "startEt": 555782400,
+      "endEt": 558743640,
+      "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/co-s_j_e_v-spice-6-v1.0/cosp_1000/data/spk/171214R_SCPSE_17224_17258.bsp",
+      "sourceIdentity": {
+        "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/co-s_j_e_v-spice-6-v1.0/cosp_1000/data/spk/171214R_SCPSE_17224_17258.bsp",
+        "bytes": 14168064,
+        "sha256": "02eb41ad1f107e9d4c9c6fd4edd4b89c8305d937f7d46d3f097ea109e268a3e5",
+        "startedAt": "2026-09-29T03:07:48.260Z",
+        "completedAt": "2026-09-29T03:07:50.228Z",
+        "etag": null,
+        "lastModified": "Fri, 29 Dec 2017 01:09:24 GMT",
+        "notesSha256": "840cfcdd5d5ebc9208d469e89fdf02c59a041cb938c535bdad16d09cc0e6d921"
+      },
+      "core": false,
+      "dependencyOnly": false,
+      "solutionKernelIds": [
+        "cassini-02eb41ad1f107e9d-d3db6708b74c-dependencies"
+      ],
+      "solution": "cassini-171214r-grand-finale-nav-reconstruction",
+      "sourceBoundary": {
+        "sourceId": "cassini",
+        "description": "Cassini operations-era NAV reconstruction for the 2017 Grand Finale; source coverage is not an accuracy or uncertainty bound."
+      },
+      "integrationBatch": "spacecraft-48a2ef1f2742f018",
+      "selectionEvidence": {
+        "preparedSha256": "48a2ef1f2742f018eb217d331f75d5b4030ae26320eaa892e8c7917d5da0a2b0",
+        "baselineSha256": "9ab2e8a87c83614958d89a5a14b5f7fc9be0b3113fbcb1a2676dd0b10fe1ad1e",
+        "requestedWindow": {
+          "startEt": 555782400,
+          "endEt": 558743640,
+          "timeScale": "TDB seconds past J2000"
+        },
+        "sources": [
+          {
+            "id": "cassini",
+            "target": -82,
+            "name": "Cassini",
+            "originalPath": "originals/171214R_SCPSE_17224_17258.bsp",
+            "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/co-s_j_e_v-spice-6-v1.0/cosp_1000/data/spk/171214R_SCPSE_17224_17258.bsp",
+            "bytes": 14168064,
+            "sha256": "02eb41ad1f107e9d4c9c6fd4edd4b89c8305d937f7d46d3f097ea109e268a3e5",
+            "startedAt": "2026-09-29T03:07:48.260Z",
+            "completedAt": "2026-09-29T03:07:50.228Z",
+            "etag": null,
+            "lastModified": "Fri, 29 Dec 2017 01:09:24 GMT",
+            "notesSha256": "840cfcdd5d5ebc9208d469e89fdf02c59a041cb938c535bdad16d09cc0e6d921",
+            "reviewedNotes": {
+              "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/co-s_j_e_v-spice-6-v1.0/cosp_1000/data/spk/spkinfo.txt",
+              "consultedOn": "2026-09-23"
+            },
+            "originTargets": [
+              10
+            ],
+            "boundary": "Cassini operations-era NAV reconstruction for the 2017 Grand Finale; source coverage is not an accuracy or uncertainty bound."
+          }
+        ],
+        "notes": [
+          {
+            "source": "https://naif.jpl.nasa.gov/pub/naif/pds/data/co-s_j_e_v-spice-6-v1.0/cosp_1000/data/spk/spkinfo.txt",
+            "bytes": 9542,
+            "sha256": "840cfcdd5d5ebc9208d469e89fdf02c59a041cb938c535bdad16d09cc0e6d921",
+            "startedAt": "2026-09-29T03:07:47.528Z",
+            "completedAt": "2026-09-29T03:07:48.259Z",
+            "etag": null,
+            "lastModified": "Fri, 02 Feb 2024 22:10:21 GMT",
+            "path": "originals/cassini-source-notes.txt"
+          }
+        ],
+        "implementation": [
+          {
+            "path": "scripts/prepare-spacecraft-pack.mjs",
+            "sha256": "6d1660bb08aeec2fad05296ef4be6133f99407df7ae6d1f1edfa70eaa70ac6c6"
+          },
+          {
+            "path": "scripts/crop-spk.mjs",
+            "sha256": "d23e171d8f7f940c3e2dcc5bd7b6a1ca23d99b975e626b74d988a4990f98ab58"
+          },
+          {
+            "path": "scripts/lib/kernel-window-coverage.mjs",
+            "sha256": "64e793cb1ce31a88d1d16182252d626a81c06ba1512c23ee20106bcfca26b8a6"
+          },
+          {
+            "path": "scripts/lib/spacecraft-source-sets.mjs",
+            "sha256": "10346cccb3f13465b67834dab0111e240955db91291cdceafe3bf31b7fc9afee"
+          },
+          {
+            "path": "src/engine/ephemeris/spk.ts",
+            "sha256": "2f6e21a3e4a9d1e16b2d43f763d3dd3b1b418f8ba67af580ea8a03f69c35437f"
+          },
+          {
+            "path": "src/engine/ephemeris/spkType21.ts",
+            "sha256": "c8f0238ee95d66dce61b543e133e7d9f87be0a24a7f502f56759bddec1e24471"
+          },
+          {
+            "path": "src/engine/ephemeris/spkType17.ts",
+            "sha256": "5c05fecf43c5500ccf216983adb3072828a531c4c4f34972493674845a42ced9"
+          },
+          {
+            "path": "src/data/spacecraftIdentities.ts",
+            "sha256": "807c7a9e1805c782d2f641503f11baa9c6ae23ee395faccac9c2287fbbd1dd70"
+          }
+        ],
+        "integrator": {
+          "path": "scripts/integrate-spacecraft-pack.mjs",
+          "sha256": "5a07cc679d117a402731d8eb57dbf2321e9e24099076f567529b869403e97273"
+        },
+        "acceptance": "source-integrated; numerical acceptance and derived-data regeneration remain separate"
       }
     }
   ]

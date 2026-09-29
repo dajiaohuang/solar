@@ -183,6 +183,8 @@ def source_case(name):
     elements = {e["name"]: e for e in cov.get("elements", orbit["elements"])}
     models = {p["name"]: p for p in orbit["model_pars"]}
     assert cov["labels"][:6] == LABELS
+    if any(key not in models or models[key].get("kind") != "EST" for key in cov["labels"][6:]):
+        raise ValueError("SBDB covariance axes may include only estimated model parameters")
     nominal = [float(elements[key]["value"]) for key in ELEMENT_NAMES]
     nominal += [float(models[key]["value"]) for key in cov["labels"][6:]]
     return {"name": name, "sourcePath": str(path.relative_to(ROOT)).replace("\\", "/"),

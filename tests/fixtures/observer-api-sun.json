@@ -10,6 +10,10 @@
     "bytes": 3767520,
     "path": "finals2000A-c672540e026d3cd4840c0858d4ce2bc4a18c3bc9751f9636c3285e11950d58a1.all"
   },
+  "earthOrientationCoverageMjdUtc": [
+    41684,
+    61673
+  ],
   "result": {
     "model": "earth-station-iau2006-2000a-spk-v1",
     "request": {
@@ -94,7 +98,6 @@
       }
     ],
     "warnings": [
-      "no-leap-seconds-after-2017-assumed",
       "iers-predicted-earth-orientation"
     ],
     "contract": {
@@ -111,13 +114,14 @@
       ],
       "leapSecondTableLastEffectiveUTC": "2017-01-01",
       "lightDeflection": "finite-distance-solar-monopole",
-      "lightTimeToleranceSeconds": 0.00005,
+      "lightTimeToleranceSeconds": 5e-05,
       "physicalUncertainty": "not-propagated",
       "precessionNutation": "IAU-2006/2000A",
       "sourceFrame": "ECLIPJ2000",
       "sourceOrigin": "solar-system-barycenter",
       "stationDatum": "WGS84-ellipsoidal-height",
-      "timeConversion": "SOFA-UTC-TAI-TT-UT1; Fairhead-Bretagnon-topocentric-TDB"
+      "timeConversion": "SOFA-UTC-TAI-TT-UT1; Fairhead-Bretagnon-topocentric-TDB",
+      "futureLeapSecondUncertaintyStartUTC": "2027-07-01"
     }
   }
 }

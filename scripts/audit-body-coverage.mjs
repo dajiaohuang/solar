@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { validateInventory } from './validate-body-inventory.mjs'
@@ -7,12 +7,22 @@ import { inventoryKernels } from './lib/inventory-kernels.mjs'
 import { createIdentityLedger } from './lib/body-identity-ledger.mjs'
 import { analyzeKernelWindow } from './lib/kernel-window-coverage.mjs'
 import { digest } from './lib/inventory-snapshot.mjs'
+import { readScientificFile, writeScientificReceipt } from './lib/scientific-file.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const MAX_REPORT_BYTES = 8 * 1024 * 1024 // internal/coverage.MaxReportBytes
+const GENERATOR_PATHS = ['scripts/audit-body-coverage.mjs', 'scripts/validate-body-inventory.mjs', 'scripts/lib/body-identity-ledger.mjs',
+  'scripts/lib/inventory-kernels.mjs', 'scripts/lib/source-chain.mjs', 'scripts/lib/kernel-window-coverage.mjs', 'scripts/lib/inventory-snapshot.mjs', 'scripts/lib/scientific-file.mjs',
+  'src/engine/ephemeris/kernelPool.ts', 'src/engine/ephemeris/spk.ts', 'src/engine/ephemeris/spkType17.ts',
+  'src/engine/ephemeris/spkType21.ts', 'src/data/ephemerisTargets.ts', 'src/data/spacecraftIdentities.ts', 'src/data/ephemerisProfile.ts',
+  'internal/catalog/source_chain.go']
+const generatorHash = async path => digest(await readScientificFile(join(ROOT, path), 4 * 1024 * 1024))
 
 export async function auditBodyCoverage({ inventory, sources, output, root = ROOT, profile = 'full', auditEt = 841752000, startEt, endEt }) {
   if (!Number.isFinite(auditEt) || !Number.isFinite(startEt) || !Number.isFinite(endEt) || startEt > endEt) throw new Error('Finite ordered TDB window and audit epoch required')
   if (!output || resolve(output) === resolve(inventory) || (sources && resolve(output) === resolve(sources))) throw new Error('A separate new output directory is required')
+  const generator = []
+  for (const path of GENERATOR_PATHS) generator.push({ path, sha256: await generatorHash(path) })
   const kernels = await inventoryKernels(root, auditEt, profile)
   const identities = createIdentityLedger()
   const verified = await validateInventory(inventory, sources, { onRecord(record, ordinal) {
@@ -44,12 +54,8 @@ export async function auditBodyCoverage({ inventory, sources, output, root = ROO
     approximate: bucket.status === 'approximate' ? bucket.count : 0,
     missing: bucket.status === 'missing' ? bucket.count : 0,
   }))
-  const generator = []
-  for (const path of ['scripts/audit-body-coverage.mjs', 'scripts/validate-body-inventory.mjs', 'scripts/lib/body-identity-ledger.mjs',
-    'scripts/lib/inventory-kernels.mjs', 'scripts/lib/kernel-window-coverage.mjs', 'scripts/lib/inventory-snapshot.mjs',
-    'src/engine/ephemeris/kernelPool.ts', 'src/engine/ephemeris/spk.ts', 'src/engine/ephemeris/spkType17.ts',
-    'src/engine/ephemeris/spkType21.ts', 'src/data/ephemerisTargets.ts', 'src/data/ephemerisProfile.ts']) {
-    generator.push({ path, sha256: digest(await readFile(join(ROOT, path))) })
+  for (const entry of generator) {
+    if (await generatorHash(entry.path) !== entry.sha256) throw new Error(`Generator source changed during audit: ${entry.path}; no completed report was written`)
   }
   const report = { schemaVersion: 1, purpose: 'source-identity-and-dependency-window-audit',
     inputInventorySha256: verified.manifestSha256, sourceSnapshotSha256: verified.snapshotSha256, sourceBytesVerified: Boolean(sources),
@@ -59,7 +65,10 @@ export async function auditBodyCoverage({ inventory, sources, output, root = ROO
       'Explicit NAIF target groups are not an all-source unique physical-body count. Unmapped, unresolved and candidate records stay in the pinned input inventory.',
       'State availability is evaluated only at auditEt. Window atoms certify descriptor and center dependency availability, not continuous numerical accuracy or observational uncertainty.',
       'No SPK coefficients, new orbital solutions, N-body integration, extrapolation or approximate replacement states are created.',
+      'Generator hashes describe bounded disk snapshots checked before and after calculation, not attestation of cached loaded modules or the complete runtime environment.',
     ] }
+  const json = JSON.stringify(report, null, 2)
+  if (Buffer.byteLength(json, 'utf8') + 1 > MAX_REPORT_BYTES) throw new RangeError('Coverage report exceeds the backend 8 MiB report budget; no completed report was written')
   await mkdir(output)
   await writeFile(join(output, 'README.md'), `# Identity and dependency-window audit\n\n` +
     `Input inventory SHA-256: ${report.inputInventorySha256}\n\n` +
@@ -69,7 +78,8 @@ export async function auditBodyCoverage({ inventory, sources, output, root = ROO
     `Requested TDB window: [${startEt}, ${endEt}]. Dependency-covered targets: ${windowCounts.dependencyCoveredTargets}; targets with dependency gaps: ${windowCounts.targetsWithDependencyGaps}.\n\n` +
     `Whole-window numerical accuracy remains unverified. See report.json for source ordinals, mapping/profile hashes, boundary points and open-interval evidence.\n`, { flag: 'wx' })
   // Completion marker last; a failed source validation never publishes a ledger.
-  await writeFile(join(output, 'report.json'), JSON.stringify(report, null, 2) + '\n', { flag: 'wx' })
+  const publication = await writeScientificReceipt(join(output, 'report.json'), json, { maxBytes: MAX_REPORT_BYTES })
+  for (const warning of publication.cleanupWarnings) console.warn(warning)
   return report
 }
 

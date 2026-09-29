@@ -3,6 +3,16 @@ import { PCK_RADII_SOURCE, readPinnedPckData } from './pckRadii.ts'
 const DAY = 86400, CENTURY = 36525, RAD = Math.PI / 180
 type Model = { id: number; epoch: number; ra: number[]; dec: number[]; pm: number[]; phases: number[][]; raTerms: number[]; decTerms: number[]; pmTerms: number[] }
 const polynomial = (coefficients: number[], time: number) => coefficients.reduceRight((value, coefficient) => value * time + coefficient, 0)
+const wrap = (angle: number) => ((angle % 360) + 360) % 360
+// Exact polynomial translation through degree three, subject to Float64
+// arithmetic. Reduce the large base angle before adding the small correction.
+function splitPolynomial(coefficients: number[], time: number, offset: number) {
+  const base = polynomial(coefficients, time)
+  const [, c1 = 0, c2 = 0, c3 = 0] = coefficients
+  const correction = offset * (c1 + time * (2*c2 + 3*c3*time) + offset * (c2 + 3*c3*time + offset*c3))
+  if (!Number.isFinite(base) || !Number.isFinite(correction) || !Number.isFinite(base + correction)) throw new RangeError('Nonfinite text-PCK polynomial')
+  return { value: base + correction, angle: wrap(wrap(base) + correction) }
+}
 const rotate3 = (a: number) => { const c = Math.cos(a), s = Math.sin(a); return [c, s, 0, -s, c, 0, 0, 0, 1] }
 const rotate1 = (a: number) => { const c = Math.cos(a), s = Math.sin(a); return [1, 0, 0, 0, c, s, 0, -s, c] }
 function multiply(a: number[], b: number[]) {
@@ -42,20 +52,25 @@ export async function loadPckOrientation(input: ArrayBuffer) {
   return {
     source: PCK_RADII_SOURCE,
     ids: () => Array.from(models.keys()).sort((a, b) => a - b),
-    evaluate(naifPckId: number, secondsPastJ2000Tdb: number) {
-      if (!Number.isSafeInteger(naifPckId) || !Number.isFinite(secondsPastJ2000Tdb) || Math.abs(secondsPastJ2000Tdb) > CENTURY * DAY) throw new RangeError('PCK orientation evaluation requires a body ID and TDB seconds within 100 Julian years of J2000')
+    evaluate(naifPckId: number, secondsPastJ2000Tdb: number, offsetSeconds = 0) {
+      if (!Number.isSafeInteger(naifPckId) || !Number.isFinite(secondsPastJ2000Tdb) || !Number.isFinite(offsetSeconds) ||
+          (secondsPastJ2000Tdb-CENTURY*DAY)+offsetSeconds > 0 || (secondsPastJ2000Tdb+CENTURY*DAY)+offsetSeconds < 0) throw new RangeError('PCK orientation evaluation requires a body ID and TDB seconds within 100 Julian years of J2000')
       const model = models.get(naifPckId)
       if (!model) return null
       const days = (secondsPastJ2000Tdb - (model.epoch - 2451545) * DAY) / DAY, centuries = days / CENTURY
-      const phases = model.phases.map(coefficients => polynomial(coefficients, centuries) * RAD)
+      const offsetDays = offsetSeconds / DAY, offsetCenturies = offsetDays / CENTURY
+      const phases = model.phases.map(coefficients => splitPolynomial(coefficients, centuries, offsetCenturies).angle * RAD)
       const periodic = (terms: number[], cosine = false) => terms.reduce((sum, coefficient, i) => sum + coefficient * (cosine ? Math.cos(phases[i]) : Math.sin(phases[i])), 0)
-      const raDegrees = polynomial(model.ra, centuries) + periodic(model.raTerms)
-      const decDegrees = polynomial(model.dec, centuries) + periodic(model.decTerms, true)
-      const primeMeridianDegrees = polynomial(model.pm, days) + periodic(model.pmTerms)
-      const j2000ToBodyFixed = multiply(rotate3(primeMeridianDegrees * RAD), multiply(rotate1(Math.PI / 2 - decDegrees * RAD), rotate3(Math.PI / 2 + raDegrees * RAD)))
-      return { naifPckId, secondsPastJ2000Tdb, constantsEpochTdb: model.epoch,
+      const ra = splitPolynomial(model.ra, centuries, offsetCenturies), dec = splitPolynomial(model.dec, centuries, offsetCenturies)
+      const pm = splitPolynomial(model.pm, days, offsetDays)
+      const raPeriodic = periodic(model.raTerms), decPeriodic = periodic(model.decTerms, true)
+      const raDegrees = ra.value + raPeriodic, decDegrees = dec.value + decPeriodic
+      const primeMeridianDegrees = wrap(pm.angle + periodic(model.pmTerms))
+      const j2000ToBodyFixed = multiply(rotate3(primeMeridianDegrees * RAD), multiply(rotate1(Math.PI / 2 - wrap(dec.angle + decPeriodic) * RAD), rotate3(Math.PI / 2 + wrap(ra.angle + raPeriodic) * RAD)))
+      return { naifPckId, secondsPastJ2000Tdb: secondsPastJ2000Tdb + offsetSeconds,
+        secondsPastJ2000TdbParts: [secondsPastJ2000Tdb, offsetSeconds] as const, constantsEpochTdb: model.epoch,
         poleRightAscensionDegrees: raDegrees, poleDeclinationDegrees: decDegrees,
-        primeMeridianDegrees: ((primeMeridianDegrees % 360) + 360) % 360,
+        primeMeridianDegrees,
         j2000ToBodyFixed, layout: 'row-major; body-fixed vector = matrix * J2000 vector' as const,
         model: 'pck00011-text-IAU' as const, physicalOrientationUncertaintyRadians: null }
     },
