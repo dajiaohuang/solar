@@ -19,10 +19,9 @@ explicit precision/status fields.
   expose verified, pending and invalid kernel files separately. Only the
   evaluated plan/tile status establishes exact availability at a requested
   epoch after verification and center-chain resolution. `snapshot` means a
-  validated source state at one declared audit epoch; `fallback` means an
-  explicitly requested source-element fixed two-body approximation; `missing`
-  means no exact state is available for the requested result. Missing states
-  include a machine-readable `missingReason`.
+  validated source state at one declared audit epoch. Runtime state transports
+  return exact-provenance states or `missing`; source-element approximations are
+  not served. Missing states include a machine-readable `missingReason`.
 * No endpoint performs N-body integration. No endpoint fetches arbitrary URLs or
   reads arbitrary client-selected paths.
 
@@ -33,9 +32,10 @@ manifest identity, outer MJD UTC bounds and record count without computation.
 `POST /v1/observation` accepts explicit ISO `utc` (with `Z`), 1–32 distinct
 `bodyIds`, and required WGS84 `station` fields `longitudeDeg`, `latitudeDeg`,
 `heightMeters`. Its optional `atmosphere` requires all of `pressureHPa`,
-`temperatureC`, `relativeHumidity` (0–1), `wavelengthMicrometers`. Unlike state
-and trajectory endpoints, this request's time is UTC and returned directions
-are degrees in a local horizon frame; source states remain TDB/ECLIPJ2000.
+`temperatureC`, `relativeHumidity` (0–1), `wavelengthMicrometers`. Unlike the
+state-plan, state-tile and state-window transports, this request's time is UTC
+and returned directions are degrees in a local horizon frame; source states
+remain TDB/ECLIPJ2000.
 
 The endpoint uses request admission, a single bounded compute slot, a 16 KiB
 request limit, at most 16 light-time iterations per body and a 20-second job
@@ -43,6 +43,12 @@ deadline. No IERS configuration returns `503 earth_orientation_unavailable`;
 an EOP coverage gap or missing Earth/Sun state returns an explicit `422`.
 Missing target states return per-body `missing` records with reasons and no
 invented directions. Computed directions and physical uncertainty are separate.
+The production handler evaluates source states directly at seconds past J2000
+TDB from SOFA's split date and iterates light time in that scale. The result
+contract identifies `epochEvaluation`; available targets also include the
+two-part `emissionJdTdbParts` alongside the compatibility scalar
+`emissionJdTdb`. Its 0.5-microsecond threshold is a numerical convergence target,
+not a physical uncertainty estimate.
 Read [ground-observation.md](ground-observation.md) for setup, numerical model,
 reference results, remaining differences and limitations.
 
@@ -81,11 +87,14 @@ full-profile catalog or inventory fails backend startup.
 catalog and inventory SHA-256 identities, the pinned source-snapshot and
 identity-mapping evidence hashes, `auditEt`, fixed TDB/ECLIPJ2000 units, the
 requested dependency window, source identity counts and unresolved reasons.
-The `coverage` array adds source/model buckets for the independent audit epoch;
-each bucket carries the bound dataset version and frame plus mutually exclusive
-`exact`, `approximate` and `missing` counts. Bucket totals reconcile to
-`identity.counts.sourceRecords`; an approximate count is zero unless the audit
-generator explicitly produces an approved approximate state.
+`sourceCounts` gives the pinned input population for each source. The `coverage`
+array adds source/model buckets for the independent audit epoch; each bucket
+carries the bound dataset version and frame plus mutually exclusive `exact`,
+`approximate` and `missing` counts. Buckets must reconcile both to the global
+source-record count and to each source's `sourceCounts` population, so a
+misallocation between sources cannot hide behind a matching grand total. An
+approximate count is zero unless the audit generator explicitly produces an
+approved approximate state.
 `windowCounts.numericallyCertifiedWholeWindowTargets` remains `null` in this
 report. The counts describe source records and dependency availability at the
 declared audit epoch; they are not current display counts, live state
@@ -139,18 +148,15 @@ open-conic records and missing parents remain visible with explicit statuses.
 or source-provided alias (whitespace is normalized); it does not scan every
 source row for arbitrary substrings.
 `GET /v1/inventory/{id}` returns only the untouched source record envelope.
-
-`GET /v1/identities/{id}/state?epochJd=&precision=exact` returns one position /
-velocity state in ECLIPJ2000. Exact mode uses only a verified operational SPK
-state or a validated source snapshot at its audit epoch and declared kernel
-segment window (returned as `evidenceWindowEt`). `precision=approximate`
-is an explicit opt-in for a bounded two-body source-element model; it is never
-reported as exact. A known identity without an exact state returns HTTP 200 with
-`availability: "missing"` and a machine-readable reason.
+Identity endpoints provide source metadata only. Current and historical states
+use the exact state-plan/tile and state-window transports; there is no JSON
+per-identity state endpoint or server-side approximate fallback.
 
 `GET /v1/catalog/manifest` publishes the exact-state dataset identity and state
-tile limits. `POST /v1/state/plan` accepts 1–32,768 unique catalog or source IDs
-at one TDB Julian epoch. It permits only `ECLIPJ2000`, `precision: "exact"` and
+tile limits. Its `limits.maxPlanBytes` value is the 8 MiB request/response JSON
+ceiling; `/v1/capabilities` reports the same bound as
+`limits.statePlanBytesMax`. `POST /v1/state/plan` accepts 1–32,768 unique
+catalog or source IDs at one TDB Julian epoch. It permits only `ECLIPJ2000`, `precision: "exact"` and
 `fieldMask: ["position","velocity"]`. Planning resolves the actual states,
 freezes their metadata and values in a bounded two-minute LRU cache, and reports
 exact/missing counts that match the eventual tile bitmaps. Approximate count is
@@ -158,40 +164,24 @@ always zero. Unknown or uncovered IDs retain their requested ordinal as an
 explicit missing row.
 
 `POST /v1/state/tiles` accepts a plan ID and tile sequence. It returns
-`application/vnd.solar.state-tile+binary` with a fixed 200-byte little-endian
+`application/vnd.solar.state-tile+binary` with a fixed 208-byte little-endian
 header, NDJSON provenance rows, exclusive exact/approximate/missing bitmaps and
 row-major Float64 `[x,y,z,vx,vy,vz]` states. Every exact state is SSB/barycentric
 (`stateOriginId: "naif:0"`), TDB, ECLIPJ2000, km and km/s. The payload, plan,
 catalog manifest and optional inventory manifest hashes are embedded in the
-header. Missing rows are zero-filled; approximate bitmap bits are forbidden by
-the exact-only contract. A repeated tile request for a live plan is byte-stable
-and does not repeat state evaluation. The default tile size is 16,384 rows;
+header. Each exact metadata row carries a valid digest of the recursively
+resolved SPK source chain; a stored audit-epoch state without that lineage is
+reported as missing. Inventory snapshots also bind the selected root segment
+and its verified kernel checksum. Missing rows are zero-filled; approximate bitmap bits are
+forbidden by the exact-only contract. A repeated tile request for a live plan
+is byte-stable and does not repeat state evaluation. The default tile size is
+16,384 rows;
 the declared maximum is 32,768 rows and 64 MiB per tile. See
 [the complete binary wire contract](./state-tiles-v1.md).
-
-Trajectory and identity endpoints keep their separate, explicit approximate
-opt-in.
 
 `GET /v1/bodies/{id}` returns one catalog record. Unknown IDs are a 404; a
 known source target without local data is a 200 catalog record with
 `availability: "missing"`.
-
-`POST /v1/trajectory` accepts source or catalog IDs and:
-
-```json
-{"bodyIds":["earth","sb:asteroid:1"],"startJd":2451545,"endJd":2451910,"samples":64,"frame":"ECLIPJ2000","precision":"exact"}
-```
-
-The request is limited to 64 bodies, 10,000 samples and a 1,000-year window.
-Cancellation is honoured between samples and returns a structured `cancelled`
-error. Exact mode does not propagate rounded/open-conic/unvalidated source
-elements. Bodies without an exact model remain in the response with an empty
-`states` array and an explicit missing reason; they are not silently dropped.
-Returned trajectory `states` are one compact row-major numeric array per body;
-`stateStride: 6` and the response `stateLayout` identify
-`[x,y,z,vx,vy,vz]` for each sample in the declared frame and units. Source
-identity trajectories also carry `centerId` when the source declares an
-orbital center; no center is inferred.
 
 `GET /v1/preview/manifest` is a deterministic, hash-tagged Pages profile
 snapshot. It is not the full data host and does not imply that a full Web or
@@ -205,11 +195,10 @@ value is present. Pages builds intentionally omit a real backend configuration a
 the curated static preview; they do not request the full catalog or claim full
 coverage. The project currently has no official public full-Web backend URL.
 
-Full-Web historical trails use the same exact binary transport once per sampled
-TDB epoch, not the JSON `/v1/trajectory` endpoint above. Their plan/tile POSTs
-append `?workload=trajectory` to enter the existing lower-priority trajectory
-queue; this hint cannot promote bulk requests. Current-state requests stay
-interactive. Each history job requests at most 320 trails plus its reference,
+Full-Web historical trails use exact binary state windows over sampled TDB
+epochs. Their plan/tile POSTs append `?workload=trajectory` to enter the
+existing lower-priority trajectory queue; this hint cannot promote bulk
+requests. Current-state requests stay interactive. Each history job requests at most 320 trails plus its reference,
 2–600 samples and a 1,000-year window, with a 120-second deadline. It validates
 each tile and the current frame's source manifest identity, retaining one epoch's
 six-vectors while appending packed Float64 AU relative positions. Missing any

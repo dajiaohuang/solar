@@ -18,8 +18,11 @@ numerical cache key. Missing, failed and cancelled evaluations are not cached
 as scientific results. Concurrent cold requests may still perform duplicate
 work; this cache is not a single-flight task coordinator.
 
-HTTP admission remains controlled by `-max-concurrent` (default 8). A separate
-`-compute-workers` flag controls evaluation blocks; zero follows `GOMAXPROCS`.
+`-max-concurrent` (default 8) caps the general HTTP request lane. State-window
+streams and Gaia motion-tile batches use isolated lanes, each capped at
+`min(max-concurrent, 2)`; therefore total active HTTP requests may reach
+`max-concurrent + 2*min(max-concurrent, 2)`. A separate `-compute-workers` flag
+controls evaluation blocks; zero follows `GOMAXPROCS`.
 State plans above 1,024 IDs split into independently scheduled blocks, with up
 to four blocks in flight per request. Time windows look ahead by at most four
 epochs. The existing weighted 4:2:1 interactive/trajectory/bulk policy applies
@@ -64,7 +67,7 @@ frame starts with a four-byte unsigned little-endian payload length. Frames are:
    `requestIdsSha256` and `catalogManifestSha256`.
 2. For each epoch in request order: JSON `kind: "epoch"`, zero-based
    `epochIndex` and `plan`, followed by exactly `plan.tileCount` ordinary
-   [v1 binary tile](./state-tiles-v1.md) frames.
+   [v2 binary tile](./state-tiles-v1.md) frames (the API route remains v1).
 3. JSON `kind: "complete"`, `epochCount`, `bodyCount`, `exactCount` and
    `missingCount`. Counts cover body-epoch pairs, including explicit missing
    rows. EOF must immediately follow the completion frame.

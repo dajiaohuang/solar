@@ -7,7 +7,7 @@ invalidates the previous result. JSON exports retain the original request,
 catalog identity, actual SPK hashes, IERS snapshot and model limitations.
 
 The form provides directions at one instant and bounded rise/set/visibility
-searches. Native UI and propagated physical uncertainty remain pending.
+searches. Android and iOS now expose source-wired Gaia station-direction and ground-contact routes. Native rise/set visibility-window search and propagated physical uncertainty remain pending; current native build, runtime and device acceptance is not established.
 No deployment or data publication is performed by the following local commands.
 
 ## Local data and service
@@ -38,7 +38,7 @@ The actual route was checked through a test-managed loopback HTTP server using
 original SPK/PCK/IERS data and all four independent Dallas contact references.
 Input, missing-configuration, unsupported-shape, cancellation and queue-class
 checks are targeted integration evidence, not deployment or native acceptance.
-Browser/native ground-contact forms remain pending.
+Android and iOS ground-contact forms are wired in source; their current build, runtime and live-service acceptance remains pending.
 
 The IERS loader verifies source URL, retrieval timestamp, byte count, SHA-256,
 filename and dated fixed-width records before startup. It uses Bulletin A
@@ -47,19 +47,34 @@ The larger endpoint error accompanies interpolation; this is not a propagated
 statistical confidence interval. Missing celestial-pole corrections stay absent.
 UT1-TAI interpolation preserves UTC leap-second discontinuities. There is no
 extrapolation, no zero-EOP fallback and no interpolation across a missing day.
-The outer coverage endpoints are not proof of continuous internal coverage.
+The observer passes SOFA's two-part UTC quasi-JD to the EOP lookup without
+first collapsing it into one full Julian Date. Subtracting the JD zero point
+before adding the fractional day preserves about 0.6 microseconds of MJD
+Float64 resolution instead of about 40 microseconds at a modern full JD. This
+is representational precision, not an end-to-end timing-accuracy claim.
+Each ground result includes `earthOrientationCoverageMjdUtc` and the source
+disclosure shows these UTC MJD endpoints. They identify the table's first and
+last records, not continuous internal coverage; the request still checks each
+queried epoch and fails or marks gaps explicitly.
 
 ## Calculation and boundaries
 
 Input is an explicit ISO UTC instant with `Z`, including a valid `23:59:60` leap
 second. SOFA-style quasi-JD is internal only. UTC → TAI → TT, UTC → UT1 and the
-Fairhead-Bretagnon topocentric TDB model are distinct conversions. Future UTC
-uses the pinned library's last known leap second (effective 2017-01-01), and the
-result discloses that assumption. A dubious-year library flag is retained.
+Fairhead-Bretagnon topocentric TDB model are distinct conversions. The pinned
+GoFA leap table's last step is effective 2017-01-01; [IERS Bulletin C 72](https://datacenter.iers.org/data/html/bulletinc-072.html)
+and [NAIF's current-LSK announcement](https://naif.jpl.nasa.gov/naif/announcements.html)
+support that offset through 2027-06-30. Result contracts publish the shared
+uncertainty boundary. Results from 2027-07-01 onward disclose
+`future-leap-seconds-assumed` and hold the last known offset. This is not a
+leap-second prediction. A dubious-year library flag is retained.
 
 WGS84 geodetic stations use east-positive longitude, latitude and ellipsoidal
 height. The calculation uses exact available SPK states, IAU 2006/2000A
 precession-nutation with available IERS dX/dY, Earth rotation and polar motion.
+For the CIO-based transform, dX/dY adjust the modeled CIP X/Y while the model
+CIO locator s from XYS06A is retained, following the
+[SOFA Earth-attitude cookbook](https://www.iausofa.org/cookbooks).
 Reception Earth/Sun states, retarded target states and solar deflector states
 share the catalog's numerical/provenance path. A target changing SPK solution
 within light-time iteration or across an entire window fails explicitly.
@@ -74,9 +89,16 @@ Directions refer to the target center and the ellipsoid's local horizon.
 No terrain, finite target limb, station tectonics/tides, planetary light
 deflection or Shapiro light-time correction is included. A target below the
 horizon can have a valid mathematical direction; it is not declared visible.
-The 50-microsecond light-time iteration tolerance reflects the catalog's scalar
-Float64 JD resolution and is **not** a physical uncertainty estimate. SPK center
-chains and different source solution sets retain their existing limitations.
+The HTTP observation path converts SOFA's two-part TDB date directly to seconds
+past J2000 before catalog evaluation. This avoids the roughly 40-microsecond
+rounding of a present-day one-part Float64 JD; the ET scalar spacing near the
+supported dates is about 0.12 microseconds. Its light-time solver targets a
+0.5-microsecond numerical residual and returns `emissionJdTdbParts` so the
+emission epoch can be retained without collapsing it to one JD. The older Go
+`Evaluate` callback API remains compatible with scalar-JD evaluators and their
+50-microsecond threshold. Neither threshold is a physical uncertainty estimate.
+SPK center chains and different source solution sets retain their existing
+limitations.
 Library attribution and license notices are in
 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
 
@@ -90,13 +112,13 @@ solar deflection, horizon rotation or refraction. Missing targets have no vector
 These inputs can support event geometry; they do not themselves calculate a
 ground contact, apparent limb or surface eclipse path.
 
-`lightTimeSeconds` now retains the iterate actually used for `emissionJdTdb`;
+`lightTimeSeconds` retains the iterate used to select the target emission state;
 `lightTimeResidualSeconds` separately reports its difference from range/c.
-Previously the exported light time was the next fixed-point estimate, even
-though the target was evaluated at the preceding iterate. The retained stopping
-threshold remains 50 microseconds. The scalar SPK JD still limits resolution;
-exporting the station's split epoch does not increase the source evaluator's
-resolution or establish physical accuracy.
+`emissionJdTdbParts` is an additive, normalized two-part JD representation;
+`emissionJdTdb` remains for existing clients and is necessarily rounded when
+serialized as one Float64 JD. The reception station's `epochJdTdbParts` remains
+the corresponding split SOFA date. This numerical precision does not reduce
+the separately excluded physical effects or supply an uncertainty estimate.
 
 Six [independent vector cases](../tests/fixtures/ground-vectors-reference.json)
 use ERFA's terrestrial PV rotated by the transpose CIRS matrix plus the original
@@ -104,9 +126,13 @@ jplephem Earth state, without reading Apco's stored observer position/velocity.
 They verify station components within 1e-6 km and 1e-10 km/s, simultaneous target
 vectors within 1e-6 km and reception vectors within 0.001 km. Tests also enforce
 vector/range consistency and exact association of the reported light time with
-the scalar emission JD. These are numerical thresholds for the pinned cases,
-not physical uncertainties. The [generator](../scripts/reference-ground-vectors.py)
-retains source and implementation hashes and refuses to overwrite an output.
+the scalar emission JD. Those pinned vector cases call the legacy one-part-JD
+callback, so they do not independently accept the production seconds-past-J2000
+path yet. The ET path needs a separate regression and reference-vector update
+before its tighter contract is test-verified. These are numerical thresholds
+for the pinned cases, not physical uncertainties. The
+[generator](../scripts/reference-ground-vectors.py) retains source and
+implementation hashes and refuses to overwrite an output.
 The model follows [ERFA Apco](https://github.com/liberfa/erfa/blob/master/src/apco.c)
 and excludes station motion/tides and an exact relativistic terrestrial/BCRS
 transformation. Older API replies without the additive vector bundle remain
@@ -137,6 +163,14 @@ Sub-step pairs of events, tangent contacts and unsampled source gaps can still
 be missed. `sampled-complete` means that all queried points were available,
 **not** proven continuous coverage or exhaustive event detection. Short-period
 spacecraft passes need a separately validated search cadence.
+
+Production HTTP handlers for a single observation, visibility windows, spherical
+ground contacts and Gaia station directions evaluate every SPK epoch in seconds
+past J2000 TDB from the retained SOFA date parts. Compatibility wrappers that
+accept one-part Julian Dates remain available to library callers, but these
+handlers use the split-epoch path. This removes date quantization from the SPK
+sample itself; it does not improve the 30-second search cadence, the 0.25-second
+crossing bracket, or physical timing uncertainty.
 
 Missing Earth/Sun/target states or EOP intervals remain explicit gaps, never
 zero altitude or a window bridged across missing data. Searches share one
@@ -226,8 +260,11 @@ IERS or SPK coverage remains an error, and non-spherical PCK bodies are rejected
 
 Ground contact responses also include sampledOverlapWindows for external disk
 overlap and internal disk containment. Each edge retains UTC, elapsed TAI, a
-numerical bracket and its kind (clipped search boundary, sampled zero or
-bracketed contact). Durations use elapsed TAI, including UTC leap seconds.
+numerical bracket and its kind (clipped search boundary, sampled zero,
+sampled negative-gap overlap or bracketed contact). Only sampled-zero and
+bracketed-contact edges require matching contact records; a sampled-overlap
+edge is evidence of a negative sampled gap, not an extra zero or contact.
+Durations use elapsed TAI, including UTC leap seconds.
 Numerical duration bounds combine the endpoint brackets; they are not physical
 uncertainty. Windows infer negative-gap spans from existing samples without
 extra ephemeris calls. Unsampled gaps may split them, and zero-only samples do

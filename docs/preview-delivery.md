@@ -25,6 +25,10 @@ Open the displayed local `/solar/` URL. For automated desktop/mobile coverage, r
 
 Product availability and scientific time coverage are different dimensions. A full product does not automatically mean full-window SPKs; a visible body does not imply a valid state at every epoch. / 产品可用性与科学时间覆盖是不同维度。完整产品不自动表示完整时间窗口 SPK；可见天体也不表示任意历元都有有效状态。
 
+## 67P availability
+
+Comet 67P has a source-backed SPK in the full profile but is not included in the current preview profile. Preview users see it as full-version-only, and its SPK is not packaged in that product. / 彗星 67P 的来源星历属于完整版，当前精选预览版尚未包含它。预览用户会看到仅完整版可用提示，该产品也不会打包其 SPK。
+
 ## Included and restricted / 开放与受限内容
 
 `src/data/preview-profile.json` is the shared policy source. It enables the Observation Deck/Explorer, Element Space, Stories and Evidence; selected planets, moons and binaries; three lessons; at most 4,383 history days and 360 trajectory samples; and the pinned 8,000-record mobile display sample on both desktop and mobile. A filtered view may show fewer points. Source catalog totals and validation reports describe the original source, **not** delivered or selectable coverage. / `src/data/preview-profile.json` 是共用策略来源：开放综合看板/探索器、轨道要素、课程与证据页，精选行星、卫星与双星，三组课程，最多 4,383 天历史与 360 个轨迹采样点，桌面和手机均使用固定的 8,000 条手机展示样本。筛选后点数可能更少。源目录总数与校验报告描述的是原始来源，**不是**实际交付或可选覆盖量。

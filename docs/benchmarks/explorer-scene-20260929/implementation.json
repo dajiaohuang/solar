@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "files": {
+    "src/lib/explorerCatalogSession.ts": "01d829a243ced3691ff9b114f3ce92e05762a301e49990b2d037ba98781fa291",
+    "src/hooks/useExplorerCatalog.ts": "9f5fcd5174425a104b3033cd4dd1097bfd35bb322dd39043a4b6260ec4309909",
+    "src/features/explorer/ExplorerWorkspace.tsx": "db4a2b60b9514de2f6a5db65754009281b4a5566fbbceedea6bab22ff1b2654a",
+    "src/components/TrajectoryCanvas.tsx": "475850a6e3cd5df4aaaa26d04bfefd798ff9c5b4465aa4bbf985c2ccd6df4f58",
+    "src/components/TrajectoryCanvas3D.tsx": "600166a696ac9c75d9099d8c3976b1dc38758916ac412009c70f052fe82654f7",
+    "src/lib/catalogStreaming.ts": "0c716fd111d4821ec0fef8f61abd57d14a657267928047f1a53e64321717ab7c",
+    "src/lib/catalogEpochCapacity.ts": "ceb7a444a0d0b1caee97b374f7fcb21de0ecee5218711883191b31f126aa0b0c",
+    "src/lib/catalogEpochStore.ts": "9d62389b50651569a277a14de2398ceba05d2a50aaa42ee36b5f061ec4e7460e",
+    "src/workers/catalog-stream.worker.ts": "d392d9d625b53abf4155dd31ce92c0632439f3763a6b23fd024e05eedc0311ce",
+    "src/data/ephemeris-manifest-full.json": "6611e75b5dfc3fdc19a00dd517c0987f5afe79c292c1957634c579073b28220d",
+    "internal/catalog/catalog.go": "636a9d96b6513f681f123bf5c7eac273fb37477e44c752c0303d1036143561fe",
+    "internal/httpapi/state_tiles.go": "bddad2de479bb6b85842ddd008454ec754cdad10134db97718ffd23c77c661d7",
+    "tests/e2e/explorer-capacity.spec.ts": "1af8226773a777ab7c669ef57afaa8c0d70d4e2c6cf50bf4f5efd9de39fcb8a2",
+    "playwright.config.ts": "6f7d5c5685a5d939e7e66c63ff1117f789ec9205aa967e5e08be05e5d68d3ee9",
+    "package-lock.json": "4f4ee1034910d9340751cc7812251e24483ec948085cd6400dec3069bad3191f"
+  },
+  "scope": "Source fingerprints for the local main-scene capacity run; benchmark is not a deployment or physical-device certificate."
+}

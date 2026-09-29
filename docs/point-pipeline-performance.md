@@ -473,8 +473,14 @@ These one-off local measurements do not establish a statistical tail estimate,
 public-network throughput or physical-display FPS. The 16.8 ms callback result
 belongs to a **34,505-representative display**, not simultaneous display of all
 1.56 million rows. Hardware and software browser modes differ. The reports pin
-the implementation before the later stale-selection/context-loss correction;
-that correction was verified separately using actual browser context loss.
+their input source-file hashes, but do not record a Git commit or complete tree
+hash. They predate later catalog changes, and all four core loading/rendering
+files in the current 2026-09-27 worktree have different SHA-256 values from the
+spatial report. The measurements therefore apply to their captured build,
+device, source and run setup; they are a historical capacity baseline, not
+current-worktree performance acceptance. A stale-selection/context-loss
+correction was verified separately using actual browser context loss, but this
+does not revalidate the report's throughput numbers against later code.
 Continuous/3D updates, adaptive time/error budgets, total process memory and
 native/mobile hardware remain unverified.
 
@@ -483,6 +489,41 @@ rtk npm run build
 rtk proxy node scripts/benchmark-catalog-stream.mjs --detail spatial --output .cache/catalog-spatial-new.json
 rtk proxy node scripts/benchmark-catalog-stream.mjs --detail spatial --graphics d3d11 --output .cache/catalog-spatial-hardware-new.json
 ```
+
+### Desktop default requests the complete admitted release (2026-09-26)
+
+The untouched desktop catalog request now follows the loaded release's full row
+count instead of stopping at an arbitrary one-million-row prefix. The existing
+array/GPU planner remains the capacity authority: a 512 MiB budget has a recorded
+full-source application run, while a smaller budget may admit fewer rows and
+continues to report a partial snapshot. Mobile still starts at 30,000 rows.
+Spatial mode keeps its existing 100,000 representative ceiling and deterministic
+screen-cell selection; the default does not switch to drawing every overlapping
+source point. This raises the amount of orbit propagation and the eligible source
+pool for visible representatives together. The evidence is a fixed-epoch full
+source application run, not continuous-time or native-device acceptance.
+
+### Release retained iOS 3D projection coordinates after payload creation (2026-09-26)
+
+The iOS 3D path copied each projected `SIMD3<Float>` point into the SceneKit
+vertex payload, then kept both the source point array and the payload alive in
+the published projection. It now retains the counted vertex/index payload for
+3D and releases the intermediate point array after preparation; 2D keeps its
+point array. This removes one steady-state projection array from the 3D scene
+and preserves the displayed count from the payload. A later display reduction
+copies bounded payload data without retaining a slice of the larger source.
+This is structural memory evidence, not a measured RSS or frame-time result;
+the 250,000-point 3D ceiling remains unchanged pending real-device evidence.
+
+### Rotation-invariant native 3D projection extent (2026-09-26)
+
+The Android projector bounded 3D points by Euclidean radius, while iOS used the
+largest absolute axis component. A diagonal point could therefore extend beyond
+the iOS fit after camera rotation. iOS now uses Euclidean radius in 3D and planar
+radius in 2D, with the same 5% display margin as Android. Float64 source states
+and the exact-state count remain unchanged. This is a camera-fit correction, not
+an ephemeris accuracy change; native device visibility still requires runtime
+verification.
 
 ## Source-tag shard scheduling (2026-09-23)
 
@@ -533,3 +574,10 @@ bound, interpolation, or continuous full-inventory streaming. Default zero
 retains the existing five-second sample-map playback request cadence; opt-in
 budgets use the clock notifications and can demand more computation at high
 playback rates.
+# Current main-scene integration evidence
+
+The [2026-09-29 Explorer receipt](benchmarks/explorer-scene-20260929/README.md)
+records real MPC rows computed and displayed in the main 2D/3D scene with a
+loopback Go backend. It supersedes the old fixed-sample integration limitation,
+not the device limitations of the historical measurements below. The observed
+renderer was SwiftShader; do not present these numbers as GPU hardware capacity.
