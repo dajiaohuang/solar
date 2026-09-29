@@ -32,7 +32,9 @@ export type CatalogStreamResponse =
   | { type: 'error'; error: string }
   | { type: 'cancelled' }
   | { type: 'selection-error'; requestId: number; count: number; error: string }
-  | { type: 'selection'; requestId: number; count: number; indices: Uint32Array; visible: number; edgeCandidates: number; selectionMs: number; testedRows?: number; skippedRows?: number }
+  /** The worker constructs unique indices in strictly increasing source-row order. */
+  | { type: 'selection'; requestId: number; count: number; indices: Uint32Array; visible: number; edgeCandidates: number; selectionMs: number; testedRows?: number; skippedRows?: number;
+      countOverlay?: { counts: Uint32Array; columns: number; rows: number; sourceRows: number; occupiedCells: number; maximumCount: number } }
   | { type: 'epoch-start'; requestId: number; julianDay: number; count: number }
   | { type: 'epoch-tile'; requestId: number; julianDay: number; startRow: number; count: number; positions: Float64Array }
   | ({ type: 'epoch-reuse'; requestId: number } & CatalogEpochReuse)

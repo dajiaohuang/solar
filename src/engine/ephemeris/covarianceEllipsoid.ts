@@ -19,7 +19,7 @@ export function covarianceEllipsoid(matrix: number[][], scale = 1) {
     if (!Number.isFinite(value) || value !== matrix[j]?.[i]) throw new RangeError('Invalid symmetric position covariance')
     if (sigma[i] === 0 || sigma[j] === 0) {
       if (value !== 0) throw new RangeError('Nonzero covariance on zero variance')
-    } else correlation[i][j] = i === j ? 1 : value/sigma[i]/sigma[j]
+    } else correlation[i][j] = i === j ? 1 : value/Math.min(sigma[i],sigma[j])/Math.max(sigma[i],sigma[j])
   }
   const lower = Array.from({ length: 3 }, () => [0, 0, 0])
   let rank = 0

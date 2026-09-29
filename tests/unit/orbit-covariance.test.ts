@@ -5,7 +5,7 @@ import { parseSbdbCovariance } from '../../src/data/loaders/sbdbCovariance'
 import { cartesianCovarianceAtSolutionEpoch } from '../../src/engine/ephemeris/orbitCovariance'
 import eros from '../fixtures/sbdb-eros-covariance.json'
 import bennu from '../fixtures/sbdb-bennu-covariance.json'
-import reference from '../fixtures/orbit-covariance-reference.json'
+import reference from '../fixtures/orbit-covariance-reference-20260926.json'
 
 const gm = reference.adoptedSolarGM
 
@@ -54,6 +54,18 @@ it('retains the full Bennu joint vector, model variances and state-model cross c
   expect(result.matrix.slice(6).map(row => row.slice(6))).toEqual(source.matrix.slice(6).map(row => row.slice(6)))
   expect(result.matrix.slice(0, 6).every(row => row[6] !== 0 && row[7] !== 0)).toBe(true)
   expect(result.jacobian.slice(6)).toEqual([[0, 0, 0, 0, 0, 0, 1, 0], [0, 0, 0, 0, 0, 0, 0, 1]])
+})
+
+it.each([
+  ['missing model parameters', (source: ReturnType<typeof parseSbdbCovariance>) => { Reflect.deleteProperty(source, 'modelParameters') }],
+  ['duplicate model parameter', (source: ReturnType<typeof parseSbdbCovariance>) => { source.modelParameters.push({ ...source.modelParameters[0] }) }],
+  ['model parameter index order', (source: ReturnType<typeof parseSbdbCovariance>) => { source.modelParameters[0].index = 1; source.modelParameters[1].index = 2 }],
+  ['mismatched model nominal', (source: ReturnType<typeof parseSbdbCovariance>) => { source.modelParameters[0].value += 1 }],
+  ['mismatched model units', (source: ReturnType<typeof parseSbdbCovariance>) => { source.modelParameters[0].units = 'm^-3' }],
+] as const)('rejects %s from the audited covariance contract', (_name, mutate) => {
+  const source = parseSbdbCovariance(bennu)
+  mutate(source)
+  expect(() => cartesianCovarianceAtSolutionEpoch(source, gm)).toThrow(/Invalid audited SBDB covariance contract/)
 })
 
 it('maps permuted source axes consistently and cannot substitute the standard epoch', () => {

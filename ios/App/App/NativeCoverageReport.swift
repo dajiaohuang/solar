@@ -56,6 +56,7 @@ struct NativeCoverageReport: Decodable, Equatable {
     let frame: String
     let requestedWindow: Window
     let counts: Counts
+    let sourceCounts: [String: UInt64]
     let windowCounts: WindowCounts
     let coverage: [CoverageBucket]
     let unresolvedReasons: [String: UInt64]
@@ -113,10 +114,15 @@ struct NativeCoverageReport: Decodable, Equatable {
         }), Self.sum(unresolvedReasons.values) == c.unresolvedSourceRecords else {
             throw StateTileFailure.invalid("Coverage unresolved reasons are invalid.")
         }
+        guard !sourceCounts.isEmpty, sourceCounts.count <= Self.maxCoverageBuckets,
+              sourceCounts.allSatisfy({ Self.coverageText($0.key) && $0.value > 0 && Self.safe($0.value) }),
+              Self.sum(sourceCounts.values) == c.sourceRecords else {
+            throw StateTileFailure.invalid("Coverage source populations are invalid.")
+        }
         guard !coverage.isEmpty, coverage.count <= Self.maxCoverageBuckets else {
             throw StateTileFailure.invalid("Coverage status buckets are invalid.")
         }
-        var keys = Set<String>(), total: UInt64 = 0
+        var keys = Set<String>(), total: UInt64 = 0, sourceCoverage: [String: UInt64] = [:]
         for bucket in coverage {
             guard Self.coverageText(bucket.datasetVersion), Self.coverageText(bucket.source), Self.coverageText(bucket.model),
                   bucket.datasetVersion == catalogVersion, bucket.frame == "ECLIPJ2000", bucket.auditEt == auditEt,
@@ -126,16 +132,21 @@ struct NativeCoverageReport: Decodable, Equatable {
                   let next = Self.sum([total, bucketTotal]) else {
                 throw StateTileFailure.invalid("Coverage status buckets are invalid.")
             }
+            guard let sourceCount = sourceCounts[bucket.source],
+                  let sourceNext = Self.sum([sourceCoverage[bucket.source] ?? 0, bucketTotal]), sourceNext <= sourceCount else {
+                throw StateTileFailure.invalid("Coverage status bucket source mismatch.")
+            }
+            sourceCoverage[bucket.source] = sourceNext
             total = next
         }
-        guard total == c.sourceRecords else {
+        guard total == c.sourceRecords, sourceCounts.allSatisfy({ sourceCoverage[$0.key] == $0.value }) else {
             throw StateTileFailure.invalid("Coverage status buckets do not reconcile.")
         }
     }
 
     static func isHash(_ value: String) -> Bool { value.utf8.count == 64 && value.range(of: hashPattern, options: .regularExpression) != nil }
     private static func coverageText(_ value: String) -> Bool {
-        !value.isEmpty && value.utf8.count <= 512 && value.unicodeScalars.allSatisfy { $0.value >= 32 && $0.value != 127 }
+        !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && value.utf8.count <= 512 && value.unicodeScalars.allSatisfy { $0.value >= 32 && $0.value != 127 }
     }
     private static func safe(_ value: UInt64) -> Bool { value <= maxSafeInteger }
     private static func sum<S: Sequence>(_ values: S) -> UInt64? where S.Element == UInt64 {

@@ -1,6 +1,7 @@
 import { useMemo, useSyncExternalStore } from 'react'
 import { subscribeEphemerides, getEphemerisSnapshot } from '../engine/ephemeris/kernelStore'
 import { majorBodies } from '../data/majorBodies'
+import { SCIENTIFIC_SPACECRAFT } from '../data/scientificSpacecraft'
 import { BODY_PHYSICAL } from '../data/physical'
 import { selectionStore } from '../state/selection-store'
 import type { BodyId, CelestialBody } from '../types'
@@ -9,14 +10,17 @@ export const majorBodiesWithPhysicalData = majorBodies.map((body) => ({
   ...body,
   radiusKm: BODY_PHYSICAL[body.id]?.radiusKm,
 }))
+export const builtInSceneBodies: CelestialBody[] = [...majorBodiesWithPhysicalData, ...SCIENTIFIC_SPACECRAFT]
 
 export function useBodyRegistry() {
   const ephemerides = useSyncExternalStore(subscribeEphemerides, getEphemerisSnapshot)
   const ephemerisRevision = ephemerides.revision
   const { catalogBodies, selectedIds } = selectionStore.useStore()
   return useMemo(() => {
-    const allBodies = [...majorBodiesWithPhysicalData, ...Object.values(catalogBodies)]
-    const bodiesById = new Map<BodyId, CelestialBody>(allBodies.map((body) => [body.id, body]))
+    // Pinned inventory records can share canonical IDs with built-ins. Keep
+    // their selected source ownership, without duplicate list/worker rows.
+    const bodiesById = new Map<BodyId, CelestialBody>([...builtInSceneBodies, ...Object.values(catalogBodies)].map((body) => [body.id, body]))
+    const allBodies = [...bodiesById.values()]
     return {
       ephemerisRevision,
       allBodies,

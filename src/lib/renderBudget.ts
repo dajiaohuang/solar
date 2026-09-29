@@ -25,8 +25,10 @@ export type AdaptiveRenderBudgetState = {
 
 export type RenderPerformanceWindow = {
   nowMs: number
-  p90FrameTimeMs: number
-  longFrameRatio: number
+  p50FrameTimeMs: number
+  p95FrameTimeMs: number
+  p99FrameTimeMs: number
+  missedFrameRatio: number
   visible: boolean
   warmedUp: boolean
   samplingActive: boolean
@@ -40,7 +42,31 @@ export type SplitRenderBudget = {
 
 export const RENDER_BUDGET_QUANTUM = 5_000
 export const RENDER_BUDGET_COOLDOWN_MS = 5_000
+export const RENDER_FRAME_TARGET_MS = 1000 / 60
+export const RENDER_FRAME_P95_TARGET_MS = 16.7
+export const RENDER_FRAME_P95_PRESSURE_MS = 18.5
+export const RENDER_FRAME_TAIL_LIMIT_MS = 28
+export const RENDER_FRAME_SLOW_LIMIT_MS = 33.3
+export const RENDER_MISSED_FRAME_TARGET_RATIO = 0.02
+export const RENDER_MISSED_FRAME_PRESSURE_RATIO = 0.05
+export const RENDER_MISSED_FRAME_EMERGENCY_RATIO = 0.2
 export const MAX_SOURCE_INVENTORY_ROWS = 1_567_193
+const UNDERSIZED_SAMPLE_MINIMUM = 2_000
+
+/** Estimate missed 60 Hz slots from window throughput, not rounded per-sample intervals. */
+export function estimateMissedFrameRatio(intervalsMs: readonly number[]): number {
+  if (intervalsMs.length === 0) return 0
+  let elapsedMs = 0
+  for (const intervalMs of intervalsMs) {
+    if (!Number.isFinite(intervalMs) || intervalMs <= 0) return 0
+    elapsedMs += intervalMs
+  }
+  if (!Number.isFinite(elapsedMs)) return 1
+  const expectedSlots = elapsedMs / RENDER_FRAME_TARGET_MS
+  if (!Number.isFinite(expectedSlots)) return 1
+  const missedSlots = Math.max(0, expectedSlots - intervalsMs.length)
+  return expectedSlots > 0 ? missedSlots / expectedSlots : 0
+}
 
 export function classifyRenderDevice(viewportWidth: number, coarsePointer: boolean): RenderDeviceClass {
   return viewportWidth <= 800 || (coarsePointer && viewportWidth <= 1_180) ? 'mobile' : 'desktop'
@@ -104,12 +130,12 @@ function clamp(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(maximum, value))
 }
 
-function quantizeDown(value: number) {
-  return Math.floor(value / RENDER_BUDGET_QUANTUM) * RENDER_BUDGET_QUANTUM
+function quantizeDown(value: number, quantum = RENDER_BUDGET_QUANTUM) {
+  return Math.floor(value / quantum) * quantum
 }
 
-function quantizeUp(value: number) {
-  return Math.ceil(value / RENDER_BUDGET_QUANTUM) * RENDER_BUDGET_QUANTUM
+function quantizeUp(value: number, quantum = RENDER_BUDGET_QUANTUM) {
+  return Math.ceil(value / quantum) * quantum
 }
 
 export function resolveRenderBudgetPolicy(
@@ -155,21 +181,46 @@ export function advanceAdaptiveRenderBudget(
   policy: RenderBudgetPolicy,
 ): AdaptiveRenderBudgetState {
   if (!policy.adaptive || !window.visible || !window.warmedUp || !window.samplingActive) return state
+  if (!Number.isFinite(window.p50FrameTimeMs) || !Number.isFinite(window.p95FrameTimeMs) ||
+      !Number.isFinite(window.p99FrameTimeMs) || !Number.isFinite(window.missedFrameRatio) ||
+      window.p50FrameTimeMs <= 0 || window.p95FrameTimeMs < window.p50FrameTimeMs ||
+      window.p99FrameTimeMs < window.p95FrameTimeMs || window.missedFrameRatio < 0 || window.missedFrameRatio > 1) return state
   if (
     state.lastAdjustmentAtMs !== null
     && window.nowMs - state.lastAdjustmentAtMs < RENDER_BUDGET_COOLDOWN_MS
   ) return state
 
-  const slow = window.p90FrameTimeMs > 28 || window.longFrameRatio > 0.15
+  const slow = window.p95FrameTimeMs > RENDER_FRAME_P95_PRESSURE_MS || window.p99FrameTimeMs > RENDER_FRAME_TAIL_LIMIT_MS ||
+    window.missedFrameRatio > RENDER_MISSED_FRAME_PRESSURE_RATIO
+  const rawAvailableCount = window.availableCount
+  const availableCount = typeof rawAvailableCount === 'number' && Number.isSafeInteger(rawAvailableCount) && rawAvailableCount >= 0
+    ? rawAvailableCount
+    : undefined
+  // The policy floor assumes its candidate workload is loaded. If the source
+  // sample is smaller, slow frames must be able to reduce the actual draw count
+  // instead of lowering an invisible ceiling above every available point.
+  const sampleBelowPolicyFloor = availableCount !== undefined && availableCount < policy.minimum
+  const recoveringBelowPolicyFloor = state.count < policy.minimum
+  const minimumCount = sampleBelowPolicyFloor
+    ? Math.min(availableCount, UNDERSIZED_SAMPLE_MINIMUM)
+    : recoveringBelowPolicyFloor
+      ? Math.min(state.count, UNDERSIZED_SAMPLE_MINIMUM)
+      : policy.minimum
+  const adjustmentQuantum = sampleBelowPolicyFloor || recoveringBelowPolicyFloor ? 1_000 : RENDER_BUDGET_QUANTUM
   // A tiny loaded sample cannot prove that the unexercised budget is fast.
-  const budgetExercised = window.availableCount === undefined || window.availableCount >= state.count
-  const fast = budgetExercised && window.p90FrameTimeMs < 18.5 && window.longFrameRatio < 0.05
+  const budgetExercised = availableCount === undefined || availableCount >= state.count
+  const fast = budgetExercised && window.p95FrameTimeMs <= RENDER_FRAME_P95_TARGET_MS &&
+    window.p99FrameTimeMs < RENDER_FRAME_TAIL_LIMIT_MS && window.missedFrameRatio < RENDER_MISSED_FRAME_TARGET_RATIO
   const consecutiveSlowWindows = slow ? state.consecutiveSlowWindows + 1 : 0
   const consecutiveFastWindows = fast ? state.consecutiveFastWindows + 1 : 0
 
-  if (consecutiveSlowWindows >= 2 && state.count > policy.minimum) {
+  const exercisedCount = Math.min(state.count, availableCount ?? state.count)
+  // Reduce the workload that was actually drawn, even while streaming has not
+  // filled the current cap. Fast frames still require the full cap above.
+  if ((consecutiveSlowWindows >= 2 || window.p95FrameTimeMs > RENDER_FRAME_SLOW_LIMIT_MS ||
+       window.missedFrameRatio > RENDER_MISSED_FRAME_EMERGENCY_RATIO) && exercisedCount > minimumCount) {
     return {
-      count: clamp(quantizeDown(state.count * 0.75), policy.minimum, policy.maximum),
+      count: clamp(quantizeDown(exercisedCount * 0.75, adjustmentQuantum), minimumCount, policy.maximum),
       consecutiveSlowWindows: 0,
       consecutiveFastWindows: 0,
       lastAdjustmentAtMs: window.nowMs,
@@ -178,7 +229,7 @@ export function advanceAdaptiveRenderBudget(
 
   if (consecutiveFastWindows >= 4 && state.count < policy.maximum) {
     return {
-      count: clamp(quantizeUp(state.count * 1.125), policy.minimum, policy.maximum),
+      count: clamp(quantizeUp(state.count * 1.125, adjustmentQuantum), minimumCount, policy.maximum),
       consecutiveSlowWindows: 0,
       consecutiveFastWindows: 0,
       lastAdjustmentAtMs: window.nowMs,
@@ -194,11 +245,9 @@ export function advanceAdaptiveRenderBudget(
 
 export function splitRenderBudget(total: number, comparisonEnabled: boolean): SplitRenderBudget {
   const available = Math.max(0, Math.floor(total))
-  if (!comparisonEnabled) return { primary: quantizeDown(available), secondary: 0 }
-  if (available < RENDER_BUDGET_QUANTUM * 2) {
-    const sharedSmallSample = Math.floor(available / 2)
-    return { primary: sharedSmallSample, secondary: sharedSmallSample }
-  }
-  const sharedPrefix = quantizeDown(available / 2)
+  if (!comparisonEnabled) return { primary: available, secondary: 0 }
+  // Policy budgets are already quantized. Preserve the available rows here;
+  // comparison panes share a prefix, so at most one odd row remains unused.
+  const sharedPrefix = Math.floor(available / 2)
   return { primary: sharedPrefix, secondary: sharedPrefix }
 }

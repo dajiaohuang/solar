@@ -1,12 +1,33 @@
-import type { BackendFrame, StateTileAudit } from './backendFrames'
+import type { BackendFrame, BackendStateEvidence, StateTileAudit } from './backendFrames'
 import type { BodyId } from '../types'
 
 export type IndexedEvidenceRows<T> = { readonly length: number; rowAt(index: number): T }
+export type ExactBackendCoverageCounts = { exactCount: number; selectedCount: number }
+type SelectedCoverageEntry = BodyId | { readonly id: BodyId }
+
+function selectedBodyIdSet(entries: readonly SelectedCoverageEntry[]) {
+  const selected = new Set<BodyId>()
+  for (const entry of entries) selected.add(typeof entry === 'string' ? entry : entry.id)
+  return selected
+}
+
+/** Count exact selected states without building the detailed coverage ledger. */
+export function summarizeExactBackendCoverage(selectedBodies: readonly { readonly id: BodyId }[], evidence?: BackendStateEvidence | null): ExactBackendCoverageCounts {
+  const selected = selectedBodyIdSet(selectedBodies)
+  let exactCount = 0
+  if (evidence) {
+    for (const bodyId of selected) {
+      const index = evidence.indexOf(bodyId)
+      if (index >= 0 && evidence.statusAt(index) === 'exact') exactCount++
+    }
+  }
+  return { exactCount, selectedCount: selected.size }
+}
 
 /** Selected entries, backend identities and reference-relative positions are
  * different populations. Never consult the local SPK registry for these counts. */
-export function summarizeBackendCoverage(selectedIds: readonly BodyId[], frame?: BackendFrame | null) {
-  const selected = new Set(selectedIds)
+export function summarizeBackendCoverage(selectedIds: readonly SelectedCoverageEntry[], frame?: BackendFrame | null) {
+  const selected = selectedBodyIdSet(selectedIds)
   const selectedCount = selected.size
   const projected = new Set<BodyId>()
   if (frame) for (let index = 0; index < frame.currentPositions.length; index++) {

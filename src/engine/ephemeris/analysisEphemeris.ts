@@ -9,6 +9,10 @@ import { utcJulianDayToEt, utcTimeScaleQuality, type TimeScaleQuality } from './
 export type AnalysisEphemerisPolicy = 'prefer-spk' | 'require-spk'
 export type AnalysisBodyModel = 'jpl-spk' | 'approximate-fallback' | 'heliocentric-origin'
 export type AnalysisBodyEvidence = { bodyId: BodyId; model: AnalysisBodyModel; source: CelestialBody['source'] }
+export type AnalysisEphemerisEpoch = Readonly<{
+  position(bodyId: BodyId): Vector3
+  velocity(bodyId: BodyId): Vector3
+}>
 export type AnalysisEphemerisEvidence = {
   schemaVersion: 1
   policy: AnalysisEphemerisPolicy
@@ -27,6 +31,13 @@ export type AnalysisEphemerisEvidence = {
   kernelPool: { id: string; sha256: string | null }[]
   bodies: AnalysisBodyEvidence[]
   physicalPredictionUncertainty: 'not-estimated'
+}
+/** Synchronous sampling contract shared by local kernels and finite backend windows. */
+export type AnalysisEphemerisProvider = {
+  bodyModels(ids?: readonly BodyId[]): AnalysisBodyEvidence[]
+  at(utcJulianDay: number): AnalysisEphemerisEpoch
+  elapsedDays(startUtcJd: number, endUtcJd: number): number
+  evidence(): AnalysisEphemerisEvidence
 }
 
 export class MissingPreciseStateError extends MissingBodyStateError {
@@ -87,11 +98,11 @@ export function createAnalysisEphemeris(options: {
     ? kernelsCoveringInterval(options.kernels, utcJulianDayToEt(startJulianDay - margin), utcJulianDayToEt(endJulianDay + margin))
     : []
   const kernels = Object.freeze(eligibleKernels.map(({ id, kernel, solutionKernelIds, dependencyOnly }) => Object.freeze({
-    id, kernel, dependencyOnly,
+    id, kernel, sha256: verifiedKernelSha256({ id, kernel }) ?? undefined, dependencyOnly,
     solutionKernelIds: solutionKernelIds === undefined ? undefined : Object.freeze(solutionKernelIds.slice()),
   })))
   const bodyEvidence = new Map<BodyId, AnalysisBodyEvidence>()
-  const kernelPool = kernels.map(kernel => ({ id: kernel.id, sha256: verifiedKernelSha256(kernel) }))
+  const kernelPool = kernels.map(kernel => ({ id: kernel.id, sha256: kernel.sha256 ?? null }))
   const record = (body: CelestialBody, model: AnalysisBodyModel) => {
     const previous = bodyEvidence.get(body.id)
     if (previous && previous.model !== model) throw new Error(`Analysis model changed inside its frozen window for ${body.id}`)

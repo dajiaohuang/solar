@@ -62,12 +62,37 @@ test('parallel waves respect consumer backpressure and independent row admission
   expect(result.verifiedChunks).toBe(3); expect(result.peakReservedRows).toBe(2)
   expect(fetcher).toHaveBeenCalledTimes(3)
 })
+test('out-of-order chunk reads preserve descriptor decode and callback order', async () => {
+  const { files, manifest: m } = await syntheticPartition()
+  let releaseFirst!: () => void, markSecondRead!: () => void
+  const firstHeld = new Promise<void>(resolve => { releaseFirst = resolve })
+  const secondReadReturned = new Promise<void>(resolve => { markSecondRead = resolve })
+  const paths: string[] = []
+  const fetcher = vi.fn(async (url: URL | RequestInfo) => {
+    const path = String(url).split('/').at(-1)!
+    if (path === m.chunks[0].path) await firstHeld
+    else if (path === m.chunks[1].path) markSecondRead()
+    return response(files.get(path)!)
+  })
+  const onChunk = vi.fn(async (chunk: GaiaChunk) => { paths.push(chunk.descriptor.path) })
+  const pending = streamGaiaChunks({ manifest:m, region, baseUrl:'https://example.test/gaia/', signal:new AbortController().signal,
+    concurrency:3, consumerConcurrency:2, fetcher, onChunk })
+  let waitedForFirstRead: boolean
+  try {
+    await secondReadReturned
+    await new Promise(resolve => setTimeout(resolve, 0))
+    waitedForFirstRead = onChunk.mock.calls.length === 0
+  } finally { releaseFirst() }
+  await pending
+  expect(waitedForFirstRead).toBe(true)
+  expect(paths).toEqual(m.chunks.map(chunk => chunk.path))
+})
 test('expanded default byte and row reservations overlap up to three small shards', async () => {
   const { files, manifest: m } = await syntheticPartition()
   const fetcher = vi.fn(async (url: URL | RequestInfo) => response(files.get(String(url).split('/').at(-1)!)!))
   const result = await streamGaiaChunks({ manifest:m, region, baseUrl:'https://example.test/gaia/', signal:new AbortController().signal,
     fetcher, onChunk:async () => {} })
-  expect(result.loadingBudget).toEqual({ concurrency:4, maxInFlightBytes:96*1024*1024,
+  expect(result.loadingBudget).toEqual({ concurrency:8, maxInFlightBytes:96*1024*1024,
     maxInFlightRows:90_000, maxTotalBytes:128*1024*1024 })
   expect(result.peakActiveChunks).toBe(3)
 })

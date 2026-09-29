@@ -2,6 +2,7 @@ import { tdbToTcb } from '../engine/ephemeris/barycentricTime.ts'
 import { validateGroundObservation, type GroundAtmosphere, type GroundObservation, type GroundStation } from './groundObservation.ts'
 import { validateStellarMotion, type StellarMotionExperiment, type StellarMotionRequest } from './stellarMotion.ts'
 import { readBounded, STATE_TILE_API_VERSION } from './stateTiles.ts'
+import { ADVERTISED_QUEUE_RETRY, fetchRetryableResponse } from './retryableHttpResponse'
 
 export type StellarObserverRequest = Omit<StellarMotionRequest, 'targetEpochJulianYearTCB' | 'covariancePolicy'> & { utc: string; station: GroundStation; atmosphere?: GroundAtmosphere }
 export type StellarObserverReport = {
@@ -118,7 +119,7 @@ export async function loadStellarObserverReceipt(base: string, request: StellarO
     check()
     const body = JSON.stringify(request)
     check()
-    response = await fetcher(`${base.trim().replace(/\/+$/, '')}/v1/stellar/observer`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal, cache: 'no-store' })
+    response = await fetchRetryableResponse(fetcher, `${base.trim().replace(/\/+$/, '')}/v1/stellar/observer`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: controller.signal, cache: 'no-store' }, controller.signal, ADVERTISED_QUEUE_RETRY)
     check()
     const originalResponseJson = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(await readBounded(response, 'application/json', 14<<20, controller.signal))
     const raw: unknown = JSON.parse(originalResponseJson)

@@ -22,7 +22,8 @@ export type EventSamplingPlan = {
   requiredSamples: number
   actualSamples: number
   capped: boolean
-  maximumResolvablePeriodDays: number
+  /** Period spanning 36 nominal grid intervals; not an event-completeness certificate. */
+  periodAt36NominalIntervalsDays: number
 }
 
 /** Interval fields describe UTC Julian-Day coordinates; ephemeris evaluation may use TDB. */
@@ -103,7 +104,7 @@ export function eventSamplingPlan(bodies: readonly CelestialBody[], windowDays: 
     requiredSamples,
     actualSamples,
     capped: actualSamples < requiredSamples,
-    maximumResolvablePeriodDays: sampleIntervalDays * SAMPLES_PER_FASTEST_PERIOD,
+    periodAt36NominalIntervalsDays: sampleIntervalDays * SAMPLES_PER_FASTEST_PERIOD,
   }
 }
 

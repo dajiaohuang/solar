@@ -5,6 +5,7 @@ import { validateBinaryElements } from '../lib/catalogLoader'
 import { validateCatalogMetadata, validateCatalogRecords } from '../lib/catalogRecordValidation'
 import { bindCatalogChecksums, catalogSha256 } from '../lib/catalogIntegrity'
 import { createCatalogFieldMatcher } from '../lib/catalogFilters'
+import { normalizeCatalogAbsoluteMagnitude } from '../lib/catalogMagnitude'
 import { StratifiedCatalogSampler } from '../lib/catalogSampling'
 import type {
   AsteroidIndexEntry,
@@ -48,6 +49,7 @@ function scannedRecord(locator: CatalogLocator, entry: AsteroidIndexEntry, value
   const offset = locator.rowIndex * 8
   return {
     ...entry,
+    absoluteMagnitude: normalizeCatalogAbsoluteMagnitude(entry.absoluteMagnitude),
     chunkIndex: locator.chunkIndex,
     rowIndex: locator.rowIndex,
     epochJd: values[offset],
@@ -256,7 +258,8 @@ async function scanCompactIndex(request: CatalogScanWorkerRequest, signal: Abort
       }
       if (!matches(entry.searchKey, entry.orbitClassCode, entry.absoluteMagnitude, values[offset+1], values[offset+2], values[offset+3])) continue
       total++
-      const decision = sampler.consider(entry.id, entry.orbitClassCode, values[offset+1], values[offset+2], values[offset+3], entry.absoluteMagnitude)
+      const decision = sampler.consider(entry.id, entry.orbitClassCode, values[offset+1], values[offset+2], values[offset+3],
+        normalizeCatalogAbsoluteMagnitude(entry.absoluteMagnitude))
       if (decision) sampler.commit(decision, { chunkIndex, rowIndex })
     }
     if (retainRecords && !refreshScannedRecords(sampler, retainedRecords, chunkIndex, metadata, values)) {

@@ -1,5 +1,6 @@
 import { assembleStateTiles, decodeStateTile, digestStateTileRequestIds, readStateTileJson, validateStateTileManifest, validateStateTilePlan, MAX_STATE_TILE_BYTES, type StateTile } from './stateTiles'
 import type { AcquireStateTile } from './stateTileAdmission'
+import { ADVERTISED_QUEUE_RETRY, fetchRetryableResponse } from './retryableHttpResponse'
 
 export const STATE_WINDOW_MEDIA_TYPE = 'application/vnd.solar.state-window+binary'
 
@@ -47,7 +48,7 @@ async function* fetchStateWindowWithSignal(params: StateWindowParams, setup: <T>
     try { params.signal.throwIfAborted(); return await run() }
     finally { release?.() }
   }
-  const manifest = await setup(async () => validateStateTileManifest(await readStateTileJson(await fetcher(`${params.base}/v1/catalog/manifest`, { signal: params.signal }), 'State catalog manifest', undefined, params.signal)))
+  const manifest = await setup(async () => validateStateTileManifest(await readStateTileJson(await fetchRetryableResponse(fetcher, `${params.base}/v1/catalog/manifest`, { signal: params.signal }, params.signal, ADVERTISED_QUEUE_RETRY), 'State catalog manifest', undefined, params.signal)))
   if (params.expectedCatalogManifestSha256 && manifest.catalogManifestSha256 !== params.expectedCatalogManifestSha256 ||
       params.expectedInventoryManifestSha256 && manifest.inventoryManifestSha256 !== params.expectedInventoryManifestSha256) throw new Error('Backend trajectory source snapshot changed')
   const idsHash = await digestStateTileRequestIds(params.bodyIds)
@@ -63,12 +64,13 @@ async function* fetchStateWindowWithSignal(params: StateWindowParams, setup: <T>
   params.signal.addEventListener('abort', abort, { once: true })
   try {
     params.signal.throwIfAborted()
-    response = await setup(() => withTileAdmission(async () => {
-      const received = await fetcher(`${params.base}/v1/state/window`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: params.signal,
-        body: JSON.stringify({ ids: params.bodyIds, epochsJd: params.epochsTdbJd, timeScale: 'TDB', frame: 'ECLIPJ2000', precision: 'exact', fieldMask: ['position', 'velocity'] }) })
-      response = received // Retain cleanup ownership even if setup rejects late headers.
+    const admittedFetcher: typeof fetch = async (input, init) => {
+      const received = await withTileAdmission(() => fetcher(input, init))
+      response = received // Retain cleanup ownership even if a late setup deadline fires.
       return received
-    }))
+    }
+    response = await setup(() => fetchRetryableResponse(admittedFetcher, `${params.base}/v1/state/window`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: params.signal,
+      body: JSON.stringify({ ids: params.bodyIds, epochsJd: params.epochsTdbJd, timeScale: 'TDB', frame: 'ECLIPJ2000', precision: 'exact', fieldMask: ['position', 'velocity'] }) }, params.signal, ADVERTISED_QUEUE_RETRY))
     if (!response.ok || response.headers.get('content-type')?.split(';')[0] !== STATE_WINDOW_MEDIA_TYPE || !response.body) throw new Error(`State window HTTP/protocol failure ${response.status}`)
     reader = response.body.getReader()
     let pending: Uint8Array = new Uint8Array(0), offset = 0

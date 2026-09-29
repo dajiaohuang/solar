@@ -7,7 +7,7 @@ import {
 import { angularSeparationDeg } from '../engine/events/angularSeparation'
 import { eventSamplingReceipt, type EventSamplingReceipt } from '../engine/events/eventSampling'
 import { findSampledExtrema, refineBracketedExtremum, type ExtremumMode, type SampledExtremum } from '../engine/events/sampledExtrema'
-import { admitEventAnalysis, MAX_ANALYSIS_EVENTS, MAX_EVENT_REFINEMENTS } from '../engine/events/eventAnalysisLimits'
+import { admitEventAnalysis, EVENT_REFINEMENTS_PER_COOPERATIVE_YIELD, MAX_ANALYSIS_EVENTS, MAX_EVENT_REFINEMENTS } from '../engine/events/eventAnalysisLimits'
 import { assertEventRequestBudget } from '../engine/events/eventRequestBudget'
 import type { BodyId, CelestialBody, Vector3 } from '../types'
 import { ensureKernelFiles, kernelsForWindow } from '../engine/ephemeris/kernelStore'
@@ -70,9 +70,14 @@ export type ConjunctionResponse = EventAnalysisResponse
 const workerScope = self as DedicatedWorkerGlobalScope
 let activeRequestId = 0
 let cancelledRequestId = 0
+let activeLoadController: AbortController | null = null
 
 function yieldToWorker() {
   return new Promise<void>((resolve) => setTimeout(resolve, 0))
+}
+
+class EventAnalysisCancelled extends Error {
+  constructor() { super('Event analysis cancelled'); this.name = 'EventAnalysisCancelled' }
 }
 
 function apsisKinds(body: Pick<CelestialBody, 'parentId'>) {
@@ -89,7 +94,18 @@ async function runAnalysis(request: EventAnalysisRequest) {
   assertEventRequestBudget(request)
   const sampleCount = admitEventAnalysis(request)
   const sampling = eventSamplingReceipt(request.centerJulianDay, request.windowDays, sampleCount)
-  await ensureKernelFiles(request.ephemerisFiles ?? [])
+  const loadController = new AbortController()
+  activeLoadController = loadController
+  try { await ensureKernelFiles(request.ephemerisFiles ?? [], loadController.signal) }
+  catch (error) {
+    if (loadController.signal.aborted || cancelledRequestId === request.requestId || activeRequestId !== request.requestId) {
+      workerScope.postMessage({ type: 'cancelled', requestId: request.requestId } satisfies EventAnalysisResponse)
+      return
+    }
+    throw error
+  } finally {
+    if (activeLoadController === loadController) activeLoadController = null
+  }
   if (cancelledRequestId === request.requestId || activeRequestId !== request.requestId) {
     workerScope.postMessage({ type: 'cancelled', requestId: request.requestId } satisfies EventAnalysisResponse)
     return
@@ -116,7 +132,7 @@ async function runAnalysis(request: EventAnalysisRequest) {
   const sampleIntervalDays = sampling.nominalIntervalDays
 
   let refinements = 0
-  const refine = (candidate: SampledExtremum, mode: ExtremumMode, evaluate: (julianDay: number) => number) => {
+  const refine = async (candidate: SampledExtremum, mode: ExtremumMode, evaluate: (julianDay: number) => number) => {
     if (++refinements > MAX_EVENT_REFINEMENTS) throw new RangeError('Event refinement budget exceeded; request fewer bodies or a shorter window')
     const refined = refineBracketedExtremum(
       julianDays[candidate.bracketStartIndex],
@@ -124,6 +140,10 @@ async function runAnalysis(request: EventAnalysisRequest) {
       mode,
       evaluate,
     )
+    if (refinements % EVENT_REFINEMENTS_PER_COOPERATIVE_YIELD === 0) {
+      await yieldToWorker()
+      if (cancelledRequestId === request.requestId || activeRequestId !== request.requestId) throw new EventAnalysisCancelled()
+    }
     return {
       value: refined.value,
       julianDay: refined.julianDay,
@@ -195,7 +215,7 @@ async function runAnalysis(request: EventAnalysisRequest) {
       }
       if (request.eventKinds.includes('close-approach')) {
         for (const extremum of findSampledExtrema(distances, 'minimum')) {
-          const refined = refine(extremum, 'minimum', (julianDay) => {
+          const refined = await refine(extremum, 'minimum', (julianDay) => {
             const resolve = createBodyPositionResolver(bodiesById, julianDay)
             return vector3Magnitude(subtractVector3(resolve(bodyA.id), resolve(bodyB.id)))
           })
@@ -206,7 +226,7 @@ async function runAnalysis(request: EventAnalysisRequest) {
       }
       if (request.eventKinds.includes('conjunction')) {
         for (const extremum of findSampledExtrema(angles, 'minimum')) {
-          const refined = refine(extremum, 'minimum', (julianDay) => {
+          const refined = await refine(extremum, 'minimum', (julianDay) => {
             const resolve = createBodyPositionResolver(bodiesById, julianDay)
             const reference = resolve(request.referenceId)
             return angularSeparationDeg(subtractVector3(resolve(bodyA.id), reference), subtractVector3(resolve(bodyB.id), reference))
@@ -218,7 +238,7 @@ async function runAnalysis(request: EventAnalysisRequest) {
       }
       if (request.eventKinds.includes('opposition')) {
         for (const extremum of findSampledExtrema(angles, 'maximum')) {
-          const refined = refine(extremum, 'maximum', (julianDay) => {
+          const refined = await refine(extremum, 'maximum', (julianDay) => {
             const resolve = createBodyPositionResolver(bodiesById, julianDay)
             const reference = resolve(request.referenceId)
             return angularSeparationDeg(subtractVector3(resolve(bodyA.id), reference), subtractVector3(resolve(bodyB.id), reference))
@@ -267,7 +287,7 @@ async function runAnalysis(request: EventAnalysisRequest) {
       }
       if (findMinimum) {
         for (const extremum of findSampledExtrema(radii, 'minimum')) {
-          const refined = refine(extremum, 'minimum', (julianDay) => {
+          const refined = await refine(extremum, 'minimum', (julianDay) => {
             const resolve = createBodyPositionResolver(bodiesById, julianDay)
             return vector3Magnitude(subtractVector3(resolve(body.id), resolve(centralBodyId)))
           })
@@ -276,7 +296,7 @@ async function runAnalysis(request: EventAnalysisRequest) {
       }
       if (findMaximum) {
         for (const extremum of findSampledExtrema(radii, 'maximum')) {
-          const refined = refine(extremum, 'maximum', (julianDay) => {
+          const refined = await refine(extremum, 'maximum', (julianDay) => {
             const resolve = createBodyPositionResolver(bodiesById, julianDay)
             return vector3Magnitude(subtractVector3(resolve(body.id), resolve(centralBodyId)))
           })
@@ -298,10 +318,18 @@ async function runAnalysis(request: EventAnalysisRequest) {
 workerScope.onmessage = (event: MessageEvent<EventAnalysisRequest | EventAnalysisCancel>) => {
   const request = event.data
   if (request.type === 'cancel') {
-    cancelledRequestId = request.requestId
+    if (activeRequestId === request.requestId) {
+      cancelledRequestId = request.requestId
+      activeLoadController?.abort()
+    }
     return
   }
+  activeLoadController?.abort()
   void runAnalysis(request).catch((error: unknown) => {
+    if (cancelledRequestId === request.requestId || activeRequestId !== request.requestId || error instanceof EventAnalysisCancelled) {
+      workerScope.postMessage({ type: 'cancelled', requestId: request.requestId } satisfies EventAnalysisResponse)
+      return
+    }
     workerScope.postMessage({
       type: 'error',
       requestId: request.requestId,

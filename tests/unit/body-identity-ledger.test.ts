@@ -4,6 +4,8 @@ import { createIdentityLedger } from '../../scripts/lib/body-identity-ledger.mjs
 const record = (id: string, target: number) => ({ id, naifId: target, source: 'fixture', sourceRow: 0,
   parentId: 'naif:10', confirmation: 'confirmed', identityStatus: 'source-designation',
   ephemerisStatus: 'state-available-at-audit-epoch', kernelEvidence: { target,
+    sourceKernelSha256: 'a'.repeat(64), sourceChainSha256: 'b'.repeat(64),
+    sourceSegment: { kernelId: 'fixture', startEt: 0, endEt: 10, center: 0, frame: 1, type: 2 },
     stateAtAuditEpoch: { position: { x: 1, y: 2, z: 3 }, velocity: { x: 4, y: 5, z: 6 } } } })
 
 it('groups explicit targets without merging source namespaces or unresolved components', () => {

@@ -45,6 +45,34 @@ struct NativeSourceIdentityPage: Sendable {
         let limit: Int
         let items: [Row]
         let nextPageToken: String?
+
+        private enum CodingKeys: String, CodingKey {
+            case apiVersion, catalogVersion, inventoryManifestSha256, sourceRecords
+            case identityAssertions, uniqueBodySemantics, totalRecords, limit, items, nextPageToken
+        }
+
+        init(from decoder: Decoder) throws {
+            try Task.checkCancellation()
+            let fields = try decoder.container(keyedBy: CodingKeys.self)
+            apiVersion = try fields.decode(String.self, forKey: .apiVersion)
+            catalogVersion = try fields.decode(String.self, forKey: .catalogVersion)
+            inventoryManifestSha256 = try fields.decode(String.self, forKey: .inventoryManifestSha256)
+            sourceRecords = try fields.decode(Bool.self, forKey: .sourceRecords)
+            identityAssertions = try fields.decode(Bool.self, forKey: .identityAssertions)
+            uniqueBodySemantics = try fields.decode(String.self, forKey: .uniqueBodySemantics)
+            totalRecords = try fields.decode(UInt64.self, forKey: .totalRecords)
+            limit = try fields.decode(Int.self, forKey: .limit)
+            nextPageToken = try fields.decodeIfPresent(String.self, forKey: .nextPageToken)
+            var entries = try fields.nestedUnkeyedContainer(forKey: .items)
+            var rows: [Row] = []
+            while !entries.isAtEnd {
+                try Task.checkCancellation()
+                guard rows.count < NativeSourceIdentityPage.size else { throw NativeSourceIdentityFailure.invalid }
+                rows.append(try entries.decode(Row.self))
+            }
+            try Task.checkCancellation()
+            items = rows
+        }
     }
 
     let rows: [Row]
@@ -58,6 +86,7 @@ struct NativeSourceIdentityPage: Sendable {
     var inventoryHash: String { manifest.inventoryManifestSha256 }
 
     init(validating data: Data, catalogManifest: Data, base: URL, query: String) throws {
+        try Task.checkCancellation()
         self.base = try Self.validatedBase(base)
         try Self.validateQuery(query)
         self.query = query
@@ -73,6 +102,7 @@ struct NativeSourceIdentityPage: Sendable {
         }
         var ids = Set<String>()
         for row in page.items {
+            try Task.checkCancellation()
             guard Self.validText(row.id), Self.validText(row.name ?? "", optional: true),
                   Self.validText(row.designation ?? "", optional: true),
                   Self.validText(row.category), Self.validText(row.source),
@@ -93,6 +123,7 @@ struct NativeSourceIdentityPage: Sendable {
         guard Self.validText(next, optional: true, limit: 4096), next.isEmpty || !page.items.isEmpty else {
             throw NativeSourceIdentityFailure.invalid
         }
+        try Task.checkCancellation()
         rows = page.items; totalRecords = page.totalRecords; self.next = next
     }
 
@@ -128,8 +159,10 @@ struct NativeSourceIdentityPage: Sendable {
     }
 
     private static func decodeManifest(_ data: Data) throws -> Manifest {
+        try Task.checkCancellation()
         guard data.count <= maxManifestBytes else { throw NativeSourceIdentityFailure.invalid }
         let value = try JSONDecoder().decode(Manifest.self, from: data)
+        try Task.checkCancellation()
         guard value.apiVersion == "solar.api/v1", validText(value.catalogVersion),
               StateTileDecoder.isHash(value.catalogManifestSha256), StateTileDecoder.isHash(value.inventoryManifestSha256) else {
             throw NativeSourceIdentityFailure.invalid

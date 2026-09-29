@@ -1,4 +1,6 @@
-import { readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { expect, test, vi } from 'vitest'
 import { columns, parseCount, parseSources, queries, sha256, spatialChunks } from '../../scripts/lib/gaia-dr3.mjs'
 import { retrieveGaiaCone } from '../../scripts/fetch-gaia-cone.mjs'
@@ -8,7 +10,7 @@ const root = 'tests/fixtures/gaia-pleiades-20260923/'
 const manifest = JSON.parse(await readFile(root+'manifest.json', 'utf8'))
 const countBytes = await readFile(root+'count.csv'), rowBytes = await readFile(root+'rows.csv')
 
-function asyncTapFetcher() {
+function asyncTapFetcher(onPhase?: () => void | Promise<void>) {
   const jobs = new Map<string, boolean>()
   let nextJob = 0, disconnectPhaseOnce = true
   const fetcher = vi.fn(async (input: URL, init: RequestInit = {}) => {
@@ -19,6 +21,7 @@ function asyncTapFetcher() {
       return new Response(null,{status:303,headers:{location:`/tap-server/tap/async/${id}`}})
     }
     if (url.pathname.endsWith('/phase')) {
+      await onPhase?.()
       if (disconnectPhaseOnce) {
         disconnectPhaseOnce = false
         throw new TypeError('fetch failed',{cause:Object.assign(new Error('socket closed'),{code:'UND_ERR_SOCKET'})})
@@ -83,6 +86,79 @@ test('TOP plus one supplies bounded row-count evidence without a second archive 
   expect(form.get('MAXREC')).toBe(String(manifest.settings.maxRows+1))
   expect(form.get('QUERY')).toContain(`SELECT TOP ${manifest.settings.maxRows+1}`)
   expect(form.get('QUERY')).not.toMatch(/ORDER BY/i)
+})
+
+test('persists the exact UWS job and resumes it without submitting a duplicate query', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'solar-gaia-resume-')), receiptPath = join(directory, 'rows.tap-job.json')
+  try {
+    const initialFetcher = asyncTapFetcher(async () => {
+      const inFlightReceipt = JSON.parse(await readFile(receiptPath, 'utf8'))
+      expect(inFlightReceipt.queryName).toBe('rows')
+    })
+    await retrieveGaiaCone(manifest.settings, { fetcher: initialFetcher, jobReceiptPath: receiptPath })
+    const receipt = JSON.parse(await readFile(receiptPath, 'utf8'))
+    expect(receipt.format).toBe('solar-gaia-tap-job-v1')
+    expect(receipt.queryName).toBe('rows'); expect(receipt.jobUrl).toMatch(/\/tap\/async\/job-1$/)
+    expect(receipt.settings).toEqual(manifest.settings)
+
+    const resumeFetcher = vi.fn(async (input: URL, init: RequestInit = {}) => {
+      const url = new URL(String(input)), method = (init.method ?? 'GET').toUpperCase()
+      if (url.pathname.endsWith('/phase')) return new Response('COMPLETED')
+      if (url.pathname.endsWith('/results/result')) return new Response(rowBytes, { headers: { 'Content-Type': 'text/csv' } })
+      if (method === 'DELETE') return new Response(null, { status: 204 })
+      throw new Error(`Unexpected Gaia resume request: ${method} ${url}`)
+    })
+    const resumed = await retrieveGaiaCone(manifest.settings, { fetcher: resumeFetcher, resumeJobReceiptPath: receiptPath })
+    expect(resumed.rows).toHaveLength(manifest.rows); expect(resumed.rowSource.resumedFromReceipt).toBe(true)
+    expect(resumeFetcher.mock.calls.filter(call => call[1].method === 'POST')).toHaveLength(0)
+
+    const mismatchFetcher = vi.fn()
+    await expect(retrieveGaiaCone({ ...manifest.settings, maxRows: manifest.settings.maxRows+1 }, { fetcher: mismatchFetcher, resumeJobReceiptPath: receiptPath }))
+      .rejects.toThrow(/does not match/)
+    expect(mismatchFetcher).not.toHaveBeenCalled()
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+test('keeps completed Gaia rows when remote job deletion cannot be confirmed', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'solar-gaia-cleanup-')), receiptPath = join(directory, 'rows.tap-job.json')
+  let deleteAttempts = 0
+  const fetcher = vi.fn(async (input: URL, init: RequestInit = {}) => {
+    const url = new URL(String(input)), method = (init.method ?? 'GET').toUpperCase()
+    if (url.pathname === '/tap-server/tap/async' && method === 'POST') {
+      return new Response(null, { status: 303, headers: { location: '/tap-server/tap/async/job-cleanup-pending' } })
+    }
+    if (url.pathname.endsWith('/phase')) return new Response('COMPLETED')
+    if (url.pathname.endsWith('/results/result')) return new Response(rowBytes, { headers: { 'Content-Type': 'text/csv' } })
+    if (method === 'DELETE') { deleteAttempts++; return new Response(null, { status: 500 }) }
+    throw new Error(`Unexpected Gaia cleanup request: ${method} ${url}`)
+  })
+  const report = vi.spyOn(console, 'error').mockImplementation(() => {})
+  try {
+    const result = await retrieveGaiaCone(manifest.settings, { fetcher, jobReceiptPath: receiptPath })
+    expect(result.rows).toHaveLength(manifest.rows)
+    expect(result.rowSource.cleanupPending).toBe(true)
+    expect(deleteAttempts).toBe(4)
+    expect(JSON.parse(await readFile(receiptPath, 'utf8')).jobUrl).toMatch(/job-cleanup-pending$/)
+  } finally {
+    report.mockRestore()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('retains a saved UWS receipt without deleting a job when polling fails', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'solar-gaia-pending-')), receiptPath = join(directory, 'rows.tap-job.json')
+  try {
+    const fetcher = vi.fn(async (input: URL, init: RequestInit = {}) => {
+      const url = new URL(String(input)), method = (init.method ?? 'GET').toUpperCase()
+      if (url.pathname === '/tap-server/tap/async' && method === 'POST') return new Response(null, { status: 303, headers: { location: '/tap-server/tap/async/job-retained' } })
+      if (url.pathname.endsWith('/phase')) throw new Error('simulated phase read failure')
+      if (method === 'DELETE') return new Response(null, { status: 204 })
+      throw new Error(`Unexpected Gaia retained-job request: ${method} ${url}`)
+    })
+    await expect(retrieveGaiaCone(manifest.settings, { fetcher, jobReceiptPath: receiptPath })).rejects.toThrow(/phase read failure/)
+    expect(JSON.parse(await readFile(receiptPath, 'utf8')).jobUrl).toMatch(/job-retained$/)
+    expect(fetcher.mock.calls.filter(call => call[1].method === 'DELETE')).toHaveLength(0)
+  } finally { await rm(directory, { recursive: true, force: true }) }
 })
 
 test('sentinel manifest evidence is exact and legacy independent-count receipts remain supported', () => {

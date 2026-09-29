@@ -5,7 +5,7 @@ export const SOLAR_1PN = Object.freeze({
   model: 'solar-monopole-1pn' as const,
   speedOfLightKmPerSecond: 299792.458,
   maxExpansionParameter: 1e-4,
-  reference: 'https://cds.cern.ch/record/257177/files/P00019892.pdf',
+  reference: 'https://descanso.jpl.nasa.gov/monograph/series2/Descanso2_all.pdf',
   equation: 'mu/(c^2 r^3) [(4 mu/r - v^2) r + 4 (r.v) v]',
   approximation: 'Sun-relative position and velocity; added to prescribed barycentric Newtonian acceleration. Not full barycentric EIH dynamics.',
 })

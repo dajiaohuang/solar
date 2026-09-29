@@ -6,7 +6,8 @@ import { propagateDynamicsCovariance } from '../../src/engine/dynamics/covarianc
 import { parseSbdbCovariance } from '../../src/data/loaders/sbdbCovariance'
 import eros from '../fixtures/sbdb-eros-covariance.json'
 import bennu from '../fixtures/sbdb-bennu-covariance.json'
-import reference from '../fixtures/dynamics-covariance-reference.json'
+import comet67p from '../fixtures/sbdb-67p-covariance.json'
+import reference from '../fixtures/dynamics-covariance-reference-20260926.json'
 
 const bytes = readFileSync(`public/data/ephemerides/${DE440_DYNAMICS_SOURCE.path}`)
 const gmText = readFileSync('src/data/gm_de440.tpc', 'utf8')
@@ -47,6 +48,7 @@ test('freezes the source before yielding and rejects unmatched parameters, epoch
   source.nominal[0] = 0
   expect((await pending).source).toEqual(original)
   await expect(propagateDynamicsCovariance(dynamics, parseSbdbCovariance(bennu), 0)).rejects.toThrow('every additional source parameter')
+  await expect(propagateDynamicsCovariance(dynamics, parseSbdbCovariance(comet67p), 0)).rejects.toThrow('every additional source parameter')
   await expect(propagateDynamicsCovariance(dynamics, { ...original, solutionEpochTdb: original.solutionEpochTdb+1 }, 0)).rejects.toThrow('solution epoch')
   const controller = new AbortController()
   controller.abort()

@@ -29,21 +29,59 @@ function orderedInstalled() {
 // The status panel asks for many bodies at the same epoch. Share the immutable
 // pool snapshot and center cache rather than rebuilding them for every row.
 let currentResolver: { et: number; resolver: ReturnType<typeof createKernelResolver> } | null = null
-const pending = new Map<string, Promise<void>>()
+type PendingKernelLoad = { promise: Promise<void>; controller: AbortController; consumers: number; abandoned: boolean }
+const pending = new Map<string, PendingKernelLoad>()
 const failures = new Map<string, string>()
 const failureMessage = () => [...failures.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, message]) => message).join('\n') || null
 let activeLoads = 0
 let loadingCount = 0
-const loadWaiters: Array<() => void> = []
-async function withLoadSlot(load: () => Promise<void>) {
-  if (activeLoads < 4) activeLoads++
-  else await new Promise<void>(resolve => loadWaiters.push(resolve))
-  try { await load() }
-  finally {
-    const next = loadWaiters.shift()
-    if (next) next()
-    else activeLoads--
+type LoadWaiter = { signal: AbortSignal; resolve: () => void; reject: (reason: unknown) => void; onAbort: () => void }
+const loadWaiters: LoadWaiter[] = []
+function abortReason(signal: AbortSignal) {
+  return signal.reason instanceof Error ? signal.reason : new DOMException('Ephemeris loading cancelled', 'AbortError')
+}
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) throw abortReason(signal)
+}
+function waitWithAbort(promise: Promise<void>, signal?: AbortSignal) {
+  if (!signal) return promise
+  if (signal.aborted) return Promise.reject(abortReason(signal))
+  return new Promise<void>((resolve, reject) => {
+    const cleanup = () => signal.removeEventListener('abort', onAbort)
+    const onAbort = () => { cleanup(); reject(abortReason(signal)) }
+    signal.addEventListener('abort', onAbort, { once: true })
+    promise.then(value => { cleanup(); resolve(value) }, error => { cleanup(); reject(error) })
+    if (signal.aborted) onAbort()
+  })
+}
+const isAbortError = (error: unknown) => error instanceof Error && error.name === 'AbortError'
+function releaseLoadSlot() {
+  let next: LoadWaiter | undefined
+  while ((next = loadWaiters.shift())) {
+    next.signal.removeEventListener('abort', next.onAbort)
+    if (next.signal.aborted) { next.reject(abortReason(next.signal)); continue }
+    next.resolve()
+    return
   }
+  activeLoads--
+}
+async function withLoadSlot(load: () => Promise<void>, signal: AbortSignal) {
+  throwIfAborted(signal)
+  if (activeLoads < 4) activeLoads++
+  else await new Promise<void>((resolve, reject) => {
+    const waiter: LoadWaiter = { signal, resolve, reject, onAbort: () => {
+      const index = loadWaiters.indexOf(waiter)
+      if (index < 0) return
+      loadWaiters.splice(index, 1)
+      signal.removeEventListener('abort', waiter.onAbort)
+      reject(abortReason(signal))
+    } }
+    loadWaiters.push(waiter)
+    signal.addEventListener('abort', waiter.onAbort, { once: true })
+    if (signal.aborted) waiter.onAbort()
+  })
+  try { await load() }
+  finally { releaseLoadSlot() }
 }
 const listeners = new Set<() => void>()
 let snapshot = { revision: 0, loading: 0, error: null as string | null }
@@ -113,7 +151,7 @@ export async function installKernel(id: string, buffer: ArrayBuffer, publishNow 
 function registerKernel(file: KernelFile, kernel: SpkKernel, verifiedSha256: string, publishNow: boolean) {
   const id = file.id
   verifiedSources.set(kernel, { id, sha256: verifiedSha256 })
-  installed.set(id, Object.freeze({ id, kernel,
+  installed.set(id, Object.freeze({ id, kernel, sha256: verifiedSha256,
     solutionKernelIds: file.solutionKernelIds === undefined ? undefined : Object.freeze(file.solutionKernelIds.slice()),
     dependencyOnly: file.dependencyOnly }))
   orderedSnapshot = null
@@ -123,14 +161,19 @@ function registerKernel(file: KernelFile, kernel: SpkKernel, verifiedSha256: str
   if (publishNow) publish({ error: failureMessage() }, true)
 }
 
-async function loadFile(source: KernelFile) {
+async function loadFile(source: KernelFile, signal: AbortSignal) {
   const file = { ...source, solutionKernelIds: source.solutionKernelIds?.slice() }
   if (file.bytes <= 0 || file.bytes > 128 * 1024 * 1024 || !Number.isSafeInteger(file.bytes)) throw new Error('Invalid ephemeris size limit')
+  throwIfAborted(signal)
   if (installed.has(file.id)) return
   const controller = new AbortController()
+  const abort = () => controller.abort(signal.reason)
+  signal.addEventListener('abort', abort, { once: true })
+  if (signal.aborted) abort()
   const deadline = performance.now() + 60000
   const timer = setTimeout(() => controller.abort(), 60000)
   const checkDeadline = () => {
+    if (signal.aborted) throw abortReason(signal)
     if (controller.signal.aborted || performance.now() >= deadline) {
       controller.abort()
       throw new Error(`Ephemeris ${file.id}: loading deadline exceeded`)
@@ -172,6 +215,7 @@ async function loadFile(source: KernelFile) {
     publishSoon({ error: failureMessage() }, true)
   } finally {
     clearTimeout(timer)
+    signal.removeEventListener('abort', abort)
     try {
       if (!consumed) {
         controller.abort()
@@ -188,8 +232,58 @@ async function loadFile(source: KernelFile) {
   }
 }
 
-/** Exact file set is sent to workers: no hidden high/low precision divergence. */
-export async function ensureKernelFiles(ids: string[]) {
+function beginKernelLoad(file: KernelFile) {
+  loadingCount += 1
+  if (loadingCount === 1) publish({ loading: loadingCount })
+  else publishSoon()
+  const controller = new AbortController()
+  const task: PendingKernelLoad = { promise: Promise.resolve(), controller, consumers: 0, abandoned: false }
+  pending.set(file.id, task)
+  task.promise = withLoadSlot(() => loadFile(file, controller.signal), controller.signal).catch((error: unknown) => {
+    // A request that lost its final consumer is not a source failure and must
+    // not poison the persistent status or suppress a later retry.
+    if (!task.abandoned) {
+      failures.set(file.id, error instanceof Error ? error.message : String(error))
+      publishSoon({ error: failureMessage() })
+    }
+    throw error
+  }).finally(() => {
+    if (pending.get(file.id) === task) pending.delete(file.id)
+    loadingCount = Math.max(0, loadingCount - 1)
+    publishSoon({ error: failureMessage() })
+  })
+  return task
+}
+
+async function awaitKernelFile(file: KernelFile, signal?: AbortSignal) {
+  while (true) {
+    throwIfAborted(signal)
+    if (installed.has(file.id)) return
+    const task = pending.get(file.id) ?? beginKernelLoad(file)
+    task.consumers += 1
+    try {
+      await waitWithAbort(task.promise, signal)
+      return
+    } catch (error) {
+      if (signal?.aborted) throw abortReason(signal)
+      // A different caller may have abandoned the shared load just before this
+      // caller joined it. Wait for its cleanup, then create a fresh task.
+      if (!(task.abandoned && isAbortError(error))) throw error
+    } finally {
+      task.consumers -= 1
+      if (task.consumers === 0 && pending.get(file.id) === task && !task.abandoned) {
+        task.abandoned = true
+        task.controller.abort(new DOMException('No callers still require this ephemeris file', 'AbortError'))
+      }
+    }
+  }
+}
+
+/** Exact file set is sent to workers: no hidden high/low precision divergence.
+ * Cancellation stops this caller's remaining queue; a shared file download is
+ * aborted only after its final consumer leaves. */
+export async function ensureKernelFiles(ids: string[], signal?: AbortSignal) {
+  throwIfAborted(signal)
   const files = exactEphemerisFiles(EPHEMERIS_MANIFEST.files, ids)
   let cursor = 0
   let failed = false
@@ -197,26 +291,9 @@ export async function ensureKernelFiles(ids: string[]) {
   // not pay a complete serial network round trip each, nor all load at once.
   const consume = async () => {
     while (!failed && cursor < files.length) {
+      throwIfAborted(signal)
       const file = files[cursor++]
-      const id = file.id
-      if (installed.has(id)) continue
-      let promise = pending.get(id)
-      if (!promise) {
-        loadingCount += 1
-        if (loadingCount === 1) publish({ loading: loadingCount })
-        else publishSoon()
-        promise = withLoadSlot(() => loadFile(file)).catch((error: unknown) => {
-          failures.set(id, error instanceof Error ? error.message : String(error))
-          publishSoon({ error: failureMessage() })
-          throw error
-        }).finally(() => {
-          pending.delete(id)
-          loadingCount = Math.max(0, loadingCount - 1)
-          publishSoon({ error: failureMessage() })
-        })
-        pending.set(id, promise)
-      }
-      try { await promise } catch (error) { failed = true; throw error }
+      try { await awaitKernelFile(file, signal) } catch (error) { failed = true; throw error }
     }
   }
   try {

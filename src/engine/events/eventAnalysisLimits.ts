@@ -4,6 +4,7 @@ import type { CelestialBody } from '../../types'
 export const MAX_EVENT_BODIES = 48
 export const MAX_ANALYSIS_EVENTS = 10_000
 export const MAX_EVENT_REFINEMENTS = 50_000
+export const EVENT_REFINEMENTS_PER_COOPERATIVE_YIELD = 64
 const KINDS = new Set(['close-approach', 'conjunction', 'opposition', 'perihelion', 'aphelion', 'periapsis', 'apoapsis'])
 
 /** Admission policy, not an accuracy or completeness certificate. */

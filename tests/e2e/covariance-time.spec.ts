@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { expect, test } from './fixtures'
-import reference from '../fixtures/dynamics-covariance-reference.json' with { type: 'json' }
+import reference from '../fixtures/dynamics-covariance-reference-20260926.json' with { type: 'json' }
 
 test.beforeEach(async ({ page }) => { await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete')) })
 

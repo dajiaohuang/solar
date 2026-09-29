@@ -56,7 +56,7 @@ export function conicCovariancePlane(e: number, q: number, elapsedDays: number, 
   const derivatives = [0,1,2].map(axis => {
     const de = Number(axis === 0), dq = Number(axis === 1), dbeta = -de
     const dTau = axis === 1 ? -1.5*tau/q : axis === 2 ? -1/timeScale : 0
-    // F(u,e)=u+e*u^3*S((1-e)u^2)-tau=0; dF/du=radius/q.
+    // F(u,e)=u+e*u^3*S((1-e)u^2)-tau=0; dF/du=1+e*u^2*C=radius.
     const du = (dTau-de*(u**3*f.s-e*u**5*f.ds))/f.radius
     const dz = dbeta*u*u+2*beta*u*du
     const dw = 2*u*f.c*du+u*u*f.dc*dz

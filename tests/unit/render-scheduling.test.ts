@@ -27,4 +27,13 @@ describe('render scheduling and indexed pixel picking', () => {
       expect(index.nearest(x, y)).toBe(expected)
     }
   })
+  it('clears cached memberships before reusing the index for a new frame', () => {
+    const index = new ScreenPointIndex(64, 64, 2)
+    index.add(0, 10, 10)
+    expect(index.nearest(10, 10)).toBe(0)
+    index.clear()
+    index.add(1, 40, 40)
+    expect(index.nearest(10, 10)).toBe(-1)
+    expect(index.nearest(40, 40)).toBe(1)
+  })
 })

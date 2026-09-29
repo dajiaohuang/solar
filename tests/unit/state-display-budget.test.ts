@@ -6,8 +6,8 @@ import type { CelestialBody } from '../../src/types'
 
 const initial = (): StateDisplayBudget => ({ count: 100_000, fast: 0, slow: 0, adjustedAt: null, reason: 'initial' })
 const policy = resolveRenderBudgetPolicy('mobile', '3d', 'auto')
-const fast = { samples: 60, p50Ms: 16, p95Ms: 16.7, missedRatio: 0 }
-const slow = { ...fast, p95Ms: 22, missedRatio: .1 }
+const fast = { samples: 60, p50Ms: 16, p95Ms: 16.7, p99Ms: 16.7, missedRatio: 0 }
+const slow = { ...fast, p95Ms: 22, p99Ms: 22, missedRatio: .1 }
 
 describe('exact-state display budget', () => {
   it('grows only after four exercised windows and honors cooldown', () => {
@@ -18,12 +18,20 @@ describe('exact-state display budget', () => {
     expect(state.count).toBe(115_000)
     expect(advanceStateDisplayBudget(state, slow, policy, 200_000, 8999)).toBe(state)
     state = advanceStateDisplayBudget(state, slow, policy, 200_000, 9000)
-    state = advanceStateDisplayBudget(state, slow, policy, 200_000, 10_000)
+    state = advanceStateDisplayBudget(state, slow, policy, 200_000, 14_000)
     expect(state.count).toBe(85_000)
+  })
+  it('reduces on repeated P99 stalls even while the P95 and missed-frame ratio stay low', () => {
+    let state = initial()
+    const tail = { ...fast, p99Ms: 34, missedRatio: .01 }
+    state = advanceStateDisplayBudget(state, tail, policy, 200_000, 1000)
+    expect(state.slow).toBe(1)
+    state = advanceStateDisplayBudget(state, tail, policy, 200_000, 2000)
+    expect(state.count).toBe(75_000)
   })
   it('decreases immediately on severe pressure and never escapes bounds', () => {
     let state = initial()
-    for (let i = 0; i < 50; i++) state = advanceStateDisplayBudget(state, { ...slow, p95Ms: 40 }, policy, 300_000, i * 6000)
+    for (let i = 0; i < 50; i++) state = advanceStateDisplayBudget(state, { ...slow, p95Ms: 40, p99Ms: 40 }, policy, 300_000, i * 6000)
     expect(state.count).toBe(25_000)
     for (let i = 50; i < 550; i++) state = advanceStateDisplayBudget(state, fast, policy, 300_000, i * 6000)
     expect(state.count).toBe(250_000)
@@ -31,19 +39,19 @@ describe('exact-state display budget', () => {
   it('resets interrupted or invalid windows rather than carrying growth across them', () => {
     const state = { ...initial(), fast: 3, slow: 1 }
     expect(resetDisplayEvidence(state)).toEqual({ ...state, fast: 0, slow: 0 })
-    for (const window of [{ ...fast, samples: 0 }, { ...fast, p95Ms: NaN }, { ...fast, missedRatio: Infinity }]) {
+    for (const window of [{ ...fast, samples: 0 }, { ...fast, p95Ms: NaN }, { ...fast, p99Ms: NaN }, { ...fast, missedRatio: Infinity }]) {
       expect(advanceStateDisplayBudget(state, window, policy, 300_000, 1000).fast).toBe(0)
     }
   })
   it('keeps 2D and 3D states independent; fixed quality can still lower under pressure', () => {
     const spatial = initial(), planar = { ...initial(), count: 250_000 }
-    const reduced = advanceStateDisplayBudget(spatial, { ...slow, p95Ms: 50 }, policy, 300_000, 1000)
+    const reduced = advanceStateDisplayBudget(spatial, { ...slow, p95Ms: 50, p99Ms: 50 }, policy, 300_000, 1000)
     expect(reduced.count).toBe(75_000); expect(planar.count).toBe(250_000)
     const fixed = { ...policy, adaptive: false }
     let state = initial()
     for (let i = 0; i < 10; i++) state = advanceStateDisplayBudget(state, fast, fixed, 300_000, i * 6000)
     expect(state.count).toBe(100_000)
-    expect(advanceStateDisplayBudget(state, { ...slow, p95Ms: 50 }, fixed, 300_000, 80_000).count).toBe(75_000)
+    expect(advanceStateDisplayBudget(state, { ...slow, p95Ms: 50, p99Ms: 50 }, fixed, 300_000, 80_000).count).toBe(75_000)
   })
 })
 
@@ -53,8 +61,22 @@ describe('bounded renderer interval sampler', () => {
     expect(sampler.sample(1000)).toBeNull(); expect(sampler.sample(1000)).toBeNull()
     let result = null
     for (let i = 0; i < 30; i++) result = sampler.sample(34)
-    expect(result).toEqual({ samples: 30, p50Ms: 34, p95Ms: 34, missedRatio: .5 })
+    expect(result?.samples).toBe(30)
+    expect(result?.p50Ms).toBe(34); expect(result?.p95Ms).toBe(34); expect(result?.p99Ms).toBe(34)
+    expect(result?.missedRatio).toBeCloseTo(1 - (1000 / 60) / 34, 10)
     sampler.reset(); expect(sampler.sample(1000)).toBeNull()
+  })
+  it('uses interval-window throughput for sub-frame and mixed callback cadence', () => {
+    const sampler = new StateDisplaySampler()
+    let result = null
+    for (let i = 0; i < 60 && result === null; i++) result = sampler.sample(20)
+    expect(result?.missedRatio).toBeCloseTo(1 / 6, 10)
+    sampler.reset()
+    sampler.sample(1000); sampler.sample(1000)
+    result = null
+    for (let i = 0; i < 60 && result === null; i++) result = sampler.sample(i % 2 === 0 ? 10 : 25)
+    expect(result?.missedRatio).toBeGreaterThan(0.02)
+    expect(result?.missedRatio).toBeLessThan(0.06)
   })
   it('caps storage at 120 samples even on unusually fast callbacks and resets invalid input', () => {
     const sampler = new StateDisplaySampler()

@@ -103,8 +103,8 @@ func TestCatalogCloseWaitsForLazyKernelLoad(t *testing.T) {
 	if binding == nil {
 		t.Fatal("lazy kernel binding was not retained")
 	}
-	previousOpen := openKernelWithCache
-	defer func() { openKernelWithCache = previousOpen }()
+	previousOpen := openKernelWithVerifiedPages
+	defer func() { openKernelWithVerifiedPages = previousOpen }()
 	openStarted := make(chan struct{})
 	releaseOpen := make(chan struct{})
 	released := false
@@ -114,8 +114,8 @@ func TestCatalogCloseWaitsForLazyKernelLoad(t *testing.T) {
 		}
 	}()
 	var opened *spk.Kernel
-	openKernelWithCache = func(path string, pageSize int, maxBytes int64) (*spk.Kernel, error) {
-		kernel, openErr := previousOpen(path, pageSize, maxBytes)
+	openKernelWithVerifiedPages = func(path string, pageSize int, maxBytes int64, pageHashes [][32]byte) (*spk.Kernel, error) {
+		kernel, openErr := previousOpen(path, pageSize, maxBytes, pageHashes)
 		opened = kernel
 		close(openStarted)
 		<-releaseOpen
@@ -245,7 +245,7 @@ func TestOperationalStateUsesPackagedSPKAndCenterPool(t *testing.T) {
 	}
 	sum := sha256.Sum256(fixture)
 	wantHash := hex.EncodeToString(sum[:])
-	manifest := fmt.Sprintf(`{"id":"spk-test","profile":"full","contract":"Original SPK types 2/3/17/21","files":[{"id":"synthetic","path":"synthetic.bsp","targets":[-210001],"startEt":0,"endEt":1000,"solutionKernelIds":["synthetic"],"bytes":%d,"sha256":"%s"}]}`, len(fixture), hex.EncodeToString(sum[:]))
+	manifest := fmt.Sprintf(`{"id":"spk-test","profile":"full","contract":"Original SPK types 2/3/17/21","files":[{"id":"synthetic","path":"synthetic.bsp","targets":[-210001],"startEt":0,"endEt":1000,"solutionKernelIds":[],"bytes":%d,"sha256":"%s"}]}`, len(fixture), hex.EncodeToString(sum[:]))
 	if err := os.WriteFile(filepath.Join(d, "ephemeris-manifest.json"), []byte(manifest), 0600); err != nil {
 		t.Fatal(err)
 	}

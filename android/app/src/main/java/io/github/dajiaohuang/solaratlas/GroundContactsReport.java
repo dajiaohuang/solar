@@ -20,7 +20,7 @@ public final class GroundContactsReport {
         public final int foreground, background;
         public Request(String start, String end, double lon, double lat, double h, int front, int back) throws StateTileDecoder.ProtocolException {
             require(start != null && end != null && start.matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?Z") && end.matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?Z"), "Explicit UTC start and end required");
-            require(Double.isFinite(lon) && lon >= -180 && lon <= 180 && Double.isFinite(lat) && lat >= -90 && lat <= 90 && Double.isFinite(h), "Invalid station coordinates");
+            require(Double.isFinite(lon) && lon >= -180 && lon <= 180 && Double.isFinite(lat) && lat >= -90 && lat <= 90 && Double.isFinite(h) && h >= -1000 && h <= 100000, "WGS84 station requires longitude [-180,180], latitude [-90,90] degrees and ellipsoidal height [-1000,100000] meters");
             require(front > 0 && back > 0 && front != back && front != 399 && back != 399, "Distinct non-Earth NAIF targets required");
             startUTC = start; endUTC = end; longitude = lon; latitude = lat; height = h; foreground = front; background = back;
         }
@@ -40,6 +40,8 @@ public final class GroundContactsReport {
             List<?> times = list(c.get("bracketUtc"), 2); require(times.size() == 2, "Invalid UTC bracket");
             bracketStartUTC = utc(times.get(0)); bracketEndUTC = utc(times.get(1));
             require(low >= 0 && low <= elapsed && elapsed <= high && high <= duration && high-low <= .05+1e-9 && bracketStartUTC.compareTo(utc) <= 0 && bracketEndUTC.compareTo(utc) >= 0, "Unbounded contact bracket");
+            require(elapsed == low+(high-low)/2 && (!direction.equals("sampled-zero") || (low == elapsed && high == elapsed))
+                    && (low != elapsed || bracketStartUTC.equals(utc)) && (high != elapsed || bracketEndUTC.equals(utc)), "Inconsistent contact time/bracket evidence");
         }
     }
     public final List<Contact> contacts;
@@ -48,12 +50,12 @@ public final class GroundContactsReport {
         public final String kind;
         WindowEdge(Map<String,Object> value, String boundary, boolean start, double duration, List<Contact> contacts) throws StateTileDecoder.ProtocolException {
             kind = text(value.get("kind"));
-            require(Arrays.asList("search-boundary", "sampled-zero", "bracketed-contact").contains(kind), "Invalid overlap edge kind");
+            require(Arrays.asList("search-boundary", "sampled-zero", "sampled-overlap", "bracketed-contact").contains(kind), "Invalid overlap edge kind");
             Map<String,Object> fields = new HashMap<>(value); fields.put("boundary", boundary); fields.put("direction", kind.equals("sampled-zero") ? "sampled-zero" : start ? "enter" : "exit");
             position = new Contact(fields, duration);
             require(kind.equals("search-boundary") == (position.elapsed == 0 || position.elapsed == duration), "Invalid clipped edge");
             if (!kind.equals("bracketed-contact")) require(position.low == position.elapsed && position.high == position.elapsed, "Invalid sampled edge bracket");
-            if (!kind.equals("search-boundary")) {
+            if (!kind.equals("search-boundary") && !kind.equals("sampled-overlap")) {
                 boolean found = false;
                 for (Contact c : contacts) if (c.boundary.equals(boundary) && c.direction.equals(position.direction) && c.elapsed == position.elapsed && c.low == position.low && c.high == position.high
                         && c.utc.equals(position.utc) && c.bracketStartUTC.equals(position.bracketStartUTC) && c.bracketEndUTC.equals(position.bracketEndUTC)) found = true;

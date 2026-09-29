@@ -78,10 +78,10 @@ func (s *Server) observationContacts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer release()
-	result, err := observation.SearchGroundContacts(ctx, req, s.bodyRadii, s.earthOrientation, s.catalog.EvalBatchContext)
+	result, err := observation.SearchGroundContactsWithET(ctx, req, s.bodyRadii, s.earthOrientation, s.catalog.EvalBatchContextAtET)
 	if err != nil {
 		s.observationError(w, ctx, err)
 		return
 	}
-	s.json(w, 200, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "catalogManifestSha256": s.catalog.ManifestHash(), "result": result})
+	s.json(w, 200, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "catalogManifestSha256": s.catalog.ManifestHash(), "earthOrientation": s.earthOrientation.Manifest, "earthOrientationCoverageMjdUtc": s.earthOrientation.CoverageMJD(), "result": result})
 }

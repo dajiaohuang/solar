@@ -3,6 +3,7 @@ import type { createDe440Dynamics } from './de440Dynamics'
 import { cartesianStatesFromSourceOffsets } from '../ephemeris/covarianceStateSamples.ts'
 import { integrateAdaptive } from './adaptiveIntegrator.ts'
 import { summarizeEnsembleEndpoints } from './ensembleMoments.ts'
+import { DynamicsSampleError } from './sampleFailure.ts'
 
 const AU = 149597870.7, DAY = 86400
 const angle = 84381.448/3600*Math.PI/180, c = Math.cos(angle), s = Math.sin(angle)
@@ -23,11 +24,14 @@ export async function propagateSourceOffsetEnsemble(
   if (durationSeconds < evidence.elapsedRangeSeconds[0] || durationSeconds > evidence.elapsedRangeSeconds[1]) throw new RangeError('Ensemble endpoint is outside the frozen force window')
   const solar = evidence.masses.find(mass => mass.naifId === 10)!
   const sun0 = stateAt(10, 0), sun1 = stateAt(10, durationSeconds)
+  if (sun0.length !== 6 || sun1.length !== 6 || !sun0.every(Number.isFinite) || !sun1.every(Number.isFinite)) throw new RangeError('Ensemble requires finite prescribed Sun endpoint six-states')
   const initial = await cartesianStatesFromSourceOffsets(input, {
     au3PerDay2: solar.gmKm3PerSecond2*DAY**2/AU**3, source: solar.gmSource,
   }, offsets, signal)
   const finalStates = new Float64Array(initial.count*6).fill(NaN), valid = initial.valid.slice()
-  const failures = initial.failures.map(value => ({ ...value, stage: 'coordinates' as 'coordinates' | 'integration' }))
+  const failures = initial.failures.map(value => ({ ...value, stage: 'coordinates' as 'coordinates' | 'integration' | 'projection' }))
+  // Includes derivative calls that failed, unlike completed-integration diagnostics.
+  const forceEvaluationsByDraw = Array<number>(initial.count).fill(0)
   const numerics: { index: number; evaluations: number; accepted: number; rejected: number }[] = []
   const integrationSettings = { algorithm: 'dormand-prince-54-component-max-v1',
     absoluteTolerance: [1e-5,1e-5,1e-5,1e-12,1e-12,1e-12], relativeTolerance: 1e-12,
@@ -53,12 +57,17 @@ export async function propagateSourceOffsetEnsemble(
       barycentric[start+1] = (c*sample[start+1]-s*sample[start+2])*scale+sun0[start+1]
       barycentric[start+2] = (s*sample[start+1]+c*sample[start+2])*scale+sun0[start+2]
     }
+    const before = evaluations
+    let stage: 'integration' | 'projection' = 'integration'
     try {
+      if (!barycentric.every(Number.isFinite)) throw new DynamicsSampleError('Ensemble barycentric initial state exceeds numeric range')
       const result = await integrateAdaptive({ initial: barycentric, duration: durationSeconds,
         derivative: (time, state, output) => {
           if (evaluations >= MAX_EVALUATIONS) throw budgetError
           evaluations++; derivative(time, state, output)
         }, ...integrationSettings, signal })
+      numerics.push({ index, evaluations: result.evaluations, accepted: result.accepted, rejected: result.rejected })
+      stage = 'projection'
       const relative = result.state.map((value,i) => value-sun1[i]), final = new Float64Array(6)
       for (const start of [0,3]) {
         const scale = (start === 0 ? 1 : DAY)/AU
@@ -66,18 +75,19 @@ export async function propagateSourceOffsetEnsemble(
         final[start+1] = (c*relative[start+1]+s*relative[start+2])*scale
         final[start+2] = (-s*relative[start+1]+c*relative[start+2])*scale
       }
-      if (!final.every(Number.isFinite)) throw new RangeError('Ensemble endpoint exceeds numeric range')
+      if (!final.every(Number.isFinite)) throw new DynamicsSampleError('Ensemble endpoint exceeds numeric range')
       finalStates.set(final,index*6)
-      numerics.push({ index, evaluations: result.evaluations, accepted: result.accepted, rejected: result.rejected })
     } catch (error) {
       signal?.throwIfAborted()
-      if (error === budgetError) throw error
+      if (!(error instanceof DynamicsSampleError)) throw error
       valid[index] = 0
-      failures.push({ index, stage: 'integration', reason: error instanceof Error ? error.message : String(error) })
+      failures.push({ index, stage, reason: error.message })
+    } finally {
+      forceEvaluationsByDraw[index] = evaluations-before
     }
   }
   signal?.throwIfAborted()
-  return { initial, finalStates, valid, failures, moments: summarizeEnsembleEndpoints(finalStates,valid), numerics, integrationSettings, evaluations, maxEvaluations: MAX_EVALUATIONS,
+  return { initial, finalStates, valid, failures, moments: summarizeEnsembleEndpoints(finalStates,valid,signal), numerics, forceEvaluationsByDraw, integrationSettings, evaluations, maxEvaluations: MAX_EVALUATIONS,
     forceModel: evidence, frame: initial.frame, units: initial.stateUnits,
     finalEpoch: { referenceEpochTdb: initial.epochTdb, elapsedTdbSeconds: durationSeconds },
     method: 'nonlinear-joint-source-offsets-restricted-dynamics-v1',
@@ -85,5 +95,6 @@ export async function propagateSourceOffsetEnsemble(
       'Only six-parameter sources are supported; additional fitted force parameters must not be dropped.',
       'Failed draws retain original offsets and indices with valid=0 and NaN endpoints. Never silently omit them from probability denominators.',
       'Finite ensemble endpoints only; no event search, probability, uncertainty calibration or continuous collision detection.',
+      'Indexed force counts include failed derivative calls; source setup and endpoint frame translations are outside that count. Completed integration diagnostics can remain when endpoint projection fails.',
       'Numerical tolerances are not physical orbit error bounds.'] }
 }

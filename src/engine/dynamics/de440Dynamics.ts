@@ -17,23 +17,28 @@ function twoSum(a: number, b: number): readonly [number, number] {
  * pool, UTC conversion, ecliptic rotation or approximate fallback enters it. */
 export async function createDe440Dynamics(options: {
   spkBytes: ArrayBuffer; gmText: string; referenceEpochTdb: number;
+  /** True only when this call receives the sole reference to the source buffer. */
+  takeSpkBytesOwnership?: boolean;
   elapsedRangeSeconds: readonly [number, number];
   exclusionKm: Readonly<Record<number, number>>;
   solarRelativity?: boolean;
   solarRadiationPressure?: SolarRadiationPressure;
 }) {
-  const { referenceEpochTdb, gmText } = options
+  const { referenceEpochTdb, gmText, takeSpkBytesOwnership = false } = options
   const solarRelativity = options.solarRelativity ?? false
   const solarRadiationPressure = options.solarRadiationPressure === undefined ? undefined : parseSolarRadiationPressure(options.solarRadiationPressure)
-  if (typeof solarRelativity !== 'boolean') throw new RangeError('Solar relativity adoption must be boolean')
+  if (typeof solarRelativity !== 'boolean' || typeof takeSpkBytesOwnership !== 'boolean') throw new RangeError('Invalid dynamics source or force-model option')
   const [start, end] = options.elapsedRangeSeconds
   const exclusions = { ...options.exclusionKm }
   const referenceEt = (referenceEpochTdb - 2451545) * 86400
   if (![referenceEt, start, end].every(Number.isFinite) || start > 0 || end < 0 || end < start ||
       referenceEt + start < DE440_DYNAMICS_SOURCE.startEt || referenceEt + end > DE440_DYNAMICS_SOURCE.endEt) throw new RangeError('Dynamics interval must include the initial epoch inside pinned DE440 coverage')
   if (options.spkBytes.byteLength !== DE440_DYNAMICS_SOURCE.bytes) throw new RangeError('Unexpected DE440 kernel size')
-  // Copy before the first await: the caller may release/change its input.
-  const bytes = options.spkBytes.slice(0), gmBytes = new TextEncoder().encode(gmText)
+  // Defensively own borrowed inputs before the first await. Dedicated workers
+  // may transfer their sole source-buffer reference to avoid a second 5.3 MiB
+  // copy; the ownership contract forbids any later mutation by the caller.
+  const bytes = takeSpkBytesOwnership ? options.spkBytes : options.spkBytes.slice(0)
+  const gmBytes = new TextEncoder().encode(gmText)
   const [spkHash, gmHash] = await Promise.all([digest(bytes), digest(gmBytes.buffer)])
   if (spkHash !== DE440_DYNAMICS_SOURCE.sha256 || gmHash !== DE440_DYNAMICS_SOURCE.gmSha256) throw new Error('DE440 dynamics source checksum mismatch')
   const kernel = new SpkKernel(bytes)

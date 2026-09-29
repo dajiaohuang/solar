@@ -21,7 +21,12 @@ async function drain() {
       const deadline = setTimeout(() => controller.abort(new Error('Current-state worker deadline exceeded')), DEADLINE_MS)
       try {
         if (!admission) throw new Error('Current-state tile admission is not configured')
-        const result = await loadCurrentStateObservation({ ...job.request, signal: controller.signal, acquireTile: admission.acquire })
+        const result = await loadCurrentStateObservation({ ...job.request, signal: controller.signal, acquireTile: admission.acquire,
+          onInitialPartial: partial => {
+            if (active?.requestId === job.requestId && !controller.signal.aborted) {
+              scope.postMessage({ type: 'partial', requestId: job.requestId, partial } satisfies CurrentStateWorkerResponse)
+            }
+          } })
         controller.signal.throwIfAborted()
         scope.postMessage({ type: 'result', requestId: job.requestId, result } satisfies CurrentStateWorkerResponse, currentStateObservationTransfers(result))
       } catch (error) {

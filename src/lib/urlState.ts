@@ -1,5 +1,7 @@
 import type { AppRoute, ElementPlotMode } from '../state/ui-store'
 import type { BodyId, DatasetMode, MagnitudeStatus, RenderQuality } from '../types'
+import { matchingMissionEpoch } from './missionEpoch'
+import type { AnalysisEphemerisPolicy } from '../engine/ephemeris/analysisEphemeris'
 
 export const SCENE_URL_VERSION = 4 as const
 type SceneUrlVersion = typeof SCENE_URL_VERSION
@@ -36,8 +38,11 @@ export type AppUrlState = {
   guide?: boolean
   missionFrom?: BodyId
   missionTo?: BodyId
+  missionEphemerisPolicy?: AnalysisEphemerisPolicy
   departureDate?: string
   arrivalDate?: string
+  departureJulianDay?: number
+  arrivalJulianDay?: number
   focused?: BodyId
   plot?: ElementPlotMode
   aRange?: [number, number]
@@ -116,8 +121,13 @@ export function encodeUrlState(state: AppUrlState) {
   if (state.guide) params.set('guide', '1')
   if (state.missionFrom) params.set('from', state.missionFrom)
   if (state.missionTo) params.set('to', state.missionTo)
+  if (state.missionEphemerisPolicy === 'prefer-spk' || state.missionEphemerisPolicy === 'require-spk') params.set('missionEphemeris', state.missionEphemerisPolicy)
   if (state.departureDate) params.set('depart', state.departureDate)
   if (state.arrivalDate) params.set('arrive', state.arrivalDate)
+  const departureEpoch = matchingMissionEpoch(state.departureJulianDay, state.departureDate)
+  const arrivalEpoch = matchingMissionEpoch(state.arrivalJulianDay, state.arrivalDate)
+  if (departureEpoch !== undefined) params.set('departJd', String(departureEpoch))
+  if (arrivalEpoch !== undefined) params.set('arriveJd', String(arrivalEpoch))
   if (state.focused) params.set('focused', state.focused)
   if (state.plot) params.set('plot', state.plot)
   setRange(params, 'a', state.aRange)
@@ -202,8 +212,12 @@ export function decodeUrlState(search = typeof window === 'undefined' ? '' : win
   if (missionFrom) state.missionFrom = missionFrom
   const missionTo = params.get('to')
   if (missionTo) state.missionTo = missionTo
+  const missionEphemerisPolicy = params.get('missionEphemeris')
+  if (missionEphemerisPolicy === 'prefer-spk' || missionEphemerisPolicy === 'require-spk') state.missionEphemerisPolicy = missionEphemerisPolicy
   state.departureDate = parseIsoDate(params.get('depart'))
   state.arrivalDate = parseIsoDate(params.get('arrive'))
+  state.departureJulianDay = matchingMissionEpoch(finite(params.get('departJd')), state.departureDate)
+  state.arrivalJulianDay = matchingMissionEpoch(finite(params.get('arriveJd')), state.arrivalDate)
   const focused = params.get('focused')
   if (focused) state.focused = focused
   const plot = params.get('plot') as ElementPlotMode | null

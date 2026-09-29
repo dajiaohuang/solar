@@ -397,7 +397,7 @@ async function installMockCatalog(page: Page | null, options: {
     await register(`**/data/asteroids/releases/${manifest.version}/catalog-sample-${size}.bin`, { body: Buffer.from(profileNumeric.buffer), contentType: 'application/octet-stream' })
   }
   await register(`**/data/asteroids/releases/${manifest.version}/catalog-summary.json`, { json: {
-    schemaVersion: 2, datasetMode: manifest.datasetMode, totalCount: entries.length,
+    schemaVersion: 3, datasetMode: manifest.datasetMode, totalCount: entries.length,
     categoryCounts: manifest.categoryCounts,
     magnitudeKnownCount: entries.filter(entry => entry.absoluteMagnitude !== undefined).length,
     magnitudeUnknownCount: entries.filter(entry => entry.absoluteMagnitude === undefined).length,
@@ -442,6 +442,26 @@ test('lazy-loads catalog samples only inside catalog workspaces and only once', 
   await openCatalog(page)
   await expect.poll(() => sampleRequests.length).toBe(2)
   expect(new Set(sampleRequests).size).toBe(2)
+})
+
+test('streams the filtered catalog into both Explorer renderers and releases it on stop', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await installMockCatalog(page, { precomputed: true, profileSamples: { desktop: [0], mobile: [0] } })
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&catalogCloud=1&quality=max&dataset=mock-content-lite&catalogSample=desktop&catalogSampleCount=1&lang=en')
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
+  await page.getByLabel('Catalog population', { exact: true }).selectOption('100000')
+  await expect(page.getByTestId('explorer-catalog-status')).toContainText('Computed 3 · Primary draw 3', { timeout: 20000 })
+  await expect(page.locator('.frame-label small')).toContainText('catalog 3 / 3')
+  const viewSwitch = page.locator('.simulation-bar .segmented-control')
+  await viewSwitch.getByRole('button', { name: '2D', exact: true }).click()
+  await expect(page.locator('.trajectory-canvas')).toBeVisible()
+  await expect(page.getByTestId('explorer-catalog-status')).toContainText('Computed 3 · Primary draw 3')
+  await page.getByRole('button', { name: 'Stop and return to sample', exact: true }).click()
+  await expect(page.getByTestId('explorer-catalog-status')).toHaveCount(0)
+  await expect(page.locator('.frame-label small')).toContainText('catalog 1 / 1')
+  expect(errors).toEqual([])
 })
 
 test('renders an explicitly enabled reproducible catalog cloud without reloading it across view changes', async ({ page }, testInfo) => {
@@ -662,6 +682,12 @@ test('streams an expanded source snapshot beyond the sample and restores its act
     const selection = (window as SelectionWindow).heldSelections
     return selection.latest > 0 && selection.received === selection.latest
   })).toBe(true)
+  const firstSelection = await page.evaluate(() => (window as SelectionWindow).heldSelections.latest)
+  await page.getByRole('spinbutton', { name: 'Map radius (AU)', exact: true }).fill('30')
+  await expect.poll(() => page.evaluate(first => {
+    const selection = (window as SelectionWindow).heldSelections
+    return selection.latest > first && selection.received === selection.latest
+  }, firstSelection)).toBe(true)
   expect(requests.length).toBe(afterLoad)
   const readPixels = () => stream.evaluate(element => {
     const gl = (element as HTMLCanvasElement).getContext('webgl')!
@@ -675,7 +701,7 @@ test('streams an expanded source snapshot beyond the sample and restores its act
     extension.loseContext()
   })
   await expect(page.locator('.catalog-render-status')).toBeVisible()
-  // Deliver the real worker's now-obsolete selection while no GPU exists.
+  // Deliver both now-obsolete worker selections while no GPU exists.
   await page.evaluate(() => (window as SelectionWindow).heldSelections.release())
   await expect(stream).toHaveAttribute('data-phase', 'complete')
   await page.evaluate(() => (window as Window & { streamContext: WEBGL_lose_context }).streamContext.restoreContext())

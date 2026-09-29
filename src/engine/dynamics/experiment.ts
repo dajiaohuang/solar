@@ -4,6 +4,7 @@ import { withIdentityTransition } from './pointMassGravity.ts'
 import { createTrajectoryRecorder } from './trajectorySamples.ts'
 import { orbitalTimescaleComparison, stateToConicDiagnostics } from '../ephemeris/osculating.ts'
 import { parseSolarRadiationPressure } from './solarRadiationPressure.ts'
+import { createTransitionMatrixIntegrity } from './transitionMatrixIntegrity.ts'
 
 export function parseDynamicsInitial(value: unknown) {
   // Own the complete source record, including optional provenance metadata.
@@ -30,7 +31,7 @@ export async function integrateDynamicsExperiment(dynamics: Awaited<ReturnType<t
   const sample = (elapsed: number, state: ArrayLike<number>) => {
     const sun = stateAt(10, elapsed)
     const relative = Array.from({ length: 6 }, (_, i) => state[i]-sun[i])
-    return { elapsedTdbSeconds: elapsed, stateKmKmPerSecond: Array.from(state).slice(0, 6),
+    return { elapsedTdbSeconds: elapsed, stateKmKmPerSecond: [state[0], state[1], state[2], state[3], state[4], state[5]],
       sunStateKmKmPerSecond: Array.from(sun),
       heliocentricPositionKm: relative.slice(0, 3), heliocentricVelocityKmPerSecond: relative.slice(3),
       osculating: stateToConicDiagnostics({ x: relative[0], y: relative[1], z: relative[2] }, { x: relative[3], y: relative[4], z: relative[5] }, solarGm) }
@@ -39,19 +40,22 @@ export async function integrateDynamicsExperiment(dynamics: Awaited<ReturnType<t
   const trajectory = createTrajectoryRecorder(initialSample)
   const { state, ...numerics } = await integrateAdaptive({ initial: initialState, duration: durationSeconds,
     derivative, absoluteTolerance, relativeTolerance: 1e-12, initialStep: 3600, maxStep: 86400, maxAttempts: 20000, signal,
-    onAcceptedStep: (elapsed, state) => trajectory.accept(() => sample(elapsed, state)) })
+    onAcceptedStepView: (elapsed, state) => trajectory.accept(() => sample(elapsed, state)) })
+  const transitionMatrixValues = Array.from(state.subarray(6))
+  const transitionMatrixIntegrity = await createTransitionMatrixIntegrity(transitionMatrixValues)
   let refinement = null
   if (compareRefinement) {
     const refined = await integrateAdaptive({ initial: initialState, duration: durationSeconds,
       derivative, absoluteTolerance: absoluteTolerance.map(value => value/10), relativeTolerance: 1e-13,
       initialStep: 1800, maxStep: 43200, maxAttempts: 20000, signal })
+    const transitionMatrixValues = Array.from(refined.state.subarray(6))
     refinement = { relativeTolerance: refined.relativeTolerance, absoluteTolerance: Array.from(refined.absoluteTolerance),
       initialStep: refined.initialStep, maxStep: refined.maxStep, maxAttempts: refined.maxAttempts,
       accepted: refined.accepted, rejected: refined.rejected, attempts: refined.attempts, evaluations: refined.evaluations,
       smallestAcceptedStep: refined.smallestAcceptedStep, largestAcceptedStep: refined.largestAcceptedStep,
       maxAcceptedErrorRatio: refined.maxAcceptedErrorRatio,
       finalStateKmKmPerSecond: Array.from(refined.state.subarray(0, 6)),
-      transitionMatrixValues: Array.from(refined.state.subarray(6)),
+      transitionMatrixValues, transitionMatrixIntegrity: await createTransitionMatrixIntegrity(transitionMatrixValues),
       endpointPositionDifferenceKm: Math.hypot(...Array.from(state.subarray(0, 3), (value, i) => value-refined.state[i])),
       endpointVelocityDifferenceKmPerSecond: Math.hypot(...Array.from(state.subarray(3, 6), (value, i) => value-refined.state[i+3])),
       maxNormalizedTransitionDifference: Math.max(...Array.from(state.subarray(6), (value, i) => Math.abs(value-refined.state[i+6])/(1+Math.abs(refined.state[i+6])))),
@@ -65,7 +69,8 @@ export async function integrateDynamicsExperiment(dynamics: Awaited<ReturnType<t
     trajectory: trajectory.finish(sample(durationSeconds, state)), refinement,
     finalEpoch: { referenceEpochTdb: evidence.referenceEpochTdb, elapsedTdbSeconds: durationSeconds },
     finalStateKmKmPerSecond: Array.from(state.subarray(0, 6)),
-    transitionMatrix: { layout: 'row-major; d(final J2000 SSB state)/d(initial J2000 SSB state)', dimension: 6, values: Array.from(state.subarray(6)) },
+    transitionMatrix: { layout: 'row-major; d(final J2000 SSB state)/d(initial J2000 SSB state)', dimension: 6,
+      values: transitionMatrixValues, integrity: transitionMatrixIntegrity },
     numerics: { ...numerics, absoluteTolerance: Array.from(numerics.absoluteTolerance) },
     uncertainty: 'Not computed. A fixed-parameter transition matrix is not the complete source-fit covariance.' }
 }

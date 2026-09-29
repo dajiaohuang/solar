@@ -12,7 +12,8 @@ const queue = createBackendTrajectoryQueue((job, signal, onProgress) => {
 }, {
   progress: (requestId, progress) => scope.postMessage({ type: 'progress', requestId, progress } satisfies BackendTrajectoryWorkerResponse),
   result: (requestId, result) => scope.postMessage({ type: 'result', requestId, result } satisfies BackendTrajectoryWorkerResponse,
-    [result.packed.offsets.buffer, result.packed.coordinates.buffer, result.audit.epochsTdbJd.buffer, result.audit.sourceOrdinals.buffer]),
+    [result.packed.offsets.buffer, result.packed.coordinates.buffer, result.audit.epochsTdbJd.buffer, result.audit.sourceOrdinals.buffer,
+      ...(result.packed.breakBefore ? [result.packed.breakBefore.buffer] : [])]),
   error: (requestId, error) => scope.postMessage({ type: 'error', requestId, error: error instanceof Error ? error.message : String(error) } satisfies BackendTrajectoryWorkerResponse),
 })
 scope.onmessage = (event: MessageEvent<BackendTrajectoryWorkerRequest>) => {

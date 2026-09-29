@@ -32,11 +32,11 @@ func TestCancellationDuringKernelOpenDiscardsUnpublishedKernelAndAllowsRetry(t *
 	binding := &kernelBinding{id: "synthetic", path: path, bytes: int64(len(raw)), sha256: hex.EncodeToString(sum[:])}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	previous := openKernelWithCache
-	defer func() { openKernelWithCache = previous }()
+	previous := openKernelWithVerifiedPages
+	defer func() { openKernelWithVerifiedPages = previous }()
 	var opened *spk.Kernel
-	openKernelWithCache = func(path string, pageSize int, maxBytes int64) (*spk.Kernel, error) {
-		kernel, err := previous(path, pageSize, maxBytes)
+	openKernelWithVerifiedPages = func(path string, pageSize int, maxBytes int64, pageHashes [][32]byte) (*spk.Kernel, error) {
+		kernel, err := previous(path, pageSize, maxBytes, pageHashes)
 		opened = kernel
 		cancel()
 		return kernel, err
@@ -54,7 +54,7 @@ func TestCancellationDuringKernelOpenDiscardsUnpublishedKernelAndAllowsRetry(t *
 	// Path-backed kernels have no persistent file descriptor; Close does not
 	// invalidate their immutable state. The binding must release its reference
 	// instead of retaining this cancelled loader's cache.
-	openKernelWithCache = previous
+	openKernelWithVerifiedPages = previous
 	kernel, err = binding.kernelFor(context.Background(), spk.DefaultCacheBytes)
 	if err != nil || kernel == nil || !binding.verified {
 		t.Fatalf("healthy request could not retry: %v", err)

@@ -1,13 +1,19 @@
 import { chunkStatePlanIds, fetchStateTiles, frameFromStateTileProjection, projectStateTileFrame, readStateTileJson, StateTileSnapshot, validateStateTileManifest,
-  type StateTile, type StateTileFrameProjection, type StateTileManifest, type StateTileSnapshotTransfer } from './stateTiles'
+  MAX_STATE_PLAN_BODIES, STATE_TILE_CONCURRENCY, type StateTile, type StateTileFrameProjection, type StateTileManifest, type StateTileSnapshotTransfer } from './stateTiles'
 import { fetchStateTilePlan } from './stateTileClient'
+import { createStateTileAdmissionPool } from './stateTileAdmission'
 import type { BackendFrame } from './backendFrames'
 import type { BodyId, CelestialBody } from '../types'
 import { requireSourcePin, type SourceScenePin } from './sourceScene'
+import { ADVERTISED_QUEUE_RETRY, fetchRetryableResponse } from './retryableHttpResponse'
 
 export type CurrentStateObservationRequest = {
   base: string
   selectedIds: BodyId[]
+  /** Selected identities that fit in the reference-first initial plan. */
+  initialSelectedIds?: BodyId[]
+  /** Stream an initial frame only when no complete frame exists for this identity. */
+  publishInitialPartial?: boolean
   requestedIds: Map<BodyId, string>
   referenceIds: BodyId[]
   epochTdbJd: number
@@ -26,22 +32,100 @@ export type CurrentStateObservation = {
   epochUtcJd: number
 }
 
-export async function loadCurrentStateObservation(params: CurrentStateObservationRequest & { signal: AbortSignal; fetcher?: typeof fetch; acquireTile?: import('./stateTileAdmission').AcquireStateTile }): Promise<CurrentStateObservation> {
+export type CurrentStateObservationPartial = {
+  selectedIds: BodyId[]
+  observation: CurrentStateObservation
+}
+
+// Pipeline plan preparation without increasing the two-tile transfer permit.
+const STATE_PLAN_CONCURRENCY = 2
+
+export async function loadCurrentStateObservation(params: CurrentStateObservationRequest & {
+  signal: AbortSignal
+  fetcher?: typeof fetch
+  acquireTile?: import('./stateTileAdmission').AcquireStateTile
+  onInitialPartial?: (partial: CurrentStateObservationPartial) => void
+}): Promise<CurrentStateObservation> {
   params.signal.throwIfAborted()
+  // Keep every parallel plan, ID binding and final projection on the same
+  // selection/source/epoch snapshot across network and admission awaits.
+  params = { ...params, selectedIds: [...params.selectedIds], initialSelectedIds: params.initialSelectedIds ? [...params.initialSelectedIds] : undefined, referenceIds: [...params.referenceIds],
+    requestedIds: new Map(params.requestedIds), sourcePin: params.sourcePin ? { ...params.sourcePin } : undefined }
   if (!Number.isFinite(params.epochTdbJd) || !Number.isFinite(params.epochUtcJd) || !params.requestedIds.size) throw new Error('Invalid current-state observation request')
   const fetcher = params.fetcher ?? fetch
-  const manifest = validateStateTileManifest(await readStateTileJson(await fetcher(`${params.base}/v1/catalog/manifest`, { signal: params.signal }), 'State catalog manifest'))
+  const manifest = validateStateTileManifest(await readStateTileJson(await fetchRetryableResponse(fetcher, `${params.base}/v1/catalog/manifest`, { signal: params.signal }, params.signal, ADVERTISED_QUEUE_RETRY), 'State catalog manifest', undefined, params.signal))
   if (params.sourcePin) requireSourcePin(params.sourcePin, params.base, manifest)
+  const chunks = chunkStatePlanIds([...params.requestedIds.values()], Math.min(MAX_STATE_PLAN_BODIES, manifest.maxPlanIds), manifest.maxPlanBytes, params.epochTdbJd)
+  const firstPlanIds = new Set(chunks[0] ?? [])
+  const initialSelectedIds = (params.initialSelectedIds ?? (params.publishInitialPartial === true ? params.selectedIds.filter(bodyId => {
+    const backendId = params.requestedIds.get(bodyId)
+    return backendId !== undefined && firstPlanIds.has(backendId.trim())
+  }) : [])).slice(0, MAX_STATE_PLAN_BODIES)
+  const initialReferencesReady = params.referenceIds.every(referenceId => {
+    const backendId = params.requestedIds.get(referenceId)
+    return backendId !== undefined && firstPlanIds.has(backendId.trim())
+  })
+  const initialSelectionReady = initialSelectedIds.length > 0 && initialSelectedIds.every(bodyId => {
+    const backendId = params.requestedIds.get(bodyId)
+    return backendId !== undefined && firstPlanIds.has(backendId.trim())
+  })
+  const canPublishInitialPartial = params.publishInitialPartial === true && chunks.length > 1 && Boolean(params.onInitialPartial)
+    && initialReferencesReady && initialSelectionReady
+  const acquireTile = params.acquireTile ?? createStateTileAdmissionPool(STATE_TILE_CONCURRENCY).acquire
+  const results: Array<{ recordCount: number; tiles: StateTile[] } | undefined> = new Array(chunks.length)
+  const planController = new AbortController()
+  const cancelPlans = () => planController.abort(params.signal.reason)
+  params.signal.addEventListener('abort', cancelPlans, { once: true })
+  if (params.signal.aborted) cancelPlans()
+  let cursor = 0, failed = false, firstError: unknown, initialPublished = false
+  const loadNextPlan = async () => {
+    while (!failed && !planController.signal.aborted) {
+      const index = cursor++
+      const bodyIds = chunks[index]
+      if (!bodyIds) return
+      try {
+        const { plan } = await fetchStateTilePlan({ ...params, bodyIds, manifest, signal: planController.signal })
+        const planTiles = await fetchStateTiles({ base: params.base, plan, signal: planController.signal, fetcher, acquireTile })
+        planController.signal.throwIfAborted()
+        results[index] = { recordCount: plan.recordCount, tiles: planTiles }
+        if (canPublishInitialPartial && index === 0 && !initialPublished && params.onInitialPartial) {
+          const partialRequestedIds = new Map<BodyId, string>()
+          for (const bodyId of params.referenceIds) {
+            const backendId = params.requestedIds.get(bodyId)
+            if (backendId && firstPlanIds.has(backendId.trim())) partialRequestedIds.set(bodyId, backendId.trim())
+          }
+          for (const bodyId of initialSelectedIds) {
+            const backendId = params.requestedIds.get(bodyId)
+            if (backendId && firstPlanIds.has(backendId.trim())) partialRequestedIds.set(bodyId, backendId.trim())
+          }
+          const snapshot = new StateTileSnapshot(planTiles, partialRequestedIds)
+          const projections = params.referenceIds.map(referenceId => projectStateTileFrame({ bodyIds: initialSelectedIds, referenceId, evidence: snapshot }))
+          params.signal.throwIfAborted()
+          params.onInitialPartial({ selectedIds: initialSelectedIds, observation: { manifest, planRecordCounts: [plan.recordCount], snapshot: snapshot.transfer(),
+            projections, epochTdbJd: params.epochTdbJd, epochUtcJd: params.epochUtcJd } })
+          initialPublished = true
+          if (failed) planController.abort(firstError)
+        }
+      } catch (error) {
+        if (!failed) { failed = true; firstError = error }
+        if (index === 0 || initialPublished || !canPublishInitialPartial) planController.abort(firstError)
+      }
+    }
+  }
+  try {
+    // At most two plan requests are prepared in parallel. Tile transfers still
+    // pass through the page-wide or same-sized standalone admission pool.
+    await Promise.all(Array.from({ length: Math.min(STATE_PLAN_CONCURRENCY, chunks.length) }, () => loadNextPlan()))
+    params.signal.throwIfAborted()
+    if (failed) throw firstError
+  } finally {
+    params.signal.removeEventListener('abort', cancelPlans)
+  }
   const tiles: StateTile[] = [], planRecordCounts: number[] = []
-  // Plans are serial; each plan admits at most two tile transfers. No partial
-  // selection is published if a later plan fails or cancellation is observed.
-  for (const bodyIds of chunkStatePlanIds([...params.requestedIds.values()])) {
-    params.signal.throwIfAborted()
-    const { plan } = await fetchStateTilePlan({ ...params, bodyIds, manifest })
-    const planTiles = await fetchStateTiles({ base: params.base, plan, signal: params.signal, fetcher, acquireTile: params.acquireTile })
-    params.signal.throwIfAborted()
-    planRecordCounts.push(plan.recordCount)
-    for (const tile of planTiles) tiles.push(tile)
+  for (const result of results) {
+    if (!result) throw new Error('Current-state plan batch is incomplete')
+    planRecordCounts.push(result.recordCount)
+    for (const tile of result.tiles) tiles.push(tile)
   }
   const snapshot = new StateTileSnapshot(tiles, params.requestedIds)
   const projections = params.referenceIds.map(referenceId => projectStateTileFrame({ bodyIds: params.selectedIds, referenceId, evidence: snapshot }))

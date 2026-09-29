@@ -74,6 +74,15 @@ type ContactResult struct {
 // SearchGroundContacts freezes one SPK identity session across every reception,
 // emission and refinement epoch. Any failure rejects the whole job.
 func SearchGroundContacts(ctx context.Context, req ContactRequest, shapes *bodyshape.Table, eop *earthorientation.Table, evaluate Evaluator) (*ContactResult, error) {
+	return searchGroundContactsRequest(ctx, req, shapes, eop, &session{ctx: ctx, evaluate: evaluate, sources: map[string]*Source{}, identities: map[string]string{}})
+}
+
+// SearchGroundContactsWithET resolves every reception/emission epoch in seconds past J2000 TDB.
+func SearchGroundContactsWithET(ctx context.Context, req ContactRequest, shapes *bodyshape.Table, eop *earthorientation.Table, evaluate ETEvaluator) (*ContactResult, error) {
+	return searchGroundContactsRequest(ctx, req, shapes, eop, &session{ctx: ctx, evaluateET: evaluate, sources: map[string]*Source{}, identities: map[string]string{}})
+}
+
+func searchGroundContactsRequest(ctx context.Context, req ContactRequest, shapes *bodyshape.Table, eop *earthorientation.Table, sess *session) (*ContactResult, error) {
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
@@ -84,7 +93,6 @@ func SearchGroundContacts(ctx context.Context, req ContactRequest, shapes *bodys
 	if eop == nil {
 		return nil, fail("earth_orientation_unavailable", "no pinned IERS Earth orientation snapshot is configured")
 	}
-	sess := &session{ctx: ctx, evaluate: evaluate, sources: map[string]*Source{}, identities: map[string]string{}}
 	warnings := map[string]bool{}
 	result, err := searchGroundContacts(ctx, w, func(t float64) (SphereGeometry, error) {
 		point, err := evaluateOccultationSession(ctx, OccultationRequest{UTC: w.utc(t), Station: req.Station, ForegroundID: req.ForegroundID, BackgroundID: req.BackgroundID, Aberration: req.Aberration}, shapes, eop, sess)
@@ -121,7 +129,8 @@ func SearchGroundContacts(ctx context.Context, req ContactRequest, shapes *bodys
 func searchGroundContacts(ctx context.Context, window taiWindow, evaluate func(float64) (SphereGeometry, error)) (*ContactResult, error) {
 	out := &ContactResult{Model: "earth-station-cn-spherical-contacts-v1", DurationSeconds: window.duration, Contacts: []GroundContact{}, SampledOverlapWindows: []GroundOverlapWindow{}, Sources: []Source{}, Warnings: []string{}, PossibleMissedEvents: true,
 		Contract: map[string]any{"timeAxis": "TAI-elapsed-SI-seconds", "stepSeconds": ContactStepSeconds, "toleranceSeconds": ContactToleranceSeconds,
-			"maxEvaluations": MaxWindowEvaluations, "maxContacts": MaxGroundContacts, "coverage": "sampled-sign-changes-only", "physicalTimingUncertaintySeconds": nil,
+			"futureLeapSecondUncertaintyStartUTC": futureLeapSecondUncertaintyStartUTC,
+			"maxEvaluations":                      MaxWindowEvaluations, "maxContacts": MaxGroundContacts, "coverage": "sampled-sign-changes-only", "physicalTimingUncertaintySeconds": nil,
 			"limitations": []string{"Grazing contacts and multiple crossings between samples may be missed; no contacts does not prove no event.",
 				"Source failures, cancellation and budgets reject the whole job, not a partial success.",
 				"CN spherical center reception only; no apparent limb aberration/deflection, topography, refraction or visibility certification.",
@@ -146,9 +155,15 @@ func searchGroundContacts(ctx context.Context, window taiWindow, evaluate func(f
 			spans[k] = append(spans[k], GroundOverlapWindow{Boundary: boundary, Start: start, End: end})
 		}
 	}
+	// Share exact sample times between internal/external boundary refinement.
+	// Reset per grid interval so storage does not grow with the search duration.
+	cache := make(map[float64]SphereGeometry)
 	sample := func(t float64) (SphereGeometry, error) {
 		if err := ctx.Err(); err != nil {
 			return SphereGeometry{}, err
+		}
+		if value, ok := cache[t]; ok {
+			return value, nil
 		}
 		if out.Evaluations >= MaxWindowEvaluations {
 			return SphereGeometry{}, fail("search_budget_exceeded", "ground contact evaluation budget exhausted")
@@ -161,7 +176,11 @@ func searchGroundContacts(ctx context.Context, window taiWindow, evaluate func(f
 		if !finite(v.ExternalGapRadians) || !finite(v.InternalGapRadians) {
 			return v, fail("invalid_contact_gap", "nonfinite contact geometry")
 		}
-		return v, ctx.Err()
+		if err := ctx.Err(); err != nil {
+			return v, err
+		}
+		cache[t] = v
+		return v, nil
 	}
 	add := func(boundary, direction string, lo, hi float64) error {
 		if len(out.Contacts) >= MaxGroundContacts {
@@ -176,6 +195,13 @@ func searchGroundContacts(ctx context.Context, window taiWindow, evaluate func(f
 			return g.ExternalGapRadians
 		}
 		return g.InternalGapRadians
+	}
+	sampledEdge := func(at, gapRadians float64) GroundWindowEdge {
+		kind := "sampled-overlap"
+		if gapRadians == 0 {
+			kind = "sampled-zero"
+		}
+		return edge(at, at, kind)
 	}
 	names := [2]string{"external", "internal"}
 	left, err := sample(0)
@@ -193,6 +219,7 @@ func searchGroundContacts(ctx context.Context, window taiWindow, evaluate func(f
 	loTime := 0.0
 	steps := int(math.Ceil(window.duration / ContactStepSeconds))
 	for i := 1; i <= steps; i++ {
+		clear(cache)
 		hiTime := math.Min(float64(i)*ContactStepSeconds, window.duration)
 		right, err := sample(hiTime)
 		if err != nil {
@@ -200,7 +227,7 @@ func searchGroundContacts(ctx context.Context, window taiWindow, evaluate func(f
 		}
 		for k, name := range names {
 			a, b := gap(left, k), gap(right, k)
-			leftEdge, rightEdge := edge(loTime, loTime, "sampled-zero"), edge(hiTime, hiTime, "sampled-zero")
+			leftEdge, rightEdge := sampledEdge(loTime, a), sampledEdge(hiTime, b)
 			if a < 0 && b <= 0 || a <= 0 && b < 0 {
 				overlap(k, name, leftEdge, rightEdge)
 			}

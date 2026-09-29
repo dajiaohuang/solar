@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { loadAsteroidSample, loadCatalogSummary } from '../lib/catalogLoader'
 import { resolveCatalogSampleProfile } from '../lib/catalogSampleProfile'
 import { classifyRenderDevice } from '../lib/renderBudget'
@@ -15,6 +15,8 @@ export function catalogSampleSize(): CatalogSampleProfile {
 }
 
 export function useCatalogSample(enabled = true) {
+  const [viewportProfile, setViewportProfile] = useState<CatalogSampleProfile>(() =>
+    typeof window === 'undefined' && PRODUCT_PROFILE !== 'preview' ? 'desktop' : catalogSampleSize())
   const manifest = catalogStore.useStore((state) => state.manifest)
   const baseSampleKey = catalogStore.useStore((state) => state.baseSampleKey)
   const requestedSampleProfile = catalogStore.useStore((state) => state.requestedSampleProfile)
@@ -23,13 +25,26 @@ export function useCatalogSample(enabled = true) {
   const requestedSampleInvalid = catalogStore.useStore((state) => state.requestedSampleInvalid)
 
   useEffect(() => {
+    if (PRODUCT_PROFILE === 'preview') return undefined
+    const coarseLandscape = window.matchMedia('(pointer: coarse) and (max-width: 1180px)')
+    const updateProfile = () => setViewportProfile(catalogSampleSize())
+    window.addEventListener('resize', updateProfile)
+    coarseLandscape.addEventListener('change', updateProfile)
+    updateProfile()
+    return () => {
+      window.removeEventListener('resize', updateProfile)
+      coarseLandscape.removeEventListener('change', updateProfile)
+    }
+  }, [])
+
+  useEffect(() => {
     if (!enabled || !manifest) return
     const resolution = resolveCatalogSampleProfile(manifest, {
       profile: requestedSampleProfile,
       count: requestedSampleCount,
       countRaw: requestedSampleCountRaw,
       invalid: requestedSampleInvalid,
-    }, catalogSampleSize())
+    }, viewportProfile)
     if (resolution.error) {
       catalogActions.patch({
         baseSampleKey: null,
@@ -66,5 +81,5 @@ export function useCatalogSample(enabled = true) {
       controller.abort()
     })
     return () => { controller.abort(); catalogActions.patch({ sampleLoading: false }) }
-  }, [baseSampleKey, enabled, manifest, requestedSampleCount, requestedSampleCountRaw, requestedSampleInvalid, requestedSampleProfile])
+  }, [baseSampleKey, enabled, manifest, requestedSampleCount, requestedSampleCountRaw, requestedSampleInvalid, requestedSampleProfile, viewportProfile])
 }

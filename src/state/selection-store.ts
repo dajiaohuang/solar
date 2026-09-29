@@ -48,6 +48,7 @@ function persistCollections(collections: Record<string, BodyId[]>) {
 export const selectionActions = {
   selectSourcePage(page: SourceIdentityPage, base: string) {
     const identity = sourceSceneFromPage(page), pin = sourcePinFor(identity, base)
+    if (page.base !== pin.base) throw new Error('Source page belongs to another backend')
     if (!availabilityActions.require(sceneAvailability({ bodies: identity.ids, sourceSelection: JSON.stringify(identity) }))) return false
     const retained = Object.fromEntries(Object.entries(selectionStore.getState().catalogBodies).filter(([, body]) => body.source !== 'source-inventory'))
     selectionStore.setState({ catalogBodies: { ...retained, ...Object.fromEntries(page.items.map(row => [row.id, sourceRecordBody(row.id, row)])) },

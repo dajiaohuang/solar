@@ -1,14 +1,29 @@
+import { trajectoryScanIntervals } from './trajectoryEvents.ts'
+
 type Gaps = { externalGapRadians: number; internalGapRadians: number }
+export const OCCULTATION_MAX_EVALUATIONS = 20_000
+
+export function occultationScanIntervalCount(
+  durationSeconds: number,
+  maxStepSeconds: number,
+  startSeconds = 0,
+  endSeconds = startSeconds + durationSeconds,
+  maxEvaluations = OCCULTATION_MAX_EVALUATIONS,
+) {
+  return trajectoryScanIntervals(durationSeconds, maxStepSeconds, startSeconds, endSeconds, maxEvaluations)
+}
+
 export type OccultationContact = {
   boundary: 'external' | 'internal'
   direction: 'enter' | 'exit' | 'sampled-zero'
   elapsedTdbSeconds: number
+  scanBracketSeconds: [number, number]
   bracketSeconds: [number, number]
 }
 type WindowEdge = {
   elapsedTdbSeconds: number
   bracketSeconds: [number, number]
-  kind: 'search-boundary' | 'sampled-zero' | 'bracketed-contact'
+  kind: 'search-boundary' | 'sampled-overlap' | 'sampled-zero' | 'bracketed-contact'
 }
 export type SampledOverlapWindow = {
   boundary: 'external' | 'internal'
@@ -27,13 +42,13 @@ export async function findOccultationContacts(options: {
   maxEvaluations?: number; maxContacts?: number; signal?: AbortSignal
 }) {
   const { evaluate, startSeconds, endSeconds, maxStepSeconds, toleranceSeconds, signal,
-    maxEvaluations = 20000, maxContacts = 512 } = options
+    maxEvaluations = OCCULTATION_MAX_EVALUATIONS, maxContacts = 512 } = options
   const duration = endSeconds-startSeconds
   if (![startSeconds, endSeconds, duration, maxStepSeconds, toleranceSeconds].every(Number.isFinite) || duration < 0 || maxStepSeconds <= 0 || toleranceSeconds <= 0 || toleranceSeconds > maxStepSeconds ||
       !Number.isSafeInteger(maxEvaluations) || maxEvaluations < 2 || maxEvaluations > 200000 || !Number.isSafeInteger(maxContacts) || maxContacts < 1 || maxContacts > 4096) throw new RangeError('Invalid bounded occultation search settings')
   // A positive duration/max-step ratio can underflow to zero. Every nonempty
   // window still needs both endpoint evaluations and one scan interval.
-  const intervals = duration === 0 ? 0 : Math.max(1, Math.ceil(duration/maxStepSeconds))
+  const intervals = occultationScanIntervalCount(duration, maxStepSeconds, startSeconds, endSeconds, maxEvaluations)
   if (!Number.isSafeInteger(intervals) || intervals+1 > maxEvaluations) throw new RangeError('Occultation scan exceeds the evaluation budget')
   let evaluations = 0, maximumScanIntervalSeconds = 0
   const cancelled = () => { if (signal?.aborted) throw new DOMException('Occultation search cancelled', 'AbortError') }
@@ -49,10 +64,10 @@ export async function findOccultationContacts(options: {
   }
   const contacts: OccultationContact[] = []
   const spans: Record<'external' | 'internal', { start: WindowEdge; end: WindowEdge }[]> = { external: [], internal: [] }
-  const edge = (time: number, kind: WindowEdge['kind'], bracket: [number, number] = [time, time]): WindowEdge => ({
-    elapsedTdbSeconds: time, bracketSeconds: [...bracket],
-    kind: time === startSeconds || time === endSeconds ? 'search-boundary' : kind,
-  })
+  const edge = (time: number, kind: WindowEdge['kind'], bracket: [number, number] = [time, time]): WindowEdge => {
+    const clippedSample = (time === startSeconds || time === endSeconds) && bracket[0] === time && bracket[1] === time
+    return { elapsedTdbSeconds: time, bracketSeconds: [...bracket], kind: clippedSample ? 'search-boundary' : kind }
+  }
   const overlap = (boundary: 'external' | 'internal', start: WindowEdge, end: WindowEdge) => {
     if (!(end.elapsedTdbSeconds > start.elapsedTdbSeconds)) return
     const previous = spans[boundary].at(-1)
@@ -66,15 +81,19 @@ export async function findOccultationContacts(options: {
   const boundaries = ['external', 'internal'] as const
   let leftTime = startSeconds, left = await sample(startSeconds)
   const startGapsRadians = { ...left }
-  for (const boundary of boundaries) if (left[boundary] === 0) add({ boundary, direction: 'sampled-zero', elapsedTdbSeconds: leftTime, bracketSeconds: [leftTime, leftTime] })
+  for (const boundary of boundaries) if (left[boundary] === 0) add({ boundary, direction: 'sampled-zero', elapsedTdbSeconds: leftTime,
+    scanBracketSeconds: [leftTime, leftTime], bracketSeconds: [leftTime, leftTime] })
   for (let i = 1; i <= intervals; i++) {
     const rightTime = i === intervals ? endSeconds : startSeconds+(duration/intervals)*i
     if (!(rightTime > leftTime)) throw new RangeError('Occultation scan interval is below the epoch numerical resolution')
-    maximumScanIntervalSeconds = Math.max(maximumScanIntervalSeconds, rightTime-leftTime)
+    const scanInterval = rightTime - leftTime
+    if (scanInterval > maxStepSeconds) throw new RangeError('Occultation scan interval exceeds its configured maximum')
+    maximumScanIntervalSeconds = Math.max(maximumScanIntervalSeconds, scanInterval)
     const right = await sample(rightTime)
     for (const boundary of boundaries) {
       let crossing: WindowEdge | undefined
-      if (right[boundary] === 0) add({ boundary, direction: 'sampled-zero', elapsedTdbSeconds: rightTime, bracketSeconds: [rightTime, rightTime] })
+      if (right[boundary] === 0) add({ boundary, direction: 'sampled-zero', elapsedTdbSeconds: rightTime,
+        scanBracketSeconds: [rightTime, rightTime], bracketSeconds: [rightTime, rightTime] })
       else if (left[boundary] !== 0 && (left[boundary] < 0) !== (right[boundary] < 0)) {
         let lo = leftTime, hi = rightTime, lowValue = left[boundary]
         while (hi-lo > toleranceSeconds) {
@@ -84,12 +103,14 @@ export async function findOccultationContacts(options: {
           if (value === 0) { lo = middle; hi = middle; break }
           if ((value < 0) === (lowValue < 0)) { lo = middle; lowValue = value } else hi = middle
         }
-        add({ boundary, direction: left[boundary] > 0 ? 'enter' : 'exit', elapsedTdbSeconds: lo+(hi-lo)/2, bracketSeconds: [lo, hi] })
+        add({ boundary, direction: left[boundary] > 0 ? 'enter' : 'exit', elapsedTdbSeconds: lo+(hi-lo)/2,
+          scanBracketSeconds: [leftTime, rightTime], bracketSeconds: [lo, hi] })
         crossing = edge(lo+(hi-lo)/2, 'bracketed-contact', [lo, hi])
       }
       // Infer spans from sampled signs, never from an assumed alternation of
       // contacts. A sampled zero alone does not establish a positive-duration event.
-      const leftEdge = edge(leftTime, 'sampled-zero'), rightEdge = edge(rightTime, 'sampled-zero')
+      const leftEdge = edge(leftTime, left[boundary] === 0 ? 'sampled-zero' : 'sampled-overlap')
+      const rightEdge = edge(rightTime, right[boundary] === 0 ? 'sampled-zero' : 'sampled-overlap')
       if (left[boundary] < 0 && right[boundary] <= 0 || left[boundary] <= 0 && right[boundary] < 0) overlap(boundary, leftEdge, rightEdge)
       else if (crossing) {
         if (left[boundary] < 0) overlap(boundary, leftEdge, crossing)

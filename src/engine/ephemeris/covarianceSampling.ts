@@ -1,4 +1,5 @@
 import type { SbdbCovariance } from '../../data/loaders/sbdbCovariance'
+import { compensatedFloat64Dot, COVARIANCE_MATRIX_ARITHMETIC } from '../numerics/compensatedMatrixProduct.ts'
 
 /** Owned correlation factor and source-unit scales. Accepted transpose pairs
  * are averaged; source bytes stay unchanged and no jitter/clipping is applied. */
@@ -18,8 +19,7 @@ export function factorSbdbCovariance(source: SbdbCovariance) {
     if (!Number.isFinite(forward) || !Number.isFinite(backward)) throw new RangeError('Covariance correlation exceeds numeric range')
     if (Math.abs(forward - backward) > 1e-12) throw new RangeError('Asymmetric covariance cannot be sampled')
     maximumCorrelationAsymmetry = Math.max(maximumCorrelationAsymmetry, Math.abs(forward-backward))
-    let value = (forward + backward) / 2
-    for (let k = 0; k < j; k++) value -= lower[i][k] * lower[j][k]
+    const value = (forward + backward) / 2 - compensatedFloat64Dot(lower[i], lower[j], j)
     if (!Number.isFinite(value)) throw new RangeError('Covariance factorization exceeds numeric range')
     if (i === j) {
       if (!(value > 0)) throw new RangeError('Covariance factorization is not positive definite; no repair was applied')
@@ -31,14 +31,14 @@ export function factorSbdbCovariance(source: SbdbCovariance) {
   for (let i = 0; i < dimension; i++) for (let j = 0; j <= i; j++) {
     const low = Math.min(sigmas[i], sigmas[j]), high = Math.max(sigmas[i], sigmas[j])
     const expected = (source.matrix[i][j]/low/high + source.matrix[j][i]/low/high)/2
-    let reconstructed = 0
-    for (let k = 0; k <= j; k++) reconstructed += lower[i][k]*lower[j][k]
+    const reconstructed = compensatedFloat64Dot(lower[i], lower[j], j + 1)
     const residual = Math.abs(reconstructed-expected)
     if (!Number.isFinite(residual)) throw new RangeError('Covariance factor reconstruction exceeds numeric range')
     maximumCorrelationReconstructionResidual = Math.max(maximumCorrelationReconstructionResidual,residual)
   }
   const factorization = {
-    method: 'correlation-symmetry-average-cholesky-v1',
+    method: 'correlation-symmetry-average-compensated-cholesky-v2',
+    arithmetic: COVARIANCE_MATRIX_ARITHMETIC,
     dimension, correlationSymmetryTolerance: 1e-12,
     maximumCorrelationAsymmetry, maximumCorrelationReconstructionResidual,
     symmetrization: 'Average normalized transpose pairs within the correlation symmetry tolerance; original source matrix is unchanged.',
@@ -55,8 +55,8 @@ export function sampleSbdbCovariance(source: SbdbCovariance, count: number, seed
     throw new RangeError('Gaussian sampling requires 1 to 10000 draws and an unsigned 32-bit seed')
   }
   const { lower, sigmas, dimension, factorization } = factorSbdbCovariance(source)
-  // Mulberry32's 32-bit operations and Box-Muller mapping are versioned in
-  // the result. This is a reproducible simulation stream, not cryptography.
+  // The random stream, compensated Cholesky and offset dot products are all
+  // versioned in the result. This is reproducible simulation, not cryptography.
   let state = seed >>> 0, spare: number | undefined
   const uniform = () => {
     state = (state + 0x6d2b79f5) >>> 0
@@ -74,13 +74,11 @@ export function sampleSbdbCovariance(source: SbdbCovariance, count: number, seed
   for (let sample = 0; sample < count; sample++) {
     for (let i = 0; i < dimension; i++) independent[i] = normal()
     for (let i = 0; i < dimension; i++) {
-      let value = 0
-      for (let j = 0; j <= i; j++) value += lower[i][j] * independent[j]
-      offsets[sample * dimension + i] = value * sigmas[i]
+      offsets[sample * dimension + i] = compensatedFloat64Dot(lower[i], independent, i + 1) * sigmas[i]
       if (!Number.isFinite(offsets[sample * dimension + i])) throw new RangeError('Gaussian source offset exceeds numeric range; no replacement draw was generated')
     }
   }
-  return { algorithm: 'mulberry32-box-muller-cholesky-correlation-v2' as const,
+  return { algorithm: 'mulberry32-box-muller-compensated-cholesky-correlation-v3' as const,
     distribution: 'joint-gaussian-in-source-parameter-offsets' as const,
     count, dimension, seed, offsets, labels: source.labels.slice(), units: source.units.slice(), nominal: source.nominal.slice(),
     factorization,

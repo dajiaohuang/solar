@@ -3,7 +3,8 @@ import * as THREE from 'three'
 import { describe, expect, it, vi } from 'vitest'
 import { CurrentPositions, concatCurrentPositions, currentPositionDetails, EMPTY_CURRENT_POSITIONS, packedCurrentPositions, selectCurrentPositions } from '../../src/lib/currentPositions'
 import { selectStateDisplayPositions } from '../../src/lib/stateDisplayBudget'
-import { buildGeometry } from '../../src/lib/trajectoryGeometry2d'
+import { ScreenPointIndex } from '../../src/lib/screenPointIndex'
+import { buildGeometry, createGeometryBufferPool } from '../../src/lib/trajectoryGeometry2d'
 import { updateCurrentPointGeometry } from '../../src/lib/pointGeometry3d'
 import { createProjection, projectPoint } from '../../src/lib/viewProjection'
 import type { CelestialBody } from '../../src/types'
@@ -59,6 +60,7 @@ describe('scalar current-position views', () => {
     const projection = createProjection(4000, 1280, 720, 40, { x: .25, y: -.75 })
     const geometry = buildGeometry(projection, bodies[0], [], source, false, false, [], 1, 1, 1, [], new Float64Array(), 0, { x: 0, y: 0 })
     expect(geometry.pointPositions).toBeInstanceOf(Float32Array)
+    expect(geometry.pointColors).toBeInstanceOf(Uint8Array)
     expect(geometry.pointPositions.length).toBe((count + 1) * 2)
     expect(geometry.pointColors.length).toBe((count + 1) * 4)
     expect(geometry.pointSizes.length).toBe(count + 1)
@@ -73,21 +75,86 @@ describe('scalar current-position views', () => {
     expect(rows).not.toHaveBeenCalled()
   })
 
+  it('reuses the 2D point and picking inputs when only line overlays change', () => {
+    const bodies = [body(0), body(1)]
+    const source = packedCurrentPositions(bodies, new Float64Array([1, 2, 3, 4, 5, 6]))
+    const projection = createProjection(40, 800, 600, 36, { x: 0, y: 0 })
+    const buffers = createGeometryBufferPool()
+    const pointIndex = new ScreenPointIndex(800, 600, source.length)
+    const first = buildGeometry(projection, bodies[0], [], source, false, false, [], 1, 1, 1, [], new Float64Array(), 0, { x: 0, y: 0 }, buffers, pointIndex)
+    const bodyReads = vi.spyOn(source, 'bodyAt')
+    const clearIndex = vi.spyOn(pointIndex, 'clear')
+    const addToIndex = vi.spyOn(pointIndex, 'add')
+    const cachedPoints = { pointPositions: first.pointPositions, pointColors: first.pointColors, pointSizes: first.pointSizes }
+
+    const overlayFrame = buildGeometry(projection, bodies[0], [], source, true, false, [], 1, 1, 1, [], new Float64Array(), 0, { x: 0, y: 0 }, buffers, pointIndex, cachedPoints)
+    expect(overlayFrame.pointPositions).toBe(first.pointPositions)
+    expect(overlayFrame.pointColors).toBe(first.pointColors)
+    expect(overlayFrame.pointSizes).toBe(first.pointSizes)
+    expect(bodyReads).not.toHaveBeenCalled()
+    expect(clearIndex).not.toHaveBeenCalled()
+    expect(addToIndex).not.toHaveBeenCalled()
+  })
+
+  it('refreshes opacity styles without reprojecting positions or rebuilding the picker', () => {
+    const bodies = [body(0), body(1)]
+    const source = packedCurrentPositions(bodies, new Float64Array([1, 2, 3, 4, 5, 6]))
+    const projection = createProjection(40, 800, 600, 36, { x: 0, y: 0 })
+    const buffers = createGeometryBufferPool()
+    const pointIndex = new ScreenPointIndex(800, 600, source.length)
+    const first = buildGeometry(projection, bodies[0], [], source, false, false, [], 1, 1, 1, [], new Float64Array(), 0, { x: 0, y: 0 }, buffers, pointIndex)
+    const previousColors = first.pointColors.slice(), previousSizes = first.pointSizes.slice()
+    const coordinates = vi.spyOn(source, 'coordinateAt')
+    const clearIndex = vi.spyOn(pointIndex, 'clear')
+    const addToIndex = vi.spyOn(pointIndex, 'add')
+
+    const opacityFrame = buildGeometry(projection, bodies[0], [], source, false, false, [], 1, 0.5, 1, [], new Float64Array(), 0, { x: 0, y: 0 }, buffers, pointIndex, undefined, first.pointPositions, first.pointSizes)
+    expect(opacityFrame.pointPositions).toBe(first.pointPositions)
+    expect(opacityFrame.pointSizes).toBe(first.pointSizes)
+    expect(Buffer.from(opacityFrame.pointColors).equals(Buffer.from(previousColors))).toBe(false)
+    expect(Buffer.from(opacityFrame.pointSizes).equals(Buffer.from(previousSizes))).toBe(true)
+    expect(coordinates).not.toHaveBeenCalled()
+    expect(clearIndex).not.toHaveBeenCalled()
+    expect(addToIndex).not.toHaveBeenCalled()
+  })
+
   it('writes 3D axes and colors directly and refreshes colors when equal-sized ordinal selections change', () => {
     const bodies = [body(0), body(1), body(2)], coordinates = new Float64Array([1, 2, 3, 4, 5, 6, 7, 8, 9])
     const source = packedCurrentPositions(bodies, coordinates), rows = vi.spyOn(source, 'rowAt')
     const first = updateCurrentPointGeometry(new THREE.BufferGeometry(), source, Uint32Array.from([0, 1]))
     const positions = first.getAttribute('position'), colors = first.getAttribute('color')
     expect(Array.from(positions.array).slice(0, 6)).toEqual([1, 3, 2, 4, 6, 5])
-    expect(Array.from(colors.array).slice(0, 6)).toEqual([1, 0, 0, 0, 1, 0])
+    expect(colors.array).toBeInstanceOf(Uint8Array)
+    expect(colors.normalized).toBe(true)
+    expect(Array.from(colors.array).slice(0, 6)).toEqual([255, 0, 0, 0, 255, 0])
     const second = updateCurrentPointGeometry(first, source, Uint32Array.from([1, 2]))
     expect(second).toBe(first)
     expect(second.getAttribute('position')).toBe(positions)
-    expect(Array.from(colors.array).slice(0, 6)).toEqual([0, 1, 0, 1, 0, 0])
+    expect(Array.from(colors.array).slice(0, 6)).toEqual([0, 255, 0, 255, 0, 0])
     expect(Array.from(positions.array).slice(0, 6)).toEqual([4, 6, 5, 7, 9, 8])
     expect(rows).not.toHaveBeenCalled()
     expect(updateCurrentPointGeometry(second, source, new Uint32Array()).drawRange.count).toBe(0)
     second.dispose()
+  })
+
+  it('skips full position rewrites when a 3D presentation update keeps the same source and point membership', () => {
+    const source = packedCurrentPositions([body(0), body(1)], new Float64Array([1, 2, 3, 4, 5, 6]))
+    const colorKey = {}, positionKey = {}, ordinals = Uint32Array.from([0, 1])
+    const first = updateCurrentPointGeometry(new THREE.BufferGeometry(), source, ordinals, colorKey, positionKey)
+    const positions = first.getAttribute('position') as THREE.BufferAttribute
+    const colors = first.getAttribute('color') as THREE.BufferAttribute
+    const firstVersion = positions.version
+    const firstColorVersion = colors.version
+
+    updateCurrentPointGeometry(first, source, ordinals.slice(), colorKey, positionKey)
+    expect(positions.version).toBe(firstVersion)
+    expect(colors.version).toBe(firstColorVersion)
+    expect(Array.from(positions.array).slice(0, 6)).toEqual([1, 3, 2, 4, 6, 5])
+
+    updateCurrentPointGeometry(first, source, ordinals, colorKey, {})
+    expect(positions.version).toBe(firstVersion + 1)
+    expect(colors.version).toBe(firstColorVersion + 1)
+    first.dispose()
   })
 
   it('rejects malformed counts, axes and ordinal selections', () => {

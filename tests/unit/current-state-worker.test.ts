@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { currentStateObservationTransfers, framesFromCurrentStateObservation, loadCurrentStateObservation, type CurrentStateObservation } from '../../src/lib/currentStateObservation'
+import { currentStateObservationTransfers, framesFromCurrentStateObservation, loadCurrentStateObservation, type CurrentStateObservation, type CurrentStateObservationPartial } from '../../src/lib/currentStateObservation'
 import { createCurrentStateWorkerClient } from '../../src/lib/currentStateWorkerClient'
 import { decodeStateTile, digestStateTileRequestIds, encodeStateTile, StateTileSnapshot, type StateTileMetadata } from '../../src/lib/stateTiles'
 import type { CurrentStateWorkerRequest, CurrentStateWorkerResponse } from '../../src/workers/current-states.protocol'
@@ -194,6 +194,19 @@ describe('reusable current-state worker client', () => {
     send({ type: 'result', requestId: 3, result }); await expect(third).resolves.toBe(result)
     expect(factory).toHaveBeenCalledTimes(1); expect(port.terminate).not.toHaveBeenCalled()
     client.dispose(); client.dispose(); expect(port.terminate).toHaveBeenCalledTimes(1)
+  })
+
+  it('delivers a matching partial frame without settling the request before its full result', async () => {
+    const { client, send } = clientPort(), onPartial = vi.fn()
+    const partial: CurrentStateObservationPartial = { selectedIds: ['a'], observation: result }
+    const pending = client.load(input, new AbortController().signal, onPartial)
+    send({ type: 'partial', requestId: 1, partial })
+    expect(onPartial).toHaveBeenCalledWith(partial)
+    let settled = false; void pending.then(() => { settled = true })
+    await Promise.resolve(); expect(settled).toBe(false)
+    send({ type: 'result', requestId: 1, result })
+    await expect(pending).resolves.toBe(result)
+    client.dispose()
   })
 
   it('rejects pre-aborted and cancelled calls immediately and removes abort listeners after success', async () => {

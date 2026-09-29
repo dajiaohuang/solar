@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../i18n/context'
-import { catalogPointColor, catalogPointSize } from '../lib/catalogPointAppearance'
-import { createCatalogPointRenderer, type CatalogPointFrame } from '../lib/catalogPointRenderer'
+import { createCatalogPointStyleTable } from '../lib/catalogPointAppearance'
+import { createCatalogPointRenderer, type CatalogPointAppend } from '../lib/catalogPointRenderer'
 import { planCatalogStream, type CatalogStreamPriority, type CatalogSourceSelection, type CatalogStreamResult } from '../lib/catalogStreaming'
 import { julianDayToDate } from '../lib/julianDate'
 import type { AsteroidManifest, CatalogFilters, CatalogLocator } from '../types'
@@ -10,6 +10,7 @@ import { CATALOG_TRANSFER_WINDOW } from '../lib/catalogTransferWindow'
 import type { CatalogRotation } from '../lib/catalogProjection'
 import { catalogTemporalDisplacementAU } from '../engine/ephemeris/catalogTemporalBudget'
 import type { CatalogEpochResult } from '../lib/catalogEpochStore'
+import { CATALOG_EPOCH_TILE_ROWS, CATALOG_EPOCH_UPLOAD_SLOTS } from '../lib/catalogEpochCapacity'
 import { saveTextExport } from '../lib/platform'
 import { BUILD_INFO } from '../lib/buildInfo'
 import { encodeCatalogEpochs, encodeCatalogMask } from '../lib/catalogEvidenceEncoding'
@@ -19,6 +20,7 @@ import { checkCatalogAppendReceipt } from '../lib/catalogAppendReceipt'
 import { CATALOG_APPEND_TIMEOUT_MS } from '../lib/catalogAppendLimits'
 import { checkCatalogReadEvidence } from '../lib/catalogReadEvidence'
 import { CATALOG_CLIP_RELATIVE_MARGIN } from '../lib/catalogProjection'
+import { CATALOG_SCREEN_COUNT_MAX_CELLS } from '../lib/catalogSpatialSelection'
 import { hasOnlyFiniteValues } from '../lib/finiteFloatArray'
 
 type Props = {
@@ -41,20 +43,64 @@ type Props = {
   selectedSources?: readonly { id: string; locator: CatalogLocator }[]
   prioritySources?: readonly { id: string; locator: CatalogLocator }[]
   onSourceSelectionChange?: (selection: CatalogSourceSelection | null) => void
+  onSourceRowsComplete?: (rows: number) => void
+  activeRenderSampling?: boolean
+  onActiveRenderFrameDuration?: (durationMs: number, renderedCount?: number) => void
   onStopped?: () => void
   onRestarted?: () => void
 }
 type Status = { drawnRows: number; sourceRows: number; phase: 'loading' | 'updating' | 'complete' | 'limited' | 'cancelled' | 'error'; error?: string }
-type Attributes = Pick<CatalogPointFrame, 'positions' | 'colors' | 'sizes'>
+type Attributes = CatalogPointAppend
 type AppendReceipt = Extract<CatalogStreamResponse, { type: 'append-done' }> & { requestedLocators: readonly CatalogLocator[] }
+type CountOverlaySummary = { sourceRows: number; occupiedCells: number; columns: number; rows: number; maximumCount: number }
+
+function drawCatalogScreenCountOverlay(canvas: HTMLCanvasElement, overlay: NonNullable<Extract<CatalogStreamResponse, { type: 'selection' }>['countOverlay']>): CountOverlaySummary {
+  const { counts, columns, rows, sourceRows, occupiedCells, maximumCount } = overlay
+  if (!(counts instanceof Uint32Array) || !Number.isSafeInteger(columns) || columns < 1 ||
+      !Number.isSafeInteger(rows) || rows < 1 || columns * rows !== counts.length || counts.length > CATALOG_SCREEN_COUNT_MAX_CELLS ||
+      !Number.isSafeInteger(sourceRows) || sourceRows < 0 || !Number.isSafeInteger(occupiedCells) || occupiedCells < 0 || occupiedCells > counts.length ||
+      !Number.isSafeInteger(maximumCount) || maximumCount < 0 || maximumCount > sourceRows) {
+    throw new Error('Invalid catalog screen-count overlay')
+  }
+  if (canvas.width !== columns) canvas.width = columns
+  if (canvas.height !== rows) canvas.height = rows
+  const context = canvas.getContext('2d')
+  if (!context) throw new Error('Catalog screen-count overlay canvas is unavailable')
+  const pixels = context.createImageData(columns, rows)
+  let total = 0, occupied = 0, observedMaximum = 0
+  const scale = maximumCount > 1 ? Math.log1p(maximumCount) : 1
+  for (let index = 0; index < counts.length; index++) {
+    const count = counts[index]
+    if (count > 0) { total += count; occupied++ }
+    observedMaximum = Math.max(observedMaximum, count)
+    // A singleton already has an exact point beneath the overlay. Color only
+    // the multiply occupied bins so the layer adds population context without
+    // obscuring isolated source positions.
+    if (count < 2) continue
+    const intensity = Math.log1p(count) / scale
+    const column = index % columns, row = rows - 1 - Math.floor(index / columns)
+    const pixel = (row * columns + column) * 4
+    pixels.data[pixel] = Math.round(38 + 186 * intensity)
+    pixels.data[pixel + 1] = Math.round(138 + 74 * intensity)
+    pixels.data[pixel + 2] = Math.round(246 - 148 * intensity)
+    pixels.data[pixel + 3] = Math.round(18 + 56 * intensity)
+  }
+  if (total !== sourceRows || occupied !== occupiedCells || observedMaximum !== maximumCount) {
+    throw new Error('Catalog screen-count overlay does not reconcile to in-viewport rows')
+  }
+  context.putImageData(pixels, 0, 0)
+  return { sourceRows, occupiedCells: occupied, columns, rows, maximumCount }
+}
 
 const DEFAULT_ROTATION: CatalogRotation = { azimuthDegrees: 0,tiltDegrees: 0 }
 const UPLOAD_SLICE_ROWS = 4096
 const UPLOAD_FRAME_BUDGET_MS = 3
+const EMPTY_SOURCE_ROW_MASK = new Uint8Array(0)
 
-export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRows, budgetBytes, viewRadiusAU, displayMode, displayLimit, mode = '2d', priority = 'source', rotation = DEFAULT_ROTATION, retainEpochs = false, appendRows = 0, targetJulianDay = julianDay, maximumTemporalDriftAU = 0, focusedSource, selectedSources, prioritySources, onSourceSelectionChange, onStopped, onRestarted }: Props) {
+export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRows, budgetBytes, viewRadiusAU, displayMode, displayLimit, mode = '2d', priority = 'source', rotation = DEFAULT_ROTATION, retainEpochs = false, appendRows = 0, targetJulianDay = julianDay, maximumTemporalDriftAU = 0, focusedSource, selectedSources, prioritySources, onSourceSelectionChange, onSourceRowsComplete, activeRenderSampling = false, onActiveRenderFrameDuration, onStopped, onRestarted }: Props) {
   const { t, language } = useI18n()
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const countOverlayCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const cancelRef = useRef<(() => void) | null>(null)
   const drawRef = useRef<(() => void) | null>(null)
   const epochRef = useRef<((epoch: number) => void) | null>(null)
@@ -96,15 +142,32 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
   const [sourceOwner, setSourceOwner] = useState<object | null>(null)
   const radiusRef = useRef(viewRadiusAU)
   const detailRef = useRef({ displayMode, displayLimit, rotation })
-  const [display, setDisplay] = useState<{ count: number; visible: number; pending: boolean; edgeCandidates?: number; testedRows?: number; skippedRows?: number }>({ count: 0, visible: 0, pending: false })
+  const [display, setDisplay] = useState<{ count: number; visible: number; selectionRows?: number; pending: boolean; selectionMs?: number; edgeCandidates?: number; testedRows?: number; skippedRows?: number; countOverlay?: CountOverlaySummary }>({ count: 0, visible: 0, pending: false })
+  const displayCountRef = useRef(display.count)
+  displayCountRef.current = display.count
   const [status, setStatus] = useState<Status>({ drawnRows: 0, sourceRows: 0, phase: 'loading' })
+  const completedSourceRows = status.phase === 'complete' || status.phase === 'limited' ? status.drawnRows : 0
+  const activeRenderSamplingRef = useRef(activeRenderSampling)
+  const activeRenderFrameDurationRef = useRef(onActiveRenderFrameDuration)
+  activeRenderSamplingRef.current = activeRenderSampling
+  activeRenderFrameDurationRef.current = onActiveRenderFrameDuration
+  useEffect(() => { onSourceRowsComplete?.(completedSourceRows) }, [completedSourceRows, onSourceRowsComplete])
   const [unavailable, setUnavailable] = useState(false)
   const [retryGeneration, setRetryGeneration] = useState(0)
   const [restoration, setRestoration] = useState<{ rows: number; total: number } | null>(null)
   const plan = planCatalogStream(manifest, requestedRows, budgetBytes, mode, retainEpochs, appendRows)
   const dimensions = mode === '3d' ? 3 : 2
   const displayUnavailable = unavailable || restoration !== null || (displayMode === 'spatial' && Boolean(spatialWorkerError))
-  const displayCountLabel = displayUnavailable ? (language === 'zh' ? '不可用' : 'unavailable') : display.count.toLocaleString()
+  const displayCountLabel = displayUnavailable ? (language === 'zh' ? '不可用' : 'unavailable')
+    : display.pending ? t(displayMode === 'spatial' ? 'catalogSpatialUpdating' : 'catalogSelectionUpdating')
+      : display.count.toLocaleString()
+  const displayKnown = !displayUnavailable && !display.pending
+  // The worker's visible count includes points admitted by the clip margin;
+  // edgeCandidates is the subset outside the mathematical viewport.
+  const inViewport = Math.max(0, display.visible - (display.edgeCandidates ?? 0))
+  const notSubmittedRows = displayKnown ? Math.max(0, status.drawnRows - display.count) : null
+  const spatialLimitReached = displayKnown && displayMode === 'spatial' && inViewport > display.count
+    && display.count >= Math.min(plan.capacity, displayLimit)
   const loadOwner = useMemo(() => ({ manifest, filters, julianDay, requestedRows, budgetBytes,
     capacity: plan.capacity, mode, dimensions, priority, retainEpochs, appendRows, prioritySources, retryGeneration }), [manifest, filters, julianDay, requestedRows, budgetBytes,
     plan.capacity, mode, dimensions, priority, retainEpochs, appendRows, prioritySources, retryGeneration])
@@ -132,14 +195,18 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
+    const classCodes = manifest.compactIndex?.classCodes
+    const pointStyles = createCatalogPointStyleTable(classCodes ?? [])
     const exportCounter = exportGeneration
     exportGeneration.current++
     let active = true, acceptingTiles = true, loading = true, stopped = false, failed = false, discardedSnapshot = false, worker: Worker | null = null, frameId = 0
+    let renderObservationFrame = 0, renderObservationPrevious: number | null = null
+    let renderObservationLastDrawAt = 0, renderObservationIdleFrames = 0
     let renderer: ReturnType<typeof createCatalogPointRenderer> | null = null
     let restoring = false, restorationFrame = 0, restorationGeneration = 0
     let gl: WebGLRenderingContext | null = null
     let viewKey = '', selectionViewKey = '', viewRequestId = 0
-    let inFlightView: number | null = null
+    let inFlightView: number | null = null, lastViewRequestedCount = 0
     let epochReady = false, epochBusy = false, epochStarted = false, coherent = true, epochId = 0, epochFrame = 0
     let awaitingPresentation = false, followFrame = 0
     let installedEpoch = julianDay, requestedEpoch = julianDay, updatedRows = 0, retainedTile = 0, retainedOffset = 0, snapshotComplete = false
@@ -151,12 +218,18 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
       timer?: ReturnType<typeof setTimeout>;
       reservation?: ReturnType<ReturnType<typeof createCatalogSourceAppendLookup>['prepareAppend']>;
       result?: CatalogStreamResult; addedRows?: number } | null = null
-    let sourceBlockCounts: number[] = []
+    let epochBlockCounts: number[] = []
+    const recordEpochBlockCounts = (rows: number) => {
+      if (!Number.isSafeInteger(rows) || rows < 0) throw new Error('Invalid catalog epoch block row count')
+      for (let start = 0; start < rows; start += CATALOG_EPOCH_TILE_ROWS) {
+        epochBlockCounts.push(Math.min(CATALOG_EPOCH_TILE_ROWS,rows-start))
+      }
+    }
     let observedBlockEpochs = new Float64Array(0), observedBlock = 0, observedBlockRows = 0
     const recordEpochRows = (rows: number, epoch: number, drift: number) => {
       while (rows > 0) {
-        const blockSize = sourceBlockCounts[observedBlock]
-        if (blockSize === undefined) throw new Error('Catalog epoch rows exceed source blocks')
+        const blockSize = epochBlockCounts[observedBlock]
+        if (blockSize === undefined) throw new Error('Catalog epoch rows exceed admitted epoch blocks')
         const offset = observedBlock * 2
         if (observedBlockRows === 0) { observedBlockEpochs[offset] = epoch; observedBlockEpochs[offset+1] = drift }
         else if (observedBlockEpochs[offset] !== epoch || observedBlockEpochs[offset+1] !== drift) {
@@ -169,9 +242,9 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
     }
     let uniformEpoch: number | null = julianDay, installedDrift = 0, requestedBudget = 0, reusedRows = 0, maximumReuseDrift = 0
     let minimumActualEpoch = Infinity, maximumActualEpoch = -Infinity
-    let epochTile: Extract<CatalogStreamResponse, { type: 'epoch-tile' }> | null = null
+    const epochTiles: Extract<CatalogStreamResponse, { type: 'epoch-tile' }>[] = []
     let epochTileOffset = 0
-    let displayScratch = new Float32Array()
+    let nextEpochTileRow = 0
     const retained: Attributes[] = []
     const pendingTiles: Extract<CatalogStreamResponse, { type: 'tile' }>[] = []
     let pendingTileOffset = 0
@@ -184,6 +257,47 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
       if (active && loading && acceptingTiles) { setStatus({ ...count, phase: 'loading' }); setComputedEpoch(julianDay); setMaximumSpeed(null); setEpochEvidence(null); setSourceSelection(null); setAppendReceipts([]); setLastAppendAttempt(null); setAppendNotice(null); setExportError(''); setSpatialWorkerError(''); setDiscardedOnCancel(false) }
     })
     const post = (request: CatalogStreamRequest) => worker?.postMessage(request)
+    const cancelView = () => {
+      if (inFlightView === null) return
+      inFlightView = null
+      lastViewRequestedCount = 0
+      post({ type: 'view-cancel' })
+    }
+    const sampleActiveRenderFrames = (timestamp: number) => {
+      renderObservationFrame = 0
+      if (!active || document.hidden || !activeRenderSamplingRef.current || !coherent || epochBusy ||
+          awaitingPresentation || restoring || stopped || failed || discardedSnapshot) {
+        renderObservationPrevious = null
+        renderObservationIdleFrames = 0
+        return
+      }
+      const previous = renderObservationPrevious
+      const renderedDuringInterval = previous !== null && renderObservationLastDrawAt > previous
+      if (renderedDuringInterval) {
+        activeRenderFrameDurationRef.current?.(timestamp - previous,
+          Math.min(displayCountRef.current, detailRef.current.displayLimit, plan.capacity))
+        renderObservationIdleFrames = 0
+      } else renderObservationIdleFrames++
+      renderObservationPrevious = timestamp
+      // Stop promptly when the user stops changing the view. Idle page frames
+      // are not evidence that this canvas can submit more catalog points.
+      if (renderObservationIdleFrames >= 2) {
+        renderObservationPrevious = null
+        renderObservationIdleFrames = 0
+        return
+      }
+      renderObservationFrame = requestAnimationFrame(sampleActiveRenderFrames)
+    }
+    const noteActiveCatalogDraw = () => {
+      if (!count.drawnRows || !activeRenderSamplingRef.current || document.hidden || !coherent || epochBusy ||
+          awaitingPresentation || restoring || stopped || failed || discardedSnapshot || !renderer) return
+      renderObservationLastDrawAt = performance.now()
+      renderObservationIdleFrames = 0
+      if (!renderObservationFrame) {
+        renderObservationPrevious = renderObservationLastDrawAt
+        renderObservationFrame = requestAnimationFrame(sampleActiveRenderFrames)
+      }
+    }
     const terminateWorker = () => {
       clearTimeout(appendPending?.timer)
       appendPending?.reservation?.cancel(); appendPending = null
@@ -202,9 +316,11 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
       terminateWorker()
       exportGeneration.current++
       viewRequestId++; viewKey = ''; selectionViewKey = ''
+      renderer?.setSpatialSelection(null)
       setSpatialWorkerError(error.message)
-      setDisplay({ count: 0, visible: 0, pending: false })
-      draw()
+      const presented = draw()
+      setDisplay({ count: presented ? Math.min(count.drawnRows, plan.capacity, detailRef.current.displayLimit) : 0,
+        visible: count.drawnRows, selectionRows: count.drawnRows, pending: false })
     }
     const invalidatePresentation = () => {
       // Keep awaitingPresentation until the replacement view is actually ready.
@@ -234,17 +350,18 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
       acceptingTiles = false
       loading = false
       inFlightView = null
+      lastViewRequestedCount = 0
       epochReady = false; epochBusy = false; epochStarted = false; epochId++
       awaitingPresentation = false; if (followFrame) { cancelAnimationFrame(followFrame); followFrame = 0 }
       if (epochFrame) { cancelAnimationFrame(epochFrame); epochFrame = 0 }
-      epochTile = null; epochTileOffset = 0
+      epochTiles.length = 0; epochTileOffset = 0; nextEpochTileRow = 0
       if (!coherent) {
         // Epoch upload overwrites the restoration buffer incrementally. It is
         // neither the prior snapshot nor a completed new epoch after cancel.
         discardedSnapshot = true
         setDiscardedOnCancel(true)
         renderer?.dispose(); renderer = null
-        retained.length = 0; displayScratch = new Float32Array(); sourceBlockCounts = []
+        retained.length = 0; epochBlockCounts = []
         observedBlockEpochs = new Float64Array(0); observedBlock = 0; observedBlockRows = 0
         count.drawnRows = 0
         setDisplay({ count: 0, visible: 0, pending: false }); setComputedEpoch(null)
@@ -277,12 +394,12 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
       epochReady = false; epochBusy = false; epochStarted = false; epochId++
       awaitingPresentation = false; if (followFrame) { cancelAnimationFrame(followFrame); followFrame = 0 }
       if (epochFrame) { cancelAnimationFrame(epochFrame); epochFrame = 0 }
-      epochTile = null; epochTileOffset = 0
+      epochTiles.length = 0; epochTileOffset = 0; nextEpochTileRow = 0
       // An upload error can leave attributes only partly replaced. Unlike a
       // user cancellation, failure does not retain a drawable snapshot or a
       // restoration copy whose GPU/CPU coherence is no longer established.
       renderer?.dispose(); renderer = null
-      retained.length = 0; displayScratch = new Float32Array(); sourceBlockCounts = []
+      retained.length = 0; epochBlockCounts = []
       observedBlockEpochs = new Float64Array(0); observedBlock = 0; observedBlockRows = 0
       setComputedEpoch(null); setEpochEvidence(null); setSourceSelection(null)
       setAppendReceipts([]); setLastAppendAttempt(null); setAppendNotice(null)
@@ -294,55 +411,106 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
       setDisplay({ count: 0, visible: 0, pending: false })
       if (active) setStatus({ ...count, phase: 'error', error: error instanceof Error ? error.message : String(error) })
     }
-    const draw = () => {
+    const draw = (verifyGpu = false) => {
       if (!renderer || restoring) return false
       try {
         if (appendPending) {
-          gl?.clear(gl.COLOR_BUFFER_BIT); checkGl()
+          gl?.clear(gl.COLOR_BUFFER_BIT)
+          if (verifyGpu) checkGl()
+          else if (gl?.isContextLost()) throw new Error('Catalog WebGL context is lost')
           return true
         }
         const rect = canvas.getBoundingClientRect(), ratio = Math.min(window.devicePixelRatio, 2)
         const width = Math.max(1, Math.round(rect.width * ratio)), height = Math.max(1, Math.round(rect.height * ratio))
         if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height }
         const detail = detailRef.current
+        const maximumDrawPoints = Math.min(plan.capacity, detail.displayLimit)
         if (!coherent) {
-          renderer.drawRetained(radiusRef.current, 0.82, width, height, ratio, mode === '3d' ? detail.rotation : undefined)
+          renderer.drawRetained(radiusRef.current, 0.82, width, height, ratio, mode === '3d' ? detail.rotation : undefined,
+            verifyGpu || awaitingPresentation, maximumDrawPoints)
           return true
         }
-        const spatialKey = `${detail.displayMode}:${detail.displayLimit}:${radiusRef.current}:${width}:${height}:${mode === '3d' ? `${detail.rotation.azimuthDegrees}:${detail.rotation.tiltDegrees}` : ''}:${focusedRowRef.current ?? 'none'}`
+        const cameraKey = detail.displayMode === 'spatial'
+          ? `${radiusRef.current}:${width}:${height}:${mode === '3d' ? `${detail.rotation.azimuthDegrees}:${detail.rotation.tiltDegrees}` : ''}` : ''
+        const spatialKey = `${detail.displayMode}:${maximumDrawPoints}:${cameraKey}:${focusedRowRef.current ?? 'none'}`
         const selectionKey = `${spatialKey}:${selectedRowsRef.current.join(',')}`
-        const key = `${selectionKey}:${count.drawnRows}`
-        if (key !== viewKey) {
-          invalidatePresentation()
-          viewKey = key
-          viewRequestId++
-          if (detail.displayMode === 'all') {
-            selectionViewKey = ''
+        if (detail.displayMode === 'all') {
+          const directKey = `${selectionKey}:${count.drawnRows}`
+          if (count.drawnRows <= maximumDrawPoints && directKey !== viewKey) {
+            invalidatePresentation()
+            viewKey = directKey
+            viewRequestId++
+            cancelView()
+            selectionViewKey = ''; lastViewRequestedCount = 0
             renderer.setSpatialSelection(null)
-            setDisplay({ count: count.drawnRows, visible: count.drawnRows, pending: false })
-          } else {
-            // A changed camera invalidates its representatives. More source
-            // rows at the same epoch/view can keep the previous partial image
-            // visible while the new selection is computed.
-            const pending = count.drawnRows > 0 && worker !== null
-            if (selectionViewKey !== selectionKey) {
-              selectionViewKey = selectionKey
-              renderer.setSpatialSelection(new Uint32Array())
-              setDisplay({ count: 0, visible: 0, pending })
-            } else setDisplay(previous => ({ ...previous, pending }))
-            // One result may be in transit at a time. Camera changes update
-            // refs/viewRequestId while busy; the receipt schedules the latest
-            // view instead of building a queue of transferred index arrays.
-            if (count.drawnRows && worker && inFlightView === null) {
-              inFlightView = viewRequestId
+            setDisplay({ count: count.drawnRows, visible: count.drawnRows, selectionRows: count.drawnRows, pending: false })
+          } else if (count.drawnRows > maximumDrawPoints && !worker &&
+              (directKey !== viewKey || selectionViewKey !== '')) {
+            invalidatePresentation()
+            viewKey = directKey
+            viewRequestId++
+            cancelView()
+            selectionViewKey = ''; lastViewRequestedCount = 0
+            renderer.setSpatialSelection(null)
+            setDisplay({ count: Math.min(count.drawnRows, maximumDrawPoints), visible: count.drawnRows, selectionRows: count.drawnRows, pending: false })
+          } else if (count.drawnRows > maximumDrawPoints && worker) {
+            const contextChanged = selectionKey !== selectionViewKey
+            if (contextChanged) {
+              invalidatePresentation()
+              viewKey = selectionKey
+              viewRequestId++
+              selectionViewKey = selectionKey; lastViewRequestedCount = 0
+              setDisplay(previous => ({ ...previous, visible: count.drawnRows, selectionRows: count.drawnRows,
+                pending: count.drawnRows > 0, selectionMs: undefined, edgeCandidates: undefined,
+                testedRows: undefined, skippedRows: undefined }))
+            }
+            // Keep an all-row representative sample visible as the scientific
+            // snapshot grows; retain useful work between geometric refreshes.
+            const progressRefresh = loading &&
+              (lastViewRequestedCount === 0 || count.drawnRows >= lastViewRequestedCount*2)
+            const terminalRefresh = !loading && lastViewRequestedCount !== count.drawnRows
+            if ((contextChanged || progressRefresh || terminalRefresh) &&
+                (contextChanged || inFlightView === null)) {
+              if (!contextChanged) viewRequestId++
+              inFlightView = viewRequestId; lastViewRequestedCount = count.drawnRows
+              if (!contextChanged) setDisplay(previous => ({ ...previous, pending: true }))
               post({ type: 'view', requestId: viewRequestId, count: count.drawnRows,
-                view: { radius: radiusRef.current, aspect: width / height, maximumPoints: Math.min(plan.capacity, detail.displayLimit),
+                view: { mode: 'all', radius: radiusRef.current, aspect: width / height, maximumPoints: maximumDrawPoints,
                   focusedRow: focusedRowRef.current, selectedRows: selectedRowsRef.current, ...(mode === '3d' ? { rotation: detail.rotation } : {}) } })
             }
           }
+        } else {
+          const contextChanged = selectionKey !== selectionViewKey
+          if (contextChanged) {
+            invalidatePresentation()
+            viewKey = selectionKey; selectionViewKey = selectionKey; lastViewRequestedCount = 0
+            // Camera/focus changes do not invalidate coordinates or row IDs.
+            // Keep the last coherent representatives until the new viewport
+            // selection is ready; epoch updates still hide incoherent states.
+            setDisplay(previous => ({ ...previous, pending: count.drawnRows > 0 && worker !== null,
+              selectionMs: undefined, edgeCandidates: undefined, testedRows: undefined, skippedRows: undefined }))
+          }
+          // Geometric refresh milestones let the map grow during a long load
+          // without cancelling a useful worker pass for every uploaded tile.
+          // Once a pass is in flight, keep it and refresh after its receipt.
+          const progressRefresh = loading && count.drawnRows > 0 &&
+            (lastViewRequestedCount === 0 || count.drawnRows >= lastViewRequestedCount*2)
+          const terminalRefresh = !loading && count.drawnRows > 0 && lastViewRequestedCount !== count.drawnRows
+          if (worker && count.drawnRows && (contextChanged || progressRefresh || terminalRefresh) &&
+              (contextChanged || inFlightView === null)) {
+            viewRequestId++
+            inFlightView = viewRequestId; lastViewRequestedCount = count.drawnRows
+            if (!contextChanged) setDisplay(previous => ({ ...previous, pending: true }))
+            post({ type: 'view', requestId: viewRequestId, count: count.drawnRows,
+              view: { mode: 'spatial', radius: radiusRef.current, aspect: width / height, maximumPoints: maximumDrawPoints,
+                focusedRow: focusedRowRef.current, selectedRows: selectedRowsRef.current, ...(mode === '3d' ? { rotation: detail.rotation } : {}) } })
+          }
         }
-        renderer.drawRetained(radiusRef.current, 0.82, width, height, ratio, mode === '3d' ? detail.rotation : undefined)
-        if (awaitingPresentation && (detail.displayMode === 'all' || !count.drawnRows)) finishPresentation()
+        renderer.drawRetained(radiusRef.current, 0.82, width, height, ratio, mode === '3d' ? detail.rotation : undefined,
+          verifyGpu || awaitingPresentation, maximumDrawPoints)
+        noteActiveCatalogDraw()
+        if (awaitingPresentation && (detail.displayMode === 'spatial' && !count.drawnRows ||
+            detail.displayMode === 'all' && (count.drawnRows <= maximumDrawPoints || !worker))) finishPresentation()
         return true
       } catch (error) { fail(error); return false }
     }
@@ -405,42 +573,63 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
       draw()
       try { post(request) } catch (error) { fail(error) }
     }
-    const advanceCpuSnapshot = (rows: number, positions?: Float32Array) => {
+    const advanceCpuSnapshot = (rows: number, positions?: Float32Array | Float64Array, sourceOffset = 0) => {
+      if (positions) {
+        const destination = retained[retainedTile]
+        if (!destination || rows > destination.sizes.length-retainedOffset) throw new Error('Catalog epoch slice crosses its CPU restoration tile')
+      }
       let copied = 0
+      let displayPositions: Float32Array | undefined
       while (copied < rows) {
         const destination = retained[retainedTile]
         if (!destination) throw new Error('Catalog epoch exceeds CPU restoration snapshot')
         const length = Math.min(rows-copied, destination.sizes.length-retainedOffset)
         if (length <= 0) throw new Error('Invalid CPU catalog range')
-        if (positions) destination.positions.set(positions.subarray(copied*dimensions, (copied+length)*dimensions), retainedOffset*dimensions)
+        if (positions) {
+          const targetStart = retainedOffset*dimensions, targetEnd = (retainedOffset+length)*dimensions
+          const sourceStart = (sourceOffset+copied)*dimensions
+          destination.positions.set(positions.subarray(sourceStart, sourceStart+length*dimensions), targetStart)
+          displayPositions = destination.positions.subarray(targetStart, targetEnd)
+        }
         copied += length; retainedOffset += length
         if (retainedOffset === destination.sizes.length) { retainedTile++; retainedOffset = 0 }
       }
+      return displayPositions
     }
     const flushEpochTile = () => {
       epochFrame = 0
-      const tile = epochTile
-      if (!active || !tile) return
-      if (!epochBusy || tile.requestId !== epochId) { epochTile = null; epochTileOffset = 0; recycle(tile); return }
+      if (!active || !epochTiles.length) return
       try {
-        if (!renderer || tile.julianDay !== requestedEpoch || tile.startRow+epochTileOffset !== updatedRows || !Number.isSafeInteger(tile.count) || tile.count < 1 || tile.count > 16384 ||
-            tile.positions.length !== tile.count*dimensions || tile.startRow+tile.count > count.drawnRows) throw new Error('Invalid catalog epoch tile')
         const started = performance.now()
-        do {
-          const end = Math.min(tile.count, epochTileOffset+UPLOAD_SLICE_ROWS), rows = end-epochTileOffset
-          if (displayScratch.length !== rows*dimensions) displayScratch = new Float32Array(rows*dimensions)
-          displayScratch.set(tile.positions.subarray(epochTileOffset*dimensions, end*dimensions))
-          if (!hasOnlyFiniteValues(displayScratch)) throw new Error('Catalog epoch exceeds GPU coordinates')
-          renderer.replacePositions(updatedRows, displayScratch); checkGl()
-          advanceCpuSnapshot(rows, displayScratch)
-          recordEpochRows(rows, tile.julianDay, 0)
-          updatedRows += rows; epochTileOffset = end
-        } while (epochTileOffset < tile.count && performance.now()-started < UPLOAD_FRAME_BUDGET_MS)
-        minimumActualEpoch = Math.min(minimumActualEpoch, tile.julianDay); maximumActualEpoch = Math.max(maximumActualEpoch, tile.julianDay)
-        if (epochTileOffset < tile.count) epochFrame = requestAnimationFrame(flushEpochTile)
-        else {
-          epochTile = null; epochTileOffset = 0
+        while (epochTiles.length && performance.now()-started < UPLOAD_FRAME_BUDGET_MS) {
+          const tile = epochTiles[0]
+          if (!epochBusy || tile.requestId !== epochId) {
+            epochTiles.shift(); epochTileOffset = 0; recycle(tile)
+            continue
+          }
+          if (!renderer || tile.julianDay !== requestedEpoch || tile.startRow+epochTileOffset !== updatedRows || !Number.isSafeInteger(tile.count) || tile.count < 1 || tile.count > 16384 ||
+              tile.positions.length !== tile.count*dimensions || tile.startRow+tile.count > count.drawnRows) throw new Error('Invalid catalog epoch tile')
+          do {
+            const retainedCpuTile = retained[retainedTile]
+            const retainedTileRows = retainedCpuTile ? retainedCpuTile.sizes.length-retainedOffset : 0
+            if (!Number.isSafeInteger(retainedTileRows) || retainedTileRows < 1) throw new Error('Catalog epoch exceeds CPU restoration snapshot')
+            const end = Math.min(tile.count, epochTileOffset+UPLOAD_SLICE_ROWS, epochTileOffset+retainedTileRows), rows = end-epochTileOffset
+            const displayPositions = advanceCpuSnapshot(rows, tile.positions, epochTileOffset)
+            if (!displayPositions) throw new Error('Catalog epoch did not produce a CPU restoration slice')
+            renderer.replacePositions(updatedRows, displayPositions)
+            recordEpochRows(rows, tile.julianDay, 0)
+            updatedRows += rows; epochTileOffset = end
+          } while (epochTileOffset < tile.count && performance.now()-started < UPLOAD_FRAME_BUDGET_MS)
+          minimumActualEpoch = Math.min(minimumActualEpoch, tile.julianDay); maximumActualEpoch = Math.max(maximumActualEpoch, tile.julianDay)
+          if (epochTileOffset < tile.count) break
+          // Keep each worker buffer until its complete upload has been checked.
+          checkGl()
+          epochTiles.shift(); epochTileOffset = 0
           recycle(tile)
+        }
+        if (epochTiles.length) {
+          if (gl?.isContextLost()) throw new Error('Catalog WebGL context is lost')
+          epochFrame = requestAnimationFrame(flushEpochTile)
         }
       } catch (error) { fail(error) }
     }
@@ -474,20 +663,25 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
             if (selectedCount !== points) throw new Error('Upload source-row bitmap differs from position count')
           }
           const end = Math.min(points, pendingTileOffset+UPLOAD_SLICE_ROWS), rows = end-pendingTileOffset
-          const tile: Attributes = { positions: new Float32Array(response.positions.subarray(pendingTileOffset*dimensions, end*dimensions)), colors: new Float32Array(rows * 3), sizes: new Float32Array(rows) }
+          const tile: Attributes = { positions: new Float32Array(response.positions.subarray(pendingTileOffset*dimensions, end*dimensions)), colors: new Uint8Array(rows * 3), sizes: new Uint8Array(rows) }
           if (!hasOnlyFiniteValues(tile.positions)) throw new Error('Catalog position exceeds GPU coordinates')
           for (let row = 0; row < rows; row++) {
             const sourceRow = pendingTileOffset+row
-            const orbitClass = manifest.compactIndex!.classCodes[response.appearance[sourceRow * 2]], flags = response.appearance[sourceRow * 2 + 1]
-            if (!orbitClass || flags > 7) throw new Error('Invalid catalog appearance')
-            tile.colors.set(catalogPointColor(orbitClass, flags), row * 3)
-            tile.sizes[row] = catalogPointSize(flags)
+            const classIndex = response.appearance[sourceRow * 2], flags = response.appearance[sourceRow * 2 + 1]
+            if (!classCodes || classIndex >= classCodes.length || flags > 7) throw new Error('Invalid catalog appearance')
+            const styleOffset = (classIndex*8+flags)*4, colorOffset = row * 3
+            tile.colors[colorOffset] = pointStyles[styleOffset]
+            tile.colors[colorOffset + 1] = pointStyles[styleOffset + 1]
+            tile.colors[colorOffset + 2] = pointStyles[styleOffset + 2]
+            tile.sizes[row] = pointStyles[styleOffset + 3]
           }
           if (rows) { renderer.append(tile); retained.push(tile); changed = true }
           count.drawnRows += rows; count.sourceRows = response.sourceRows
           pendingTileOffset = end; processed = true
           if (end === points) {
-            uploadedMasks.set(response.sourceChunk, response.sourceRowMask)
+            // Keep the duplicate-chunk guard without retaining a full all-zero
+            // source bitmap for shards that contributed no uploaded points.
+            uploadedMasks.set(response.sourceChunk, points ? response.sourceRowMask : EMPTY_SOURCE_ROW_MASK)
             uploadedShards.push({ chunk: response.sourceChunk, selectedRows: points, sourceRows: response.sourceRows, drawnRows: response.drawnRows })
             pendingTiles.shift(); pendingTileOffset = 0
             acknowledgements.push(response)
@@ -496,7 +690,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
         // drawRetained checks the shared GL error state after upload and draw.
         // A separate pre-draw getError synchronizes with the GPU twice while
         // adding no acknowledgement protection: a failed draw never reaches ACK.
-        if (changed && !draw()) return
+        if (changed && !draw(true)) return
         setStatus({ ...count, phase: 'loading' })
         // Acknowledge only after the batch has actually reached the renderer.
         for (const tile of acknowledgements) {
@@ -515,15 +709,13 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
       try {
         gl = canvas.getContext('webgl', { antialias: false, alpha: false })
         if (!gl) throw new Error('WebGL unavailable')
-        renderer = createCatalogPointRenderer(gl, plan.capacity, dimensions)
-        checkGl()
+        renderer = createCatalogPointRenderer(gl, plan.capacity, dimensions, true)
         const ownedRenderer = renderer, generation = restorationGeneration
         const finish = () => {
           restoring = false; setRestoration(null)
           if (!coherent) { ownedRenderer.invalidatePositions(); setDisplay({ count: 0, visible: 0, pending: false }) }
           viewKey = ''; selectionViewKey = ''
-          checkGl()
-          if (!draw()) return false
+          if (!draw(true)) return false
           if (epochReady) requestEpoch(targetEpochRef.current)
           if (active) setUnavailable(false)
           return true
@@ -541,12 +733,16 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
               do {
                 const tile = retained[tileIndex]
                 const end = Math.min(tile.sizes.length, rowOffset + UPLOAD_SLICE_ROWS)
-                ownedRenderer.append({ positions: tile.positions.subarray(rowOffset*dimensions, end*dimensions),
-                  colors: tile.colors.subarray(rowOffset*3, end*3), sizes: tile.sizes.subarray(rowOffset, end) })
+                const positions = tile.positions.subarray(rowOffset*dimensions, end*dimensions)
+                if (tile.colors instanceof Uint8Array && tile.sizes instanceof Uint8Array) {
+                  ownedRenderer.append({ positions, colors: tile.colors.subarray(rowOffset*3, end*3), sizes: tile.sizes.subarray(rowOffset, end) })
+                } else if (tile.colors instanceof Float32Array && tile.sizes instanceof Float32Array) {
+                  ownedRenderer.append({ positions, colors: tile.colors.subarray(rowOffset*3, end*3), sizes: tile.sizes.subarray(rowOffset, end) })
+                } else throw new Error('Mismatched retained catalog attribute formats')
                 restoredRows += end-rowOffset; rowOffset = end
                 if (rowOffset === tile.sizes.length) { tileIndex++; rowOffset = 0 }
               } while (tileIndex < retained.length && performance.now()-start < UPLOAD_FRAME_BUDGET_MS)
-              checkGl()
+              if (gl?.isContextLost()) throw new Error('Catalog WebGL context is lost')
               setRestoration({ rows: restoredRows, total: count.drawnRows })
               if (tileIndex < retained.length) restorationFrame = requestAnimationFrame(upload)
               else {
@@ -569,6 +765,8 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
       // A selection already posted by the worker belongs to the lost context.
       // Restoration requests fresh indices after rebuilding the attributes.
       viewRequestId++
+      cancelView()
+      setDisplay(previous => ({ ...previous, selectionMs: undefined }))
       invalidatePresentation()
       stopRestoration()
       renderer?.dispose(); renderer = null
@@ -577,9 +775,10 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
     }
     canvas.addEventListener('webglcontextlost', lost)
     canvas.addEventListener('webglcontextrestored', initialize)
-    canvas.addEventListener('solar-atlas-prepare-canvas-capture', draw)
+    const prepareCapture = () => { draw(true) }
+    canvas.addEventListener('solar-atlas-prepare-canvas-capture', prepareCapture)
     drawRef.current = draw
-    const resize = new ResizeObserver(draw); resize.observe(canvas)
+    const resize = new ResizeObserver(() => { draw() }); resize.observe(canvas)
     const startWorker = () => {
       worker = new Worker(new URL('../workers/catalog-stream.worker.ts', import.meta.url), { type: 'module' })
       const ownedWorker = worker
@@ -621,12 +820,16 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
               pending.reservation = appendLookup.prepareAppend(selection,response.startRow)
               if (pending.reservation.count !== response.count) throw new Error('Catalog append mask count differs from upload')
               const attributes: Attributes = { positions: new Float32Array(response.positions),
-                colors: new Float32Array(response.count*3), sizes: new Float32Array(response.count) }
+                colors: new Uint8Array(response.count*3), sizes: new Uint8Array(response.count) }
               if (!hasOnlyFiniteValues(attributes.positions)) throw new Error('Catalog append exceeds GPU coordinates')
               for (let row=0;row<response.count;row++) {
-                const orbitClass = manifest.compactIndex!.classCodes[response.appearance[row*2]], flags = response.appearance[row*2+1]
-                if (!orbitClass || flags > 7) throw new Error('Invalid appended catalog appearance')
-                attributes.colors.set(catalogPointColor(orbitClass,flags),row*3); attributes.sizes[row] = catalogPointSize(flags)
+                const classIndex = response.appearance[row*2], flags = response.appearance[row*2+1]
+                if (!classCodes || classIndex >= classCodes.length || flags > 7) throw new Error('Invalid appended catalog appearance')
+                const styleOffset = (classIndex*8+flags)*4, colorOffset = row*3
+                attributes.colors[colorOffset] = pointStyles[styleOffset]
+                attributes.colors[colorOffset+1] = pointStyles[styleOffset+1]
+                attributes.colors[colorOffset+2] = pointStyles[styleOffset+2]
+                attributes.sizes[row] = pointStyles[styleOffset+3]
               }
               renderer.append(attributes); checkGl(); retained.push(attributes)
               checkAppendDeadline()
@@ -646,7 +849,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
                   })) throw new Error('Catalog append completion changed its uploaded receipt')
               checkAppendDeadline()
               pending.reservation!.commit(response.startRow,response.addedRows)
-              sourceBlockCounts.push(response.addedRows)
+              recordEpochBlockCounts(response.addedRows)
               const speed = response.result.maximumSpeedAUPerTtDay ?? null
               sourceMaximumSpeed = count.drawnRows === 0 ? speed : sourceMaximumSpeed === null || speed === null ? null : Math.max(sourceMaximumSpeed,speed)
               setMaximumSpeed(sourceMaximumSpeed)
@@ -668,7 +871,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
             }
             setStatus({ ...count, phase: snapshotComplete ? 'complete' : 'limited' })
             requestEpoch(targetEpochRef.current)
-            draw()
+            draw(true)
           } catch (error) { fail(error) }
           return
         }
@@ -685,36 +888,53 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
             if (response.type === 'epoch-start') {
               if (epochStarted || response.count !== count.drawnRows) throw new Error('Duplicate or mismatched catalog epoch start receipt')
               epochStarted = true
-              updatedRows = 0; retainedTile = 0; retainedOffset = 0
-              observedBlockEpochs = new Float64Array(sourceBlockCounts.length * 2)
+              if (epochTiles.length) throw new Error('Catalog epoch started with an unreturned upload tile')
+              updatedRows = 0; nextEpochTileRow = 0; retainedTile = 0; retainedOffset = 0
+              observedBlockEpochs = new Float64Array(epochBlockCounts.length * 2)
               observedBlock = 0; observedBlockRows = 0
               reusedRows = 0; maximumReuseDrift = 0; minimumActualEpoch = Infinity; maximumActualEpoch = -Infinity
               renderer.beginPositionUpdate()
             } else if (response.type === 'epoch-reuse') {
-              if (epochTile || response.startRow !== updatedRows || !Number.isSafeInteger(response.count) || response.count < 1 || response.count > Math.max(manifest.chunkSize,plan.appendCapacity) ||
+              if (epochTiles.length || response.startRow !== updatedRows || response.startRow !== nextEpochTileRow || !Number.isSafeInteger(response.count) || response.count < 1 || response.count > Math.max(manifest.chunkSize,plan.appendCapacity) ||
                   updatedRows+response.count > count.drawnRows || !Number.isFinite(response.computedJulianDay) || response.computedJulianDay < 2441317.5 ||
                   !Number.isFinite(response.displacementAU) || response.displacementAU < 0 || response.displacementAU > requestedBudget ||
                   (response.computedJulianDay === requestedEpoch) !== (response.displacementAU === 0)) throw new Error('Invalid catalog reused-block receipt')
               renderer.retainPositions(response.startRow, response.count); advanceCpuSnapshot(response.count)
               recordEpochRows(response.count, response.computedJulianDay, response.displacementAU)
-              updatedRows += response.count; reusedRows += response.count
+              updatedRows += response.count; nextEpochTileRow += response.count; reusedRows += response.count
               maximumReuseDrift = Math.max(maximumReuseDrift, response.displacementAU)
               minimumActualEpoch = Math.min(minimumActualEpoch, response.computedJulianDay); maximumActualEpoch = Math.max(maximumActualEpoch, response.computedJulianDay)
               post({ type: 'epoch-reuse-ack', requestId: response.requestId, startRow: response.startRow, count: response.count })
             } else if (response.type === 'epoch-tile') {
-              if (epochTile || !(response.positions instanceof Float64Array)) throw new Error('Invalid catalog epoch transfer window or coordinates')
-              epochTile = response; epochTileOffset = 0; epochFrame = requestAnimationFrame(flushEpochTile)
+              if (epochTiles.length >= CATALOG_EPOCH_UPLOAD_SLOTS || !(response.positions instanceof Float64Array) ||
+                  !Number.isSafeInteger(response.startRow) || response.startRow !== nextEpochTileRow ||
+                  !Number.isSafeInteger(response.count) || response.count < 1 || response.count > 16384 ||
+                  response.positions.length !== response.count*dimensions || response.startRow+response.count > count.drawnRows) {
+                throw new Error('Invalid catalog epoch transfer window or coordinates')
+              }
+              epochTiles.push(response); nextEpochTileRow += response.count
+              if (!epochFrame) epochFrame = requestAnimationFrame(flushEpochTile)
             } else {
-              if (epochTile || response.count !== updatedRows || updatedRows !== count.drawnRows ||
-                  observedBlock !== sourceBlockCounts.length || observedBlockRows !== 0) throw new Error('Catalog epoch completed before upload')
+              if (epochTiles.length || response.count !== updatedRows || updatedRows !== count.drawnRows || nextEpochTileRow !== count.drawnRows ||
+                  observedBlock !== epochBlockCounts.length || observedBlockRows !== 0) throw new Error('Catalog epoch completed before upload')
+              const timing = response.workerTimingMs
+              if (!timing || ![timing.computeAndYield,timing.propagation,timing.cooperativeYield,
+                timing.tileOwnershipWait,timing.reuseAckWait,timing.total]
+                  .every(value => Number.isFinite(value) && value >= 0) ||
+                  timing.tileRows !== CATALOG_EPOCH_TILE_ROWS ||
+                  timing.maxUnacknowledgedTiles !== CATALOG_EPOCH_UPLOAD_SLOTS || !Number.isSafeInteger(timing.peakUnacknowledgedTiles) ||
+                  timing.peakUnacknowledgedTiles < (response.recomputedRows === 0 ? 0 : 1) ||
+                  timing.peakUnacknowledgedTiles > timing.maxUnacknowledgedTiles) {
+                throw new Error('Invalid catalog epoch worker timing receipt')
+              }
               if (response.reusedRows !== reusedRows || response.recomputedRows !== updatedRows-reusedRows || response.maximumDisplacementAU !== maximumReuseDrift ||
                   (updatedRows ? !response.computedEpochRange || response.computedEpochRange[0] !== minimumActualEpoch || response.computedEpochRange[1] !== maximumActualEpoch : response.computedEpochRange !== null)) throw new Error('Catalog epoch provenance summary mismatch')
               if (response.maximumDriftAU !== requestedBudget || !(response.blockEpochs instanceof Float64Array) ||
-                  response.blockEpochs.length !== sourceBlockCounts.length*4) throw new Error('Invalid catalog block epoch evidence')
+                  response.blockEpochs.length !== epochBlockCounts.length*4) throw new Error('Invalid catalog block epoch evidence')
               let blockRows = 0, blockMinimum = Infinity, blockMaximum = -Infinity, blockDrift = 0
               for (let offset = 0; offset < response.blockEpochs.length; offset += 4) {
                 const [start, rows, epoch, drift] = response.blockEpochs.subarray(offset, offset+4)
-                if (start !== blockRows || rows !== sourceBlockCounts[offset/4] || !Number.isSafeInteger(rows) || rows < 1 || rows > Math.max(manifest.chunkSize,plan.appendCapacity) ||
+                if (start !== blockRows || rows !== epochBlockCounts[offset/4] || !Number.isSafeInteger(rows) || rows < 1 || rows > CATALOG_EPOCH_TILE_ROWS ||
                     !Number.isFinite(epoch) || epoch < 2441317.5 || !Number.isFinite(drift) || drift < 0 || drift > requestedBudget ||
                     (epoch === requestedEpoch) !== (drift === 0) || epoch !== observedBlockEpochs[offset/2] ||
                     drift !== observedBlockEpochs[offset/2+1]) throw new Error('Invalid contiguous catalog block evidence')
@@ -722,16 +942,15 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
               }
               if (blockRows !== updatedRows || blockDrift !== maximumReuseDrift ||
                   updatedRows > 0 && (blockMinimum !== minimumActualEpoch || blockMaximum !== maximumActualEpoch)) throw new Error('Catalog block evidence differs from uploaded epoch')
-              renderer.finishPositionUpdate(); coherent = true; epochBusy = false; epochStarted = false; installedEpoch = requestedEpoch
+              renderer.finishPositionUpdate(false); coherent = true; epochBusy = false; epochStarted = false; installedEpoch = requestedEpoch
               installedDrift = response.maximumDisplacementAU
               uniformEpoch = response.computedEpochRange && response.computedEpochRange[0] === response.computedEpochRange[1] ? response.computedEpochRange[0] : null
               completedEpochEvidence = response
               awaitingPresentation = true
               setComputedEpoch(uniformEpoch); setEpochEvidence(response); viewKey = ''; selectionViewKey = ''
-              if (!draw()) return
+              if (!draw(true)) return
               setStatus({ ...count, phase: snapshotComplete ? 'complete' : 'limited' })
-              // Spatial mode waits for matching selection before presenting;
-              // all-points mode schedules presentation inside draw().
+              // Capped display modes wait for matching selection before presenting.
             }
           } catch (error) { fail(error) }
           return
@@ -739,30 +958,47 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
         if (response.type === 'selection' || response.type === 'selection-error') {
           if (response.requestId !== inFlightView) return
           inFlightView = null
-          if (response.requestId !== viewRequestId || response.count !== count.drawnRows) {
+          const detail = detailRef.current
+          if (response.requestId !== viewRequestId) {
             viewKey = ''
             draw()
             return
           }
-          if (restoring || !coherent || response.requestId !== viewRequestId || response.count !== count.drawnRows || detailRef.current.displayMode !== 'spatial') return
+          if (restoring || !coherent) return
           if (response.type === 'selection-error') { workerFailure(new Error(response.error)); return }
           try {
-            if (!renderer || !(response.indices instanceof Uint32Array) || response.indices.length > detailRef.current.displayLimit ||
-                !Number.isSafeInteger(response.visible) || response.visible < response.indices.length || response.visible > count.drawnRows ||
-                !Number.isSafeInteger(response.edgeCandidates) || response.edgeCandidates < 0 || response.edgeCandidates > response.visible) throw new Error('Invalid catalog spatial selection')
-            if (response.testedRows !== undefined || response.skippedRows !== undefined) {
+            if (!Number.isSafeInteger(response.count) || response.count < 1 || response.count !== lastViewRequestedCount || response.count > count.drawnRows ||
+                !renderer || !(response.indices instanceof Uint32Array) || response.indices.byteOffset !== 0 ||
+                !(response.indices.buffer instanceof ArrayBuffer) || response.indices.buffer.byteLength !== response.indices.byteLength ||
+                response.indices.length > Math.min(detail.displayLimit,response.count) ||
+                response.indices.length > 0 && response.indices[response.indices.length-1] >= response.count ||
+                !Number.isSafeInteger(response.visible) || response.visible < response.indices.length || response.visible > response.count ||
+                !Number.isSafeInteger(response.edgeCandidates) || response.edgeCandidates < 0 || response.edgeCandidates > response.visible ||
+                !Number.isFinite(response.selectionMs) || response.selectionMs < 0) throw new Error('Invalid catalog display selection')
+            const hasSpatialWorkCounters = response.testedRows !== undefined || response.skippedRows !== undefined
+            if ((detail.displayMode === 'spatial') !== hasSpatialWorkCounters) throw new Error('Catalog selection counters do not match display mode')
+            if (hasSpatialWorkCounters) {
               if (!Number.isSafeInteger(response.testedRows) || !Number.isSafeInteger(response.skippedRows) || response.testedRows! < 0 || response.skippedRows! < 0 ||
-                  response.testedRows!+response.skippedRows! !== count.drawnRows || response.visible > response.testedRows!) throw new Error('Invalid catalog spatial work counters')
+                  response.testedRows!+response.skippedRows! !== response.count || response.visible > response.testedRows!) throw new Error('Invalid catalog spatial work counters')
             }
-            renderer.setSpatialSelection(response.indices)
+            if ((detail.displayMode === 'spatial') !== Boolean(response.countOverlay)) throw new Error('Catalog screen-count overlay does not match display mode')
+            const countOverlaySummary = response.countOverlay
+              ? drawCatalogScreenCountOverlay(countOverlayCanvasRef.current!, response.countOverlay)
+              : undefined
+            if (response.countOverlay && response.countOverlay.sourceRows !== response.visible-response.edgeCandidates) {
+              throw new Error('Catalog screen-count overlay does not cover the exact viewport rows')
+            }
+            renderer.setSpatialSelectionFromWorker(response.indices)
+            setDisplay({ count: response.indices.length, visible: response.visible, selectionRows: response.count,
+              selectionMs: response.selectionMs, edgeCandidates: response.edgeCandidates, pending: false,
+              testedRows: response.testedRows, skippedRows: response.skippedRows, countOverlay: countOverlaySummary })
             // The draw validates index upload and draw errors together before
             // publishing this selection as presented.
-            if (!draw()) return
-            // draw() may discover a newer camera/viewport and issue another
-            // selection. Its pending state must not be overwritten by this one.
+            if (!draw(true)) return
+            // draw() may schedule a follow-up progress pass. Its pending state
+            // must not be overwritten by this completed, older selection.
             if (response.requestId !== viewRequestId || !coherent) return
-            setDisplay({ count: response.indices.length, visible: response.visible, edgeCandidates: response.edgeCandidates, pending: false, testedRows: response.testedRows, skippedRows: response.skippedRows })
-            if (awaitingPresentation) finishPresentation()
+            if (awaitingPresentation && inFlightView === null) finishPresentation()
           } catch (error) { fail(error) }
         } else if (response.type === 'tile') {
           if (!acceptingTiles) return
@@ -778,7 +1014,10 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
           if (response.type === 'error') fail(new Error(response.error))
           else if (response.type === 'cancelled') {
             acceptingTiles = false
+            lastViewRequestedCount = 0
             setStatus({ ...count, phase: 'cancelled' })
+            viewKey = ''
+            draw()
           }
           else if (response.type !== 'done') fail(new Error('Unexpected catalog completion response'))
           else if (pendingTiles.length || response.drawnRows !== count.drawnRows || response.sourceRows !== count.sourceRows) fail(new Error('Catalog completed before all tiles were uploaded'))
@@ -827,7 +1066,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
               const chunks = new Set<number>()
               const selectedOrder = screening.shards.filter(shard => shard.selectedRows > 0)
               if (selectedOrder.length !== mapping.shards.length) { fail(new Error('Selected shard count differs from upload order')); return }
-              sourceBlockCounts = []
+              epochBlockCounts = []
               let mappedRows = 0
               for (const shard of mapping.shards) {
                 if (!shard || !Number.isSafeInteger(shard.chunk) || shard.chunk < 0 || shard.chunk >= manifest.chunkCount || chunks.has(shard.chunk) ||
@@ -849,7 +1088,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
                 if (!checked || checked.selectedRows !== selectedCount || checked.binarySha256 !== shard.sha256 ||
                     checked.metadataSha256 !== shard.metadataSha256) { fail(new Error('Selected shard differs from screening evidence')); return }
                 mappedRows += selectedCount
-                sourceBlockCounts.push(selectedCount)
+                recordEpochBlockCounts(selectedCount)
               }
               if (mappedRows !== count.drawnRows) { fail(new Error('Catalog source selection does not cover uploaded rows')); return }
               if (plan.appendCapacity) { appendBase = mapping; appendLookup = createCatalogSourceAppendLookup(mapping,plan.capacity) }
@@ -864,6 +1103,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
             sourceMaximumSpeed = speed ?? null; setMaximumSpeed(sourceMaximumSpeed)
             setStatus({ ...count, phase: response.complete ? 'complete' : 'limited' })
             requestEpoch(targetEpochRef.current)
+            draw()
           }
         }
       }
@@ -885,11 +1125,12 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
       if (epochFrame) cancelAnimationFrame(epochFrame)
       if (followFrame) cancelAnimationFrame(followFrame)
       if (frameId) cancelAnimationFrame(frameId)
+      if (renderObservationFrame) cancelAnimationFrame(renderObservationFrame)
       terminateWorker()
       resize.disconnect()
       canvas.removeEventListener('webglcontextlost', lost)
       canvas.removeEventListener('webglcontextrestored', initialize)
-      canvas.removeEventListener('solar-atlas-prepare-canvas-capture', draw)
+      canvas.removeEventListener('solar-atlas-prepare-canvas-capture', prepareCapture)
       renderer?.dispose()
       pendingTiles.length = 0; pendingTileOffset = 0
       retained.length = 0
@@ -897,14 +1138,25 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
   }, [manifest, filters, julianDay, requestedRows, budgetBytes, plan.capacity, plan.initialCapacity, plan.appendCapacity, mode, dimensions, priority, retainEpochs, appendRows, prioritySources, retryGeneration, loadOwner, onStopped])
 
   return <>
-    <canvas ref={canvasRef} className="viz-canvas catalog-point-canvas" role="img" aria-label={`${t('catalogPointAria')} ${mode}: ${displayCountLabel}`} data-testid="catalog-stream-canvas" data-drawn-rows={status.drawnRows} data-source-rows={status.sourceRows} data-phase={status.phase} data-capacity={plan.capacity} data-display-count={display.count} data-spatial-pending={display.pending} data-display-mode={displayMode} data-coordinate-mode={mode} />
+    <canvas ref={canvasRef} className="viz-canvas catalog-point-canvas" role="img" aria-label={`${t('catalogPointAria')} ${mode}: ${displayCountLabel}`} data-testid="catalog-stream-canvas" data-drawn-rows={status.drawnRows} data-source-rows={status.sourceRows} data-phase={status.phase} data-capacity={plan.capacity} data-display-count={display.count} data-selection-rows={display.selectionRows} data-spatial-pending={display.pending} data-selection-ms={display.selectionMs} data-tested-rows={display.testedRows} data-skipped-rows={display.skippedRows} data-viewport-candidates={displayMode === 'spatial' ? inViewport : undefined} data-edge-candidates={displayMode === 'spatial' ? display.edgeCandidates : undefined} data-count-overlay-rows={display.countOverlay?.sourceRows} data-count-overlay-cells={display.countOverlay?.occupiedCells} data-count-overlay-max={display.countOverlay?.maximumCount} data-display-mode={displayMode} data-coordinate-mode={mode} data-target-utc-jd={targetJulianDay} data-temporal-budget-au={maximumTemporalDriftAU} />
+    <canvas ref={countOverlayCanvasRef} className="catalog-screen-count-overlay" aria-hidden="true"
+      style={{ display: displayMode === 'spatial' && !display.pending && !displayUnavailable && display.countOverlay ? 'block' : 'none' }} />
     <div className="catalog-stream-overlay">
     <div className="catalog-stream-status">
       <strong>{status.drawnRows.toLocaleString()} / {plan.capacity.toLocaleString()} · {t('catalogStreamLoaded')}</strong>
-      <span>{t('catalogStreamDisplayed')}: {displayCountLabel}{displayMode === 'spatial' && !displayUnavailable ? ` / ${display.visible.toLocaleString()} ${t('catalogStreamInView')}` : ''}</span>
+      {displayMode === 'all' && display.pending && <span>{t('catalogStreamDisplayed')}: {displayCountLabel}</span>}
+      {!display.pending && <span>{t('catalogStreamDisplayed')}: {displayCountLabel}{displayMode === 'spatial' && !displayUnavailable ? ` / ${inViewport.toLocaleString()} ${t('catalogStreamInView')}` : ''}</span>}
+      {notSubmittedRows !== null && <span>{t('catalogStreamNotSubmitted')}: {notSubmittedRows.toLocaleString()}</span>}
       {displayMode === 'spatial' && !displayUnavailable && <span>{t(display.pending ? 'catalogSpatialUpdating' : 'catalogSpatialExplanation')}</span>}
+      {displayMode === 'spatial' && !displayUnavailable && !display.pending && display.countOverlay &&
+        <span>{language === 'zh' ? '视口计数底图：' : 'Viewport count overlay: '}{display.countOverlay.sourceRows.toLocaleString()}
+          {language === 'zh' ? ' 条记录，' : ' source rows across '}{display.countOverlay.occupiedCells.toLocaleString()}
+          {language === 'zh' ? ` 个有记录的屏幕格，最高格 ${display.countOverlay.maximumCount.toLocaleString()} 条；颜色按当前视口对数缩放。`
+            : ` occupied screen cells, maximum ${display.countOverlay.maximumCount.toLocaleString()} rows per cell; color is log-scaled within this view.`}</span>}
+      {spatialLimitReached && <span>{t('catalogSpatialLimitApplied')} {display.count.toLocaleString()} / {inViewport.toLocaleString()}.</span>}
       {displayMode === 'spatial' && !displayUnavailable && !display.pending && display.edgeCandidates !== undefined && <span>{language === 'zh' ? '其中边缘余量候选：' : 'Candidates admitted by edge margin: '}{display.edgeCandidates.toLocaleString()}</span>}
       {displayMode === 'spatial' && !displayUnavailable && !display.pending && display.testedRows !== undefined && <span>{language === 'zh' ? '逐点筛选 / 整块跳过：' : 'Points screened / skipped by block: '}{display.testedRows.toLocaleString()} / {display.skippedRows?.toLocaleString()}</span>}
+      {!displayUnavailable && !display.pending && display.selectionRows !== undefined && <span>{t('catalogSelectionSnapshotRows')}: {display.selectionRows.toLocaleString()}</span>}
       <span>{t('catalogStreamScanned')}: {status.sourceRows.toLocaleString()} / {manifest.totalCount.toLocaleString()}</span>
       <span role="status">{status.phase === "cancelled" ? (discardedOnCancel
         ? (language === "zh" ? "已停止；未完成的历元快照已丢弃，请重新加载。" : "Stopped; the incomplete epoch snapshot was discarded. Reload to continue.")
@@ -944,14 +1196,21 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
         {' · '}{language === 'zh' ? '应用层计数，非实测网络节省。' : 'Application counters, not measured network savings.'}</span>}
       {status.error && <span role="alert">{status.error}</span>}
       {spatialWorkerError && <div role="alert"><p>{language === 'zh'
-        ? '空间筛选已停止。已加载快照仍保留；可切换为全部显示，或重新加载以恢复空间筛选。'
-        : 'Spatial selection stopped. The loaded snapshot is retained; use the all-points view or reload to restore spatial selection.'} {spatialWorkerError}</p>
+        ? '星表显示筛选 Worker 已停止。已加载快照仍保留；回退画面不再生成视野或均匀间隔代表点。'
+        : 'Catalog display selection worker stopped. The loaded snapshot is retained; the fallback no longer selects viewport or evenly spaced representatives.'}
+        {status.drawnRows > Math.min(plan.capacity, displayLimit) && <> {language === 'zh'
+          ? `为限制绘制量，当前仅按上传顺序绘制前 ${Math.min(plan.capacity, displayLimit).toLocaleString()} 行；它不是均匀或空间代表样本。`
+          : `To bound drawing, only the first ${Math.min(plan.capacity, displayLimit).toLocaleString()} uploaded rows are drawn; this is not an even or spatially representative sample.`}</>}
+        {' '}{spatialWorkerError}</p>
         <button type="button" className="secondary-button" onClick={() => { onRestarted?.(); setRetryGeneration(value => value+1) }}>{language === 'zh' ? '重新加载' : 'Reload'}</button></div>}
     </div>
     {computedEpoch !== null && status.drawnRows > 0 && <p className="catalog-point-epoch" data-testid="catalog-point-epoch" data-utc-jd={computedEpoch}>
       {t(mode === '3d' ? 'catalogPointModel3d' : 'catalogPointModel')} <time dateTime={julianDayToDate(computedEpoch).toISOString()}>{julianDayToDate(computedEpoch).toISOString().replace('T', ' ')}</time>
     </p>}
-    {epochEvidence && <p className="catalog-result-note" data-testid="catalog-block-epochs">
+    {epochEvidence && <p className="catalog-result-note" data-testid="catalog-block-epochs"
+      data-min-computed-utc-jd={epochEvidence.computedEpochRange?.[0]}
+      data-max-computed-utc-jd={epochEvidence.computedEpochRange?.[1]}
+      data-maximum-displacement-au={epochEvidence.maximumDisplacementAU}>
       {language === 'zh' ? '本次复算 / 复用行数：' : 'Rows recomputed / reused: '}{epochEvidence.recomputedRows.toLocaleString()} / {epochEvidence.reusedRows.toLocaleString()}.
       {epochEvidence.computedEpochRange && <> {language === 'zh' ? '实际计算历元范围（UTC JD）：' : 'Actual computed epoch range (UTC JD): '}{epochEvidence.computedEpochRange.join(' – ')}.</>}
       {' '}{language === 'zh' ? '验收目标（UTC JD）：' : 'Evaluated target (UTC JD): '}{epochEvidence.julianDay}.
@@ -993,12 +1252,25 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
             spatialWorkerError: spatialWorkerError || null,
             selectionPending: display.pending,
             available: !displayUnavailable,
-            counts: display.pending || displayUnavailable ? null : { submittedPoints: display.count,
-              ...(displayMode === 'spatial' ? { viewportCandidates: display.visible, edgeCandidates: display.edgeCandidates,
-                testedRows: display.testedRows, skippedRows: display.skippedRows } : {}) },
-            viewportPolicy: { model: 'outward-Float32-screening', relativeMargin: CATALOG_CLIP_RELATIVE_MARGIN,
+            counts: display.pending || displayUnavailable ? null : { submittedPoints: display.count, selectionRows: display.selectionRows,
+              ...(displayMode === 'spatial' ? { viewportCandidates: inViewport, edgeCandidates: display.edgeCandidates,
+                testedRows: display.testedRows, skippedRows: display.skippedRows,
+                countOverlay: display.countOverlay ? { ...display.countOverlay, model: 'exact-in-viewport-source-row-count-per-equal-area-projected-screen-cell',
+                  meaning: 'Screen-bin counts only; not depth-normalized three-dimensional physical density, probability or event rate.' } : null } : {}) },
+            selectionPolicy: spatialWorkerError
+              ? status.drawnRows > Math.min(plan.capacity, displayLimit)
+                ? { model: 'upload-order prefix fallback after selection worker failure', priority: 'first rows up to the draw cap',
+                    meaning: 'Not a spatially or statistically representative sample; source ordering may bias what is shown.' }
+                : { model: 'direct uploaded rows after selection worker failure', priority: 'all rows fit under the draw cap',
+                    meaning: 'No viewport representative selection was performed.' }
+              : displayMode === 'spatial'
+                ? { model: 'screen-cell representatives', priority: 'focus-and-selections-first; viewport-interior before margin-only; deterministic hash within tier',
+                    meaning: 'Exact selected source positions plus a count overlay for every mathematical-viewport source row; screen-bin counts are not depth-normalized three-dimensional physical density or event probability.' }
+                : { model: 'deterministic-even-spacing-in-upload-order', priority: 'focus then located selections before remaining rows',
+                    meaning: 'Display thinning only; not a spatial or statistical sample.' },
+            viewportPolicy: displayMode === 'spatial' && !spatialWorkerError ? { model: 'outward-Float32-screening', relativeMargin: CATALOG_CLIP_RELATIVE_MARGIN,
               representativePriority: 'explicit-pins-then-viewport-interior-before-margin-only; deterministic-hash-within-tier',
-              meaning: 'Candidate admission, not an on-screen pixel count or physical position uncertainty.' },
+              meaning: 'Candidate admission, not an on-screen pixel count or physical position uncertainty.' } : null,
             focusedSource: focusedSource ?? null, focusedUploadedRow: focusedRow ?? null,
             selectedSources: selectedSources ?? [], selectedUploadedRows: selectedRows,
             selectedSourceRows,

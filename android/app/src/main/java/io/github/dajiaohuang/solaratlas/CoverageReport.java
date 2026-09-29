@@ -16,6 +16,7 @@ public final class CoverageReport {
     public final String catalogVersion, catalogHash, inventoryHash, reportHash, sourceHash, mappingHash, satelliteHash;
     public final long sourceRecords, mappedRecords, unresolvedRecords, explicitTargets, availableTargets, dependencyCovered, dependencyGaps;
     public final double auditEt, windowStartEt, windowEndEt;
+    public final SortedMap<String, Long> sourceCounts;
     public final SortedMap<String, Long> unresolvedReasons;
     public final List<CoverageBucket> coverage;
 
@@ -71,19 +72,40 @@ public final class CoverageReport {
         }
         require(remaining == 0, "incomplete coverage reasons");
         unresolvedReasons = Collections.unmodifiableSortedMap(parsedReasons);
+        Map<String, Object> rawSourceCounts = object(value.get("sourceCounts"));
+        require(!rawSourceCounts.isEmpty() && rawSourceCounts.size() <= 256, "invalid coverage source counts");
+        SortedMap<String, Long> parsedSourceCounts = new TreeMap<>(); long sourceTotal = 0;
+        for (Map.Entry<String, Object> entry : rawSourceCounts.entrySet()) {
+            String source = text(entry.getKey(), false, 512); long count = count(entry.getValue());
+            require(source.codePoints().anyMatch(codePoint -> !Character.isWhitespace(codePoint) && !Character.isSpaceChar(codePoint)), "invalid coverage source population");
+            Long next = sum(sourceTotal, count);
+            require(count > 0 && next != null && next <= sourceRecords, "invalid coverage source population");
+            sourceTotal = next; parsedSourceCounts.put(source, count);
+        }
+        require(sourceTotal == sourceRecords, "coverage source counts do not reconcile");
+        sourceCounts = Collections.unmodifiableSortedMap(parsedSourceCounts);
         auditEt = finite(value.get("auditEt"));
         Object rawCoverage = value.get("coverage");
         require(rawCoverage instanceof List && !((List<?>) rawCoverage).isEmpty() && ((List<?>) rawCoverage).size() <= 256, "invalid coverage status buckets");
         List<CoverageBucket> parsedCoverage = new ArrayList<>(); Set<String> coverageKeys = new HashSet<>(); long coverageTotal = 0;
+        Map<String, Long> sourceCoverage = new TreeMap<>();
         for (Object entry : (List<?>) rawCoverage) {
             CoverageBucket bucket = new CoverageBucket(object(entry), catalogVersion, auditEt);
             String key = bucket.datasetVersion + "\u0000" + bucket.source + "\u0000" + bucket.model + "\u0000" + Double.toString(bucket.auditEt) + "\u0000" + bucket.frame;
             require(coverageKeys.add(key), "repeated coverage status bucket");
+            Long sourceCount = sourceCounts.get(bucket.source);
+            Long priorSourceTotal = sourceCoverage.getOrDefault(bucket.source, 0L);
+            Long sourceNext = sum(priorSourceTotal, bucket.exact, bucket.approximate, bucket.missing);
+            require(sourceCount != null && sourceNext != null && sourceNext <= sourceCount, "coverage status bucket source mismatch");
+            sourceCoverage.put(bucket.source, sourceNext);
             Long next = sum(coverageTotal, bucket.exact, bucket.approximate, bucket.missing);
             require(next != null, "coverage status bucket total overflow"); coverageTotal = next;
             parsedCoverage.add(bucket);
         }
         require(coverageTotal == sourceRecords, "coverage status buckets do not reconcile");
+        for (Map.Entry<String, Long> entry : sourceCounts.entrySet()) {
+            require(sourceCoverage.getOrDefault(entry.getKey(), 0L).equals(entry.getValue()), "coverage status buckets do not reconcile for source");
+        }
         coverage = Collections.unmodifiableList(parsedCoverage);
         Map<String, Object> window = object(value.get("requestedWindow"));
         windowStartEt = finite(window.get("startEt")); windowEndEt = finite(window.get("endEt"));

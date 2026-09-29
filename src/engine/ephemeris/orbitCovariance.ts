@@ -1,11 +1,37 @@
-import type { SbdbCovariance } from '../../data/loaders/sbdbCovariance'
+import { sbdbCovarianceModelParameterIssue, type SbdbCovariance, type SbdbModelParameter } from '../../data/loaders/sbdbCovariance'
 import { solveEllipticKeplerRadians } from './kepler.ts'
 import { conicCovariancePlane } from './conicCovariancePlane.ts'
+import { compensatedMatrixProduct, COVARIANCE_MATRIX_ARITHMETIC } from '../numerics/compensatedMatrixProduct.ts'
 
 export type AdoptedSolarGM = { au3PerDay2: number; source: string }
 const orbitalLabels = ['e', 'q', 'tp', 'node', 'peri', 'i']
 const orbitalUnits = [null, 'au', 'd', 'deg', 'deg', 'deg']
 const DEG = Math.PI / 180
+const transpose = (matrix: number[][]) => matrix[0].map((_, column) => matrix.map(row => row[column]))
+
+function hasValidModelParameterContract(source: SbdbCovariance) {
+  const values: unknown = source.modelParameters
+  if (!Array.isArray(values) || values.length > 64) return false
+  const names = new Set<string>(), byName = new Map<string, SbdbModelParameter>()
+  for (const value of values) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+    const parameter = value as Partial<SbdbModelParameter>
+    const validText = (item: unknown) => item === null || typeof item === 'string' && item.length > 0 && item.trim() === item
+    if (typeof parameter.name !== 'string' || !parameter.name || parameter.name.trim() !== parameter.name || names.has(parameter.name) ||
+        (parameter.kind !== 'SET' && parameter.kind !== 'EST' && parameter.kind !== 'CON') ||
+        (parameter.index !== null && !Number.isSafeInteger(parameter.index)) ||
+        typeof parameter.value !== 'number' || !Number.isFinite(parameter.value) ||
+        !validText(parameter.units) || (parameter.sigma !== null && (typeof parameter.sigma !== 'number' || !Number.isFinite(parameter.sigma) || parameter.sigma < 0)) ||
+        !validText(parameter.title) || !validText(parameter.description)) return false
+    names.add(parameter.name)
+    byName.set(parameter.name, parameter as SbdbModelParameter)
+  }
+  if (sbdbCovarianceModelParameterIssue(source.labels, values as SbdbModelParameter[])) return false
+  return source.labels.slice(6).every((label, index) => {
+    const parameter = byName.get(label)
+    return parameter?.kind === 'EST' && parameter.value === source.nominal[index + 6] && parameter.units === source.units[index + 6]
+  })
+}
 
 function ellipticPlane(e: number, q: number, elapsed: number, mu: number) {
   const a = q/(1-e), motion = Math.sqrt(mu/a**3), mean = motion*elapsed
@@ -37,7 +63,8 @@ export function cartesianCovarianceAtSolutionEpoch(source: SbdbCovariance, gm: A
   if (n < 6 || n > 16 || new Set(source.labels).size !== n || axes.some((axis, i) => axis < 0 || axis >= 6 || source.units[axis] !== orbitalUnits[i]) ||
       source.nominal.length !== n || source.nominal.some(value => !Number.isFinite(value)) ||
       source.frame !== 'heliocentric-IAU76/80-ecliptic-J2000' || !Number.isFinite(source.solutionEpochTdb) ||
-      source.matrix.length !== n || source.matrix.some(row => row.length !== n || row.some(value => !Number.isFinite(value)))) {
+      source.matrix.length !== n || source.matrix.some(row => row.length !== n || row.some(value => !Number.isFinite(value))) ||
+      !hasValidModelParameterContract(source)) {
     throw new RangeError('Invalid audited SBDB covariance contract')
   }
   const [e, q, tp, node, peri, inclination] = axes.map(axis => source.nominal[axis])
@@ -75,10 +102,13 @@ export function cartesianCovarianceAtSolutionEpoch(source: SbdbCovariance, gm: A
     // tiny variances. The original source matrix remains untouched.
     return (low < 0) === (high < 0) ? low + (high - low) / 2 : (low + high) / 2
   }))
-  const left = jacobian.map(row => row.map((_, j) => row.reduce((sum, value, k) => sum + value * symmetric[k][j], 0)))
+  const left = compensatedMatrixProduct(jacobian, symmetric)
+  const product = compensatedMatrixProduct(left, transpose(jacobian))
   const matrix = Array.from({ length: n }, () => Array<number>(n).fill(0))
   for (let row = 0; row < n; row++) for (let column = row; column < n; column++) {
-    const value = left[row].reduce((sum, entry, k) => sum + entry * jacobian[column][k], 0)
+    const forward = product[row][column], backward = product[column][row]
+    const low = Math.min(forward, backward), high = Math.max(forward, backward)
+    const value = (low < 0) === (high < 0) ? low + (high - low) / 2 : (low + high) / 2
     matrix[row][column] = matrix[column][row] = value
   }
   if ([...nominal, ...jacobian.flat(), ...matrix.flat()].some(value => !Number.isFinite(value)) || matrix.some((row, i) => row[i] < 0)) {
@@ -94,11 +124,13 @@ export function cartesianCovarianceAtSolutionEpoch(source: SbdbCovariance, gm: A
     epochTdb: source.solutionEpochTdb, frame: source.frame,
     labels: ['x', 'y', 'z', 'vx', 'vy', 'vz', ...source.labels.slice(6)],
     units: ['au', 'au', 'au', 'au/d', 'au/d', 'au/d', ...source.units.slice(6)],
-    nominal, matrix, jacobian, marginalSigmas: matrix.map((row, i) => Math.sqrt(row[i])),
+    nominal, matrix, jacobian, matrixArithmetic: COVARIANCE_MATRIX_ARITHMETIC,
+    marginalSigmas: matrix.map((row, i) => Math.sqrt(row[i])),
     inputLabels: source.labels.slice(), inputUnits: source.units.slice(),
     adoptedSolarGM: { ...gm },
     source: { designation: source.designation, spkId: source.spkId, solutionId: source.solutionId,
       solutionEpochTdb: source.solutionEpochTdb, standardElementEpochTdb: source.standardElementEpochTdb,
+      modelParameters: source.modelParameters.map(parameter => ({ ...parameter })),
       planetaryEphemeris: source.planetaryEphemeris, smallBodyEphemeris: source.smallBodyEphemeris },
     limitations: ['First-order coordinate transformation at the covariance solution epoch, not temporal propagation.',
       'Conditional on the explicit adopted solar GM; SBDB cov=mat does not supply a GM or its uncertainty.',

@@ -1,4 +1,4 @@
-import type { CurrentStateObservation, CurrentStateObservationRequest } from '../lib/currentStateObservation'
+import type { CurrentStateObservation, CurrentStateObservationPartial, CurrentStateObservationRequest } from '../lib/currentStateObservation'
 
 export type CurrentStateWorkerRequest =
   | import('../lib/stateTileAdmission').StateTileAdmissionInit
@@ -7,4 +7,5 @@ export type CurrentStateWorkerRequest =
 
 export type CurrentStateWorkerResponse =
   | { type: 'result'; requestId: number; result: CurrentStateObservation }
+  | { type: 'partial'; requestId: number; partial: CurrentStateObservationPartial }
   | { type: 'error'; requestId: number; error: string }

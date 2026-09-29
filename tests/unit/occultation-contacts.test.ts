@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { expect, test } from 'vitest'
 import { findOccultationContacts } from '../../src/engine/events/occultationContacts'
+import { parseOccultationInput } from '../../src/engine/events/occultationExperiment'
 import { sphericalOccultation } from '../../src/engine/events/sphericalOccultation'
 import { createDe440Dynamics, DE440_FORCE_IDS } from '../../src/engine/dynamics/de440Dynamics'
 import { loadPckRadii } from '../../src/data/loaders/pckRadii'
@@ -96,6 +97,9 @@ test('sampled windows preserve clipping, separate events and zero-only ambiguity
   const clipped = await run(t => t)
   expect(clipped.sampledOverlapWindows).toMatchObject([{ boundary: 'external', durationSeconds: 2,
     start: { kind: 'search-boundary', elapsedTdbSeconds: -2 }, end: { kind: 'sampled-zero', elapsedTdbSeconds: 0 } }])
+  const sampledInterior = await run(t => t-0.5)
+  expect(sampledInterior.sampledOverlapWindows).toMatchObject([{ boundary: 'external',
+    start: { kind: 'sampled-overlap', elapsedTdbSeconds: -2 }, end: { kind: 'search-boundary', elapsedTdbSeconds: 2 } }])
   const separate = await run(t => -(t*t-1))
   expect(separate.sampledOverlapWindows.map(w => [w.start.elapsedTdbSeconds, w.end.elapsedTdbSeconds])).toEqual([[-2, -1], [1, 2]])
   expect((await run(t => t*t)).sampledOverlapWindows).toEqual([])
@@ -106,7 +110,8 @@ test('sampled windows preserve clipping, separate events and zero-only ambiguity
 test('sampled zeros are not duplicated or asserted to be crossings, and empty output does not certify completeness', async () => {
   const zero = await findOccultationContacts({ ...defaults, startSeconds: -1, endSeconds: 1, maxStepSeconds: 1,
     evaluate: t => ({ externalGapRadians: t, internalGapRadians: 1 }) })
-  expect(zero.contacts).toEqual([{ boundary: 'external', direction: 'sampled-zero', elapsedTdbSeconds: 0, bracketSeconds: [0, 0] }])
+  expect(zero.contacts).toEqual([{ boundary: 'external', direction: 'sampled-zero', elapsedTdbSeconds: 0,
+    scanBracketSeconds: [0, 0], bracketSeconds: [0, 0] }])
   const missed = await findOccultationContacts({ ...defaults, startSeconds: 0, endSeconds: 1, maxStepSeconds: 1,
     evaluate: t => ({ externalGapRadians: (t-.5)**2-.01, internalGapRadians: 1 }) })
   expect(missed.contacts).toHaveLength(0)
@@ -137,4 +142,12 @@ test('reports actual rounded sample spacing rather than a nominal interval', asy
   expect(result.requestedMaxStepSeconds).toBe(.1)
   expect(result.maximumScanIntervalSeconds).toBe(Math.max(...times.slice(1).map((time, i) => time-times[i])))
   expect(result.maximumScanIntervalSeconds).toBeGreaterThan(.1)
+})
+
+test('rejects over-budget contact scans before loading scientific kernels', () => {
+  const input = { schemaVersion: 1, foregroundId: 301, backgroundId: 399, observerId: 0,
+    referenceEpochTdb: 2451545, startSeconds: 0, endSeconds: 365*86400,
+    maxStepSeconds: 300, toleranceSeconds: 0.01, aberration: 'CN', frame: 'J2000', timeScale: 'TDB' }
+  const bytes = new TextEncoder().encode(JSON.stringify(input)).buffer
+  expect(() => parseOccultationInput(bytes)).toThrow('geometry-evaluation budget')
 })

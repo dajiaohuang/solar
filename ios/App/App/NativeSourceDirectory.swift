@@ -6,16 +6,30 @@ final class NativeSourceDirectoryModel: ObservableObject {
     @Published private(set) var loading = false
     @Published private(set) var message = SourceDirectoryCopy.empty
     private var request: Task<Void, Never>?
+    private var requestIdentity: UUID?
+    private var requestDeadline: Task<Void, Never>?
     private var generation = 0
 
     func clear() {
         generation += 1
-        request?.cancel(); request = nil
+        // Keep the old task until it drains; a replacement awaits this barrier.
+        request?.cancel()
+        requestDeadline?.cancel(); requestDeadline = nil
         page = nil; loading = false; message = SourceDirectoryCopy.empty
+    }
+
+    private func acceptRequest(_ token: Int, deadline: TimeInterval) -> Bool {
+        guard !Task.isCancelled, token == generation else { return false }
+        guard ProcessInfo.processInfo.systemUptime < deadline else {
+            clear(); message = SourceDirectoryCopy.failure
+            return false
+        }
+        return true
     }
 
     func load(address: String, query: String, next: Bool = false) {
         let previous = next ? page : nil
+        let predecessor = request
         clear()
         guard !next || previous != nil else { return }
         guard let base = URL(string: address.trimmingCharacters(in: .whitespacesAndNewlines)) else {
@@ -23,18 +37,35 @@ final class NativeSourceDirectoryModel: ObservableObject {
             return
         }
         let current = generation
+        let owner = UUID()
+        let deadline = ProcessInfo.processInfo.systemUptime + 30
+        requestIdentity = owner
         loading = true; message = SourceDirectoryCopy.loading
+        requestDeadline = Task {
+            do { try await Task.sleep(nanoseconds: 30_000_000_000) } catch { return }
+            guard current == generation, requestIdentity == owner else { return }
+            clear(); message = SourceDirectoryCopy.failure
+        }
         request = Task {
+            defer {
+                if requestIdentity == owner {
+                    requestDeadline?.cancel(); requestDeadline = nil
+                    request = nil; requestIdentity = nil
+                    if current == generation { loading = false }
+                }
+            }
             do {
+                await predecessor?.value
+                try Task.checkCancellation()
+                guard acceptRequest(current, deadline: deadline) else { return }
                 let result = try await NativeSourceIdentityService(base: base).load(query: query, previous: previous)
                 try Task.checkCancellation()
-                guard current == generation else { return }
+                guard acceptRequest(current, deadline: deadline) else { return }
                 page = result; message = SourceDirectoryCopy.loaded
             } catch {
-                guard current == generation else { return }
+                guard acceptRequest(current, deadline: deadline) else { return }
                 message = (error as? NativeSourceIdentityFailure)?.localizedDescription ?? SourceDirectoryCopy.failure
             }
-            if current == generation { loading = false; request = nil }
         }
     }
 }

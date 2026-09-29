@@ -1,6 +1,6 @@
 import type { SbdbCovariance } from '../../data/loaders/sbdbCovariance'
 import { cartesianCovarianceAtSolutionEpoch, type AdoptedSolarGM } from './orbitCovariance.ts'
-import { propagatePeriapsisConic } from './conicPeriapsis.ts'
+import { ConicEvaluationError, propagatePeriapsisConic } from './conicPeriapsis.ts'
 
 const AU = 149597870.7, DAY = 86400, DEG = Math.PI/180
 
@@ -31,12 +31,17 @@ export async function cartesianStatesFromSourceOffsets(input: SbdbCovariance, ad
       const state = [result.positionKm.x/AU,result.positionKm.y/AU,result.positionKm.z/AU,
         result.velocityKmPerSecond.x*DAY/AU,result.velocityKmPerSecond.y*DAY/AU,result.velocityKmPerSecond.z*DAY/AU]
       const extras = source.nominal.slice(6).map((v,j) => v+draws[index*dimension+6+j])
-      if (![...state,...extras].every(Number.isFinite)) throw new RangeError('Sample exceeds numeric range')
+      if (![...state,...extras].every(Number.isFinite)) throw new ConicEvaluationError('Sample exceeds numeric range')
       states.set(state,index*6); additionalValues.set(extras,index*(dimension-6)); valid[index] = 1
-    } catch (error) { failures.push({ index, reason: error instanceof Error ? error.message : String(error) }) }
+    } catch (error) {
+      signal?.throwIfAborted()
+      if (!(error instanceof ConicEvaluationError)) throw error
+      failures.push({ index, reason: error.message })
+    }
   }
   signal?.throwIfAborted()
   return { source, adoptedSolarGM: gm, offsets: draws, count, dimension, states, additionalValues, valid, failures,
+    nominalCoordinateModel: { model: nominal.model, matrixArithmetic: nominal.matrixArithmetic, numericalDomain: nominal.numericalDomain, nominalConic: nominal.nominalConic },
     frame: source.frame, epochTdb: source.solutionEpochTdb,
     stateLabels: nominal.labels.slice(0,6), stateUnits: nominal.units.slice(0,6),
     additionalLabels: source.labels.slice(6), additionalUnits: source.units.slice(6),

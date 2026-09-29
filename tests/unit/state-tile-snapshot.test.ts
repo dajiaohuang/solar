@@ -11,7 +11,7 @@ const catalogManifestSha256 = 'a'.repeat(64), planHash = 'b'.repeat(64), epochJd
 const body = (id: string): CelestialBody => ({ id, name: id, kind: 'asteroid', color: '#ffffff', size: 1, source: 'custom' })
 function metadata(id: string, exact: boolean): StateTileMetadata {
   return { id, source: 'synthetic-snapshot', datasetVersion: 'fixture', datasetSha256: catalogManifestSha256,
-    kernelSha256: 'c'.repeat(64), model: 'spk-original', centerId: 'naif:0',
+    kernelSha256: 'c'.repeat(64), sourceChainSha256: 'e'.repeat(64), model: 'spk-original', centerId: 'naif:0',
     validityStartEt: -100, validityEndEt: 100, validityPresent: true, stateEvidence: 'kernel',
     evidenceWindowStartEt: -100, evidenceWindowEndEt: 100, evidenceWindowPresent: true,
     missingReason: exact ? '' : 'synthetic-gap', identityStatus: '', sourceRecord: false }
@@ -141,7 +141,7 @@ describe('shared column-backed scientific snapshots', () => {
     expect(empty.hasPosition('body')).toBe(false)
   })
 
-  it('loads both 32K-bounded plans before publishing one shared multi-reference snapshot and never publishes partial failures', async () => {
+  it('publishes a verified first 32K plan while later plans load, then replaces it with the full multi-reference snapshot', async () => {
     const source = [await tile(0, 32_768), await tile(32_768, 1)]
     const bodyIds = Array.from({ length: 32_769 }, (_, index) => `source:${index}`)
     const requestedIds = new Map(bodyIds.map((id, index) => [`body:${index}`, id]))
@@ -181,24 +181,32 @@ describe('shared column-backed scientific snapshots', () => {
       throw new Error(`Unexpected test request: ${url}`)
     }) as typeof fetch & ReturnType<typeof vi.fn>
     const publish = vi.fn()
-    const load = async () => {
+    const load = async (publishInitial = false) => {
       const observation = await loadCurrentStateObservation({ base: 'https://synthetic.example', epochTdbJd: epochJd,
-        epochUtcJd: epochJd - 0.001, selectedIds: bodies.map(body => body.id), requestedIds, referenceIds: ['body:1', 'body:2'], signal: controller.signal, fetcher })
+        epochUtcJd: epochJd - 0.001, selectedIds: bodies.map(body => body.id), publishInitialPartial: publishInitial, requestedIds, referenceIds: ['body:1', 'body:2'], signal: controller.signal, fetcher,
+        onInitialPartial: publishInitial ? partial => {
+          const partialFrames = framesFromCurrentStateObservation(partial.observation, partial.selectedIds.map(body), ['body:1', 'body:2'])
+          publish({ frames: partialFrames, publishedEpochUtcJd: partial.observation.epochUtcJd, partial: true })
+        } : undefined })
       const received = structuredClone(observation, { transfer: currentStateObservationTransfers(observation) })
       const frames = framesFromCurrentStateObservation(received, bodies, ['body:1', 'body:2'])
       publish({ frames, publishedEpochUtcJd: received.epochUtcJd })
       return { observation: received, frames }
     }
-    const loaded = await load()
+    const loaded = await load(true)
     expect(loaded.observation.planRecordCounts).toEqual([32_768, 1])
     expect(fetcher).toHaveBeenCalledTimes(5)
-    expect(publish).toHaveBeenCalledTimes(1)
+    expect(publish).toHaveBeenCalledTimes(2)
+    const initial = publish.mock.calls[0][0]
+    expect(initial.partial).toBe(true)
+    expect(initial.frames.get('body:1')!.evidence.length).toBe(32_768)
+    expect(initial.frames.get('body:1')!.currentPositions.length).toBe(32_768 - Math.ceil(32_768 / 7))
     const first = loaded.frames.get('body:1')!, second = loaded.frames.get('body:2')!
     expect(first.evidence).toBe(second.evidence)
     expect(first.evidence.length).toBe(bodyIds.length)
     expect(first.currentPositions.length).toBe(bodyIds.length - Math.ceil(bodyIds.length / 7))
-    expect(publish.mock.calls[0][0].publishedEpochUtcJd).toBe(epochJd - 0.001)
-    // Failure/cancellation after a complete first plan cannot publish that plan.
+    expect(publish.mock.calls[1][0].publishedEpochUtcJd).toBe(epochJd - 0.001)
+    // Callers that leave progressive publication disabled retain atomic results.
     planIndex = -1; failSecond = true; publish.mockClear()
     await expect(load()).rejects.toThrow('second plan unavailable')
     expect(publish).not.toHaveBeenCalled()

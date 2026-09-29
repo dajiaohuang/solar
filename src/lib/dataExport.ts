@@ -22,6 +22,7 @@ export async function exportAsJSON(frame: TrajectoryFrameData) {
       points: Array.from({ length: trajectory.coordinates.length / 3 }, (_, index) => ({
         x: trajectory.coordinates[index * 3], y: trajectory.coordinates[index * 3 + 1],
         z: trajectory.coordinates[index * 3 + 2],
+        breakBefore: Boolean(trajectory.breakBefore?.[index]),
       })),
     })),
   }
@@ -30,11 +31,12 @@ export async function exportAsJSON(frame: TrajectoryFrameData) {
 }
 
 export async function exportAsCSV(frame: TrajectoryFrameData) {
-  const rows: string[] = ['bodyId,bodyName,sampleIndex,x,au,y,au']
+  const rows: string[] = ['bodyId,bodyName,sampleIndex,xAU,yAU,zAU,breakBefore']
+  const cell = (value: string) => `"${value.replaceAll('"', '""')}"`
 
   for (const trajectory of frame.trajectories) {
     for (let index = 0; index < trajectory.coordinates.length / 3; index++) {
-      rows.push(`${trajectory.body.id},${trajectory.body.name},${index},${trajectory.coordinates[index * 3]},${trajectory.coordinates[index * 3 + 1]}`)
+      rows.push(`${cell(trajectory.body.id)},${cell(trajectory.body.name)},${index},${trajectory.coordinates[index * 3]},${trajectory.coordinates[index * 3 + 1]},${trajectory.coordinates[index * 3 + 2]},${trajectory.breakBefore?.[index] ? 1 : 0}`)
     }
   }
 

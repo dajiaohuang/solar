@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,6 +11,7 @@ import (
 )
 
 const maxCoverageQueryIDs = 64
+const maxCoverageTargetResponseBytes = 16 << 20
 
 type coverageSummaryResponse struct {
 	APIVersion string `json:"apiVersion"`
@@ -64,15 +66,34 @@ func (s *Server) coverageTargets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	summary := s.coverage.Summary()
-	rows := make([]coverageTargetResponse, 0, len(ids))
+	// Keep one owned ledger copy per target, including negative lookups. Aliases
+	// remain separate response rows without multiplying large dependency graphs.
+	lookups := make(map[int]*coverage.TargetCoverage)
+	lookup := func(id int) *coverage.TargetCoverage {
+		if target, exists := lookups[id]; exists {
+			return target
+		}
+		target, found := s.coverage.Lookup(id)
+		if !found {
+			lookups[id] = nil
+			return nil
+		}
+		lookups[id] = &target
+		return &target
+	}
+	rows := make([]json.RawMessage, 0, len(ids))
+	rowBytes := 2 // Array brackets; final envelope is checked by jsonLimited.
 	for _, id := range ids {
+		if r.Context().Err() != nil {
+			return
+		}
 		row := coverageTargetResponse{RequestedID: id, Status: "not_audited"}
 		body, ok := s.catalog.Get(id)
 		targetID, hasTarget := body.NAIFID, ok && body.NAIFID != 0
 		if !hasTarget && strings.HasPrefix(id, "naif:") {
 			parsed, err := strconv.Atoi(strings.TrimPrefix(id, "naif:"))
 			if err == nil && id == "naif:"+strconv.Itoa(parsed) {
-				_, hasTarget = s.coverage.Lookup(parsed)
+				hasTarget = lookup(parsed) != nil
 				targetID = parsed
 			}
 		}
@@ -80,14 +101,31 @@ func (s *Server) coverageTargets(w http.ResponseWriter, r *http.Request) {
 			canonicalID := "naif:" + strconv.Itoa(targetID)
 			row.CanonicalID = canonicalID
 			row.Target = &targetID
-			if target, covered := s.coverage.Lookup(targetID); covered {
+			if target := lookup(targetID); target != nil {
 				row.Status = "audited"
-				row.Coverage = &target
+				row.Coverage = target
 			}
 		}
-		rows = append(rows, row)
+		encoded, err := json.Marshal(row)
+		if err != nil {
+			s.error(w, http.StatusInternalServerError, "encode_response", "coverage target could not be encoded")
+			return
+		}
+		separator := 0
+		if len(rows) > 0 {
+			separator = 1
+		}
+		if len(encoded) > maxCoverageTargetResponseBytes-rowBytes-separator {
+			s.error(w, http.StatusRequestEntityTooLarge, "response_too_large", "coverage targets exceed the response budget; request fewer identities")
+			return
+		}
+		rowBytes += len(encoded) + separator
+		rows = append(rows, encoded)
 	}
-	s.json(w, http.StatusOK, map[string]any{
+	if r.Context().Err() != nil {
+		return
+	}
+	s.jsonLimited(w, http.StatusOK, map[string]any{
 		"apiVersion":              catalog.APIVersion,
 		"reportSha256":            summary.ReportSHA256,
 		"catalogManifestSha256":   summary.CatalogManifestSHA256,
@@ -97,5 +135,5 @@ func (s *Server) coverageTargets(w http.ResponseWriter, r *http.Request) {
 		"frame":                   summary.Frame,
 		"requestedWindow":         summary.RequestedWindow,
 		"targets":                 rows,
-	})
+	}, maxCoverageTargetResponseBytes)
 }

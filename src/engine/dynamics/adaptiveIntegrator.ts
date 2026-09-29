@@ -20,6 +20,8 @@ export type IntegrationOptions = {
   signal?: AbortSignal
   /** Observes accepted endpoints only; receives an owned copy. */
   onAcceptedStep?: (elapsed: number, state: Float64Array) => void
+  /** Synchronous, read-only view of accepted state; valid only during callback. */
+  onAcceptedStepView?: (elapsed: number, state: ArrayLike<number>) => void
   /** Worker/event-loop cooperation; injectable for deterministic cancellation. */
   yieldControl?: () => Promise<void>
 }
@@ -33,13 +35,13 @@ const ERROR = [35/384 - 5179/57600, 0, 500/1113 - 7571/16695,
   125/192 - 393/640, -2187/6784 + 92097/339200, 11/84 - 187/2100, -1/40]
 
 export async function integrateAdaptive(options: IntegrationOptions) {
-  const { duration, relativeTolerance, maxStep, initialStep, maxAttempts, signal, derivative, onAcceptedStep } = options
+  const { duration, relativeTolerance, maxStep, initialStep, maxAttempts, signal, derivative, onAcceptedStep, onAcceptedStepView } = options
   const n = options.initial.length
   if (!Number.isSafeInteger(n) || n < 1 || n > 512 || !Number.isFinite(duration) ||
       !Number.isFinite(relativeTolerance) || relativeTolerance < 1e-14 || relativeTolerance > 1 ||
       !Number.isFinite(maxStep) || maxStep <= 0 || !Number.isFinite(initialStep) || initialStep <= 0 ||
       !Number.isSafeInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 200_000 ||
-      options.absoluteTolerance.length !== n) throw new RangeError('Invalid bounded integration settings')
+      options.absoluteTolerance.length !== n || onAcceptedStep !== undefined && onAcceptedStepView !== undefined) throw new RangeError('Invalid bounded integration settings')
   const state = Float64Array.from(options.initial), absolute = Float64Array.from(options.absoluteTolerance)
   if (!state.every(Number.isFinite) || !absolute.every(value => Number.isFinite(value) && value > 0)) throw new RangeError('Initial state and component tolerances must be finite, with positive tolerances')
   const cancelled = () => { if (signal?.aborted) throw new DOMException('Integration cancelled', 'AbortError') }
@@ -110,6 +112,7 @@ export async function integrateAdaptive(options: IntegrationOptions) {
       smallestAcceptedStep = Math.min(smallestAcceptedStep, magnitude)
       largestAcceptedStep = Math.max(largestAcceptedStep, magnitude)
       maxAcceptedErrorRatio = Math.max(maxAcceptedErrorRatio, errorRatio)
+      onAcceptedStepView?.(elapsed, state)
       onAcceptedStep?.(elapsed, state.slice())
     } else rejected++
     stepSize = magnitude * (errorRatio > 1 ? Math.min(1, factor) : factor)

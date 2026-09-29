@@ -13,6 +13,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,31 +30,39 @@ const (
 	maxTargetGroups    = 2048
 	maxSourceRefs      = 4096
 	maxSourceRefsTotal = 8192
-	maxWindowAtoms     = 256
+	maxWindowAtoms     = 4096 // Matches the window generator's MAX_BOUNDARIES.
+	maxWindowGaps      = 2*maxWindowAtoms - 1
 	maxChainSteps      = 64
 	maxSummaryReasons  = 128
 	maxCoverageBuckets = 256
 )
 
 type Summary struct {
-	Purpose                 string           `json:"purpose"`
-	ReportSHA256            string           `json:"reportSha256"`
-	CatalogVersion          string           `json:"catalogVersion"`
-	CatalogManifestSHA256   string           `json:"catalogManifestSha256"`
-	InventoryManifestSHA256 string           `json:"inventoryManifestSha256"`
-	SourceSnapshotSHA256    string           `json:"sourceSnapshotSha256"`
-	IdentityMappingSHA256   string           `json:"identityMappingSha256"`
-	SatelliteCatalogSHA256  string           `json:"satelliteCatalogSha256"`
-	SourceBytesVerified     bool             `json:"sourceBytesVerified"`
-	Profile                 string           `json:"profile"`
-	AuditET                 float64          `json:"auditEt"`
-	TimeScale               string           `json:"timeScale"`
-	Frame                   string           `json:"frame"`
-	RequestedWindow         Window           `json:"requestedWindow"`
-	Counts                  Counts           `json:"counts"`
-	WindowCounts            WindowCounts     `json:"windowCounts"`
-	UnresolvedReasons       map[string]int   `json:"unresolvedReasons"`
-	Coverage                []CoverageBucket `json:"coverage"`
+	Generator               []GeneratorSource `json:"generator"`
+	Purpose                 string            `json:"purpose"`
+	ReportSHA256            string            `json:"reportSha256"`
+	CatalogVersion          string            `json:"catalogVersion"`
+	CatalogManifestSHA256   string            `json:"catalogManifestSha256"`
+	InventoryManifestSHA256 string            `json:"inventoryManifestSha256"`
+	SourceSnapshotSHA256    string            `json:"sourceSnapshotSha256"`
+	IdentityMappingSHA256   string            `json:"identityMappingSha256"`
+	SatelliteCatalogSHA256  string            `json:"satelliteCatalogSha256"`
+	SourceBytesVerified     bool              `json:"sourceBytesVerified"`
+	Profile                 string            `json:"profile"`
+	AuditET                 float64           `json:"auditEt"`
+	TimeScale               string            `json:"timeScale"`
+	Frame                   string            `json:"frame"`
+	RequestedWindow         Window            `json:"requestedWindow"`
+	Counts                  Counts            `json:"counts"`
+	SourceCounts            map[string]int    `json:"sourceCounts"`
+	WindowCounts            WindowCounts      `json:"windowCounts"`
+	UnresolvedReasons       map[string]int    `json:"unresolvedReasons"`
+	Coverage                []CoverageBucket  `json:"coverage"`
+}
+
+type GeneratorSource struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
 }
 
 type Counts struct {
@@ -110,6 +119,7 @@ type ChainStep struct {
 	StartET  *float64 `json:"startEt,omitempty"`
 	EndET    *float64 `json:"endEt,omitempty"`
 	Context  string   `json:"context,omitempty"`
+	Root     string   `json:"root,omitempty"`
 }
 
 type WindowPoint struct {
@@ -213,6 +223,7 @@ func Load(path string, cat *catalog.Catalog, inv *inventory.Inventory) (*Ledger,
 		}
 	}
 	summary := Summary{
+		Generator:               append([]GeneratorSource(nil), report.Generator...),
 		Purpose:                 report.Purpose,
 		ReportSHA256:            hex.EncodeToString(reportSum[:]),
 		CatalogVersion:          cat.Version(),
@@ -228,6 +239,7 @@ func Load(path string, cat *catalog.Catalog, inv *inventory.Inventory) (*Ledger,
 		Frame:                   report.Kernels.Frame,
 		RequestedWindow:         Window{StartET: report.RequestedWindow.StartET, EndET: report.RequestedWindow.EndET, TimeScale: report.RequestedWindow.TimeScale},
 		Counts:                  report.Identity.Counts,
+		SourceCounts:            cloneCounts(report.Identity.SourceCounts),
 		WindowCounts:            report.WindowCounts,
 		UnresolvedReasons:       cloneCounts(report.Identity.UnresolvedReasons),
 		Coverage:                cloneCoverage(report.Coverage),
@@ -247,6 +259,8 @@ func (l *Ledger) Summary() Summary {
 		return Summary{}
 	}
 	out := l.summary
+	out.Generator = append([]GeneratorSource(nil), out.Generator...)
+	out.SourceCounts = cloneCounts(out.SourceCounts)
 	out.UnresolvedReasons = cloneCounts(out.UnresolvedReasons)
 	out.Coverage = cloneCoverage(out.Coverage)
 	return out
@@ -266,18 +280,19 @@ func (l *Ledger) Lookup(target int) (TargetCoverage, bool) {
 }
 
 type reportFile struct {
-	SchemaVersion        int              `json:"schemaVersion"`
-	Purpose              string           `json:"purpose"`
-	InputInventorySHA256 string           `json:"inputInventorySha256"`
-	SourceSnapshotSHA256 string           `json:"sourceSnapshotSha256"`
-	SourceBytesVerified  bool             `json:"sourceBytesVerified"`
-	Kernels              reportKernels    `json:"kernels"`
-	RequestedWindow      Window           `json:"requestedWindow"`
-	Identity             reportIdentity   `json:"identity"`
-	WindowCounts         WindowCounts     `json:"windowCounts"`
-	Coverage             []CoverageBucket `json:"coverage"`
-	Windows              []reportWindow   `json:"windows"`
-	Limitations          []string         `json:"limitations"`
+	Generator            []GeneratorSource `json:"generator"`
+	SchemaVersion        int               `json:"schemaVersion"`
+	Purpose              string            `json:"purpose"`
+	InputInventorySHA256 string            `json:"inputInventorySha256"`
+	SourceSnapshotSHA256 string            `json:"sourceSnapshotSha256"`
+	SourceBytesVerified  bool              `json:"sourceBytesVerified"`
+	Kernels              reportKernels     `json:"kernels"`
+	RequestedWindow      Window            `json:"requestedWindow"`
+	Identity             reportIdentity    `json:"identity"`
+	WindowCounts         WindowCounts      `json:"windowCounts"`
+	Coverage             []CoverageBucket  `json:"coverage"`
+	Windows              []reportWindow    `json:"windows"`
+	Limitations          []string          `json:"limitations"`
 }
 
 type reportKernels struct {
@@ -329,6 +344,21 @@ type reportWindow struct {
 }
 
 func validateReport(report reportFile, cat *catalog.Catalog, inv *inventory.Inventory) error {
+	if len(report.Generator) > 64 {
+		return fmt.Errorf("too many coverage generator sources")
+	}
+	paths := make(map[string]bool, len(report.Generator))
+	for _, source := range report.Generator {
+		if len(source.Path) > 512 || (!strings.HasPrefix(source.Path, "scripts/") && !strings.HasPrefix(source.Path, "src/")) || strings.ContainsAny(source.Path, "\\:\r\n\t") || !validHash(source.SHA256) || paths[source.Path] {
+			return fmt.Errorf("invalid coverage generator source")
+		}
+		for _, part := range strings.Split(source.Path, "/") {
+			if part == "" || part == "." || part == ".." {
+				return fmt.Errorf("invalid coverage generator path")
+			}
+		}
+		paths[source.Path] = true
+	}
 	if report.SchemaVersion != 1 || report.Purpose != "source-identity-and-dependency-window-audit" {
 		return fmt.Errorf("unsupported coverage report schema or purpose")
 	}
@@ -352,6 +382,15 @@ func validateReport(report reportFile, cat *catalog.Catalog, inv *inventory.Inve
 	}
 	if err := validateCounts(report); err != nil {
 		return err
+	}
+	inventorySourceCounts := inv.SourceRecordCounts()
+	if len(inventorySourceCounts) != len(report.Identity.SourceCounts) {
+		return fmt.Errorf("coverage report source populations do not match the current inventory")
+	}
+	for source, count := range inventorySourceCounts {
+		if report.Identity.SourceCounts[source] != count {
+			return fmt.Errorf("coverage report source population for %q does not match the current inventory", source)
+		}
 	}
 	if err := validateCoverage(report); err != nil {
 		return err
@@ -436,9 +475,12 @@ func validateCounts(report reportFile) error {
 		return fmt.Errorf("coverage report identity counts are inconsistent")
 	}
 	sourceTotal := 0
-	for _, count := range report.Identity.SourceCounts {
-		if count < 0 || count > c.SourceRecords-sourceTotal {
-			return fmt.Errorf("coverage report source count is negative")
+	if len(report.Identity.SourceCounts) > maxCoverageBuckets {
+		return fmt.Errorf("coverage report has too many source populations")
+	}
+	for source, count := range report.Identity.SourceCounts {
+		if !validCoverageText(source) || count <= 0 || count > c.SourceRecords-sourceTotal {
+			return fmt.Errorf("coverage report source population is invalid")
 		}
 		sourceTotal += count
 	}
@@ -487,9 +529,10 @@ func validateCoverage(report reportFile) error {
 		return fmt.Errorf("coverage status buckets are invalid")
 	}
 	seen := make(map[string]struct{}, len(report.Coverage))
+	sourceTotals := make(map[string]int, len(report.Identity.SourceCounts))
 	total := 0
 	for _, bucket := range report.Coverage {
-		if bucket.DatasetVersion != report.Kernels.ManifestID || bucket.Source == "" || bucket.Model == "" ||
+		if bucket.DatasetVersion != report.Kernels.ManifestID || !validCoverageText(bucket.Source) || !validCoverageText(bucket.Model) ||
 			bucket.Frame != report.Kernels.Frame || !finite(bucket.AuditET) || bucket.AuditET != report.Kernels.AuditET ||
 			bucket.Exact < 0 || bucket.Approximate < 0 || bucket.Missing < 0 {
 			return fmt.Errorf("coverage status bucket is invalid")
@@ -499,19 +542,43 @@ func validateCoverage(report reportFile) error {
 			return fmt.Errorf("coverage status bucket is repeated")
 		}
 		seen[key] = struct{}{}
+		sourceCount, ok := report.Identity.SourceCounts[bucket.Source]
+		if !ok {
+			return fmt.Errorf("coverage status bucket references an unknown source")
+		}
 		remaining := report.Identity.Counts.SourceRecords - total
+		remainingForSource := sourceCount - sourceTotals[bucket.Source]
 		for _, count := range []int{bucket.Exact, bucket.Approximate, bucket.Missing} {
-			if count < 0 || count > remaining {
+			if count < 0 || count > remaining || count > remainingForSource {
 				return fmt.Errorf("coverage status bucket count is invalid")
 			}
 			remaining -= count
+			remainingForSource -= count
 		}
 		total = report.Identity.Counts.SourceRecords - remaining
+		sourceTotals[bucket.Source] = sourceCount - remainingForSource
 	}
 	if total != report.Identity.Counts.SourceRecords {
 		return fmt.Errorf("coverage status buckets do not reconcile")
 	}
+	for source, count := range report.Identity.SourceCounts {
+		if sourceTotals[source] != count {
+			return fmt.Errorf("coverage status buckets do not reconcile for source %q", source)
+		}
+	}
 	return nil
+}
+
+func validCoverageText(value string) bool {
+	if len(value) == 0 || len(value) > 512 {
+		return false
+	}
+	for _, character := range value {
+		if character < 32 || character == 127 {
+			return false
+		}
+	}
+	return strings.TrimSpace(value) != ""
 }
 
 func validateWindow(window reportWindow, requested Window) error {
@@ -520,7 +587,7 @@ func validateWindow(window reportWindow, requested Window) error {
 	}
 	points := window.DependencyCoverage.Points
 	intervals := window.DependencyCoverage.Intervals
-	if len(points) < 1 || len(points) > maxWindowAtoms || len(intervals) != len(points)-1 || len(window.Gaps) > maxWindowAtoms {
+	if len(points) < 1 || len(points) > maxWindowAtoms || len(intervals) != len(points)-1 || len(window.Gaps) > maxWindowGaps {
 		return fmt.Errorf("window atom count is invalid")
 	}
 	pointKeys := make(map[string]struct{}, len(points))
@@ -533,7 +600,10 @@ func validateWindow(window reportWindow, requested Window) error {
 			return fmt.Errorf("duplicate point atom")
 		}
 		pointKeys[key] = struct{}{}
-		if err := validateChain(point.Chain); err != nil {
+		if err := validateChain(point.Chain, point.Reason); err != nil {
+			return err
+		}
+		if err := validateAtomChain(point.Chain, window.Target, point.ET, point.ET, point.State, point.Reason); err != nil {
 			return err
 		}
 	}
@@ -559,27 +629,24 @@ func validateWindow(window reportWindow, requested Window) error {
 			return fmt.Errorf("duplicate interval atom")
 		}
 		intervalKeys[key] = struct{}{}
-		if err := validateChain(interval.Chain); err != nil {
+		if err := validateChain(interval.Chain, interval.Reason); err != nil {
+			return err
+		}
+		if err := validateAtomChain(interval.Chain, window.Target, interval.StartET, interval.EndET, interval.State, interval.Reason); err != nil {
 			return err
 		}
 	}
-	for _, interval := range intervals {
-		if _, ok := findPoint(points, interval.StartET); !ok {
-			return fmt.Errorf("interval start has no boundary point")
-		}
-		if _, ok := findPoint(points, interval.EndET); !ok {
-			return fmt.Errorf("interval end has no boundary point")
-		}
-	}
-	gapAtoms := make(map[string]int)
+	// The indexed checks above bind each interval to points[n:n+2]; rescanning
+	// all points per endpoint would add quadratic work without another invariant.
+	gapAtoms := make(map[string][]ChainStep)
 	for _, point := range points {
 		if point.State == "gap" {
-			gapAtoms[atomKey("point", point.ET, point.ET, point.Reason)]++
+			gapAtoms[atomKey("point", point.ET, point.ET, point.Reason)] = point.Chain
 		}
 	}
 	for _, interval := range intervals {
 		if interval.State == "gap" {
-			gapAtoms[atomKey("interval", interval.StartET, interval.EndET, interval.Reason)]++
+			gapAtoms[atomKey("interval", interval.StartET, interval.EndET, interval.Reason)] = interval.Chain
 		}
 	}
 	for _, gap := range window.Gaps {
@@ -587,37 +654,132 @@ func validateWindow(window reportWindow, requested Window) error {
 		if err != nil {
 			return err
 		}
-		if gapAtoms[key] == 0 {
+		steps, exists := gapAtoms[key]
+		if !exists {
 			return fmt.Errorf("reported gap has no matching atom")
 		}
-		gapAtoms[key]--
+		if len(steps) != len(gap.Chain) {
+			return fmt.Errorf("reported gap dependency chain differs from its atom")
+		}
+		for n, step := range steps {
+			if !reflect.DeepEqual(step, gap.Chain[n]) {
+				return fmt.Errorf("reported gap dependency chain differs from its atom")
+			}
+		}
+		delete(gapAtoms, key)
 	}
-	for _, count := range gapAtoms {
-		if count != 0 {
-			return fmt.Errorf("window gap atoms are not fully reported")
+	if len(gapAtoms) != 0 {
+		return fmt.Errorf("window gap atoms are not fully reported")
+	}
+	return nil
+}
+
+// Called after structural chain validation; this reconciles declared evidence,
+// not kernel evaluation or physical/numerical accuracy.
+func validateAtomChain(chain []ChainStep, target int, start, end float64, state, reason string) error {
+	nextTarget := target
+	context := ""
+	visited := make(map[int]bool, len(chain))
+	for n, step := range chain {
+		if step.Context != "" {
+			if step.Context != "legacy" && (!strings.HasPrefix(step.Context, "root:") || len(step.Context) == 5) {
+				return fmt.Errorf("invalid dependency solution context")
+			}
+			if context != "" && step.Context != context {
+				return fmt.Errorf("dependency chain switches solution pools")
+			}
+			context = step.Context
+		}
+		if step.Target == nil || *step.Target != nextTarget {
+			return fmt.Errorf("dependency target/center chain is discontinuous")
+		}
+		if visited[*step.Target] {
+			return fmt.Errorf("dependency chain continues after a repeated target")
+		}
+		visited[*step.Target] = true
+		// Match the generator's SSB check before its seen.length > 32 guard.
+		if n > 32 && *step.Target != 0 || *step.Target == 0 && step.Origin != "naif:0" {
+			return fmt.Errorf("dependency chain exceeds resolver stopping rules")
+		}
+		if step.KernelID != "" {
+			if *step.StartET > start || *step.EndET < end {
+				return fmt.Errorf("dependency kernel does not cover its window atom")
+			}
+			nextTarget = *step.Center
+		} else {
+			if n != len(chain)-1 {
+				return fmt.Errorf("dependency terminal step is not last")
+			}
+			if step.Origin != "" && (step.Origin != "naif:0" || *step.Target != 0 || step.Center != nil || step.Root != "" || step.Context != "") {
+				return fmt.Errorf("invalid dependency SSB terminal")
+			}
+		}
+		if step.Root != "" && reason != "explicit-solution-pool-missing" {
+			return fmt.Errorf("dependency root does not match gap reason")
+		}
+	}
+	if reason == "center-chain-cycle" && (len(chain) == 0 || chain[len(chain)-1].KernelID == "" || nextTarget == 0 || !visited[nextTarget]) {
+		return fmt.Errorf("cycle gap lacks a closing center link")
+	}
+	if reason == "center-chain-depth-exceeded" && (len(chain) != 33 || chain[len(chain)-1].KernelID == "" || nextTarget == 0 || visited[nextTarget]) {
+		return fmt.Errorf("depth gap differs from resolver stopping rules")
+	}
+	atSSB := len(chain) > 0 && chain[len(chain)-1].Origin == "naif:0"
+	if (state == "covered") != atSSB {
+		return fmt.Errorf("dependency coverage must terminate at SSB")
+	}
+	if reason == "explicit-solution-pool-missing" && (len(chain) != 1 || chain[0].Root == "") {
+		return fmt.Errorf("missing solution pool reason lacks root evidence")
+	}
+	if reason == "target-absent-in-solution-pool" {
+		if len(chain) == 0 {
+			return fmt.Errorf("missing target reason lacks terminal context evidence")
+		}
+		last := chain[len(chain)-1]
+		if last.Context == "" || last.KernelID != "" || last.Origin != "" || last.Root != "" || last.Center != nil {
+			return fmt.Errorf("missing target reason lacks terminal context evidence")
+		}
+	}
+	if len(chain) > 0 {
+		last := chain[len(chain)-1]
+		if last.Context != "" && last.KernelID == "" && reason != "target-absent-in-solution-pool" {
+			return fmt.Errorf("unresolved dependency target has a different gap reason")
 		}
 	}
 	return nil
 }
 
-func validateChain(chain []ChainStep) error {
+func validateChain(chain []ChainStep, reason string) error {
 	if len(chain) > maxChainSteps {
 		return fmt.Errorf("dependency chain is too long")
 	}
-	for _, step := range chain {
-		if step.Target == nil && step.Origin == "" || step.Context == "" && step.Origin == "" {
+	unsupported := false
+	for n, step := range chain {
+		if step.Target == nil && step.Origin == "" || step.Context == "" && step.Origin == "" && step.Root == "" {
 			return fmt.Errorf("dependency chain step is incomplete")
+		}
+		if step.Root != "" && (step.Target == nil || step.KernelID != "" || step.Context != "" || step.Origin != "") {
+			return fmt.Errorf("missing solution pool root step is invalid")
 		}
 		if step.Origin != "" && !strings.HasPrefix(step.Origin, "naif:") {
 			return fmt.Errorf("dependency chain origin is invalid")
 		}
 		if step.KernelID != "" {
-			if step.Target == nil || step.Frame == nil || *step.Frame != 1 || step.Type == nil || (*step.Type != 2 && *step.Type != 3 && *step.Type != 17 && *step.Type != 21) || step.StartET == nil || step.EndET == nil || !finite(*step.StartET) || !finite(*step.EndET) || *step.StartET > *step.EndET {
+			if step.Target == nil || step.Center == nil || step.Frame == nil || step.Type == nil || step.Origin != "" || step.StartET == nil || step.EndET == nil || !finite(*step.StartET) || !finite(*step.EndET) || *step.StartET > *step.EndET {
 				return fmt.Errorf("kernel dependency chain step is invalid")
+			}
+			if (*step.Frame != 1 && *step.Frame != 17) || (*step.Type != 1 && *step.Type != 2 && *step.Type != 3 && *step.Type != 17 && *step.Type != 21) {
+				if reason != "unsupported-selected-segment" || n != len(chain)-1 {
+					return fmt.Errorf("unsupported segment cannot establish dependency coverage")
+				}
+				unsupported = true
 			}
 		} else if step.StartET != nil || step.EndET != nil || step.Frame != nil || step.Type != nil {
 			return fmt.Errorf("non-kernel dependency chain step has kernel fields")
 		}
+	}
+	if (reason == "unsupported-selected-segment") != unsupported {
+		return fmt.Errorf("unsupported segment reason lacks matching terminal evidence")
 	}
 	return nil
 }
@@ -651,19 +813,11 @@ func validHash(value string) bool {
 func atomKey(kind string, start, end float64, reason string) string {
 	return kind + ":" + strconv.FormatFloat(start, 'g', -1, 64) + ":" + strconv.FormatFloat(end, 'g', -1, 64) + ":" + reason
 }
-func findPoint(points []WindowPoint, value float64) (WindowPoint, bool) {
-	for _, point := range points {
-		if point.ET == value {
-			return point, true
-		}
-	}
-	return WindowPoint{}, false
-}
 func gapKey(gap WindowGap, requested Window) (string, error) {
 	if gap.Reason == "" || len(gap.Chain) > maxChainSteps {
 		return "", fmt.Errorf("invalid reported gap")
 	}
-	if err := validateChain(gap.Chain); err != nil {
+	if err := validateChain(gap.Chain, gap.Reason); err != nil {
 		return "", err
 	}
 	switch gap.Kind {

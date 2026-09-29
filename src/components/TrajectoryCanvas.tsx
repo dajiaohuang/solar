@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PREPARE_CANVAS_CAPTURE_EVENT } from '../lib/canvasCapture'
-import { SVG_PADDING, createProjection, projectPoint, unprojectPoint } from '../lib/viewProjection'
+import { SVG_PADDING, createProjection, projectPoint, unprojectPoint, type Projection } from '../lib/viewProjection'
 import type { LagrangePoint } from '../lib/lagrange'
 import type { AsteroidRecord, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector2 } from '../types'
 import type { CurrentPositions } from '../lib/currentPositions'
+import { ScreenPointIndex } from '../lib/screenPointIndex'
 import { bodyDisplayName } from '../lib/bodyNames'
-import { buildGeometry, type Geometry, type OrbitEllipse } from '../lib/trajectoryGeometry2d'
+import { buildGeometry, createGeometryBufferPool, type Geometry, type GeometryBufferPool, type OrbitEllipse } from '../lib/trajectoryGeometry2d'
 
 
 type Props = {
@@ -34,12 +35,15 @@ type Props = {
   emptyLabel?: string
   webglUnavailableLabel?: string
   influenceLabels?: { hill: string; soi: string }
+  catalogAppearance?: Uint8Array
+  onCatalogSelect?: (ordinal: number) => void
   catalogRecords?: AsteroidRecord[]
   catalogPositions?: Float64Array
   catalogDrawCount?: number
   catalogOrigin?: Vector2
   pixelRatioLimit?: number
   continuous?: boolean
+  sampleFrameCadence?: boolean
   onFrameDuration?: (durationMs: number) => void
 }
 
@@ -53,6 +57,7 @@ type GlResources = {
   pointPositionBuffer: WebGLBuffer
   pointColorBuffer: WebGLBuffer
   pointSizeBuffer: WebGLBuffer
+  bufferCapacities: Map<WebGLBuffer, number>
 }
 
 const CANVAS_SIZE = 880
@@ -211,6 +216,7 @@ function createResources(gl: WebGLRenderingContext): GlResources {
     pointPositionBuffer,
     pointColorBuffer,
     pointSizeBuffer,
+    bufferCapacities: new Map(),
   }
 }
 
@@ -222,6 +228,21 @@ function resetVertexAttributes(gl: WebGLRenderingContext) {
   }
 }
 
+function uploadBuffer(resources: GlResources, buffer: WebGLBuffer, data: Float32Array | Uint8Array) {
+  const { gl, bufferCapacities } = resources
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+  const requiredBytes = data.byteLength
+  const capacityBytes = bufferCapacities.get(buffer) ?? 0
+  const shouldShrink = capacityBytes > 256 && (requiredBytes === 0 || requiredBytes < capacityBytes / 4)
+  if (requiredBytes > capacityBytes || shouldShrink) {
+    const nextCapacity = requiredBytes === 0
+      ? 0
+      : Math.max(256, requiredBytes, shouldShrink ? 0 : Math.ceil(capacityBytes * 1.5))
+    gl.bufferData(gl.ARRAY_BUFFER, nextCapacity, gl.DYNAMIC_DRAW)
+    bufferCapacities.set(buffer, nextCapacity)
+  }
+  if (requiredBytes) gl.bufferSubData(gl.ARRAY_BUFFER, 0, data)
+}
 
 function drawLines(resources: GlResources, geometry: Geometry, upload = true) {
   const { gl, lineProgram, linePositionBuffer, lineColorBuffer } = resources
@@ -235,22 +256,25 @@ function drawLines(resources: GlResources, geometry: Geometry, upload = true) {
   const positionLocation = gl.getAttribLocation(lineProgram, 'aPosition')
   const colorLocation = gl.getAttribLocation(lineProgram, 'aColor')
 
-  gl.bindBuffer(gl.ARRAY_BUFFER, linePositionBuffer)
-  if (upload) gl.bufferData(gl.ARRAY_BUFFER, geometry.linePositions, gl.DYNAMIC_DRAW)
+  if (upload) uploadBuffer(resources, linePositionBuffer, geometry.linePositions)
+  else gl.bindBuffer(gl.ARRAY_BUFFER, linePositionBuffer)
   gl.enableVertexAttribArray(positionLocation)
   gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0)
 
-  gl.bindBuffer(gl.ARRAY_BUFFER, lineColorBuffer)
-  if (upload) gl.bufferData(gl.ARRAY_BUFFER, geometry.lineColors, gl.DYNAMIC_DRAW)
+  if (upload) uploadBuffer(resources, lineColorBuffer, geometry.lineColors)
+  else gl.bindBuffer(gl.ARRAY_BUFFER, lineColorBuffer)
   gl.enableVertexAttribArray(colorLocation)
   gl.vertexAttribPointer(colorLocation, 4, gl.FLOAT, false, 0, 0)
 
   gl.drawArrays(gl.LINES, 0, geometry.linePositions.length / 2)
 }
 
-function drawPoints(resources: GlResources, geometry: Geometry, pixelRatio: number, upload = true) {
+function drawPoints(resources: GlResources, geometry: Geometry, pixelRatio: number, uploadPositions = true, uploadColors = uploadPositions, uploadSizes = uploadPositions) {
   const { gl, pointProgram, pointPositionBuffer, pointColorBuffer, pointSizeBuffer } = resources
   if (!geometry.pointPositions.length) {
+    if (uploadPositions) uploadBuffer(resources, pointPositionBuffer, geometry.pointPositions)
+    if (uploadColors) uploadBuffer(resources, pointColorBuffer, geometry.pointColors)
+    if (uploadSizes) uploadBuffer(resources, pointSizeBuffer, geometry.pointSizes)
     return
   }
 
@@ -264,18 +288,18 @@ function drawPoints(resources: GlResources, geometry: Geometry, pixelRatio: numb
 
   gl.uniform1f(pixelRatioLocation, pixelRatio)
 
-  gl.bindBuffer(gl.ARRAY_BUFFER, pointPositionBuffer)
-  if (upload) gl.bufferData(gl.ARRAY_BUFFER, geometry.pointPositions, gl.DYNAMIC_DRAW)
+  if (uploadPositions) uploadBuffer(resources, pointPositionBuffer, geometry.pointPositions)
+  else gl.bindBuffer(gl.ARRAY_BUFFER, pointPositionBuffer)
   gl.enableVertexAttribArray(positionLocation)
   gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0)
 
-  gl.bindBuffer(gl.ARRAY_BUFFER, pointColorBuffer)
-  if (upload) gl.bufferData(gl.ARRAY_BUFFER, geometry.pointColors, gl.DYNAMIC_DRAW)
+  if (uploadColors) uploadBuffer(resources, pointColorBuffer, geometry.pointColors)
+  else gl.bindBuffer(gl.ARRAY_BUFFER, pointColorBuffer)
   gl.enableVertexAttribArray(colorLocation)
-  gl.vertexAttribPointer(colorLocation, 4, gl.FLOAT, false, 0, 0)
+  gl.vertexAttribPointer(colorLocation, 4, gl.UNSIGNED_BYTE, true, 0, 0)
 
-  gl.bindBuffer(gl.ARRAY_BUFFER, pointSizeBuffer)
-  if (upload) gl.bufferData(gl.ARRAY_BUFFER, geometry.pointSizes, gl.DYNAMIC_DRAW)
+  if (uploadSizes) uploadBuffer(resources, pointSizeBuffer, geometry.pointSizes)
+  else gl.bindBuffer(gl.ARRAY_BUFFER, pointSizeBuffer)
   gl.enableVertexAttribArray(sizeLocation)
   gl.vertexAttribPointer(sizeLocation, 1, gl.FLOAT, false, 0, 0)
 
@@ -303,16 +327,22 @@ export function TrajectoryCanvas({
   emptyLabel = 'Select at least one celestial object to display.',
   webglUnavailableLabel = 'WebGL acceleration is unavailable in this browser.',
   influenceLabels = { hill: 'Hill Sphere', soi: 'Laplace SOI' },
+  catalogAppearance,
+  onCatalogSelect,
   catalogRecords = EMPTY_CATALOG_RECORDS,
   catalogPositions = EMPTY_CATALOG_POSITIONS,
   catalogDrawCount = 0,
   catalogOrigin = HELIOCENTRIC_ORIGIN,
   pixelRatioLimit = 1.75,
   continuous = false,
+  sampleFrameCadence = false,
   onFrameDuration,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const resourcesRef = useRef<GlResources | null>(null)
+  const pickingRef = useRef<{ positions: CurrentPositions; projection: Projection; index: ScreenPointIndex } | null>(null)
+  const geometryBuffersRef = useRef<GeometryBufferPool | null>(null)
+  if (geometryBuffersRef.current === null) geometryBuffersRef.current = createGeometryBufferPool()
   const drawRef = useRef<(() => void) | null>(null)
   const lastTouchTapRef = useRef<{ bodyId: string; timestamp: number } | null>(null)
   const touchGestureRef = useRef<{ pointerId: number; startX: number; startY: number; moved: boolean } | null>(null)
@@ -341,38 +371,56 @@ export function TrajectoryCanvas({
       ),
     [size.height, size.width, viewOffsetAU, viewRadiusAU],
   )
+  // Line-only controls and opacity are excluded from this key: the former
+  // reuse every point stream, while opacity reuses projected positions/index.
+  const pointPositionKey = useMemo(() => ({}), [
+    catalogDrawCount,
+    catalogOrigin,
+    catalogPositions,
+    catalogRecords,
+    catalogAppearance,
+    currentPositions,
+    projection,
+  ])
+  const pointGeometryKey = useMemo(() => ({}), [asteroidOpacity, moonOpacity, planetOpacity, pointPositionKey, referenceBody])
+  const pointGeometryCacheRef = useRef<{
+    geometryKey: object
+    positionKey: object
+    points: Pick<Geometry, 'pointPositions' | 'pointColors' | 'pointSizes'>
+  } | null>(null)
 
   const labels = useMemo(() => {
     const majorBodies: RenderedBodyPosition[] = [], asteroidBodies: RenderedBodyPosition[] = []
     for (let index = 0; index < currentPositions.length; index++) {
-      const asteroid = currentPositions.bodyAt(index).kind === 'asteroid'
-      if (asteroid && asteroidBodies.length < ASTEROID_LABEL_LIMIT) asteroidBodies.push(currentPositions.rowAt(index))
-      if (!asteroid && majorBodies.length < MAJOR_LABEL_LIMIT) majorBodies.push(currentPositions.rowAt(index))
+      const smallBody = currentPositions.bodyAt(index).kind === 'asteroid' || currentPositions.bodyAt(index).kind === 'comet'
+      if (smallBody && asteroidBodies.length < ASTEROID_LABEL_LIMIT) asteroidBodies.push(currentPositions.rowAt(index))
+      if (!smallBody && majorBodies.length < MAJOR_LABEL_LIMIT) majorBodies.push(currentPositions.rowAt(index))
       if (majorBodies.length === MAJOR_LABEL_LIMIT && asteroidBodies.length === ASTEROID_LABEL_LIMIT) break
     }
     return [...majorBodies, ...asteroidBodies]
   }, [currentPositions])
 
-  const geometry = useMemo(
-    () =>
-      buildGeometry(
-        projection,
-        referenceBody,
-        trajectories,
-        currentPositions,
-        showEcliptic,
-        showOrbits ?? false,
-        orbitEllipses ?? [],
-        planetOpacity,
-        asteroidOpacity,
-        moonOpacity,
-        catalogRecords,
-        catalogPositions,
-        catalogDrawCount,
-        catalogOrigin,
-      ),
-    [asteroidOpacity, catalogDrawCount, catalogOrigin, catalogPositions, catalogRecords, currentPositions, moonOpacity, orbitEllipses, planetOpacity, projection, referenceBody, showEcliptic, showOrbits, trajectories],
-  )
+  const nearestPositionIndex = useCallback((screenPoint: Vector2, radiusAU: number) => {
+    const picking = pickingRef.current
+    if (picking?.positions === currentPositions && picking.projection === projection) {
+      return picking.index.nearest(screenPoint.x, screenPoint.y, radiusAU * projection.scale)
+    }
+
+    const worldPoint = unprojectPoint(screenPoint, projection)
+    const radiusSquared = radiusAU * radiusAU
+    let nearestIndex = -1
+    let nearestDistanceSquared = radiusSquared
+    for (let index = 0; index < currentPositions.length; index++) {
+      const dx = currentPositions.coordinateAt(index, 0) - worldPoint.x
+      const dy = currentPositions.coordinateAt(index, 1) - worldPoint.y
+      const distanceSquared = dx * dx + dy * dy
+      if (distanceSquared < nearestDistanceSquared) {
+        nearestDistanceSquared = distanceSquared
+        nearestIndex = index
+      }
+    }
+    return nearestIndex
+  }, [currentPositions, projection])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -390,6 +438,7 @@ export function TrajectoryCanvas({
     canvas.style.height = `${height}px`
 
     let resources = resourcesRef.current
+    const resourcesCreated = !resources
     if (!resources) {
       const gl = canvas.getContext('webgl', { alpha: true, antialias: true })
       if (!gl) {
@@ -401,7 +450,52 @@ export function TrajectoryCanvas({
       resourcesRef.current = resources
     }
 
-    const drawFrame = (upload = false) => {
+    const pickCellSize = Math.max(18, Math.ceil(projection.drawableRadius * 0.1))
+    const previousPicking = pickingRef.current
+    const pointIndex = previousPicking?.index.width === width && previousPicking.index.height === height &&
+      previousPicking.index.cellSize === pickCellSize && previousPicking.index.count === currentPositions.length
+      ? previousPicking.index
+      : new ScreenPointIndex(width, height, currentPositions.length, pickCellSize)
+    const cachedPointGeometry = pointGeometryCacheRef.current
+    const reusablePoints = cachedPointGeometry?.geometryKey === pointGeometryKey ? cachedPointGeometry.points : undefined
+    const reusablePositions = cachedPointGeometry?.positionKey === pointPositionKey ? cachedPointGeometry.points.pointPositions : undefined
+    const reusePoints = reusablePoints !== undefined
+    const reusePositions = reusablePositions !== undefined
+
+    // Build into retained arrays only after React commits this prop set. This
+    // keeps an interrupted render from mutating buffers used by the live frame.
+    const geometry = buildGeometry(
+      projection,
+      referenceBody,
+      trajectories,
+      currentPositions,
+      showEcliptic,
+      showOrbits ?? false,
+      orbitEllipses ?? [],
+      planetOpacity,
+      asteroidOpacity,
+      moonOpacity,
+      catalogRecords,
+      catalogPositions,
+      catalogDrawCount,
+      catalogOrigin,
+      geometryBuffersRef.current!,
+      pointIndex,
+      reusablePoints,
+      reusePoints ? undefined : reusablePositions,
+      reusePoints || !reusePositions ? undefined : cachedPointGeometry?.points.pointSizes,
+      catalogAppearance,
+    )
+    if (!reusePoints) {
+      pointGeometryCacheRef.current = {
+        geometryKey: pointGeometryKey,
+        positionKey: pointPositionKey,
+        points: { pointPositions: geometry.pointPositions, pointColors: geometry.pointColors, pointSizes: geometry.pointSizes },
+      }
+    }
+    pickingRef.current = { positions: currentPositions, projection, index: pointIndex }
+
+    const drawFrame = (uploadLines = false, uploadPointPositions = false, uploadPointColors = uploadPointPositions, uploadPointSizes = uploadPointPositions) => {
       const { gl } = resources
       gl.viewport(0, 0, canvas.width, canvas.height)
       gl.clearColor(0, 0, 0, 0)
@@ -409,23 +503,24 @@ export function TrajectoryCanvas({
       gl.enable(gl.BLEND)
       gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 
-      drawLines(resources, geometry, upload)
-      drawPoints(resources, geometry, pixelRatio, upload)
+      drawLines(resources, geometry, uploadLines)
+      drawPoints(resources, geometry, pixelRatio, uploadPointPositions, uploadPointColors, uploadPointSizes)
     }
     const redraw = () => drawFrame()
     canvas.addEventListener(PREPARE_CANVAS_CAPTURE_EVENT, redraw)
-    drawFrame(true)
+    drawFrame(true, resourcesCreated || !reusePositions, resourcesCreated || !reusePoints, resourcesCreated || !reusePositions)
     drawRef.current = redraw
     return () => { drawRef.current = null; canvas.removeEventListener(PREPARE_CANVAS_CAPTURE_EVENT, redraw) }
-  }, [geometry, pixelRatioLimit, size.height, size.width, webglUnavailable])
+  }, [asteroidOpacity, catalogAppearance, catalogDrawCount, catalogOrigin, catalogPositions, catalogRecords, currentPositions, moonOpacity, orbitEllipses, pixelRatioLimit, planetOpacity, pointGeometryKey, pointPositionKey, projection, referenceBody, showEcliptic, showOrbits, size.height, size.width, trajectories, webglUnavailable])
 
   useEffect(() => {
-    if (!continuous || webglUnavailable) return
+    if ((!continuous && !sampleFrameCadence) || webglUnavailable) return
     let handle = 0, previous: number | null = null
     const frame = (timestamp: number) => {
-      if (document.hidden || !drawRef.current || resourcesRef.current?.gl.isContextLost()) previous = null
+      const resources = resourcesRef.current
+      if (document.hidden || !drawRef.current || !resources || resources.gl.isContextLost()) previous = null
       else {
-        drawRef.current()
+        if (continuous) drawRef.current()
         if (previous !== null) onFrameDuration?.(timestamp - previous)
         previous = timestamp
       }
@@ -433,7 +528,7 @@ export function TrajectoryCanvas({
     }
     handle = window.requestAnimationFrame(frame)
     return () => window.cancelAnimationFrame(handle)
-  }, [continuous, onFrameDuration, webglUnavailable])
+  }, [continuous, onFrameDuration, sampleFrameCadence, webglUnavailable])
 
   useEffect(() => {
     return () => {
@@ -466,28 +561,14 @@ export function TrajectoryCanvas({
         y: event.clientY - rect.top,
       }
 
-      const worldPoint = unprojectPoint(clickPoint, projection)
-      const thresholdAU = viewRadiusAU * 0.06
-
-      let nearestBody: string | null = null
-      let nearestDistance = Number.POSITIVE_INFINITY
-
-      for (let index = 0; index < currentPositions.length; index++) {
-        const dx = currentPositions.coordinateAt(index, 0) - worldPoint.x
-        const dy = currentPositions.coordinateAt(index, 1) - worldPoint.y
-        const dist = Math.hypot(dx, dy)
-
-        if (dist < thresholdAU && dist < nearestDistance) {
-          nearestDistance = dist
-          nearestBody = currentPositions.bodyAt(index).id
-        }
-      }
+      const nearestIndex = nearestPositionIndex(clickPoint, viewRadiusAU * 0.06)
+      const nearestBody = nearestIndex >= 0 ? currentPositions.bodyAt(nearestIndex).id : null
 
       if (nearestBody) {
         onReferenceChange(nearestBody)
       }
     },
-    [currentPositions, onReferenceChange, projection, viewRadiusAU],
+    [currentPositions, nearestPositionIndex, onReferenceChange, viewRadiusAU],
   )
 
   const handleMouseMove = useCallback(
@@ -502,22 +583,7 @@ export function TrajectoryCanvas({
         y: event.clientY - rect.top,
       }
 
-      const worldPoint = unprojectPoint(clickPoint, projection)
-      const thresholdAU = viewRadiusAU * 0.06
-
-      let nearestIndex = -1
-      let nearestDistance = Number.POSITIVE_INFINITY
-
-      for (let index = 0; index < currentPositions.length; index++) {
-        const dx = currentPositions.coordinateAt(index, 0) - worldPoint.x
-        const dy = currentPositions.coordinateAt(index, 1) - worldPoint.y
-        const dist = Math.hypot(dx, dy)
-
-        if (dist < thresholdAU && dist < nearestDistance) {
-          nearestDistance = dist
-          nearestIndex = index
-        }
-      }
+      const nearestIndex = nearestPositionIndex(clickPoint, viewRadiusAU * 0.06)
 
       if (nearestIndex >= 0) {
         onHover(currentPositions.bodyAt(nearestIndex), currentPositions.distanceAt(nearestIndex), event.clientX, event.clientY)
@@ -525,22 +591,15 @@ export function TrajectoryCanvas({
         onHover(null, 0, 0, 0)
       }
     },
-    [currentPositions, onHover, projection, viewRadiusAU],
+    [currentPositions, nearestPositionIndex, onHover, viewRadiusAU],
   )
 
   const handleTouchTap = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
-    const worldPoint = unprojectPoint({ x: event.clientX - rect.left, y: event.clientY - rect.top }, projection)
-    const thresholdAU = viewRadiusAU * 0.1
-    let nearestIndex = -1
-    let nearestDistance = Number.POSITIVE_INFINITY
-    for (let index = 0; index < currentPositions.length; index++) {
-      const distance = Math.hypot(currentPositions.coordinateAt(index, 0) - worldPoint.x, currentPositions.coordinateAt(index, 1) - worldPoint.y)
-      if (distance < thresholdAU && distance < nearestDistance) {
-        nearestDistance = distance
-        nearestIndex = index
-      }
-    }
+    const nearestIndex = nearestPositionIndex(
+      { x: event.clientX - rect.left, y: event.clientY - rect.top },
+      viewRadiusAU * 0.1,
+    )
     if (nearestIndex < 0) {
       lastTouchTapRef.current = null
       return
@@ -555,7 +614,7 @@ export function TrajectoryCanvas({
     } else {
       lastTouchTapRef.current = { bodyId: nearestItem.body.id, timestamp: now }
     }
-  }, [currentPositions, onHover, onReferenceChange, projection, viewRadiusAU])
+  }, [currentPositions, nearestPositionIndex, onHover, onReferenceChange, viewRadiusAU])
 
   const handleTouchStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== 'touch') return
@@ -605,6 +664,19 @@ export function TrajectoryCanvas({
       ref={containerRef}
       onDoubleClick={handleDoubleClick}
       onPointerDown={handleTouchStart}
+      onClick={event => {
+        if (!onCatalogSelect || !catalogDrawCount) return
+        const rect = event.currentTarget.getBoundingClientRect(), x = event.clientX - rect.left, y = event.clientY - rect.top
+        if (nearestPositionIndex({ x, y }, 7 / projection.scale) >= 0) return
+        let nearest = -1, distance = 49
+        for (let index = 0; index < Math.min(catalogDrawCount, catalogPositions.length / 2); index++) {
+          const dx = projection.centerX + (catalogPositions[index * 2] - catalogOrigin.x - projection.offsetXAU) * projection.scale - x
+          const dy = projection.centerY - (catalogPositions[index * 2 + 1] - catalogOrigin.y - projection.offsetYAU) * projection.scale - y
+          const squared = dx * dx + dy * dy
+          if (squared < distance) { nearest = index; distance = squared }
+        }
+        if (nearest >= 0) onCatalogSelect(nearest)
+      }}
       onPointerMove={handleTouchMove}
       onPointerUp={handleTouchEnd}
       onPointerCancel={handleTouchCancel}
@@ -652,7 +724,7 @@ export function TrajectoryCanvas({
           return (
             <span
               key={body.id}
-              className={`floating-label ${body.kind === 'asteroid' ? 'minor-floating-label' : ''}`}
+              className={`floating-label ${body.kind === 'asteroid' || body.kind === 'comet' ? 'minor-floating-label' : ''}`}
               style={{
                 left: `${(projected.x / Math.max(size.width, 1)) * 100}%`,
                 top: `${(projected.y / Math.max(size.height, 1)) * 100}%`,

@@ -23,6 +23,10 @@ describe('inventory does not confuse source membership with SPK coverage', () =>
       const mapped = kernels.attach(record)
       expect(mapped).toMatchObject({ naifId: expectedTarget, ephemerisStatus: 'state-available-at-audit-epoch',
         identityMappingEvidence: { method: 'jpl-iau-name-and-primary-to-audited-spk-alias', sourceRecordId: record.id, primaryId: record.parentId, target: expectedTarget } })
+      expect(mapped.kernelEvidence).toMatchObject({ sourceKernelSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+        sourceChainSha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+        sourceSegment: { kernelId: expect.any(String), startEt: expect.any(Number), endEt: expect.any(Number),
+          center: expect.any(Number), frame: expect.any(Number), type: expect.any(Number) } })
       expect(mapped.kernelEvidence.stateAtAuditEpoch).toEqual(kernels.attach({ id: `naif:${expectedTarget}`, category: 'moon', parentId: record.parentId }).kernelEvidence.stateAtAuditEpoch)
       expect(mapped.identityMappingEvidence.satelliteCatalogSha256).toMatch(/^[a-f0-9]{64}$/)
       for (const invalid of [

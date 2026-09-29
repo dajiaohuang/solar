@@ -82,7 +82,7 @@ func TestStatePlanCountsEvaluatedKernelState(t *testing.T) {
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256(fixture)
-	manifest := fmt.Sprintf(`{"id":"spk-test","files":[{"id":"synthetic","path":"synthetic.bsp","targets":[-210001],"startEt":0,"endEt":1000,"solutionKernelIds":["synthetic"],"bytes":%d,"sha256":"%s"}]}`, len(fixture), hex.EncodeToString(sum[:]))
+	manifest := fmt.Sprintf(`{"id":"spk-test","files":[{"id":"synthetic","path":"synthetic.bsp","targets":[-210001],"startEt":0,"endEt":1000,"solutionKernelIds":[],"bytes":%d,"sha256":"%s"}]}`, len(fixture), hex.EncodeToString(sum[:]))
 	if err := os.WriteFile(filepath.Join(d, "ephemeris-manifest.json"), []byte(manifest), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestStateTileInventoryOperationalMetadataUsesSelectedKernelProvenance(t *te
 	}
 	sum := sha256.Sum256(fixture)
 	wantHash := hex.EncodeToString(sum[:])
-	manifest := fmt.Sprintf(`{"id":"spk-test","files":[{"id":"synthetic","path":"synthetic.bsp","targets":[-210001],"startEt":-100,"endEt":2000,"solutionKernelIds":["synthetic"],"bytes":%d,"sha256":"%s"}]}`, len(fixture), wantHash)
+	manifest := fmt.Sprintf(`{"id":"spk-test","files":[{"id":"synthetic","path":"synthetic.bsp","targets":[-210001],"startEt":-100,"endEt":2000,"solutionKernelIds":[],"bytes":%d,"sha256":"%s"}]}`, len(fixture), wantHash)
 	if err := os.WriteFile(filepath.Join(d, "ephemeris-manifest.json"), []byte(manifest), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -162,33 +162,16 @@ func TestStateTileInventoryOperationalMetadataUsesSelectedKernelProvenance(t *te
 	if err := json.Unmarshal(bytes.TrimSpace(tileRecorder.Body.Bytes()[h.MetadataOffset:h.MetadataOffset+h.MetadataLength]), &metadata); err != nil {
 		t.Fatal(err)
 	}
-	if metadata.Model != "spk-original" || metadata.Source != "synthetic" || metadata.KernelSHA256 != wantHash || metadata.DatasetSHA256 != inv.ManifestHash() || metadata.CenterID != "naif:0" || !metadata.ValidityPresent || metadata.ValidityStartET != 0 || metadata.ValidityEndET != 1000 {
+	if metadata.Model != "spk-original" || metadata.Source != "synthetic" || metadata.KernelSHA256 != wantHash || metadata.DatasetSHA256 != inv.ManifestHash() || len(metadata.SourceChainSHA256) != 64 || metadata.CenterID != "naif:0" || !metadata.ValidityPresent || metadata.ValidityStartET != 0 || metadata.ValidityEndET != 1000 {
 		t.Fatalf("inventory operational provenance=%+v want kernel=%s dataset=%s", metadata, wantHash, inv.ManifestHash())
 	}
-	stateRecorder := httptest.NewRecorder()
-	s.ServeHTTP(stateRecorder, httptest.NewRequest(http.MethodGet, "/v1/identities/sb:operational/state?epochJd=2451545", nil))
-	var stateResponse struct {
-		Availability   catalog.Availability `json:"availability"`
-		EvidenceWindow map[string]float64   `json:"evidenceWindowEt"`
-	}
-	if stateRecorder.Code != http.StatusOK || json.Unmarshal(stateRecorder.Body.Bytes(), &stateResponse) != nil {
-		t.Fatalf("source state status=%d body=%s", stateRecorder.Code, stateRecorder.Body.String())
-	}
-	if stateResponse.Availability != catalog.AvailableOperational || stateResponse.EvidenceWindow["startEt"] != 0 || stateResponse.EvidenceWindow["endEt"] != 1000 {
-		t.Fatalf("source state used catalog-wide validity: %+v", stateResponse)
-	}
-	outsideRecorder := httptest.NewRecorder()
 	outsideJD := 2451545.0 + 1500.0/86400
-	s.ServeHTTP(outsideRecorder, httptest.NewRequest(http.MethodGet, "/v1/identities/sb:operational/state?epochJd="+fmt.Sprintf("%.17g", outsideJD), nil))
-	var outsideResponse struct {
-		Availability catalog.Availability `json:"availability"`
-		State        *catalog.State       `json:"state"`
-	}
-	if outsideRecorder.Code != http.StatusOK || json.Unmarshal(outsideRecorder.Body.Bytes(), &outsideResponse) != nil {
-		t.Fatalf("outside state status=%d body=%s", outsideRecorder.Code, outsideRecorder.Body.String())
-	}
-	if outsideResponse.Availability != catalog.Missing || outsideResponse.State != nil {
-		t.Fatalf("catalog-wide window incorrectly made outside state available: %+v", outsideResponse)
+	outsideRecorder := httptest.NewRecorder()
+	outsideBody := fmt.Sprintf(`{"ids":["sb:operational"],"epochJd":%.17g,"timeScale":"TDB","frame":"ECLIPJ2000","precision":"exact","fieldMask":["position","velocity"],"tileSize":1}`, outsideJD)
+	s.ServeHTTP(outsideRecorder, httptest.NewRequest(http.MethodPost, "/v1/state/plan", strings.NewReader(outsideBody)))
+	var outsidePlan statePlanResponse
+	if outsideRecorder.Code != http.StatusOK || json.Unmarshal(outsideRecorder.Body.Bytes(), &outsidePlan) != nil || outsidePlan.ExactCount != 0 || outsidePlan.MissingCount != 1 {
+		t.Fatalf("catalog-wide window incorrectly made outside state available: status=%d body=%s", outsideRecorder.Code, outsideRecorder.Body.String())
 	}
 }
 
@@ -213,7 +196,12 @@ func TestStateTileInventorySnapshotMetadataUsesEvidenceKernelProvenance(t *testi
 	}
 	defer c.Close()
 	epoch := 2451545.0 + 500.0/86400
-	inv := fixtureInventory(t, fmt.Sprintf(`{"id":"sb:snapshot","source":"numbered","naifId":-210002,"kernelEvidence":{"auditEt":500,"target":-210002,"segments":[{"kernelId":"synthetic","startEt":0,"endEt":1000,"center":399,"frame":1,"type":2}],"stateAtAuditEpoch":{"position":{"x":1,"y":2,"z":3},"velocity":{"x":4,"y":5,"z":6}}}}`))
+	inv := fixtureInventory(t,
+		fmt.Sprintf(`{"id":"sb:snapshot","source":"numbered","identityStatus":"confirmed","naifId":-210002,"orbit":{"timeScale":"TDB","frame":"ECLIPJ2000","center":"naif:10","epochJd":2451545,"semiMajorAxisAU":2,"eccentricity":0.1,"inclinationDeg":0,"argPeriapsisDeg":0,"ascendingNodeDeg":0,"meanAnomalyDeg":0},"kernelEvidence":{"auditEt":500,"target":-210002,"sourceKernelSha256":"%s","sourceChainSha256":"%s","sourceSegment":{"kernelId":"synthetic","startEt":0,"endEt":1000,"center":399,"frame":1,"type":2},"segments":[{"kernelId":"synthetic","startEt":0,"endEt":1000,"center":399,"frame":1,"type":2}],"stateAtAuditEpoch":{"position":{"x":1,"y":2,"z":3},"velocity":{"x":4,"y":5,"z":6}}}}`, wantHash, strings.Repeat("d", 64)),
+		`{"id":"sb:unverified-snapshot","source":"numbered","naifId":-210003,"kernelEvidence":{"auditEt":500,"target":-210003,"segments":[{"kernelId":"synthetic","startEt":0,"endEt":1000,"center":399,"frame":1,"type":2}],"stateAtAuditEpoch":{"position":{"x":1,"y":2,"z":3},"velocity":{"x":4,"y":5,"z":6}}}}`,
+		`{"id":"sb:unhashed-snapshot","source":"numbered","identityStatus":"confirmed","naifId":-210004,"kernelEvidence":{"auditEt":500,"target":-210004,"segments":[{"kernelId":"unavailable","startEt":0,"endEt":1000,"center":399,"frame":1,"type":2}],"stateAtAuditEpoch":{"position":{"x":1,"y":2,"z":3},"velocity":{"x":4,"y":5,"z":6}}}}`,
+		fmt.Sprintf(`{"id":"sb:unlisted-root-segment","source":"numbered","identityStatus":"confirmed","naifId":-210005,"kernelEvidence":{"auditEt":500,"target":-210005,"sourceKernelSha256":"%s","sourceChainSha256":"%s","sourceSegment":{"kernelId":"synthetic","startEt":0,"endEt":1000,"center":399,"frame":1,"type":2},"segments":[{"kernelId":"synthetic","startEt":0,"endEt":1000,"center":399,"frame":1,"type":3}],"stateAtAuditEpoch":{"position":{"x":1,"y":2,"z":3},"velocity":{"x":4,"y":5,"z":6}}}}`, wantHash, strings.Repeat("e", 64)),
+	)
 	s := New(c, 2, inv)
 	planRecorder := httptest.NewRecorder()
 	body := fmt.Sprintf(`{"ids":["sb:snapshot"],"epochJd":%.17g,"timeScale":"TDB","frame":"ECLIPJ2000","precision":"exact","fieldMask":["position","velocity"],"tileSize":1}`, epoch)
@@ -226,7 +214,7 @@ func TestStateTileInventorySnapshotMetadataUsesEvidenceKernelProvenance(t *testi
 		t.Fatal(err)
 	}
 	if plan.ExactCount != 1 || plan.MissingCount != 0 {
-		t.Fatalf("unexpected inventory snapshot plan: %+v", plan)
+		t.Fatalf("snapshot with complete source lineage was not exact: %+v", plan)
 	}
 	tileRecorder := httptest.NewRecorder()
 	s.ServeHTTP(tileRecorder, httptest.NewRequest(http.MethodPost, "/v1/state/tiles", strings.NewReader(`{"planId":"`+plan.PlanID+`","sequence":0}`)))
@@ -241,34 +229,23 @@ func TestStateTileInventorySnapshotMetadataUsesEvidenceKernelProvenance(t *testi
 	if err := json.Unmarshal(bytes.TrimSpace(tileRecorder.Body.Bytes()[h.MetadataOffset:h.MetadataOffset+h.MetadataLength]), &metadata); err != nil {
 		t.Fatal(err)
 	}
-	if metadata.Model != "source-kernel-state-at-audit-epoch" || metadata.Source != "synthetic" || metadata.KernelSHA256 != wantHash || metadata.DatasetSHA256 != inv.ManifestHash() || metadata.CenterID != "naif:399" || !metadata.ValidityPresent || metadata.ValidityStartET != 500 || metadata.ValidityEndET != 500 || !metadata.EvidenceWindowPresent || metadata.EvidenceWindowStartET != 0 || metadata.EvidenceWindowEndET != 1000 {
-		t.Fatalf("inventory snapshot provenance=%+v want kernel=%s dataset=%s", metadata, wantHash, inv.ManifestHash())
-	}
-	auditRecorder := httptest.NewRecorder()
-	s.ServeHTTP(auditRecorder, httptest.NewRequest(http.MethodGet, "/v1/identities/sb:snapshot/state?epochJd="+fmt.Sprintf("%.17g", epoch), nil))
-	var auditResponse struct {
-		Availability   catalog.Availability `json:"availability"`
-		State          *catalog.State       `json:"state"`
-		EvidenceWindow map[string]float64   `json:"evidenceWindowEt"`
-	}
-	if auditRecorder.Code != http.StatusOK || json.Unmarshal(auditRecorder.Body.Bytes(), &auditResponse) != nil {
-		t.Fatalf("snapshot audit state status=%d body=%s", auditRecorder.Code, auditRecorder.Body.String())
-	}
-	if auditResponse.Availability != catalog.AvailableSnapshot || auditResponse.State == nil || auditResponse.EvidenceWindow["startEt"] != 0 || auditResponse.EvidenceWindow["endEt"] != 1000 {
-		t.Fatalf("snapshot audit evidence mismatch: %+v", auditResponse)
+	if metadata.Model != "source-kernel-state-at-audit-epoch" || metadata.SourceChainSHA256 != strings.Repeat("d", 64) || metadata.CenterID != "naif:0" || !metadata.ValidityPresent || metadata.ValidityStartET != 500 || metadata.ValidityEndET != 500 {
+		t.Fatalf("inventory snapshot lineage or audit-epoch binding is invalid: %+v", metadata)
 	}
 	adjacentJD := epoch + 2e-9
 	adjacentRecorder := httptest.NewRecorder()
-	s.ServeHTTP(adjacentRecorder, httptest.NewRequest(http.MethodGet, "/v1/identities/sb:snapshot/state?epochJd="+fmt.Sprintf("%.17g", adjacentJD), nil))
-	var adjacentResponse struct {
-		Availability catalog.Availability `json:"availability"`
-		State        *catalog.State       `json:"state"`
+	adjacentBody := fmt.Sprintf(`{"ids":["sb:snapshot"],"epochJd":%.17g,"timeScale":"TDB","frame":"ECLIPJ2000","precision":"exact","fieldMask":["position","velocity"],"tileSize":1}`, adjacentJD)
+	s.ServeHTTP(adjacentRecorder, httptest.NewRequest(http.MethodPost, "/v1/state/plan", strings.NewReader(adjacentBody)))
+	var adjacentPlan statePlanResponse
+	if adjacentRecorder.Code != http.StatusOK || json.Unmarshal(adjacentRecorder.Body.Bytes(), &adjacentPlan) != nil || adjacentPlan.ExactCount != 0 || adjacentPlan.MissingCount != 1 {
+		t.Fatalf("snapshot state escaped audit epoch: status=%d body=%s", adjacentRecorder.Code, adjacentRecorder.Body.String())
 	}
-	if adjacentRecorder.Code != http.StatusOK || json.Unmarshal(adjacentRecorder.Body.Bytes(), &adjacentResponse) != nil {
-		t.Fatalf("snapshot adjacent state status=%d body=%s", adjacentRecorder.Code, adjacentRecorder.Body.String())
-	}
-	if adjacentResponse.Availability != catalog.Missing || adjacentResponse.State != nil {
-		t.Fatalf("snapshot state escaped audit epoch: %+v", adjacentResponse)
+	invalidBody := fmt.Sprintf(`{"ids":["sb:unverified-snapshot","sb:unhashed-snapshot","sb:unlisted-root-segment"],"epochJd":%.17g,"timeScale":"TDB","frame":"ECLIPJ2000","precision":"exact","fieldMask":["position","velocity"],"tileSize":3}`, epoch)
+	invalidRecorder := httptest.NewRecorder()
+	s.ServeHTTP(invalidRecorder, httptest.NewRequest(http.MethodPost, "/v1/state/plan", strings.NewReader(invalidBody)))
+	var invalidPlan statePlanResponse
+	if invalidRecorder.Code != http.StatusOK || json.Unmarshal(invalidRecorder.Body.Bytes(), &invalidPlan) != nil || invalidPlan.ExactCount != 0 || invalidPlan.MissingCount != 3 {
+		t.Fatalf("invalid exact snapshots entered state tiles: status=%d body=%s", invalidRecorder.Code, invalidRecorder.Body.String())
 	}
 }
 
@@ -364,7 +341,7 @@ func TestStatePlanCacheEvictsByResidentBytes(t *testing.T) {
 	if _, found := cache.get("second"); !found {
 		t.Fatal("newest plan was not retained")
 	}
-	items, resident, maximum := cache.stats()
+	items, resident, maximum, _, _, _, _ := cache.stats()
 	if items != 1 || resident > maximum {
 		t.Fatalf("unbounded plan cache: items=%d resident=%d max=%d", items, resident, maximum)
 	}

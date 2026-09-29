@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -123,7 +124,16 @@ func (s *Server) stateWindow(w http.ResponseWriter, r *http.Request) {
 		case value = <-pending[n%count]:
 		}
 		if value.err != nil {
-			_ = writeJSON(map[string]any{"kind": "error", "message": value.err.Error()})
+			code, status := "state_unavailable", http.StatusUnprocessableEntity
+			var failure *stateTileBuildError
+			if errors.As(value.err, &failure) {
+				code, status = failure.code, failure.status
+			} else if errors.Is(value.err, errRequestQueueFull) || errors.Is(value.err, errRequestQueueTimeout) {
+				code, status = "overloaded", http.StatusTooManyRequests
+			} else if errors.Is(value.err, context.Canceled) || errors.Is(value.err, context.DeadlineExceeded) {
+				code, status = "cancelled", http.StatusRequestTimeout
+			}
+			_ = writeJSON(map[string]any{"kind": "error", "code": code, "status": status, "epochIndex": n, "message": value.err.Error()})
 			return
 		}
 		if err := writeJSON(map[string]any{"kind": "epoch", "epochIndex": n, "plan": value.plan.response}); err != nil {

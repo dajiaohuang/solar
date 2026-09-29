@@ -73,7 +73,7 @@ func (s *Server) stellarObserver(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer release()
-	result, err := stellarmotion.FromCSVAtStation(ctx, wire.Manifest, wire.Rows, wire.SourceID, wire.Policy, wire.UTC, station, request.Atmosphere, s.earthOrientation, s.catalog.EvalBatchContext)
+	result, err := stellarmotion.FromCSVAtStationWithET(ctx, wire.Manifest, wire.Rows, wire.SourceID, wire.Policy, wire.UTC, station, request.Atmosphere, s.earthOrientation, s.catalog.EvalBatchContextAtET)
 	if err != nil {
 		var observerError *observation.Error
 		if ctx.Err() != nil || errors.As(err, &observerError) {

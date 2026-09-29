@@ -5,7 +5,7 @@ const count = (value: unknown): value is number => typeof value === 'number' && 
 
 /** Structural and declared-metadata consistency; does not rescan source rows. */
 export function bindCatalogSummary(summary: CatalogSummary, manifest: AsteroidManifest): CatalogSummary {
-  if (!record(summary) || ![1, 2].includes(summary.schemaVersion) || !count(summary.totalCount) ||
+  if (!record(summary) || ![1, 2, 3].includes(summary.schemaVersion) || !count(summary.totalCount) ||
       summary.totalCount !== manifest.totalCount || !['lite', 'full'].includes(summary.datasetMode) ||
       manifest.datasetMode !== undefined && summary.datasetMode !== manifest.datasetMode ||
       typeof summary.sourceSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(summary.sourceSha256) ||
@@ -24,7 +24,7 @@ export function bindCatalogSummary(summary: CatalogSummary, manifest: AsteroidMa
   }
   if (total !== summary.totalCount) throw new Error('Catalog summary category counts do not sum to total')
   const known = summary.magnitudeKnownCount, unknown = summary.magnitudeUnknownCount
-  if (summary.schemaVersion === 2 || known !== undefined || unknown !== undefined) {
+  if (summary.schemaVersion >= 2 || known !== undefined || unknown !== undefined) {
     if (!count(known) || !count(unknown) || known > summary.totalCount || unknown !== summary.totalCount-known) {
       throw new Error('Catalog magnitude coverage does not partition the total')
     }
@@ -48,7 +48,9 @@ export function bindCatalogSummary(summary: CatalogSummary, manifest: AsteroidMa
     totalCount: summary.totalCount, sourceSha256: summary.sourceSha256,
     categoryCounts: { ...summary.categoryCounts },
     numericRanges: Object.fromEntries(Object.entries(summary.numericRanges).map(([key, range]) => [key, [range[0], range[1]] as [number, number]])),
-    ...(known !== undefined ? { magnitudeKnownCount: known } : {}),
-    ...(unknown !== undefined ? { magnitudeUnknownCount: unknown } : {}),
+    // Older summaries don't establish whether the pinned MPCORB H=99.99 value
+    // was normalized. Keep validating their partition, but don't display it.
+    ...(summary.schemaVersion >= 3 && known !== undefined ? { magnitudeKnownCount: known } : {}),
+    ...(summary.schemaVersion >= 3 && unknown !== undefined ? { magnitudeUnknownCount: unknown } : {}),
   }
 }

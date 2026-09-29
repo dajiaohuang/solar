@@ -109,6 +109,15 @@ type altitudeSample struct {
 type altitudeEvaluator func(float64) (altitudeSample, error)
 
 func SearchVisibility(ctx context.Context, req VisibilityRequest, eop *earthorientation.Table, evaluate Evaluator) (*VisibilityResult, error) {
+	return searchVisibility(ctx, req, eop, &session{ctx: ctx, evaluate: evaluate, sources: map[string]*Source{}, identities: map[string]string{}})
+}
+
+// SearchVisibilityWithET resolves every sampled epoch in seconds past J2000 TDB.
+func SearchVisibilityWithET(ctx context.Context, req VisibilityRequest, eop *earthorientation.Table, evaluate ETEvaluator) (*VisibilityResult, error) {
+	return searchVisibility(ctx, req, eop, &session{ctx: ctx, evaluateET: evaluate, sources: map[string]*Source{}, identities: map[string]string{}})
+}
+
+func searchVisibility(ctx context.Context, req VisibilityRequest, eop *earthorientation.Table, sess *session) (*VisibilityResult, error) {
 	window, err := req.timeWindow()
 	if err != nil {
 		return nil, err
@@ -116,7 +125,6 @@ func SearchVisibility(ctx context.Context, req VisibilityRequest, eop *earthorie
 	if eop == nil {
 		return nil, fail("earth_orientation_unavailable", "no pinned IERS Earth orientation snapshot is configured")
 	}
-	sess := &session{ctx: ctx, evaluate: evaluate, sources: map[string]*Source{}, identities: map[string]string{}}
 	warnings := map[string]bool{}
 	point := Request{Station: req.Station, BodyIDs: []string{req.BodyID}}
 	if req.MaxSunAltitudeDeg != nil && req.BodyID != "sun" && req.BodyID != "naif:10" {
@@ -164,7 +172,7 @@ func SearchVisibility(ctx context.Context, req VisibilityRequest, eop *earthorie
 // that boundary explicitly rather than claiming a complete physical search.
 func searchAltitudeWindow(ctx context.Context, req VisibilityRequest, window taiWindow, evaluate altitudeEvaluator) (*VisibilityResult, error) {
 	out := &VisibilityResult{Model: VisibilityModel, Request: req, DurationSeconds: window.duration, Coverage: "sampled-complete", Windows: []WindowInterval{}, Crossings: []Crossing{}, Missing: []MissingInterval{}, Sources: []Source{}, Warnings: []string{"sub-step-events-and-tangent-contacts-may-be-missed"}, Contract: map[string]any{
-		"observationModel": Model, "direction": "apparent-airless-target-center", "timeAxis": "TAI-elapsed-SI-seconds", "angleUnit": "deg", "stationDatum": "WGS84-ellipsoidal-height", "stepSeconds": SearchStepSeconds, "boundaryToleranceSeconds": BoundaryToleranceSeconds, "maxEvaluations": MaxWindowEvaluations, "physicalUncertainty": "not-propagated", "continuousCoverageProven": false, "searchCompleteness": "sign-changes-only-sub-step-and-tangent-events-not-guaranteed", "excludedEffects": []string{"refraction", "terrain-horizon", "finite-target-limb", "atmospheric-extinction"},
+		"observationModel": Model, "direction": "apparent-airless-target-center", "timeAxis": "TAI-elapsed-SI-seconds", "angleUnit": "deg", "stationDatum": "WGS84-ellipsoidal-height", "stepSeconds": SearchStepSeconds, "boundaryToleranceSeconds": BoundaryToleranceSeconds, "maxEvaluations": MaxWindowEvaluations, "physicalUncertainty": "not-propagated", "futureLeapSecondUncertaintyStartUTC": futureLeapSecondUncertaintyStartUTC, "continuousCoverageProven": false, "searchCompleteness": "sign-changes-only-sub-step-and-tangent-events-not-guaranteed", "excludedEffects": []string{"refraction", "terrain-horizon", "finite-target-limb", "atmospheric-extinction"},
 	}}
 	cache := map[float64]altitudeSample{}
 	sample := func(t float64) (altitudeSample, error) {
@@ -179,6 +187,9 @@ func searchAltitudeWindow(ctx context.Context, req VisibilityRequest, window tai
 		}
 		out.Evaluations++
 		v, err := evaluate(t)
+		if err == nil {
+			err = ctx.Err()
+		}
 		if err == nil && v.missing == "" && (!finite(v.target) || !finite(v.sun)) {
 			return altitudeSample{}, fail("invalid_direction", "non-finite search direction")
 		}
@@ -220,6 +231,13 @@ func searchAltitudeWindow(ctx context.Context, req VisibilityRequest, window tai
 	steps := int(math.Ceil(window.duration / SearchStepSeconds))
 	for i := 0; i < steps; i++ {
 		a, b := float64(i)*SearchStepSeconds, math.Min(float64(i+1)*SearchStepSeconds, window.duration)
+		// Only the previous right endpoint can be reused by this interval.
+		// Preserve missing samples too: they are evidence, not cache misses.
+		carried, hasCarried := cache[a]
+		clear(cache)
+		if hasCarried {
+			cache[a] = carried
+		}
 		left, err := sample(a)
 		if err != nil {
 			return nil, err
@@ -345,12 +363,22 @@ func searchAltitudeWindow(ctx context.Context, req VisibilityRequest, window tai
 	}
 	missingDuration := 0.0
 	for _, gap := range out.Missing {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		missingDuration += gap.DurationSeconds
 	}
 	if math.Abs(missingDuration-window.duration) < 1e-6 {
 		out.Coverage = "unavailable"
 	}
+	// Sampling appends ordered, disjoint windows and missing intervals. Keep
+	// separate cursors for the two edge types so each gap is visited at most
+	// twice, including adjacent gaps with different missing reasons.
+	startGap, endGap := 0, 0
 	for i := range out.Windows {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		v := &out.Windows[i]
 		if v.StartSeconds == 0 {
 			v.StartBoundary = "search-boundary"
@@ -358,13 +386,17 @@ func searchAltitudeWindow(ctx context.Context, req VisibilityRequest, window tai
 		if v.EndSeconds == window.duration {
 			v.EndBoundary = "search-boundary"
 		}
-		for _, gap := range out.Missing {
-			if v.StartSeconds == gap.EndSeconds {
-				v.StartBoundary = "coverage-gap"
-			}
-			if v.EndSeconds == gap.StartSeconds {
-				v.EndBoundary = "coverage-gap"
-			}
+		for startGap < len(out.Missing) && out.Missing[startGap].EndSeconds < v.StartSeconds {
+			startGap++
+		}
+		if startGap < len(out.Missing) && out.Missing[startGap].EndSeconds == v.StartSeconds {
+			v.StartBoundary = "coverage-gap"
+		}
+		for endGap < len(out.Missing) && out.Missing[endGap].StartSeconds < v.EndSeconds {
+			endGap++
+		}
+		if endGap < len(out.Missing) && out.Missing[endGap].StartSeconds == v.EndSeconds {
+			v.EndBoundary = "coverage-gap"
 		}
 	}
 	if err := ctx.Err(); err != nil {

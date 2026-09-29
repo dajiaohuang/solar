@@ -2,13 +2,13 @@
 import { requireCatalogAccess } from '../lib/productAccess'
 import { planCatalogStream, streamCatalogPoints, createCatalogStreamSourceCache, clearCatalogStreamSourceCache, type CatalogStreamSourceCache } from '../lib/catalogStreaming'
 import { createCatalogTransferWindow } from '../lib/catalogTransferWindow'
-import { selectCatalogSpatialPoints } from '../lib/catalogSpatialSelection'
+import { selectCatalogAllPoints, selectCatalogSpatialPoints } from '../lib/catalogSpatialSelection'
 import { createCatalogEpochStore } from '../lib/catalogEpochStore'
+import { CATALOG_EPOCH_TRANSFER_ROWS, CATALOG_EPOCH_UPLOAD_SLOTS } from '../lib/catalogEpochCapacity'
 import { createCatalogSpatialIndex } from '../lib/catalogSpatialIndex'
 import { prepareCatalogAppendBatch } from '../lib/catalogAppendBatch'
 import { createCatalogSourceAppendLookup } from '../lib/catalogSourceAppendLookup'
 import { CATALOG_APPEND_TIMEOUT_MS } from '../lib/catalogAppendLimits'
-import { hasOnlyFiniteValues } from '../lib/finiteFloatArray'
 import type { CatalogStreamRequest, CatalogStreamResponse } from './catalog-stream.protocol'
 
 const scope = self as DedicatedWorkerGlobalScope
@@ -22,7 +22,7 @@ let spatialIndex: ReturnType<typeof createCatalogSpatialIndex> | undefined
 let epochs: ReturnType<typeof createCatalogEpochStore> | null = null
 let pendingEpoch: Extract<CatalogStreamRequest, { type: 'epoch' }> | null = null
 let epochGeneration = 0, computingEpoch = false, spatialCoherent = true
-let epochUpload: { requestId: number; startRow: number; elements: number; resolve: (buffer: Float64Array) => void; reject: (error: unknown) => void } | null = null
+const epochUploads = new Map<string, { requestId: number; startRow: number; elements: number; resolve: (buffer: Float64Array) => void; reject: (error: unknown) => void }>()
 let epochReuse: { requestId: number; startRow: number; count: number; resolve: () => void; reject: (error: unknown) => void } | null = null
 let pendingView: Extract<CatalogStreamRequest, { type: 'view' }> | null = null
 let selecting = false, viewGeneration = 0
@@ -31,16 +31,15 @@ let appendState: { start: Extract<CatalogStreamRequest, { type: 'start' }>; look
   contentSha256: string; indexSha256: string; remaining: number; sourceCache: CatalogStreamSourceCache } | null = null
 let appending = false, appendGeneration = 0, completedJulianDay = NaN
 let appendUpload: { requestId: number; startRow: number; count: number; resolve: () => void; reject: (error: unknown) => void } | null = null
-// Scientific positions remain Float64. Reject overflow in the separate visual
-// copy before making those rows available to the spatial index or consumer.
+// Scientific positions remain Float64. The main thread validates each rounded
+// display slice before drawing it or requesting a view over those rows; the
+// spatial index also rejects nonfinite coordinates. Avoid a second full scan
+// here after the Float64-to-Float32 copy.
 const installSpatialPositions = (positions: Float64Array, startRow: number) => {
   const offset = startRow*dimensions
   if (!Number.isSafeInteger(startRow) || startRow < 0 || positions.length % dimensions !== 0 ||
       offset+positions.length > spatialPositions.length) throw new Error('Catalog spatial upload exceeds its admitted layout')
   spatialPositions.set(positions,offset)
-  if (!hasOnlyFiniteValues(spatialPositions.subarray(offset,offset+positions.length))) {
-    throw new Error('Catalog coordinates exceed spatial coordinate representation')
-  }
   spatialIndex?.invalidate(startRow,positions.length/dimensions)
 }
 const discardFailedSnapshot = () => {
@@ -80,13 +79,23 @@ async function selectViews() {
       pendingView = null
       try {
         if (!spatialCoherent) throw new Error('Spatial view requires a completed catalog epoch')
-        if (request.count > availablePoints) throw new Error('Spatial view exceeds computed source rows')
-        if (Boolean(request.view.rotation) !== (dimensions === 3)) throw new Error('Spatial view dimension does not match its source snapshot')
+        if (request.count > availablePoints) throw new Error('Catalog view exceeds computed source rows')
+        if (Boolean(request.view.rotation) !== (dimensions === 3)) throw new Error('Catalog view dimension does not match its source snapshot')
         const selectionStarted = performance.now()
-        const result = await selectCatalogSpatialPoints(spatialPositions, request.count, request.view, () => generation !== viewGeneration, yieldToMessages, spatialIndex)
+        const cancelled = () => generation !== viewGeneration
+        const result: (NonNullable<Awaited<ReturnType<typeof selectCatalogAllPoints>>> & Partial<NonNullable<Awaited<ReturnType<typeof selectCatalogSpatialPoints>>>>) | null = request.view.mode === 'all'
+          ? await selectCatalogAllPoints(request.count, request.view.maximumPoints, request.view.focusedRow,
+            request.view.selectedRows, cancelled, yieldToMessages)
+          : await selectCatalogSpatialPoints(spatialPositions, request.count, request.view, cancelled, yieldToMessages, spatialIndex)
         const selectionMs = performance.now() - selectionStarted
-        if (result && generation === viewGeneration) scope.postMessage({ type: 'selection', requestId: request.requestId, count: request.count, indices: result.indices, visible: result.visible,
-          edgeCandidates: result.edgeCandidates, selectionMs, testedRows: result.testedRows, skippedRows: result.skippedRows } satisfies CatalogStreamResponse, [result.indices.buffer])
+        if (result && generation === viewGeneration) {
+          const countOverlay = result.countOverlay
+          const transfer: Transferable[] = [result.indices.buffer]
+          if (countOverlay) transfer.push(countOverlay.counts.buffer as ArrayBuffer)
+          scope.postMessage({ type: 'selection', requestId: request.requestId, count: request.count, indices: result.indices, visible: result.visible,
+            edgeCandidates: result.edgeCandidates, selectionMs, ...(countOverlay ? { countOverlay } : {}),
+            ...(result.testedRows !== undefined ? { testedRows: result.testedRows, skippedRows: result.skippedRows } : {}) } satisfies CatalogStreamResponse, transfer)
+        }
       } catch (error) {
         if (generation === viewGeneration) scope.postMessage({ type: 'selection-error', requestId: request.requestId, count: request.count,
           error: error instanceof Error ? error.message : String(error) } satisfies CatalogStreamResponse)
@@ -105,9 +114,9 @@ async function computeEpochs() {
       spatialCoherent = false; viewGeneration++; pendingView = null
       try {
         scope.postMessage({ type: 'epoch-start', requestId: request.requestId, julianDay: request.julianDay, count: store.count } satisfies CatalogStreamResponse)
-        const result = await store.computeEpoch({ julianDay: request.julianDay, signal, tileRows: 16384, superseded: () => epochGeneration !== request.requestId,
+        const result = await store.computeEpoch({ julianDay: request.julianDay, signal, tileRows: CATALOG_EPOCH_TRANSFER_ROWS, superseded: () => epochGeneration !== request.requestId,
           maximumDriftAU: request.maximumDriftAU,
-          yieldControl: yieldToMessages,
+          yieldControl: yieldCatalogStreamMessages,
           // Zero drift still admits blocks computed at exactly this epoch.
           // Keep their ownership/receipt handshake when tightening the budget.
           onReuse: block => new Promise<void>((resolve, reject) => {
@@ -134,12 +143,17 @@ async function computeEpochs() {
             catch (error) { fail(error) }
           }),
           onTile: tile => new Promise<Float64Array>((resolve, reject) => {
+            const key = `${request.requestId}:${tile.startRow}`
+            if (epochUploads.size >= CATALOG_EPOCH_UPLOAD_SLOTS || epochUploads.has(key)) {
+              reject(new Error('Catalog epoch upload exceeded its bounded tile window')); return
+            }
             let settled = false
             const deadline = performance.now() + 30_000
             const clean = () => {
               if (settled) return false
               settled = true
-              clearTimeout(timer); signal.removeEventListener('abort', abort); epochUpload = null
+              clearTimeout(timer); signal.removeEventListener('abort', abort)
+              if (epochUploads.get(key)?.resolve === finish) epochUploads.delete(key)
               return true
             }
             const fail = (error: unknown) => { if (clean()) reject(error) }
@@ -150,7 +164,7 @@ async function computeEpochs() {
             }
             const abort = () => fail(signal.reason ?? new DOMException('Catalog epoch cancelled', 'AbortError'))
             const timer = setTimeout(timeout, 30_000)
-            epochUpload = { requestId: request.requestId, startRow: tile.startRow, elements: tile.positions.length, resolve: finish, reject: fail }
+            epochUploads.set(key, { requestId: request.requestId, startRow: tile.startRow, elements: tile.positions.length, resolve: finish, reject: fail })
             signal.addEventListener('abort', abort, { once: true })
             if (signal.aborted) { abort(); return }
             try {
@@ -275,7 +289,8 @@ scope.onmessage = (event: MessageEvent<CatalogStreamRequest>) => {
     return
   }
   if (request.type === 'epoch-ack') {
-    const upload = epochUpload
+    const upload = Number.isSafeInteger(request.requestId) && Number.isSafeInteger(request.startRow)
+      ? epochUploads.get(`${request.requestId}:${request.startRow}`) : undefined
     if (!upload || upload.requestId !== request.requestId || upload.startRow !== request.startRow) return
     if (!(request.positions instanceof Float64Array) || request.positions.length !== upload.elements || request.positions.byteOffset !== 0 ||
         !(request.positions.buffer instanceof ArrayBuffer) || request.positions.buffer.byteLength !== upload.elements*8) upload.reject(new Error('Invalid returned catalog epoch buffer'))
@@ -343,7 +358,7 @@ scope.onmessage = (event: MessageEvent<CatalogStreamRequest>) => {
           recycledPositions = null
           return returned?.length === elements ? returned : new Float64Array(elements)
         },
-        onPrepared: epochs ? (prepared, startRow, speed) => epochs!.append(prepared, startRow, speed) : undefined,
+        onPrepared: epochs ? (prepared, startRow, speed, blockSpeeds) => epochs!.append(prepared, startRow, speed, blockSpeeds) : undefined,
         onTile: tile => {
           // This Float32 copy is exclusively for visual culling. Scientific
           // propagation and the transferred source snapshot remain Float64.

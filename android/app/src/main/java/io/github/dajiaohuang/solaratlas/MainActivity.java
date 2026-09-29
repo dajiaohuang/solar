@@ -49,6 +49,9 @@ public final class MainActivity extends Activity {
     private CoveragePanel coveragePanel;
     private GroundContactsPanel contactsPanel;
     private StellarMotionPanel stellarPanel;
+    private OrbitCovariancePanel orbitCovariancePanel;
+    private byte[] pendingOrbitCovarianceExport;
+    private static final int ORBIT_COVARIANCE_SOURCE_REQUEST = 735, ORBIT_COVARIANCE_EXPORT_REQUEST = 736;
     private byte[] pendingStellarExport;
     private static final int STELLAR_MANIFEST_REQUEST = 732, STELLAR_ROWS_REQUEST = 733, STELLAR_EXPORT_REQUEST = 734;
     private byte[] pendingContactExport;
@@ -57,12 +60,18 @@ public final class MainActivity extends Activity {
     private SourceIdentityPage selectedSourcePage;
     private StateTileCache tileCache;
     private volatile StateTileService activeStateService;
-    private Thread loadThread;
+    private java.util.concurrent.Future<?> loadThread;
+    private final NativeStateLoadQueue stateLoadQueue = new NativeStateLoadQueue();
+    private final NativeUiResultSlot stateResults = new NativeUiResultSlot();
+    private final NativeUiResultSlot statePartialResults = new NativeUiResultSlot();
+    private final NativeUiResultSlot projectionResults = new NativeUiResultSlot();
     private Thread renderThread;
     private final NativeProjectionPrefetch projectionPrefetch = new NativeProjectionPrefetch();
     private StateTileService.Frame currentFrame;
     private String currentReferenceId = "";
     private int evidencePageIndex;
+    private int currentRequestBodyCount;
+    private boolean evidenceReferenceAvailable;
     private int renderGeneration;
     private int generation;
     private boolean mode3d = true;
@@ -71,6 +80,7 @@ public final class MainActivity extends Activity {
     private NativeObservationDeck.PreparedPoints currentPrepared;
     private TextView budgetStatus;
     private ThermalMonitor thermalMonitor;
+    private String stateLoadNotice = "";
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         androidx.core.splashscreen.SplashScreen.installSplashScreen(this);
@@ -110,12 +120,13 @@ public final class MainActivity extends Activity {
             content.addView(button, new LinearLayout.LayoutParams(-1, -2));
         }
         LinearLayout actions = new LinearLayout(this);
-        Button load = new Button(this); load.setText("Load observation"); load.setOnClickListener(v -> { if (loadThread != null) cancelLoad(); else loadObservation(); });
+        Button load = new Button(this); load.setText("Load observation"); load.setOnClickListener(v -> { if (loadThread != null) cancelLoad(true); else loadObservation(); });
         Button switchMode = new Button(this); switchMode.setText("Switch to 2D");
         switchMode.setOnClickListener(v -> {
             mode3d = !mode3d; final boolean requestedMode3d = mode3d;
             budget3d.resetEvidence(); budget2d.resetEvidence();
             switchMode.setText(mode3d ? "Switch to 2D" : "Switch to 3D");
+            cancelRender();
             viewport.clearPoints(() -> {
                 if (currentFrame != null && mode3d == requestedMode3d) {
                     prepareRenderer(currentFrame, currentReferenceId, Double.toString(currentFrame.epochJd), exactCount(currentFrame));
@@ -143,6 +154,7 @@ public final class MainActivity extends Activity {
         content.addView(identityPanel);
         contactsPanel = new GroundContactsPanel(this, backend, this::exportContacts); content.addView(contactsPanel);
         stellarPanel = new StellarMotionPanel(this, backend, this::pickStellarSource, this::exportStellar); content.addView(stellarPanel);
+        orbitCovariancePanel = new OrbitCovariancePanel(this, backend, this::pickOrbitCovarianceSource, this::exportOrbitCovariance); content.addView(orbitCovariancePanel);
         android.text.TextWatcher invalidate = new android.text.TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
@@ -175,7 +187,7 @@ public final class MainActivity extends Activity {
         });
         setContentView(safeContent);
         ViewCompat.requestApplyInsets(safeContent);
-        try { tileCache = new StateTileCache(new File(getCacheDir(), "state-tiles-v1")); }
+        try { tileCache = new StateTileCache(new File(getCacheDir(), "state-tiles-v2")); }
         catch (Exception error) { tileCache = null; status.setText("Tile cache is unavailable; no observation can be loaded."); }
     }
 
@@ -187,6 +199,8 @@ public final class MainActivity extends Activity {
     private void loadObservation() {
         budget3d.resetEvidence(); budget2d.resetEvidence();
         final int requestGeneration = ++generation;
+        final long resultToken = stateResults.reset();
+        final long partialToken = statePartialResults.reset();
         final String address = backend.getText().toString().trim();
         final String epochText = epoch.getText().toString().trim();
         final String referenceId = reference.getText().toString().trim();
@@ -195,31 +209,43 @@ public final class MainActivity extends Activity {
         final double epochJd;
         try { epochJd = Double.parseDouble(epochText); } catch (NumberFormatException error) { status.setText("Enter a finite TDB Julian date."); return; }
         if (!Double.isFinite(epochJd) || address.isEmpty() || ids.isEmpty() || referenceId.isEmpty()) { status.setText("Enter an HTTPS backend, finite TDB JD, body IDs and a reference ID."); return; }
-        cancelRender(); currentFrame = null; viewport.clearPoints(); showEvidence(null, ""); evidence.setText("Loading; no partial observation will be published."); status.setText("Loading manifest, plans and verified state tiles...");
-        loadThread = new Thread(() -> {
+        cancelRender(); currentFrame = null; currentRequestBodyCount = ids.size(); stateLoadNotice = ""; viewport.clearPoints(); showEvidence(null, ""); evidence.setText("Loading manifest and verified state tiles..."); status.setText("Loading manifest, plans and verified state tiles...");
+        loadThread = stateLoadQueue.start(() -> {
             StateTileService service = null;
             try {
                 if (tileCache == null) throw new StateTileDecoder.ProtocolException("tile cache is unavailable");
                 service = new StateTileService(address, tileCache);
                 activeStateService = service;
-                StateTileService.Frame loaded = service.load(ids, epochJd, sourcePage);
+                StateTileService.Frame loaded = service.load(ids, epochJd, sourcePage, partial -> {
+                    final boolean referenceAvailable = findReferenceAvailability(partial, referenceId);
+                    statePartialResults.offer(partialToken, () -> publishPartial(requestGeneration, partial, referenceId, epochText, referenceAvailable, ids.size()));
+                });
+                final boolean referenceAvailable = findReferenceAvailability(loaded, referenceId);
                 if (Thread.currentThread().isInterrupted()) throw new StateTileDecoder.ProtocolException("state load cancelled");
-                runOnUiThread(() -> publish(requestGeneration, loaded, referenceId, epochText));
+                stateResults.offer(resultToken, () -> publish(requestGeneration, loaded, referenceId, epochText, referenceAvailable));
             } catch (Exception error) {
-                runOnUiThread(() -> fail(requestGeneration, error));
+                stateResults.offer(resultToken, () -> fail(requestGeneration, error));
             } finally {
                 if (service != null) {
                     service.close();
                     if (activeStateService == service) activeStateService = null;
                 }
             }
-        }, "solar-state-load");
-        loadThread.start();
+        });
     }
 
-    private void publish(int requestGeneration, StateTileService.Frame loaded, String referenceId, String epochText) {
-        if (requestGeneration != generation) return; loadThread = null; currentFrame = loaded; currentReferenceId = referenceId; showEvidence(loaded, referenceId);
+    private static boolean findReferenceAvailability(StateTileService.Frame frame, String referenceId) {
+        for (int i = 0; i < frame.metadata.size(); i++) {
+            if ((i & 1023) == 0 && Thread.currentThread().isInterrupted()) throw new java.util.concurrent.CancellationException();
+            if (frame.metadata.get(i).id.equals(referenceId)) return frame.exact[i];
+        }
+        return false;
+    }
+
+    private void publish(int requestGeneration, StateTileService.Frame loaded, String referenceId, String epochText, boolean referenceAvailable) {
+        if (requestGeneration != generation) return; loadThread = null; stateLoadNotice = ""; currentFrame = loaded; currentReferenceId = referenceId; showEvidence(loaded, referenceId, referenceAvailable);
         final int exactCount = exactCount(loaded);
+        cancelRender();
         status.setText(exactCount + " verified states - " + (loaded.exact.length - exactCount) + " data gaps - TDB JD " + epochText + ". Preparing GPU points...");
         viewport.clearPoints(() -> {
             if (requestGeneration == generation && currentFrame == loaded) {
@@ -228,34 +254,74 @@ public final class MainActivity extends Activity {
         });
     }
 
+    private void publishPartial(int requestGeneration, StateTileService.Frame partial, String referenceId, String epochText,
+                                boolean referenceAvailable, int requestedBodyCount) {
+        if (requestGeneration != generation || loadThread == null) return;
+        currentFrame = partial; currentReferenceId = referenceId;
+        stateLoadNotice = "First verified plan displayed (" + partial.metadata.size() + "/" + requestedBodyCount + " identities); remaining identities are pending.";
+        showEvidence(partial, referenceId, referenceAvailable);
+        status.setText(partial.metadata.size() + "/" + requestedBodyCount + " identities received - " + partial.exactCount + " verified states - " + (partial.exact.length - partial.exactCount)
+                + " data gaps - TDB JD " + epochText + ". Preparing the first GPU frame while more plans load...");
+        cancelRender();
+        viewport.clearPoints(() -> {
+            if (requestGeneration == generation && currentFrame == partial) {
+                prepareRenderer(partial, referenceId, epochText, partial.exactCount);
+            }
+        });
+    }
+
     private void prepareRenderer(StateTileService.Frame frame, String referenceId, String epochText, int exactCount) {
         cancelRender();
         final int request = ++renderGeneration;
+        final long resultToken = projectionResults.reset();
         final boolean render3d = mode3d;
         final int displayLimit = activeBudget().limit();
         renderThread = projectionPrefetch.start(() -> {
             try {
                 NativeObservationDeck.PreparedPoints prepared = NativeObservationDeck.prepare(frame, referenceId, render3d, displayLimit);
                 if (Thread.currentThread().isInterrupted()) return;
-                runOnUiThread(() -> {
+                projectionResults.offer(resultToken, () -> {
                     if (request != renderGeneration || currentFrame != frame) return;
                     renderThread = null; currentPrepared = prepared; viewport.setPrepared(prepared);
                     String referenceStatus = prepared.referenceAvailable ? "" : " Reference state unavailable; no origin substituted.";
-                    status.setText(exactCount + " verified states - " + (frame.exact.length - exactCount) + " data gaps - TDB JD " + epochText + ". " + (render3d ? "3D" : "2D") + " GPU points " + prepared.displayedCount + "/" + prepared.candidateCount + " (limit " + prepared.displayLimit + ")." + referenceStatus);
+                    status.setText(exactCount + " verified states - " + (frame.exact.length - exactCount) + " data gaps - TDB JD " + epochText + ". " + (render3d ? "3D" : "2D") + " GPU points " + prepared.displayedCount + "/" + prepared.candidateCount + " (limit " + prepared.displayLimit + ")." + referenceStatus + (stateLoadNotice.isEmpty() ? "" : " " + stateLoadNotice));
                     budgetStatus.setText(getString(R.string.render_budget_summary,
                             prepared.candidateCount - prepared.displayedCount, budgetReason()));
                 });
             } catch (RuntimeException error) {
-                runOnUiThread(() -> { if (request == renderGeneration) { renderThread = null; viewport.clearPoints(); status.setText("GPU point preparation failed; no observation rendered."); } });
+                projectionResults.offer(resultToken, () -> { if (request == renderGeneration) { renderThread = null; viewport.clearPoints(); status.setText("GPU point preparation failed; no observation rendered."); } });
             }
         }, "solar-render-prepare");
     }
 
-    private static int exactCount(StateTileService.Frame frame) { int count = 0; for (boolean value : frame.exact) if (value) count++; return count; }
+    private static int exactCount(StateTileService.Frame frame) { return frame.exactCount; }
 
-    private void fail(int requestGeneration, Exception error) { if (requestGeneration != generation) return; loadThread = null; currentFrame = null; cancelRender(); viewport.clearPoints(); status.setText(error.getMessage() == null ? "State load failed." : error.getMessage()); showEvidence(null, ""); evidence.setText("No partial observation was published."); }
-    private void cancelLoad() { generation++; StateTileService service = activeStateService; if (service != null) service.cancel(); if (loadThread != null) { loadThread.interrupt(); loadThread = null; status.setText("Loading cancelled. No partial observation was published."); } currentFrame = null; cancelRender(); viewport.clearPoints(); }
-    private void cancelRender() { renderGeneration++; currentPrepared = null; budgetStatus.setText(R.string.render_budget_empty); projectionPrefetch.cancel(); renderThread = null; }
+    private void fail(int requestGeneration, Exception error) {
+        if (requestGeneration != generation) return;
+        loadThread = null;
+        String detail = error.getMessage() == null ? "State load failed." : error.getMessage();
+        if (currentFrame != null) {
+            stateLoadNotice = "Remaining plans failed; retained " + currentFrame.metadata.size() + "/" + currentRequestBodyCount + " verified-plan identities. " + detail;
+            status.setText(currentFrame.exactCount + " exact states in the retained prefix. " + stateLoadNotice);
+            return;
+        }
+        stateLoadNotice = ""; currentFrame = null; cancelRender(); viewport.clearPoints(); status.setText(detail); showEvidence(null, "");
+        evidence.setText("No verified state plan was available to display.");
+    }
+    private void cancelLoad() { cancelLoad(false); }
+    private void cancelLoad(boolean retainVerifiedFrame) {
+        boolean retain = retainVerifiedFrame && loadThread != null && currentFrame != null;
+        generation++; stateResults.reset(); statePartialResults.reset();
+        StateTileService service = activeStateService; if (service != null) service.cancel(); stateLoadQueue.cancel();
+        if (loadThread != null) loadThread = null;
+        if (retain) {
+            stateLoadNotice = "Loading cancelled; retained " + currentFrame.metadata.size() + "/" + currentRequestBodyCount + " verified-plan identities.";
+            status.setText(currentFrame.exactCount + " exact states in the retained prefix. " + stateLoadNotice);
+            return;
+        }
+        stateLoadNotice = ""; currentFrame = null; cancelRender(); viewport.clearPoints();
+    }
+    private void cancelRender() { renderGeneration++; projectionResults.reset(); currentPrepared = null; budgetStatus.setText(R.string.render_budget_empty); projectionPrefetch.cancel(); renderThread = null; }
 
     private NativeRenderBudget activeBudget() { return mode3d ? budget3d : budget2d; }
 
@@ -270,8 +336,9 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private void onFrameWindow(NativeObservationDeck.PreparedPoints prepared, NativeRenderBudget.Window window) {
-        if (prepared == null || prepared != currentPrepared || currentFrame == null || prepared.mode3d != mode3d) return;
+    private void onFrameWindow(Object projectionIdentity, NativeRenderBudget.Window window) {
+        NativeObservationDeck.PreparedPoints prepared = currentPrepared;
+        if (prepared == null || prepared.identity != projectionIdentity || currentFrame == null || prepared.mode3d != mode3d) return;
         boolean changed = activeBudget().sample(window, prepared.candidateCount, System.nanoTime());
         budgetStatus.setText(getString(R.string.render_budget_metrics,
                 prepared.candidateCount - prepared.displayedCount, window.p50Ms, window.p95Ms, window.droppedRatio * 100, budgetReason()));
@@ -284,6 +351,7 @@ public final class MainActivity extends Activity {
         final String referenceId = currentReferenceId;
         final boolean render3d = mode3d;
         final boolean resumeInteraction = viewport.isInteracting();
+        cancelRender();
         viewport.clearPoints(() -> {
             if (currentFrame == frame && mode3d == render3d) {
                 prepareRenderer(frame, referenceId, Double.toString(frame.epochJd), exactCount(frame));
@@ -309,7 +377,8 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private void showEvidence(StateTileService.Frame frame, String referenceId) { currentFrame = frame; currentReferenceId = referenceId == null ? "" : referenceId; evidencePageIndex = 0; renderEvidencePage(); }
+    private void showEvidence(StateTileService.Frame frame, String referenceId) { showEvidence(frame, referenceId, false); }
+    private void showEvidence(StateTileService.Frame frame, String referenceId, boolean referenceAvailable) { currentFrame = frame; currentReferenceId = referenceId == null ? "" : referenceId; evidenceReferenceAvailable = referenceAvailable; evidencePageIndex = 0; renderEvidencePage(); }
     private void changeEvidencePage(int delta) { evidencePageIndex += delta; renderEvidencePage(); }
     private void renderEvidencePage() {
         if (currentFrame == null) { evidence.setText("No rows loaded."); updateEvidencePageControls(0, 0); return; }
@@ -318,13 +387,15 @@ public final class MainActivity extends Activity {
         int start = evidencePageIndex * 100, end = Math.min(total, start + 100);
         StringBuilder out = new StringBuilder(4096);
         out.append("Rows ").append(start + 1).append('-').append(end).append(" of ").append(total).append('\n');
-        int referenceIndex = -1;
-        for (int i = 0; i < total; i++) if (currentFrame.metadata.get(i).id.equals(currentReferenceId)) { referenceIndex = i; break; }
-        if (referenceIndex < 0 || !currentFrame.exact[referenceIndex]) out.append("Reference state is missing; no origin substituted.\n");
+        if (!evidenceReferenceAvailable) out.append("Reference state is missing; no origin substituted.\n");
         for (int i = start; i < end; i++) {
             StateTileDecoder.Metadata row = currentFrame.metadata.get(i);
             out.append(row.id).append(currentFrame.exact[i] ? " - VERIFIED - " : " - MISSING - ")
                     .append(currentFrame.exact[i] ? row.model + " - " + row.source : row.missingReason).append('\n');
+            if (currentFrame.exact[i]) {
+                out.append("  Source-chain SHA-256: ")
+                        .append(row.sourceChainSha256.isEmpty() ? "not provided" : row.sourceChainSha256).append('\n');
+            }
         }
         evidence.setText(out.toString()); updateEvidencePageControls(evidencePageIndex + 1, pages);
     }
@@ -332,8 +403,8 @@ public final class MainActivity extends Activity {
 
     private static List<String> parseIds(String text, String referenceId) {
         Set<String> seen = new HashSet<>(); List<String> ids = new ArrayList<>();
+        if (referenceId != null && !referenceId.trim().isEmpty()) { String reference = referenceId.trim(); seen.add(reference); ids.add(reference); }
         for (String value : text.split("[,\\s]+")) { String id = value.trim(); if (!id.isEmpty() && seen.add(id)) ids.add(id); }
-        if (!referenceId.isEmpty() && seen.add(referenceId)) ids.add(referenceId);
         return ids;
     }
 
@@ -341,7 +412,7 @@ public final class MainActivity extends Activity {
     private TextView sectionLabel(String value) { TextView result = label(value, 12, Color.rgb(145, 190, 205)); result.setPadding(0, dp(16), 0, dp(3)); return result; }
     private TextView label(String text, int size, int color) { TextView result = new TextView(this); result.setText(text); result.setTextSize(size); result.setTextColor(color); return result; }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
-    private void showTutorial() { new android.app.AlertDialog.Builder(this).setTitle("First observation").setMessage("1. Enter an HTTPS backend address and a finite TDB Julian date. 2. Choose a preset or enter custom IDs. 3. Loading verifies manifest, plan and every binary tile; cancellation publishes nothing. 4. Only verified exact rows render. Missing references never become an invented origin.").setPositiveButton("Done", null).show(); }
+    private void showTutorial() { new android.app.AlertDialog.Builder(this).setTitle("First observation").setMessage("1. Enter an HTTPS backend address and a finite TDB Julian date. 2. Choose a preset or enter custom IDs. 3. Loading verifies the manifest, each plan and every binary tile; the first complete plan can render while later plans load. 4. Cancelling keeps any already verified first plan. Only verified exact rows render, and a missing reference never becomes an invented origin.").setPositiveButton("Done", null).show(); }
     private void pickStellarSource(boolean manifest) {
         android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT)
                 .addCategory(android.content.Intent.CATEGORY_OPENABLE).setType("*/*")
@@ -349,13 +420,30 @@ public final class MainActivity extends Activity {
         try { startActivityForResult(intent, manifest ? STELLAR_MANIFEST_REQUEST : STELLAR_ROWS_REQUEST); }
         catch (RuntimeException unavailable) { stellarPanel.exportStatus(false); }
     }
-    private void exportStellar(byte[] bytes) {
-        pendingStellarExport = bytes.clone();
+    private void pickOrbitCovarianceSource() {
+        android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(android.content.Intent.CATEGORY_OPENABLE).setType("*/*")
+                .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        try { startActivityForResult(intent, ORBIT_COVARIANCE_SOURCE_REQUEST); }
+        catch (RuntimeException unavailable) { orbitCovariancePanel.exportStatus(false); }
+    }
+    private void exportOrbitCovariance(byte[] bytes) {
+        // The panel transfers a fresh exportBytes() snapshot; it has no mutable
+        // alias to the report's privately owned response.
+        pendingOrbitCovarianceExport = bytes;
         android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_CREATE_DOCUMENT)
                 .addCategory(android.content.Intent.CATEGORY_OPENABLE).setType("application/json")
-                .putExtra(android.content.Intent.EXTRA_TITLE, "solar-stellar-motion.json");
+                .putExtra(android.content.Intent.EXTRA_TITLE, orbitCovariancePanel.exportFileName());
+        try { startActivityForResult(intent, ORBIT_COVARIANCE_EXPORT_REQUEST); }
+        catch (RuntimeException unavailable) { pendingOrbitCovarianceExport = null; showReportExportStatus(ORBIT_COVARIANCE_EXPORT_REQUEST, R.string.report_export_failed); }
+    }
+    private void exportStellar(byte[] bytes) {
+        pendingStellarExport = bytes;
+        android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_CREATE_DOCUMENT)
+                .addCategory(android.content.Intent.CATEGORY_OPENABLE).setType("application/json")
+                .putExtra(android.content.Intent.EXTRA_TITLE, stellarPanel.exportFileName());
         try { startActivityForResult(intent, STELLAR_EXPORT_REQUEST); }
-        catch (RuntimeException unavailable) { pendingStellarExport = null; stellarPanel.exportStatus(false); }
+        catch (RuntimeException unavailable) { pendingStellarExport = null; showReportExportStatus(STELLAR_EXPORT_REQUEST, R.string.report_export_failed); }
     }
     private void exportContacts(byte[] bytes) {
         pendingContactExport = bytes;
@@ -363,10 +451,20 @@ public final class MainActivity extends Activity {
                 .addCategory(android.content.Intent.CATEGORY_OPENABLE).setType("application/json")
                 .putExtra(android.content.Intent.EXTRA_TITLE, "solar-ground-contacts.json");
         try { startActivityForResult(intent, CONTACT_EXPORT_REQUEST); }
-        catch (RuntimeException unavailable) { pendingContactExport = null; contactsPanel.exportStatus(false); }
+        catch (RuntimeException unavailable) { pendingContactExport = null; showReportExportStatus(CONTACT_EXPORT_REQUEST, R.string.report_export_failed); }
     }
     @Override protected void onActivityResult(int request, int result, android.content.Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == ORBIT_COVARIANCE_SOURCE_REQUEST) {
+            if (result == RESULT_OK && data != null && data.getData() != null) orbitCovariancePanel.importSource(data.getData());
+            return;
+        }
+        if (request == ORBIT_COVARIANCE_EXPORT_REQUEST) {
+            final byte[] bytes = pendingOrbitCovarianceExport; pendingOrbitCovarianceExport = null;
+            if (result != RESULT_OK || data == null || data.getData() == null || bytes == null) return;
+            writeReport(data.getData(), bytes, request);
+            return;
+        }
         if (request == STELLAR_MANIFEST_REQUEST || request == STELLAR_ROWS_REQUEST) {
             if (result == RESULT_OK && data != null && data.getData() != null) stellarPanel.importSource(data.getData(), request == STELLAR_MANIFEST_REQUEST);
             return;
@@ -374,33 +472,31 @@ public final class MainActivity extends Activity {
         if (request == STELLAR_EXPORT_REQUEST) {
             final byte[] bytes = pendingStellarExport; pendingStellarExport = null;
             if (result != RESULT_OK || data == null || data.getData() == null || bytes == null) return;
-            final android.net.Uri destination = data.getData();
-            new Thread(() -> {
-                boolean saved = false;
-                try (java.io.OutputStream output = getContentResolver().openOutputStream(destination, "wt")) {
-                    if (output == null) throw new java.io.IOException("Export destination unavailable");
-                    output.write(bytes); output.flush(); saved = true;
-                } catch (java.io.IOException | RuntimeException error) { saved = false; }
-                final boolean success = saved;
-                runOnUiThread(() -> { if (!isFinishing() && !isDestroyed()) stellarPanel.exportStatus(success); });
-            }, "solar-stellar-export").start();
+            writeReport(data.getData(), bytes, request);
             return;
         }
         if (request != CONTACT_EXPORT_REQUEST) return;
         final byte[] bytes = pendingContactExport; pendingContactExport = null;
         if (result != RESULT_OK || data == null || data.getData() == null || bytes == null) return;
-        final android.net.Uri destination = data.getData();
         // The file picker authorizes this destination. Preserve the snapshot that
         // opened it even though onPause correctly discarded the live search UI.
-        new Thread(() -> {
-            boolean saved = false;
-            try (java.io.OutputStream output = getContentResolver().openOutputStream(destination, "wt")) {
-                if (output == null) throw new java.io.IOException("Export destination unavailable");
-                output.write(bytes); output.flush(); saved = true;
-            } catch (java.io.IOException | RuntimeException error) { saved = false; }
-            final boolean success = saved;
-            runOnUiThread(() -> { if (!isFinishing() && !isDestroyed()) contactsPanel.exportStatus(success); });
-        }, "solar-contact-export").start();
+        writeReport(data.getData(), bytes, request);
+    }
+    private void writeReport(android.net.Uri destination, byte[] bytes, int kind) {
+        java.lang.ref.WeakReference<MainActivity> owner = new java.lang.ref.WeakReference<>(this);
+        java.util.function.Consumer<Boolean> completion = success -> {
+            MainActivity activity = owner.get();
+            if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
+            activity.showReportExportStatus(kind, success ? R.string.report_export_saved : R.string.report_export_failed);
+        };
+        if (!NativeReportExport.submit(getApplicationContext().getContentResolver(), destination, bytes, completion)) {
+            showReportExportStatus(kind, R.string.report_export_not_queued);
+        }
+    }
+    private void showReportExportStatus(int kind, int message) {
+        int label = kind == ORBIT_COVARIANCE_EXPORT_REQUEST ? R.string.report_export_orbit
+                : kind == STELLAR_EXPORT_REQUEST ? R.string.report_export_stellar : R.string.report_export_contacts;
+        android.widget.Toast.makeText(getApplicationContext(), getString(message, getString(label)), android.widget.Toast.LENGTH_LONG).show();
     }
     @Override protected void onPause() {
         if (Build.VERSION.SDK_INT >= 29 && thermalMonitor != null) { thermalMonitor.close(); thermalMonitor = null; }
@@ -409,6 +505,7 @@ public final class MainActivity extends Activity {
         identityPanel.clear();
         contactsPanel.clear();
         stellarPanel.clear();
+        orbitCovariancePanel.clear();
         boolean hadObservation = currentFrame != null || loadThread != null;
         cancelLoad(); showEvidence(null, "");
         if (hadObservation) status.setText("Observation released while inactive. Load again to resume verified states.");
@@ -421,7 +518,7 @@ public final class MainActivity extends Activity {
             if (manager != null) thermalMonitor = new ThermalMonitor(manager, this::thermalChanged);
         }
     }
-    @Override protected void onDestroy() { pendingContactExport = null; pendingStellarExport = null; if (stellarPanel != null) stellarPanel.clear(); cancelLoad(); projectionPrefetch.close(); if (viewport != null) viewport.release(); super.onDestroy(); }
+    @Override protected void onDestroy() { pendingContactExport = null; pendingStellarExport = null; pendingOrbitCovarianceExport = null; if (orbitCovariancePanel != null) orbitCovariancePanel.clear(); if (stellarPanel != null) stellarPanel.clear(); cancelLoad(); stateResults.close(); statePartialResults.close(); projectionResults.close(); stateLoadQueue.close(); projectionPrefetch.close(); if (viewport != null) viewport.release(); super.onDestroy(); }
 
     private static final class Preset {
         final String id, title, reference, ids;

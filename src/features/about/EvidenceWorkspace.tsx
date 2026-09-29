@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { majorBodiesById } from '../../data/majorBodies'
 import { EARTH_MOON_MASS_PARTITION_EVIDENCE, JPL_APPROX_MODEL_EVIDENCE, SATELLITE_ORBIT_MODEL_EVIDENCE } from '../../engine/ephemeris/modelValidity'
 import { useI18n } from '../../i18n/context'
@@ -10,14 +10,25 @@ import { DatasetCard } from '../catalog/DatasetCard'
 import { EPHEMERIS_MANIFEST } from '../../engine/ephemeris/kernelStore'
 import { PRODUCT_PROFILE } from '../../lib/productAvailability'
 import { SourceCoverageReport } from './SourceCoverageReport'
-import { OrbitUncertainty } from './OrbitUncertainty'
-import { DynamicsLaboratory } from './DynamicsLaboratory'
-import { OccultationLaboratory } from './OccultationLaboratory'
-import { PckOrientationPanel } from './PckOrientationPanel'
-import { SpkLimbPanel } from './SpkLimbPanel'
-import { GaiaSky } from './GaiaSky'
-import { GaiaMotion } from './GaiaMotion'
-import { ConicLaboratory } from './ConicLaboratory'
+const CometUncertaintyEvidence = lazy(() => import('./CometUncertaintyEvidence').then(module => ({ default: module.CometUncertaintyEvidence })))
+const MessengerOrecon3Evidence = lazy(() => import('./MessengerOrecon3Evidence').then(module => ({ default: module.MessengerOrecon3Evidence })))
+
+function OptionalEvidence({ title, children }: { title: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return <details className="evidence-module glass-panel" onToggle={event => setOpen(event.currentTarget.open)}>
+    <summary>{title}</summary>
+    {open && <Suspense fallback={<p role="status">…</p>}>{children}</Suspense>}
+  </details>
+}
+
+const OrbitUncertainty = lazy(() => import('./OrbitUncertainty').then(module => ({ default: module.OrbitUncertainty })))
+const DynamicsLaboratory = lazy(() => import('./DynamicsLaboratory').then(module => ({ default: module.DynamicsLaboratory })))
+const OccultationLaboratory = lazy(() => import('./OccultationLaboratory').then(module => ({ default: module.OccultationLaboratory })))
+const PckOrientationPanel = lazy(() => import('./PckOrientationPanel').then(module => ({ default: module.PckOrientationPanel })))
+const SpkLimbPanel = lazy(() => import('./SpkLimbPanel').then(module => ({ default: module.SpkLimbPanel })))
+const GaiaSky = lazy(() => import('./GaiaSky').then(module => ({ default: module.GaiaSky })))
+const GaiaMotion = lazy(() => import('./GaiaMotion').then(module => ({ default: module.GaiaMotion })))
+const ConicLaboratory = lazy(() => import('./ConicLaboratory').then(module => ({ default: module.ConicLaboratory })))
 
 type ValidationReport = {
   passed?: boolean
@@ -74,6 +85,7 @@ export function EvidenceWorkspace() {
     <div className="page-heading"><div><span className="eyebrow">{t('evidenceKicker')}</span><h1>{t('about')}</h1><p>{t('educationalWarning')}</p></div></div>
     <div className="evidence-grid">
       <SourceCoverageReport />
+      <Suspense fallback={<p role="status">…</p>}>
       <OrbitUncertainty />
       <DynamicsLaboratory />
       <OccultationLaboratory />
@@ -82,6 +94,9 @@ export function EvidenceWorkspace() {
       <GaiaSky />
       <GaiaMotion />
       <ConicLaboratory />
+      </Suspense>
+      <OptionalEvidence title={language === 'zh' ? '彗星不确定度来源详情' : 'Comet uncertainty source details'}><CometUncertaintyEvidence /></OptionalEvidence>
+      <OptionalEvidence title={language === 'zh' ? 'MESSENGER 历史重建误差资料' : 'MESSENGER historical reconstruction uncertainty'}><MessengerOrecon3Evidence /></OptionalEvidence>
       <section className="evidence-module glass-panel">
         <div className="module-heading"><span>{t('physicalEphemerides')}</span><em>JPL SPK</em></div>
         <p>{t('ephemerisBoundary')}</p><p>{t('ephemerisTimeBoundary')}</p>

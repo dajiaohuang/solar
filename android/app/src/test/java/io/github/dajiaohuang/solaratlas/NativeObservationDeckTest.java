@@ -19,9 +19,11 @@ public class NativeObservationDeckTest {
         // Only tests bypass the service constructor; production frames still
         // originate from the fully validated manifest/plan/tile service.
         Constructor<StateTileService.Frame> constructor = StateTileService.Frame.class.getDeclaredConstructor(
-                double.class, String.class, String.class, List.class, double[].class, boolean[].class);
+                double.class, String.class, String.class, List.class, double[].class, boolean[].class, int.class);
         constructor.setAccessible(true);
-        return constructor.newInstance(2461287.5, repeat('b'), null, rows, states, exact);
+        int exactCount = 0;
+        for (boolean value : exact) if (value) exactCount++;
+        return constructor.newInstance(2461287.5, repeat('b'), null, rows, states, exact, exactCount);
     }
 
     @Test public void preservesSmallRelativeDisplacementsAndFitsAllRotatedDepths() throws Exception {
@@ -48,7 +50,10 @@ public class NativeObservationDeckTest {
         StateTileService.Frame frame = frame(new double[]{1, 1, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0}, new boolean[]{true, true});
         NativeObservationDeck.PreparedPoints planar = NativeObservationDeck.prepare(frame, "origin", false, 250_000);
         assertFalse(planar.mode3d);
-        assertEquals(0, planar.positions.get(5), 0);
+        assertEquals(2 * planar.displayedCount, planar.positions.capacity());
+        assertEquals(0, planar.positions.get(0), 0);
+        assertEquals(0, planar.positions.get(1), 0);
+        assertEquals(0.95 / Math.sqrt(2), planar.positions.get(2), 1e-7);
         assertEquals(0.95 / Math.sqrt(2), planar.positions.get(3), 1e-7);
         frame.exact[1] = false;
         NativeObservationDeck.PreparedPoints absent = NativeObservationDeck.prepare(frame, "origin", true, 100_000);
@@ -77,6 +82,7 @@ public class NativeObservationDeckTest {
         assertArrayEquals(original, frame.states, 0);
         NativeObservationDeck.PreparedPoints planar = NativeObservationDeck.prepare(frame, "origin", false, 2);
         assertNotSame(planar.positions, capped.positions); assertFalse(planar.mode3d);
+        assertEquals(2 * planar.displayedCount, planar.positions.capacity());
         assertArrayEquals(original, frame.states, 0);
         for (int invalid : new int[]{0, -1, 250_001}) {
             try { NativeObservationDeck.prepare(frame, "origin", true, invalid); fail("invalid budget accepted"); }

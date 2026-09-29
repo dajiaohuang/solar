@@ -24,8 +24,13 @@ public final class NativeObservationDeck extends GLSurfaceView {
     private volatile boolean interacting;
     private volatile FrameListener frameListener;
     private final AtomicBoolean framePosted = new AtomicBoolean();
+    private final Object preparedLock = new Object();
+    private PreparedPoints pendingPrepared;
+    private Runnable pendingClearCompletion;
+    private boolean preparedQueued,hasPendingPrepared,released;
+    private long preparedGeneration;
 
-    interface FrameListener { void onWindow(PreparedPoints prepared, NativeRenderBudget.Window window); }
+    interface FrameListener { void onWindow(Object projectionIdentity, NativeRenderBudget.Window window); }
     void setFrameListener(FrameListener listener) { frameListener = listener; }
 
     public NativeObservationDeck(Context context) {
@@ -39,8 +44,34 @@ public final class NativeObservationDeck extends GLSurfaceView {
     }
 
     public void setPrepared(PreparedPoints prepared) {
-        queueEvent(() -> renderer.setPrepared(prepared));
+        synchronized (preparedLock) {
+            if (released) return;
+            pendingPrepared=prepared;hasPendingPrepared=true;
+            if (!preparedQueued) {
+                preparedQueued=true;
+                // The queued notification captures no full projection buffer.
+                // Replacements overwrite the owned slot until GL consumes it.
+                long token=preparedGeneration;
+                queueEvent(() -> consumePrepared(token));
+            }
+        }
         requestRender();
+    }
+
+    private void consumePrepared(long token) {
+        synchronized (preparedLock) {
+            if (token!=preparedGeneration) return;
+            preparedQueued=false;
+            if (!released && hasPendingPrepared) renderer.setPrepared(pendingPrepared);
+            pendingPrepared=null;hasPendingPrepared=false;
+        }
+    }
+
+    private void discardPendingPrepared() {
+        // Called while holding preparedLock so the clear notification is ordered
+        // before any replacement publication from another thread.
+        preparedGeneration++;pendingPrepared=null;hasPendingPrepared=false;preparedQueued=false;
+        pendingClearCompletion=null;
     }
 
     public void clearPoints() {
@@ -48,21 +79,45 @@ public final class NativeObservationDeck extends GLSurfaceView {
     }
 
     /**
-     * Clear the active mode's GPU buffer and notify the owner only after the
-     * GL thread has completed the clear.  A new mode buffer must be prepared
-     * from that callback so a 2D/3D switch never holds two full GPU buffers.
+     * Drop the renderer's point references before preparing the replacement.
+     * This does not guarantee immediate direct-memory or driver reclamation.
      */
     void clearPoints(Runnable onCleared) {
         stopInteraction();
-        queueEvent(() -> {
-            renderer.clearPoints();
-            if (onCleared != null) post(onCleared);
-        });
+        synchronized (preparedLock) {
+            if (released) return;
+            discardPendingPrepared();
+            pendingClearCompletion=onCleared;
+            long token=preparedGeneration;
+            queueEvent(() -> {
+                renderer.clearPoints();
+                // Both queues retain only this owner and a generation token.
+                if (!post(() -> completeClear(token))) {
+                    synchronized (preparedLock) {
+                        if (token==preparedGeneration) pendingClearCompletion=null;
+                    }
+                }
+            });
+        }
         requestRender();
     }
 
+    private void completeClear(long token) {
+        Runnable completion;
+        synchronized (preparedLock) {
+            if (released || token!=preparedGeneration) return;
+            completion=pendingClearCompletion;
+            pendingClearCompletion=null;
+        }
+        // Owner changes and completion delivery are serialized on the UI thread.
+        if (completion!=null) completion.run();
+    }
+
     void clearPrepared() {
-        queueEvent(renderer::clearPoints);
+        synchronized (preparedLock) {
+            discardPendingPrepared();
+            queueEvent(renderer::clearPoints);
+        }
         requestRender();
     }
 
@@ -80,6 +135,10 @@ public final class NativeObservationDeck extends GLSurfaceView {
 
     /** Release GL-owned objects on the GL thread before the view is destroyed. */
     void release() {
+        synchronized (preparedLock) {
+            if (released) return;
+            released=true;discardPendingPrepared();
+        }
         stopInteraction();
         frameListener = null;
         queueEvent(renderer::release);
@@ -134,6 +193,8 @@ public final class NativeObservationDeck extends GLSurfaceView {
 
     /** Prepared on the load worker: all subtraction is Float64 before conversion to GPU Float32. */
     public static final class PreparedPoints {
+        // The identity has no back-reference to this object or its direct buffer.
+        final Object identity = new Object();
         final FloatBuffer positions;
         final int displayedCount;
         final int candidateCount;
@@ -174,7 +235,8 @@ public final class NativeObservationDeck extends GLSurfaceView {
             radius = Math.max(radius, distance);
         }
         int displayed = Math.min(candidates, limit);
-        FloatBuffer positions = ByteBuffer.allocateDirect(displayed * 3 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer();
+        int components = mode3d ? 3 : 2;
+        FloatBuffer positions = ByteBuffer.allocateDirect(displayed * components * Float.BYTES).order(ByteOrder.nativeOrder()).asFloatBuffer();
         appendPoint(positions, frame, origin, ox, oy, oz, radius, mode3d);
         int written = 1;
         for (int i = 0; i < frame.exact.length && written < displayed; i++) {
@@ -194,7 +256,8 @@ public final class NativeObservationDeck extends GLSurfaceView {
         double dy = (frame.states[index * 6 + 1] - oy) / radius;
         double dz = mode3d ? (frame.states[index * 6 + 2] - oz) / radius : 0.0;
         // Leave a small numerical margin at near/far planes after Float32 rounding.
-        output.put((float) (dx * 0.95)).put((float) (dy * 0.95)).put((float) (dz * 0.95));
+        output.put((float) (dx * 0.95)).put((float) (dy * 0.95));
+        if (mode3d) output.put((float) (dz * 0.95));
     }
 
     private final class DeckRenderer implements GLSurfaceView.Renderer {
@@ -232,9 +295,12 @@ public final class NativeObservationDeck extends GLSurfaceView {
         @Override public void onDrawFrame(GL10 gl) {
             NativeRenderBudget.Window window = sampler.frame(System.nanoTime(), interacting && pointCount > 0);
             if (window != null && frameListener != null && framePosted.compareAndSet(false, true)) {
-                PreparedPoints sampled = prepared;
+                Object sampledIdentity = prepared == null ? null : prepared.identity;
                 if (!post(() -> {
-                    try { if (interacting && frameListener != null) frameListener.onWindow(sampled, window); }
+                    try {
+                        FrameListener listener = frameListener;
+                        if (interacting && listener != null) listener.onWindow(sampledIdentity, window);
+                    }
                     finally { framePosted.set(false); }
                 })) framePosted.set(false);
             }
@@ -243,7 +309,8 @@ public final class NativeObservationDeck extends GLSurfaceView {
             GLES20.glUseProgram(program);
             GLES20.glUniform1f(zoomHandle, zoom); GLES20.glUniform1f(rotationXHandle, mode3d ? (float) Math.toRadians(rotationX) : 0); GLES20.glUniform1f(rotationYHandle, mode3d ? (float) Math.toRadians(rotationY) : 0); GLES20.glUniform1f(aspectHandle, (float) width / height);
             GLES20.glUniform4f(colorHandle, 0.384f, 0.816f, 0.710f, 1.0f);
-            points.position(0); GLES20.glEnableVertexAttribArray(positionHandle); GLES20.glVertexAttribPointer(positionHandle, 3, GLES20.GL_FLOAT, false, 3 * 4, points); GLES20.glDrawArrays(GLES20.GL_POINTS, 0, pointCount); GLES20.glDisableVertexAttribArray(positionHandle);
+            int components = mode3d ? 3 : 2;
+            points.position(0); GLES20.glEnableVertexAttribArray(positionHandle); GLES20.glVertexAttribPointer(positionHandle, components, GLES20.GL_FLOAT, false, components * Float.BYTES, points); GLES20.glDrawArrays(GLES20.GL_POINTS, 0, pointCount); GLES20.glDisableVertexAttribArray(positionHandle);
         }
 
         void setPrepared(PreparedPoints prepared) { this.prepared = prepared; sampler.reset(); points = prepared == null ? null : prepared.positions; pointCount = prepared == null ? 0 : prepared.displayedCount; mode3d = prepared == null || prepared.mode3d; }

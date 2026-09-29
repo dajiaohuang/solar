@@ -1,6 +1,6 @@
 export type BodyId = string
 
-export type BodyKind = 'star' | 'planet' | 'moon' | 'dwarfPlanet' | 'asteroid' | 'spacecraft' | 'sourceRecord'
+export type BodyKind = 'star' | 'planet' | 'moon' | 'dwarfPlanet' | 'asteroid' | 'comet' | 'spacecraft' | 'sourceRecord'
 
 export type OrbitSource = 'jpl-approx' | 'jpl-satellite-mean' | 'jpl-satellite-inventory' | 'jpl-sbdb' | 'mpcorb' | 'horizons' | 'curated-approx' | 'schematic' | 'custom' | 'jpl-spk' | 'jpl-spk-osculating-fallback' | 'source-inventory'
 

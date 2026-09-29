@@ -1,12 +1,15 @@
 import { catalogAdmission } from '../data/cache/catalogAdmission'
 import { readBoundedStream } from '../data/cache/boundedStream'
-import { prepareCatalogElementRange, PREPARED_CATALOG_STRIDE, propagatePreparedCatalogPositions, type PreparedCatalogElements } from '../engine/ephemeris/catalogPoints'
+import { createCatalogPointWorkspace, prepareCatalogSourceRowsRange, PREPARED_CATALOG_STRIDE, propagatePreparedCatalogPositions, type CatalogPointWorkspace, type PreparedCatalogElements } from '../engine/ephemeris/catalogPoints'
 import { utcJulianDayToTt } from '../engine/ephemeris/timeScales'
-import { catalogMaximumSpeedAUPerTtDay } from '../engine/ephemeris/catalogTemporalBudget'
+import { catalogOrbitMaximumSpeedAUPerTtDay, catalogSpeedUpperBoundAUPerTtDay } from '../engine/ephemeris/catalogTemporalBudget'
+import { CATALOG_EPOCH_TILE_ROWS, CATALOG_EPOCH_TRANSFER_ROWS, CATALOG_EPOCH_UPLOAD_SLOTS } from './catalogEpochCapacity'
 import { CATALOG_SPATIAL_BLOCK_ROWS } from './catalogSpatialIndex'
+import { CATALOG_SCREEN_COUNT_MAX_CELLS } from './catalogSpatialSelection'
 import { CATALOG_TRANSFER_WINDOW } from './catalogTransferWindow'
 import { CATALOG_SOURCE_RANK_BLOCK_BYTES } from './catalogSourceRow'
 import { createCatalogFieldMatcher } from './catalogFilters'
+import { normalizeCatalogAbsoluteMagnitude } from './catalogMagnitude'
 import { normalizeSearchText, validateBinaryElements } from './catalogLoader'
 import { bindCatalogChecksums, type CatalogChecksums } from './catalogIntegrity'
 import { validateCatalogMetadataRow } from './catalogRecordValidation'
@@ -55,7 +58,41 @@ export type CatalogStreamResult = { sourceRows: number; drawnRows: number; compl
   reads: CatalogReadEvidence;
   screening: { admittedShards: number; completedShards: number; metadataOnlyRows: number; completionReason: 'exhausted' | 'capacity'; shards: CatalogScreenedShard[] };
   maximumSpeedAUPerTtDay?: number | null; sourceSelection?: CatalogSourceSelection; performanceMs?: CatalogStreamPerformanceReceipt }
-type Checksums = { schemaVersion: number; algorithm: string; files: Record<string, string> }
+type Checksums = { schemaVersion: number; algorithm: string; files: Record<string,string> }
+
+function quantizedRangeMayIntersect(center: number, halfStep: number, range: readonly [number, number]) {
+  const lower = center-halfStep, upper = center+halfStep
+  const padding = 64*Number.EPSILON*Math.max(1,Math.abs(lower),Math.abs(upper),Math.abs(range[0]),Math.abs(range[1]))
+  return !Number.isFinite(padding) || (upper+padding >= range[0] && lower-padding <= range[1])
+}
+
+/** Conservative row-level prefilter over the compact index. Quantized fields
+ * only reject a shard when their outward intervals cannot touch the filter;
+ * the source-precision binary values remain authoritative for actual rows. */
+function compactIndexMayMatchFilters(filters: CatalogFilters, semiMajorAxisAU: number, eccentricityFixed: number,
+  inclinationFixed: number, magnitudeFixed: number, flags: number) {
+  if (eccentricityFixed > 1_000_000_000 || inclinationFixed > 180_000_000) {
+    throw new Error('Invalid quantized catalog orbital fields')
+  }
+  const eccentricity = eccentricityFixed/1_000_000_000
+  if (!quantizedRangeMayIntersect(eccentricity,0.5e-9,filters.eccentricity) ||
+      !quantizedRangeMayIntersect(inclinationFixed/1_000_000,0.5e-6,filters.inclination)) return false
+
+  const magnitudeKnown = Boolean(flags & 4) && normalizeCatalogAbsoluteMagnitude(magnitudeFixed / 100) !== undefined
+  if (filters.magnitudeStatus === 'known' && !magnitudeKnown || filters.magnitudeStatus === 'unknown' && magnitudeKnown) return false
+  if (magnitudeKnown && filters.magnitudeStatus !== 'unknown' &&
+      !quantizedRangeMayIntersect(magnitudeFixed/100,0.005,filters.absoluteMagnitude)) return false
+
+  const eccentricityPadding = 64*Number.EPSILON*Math.max(1,Math.abs(eccentricity))
+  const minimumEccentricity = Math.max(0,eccentricity-0.5e-9-eccentricityPadding)
+  const maximumEccentricity = Math.min(1,eccentricity+0.5e-9+eccentricityPadding)
+  const minimumPerihelion = semiMajorAxisAU*(1-maximumEccentricity)
+  const maximumPerihelion = semiMajorAxisAU*(1-minimumEccentricity)
+  const perihelionPadding = 64*Number.EPSILON*Math.max(1,Math.abs(semiMajorAxisAU),Math.abs(minimumPerihelion),
+    Math.abs(maximumPerihelion),Math.abs(filters.perihelion[0]),Math.abs(filters.perihelion[1]))
+  return !Number.isFinite(perihelionPadding) || (maximumPerihelion+perihelionPadding >= filters.perihelion[0] &&
+    minimumPerihelion-perihelionPadding <= filters.perihelion[1])
+}
 
 export type CatalogStreamSourceCache = Readonly<{ kind: 'catalog-stream-source-cache' }>
 type SourceCacheEntry = { key: string; indexBuffer: ArrayBuffer; hash: CatalogChecksums;
@@ -83,7 +120,7 @@ export function clearCatalogStreamSourceCache(cache: CatalogStreamSourceCache) {
   if (state) { state.entry = undefined; state.generation++ }
 }
 
-export function planCatalogStream(manifest: AsteroidManifest, requestedRows: number, budgetBytes: number, mode: '2d' | '3d' = '2d', retainEpochs = false, appendRows = 0): CatalogStreamPlan {
+export function planCatalogStream(manifest: AsteroidManifest, requestedRows: number, budgetBytes: number, mode: '2d' | '3d' = '2d', retainEpochs = false, appendRows = 0, candidateLocatorCount?: number): CatalogStreamPlan {
   if (mode !== '2d' && mode !== '3d') throw new Error('Invalid catalog streaming dimension')
   if (typeof retainEpochs !== 'boolean') throw new Error('Invalid catalog epoch retention policy')
   if (!Number.isSafeInteger(appendRows) || appendRows < 0 || appendRows > 256 || appendRows > 0 && !retainEpochs) {
@@ -97,6 +134,9 @@ export function planCatalogStream(manifest: AsteroidManifest, requestedRows: num
       new Set(compact.classCodes).size !== compact.classCodes.length || compact.classCodes.some(code => typeof code !== 'string' || !code) ||
       !/^[a-zA-Z0-9_-]+\.bin$/.test(compact.path) || !manifest.releasePath) throw new Error('Unsupported catalog streaming manifest')
   if (!Number.isSafeInteger(requestedRows) || requestedRows < 1 || !Number.isSafeInteger(budgetBytes) || budgetBytes < 1 || budgetBytes > 512 * MIB) throw new Error('Invalid catalog streaming budget')
+  if (candidateLocatorCount !== undefined && (!Number.isSafeInteger(candidateLocatorCount) || candidateLocatorCount < 0 || candidateLocatorCount > totalCount)) {
+    throw new Error('Invalid catalog candidate locator reserve')
+  }
   // Explicit typed-array / GPU admission model, not total browser RSS: index
   // read plus concatenation, optional query locators + bitset, four in-flight
   // shards and compute/transfer scratch, metadata parsing and full-source
@@ -113,11 +153,15 @@ export function planCatalogStream(manifest: AsteroidManifest, requestedRows: num
   // One extra byte per source shard marks exact candidate-shard membership.
   const sourceSelectionBytes = 3 * (Math.ceil(totalCount/8)+chunkCount) + chunkCount*2048 + sourceRankBytes + chunkCount
   // Four bounded reads/hash copies (128 B/row each), one raw/selected/prepared/
-  // computed shard (rounded up to 240 B/row), and four transferred xyz+appearance
-  // tiles (26 B/row), plus one returned Float64 xyz buffer (24 B/row).
-  // Keep the older, larger reservation as additional headroom.
-  const pipelineBytes = chunkSize * Math.max(CATALOG_STREAM_CONCURRENCY*256,
-    CATALOG_STREAM_CONCURRENCY*128 + 240 + CATALOG_TRANSFER_WINDOW*26 + 24)
+  // computed shard (174 B per fully selected 3D row after replacing the copied
+  // 64-byte element slab with 4-byte source-row IDs; keep 240 B for scratch and
+  // object headroom), four transferred xyz+appearance tiles (26 B/row), and
+  // the bounded temporal Float64 xyz upload window (24 B/row per tile).
+  // Transport tiles can exceed source shards, so charge their row count
+  // independently. Retain the older concurrency*256 reserve when it is larger.
+  const pipelineBytes = Math.max(chunkSize * CATALOG_STREAM_CONCURRENCY*256,
+    chunkSize * (CATALOG_STREAM_CONCURRENCY*128 + 240 + CATALOG_TRANSFER_WINDOW*26)
+      + CATALOG_EPOCH_TRANSFER_ROWS * CATALOG_EPOCH_UPLOAD_SLOTS*24)
   // One source-metadata shard at a time: bounded bytes, UTF-8 decoding/JSON
   // scratch headroom, and compact extracted columns. Object overhead is an
   // estimate, not a bound on engine-managed heap or total browser RSS.
@@ -134,24 +178,53 @@ export function planCatalogStream(manifest: AsteroidManifest, requestedRows: num
   // A single retained binary shard is charged separately from active reads.
   const appendReservedBytes = appendRows ? chunkSize*64 + 2*sourceRankBytes + chunkCount*256 +
     appendRows*(3*Math.ceil(chunkSize/8)+4096+128) : 0
-  const maximumEpochBlocks = chunkCount+appendRows
-  const fixed = totalCount * (48 + 9) + pipelineBytes + metadataBytes + 8 * MIB + spatialIndexBytes + spatialMembershipBytes + sourceSelectionBytes + appendReservedBytes + (retainEpochs ? 2 * MIB + chunkCount * 128 : 0)
-  // Worst-case admitted-row charge for spatial display. In 2D, the 72 B base
-  // is 48 B of CPU/GPU point attributes, 8 B of worker culling positions, and
-  // 16 B for worker winners/output indices plus the previous CPU selection and
-  // GPU index-buffer high-water mark that can coexist during replacement. The
-  // extra byte below is winnerInside; retain-all views skip winner arrays.
+  // Initial temporal-reuse receipts are aligned to bounded epoch upload tiles.
+  // A selected population can occupy every source shard, adding one partial
+  // tile per shard to the global tile count. Appended rows remain separately
+  // admitted and each append batch has at most 256 rows.
+  // These full-source input reserves are separate from the per-admitted-row
+  // renderer charge below. During index assembly, one network chunk can overlap
+  // the growing destination (2 * the 24-byte index stride). Candidate locators
+  // are optional; charge their actual Uint32 pairs and the exact membership
+  // bitset/chunk flags only when the caller supplied a candidate list.
+  const compactIndexAssemblyBytes = totalCount * compact.strideBytes * 2
+  const candidateLocatorBytes = candidateLocatorCount === undefined ? 0 :
+    candidateLocatorCount * 2 * Uint32Array.BYTES_PER_ELEMENT + Math.ceil(totalCount / 8) + chunkCount
+  // Spatial count overlay reserves the worker grid, main-thread ImageData and
+  // bounded canvas backing for every screen bin, but does not scale with rows.
+  const screenCountOverlayBytes = Math.min(totalCount, CATALOG_SCREEN_COUNT_MAX_CELLS) * 12
+  const fixed = compactIndexAssemblyBytes + candidateLocatorBytes + pipelineBytes + metadataBytes + 8 * MIB + spatialIndexBytes + spatialMembershipBytes + sourceSelectionBytes + screenCountOverlayBytes + appendReservedBytes + (retainEpochs ? 2 * MIB + chunkCount * 128 : 0)
+  // Worst-case admitted-row charge for spatial display. In 2D, the 44 B base
+  // is 24 B of CPU/GPU point attributes (Float32 positions, packed 8-bit color
+  // and tenth-pixel size), 8 B of worker culling positions, and 12 B for worker
+  // winners/output indices plus the GPU index-buffer high-water mark. The
+  // renderer drops each CPU selection array after its index bytes reach WebGL.
+  // The winner's inside-viewport priority is a packed bitset reserved after
+  // solving capacity.
   // 3D adds one Float32 coordinate in both CPU/GPU attributes and worker culling.
   // Ten Float64 prepared coefficients per retained row are additional resident
   // storage, never hidden inside the static snapshot budget. The packed source
   // membership bitmap and spatial block bounds are separately reserved above.
-  const perPoint = (mode === '3d' ? 84 : 72) + 1 + (retainEpochs ? 80 : 0)
-  const capacity = Math.min(totalCount, requestedRows, Math.max(0, Math.floor((budgetBytes - fixed) / perPoint)))
+  const perPoint = (mode === '3d' ? 56 : 44) + (retainEpochs ? 80 : 0)
+  const maximumCapacity = Math.min(totalCount, requestedRows)
+  // Spatial winner priority uses one bit per possible representative. Solve
+  // the small monotone capacity equation so its rounded bitmap is charged to
+  // the admitted capacity, rather than over-reserving one byte per body.
+  let lowerCapacity = 0, upperCapacity = maximumCapacity
+  while (lowerCapacity < upperCapacity) {
+    const candidate = Math.ceil((lowerCapacity + upperCapacity) / 2)
+    if (fixed + Math.ceil(candidate / 8) + candidate * perPoint <= budgetBytes) lowerCapacity = candidate
+    else upperCapacity = candidate - 1
+  }
+  const capacity = lowerCapacity, winnerPriorityBytes = Math.ceil(capacity / 8)
+  const maximumEpochBlocks = retainEpochs
+    ? Math.ceil(capacity/CATALOG_EPOCH_TILE_ROWS)+Math.min(chunkCount,capacity)+appendRows
+    : chunkCount+appendRows
   // Requested rows remain the total ceiling. Keep at least one initial row;
   // append slots are unavailable to the initial loader, never extra capacity.
   const appendCapacity = Math.min(appendRows,Math.max(0,capacity-1))
   return { capacity, initialCapacity: capacity-appendCapacity, appendCapacity, appendReservedBytes, maximumEpochBlocks,
-    budgetBytes, reservedBytes: fixed + capacity * perPoint, metadataMaximumBytes, metadataReservedBytes: metadataBytes }
+    budgetBytes, reservedBytes: fixed + winnerPriorityBytes + capacity * perPoint, metadataMaximumBytes, metadataReservedBytes: metadataBytes }
 }
 
 async function sha256(buffer: ArrayBuffer) {
@@ -237,9 +310,12 @@ async function loadStreamMetadata(root: string, chunk: number, count: number, cl
       validateCatalogMetadataRow(entry, row, ids, id, chunk)
       const classIndex = classMap.get(entry.orbitClassCode)
       if (classIndex === undefined) throw new Error('Catalog stream metadata class is absent from index')
-      magnitudes[row] = entry.absoluteMagnitude ?? NaN
+      // Keep immutable source values for index identity checks. Interpretation
+      // (including legacy H=99.99) belongs in the shared filter/appearance path.
+      const absoluteMagnitude = entry.absoluteMagnitude
+      magnitudes[row] = absoluteMagnitude ?? NaN
       classIndices[row] = classIndex
-      flags[row] = (entry.isNeo ? 1 : 0) | (entry.isPha ? 2 : 0) | (entry.absoluteMagnitude !== undefined ? 4 : 0)
+      flags[row] = (entry.isNeo ? 1 : 0) | (entry.isPha ? 2 : 0) | (absoluteMagnitude !== undefined ? 4 : 0)
       queryMatches[row] = !query || entry.searchKey.includes(query) ? 1 : 0
     }
     if (performanceReceipt) performanceReceipt.metadataDecodeAndValidateMs += performance.now() - validationStarted
@@ -261,7 +337,8 @@ type StreamOptions = {
   yieldControl?: () => Promise<void>
   retainEpochs?: boolean
   appendRows?: number
-  onPrepared?: (prepared: PreparedCatalogElements, startRow: number, maximumSpeedAUPerTtDay: number | null) => void
+  onPrepared?: (prepared: PreparedCatalogElements, startRow: number, maximumSpeedAUPerTtDay: number | null,
+    epochBlockMaximumSpeedsAUPerTtDay?: readonly (number | null)[]) => void
   priority?: CatalogStreamPriority
   mode?: '2d' | '3d'
   manifest: AsteroidManifest
@@ -293,7 +370,11 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
   const priorityFlag = priority === 'neo-first' ? 1 : priority === 'pha-first' ? 2 : 0
   if (!Number.isFinite(options.julianDay) || options.julianDay < 2441317.5) throw new Error('Catalog streaming requires a UTC epoch from 1972 onwards')
   const mode = options.mode ?? '2d', stride = mode === '3d' ? 3 : 2
-  const plan = planCatalogStream(manifest, options.requestedRows, options.budgetBytes, mode, options.retainEpochs, options.appendRows)
+  const candidateLocators = options.candidateLocators
+  if (candidateLocators !== undefined && (!(candidateLocators instanceof Uint32Array) || candidateLocators.length%2 !== 0 ||
+      candidateLocators.length > manifest.totalCount*2)) throw new Error('Invalid source locator capacity')
+  const candidateLocatorCount = candidateLocators === undefined ? undefined : candidateLocators.length/2
+  const plan = planCatalogStream(manifest, options.requestedRows, options.budgetBytes, mode, options.retainEpochs, options.appendRows, candidateLocatorCount)
   if (Boolean(options.onPrepared) !== Boolean(options.retainEpochs)) throw new Error('Retained catalog epochs require both budget admission and a source receiver')
   if (!plan.initialCapacity) throw new Error('Catalog index, metadata and pipeline reserves exceed the available streaming budget')
   const priorityLocators = options.priorityLocators ?? []
@@ -306,9 +387,8 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
   const compact = manifest.compactIndex!, root = manifest.releasePath!.replace(/\/$/, '')
   let candidates: Uint8Array | undefined
   let candidateChunks: Uint8Array | undefined
-  if (options.candidateLocators) {
-    const locators = options.candidateLocators
-    if (locators.length % 2 || locators.length > manifest.totalCount * 2) throw new Error('Invalid source locator capacity')
+  if (candidateLocators !== undefined) {
+    const locators = candidateLocators
     candidates = new Uint8Array(Math.ceil(manifest.totalCount / 8))
     candidateChunks = new Uint8Array(manifest.chunkCount)
     for (let i = 0; i < locators.length; i += 2) {
@@ -388,8 +468,8 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
       return buffer
     }
     const index = new DataView(indexBuffer)
-    // Only exact index fields may exclude a shard. The quantized e/i/H columns
-    // cannot decide source-precision boundaries (including perihelion).
+    // Exact a/class fields and outward intervals for quantized e/i/H may reject
+    // a shard. They never replace the source-precision row filter below.
     const matchesIndex = createCatalogFieldMatcher({ ...filters, query: '',
       eccentricity: [0, 1], inclination: [0, 180], perihelion: [0, Number.MAX_VALUE],
       absoluteMagnitude: [-Infinity, Infinity], magnitudeStatus: 'all' })
@@ -405,17 +485,19 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
         continue
       }
       let admitted = false, preferred = false
-      const end = Math.min(manifest.totalCount, (chunk + 1) * manifest.chunkSize)
+      const end = Math.min(manifest.totalCount,(chunk + 1) * manifest.chunkSize)
       for (let row = chunk * manifest.chunkSize; row < end; row++) {
         if (++inspected % 20_000 === 0) {
           await cooperate()
         }
         if (!hasCandidate(row)) continue
         const offset = row * 24, a = index.getFloat64(offset, true)
+        const eccentricityFixed = index.getUint32(offset + 8, true), inclinationFixed = index.getUint32(offset + 12, true)
         const classIndex = index.getUint8(offset + 18), flags = index.getUint8(offset + 19), magnitude = index.getInt16(offset + 16, true)
         if (index.getUint16(offset + 20, true) !== chunk || index.getUint16(offset + 22, true) !== row - chunk * manifest.chunkSize) throw new Error('Catalog index locator mismatch')
         if (!Number.isFinite(a) || a <= 0 || classIndex >= compact.classCodes.length || flags > 7 || Boolean(flags & 4) !== (magnitude !== 0x7fff)) throw new Error('Invalid catalog index metadata')
-        if (matchesIndex('', compact.classCodes[classIndex], magnitude === 0x7fff ? undefined : magnitude / 100, a, 0, 0)) {
+        if (matchesIndex('', compact.classCodes[classIndex], magnitude === 0x7fff ? undefined : magnitude / 100, a, 0, 0) &&
+            compactIndexMayMatchFilters(filters,a,eccentricityFixed,inclinationFixed,magnitude,flags)) {
           admitted = true
           preferred = priorityFlag === 0 || Boolean(flags & priorityFlag)
           if (preferred) break
@@ -441,7 +523,9 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
       if (classIndex !== metadata.classIndices[row] || flags !== metadata.flags[row] ||
           magnitude !== (sourceMagnitude === undefined ? 0x7fff : Math.round(sourceMagnitude*100))) throw new Error('Catalog index metadata differs from source shard')
       // Quantized index fields establish identity, never exact filter boundaries.
-      if (index.getFloat64(offset, true) !== elements[orbit + 1] || index.getUint32(offset + 8, true) !== Math.round(elements[orbit + 2] * 1e9) || index.getUint32(offset + 12, true) !== Math.round(elements[orbit + 3] * 1e6)) throw new Error('Catalog index orbital fields mismatch')
+      if (index.getFloat64(offset, true) !== elements[orbit + 1] ||
+          index.getUint32(offset + 8, true) !== Math.round(elements[orbit + 2] * 1e9) ||
+          index.getUint32(offset + 12, true) !== Math.round(elements[orbit + 3] * 1e6)) throw new Error('Catalog index orbital fields mismatch')
       return hasCandidate(sourceRow) && Boolean(metadata.queryMatches[row]) &&
         matches('', compact.classCodes[classIndex], sourceMagnitude, elements[orbit + 1], elements[orbit + 2], elements[orbit + 3])
     }
@@ -521,6 +605,7 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
     // Ordinary catalog loads retain the four-shard binary prefetch window.
     if (!query) for (let i = 0; i < Math.min(chunks.length, CATALOG_STREAM_CONCURRENCY); i++) enqueue(i)
     const epochTt = utcJulianDayToTt(options.julianDay)
+    let propagationWorkspace: CatalogPointWorkspace | undefined
     let sourceRows = 0, drawnRows = 0, capacityOmitted = false
     let completedShards = 0, metadataOnlyRows = 0
     const screenedShards: CatalogScreenedShard[] = []
@@ -595,7 +680,8 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
       // Allocate only admitted rows. Sparse filters and nearly-full budgets
       // need not retain a full-shard orbital/appearance scratch allocation.
       let packingStarted = performanceMs ? performance.now() : 0
-      const selectedElements = new Float64Array(used * 8), appearance = new Uint8Array(used * 2)
+      // Keep compact row identities; copy no second 8-value Float64 slab.
+      const selectedSourceRows = new Uint32Array(used), appearance = new Uint8Array(used * 2)
       let copied = 0
       for (let byte = 0; byte < selectedRows.length && copied < used; byte++) {
         if (byte > 0 && byte % 256 === 0) {
@@ -606,9 +692,7 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
         let bits = selectedRows[byte]
         while (bits) {
           const bit = 31 - Math.clz32(bits & -bits), row = byte * 8 + bit
-          const orbit = row * 8, target = copied * 8
-          // Preserve Float64 values without allocating one view per body.
-          for (let column = 0; column < 8; column++) selectedElements[target + column] = elements[orbit + column]
+          selectedSourceRows[copied] = row
           const offset = (chunk * manifest.chunkSize + row) * 24
           appearance[copied * 2] = index.getUint8(offset + 18)
           appearance[copied * 2 + 1] = index.getUint8(offset + 19)
@@ -623,23 +707,40 @@ export async function streamCatalogPoints(options: StreamOptions): Promise<Catal
       if (!(positions instanceof Float64Array) || positions.length !== used*stride || positions.byteOffset !== 0 ||
           !(positions.buffer instanceof ArrayBuffer) || positions.buffer.byteLength !== used*stride*8) throw new Error('Invalid owned catalog position buffer')
       let speed: number | null = options.retainEpochs && used ? 0 : null
+      const epochBlockSpeeds: (number | null)[] | undefined = options.retainEpochs && used
+        ? Array<number | null>(Math.ceil(used/CATALOG_EPOCH_TILE_ROWS)).fill(0) : undefined
       for (let start = 0; start < used; start += 256) {
         const end = Math.min(used, start+256)
         const preparationStarted = performanceMs ? performance.now() : 0
-        prepareCatalogElementRange(selectedElements, prepared, start, end)
-        if (speed !== null) {
-          const sliceSpeed = catalogMaximumSpeedAUPerTtDay(selectedElements.subarray(start*8, end*8))
-          speed = sliceSpeed === null ? null : Math.max(speed, sliceSpeed)
+        prepareCatalogSourceRowsRange(elements, selectedSourceRows, prepared, start, end)
+        if (epochBlockSpeeds) {
+          let maximumSliceSpeed = 0, validSliceSpeeds = true
+          for (let row = start; row < end; row++) {
+            const sourceOffset = selectedSourceRows[row] * 8
+            const orbitSpeed = catalogOrbitMaximumSpeedAUPerTtDay(elements[sourceOffset + 1], elements[sourceOffset + 2], elements[sourceOffset + 7])
+            if (orbitSpeed === null) { validSliceSpeeds = false; break }
+            maximumSliceSpeed = Math.max(maximumSliceSpeed, orbitSpeed)
+          }
+          const sliceSpeed = validSliceSpeeds ? catalogSpeedUpperBoundAUPerTtDay(maximumSliceSpeed) : null
+          const block = Math.floor(start/CATALOG_EPOCH_TILE_ROWS)
+          if (sliceSpeed === null) {
+            speed = null
+            epochBlockSpeeds[block] = null
+          } else {
+            if (speed !== null) speed = Math.max(speed,sliceSpeed)
+            if (epochBlockSpeeds[block] !== null) epochBlockSpeeds[block] = Math.max(epochBlockSpeeds[block] ?? 0,sliceSpeed)
+          }
         }
         if (performanceMs) performanceMs.orbitalElementPreparationMs += performance.now() - preparationStarted
         const propagationStarted = performanceMs ? performance.now() : 0
-        propagatePreparedCatalogPositions(prepared, epochTt, mode, positions, start, end)
+        const workspace = propagationWorkspace ?? (propagationWorkspace = createCatalogPointWorkspace())
+        propagatePreparedCatalogPositions(prepared, epochTt, mode, positions, start, end, workspace)
         if (performanceMs) performanceMs.keplerPropagationMs += performance.now() - propagationStarted
         await cooperate()
       }
       signal.throwIfAborted()
       if (options.retainEpochs && used && maximumSpeed !== null) maximumSpeed = speed === null ? null : Math.max(maximumSpeed, speed)
-      options.onPrepared?.(prepared, drawnRows, speed)
+      options.onPrepared?.(prepared, drawnRows, speed, epochBlockSpeeds)
       screenedShards.push({ chunk, metadataSha256: metadataHash, binarySha256: hash(`binary/chunk-${String(chunk).padStart(4, '0')}.bin`),
         examinedRows, selectedRows: used, outcome: 'source-screened' })
       if (used) sourceSelection.shards.push({ chunk,

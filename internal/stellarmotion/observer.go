@@ -32,10 +32,24 @@ type ObserverExperiment struct {
 // never from a second independently entered epoch. The same compute admission
 // lease must cover this call and the supplied catalog evaluator.
 func FromCSVAtStation(ctx context.Context, manifest, rows []byte, id, rvPolicy, utc string, station observation.Station, atmosphere *observation.Atmosphere, eop *earthorientation.Table, evaluate observation.Evaluator) (*ObserverExperiment, error) {
+	return fromCSVAtStation(ctx, manifest, rows, id, rvPolicy, utc, station, atmosphere, func(req observation.Request) (*observation.Result, error) {
+		return observation.Evaluate(ctx, req, eop, evaluate)
+	})
+}
+
+// FromCSVAtStationWithET keeps the station epoch in seconds past J2000 TDB while
+// resolving the Earth/Sun states used by stellar parallax and apparent place.
+func FromCSVAtStationWithET(ctx context.Context, manifest, rows []byte, id, rvPolicy, utc string, station observation.Station, atmosphere *observation.Atmosphere, eop *earthorientation.Table, evaluate observation.ETEvaluator) (*ObserverExperiment, error) {
+	return fromCSVAtStation(ctx, manifest, rows, id, rvPolicy, utc, station, atmosphere, func(req observation.Request) (*observation.Result, error) {
+		return observation.EvaluateWithET(ctx, req, eop, evaluate)
+	})
+}
+
+func fromCSVAtStation(ctx context.Context, manifest, rows []byte, id, rvPolicy, utc string, station observation.Station, atmosphere *observation.Atmosphere, evaluate func(observation.Request) (*observation.Result, error)) (*ObserverExperiment, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	obs, err := observation.Evaluate(ctx, observation.Request{UTC: utc, Station: station, Atmosphere: atmosphere, BodyIDs: []string{"naif:10"}}, eop, evaluate)
+	obs, err := evaluate(observation.Request{UTC: utc, Station: station, Atmosphere: atmosphere, BodyIDs: []string{"naif:10"}})
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +112,7 @@ func FromCSVAtStation(ctx context.Context, manifest, rows []byte, id, rvPolicy, 
 		Limitations: []string{
 			"Coordinate BCRS direction from the source-backed Earth station; no stellar aberration, gravitational deflection, horizontal transform or atmospheric refraction is applied to this direction.",
 			"GoFA Pmpx applies observer parallax and an approximate observer Roemer correction to the propagated Starpm catalog state; this is not an iterative full relativistic observer/star light-time solution.",
-			"TCB-compatible catalog rates and parallax are scaled to TDB-compatible inputs; source SPK J2000 axes are treated as ICRS-aligned under the existing observer convention.",
+			"TCB-compatible catalog angular rates and parallax are converted to TDB-compatible inputs; radial velocity remains in km/s. Pmpx receives the combined Apco reception-observer vector (source Earth state plus WGS-84 station offset), expressed in km and converted to AU. No additional TCB/TDB spatial rescaling is applied, so compatibility of the ephemeris and station length scales is an explicit assumption, especially for custom profiles. Source SPK J2000 axes are treated as ICRS-aligned under the existing observer convention.",
 			"All nested Gaia, spectroscopic-RV, SPK, EOP and station-model limitations remain applicable. No stellar radius, observer-direction covariance, systematics, occultation probability or contact timing is supplied.",
 		}}, nil
 }

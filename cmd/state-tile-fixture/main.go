@@ -180,7 +180,7 @@ func main() {
 	if synthetic {
 		fixtureSource = "real-httpapi; synthetic SPK fixture (test provenance, not a scientific oracle)"
 	}
-	manifest := fixtureManifest{Format: "solar.state-tile-fixture/v1", FixtureSource: fixtureSource, APIVersion: plan.APIVersion, EpochJD: epochJD, IDs: ids, CatalogManifestSHA256: plan.CatalogManifestSHA256, InventoryManifestSHA256: plan.InventoryManifestSHA256, CatalogManifestFile: "catalog-manifest.json", PlanFile: "plan.json", Plan: plan}
+	manifest := fixtureManifest{Format: "solar.state-tile-fixture/v2", FixtureSource: fixtureSource, APIVersion: plan.APIVersion, EpochJD: epochJD, IDs: ids, CatalogManifestSHA256: plan.CatalogManifestSHA256, InventoryManifestSHA256: plan.InventoryManifestSHA256, CatalogManifestFile: "catalog-manifest.json", PlanFile: "plan.json", Plan: plan}
 	for _, descriptor := range plan.Tiles {
 		body, response := serveWithResponse(server, http.MethodPost, "/v1/state/tiles", []byte(`{"planId":"`+plan.PlanID+`","sequence":`+strconv.FormatUint(uint64(descriptor.Sequence), 10)+`}`))
 		if response.Code != http.StatusOK {

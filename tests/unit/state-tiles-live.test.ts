@@ -48,7 +48,10 @@ describe.skipIf(!base)('live Go → Web state-tile integration', () => {
     // carry auditable evidence instead of assuming every catalog ID is exact.
     for (const part of tiles) for (let row = 0; row < part.recordCount; row++) {
       const metadata = part.metadata.rowAt(row)
-      if (part.exactBitmap[row >> 3] & (1 << (row % 8))) expect(metadata.kernelSha256).toMatch(/^[a-f0-9]{64}$/)
+      if (part.exactBitmap[row >> 3] & (1 << (row % 8))) {
+        expect(metadata.kernelSha256).toMatch(/^[a-f0-9]{64}$/)
+        expect(metadata.sourceChainSha256).toMatch(/^[a-f0-9]{64}$/)
+      }
       else expect(metadata.missingReason.length).toBeGreaterThan(0)
     }
     const selected = ['sun', 'naif:10', 'earth', 'naif:399', 'naif:301', 'naif:599', 'naif:501']
@@ -77,6 +80,8 @@ describe.skipIf(!base)('live Go → Web state-tile integration', () => {
     expect(tile.metadata.rowAt(0).datasetSha256).toBe(manifest.inventoryManifestSha256)
     expect(tile.metadata.rowAt(1).sourceRecord).toBe(false)
     expect(tile.metadata.rowAt(1).datasetSha256).toBe(manifest.catalogManifestSha256)
+    expect(tile.metadata.rowAt(0).sourceChainSha256).toMatch(/^[a-f0-9]{64}$/)
+    expect(tile.metadata.rowAt(1).sourceChainSha256).toMatch(/^[a-f0-9]{64}$/)
     expect(tile.metadata.rowAt(0).kernelSha256).toBe(tile.metadata.rowAt(1).kernelSha256)
     for (let axis = 0; axis < 6; axis++) expect(bits(tile.states[axis])).toBe(bits(tile.states[6 + axis]))
   }, 90_000)

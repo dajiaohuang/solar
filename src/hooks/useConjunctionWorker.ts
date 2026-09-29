@@ -128,12 +128,14 @@ export function useConjunctionWorker() {
   const [sampling, setSampling] = useState<EventSamplingReceipt | null>(null)
 
   const cancel = useCallback(() => {
-    latestRequestId.current += 1
     const worker = workerRef.current
     if (!worker) return
-    worker.terminate()
-    workerRef.current = null
     setStatus('cancelled')
+    try { worker.postMessage({ type: 'cancel', requestId: latestRequestId.current }) }
+    catch {
+      worker.terminate()
+      if (workerRef.current === worker) workerRef.current = null
+    }
   }, [])
 
   const run = useCallback((params: RunEventAnalysisParams) => {

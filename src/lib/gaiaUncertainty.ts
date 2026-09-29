@@ -14,6 +14,6 @@ export function gaiaPositionUncertainty(source: GaiaSource) {
     return { available:true as const, epochJulianYear:2016, timeScale:'TCB', coordinateLabels:['delta-alpha*cos(delta)','delta-dec'],
       covarianceMasSquared, majorMas:ellipse.major, minorMas:ellipse.minor,
       majorAxisDegreesFromEastTowardNorth:ellipse.major === ellipse.minor ? null : ellipse.angleRadians*180/Math.PI,
-      contour:'unit-Mahalanobis', includesSystematics:false, propagated:false }
+      contour:'unit-Mahalanobis', correlationScope:'approximate-within-source-only; between-source correlations omitted', includesSystematics:false, propagated:false }
   } catch { return { available:false as const, reason:'unrepresentable-position-uncertainty' } }
 }

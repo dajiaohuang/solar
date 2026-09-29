@@ -13,23 +13,39 @@ export class GaiaSourceCache {
   get retainedBytes() { return this.size }
   get count() { return this.entries.size }
   get(hash: string, expectedBytes?: number): Uint8Array | undefined {
+    return this.borrowForRead(hash, expectedBytes)?.slice()
+  }
+  /** Borrow cache-owned bytes for read-only verification; never mutate or transfer them. */
+  borrowForRead(hash: string, expectedBytes?: number): Uint8Array | undefined {
     if (expectedBytes !== undefined && (!Number.isSafeInteger(expectedBytes) || expectedBytes < 1)) throw new Error('Invalid Gaia cache expected byte length')
     const bytes = this.entries.get(hash)
     if (!bytes) return
-    // Reject mismatched entries before allocating a copy outside the caller's reservation.
+    // Reject mismatched entries before exposing the cache-owned array.
     if (expectedBytes !== undefined && bytes.byteLength !== expectedBytes) {
       this.delete(hash)
       return
     }
     this.entries.delete(hash); this.entries.set(hash,bytes)
-    return bytes.slice()
+    return bytes
   }
   put(hash: string, bytes: Uint8Array) {
     if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error('Invalid Gaia cache hash')
     if (bytes.byteLength > this.maxBytes) return
+    this.retain(hash, Uint8Array.from(bytes))
+  }
+  /** Adopt a standalone owned buffer after validation; callers must not mutate it afterward. */
+  putOwned(hash: string, bytes: Uint8Array) {
+    if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error('Invalid Gaia cache hash')
+    if (bytes.byteLength > this.maxBytes) return
+    const backing = bytes.buffer
+    const owned = bytes.byteOffset === 0 && backing instanceof ArrayBuffer && backing.byteLength === bytes.byteLength
+      ? bytes : Uint8Array.from(bytes)
+    this.retain(hash, owned)
+  }
+  private retain(hash: string, bytes: Uint8Array) {
     this.delete(hash)
     while (this.size+bytes.byteLength > this.maxBytes || this.entries.size >= this.maxEntries) this.delete(this.entries.keys().next().value!)
-    this.entries.set(hash,Uint8Array.from(bytes)); this.size += bytes.byteLength
+    this.entries.set(hash,bytes); this.size += bytes.byteLength
   }
   delete(hash: string) {
     const existing = this.entries.get(hash)

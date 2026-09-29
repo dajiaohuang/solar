@@ -50,6 +50,22 @@ public class NativeRenderBudgetTest {
         assertTrue(budget.memoryPressure(20_000_000_005L)); assertEquals(25_000, budget.limit());
     }
 
+    @Test public void moderateThermalMatchesFairNativeCapsAndAllowsOnlyCappedRecovery() {
+        NativeRenderBudget spatial = new NativeRenderBudget(true);
+        NativeRenderBudget planar = new NativeRenderBudget(false);
+        assertTrue(spatial.thermal(2, 1)); assertEquals(75_000, spatial.limit());
+        assertTrue(planar.thermal(2, 1)); assertEquals(100_000, planar.limit());
+        for (int i = 0; i < 4; i++) spatial.sample(window(16, 0), 1_000_000, 6_000_000_000L + i * 6_000_000_000L);
+        assertEquals(75_000, spatial.limit());
+        assertFalse(spatial.thermal(0, 30_000_000_000L)); assertEquals(75_000, spatial.limit());
+
+        NativeRenderBudget recovering = new NativeRenderBudget(true);
+        assertTrue(recovering.thermal(3, 1)); assertEquals(25_000, recovering.limit());
+        assertFalse(recovering.thermal(2, 2)); assertEquals(25_000, recovering.limit());
+        for (int i = 0; i < 4; i++) recovering.sample(window(16, 0), 1_000_000, 6_000_000_000L + i * 6_000_000_000L);
+        assertEquals(30_000, recovering.limit());
+    }
+
     @Test public void repeatedMemoryWarningsAtMinimumResetGrowthEvidenceAndCooldown() {
         NativeRenderBudget budget = new NativeRenderBudget(true);
         assertTrue(budget.memoryPressure(1));
@@ -68,7 +84,7 @@ public class NativeRenderBudgetTest {
         long now = 1;
         for (int i = 0; i < 500; i++) { now += 6_000_000_000L; budget.sample(window(16, 0), 1_000_000, now); }
         assertEquals(250_000, budget.limit());
-        assertTrue(budget.thermal(2, ++now)); assertEquals(100_000, budget.limit());
+        assertTrue(budget.thermal(2, ++now)); assertEquals(75_000, budget.limit());
         for (int i = 0; i < 20; i++) { now += 6_000_000_000L; assertFalse(budget.sample(window(16, 0), 1_000_000, now)); }
         budget.thermal(0, ++now);
         for (int i = 0; i < 50; i++) { now += 6_000_000_000L; budget.sample(window(60, 0.5), 1_000_000, now); }
@@ -89,7 +105,11 @@ public class NativeRenderBudgetTest {
         for (int i = 0; i < 30; i++) result = sampler.frame(now += 34_000_000L, true);
         assertNotNull(result); assertEquals(30, result.samples);
         assertEquals(34, result.p50Ms, 0); assertEquals(34, result.p95Ms, 0);
-        assertEquals(0.5, result.droppedRatio, 0);
+        assertEquals(1.0 - (1000.0 / 60) / 34, result.droppedRatio, 1e-9);
+        sampler.reset(); now += 1_000_000_000L;
+        result = null;
+        for (int i = 0; i < 62 && result == null; i++) result = sampler.frame(now += 20_000_000L, true);
+        assertNotNull(result); assertEquals(1.0 / 6, result.droppedRatio, 1e-9);
         assertNull(sampler.frame(now + 10_000_000_000L, false));
         assertNull(sampler.frame(now + 20_000_000_000L, true));
         sampler.reset(); assertNull(sampler.frame(now - 1, true));

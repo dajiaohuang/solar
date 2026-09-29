@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { inspectSourceIdentityPage, loadSourceIdentityPage, validateSourceIdentityPage } from '../../src/lib/sourceIdentityPage'
 import type { StateTileManifest } from '../../src/lib/stateTiles'
 
-const manifest: StateTileManifest = { apiVersion: 'solar.api/v1', catalogVersion: 'test', catalogManifestSha256: 'a'.repeat(64), inventoryManifestSha256: 'b'.repeat(64) }
+const manifest: StateTileManifest = { apiVersion: 'solar.api/v1', catalogVersion: 'test', catalogManifestSha256: 'a'.repeat(64), inventoryManifestSha256: 'b'.repeat(64), maxPlanIds: 32_768, maxPlanBytes: 8 * 1024 * 1024 }
 const row = { id: 'sb:comet:1P', name: 'Halley', designation: '1P', category: 'comet', source: 'test-source', sourceRow: 1, identityStatus: 'source-designation', ephemerisStatus: 'not-mapped-to-bundled-kernel', naifId: 1000036, parentId: 'sun', parentResolution: 'index-match', centerId: 'sun', centerResolution: 'index-match', aliases: ['1P/Halley'], confirmation: 'confirmed', geometryStatus: 'open-conic-elements', identityEvidence: ['source-id', 'source-designation'] }
 function raw() { return { ...manifest, sourceRecords: true, identityAssertions: true, uniqueBodySemantics: 'not-deduplicated', totalRecords: 100, limit: 50, items: [row], nextPageToken: 'next' } }
 function json(value: unknown) {
@@ -52,12 +52,12 @@ describe('bounded all-source directory', () => {
   it('rejects oversized delivery and repeated cursors', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(json(manifest)).mockResolvedValueOnce(new Response('{}', { headers: { 'content-length': String(256 * 1024 + 1) } }))
     await expect(loadSourceIdentityPage({ ...request(), fetcher })).rejects.toThrow('byte budget')
-    const page = { ...validateSourceIdentityPage(raw(), manifest), query: '' }
+    const page = { ...validateSourceIdentityPage(raw(), manifest), query: '', base: request().base }
     fetcher.mockResolvedValueOnce(json(manifest)).mockResolvedValueOnce(json(raw()))
     await expect(loadSourceIdentityPage({ ...request(), previous: page, fetcher })).rejects.toThrow('did not advance')
   })
   it('does not issue a state plan after inventory drift, invalid epoch or preview restriction', async () => {
-    const page = { ...validateSourceIdentityPage(raw(), manifest), query: '' }
+    const page = { ...validateSourceIdentityPage(raw(), manifest), query: '', base: request().base }
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(json({ ...manifest, inventoryManifestSha256: 'c'.repeat(64) }))
     await expect(inspectSourceIdentityPage({ ...request(), page, epochTdbJd: NaN, fetcher })).rejects.toThrow()
     await expect(inspectSourceIdentityPage({ ...request(), page, epochTdbJd: 2461287.5, profile: 'preview', fetcher })).rejects.toThrow()

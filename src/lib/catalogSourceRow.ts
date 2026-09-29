@@ -8,6 +8,25 @@ function population(value: number) {
 
 export const CATALOG_SOURCE_RANK_BLOCK_BYTES = 256
 
+/** Inverse upload-order lookup for an explicitly picked point. Metadata is
+ * hydrated only for this locator, never for the complete rendered cloud. */
+export function catalogSourceLocator(selection: CatalogSourceSelection, ordinal: number): CatalogLocator | null {
+  if (!Number.isSafeInteger(ordinal) || ordinal < 0) return null
+  let remaining = ordinal
+  for (const shard of selection.shards) {
+    for (let byte = 0; byte < shard.selectedRows.length; byte++) {
+      const value = shard.selectedRows[byte], count = population(value)
+      if (remaining >= count) { remaining -= count; continue }
+      for (let bit = 0; bit < 8; bit++) {
+        if (value & (1 << bit)) {
+          if (remaining-- === 0) return { chunkIndex: shard.chunk, rowIndex: byte * 8 + bit }
+        }
+      }
+    }
+  }
+  return null
+}
+
 /** Build once for checked, immutable upload masks; never mutate those masks
  * during this lookup's lifetime. Offsets follow upload order, not chunk number. */
 export function createCatalogSourceRowLookup(selection: CatalogSourceSelection) {

@@ -15,6 +15,7 @@ import type {
 const workerScope = self as DedicatedWorkerGlobalScope
 let activeRequestId = 0
 let cancelledRequestId = 0
+let activeLoadController: AbortController | null = null
 
 function yieldToWorker() {
   return new Promise<void>((resolve) => setTimeout(resolve, 0))
@@ -22,35 +23,51 @@ function yieldToWorker() {
 
 async function compute(request: TrajectoryWorkerRequest) {
   activeRequestId = request.requestId
-  await ensureKernelFiles(request.ephemerisFiles ?? [])
+  const cancelled = () => cancelledRequestId === request.requestId || activeRequestId !== request.requestId
+  const reportCancelled = () => workerScope.postMessage({ type: 'cancelled', requestId: request.requestId } satisfies TrajectoryWorkerResponse)
+  if (!Number.isFinite(request.centerJulianDay) || !Number.isFinite(request.historyDays) || request.historyDays <= 0) throw new Error('Invalid local trajectory window')
+  const sampleCount = Math.max(2, request.sampleCount)
+  // Reject invalid dimensions without retaining a sample buffer during loading.
+  if (!Number.isSafeInteger(sampleCount) || sampleCount > 600 || request.bodies.length > 320) throw new Error('Trajectory detail budget exceeded')
+  const loadController = new AbortController()
+  activeLoadController = loadController
+  try { await ensureKernelFiles(request.ephemerisFiles ?? [], loadController.signal) }
+  catch (error) {
+    if (loadController.signal.aborted || cancelled()) { reportCancelled(); return }
+    throw error
+  } finally {
+    if (activeLoadController === loadController) activeLoadController = null
+  }
+  if (cancelled()) { reportCancelled(); return }
+  const accumulator = createTrajectoryAccumulator(request.bodies, sampleCount)
   const kernels = kernelsForWindow(request.centerJulianDay - request.historyDays, request.centerJulianDay, request.ephemerisFiles ?? [])
   const bodiesById = new Map<BodyId, CelestialBody>(request.resolutionBodies.map((body) => [body.id, body]))
-  const sampleCount = Math.max(2, request.sampleCount)
-  const accumulator = createTrajectoryAccumulator(request.bodies, sampleCount)
-
+  let sliceStarted = performance.now()
   for (let index = 0; index < sampleCount; index += 1) {
-    if (cancelledRequestId === request.requestId || activeRequestId !== request.requestId) {
-      workerScope.postMessage({ type: 'cancelled', requestId: request.requestId } satisfies TrajectoryWorkerResponse)
+    if (cancelled()) {
+      reportCancelled()
       return
     }
     const progress = index / (sampleCount - 1)
-    const julianDay = request.centerJulianDay - request.historyDays + progress * request.historyDays
+    const julianDay = index === sampleCount-1 ? request.centerJulianDay : request.centerJulianDay - request.historyDays + progress * request.historyDays
     const resolve = createBodyPositionResolver(bodiesById, julianDay, kernels)
     const positions = getRelativePositions(request.bodies, request.referenceId, resolve)
     accumulator.append(positions)
-    if (index % 12 === 0) {
+    if (index % 12 === 0 || performance.now()-sliceStarted >= 8) {
       workerScope.postMessage({
         type: 'progress',
         requestId: request.requestId,
-        progress,
+        progress: (index+1)/sampleCount,
       } satisfies TrajectoryWorkerResponse)
       await yieldToWorker()
+      sliceStarted = performance.now()
     }
   }
 
-  // The final progress yield can deliver cancellation or a newer request.
-  if (cancelledRequestId === request.requestId || activeRequestId !== request.requestId) {
-    workerScope.postMessage({ type: 'cancelled', requestId: request.requestId } satisfies TrajectoryWorkerResponse)
+  // Process queued cancellation even if the final epoch did not trigger a yield.
+  await yieldToWorker()
+  if (cancelled()) {
+    reportCancelled()
     return
   }
   const packed = accumulator.finish()
@@ -61,9 +78,13 @@ async function compute(request: TrajectoryWorkerRequest) {
 workerScope.onmessage = (event: MessageEvent<TrajectoryWorkerRequest | TrajectoryWorkerCancelRequest>) => {
   const request = event.data
   if (request.type === 'cancel') {
-    cancelledRequestId = request.requestId
+    if (activeRequestId === request.requestId) {
+      cancelledRequestId = request.requestId
+      activeLoadController?.abort()
+    }
     return
   }
+  activeLoadController?.abort()
   void compute(request).catch((error: unknown) => {
     workerScope.postMessage({
       type: 'error',

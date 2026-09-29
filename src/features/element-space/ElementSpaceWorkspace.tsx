@@ -191,24 +191,26 @@ export function ElementSpaceWorkspace() {
     if (!catalog.manifest || catalog.manifest.precomputedSamples) return
     const controller = new AbortController()
     const sampleLimit = EXACT_CATALOG_LOCATOR_LIMIT
-    const scanKey = createCatalogScanKey(catalog.manifest.version, catalog.filters, sampleLimit)
+    const scanKey = createCatalogScanKey(catalog.manifest, catalog.filters, sampleLimit)
+    const isCurrent = () => {
+      const current = catalogStore.getState()
+      return !controller.signal.aborted && current.manifest === catalog.manifest && current.manifest !== null &&
+        createCatalogScanKey(current.manifest, current.filters, sampleLimit) === scanKey
+    }
     const timer = window.setTimeout(() => {
+      if (!isCurrent()) return
       catalogActions.patch({ isLoading: true, error: null, loadProgress: 0 })
       void scanAsteroidCatalog({
         manifest: catalog.manifest!,
         filters: catalog.filters,
         sampleLimit,
         signal: controller.signal,
-        onProgress: (loadProgress) => catalogActions.patch({ loadProgress }),
+        onProgress: (loadProgress) => { if (isCurrent()) catalogActions.patch({ loadProgress }) },
       }).then((result) => {
-        const current = catalogStore.getState()
-        const currentKey = current.manifest
-          ? createCatalogScanKey(current.manifest.version, current.filters, sampleLimit)
-          : ''
-        if (controller.signal.aborted || result.scanKey !== scanKey || currentKey !== scanKey) return
+        if (!isCurrent() || result.scanKey !== scanKey) return
         catalogActions.setExactResult(result.scanKey, result.records, result.total, result.hasMore)
       }).catch((error: unknown) => {
-        if (!controller.signal.aborted) catalogActions.patch({ error: error instanceof Error ? error.message : String(error), isLoading: false })
+        if (isCurrent()) catalogActions.patch({ error: error instanceof Error ? error.message : String(error), isLoading: false })
       })
     }, 250)
     return () => {
@@ -218,7 +220,8 @@ export function ElementSpaceWorkspace() {
   }, [catalog.filters, catalog.manifest])
 
   const sampleLimit = EXACT_CATALOG_LOCATOR_LIMIT
-  const scanKey = catalog.manifest ? createCatalogScanKey(catalog.manifest.version, catalog.filters, sampleLimit) : ''
+  const scanKey = useMemo(() => catalog.manifest ? createCatalogScanKey(catalog.manifest, catalog.filters, sampleLimit) : '',
+    [catalog.manifest, catalog.filters, sampleLimit])
   const exactResultIsPartial = catalog.activeResultScanKey === scanKey && catalog.exactFilteredTotal !== null &&
     catalog.exactFilteredTotal > catalog.activeResultRecords.length
   const displayedRecords = exactResultIsPartial && catalog.baseSampleRecords.length
@@ -231,6 +234,7 @@ export function ElementSpaceWorkspace() {
   const selectedSet = useMemo(() => new Set(selection.selectedIds), [selection.selectedIds])
   const miniBodies = useMemo(() => selection.selectedIds.map((id) => bodiesById.get(id)).filter((body): body is CelestialBody => Boolean(body)), [bodiesById, selection.selectedIds])
   const miniFrame = useMemo(() => buildCurrentPositions({ bodies: miniBodies, bodiesById, referenceId: 'sun', julianDay: clock.julianDay }), [bodiesById, clock.julianDay, miniBodies])
+  const miniStateFitToken = useMemo(() => ({}), [miniBodies])
   const [xLabel, yLabel] = labelsFor(mode)
 
   return <div className="workspace-page elements-workspace" data-story-target="elements">
@@ -256,7 +260,7 @@ export function ElementSpaceWorkspace() {
       </section>
       <section className="linked-space-panel glass-panel">
         <div className="map-caption"><span>{t('linkedHeliocentric3d')}</span><strong>{miniBodies.length}</strong></div>
-        <TrajectoryCanvas3D referenceBody={majorBodiesWithPhysicalData[0]} trajectories={[]} currentPositions={miniFrame.currentPositions} onBodySelect={selectionActions.focus} showEcliptic ariaLabel={t('interactive3d')} fallbackLabel={t('webgl3dUnavailable')} />
+        <TrajectoryCanvas3D referenceBody={majorBodiesWithPhysicalData[0]} trajectories={[]} currentPositions={miniFrame.currentPositions} stateFitToken={miniStateFitToken} onBodySelect={selectionActions.focus} showEcliptic ariaLabel={t('interactive3d')} fallbackLabel={t('webgl3dUnavailable')} />
       </section>
       <aside className="selection-panel glass-panel">
         <div className="section-heading"><span>{t('selectedBodies')}</span><button onClick={() => selectionActions.setSelectedIds([])}>{t('clear')}</button></div>

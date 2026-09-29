@@ -4,10 +4,16 @@ import type { Vector3 } from '../../types'
 export type GeometricState = { position: Vector3; velocity: Vector3 }
 export type LoadedKernel = {
   id: string; kernel: SpkKernel;
+  /** Manifest digest of the exact bytes parsed into this kernel. */
+  sha256?: string;
   /** Ordered, complete dependency pool; the root itself is appended last. */
   solutionKernelIds?: readonly string[];
   /** Available inside explicit pools, never an implicit root override. */
   dependencyOnly?: boolean;
+}
+export type SourceChainSegment = {
+  kernelId: string; kernelSha256: string; target: number; center: number;
+  frame: number; type: number; startEt: number; endEt: number;
 }
 /** A scan must not acquire/drop a kernel halfway through a curve or event
  * bracket: that discontinuity can manufacture an extremum. Each target must
@@ -65,8 +71,8 @@ export function createKernelResolver(sourceKernels: readonly LoadedKernel[], et:
   if (!Number.isFinite(et)) throw new RangeError('Ephemeris time must be finite')
   // Own selection metadata for this epoch. Caller list edits or dependency
   // changes must not make the lazy contexts disagree with already cached states.
-  const kernels = sourceKernels.map(({ id, kernel, solutionKernelIds, dependencyOnly }) => ({
-    id, kernel, solutionKernelIds: solutionKernelIds?.slice(), dependencyOnly,
+  const kernels = sourceKernels.map(({ id, kernel, sha256, solutionKernelIds, dependencyOnly }) => ({
+    id, kernel, sha256, solutionKernelIds: solutionKernelIds?.slice(), dependencyOnly,
   }))
   const byId = new Map(kernels.map(kernel => [kernel.id, kernel]))
   if (byId.size !== kernels.length) throw new Error('Duplicate SPK kernel identity')
@@ -78,6 +84,8 @@ export function createKernelResolver(sourceKernels: readonly LoadedKernel[], et:
   const observerCoverage = new Map<string, boolean>()
   const cache = new Map<string, GeometricState | null>()
   const visiting = new Set<string>()
+  const chainCache = new Map<string, readonly SourceChainSegment[] | null>()
+  const chainVisiting = new Set<string>()
   const contextFor = (target: number): string => {
     const cached = targetContexts.get(target)
     if (cached !== undefined) return cached
@@ -126,6 +134,49 @@ export function createKernelResolver(sourceKernels: readonly LoadedKernel[], et:
       return null
     } finally { visiting.delete(key) }
   }
+  const resolveChainIn = (target: number, context: string): readonly SourceChainSegment[] | null => {
+    if (target === 0) return Object.freeze([])
+    const pool = contexts.get(context)
+    if (!pool) return null
+    const key = `${context}/${target}`
+    if (chainCache.has(key)) return chainCache.get(key)!
+    if (chainVisiting.has(key) || chainVisiting.size > 32) throw new Error('Cyclic or excessively deep SPK source chain')
+    chainVisiting.add(key)
+    try {
+      for (let index = pool.length - 1; index >= 0; index--) {
+        const loaded = pool[index]
+        const state = loaded.kernel.evaluate(target, et)
+        if (!state) continue
+        // evaluate() follows DAF's last-covering-segment precedence. Match that
+        // returned center/frame while scanning backward to retain the selected
+        // descriptor, including its type and exact interval.
+        let selected: SpkSegment | undefined
+        for (let n = loaded.kernel.segments.length - 1; n >= 0; n--) {
+          const segment = loaded.kernel.segments[n]
+          if (segment.target === target && segment.center === state.center && segment.frame === state.frame && segment.startEt <= et && segment.endEt >= et) {
+            selected = segment
+            break
+          }
+        }
+        if (!selected || !loaded.sha256 || !/^[a-f0-9]{64}$/.test(loaded.sha256)) {
+          chainCache.set(key, null)
+          return null
+        }
+        const parent = resolveChainIn(state.center, context)
+        if (!parent) {
+          chainCache.set(key, null)
+          return null
+        }
+        const chain = Object.freeze([{ kernelId: loaded.id, kernelSha256: loaded.sha256, target,
+          center: selected.center, frame: selected.frame, type: selected.type,
+          startEt: selected.startEt, endEt: selected.endEt }, ...parent])
+        chainCache.set(key, chain)
+        return chain
+      }
+      chainCache.set(key, null)
+      return null
+    } finally { chainVisiting.delete(key) }
+  }
   const barycentric = (target: number): GeometricState | null => {
     const state = resolveIn(target, contextFor(target))
     // Public results are caller-owned; internal center-chain cache entries stay
@@ -134,6 +185,10 @@ export function createKernelResolver(sourceKernels: readonly LoadedKernel[], et:
   }
   return {
     barycentric,
+    /** Actual recursively selected segment lineage for this same epoch/pool. */
+    sourceChain(target: number): readonly SourceChainSegment[] | null {
+      return resolveChainIn(target, contextFor(target))
+    },
     relative(target: number, observer: number): GeometricState | null {
       const context = contextFor(target)
       const body = resolveIn(target, context)

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { prepareCatalogElements, propagatePreparedCatalogTile } from '../../src/engine/ephemeris/catalogPoints'
+import { createCatalogPointWorkspace, prepareCatalogElements, propagatePreparedCatalogPositions, propagatePreparedCatalogTile, type CatalogPointWorkspace } from '../../src/engine/ephemeris/catalogPoints'
 
 const epoch = 2451545
 const prepared = () => prepareCatalogElements(new Float64Array([
@@ -33,4 +33,16 @@ it('rejects invalid tile ranges and capacities before writing the output', () =>
   expect(() => propagatePreparedCatalogTile(source,NaN,'2d',0,1,output)).toThrow('epoch')
   expect(() => propagatePreparedCatalogTile(source,epoch,'3d',0,1,output)).toThrow('capacity')
   expect([...output]).toEqual([17,17])
+})
+
+it('reuses one exclusive Kepler workspace across bounded slices', () => {
+  const source = prepared(), workspace = createCatalogPointWorkspace(), dimensions = 3
+  const expected = propagatePreparedCatalogPositions(source,epoch+0.25,'3d',new Float64Array(source.count*dimensions))
+  const actual = new Float64Array(source.count*dimensions)
+  for (let row=0;row<source.count;row++) {
+    propagatePreparedCatalogTile(source,epoch+0.25,'3d',row,row+1,actual.subarray(row*dimensions,(row+1)*dimensions),workspace)
+  }
+  expect(actual).toEqual(expected)
+  const aliased = { keplerTrigonometry: source.data.subarray(0,2) } as CatalogPointWorkspace
+  expect(() => propagatePreparedCatalogTile(source,epoch,'3d',0,1,new Float64Array(3),aliased)).toThrow('workspace')
 })

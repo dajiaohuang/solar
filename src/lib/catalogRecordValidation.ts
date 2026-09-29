@@ -1,12 +1,14 @@
 import type { AsteroidIndexEntry, AsteroidRecord } from '../types'
+import { normalizeCatalogAbsoluteMagnitude } from './catalogMagnitude'
 
 /** Resolve an index against its declared shard and actual row, never a record
  * with the same ID found incidentally in another requested shard. */
 export function bindCatalogIndexRecord<T extends AsteroidIndexEntry>(entry: AsteroidIndexEntry, record: T | undefined, rowIndex: number): T {
   if (!record) throw new Error(`Catalog index record is missing from its source shard: ${entry.id}`)
   const fields = ['id', 'packedDesignation', 'permanentNumber', 'label', 'shortLabel', 'searchKey',
-    'chunkId', 'orbitClassCode', 'orbitClassName', 'absoluteMagnitude', 'isNeo', 'isPha'] as const
+    'chunkId', 'orbitClassCode', 'orbitClassName', 'isNeo', 'isPha'] as const
   if (fields.some(field => entry[field] !== record[field]) ||
+      normalizeCatalogAbsoluteMagnitude(entry.absoluteMagnitude) !== normalizeCatalogAbsoluteMagnitude(record.absoluteMagnitude) ||
       entry.rowIndex !== undefined && entry.rowIndex !== rowIndex ||
       record.rowIndex !== undefined && record.rowIndex !== rowIndex ||
       entry.chunkIndex !== undefined && entry.chunkIndex !== Number(record.chunkId.slice(6))) {

@@ -7,6 +7,7 @@ import { bindCatalogSummary } from './catalogSummary'
 import { bindCatalogChecksums, catalogSha256 } from './catalogIntegrity'
 import type { CatalogChecksums } from './catalogIntegrity'
 import { bindCatalogIndexRecord, validateCatalogMetadata, validateCatalogRecords } from './catalogRecordValidation'
+import { normalizeCatalogAbsoluteMagnitude } from './catalogMagnitude'
 import type {
   AsteroidIndexEntry,
   AsteroidManifest,
@@ -388,6 +389,7 @@ function decodeBinaryChunk(metadata: AsteroidIndexEntry[], buffer: ArrayBuffer, 
     const offset = index * stride
     return {
       ...entry,
+      absoluteMagnitude: normalizeCatalogAbsoluteMagnitude(entry.absoluteMagnitude),
       // Samples may mix source shards; their sample offset is not a source row.
       ...(chunkIndex === undefined ? {} : { chunkIndex, rowIndex: index }),
       epochJd: values[offset],
@@ -703,11 +705,17 @@ export async function loadAsteroidSectionPage(params: {
   const records: AsteroidRecord[] = []
   while (chunkIndex < manifest.chunkCount && records.length < pageSize) {
     const chunk = await loadAsteroidChunk(getChunkIdFromIndex(chunkIndex), manifest, params.signal)
-    const filtered = filterChunkByOrbitClass(chunk, orbitClassCode)
-    const slice = filtered.slice(recordOffset, recordOffset + pageSize - records.length)
-    records.push(...slice)
-    if (recordOffset + slice.length < filtered.length) {
-      return { records, startCursor, endCursor: { chunkIndex, recordOffset: recordOffset + slice.length } }
+    let filteredOffset = 0, appended = 0
+    for (const record of chunk) {
+      if (orbitClassCode !== 'all' && record.orbitClassCode !== orbitClassCode) continue
+      if (filteredOffset < recordOffset) { filteredOffset++; continue }
+      if (records.length < pageSize) {
+        records.push(record); appended++; filteredOffset++
+      } else {
+        // A further matching row proves the page ends inside this chunk. Keep
+        // the same filtered-row cursor without allocating a filtered copy.
+        return { records, startCursor, endCursor: { chunkIndex, recordOffset: recordOffset + appended } }
+      }
     }
     chunkIndex += 1
     recordOffset = 0

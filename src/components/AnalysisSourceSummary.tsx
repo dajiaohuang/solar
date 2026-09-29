@@ -13,12 +13,14 @@ export function AnalysisPolicySelect({ value, onChange }: {
   </label>
 }
 
-export function AnalysisSourceSummary({ evidence }: { evidence: AnalysisEphemerisEvidence | null | undefined }) {
+export function AnalysisSourceSummary({ evidence, testId = 'analysis-source-summary' }: {
+  evidence: AnalysisEphemerisEvidence | null | undefined; testId?: string
+}) {
   const { t } = useI18n()
   if (!evidence) return null
   const precise = evidence.bodies.filter(body => body.model === 'jpl-spk')
   const approximate = evidence.bodies.filter(body => body.model === 'approximate-fallback')
-  return <div className="model-note" data-testid="analysis-source-summary">
+  return <div className="model-note" data-testid={testId}>
     <b>{t('analysisStateSources')}</b>
     <p>SPK {precise.length} · {t('analysisApproximateStates')} {approximate.length}</p>
     <small>{t(evidence.policy === 'require-spk' ? 'analysisRequireSpk' : 'analysisPreferSpk')} · {evidence.frame} · {evidence.dynamicalTimeScale}</small>

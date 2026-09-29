@@ -5,6 +5,8 @@ import {
   classifyRenderCapacity,
   classifyRenderDevice,
   createAdaptiveRenderBudgetState,
+  estimateMissedFrameRatio,
+  RENDER_FRAME_TARGET_MS,
   resolveRenderBudgetPolicy,
   selectInitialRenderBudget,
   splitRenderBudget,
@@ -14,11 +16,13 @@ import {
 } from '../../src/lib/renderBudget'
 
 function performanceWindow(update: Partial<RenderPerformanceWindow> = {}): RenderPerformanceWindow {
+  const p95FrameTimeMs = update.p95FrameTimeMs ?? 20
   return {
     nowMs: 10_000,
-    p90FrameTimeMs: 20,
-    p99FrameTimeMs: 20,
-    longFrameRatio: 0,
+    p50FrameTimeMs: 10,
+    p95FrameTimeMs,
+    p99FrameTimeMs: Math.max(p95FrameTimeMs, 20),
+    missedFrameRatio: 0,
     visible: true,
     warmedUp: true,
     samplingActive: true,
@@ -53,10 +57,10 @@ describe('render budget policies', () => {
     expect(policy.adaptive).toBe(true)
     expect(policy.initial).toBeLessThan(policy.maximum)
     let state = createAdaptiveRenderBudgetState(policy)
-    for (let i = 1; i <= 4; i++) state = advance(state, policy, { nowMs: i * 2000, p90FrameTimeMs: 10 })
+    for (let i = 1; i <= 4; i++) state = advance(state, policy, { nowMs: i * 2000, p95FrameTimeMs: 16.7 })
     expect(state.count).toBeGreaterThan(policy.initial)
     const grown = state.count
-    for (let i = 7; i <= 8; i++) state = advance(state, policy, { nowMs: i * 2000, p90FrameTimeMs: 40 })
+    for (let i = 7; i <= 8; i++) state = advance(state, policy, { nowMs: i * 2000, p95FrameTimeMs: 40 })
     expect(state.count).toBeLessThan(grown)
   })
   it('keeps coarse-pointer landscape phones on the mobile policy', () => {
@@ -108,26 +112,26 @@ describe('adaptive render budget', () => {
 
   it('reduces by 25 percent after two consecutive slow windows', () => {
     let state = createAdaptiveRenderBudgetState(policy)
-    state = advance(state, policy, { nowMs: 2_000, p90FrameTimeMs: 29 })
+    state = advance(state, policy, { nowMs: 2_000, p95FrameTimeMs: 29 })
     expect(state.count).toBe(250_000)
     expect(state.consecutiveSlowWindows).toBe(1)
-    state = advance(state, policy, { nowMs: 4_000, p90FrameTimeMs: 29 })
+    state = advance(state, policy, { nowMs: 4_000, p95FrameTimeMs: 29 })
     expect(state.count).toBe(185_000)
     expect(state.lastAdjustmentAtMs).toBe(4_000)
   })
 
-  it('also treats more than 15 percent long frames as slow', () => {
+  it('treats more than five percent estimated missed frames as slow', () => {
     let state = createAdaptiveRenderBudgetState(policy)
-    state = advance(state, policy, { nowMs: 2_000, p90FrameTimeMs: 20, longFrameRatio: 0.16 })
-    state = advance(state, policy, { nowMs: 4_000, p90FrameTimeMs: 20, longFrameRatio: 0.16 })
+    state = advance(state, policy, { nowMs: 2_000, p95FrameTimeMs: 20, missedFrameRatio: 0.16 })
+    state = advance(state, policy, { nowMs: 4_000, p95FrameTimeMs: 20, missedFrameRatio: 0.16 })
     expect(state.count).toBe(185_000)
   })
 
-  it('reduces after repeated P99 frame pressure even when P90 remains fast', () => {
+  it('reduces after repeated P99 frame pressure when P95 remains within pressure limits', () => {
     let state = createAdaptiveRenderBudgetState(policy)
-    state = advance(state, policy, { nowMs: 2_000, p90FrameTimeMs: 18, p99FrameTimeMs: 34 })
+    state = advance(state, policy, { nowMs: 2_000, p95FrameTimeMs: 18, p99FrameTimeMs: 34 })
     expect(state.consecutiveSlowWindows).toBe(1)
-    state = advance(state, policy, { nowMs: 4_000, p90FrameTimeMs: 18, p99FrameTimeMs: 34 })
+    state = advance(state, policy, { nowMs: 4_000, p95FrameTimeMs: 18, p99FrameTimeMs: 34 })
     expect(state.count).toBe(185_000)
   })
 
@@ -136,62 +140,85 @@ describe('adaptive render budget', () => {
     for (let index = 1; index <= 4; index += 1) {
       state = advance(state, policy, {
         nowMs: index * 2_000,
-        p90FrameTimeMs: 18,
-        longFrameRatio: 0.04,
+        p95FrameTimeMs: 16.7,
+        missedFrameRatio: 0.01,
       })
     }
     expect(state.count).toBe(285_000)
     expect(state.lastAdjustmentAtMs).toBe(8_000)
   })
 
-  it('does not grow from an undersized sample but still reacts to its pressure', () => {
+  it('does not grow from an undersized sample and reduces its actual draw count under pressure', () => {
     let state = createAdaptiveRenderBudgetState(policy)
     for (let index = 1; index <= 4; index++) {
-      state = advance(state, policy, { nowMs: index * 2000, p90FrameTimeMs: 10, availableCount: 10_000 })
+      state = advance(state, policy, { nowMs: index * 2000, p95FrameTimeMs: 10, availableCount: 10_000 })
     }
     expect(state.count).toBe(policy.initial)
     expect(state.consecutiveFastWindows).toBe(0)
     for (let index = 5; index <= 6; index++) {
-      state = advance(state, policy, { nowMs: index * 2000, p90FrameTimeMs: 40, availableCount: 10_000 })
+      state = advance(state, policy, { nowMs: index * 2000, p95FrameTimeMs: 40, availableCount: 10_000 })
     }
-    expect(state.count).toBeLessThan(policy.initial)
+    expect(state.count).toBe(7_000)
+    expect(Math.min(state.count, 10_000)).toBe(7_000)
   })
 
   it('uses strict frame thresholds and resets interrupted streaks', () => {
     let state = createAdaptiveRenderBudgetState(policy)
-    state = advance(state, policy, { nowMs: 2_000, p90FrameTimeMs: 28, longFrameRatio: 0.15 })
+    state = advance(state, policy, { nowMs: 2_000, p95FrameTimeMs: 18.5, p99FrameTimeMs: 28, missedFrameRatio: 0.05 })
     expect(state.consecutiveSlowWindows).toBe(0)
-    state = advance(state, policy, { nowMs: 4_000, p90FrameTimeMs: 29 })
-    state = advance(state, policy, { nowMs: 6_000, p90FrameTimeMs: 20 })
+    state = advance(state, policy, { nowMs: 4_000, p95FrameTimeMs: 18.6 })
+    state = advance(state, policy, { nowMs: 6_000, p95FrameTimeMs: 16.7 })
     expect(state.consecutiveSlowWindows).toBe(0)
     expect(state.count).toBe(250_000)
 
     for (let index = 0; index < 4; index += 1) {
-      state = advance(state, policy, { nowMs: 8_000 + index * 2_000, p90FrameTimeMs: 18.5, longFrameRatio: 0.05 })
+      state = advance(state, policy, { nowMs: 8_000 + index * 2_000, p95FrameTimeMs: 16.7, missedFrameRatio: 0.02 })
     }
     expect(state.count).toBe(250_000)
   })
 
+  it('does not grow when P95 misses the target or estimated dropped frames reach two percent', () => {
+    const cases = [
+      { p95FrameTimeMs: 16.71, missedFrameRatio: 0 },
+      { p95FrameTimeMs: 16.7, missedFrameRatio: 0.02 },
+    ]
+    for (const receipt of cases) {
+      let state = createAdaptiveRenderBudgetState(policy)
+      for (let index = 1; index <= 4; index++) {
+        state = advance(state, policy, { nowMs: index * 2_000, ...receipt })
+      }
+      expect(state.count).toBe(policy.initial)
+      expect(state.consecutiveFastWindows).toBe(0)
+    }
+  })
+
+  it('ignores malformed frame statistics instead of adjusting the draw count', () => {
+    const state = createAdaptiveRenderBudgetState(policy)
+    expect(advance(state, policy, { p50FrameTimeMs: Number.NaN })).toBe(state)
+    expect(advance(state, policy, { p95FrameTimeMs: 9 })).toBe(state)
+    expect(advance(state, policy, { missedFrameRatio: 1.1 })).toBe(state)
+  })
+
   it('observes the five-second cooldown after an adjustment', () => {
     let state = createAdaptiveRenderBudgetState(policy)
-    state = advance(state, policy, { nowMs: 2_000, p90FrameTimeMs: 29 })
-    state = advance(state, policy, { nowMs: 4_000, p90FrameTimeMs: 29 })
+    state = advance(state, policy, { nowMs: 2_000, p95FrameTimeMs: 29 })
+    state = advance(state, policy, { nowMs: 4_000, p95FrameTimeMs: 29 })
     const adjusted = state
     state = advance(state, policy, {
       nowMs: 4_000 + RENDER_BUDGET_COOLDOWN_MS - 1,
-      p90FrameTimeMs: 40,
-      longFrameRatio: 1,
+      p95FrameTimeMs: 40,
+      missedFrameRatio: 1,
     })
     expect(state).toBe(adjusted)
-    state = advance(state, policy, { nowMs: 9_000, p90FrameTimeMs: 40, longFrameRatio: 1 })
+    state = advance(state, policy, { nowMs: 9_000, p95FrameTimeMs: 40, missedFrameRatio: 1 })
     expect(state.consecutiveSlowWindows).toBe(1)
   })
 
   it('does not sample while hidden, warming up, or paused', () => {
     const initial = createAdaptiveRenderBudgetState(policy)
-    expect(advance(initial, policy, { visible: false, p90FrameTimeMs: 40 })).toBe(initial)
-    expect(advance(initial, policy, { warmedUp: false, p90FrameTimeMs: 40 })).toBe(initial)
-    expect(advance(initial, policy, { samplingActive: false, p90FrameTimeMs: 40 })).toBe(initial)
+    expect(advance(initial, policy, { visible: false, p95FrameTimeMs: 40 })).toBe(initial)
+    expect(advance(initial, policy, { warmedUp: false, p95FrameTimeMs: 40 })).toBe(initial)
+    expect(advance(initial, policy, { samplingActive: false, p95FrameTimeMs: 40 })).toBe(initial)
   })
 
   it('keeps all adjustments quantized and inside policy bounds', () => {
@@ -201,7 +228,7 @@ describe('adaptive render budget', () => {
       consecutiveFastWindows: 0,
       lastAdjustmentAtMs: null,
     }
-    lowState = advance(lowState, policy, { p90FrameTimeMs: 40 })
+    lowState = advance(lowState, policy, { p95FrameTimeMs: 40 })
     expect(lowState.count).toBe(50_000)
 
     const maxPolicy = resolveRenderBudgetPolicy('desktop', '3d', 'max')
@@ -211,14 +238,22 @@ describe('adaptive render budget', () => {
       consecutiveFastWindows: 3,
       lastAdjustmentAtMs: null,
     }
-    highState = advance(highState, maxPolicy, { p90FrameTimeMs: 10 })
+    highState = advance(highState, maxPolicy, { p95FrameTimeMs: 10 })
     expect(highState.count).toBe(1_567_193)
   })
 
   it('does not adapt a balanced fixed policy', () => {
     const balanced = resolveRenderBudgetPolicy('desktop', '3d', 'balanced')
     const state = createAdaptiveRenderBudgetState(balanced)
-    expect(advance(state, balanced, { p90FrameTimeMs: 50, longFrameRatio: 1 })).toBe(state)
+    expect(advance(state, balanced, { p95FrameTimeMs: 50, missedFrameRatio: 1 })).toBe(state)
+  })
+})
+
+describe('missed-frame estimator', () => {
+  it('uses aggregate elapsed cadence instead of rounding every irregular interval', () => {
+    expect(estimateMissedFrameRatio([20, 20])).toBeCloseTo(1 / 6, 10)
+    expect(estimateMissedFrameRatio([10, 25])).toBeCloseTo(1 - 2 * RENDER_FRAME_TARGET_MS / 35, 10)
+    expect(estimateMissedFrameRatio([16, 16, 16])).toBe(0)
   })
 })
 

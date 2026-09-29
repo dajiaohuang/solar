@@ -1,7 +1,13 @@
 import { expect, it } from 'vitest'
 import { parseSbdbCovariance } from '../../src/data/loaders/sbdbCovariance'
 import { sampleSbdbCovariance } from '../../src/engine/ephemeris/covarianceSampling'
+import { compensatedFloat64Dot, compensatedMatrixProduct } from '../../src/engine/numerics/compensatedMatrixProduct'
 import bennu from '../fixtures/sbdb-bennu-covariance.json'
+
+it('retains a representable result when short covariance sums cancel', () => {
+  expect(compensatedFloat64Dot([1e16, 1, -1e16], [1, 1, 1])).toBe(1)
+  expect(compensatedMatrixProduct([[1e16, 1, -1e16]], [[1], [1], [1]])).toEqual([[1]])
+})
 
 it('reproduces a seeded joint sample, retains all axes, and separates tiny time offsets', () => {
   const source = parseSbdbCovariance(bennu), before = JSON.stringify(source)
@@ -9,13 +15,14 @@ it('reproduces a seeded joint sample, retains all axes, and separates tiny time 
   expect(sampleSbdbCovariance(source, 100, 42)).toEqual(first)
   expect(sampleSbdbCovariance(source, 100, 43).offsets).not.toEqual(first.offsets)
   expect(JSON.stringify(source)).toBe(before)
-  expect(first.algorithm).toBe('mulberry32-box-muller-cholesky-correlation-v2')
-  expect(first.factorization.method).toBe('correlation-symmetry-average-cholesky-v1')
+  expect(first.algorithm).toBe('mulberry32-box-muller-compensated-cholesky-correlation-v3')
+  expect(first.factorization.method).toBe('correlation-symmetry-average-compensated-cholesky-v2')
+  expect(first.factorization.arithmetic).toBe('neumaier-compensated-f64-dot-v1')
   expect(Array.from(first.offsets.slice(0, 16))).toEqual([
     -6.668994933868437e-11, 2.3235008487800057e-10, 1.3852762904887202e-8, -1.8113346007968323e-8,
-    4.074059821249829e-8, -4.598162542969632e-9, -1.119044678421469, -1.9075254479558994e-7,
+    4.074059821249829e-8, -4.598162542969633e-9, -1.1190446784214692, -1.9075254479558994e-7,
     -3.6926696937188733e-11, 1.2312299015435086e-10, 2.6536565674559117e-8, -6.469774166891342e-8,
-    9.027700266210886e-8, 3.0470308934599964e-9, -1.3447869711372185, -1.014177240584137e-7,
+    9.027700266210886e-8, 3.0470308934599972e-9, -1.3447869711372187, -1.0141772405841369e-7,
   ])
   expect(first.labels.slice(6)).toEqual(['RHO', 'AMRAT'])
   expect(first.offsets.byteLength).toBe(100 * 8 * 8)

@@ -8,6 +8,7 @@ import { useSimulationClock } from '../../engine/clock/useSimulationClock'
 import { useI18n } from '../../i18n/context'
 import { useCatalogPointWorker } from '../../hooks/useCatalogPointWorker'
 import { useCatalogSample } from '../../hooks/useCatalogSample'
+import { useAdaptiveRenderBudget } from '../../hooks/useAdaptiveRenderBudget'
 import {
   asteroidRecordToBody,
   isNameSearchTooShort,
@@ -25,7 +26,8 @@ import {
 import { catalogActions, catalogDisplayRecords, catalogStore, filterCatalogRecords } from '../../state/catalog-store'
 import { selectionActions, selectionStore } from '../../state/selection-store'
 import { uiActions } from '../../state/ui-store'
-import { simulationStore } from '../../state/simulation-store'
+import { simulationActions, simulationStore } from '../../state/simulation-store'
+import { PRODUCT_PROFILE } from '../../lib/productAvailability'
 import type { AsteroidManifest, AsteroidRecord, AsteroidSectionCursor, MagnitudeStatus } from '../../types'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { catalogSampleErrorMessage } from '../../lib/catalogSampleProfile'
@@ -58,20 +60,26 @@ export function CatalogWorkspace() {
     const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory
     return (memory !== undefined && memory <= 4 ? 256 : window.innerWidth <= 800 ? 256 : 512) * 1024 * 1024
   })
-  const [streamLimit, setStreamLimit] = useState(() => window.innerWidth <= 800 ? 30_000 : 1_000_000)
+  // An untouched desktop request follows the installed release's full row
+  // count. Keep mobile conservative; an explicit user choice stays pinned.
+  const [streamLimit, setStreamLimit] = useState<number | null>(null)
+  const requestedStreamRows = streamLimit ?? (window.innerWidth <= 800 ? 30_000 : (catalog.manifest?.totalCount ?? 1_000_000))
   const [streamRetainEpochs, setStreamRetainEpochs] = useState(false)
   const [streamAppend, setStreamAppend] = useState(false)
   const streamAppendRows = streamRetainEpochs && streamAppend ? 256 : 0
   const [streamTemporalBudget, setStreamTemporalBudget] = useState(0)
   const [streamRadius, setStreamRadius] = useState(8)
+  const [sampleViewRadiusAU, setSampleViewRadiusAU] = useState(80)
   const [streamMode,setStreamMode] = useState<'2d' | '3d'>('2d')
   const [sampleTemporalBudget, setSampleTemporalBudget] = useState(0)
   const [streamSelectedFirst, setStreamSelectedFirst] = useState(false)
   const [streamPriority, setStreamPriority] = useState<CatalogStreamPriority>('source')
   const [streamAzimuth,setStreamAzimuth] = useState(0), [streamTilt,setStreamTilt] = useState(30)
   const streamRotation = useMemo(() => ({ azimuthDegrees: streamAzimuth,tiltDegrees: streamTilt }),[streamAzimuth,streamTilt])
-  const [streamDisplay, setStreamDisplay] = useState<'spatial' | 'all'>('spatial')
+  const [streamDisplay, setStreamDisplay] = useState<'spatial' | 'all'>('all')
   const [streamDisplayLimit, setStreamDisplayLimit] = useState(() => window.innerWidth <= 800 ? 30_000 : 100_000)
+  const [streamAdaptiveDisplay, setStreamAdaptiveDisplay] = useState(true)
+  const [streamCompletedRows, setStreamCompletedRows] = useState(0)
   const [streamRequest, setStreamRequest] = useState<{ key: string; epoch: number; id: number; prioritySources: { id: string; locator: { chunkIndex: number; rowIndex: number } }[] } | null>(null)
   const activeStreamRef = useRef<typeof streamRequest>(null)
   const [stoppedStreamRequest, setStoppedStreamRequest] = useState<typeof streamRequest>(null)
@@ -95,9 +103,9 @@ export function CatalogWorkspace() {
       return activeStreamRef.current === streamRequest ? { request: streamRequest, selection } : current
     })
   }, [streamRequest])
-  const streamKey = useMemo(() => JSON.stringify([catalog.manifest, catalog.filters, streamLimit, streamMode,
+  const streamKey = useMemo(() => JSON.stringify([catalog.manifest, catalog.filters, requestedStreamRows, streamMode,
     streamPriority, streamBudget, streamRetainEpochs, streamSelectedFirst, streamAppendRows]),
-  [catalog.manifest, catalog.filters, streamLimit, streamMode, streamPriority, streamBudget, streamRetainEpochs, streamSelectedFirst, streamAppendRows])
+  [catalog.manifest, catalog.filters, requestedStreamRows, streamMode, streamPriority, streamBudget, streamRetainEpochs, streamSelectedFirst, streamAppendRows])
   const streaming = streamRequest?.key === streamKey
   // Publish only committed ownership. Passive cleanup may run after an old
   // timer or worker callback is already queued, and renders can be abandoned.
@@ -107,11 +115,30 @@ export function CatalogWorkspace() {
   }, [streaming, streamRequest])
   let streamCapacity = 0, streamMetadataMaximumBytes = 0
   try { if (catalog.manifest) {
-    const plan = planCatalogStream(catalog.manifest, streamLimit, streamBudget, streamMode, streamRetainEpochs, streamAppendRows)
+    const plan = planCatalogStream(catalog.manifest, requestedStreamRows, streamBudget, streamMode, streamRetainEpochs, streamAppendRows)
     streamCapacity = plan.capacity
     streamMetadataMaximumBytes = plan.metadataMaximumBytes
   } }
   catch { /* Older dataset formats retain their existing sample renderer. */ }
+
+  const adaptiveRenderBudget = useAdaptiveRenderBudget({
+    viewMode: streamMode,
+    quality: 'auto',
+    comparisonEnabled: false,
+    availableCount: streamCompletedRows,
+    sampleTotal: catalog.manifest?.totalCount ?? 0,
+    samplingActive: streaming && streamAdaptiveDisplay,
+    ...(streamAdaptiveDisplay ? {} : { initialCount: Math.max(1, streamDisplayLimit) }),
+  })
+  const activeRenderFrameDurationRef = useRef(adaptiveRenderBudget.onActiveRenderFrameDuration)
+  useLayoutEffect(() => { activeRenderFrameDurationRef.current = adaptiveRenderBudget.onActiveRenderFrameDuration }, [adaptiveRenderBudget.onActiveRenderFrameDuration])
+  const recordActiveRenderFrameDuration = useCallback((durationMs: number, renderedCount?: number) => {
+    activeRenderFrameDurationRef.current(durationMs, renderedCount)
+  }, [])
+  const receiveCompletedStreamRows = useCallback((rows: number) => setStreamCompletedRows(rows), [])
+  const effectiveStreamDisplayLimit = streamAdaptiveDisplay && streaming
+    ? Math.max(1, adaptiveRenderBudget.cap)
+    : streamDisplayLimit
 
   useEffect(() => {
     if (!clock.isPlaying) return
@@ -416,6 +443,11 @@ export function CatalogWorkspace() {
           <button className={installedMode === 'full' ? 'active' : ''} disabled={installedMode !== 'full'}>{t('full')}</button>
         </div>
       </div>
+      {PRODUCT_PROFILE === 'full' && catalog.manifest && <button type="button" onClick={() => {
+        catalogActions.patch({ explorerStreamRows: catalog.manifest!.totalCount })
+        simulationActions.patch({ showCatalogCloud: true })
+        uiActions.navigate('explorer')
+      }}>{language === 'zh' ? '在观测场景加载当前筛选目录' : 'Load this filtered catalog in Explorer'}</button>}
 
       <SourceIdentityBrowser onSelectPage={(page) => {
         const base = import.meta.env.VITE_SOLAR_API_BASE_URL?.trim() || ''
@@ -440,6 +472,13 @@ export function CatalogWorkspace() {
             <option value="unknown">{t('magnitudeUnknown')}</option>
           </select></label>
           <RangeFields label="q (AU)" minimumLabel={t('minimum')} maximumLabel={t('maximum')} value={catalog.filters.perihelion} onChange={(value) => catalogActions.patchFilters({ perihelion: value })} step="0.1" />
+          {!streaming && <>
+            <label className="field"><span>{language === 'zh' ? '样本图视野半径 (AU)' : 'Sample map view radius (AU)'}</span><input type="number" min="0.001" max="1000000" step="1" value={sampleViewRadiusAU} onChange={event => {
+              const radius = Number(event.target.value)
+              if (Number.isFinite(radius) && radius > 0 && radius <= 1_000_000) setSampleViewRadiusAU(radius)
+            }} /></label>
+            <p className="catalog-result-note">{language === 'zh' ? '筛选范围决定参与计算的轨道；视野半径独立决定地图显示尺度。' : 'Orbit filters choose which records are computed; the view radius independently sets the map scale.'}</p>
+          </>}
           {catalog.manifest?.compactIndex && <div className="catalog-stream-controls">
             <label className="field"><span>{language === 'zh' ? '目录数组与 GPU 预算（MiB）' : 'Catalog array and GPU budget (MiB)'}</span><select value={streamBudget} onChange={event => setStreamBudget(Number(event.target.value))}>
               {[64, 128, 256, 384, 512].map(value => <option key={value} value={value*1024*1024}>{value}</option>)}
@@ -477,7 +516,7 @@ export function CatalogWorkspace() {
               <label className="field"><span>{language === 'zh' ? '目录倾斜角' : 'Catalog tilt'}: {streamTilt}°</span><input aria-label={language === 'zh' ? '目录倾斜角' : 'Catalog tilt'} type="range" min="-90" max="90" value={streamTilt} onChange={event => setStreamTilt(Number(event.target.value))} /></label>
               <p className="catalog-result-note">{language === 'zh' ? '真实三维坐标的正交视图；旋转复用当前已完成历元，不重新下载目录。时间跟随按完整历元更新，不做帧间插值。' : 'Orthographic view of actual 3D positions. Rotation reuses the completed epoch without downloading the catalog. Time following publishes complete epochs without frame interpolation.'}</p>
             </>}
-            <label className="field"><span>{t('catalogStreamLimit')}</span><select value={streamLimit} onChange={event => setStreamLimit(Number(event.target.value))}>
+            <label className="field"><span>{t('catalogStreamLimit')}</span><select value={requestedStreamRows} onChange={event => setStreamLimit(Number(event.target.value))}>
               {[...new Set([30_000, 100_000, 300_000, 1_000_000, catalog.manifest.totalCount])].sort((a, b) => a - b).map(limit => <option key={limit} value={limit}>{limit === catalog.manifest!.totalCount ? t('catalogStreamAll') : limit.toLocaleString()}</option>)}
             </select></label>
             <label className="field"><span>{t('catalogStreamRadius')}</span><input type="number" min="0.001" max="1000000" step="1" value={streamRadius} onChange={event => {
@@ -487,9 +526,16 @@ export function CatalogWorkspace() {
             <label className="field"><span>{t('catalogSpatialDetail')}</span><select value={streamDisplay} onChange={event => setStreamDisplay(event.target.value as 'spatial' | 'all')}>
               <option value="spatial">{t('catalogSpatialMode')}</option><option value="all">{t('catalogSpatialAll')}</option>
             </select></label>
-            {streamDisplay === 'spatial' && <label className="field"><span>{t('catalogSpatialLimit')}</span><select value={streamDisplayLimit} onChange={event => setStreamDisplayLimit(Number(event.target.value))}>
-              {[10_000, 30_000, 100_000, 300_000, 500_000, 1_000_000].map(value => <option value={value} key={value}>{value.toLocaleString()}</option>)}
-            </select></label>}
+            <label className="field"><span>{t('catalogSpatialLimit')}</span><select value={streamAdaptiveDisplay ? 'auto' : streamDisplayLimit} onChange={event => {
+              if (event.target.value === 'auto') setStreamAdaptiveDisplay(true)
+              else { setStreamAdaptiveDisplay(false); setStreamDisplayLimit(Number(event.target.value)) }
+            }}>
+              <option value="auto">{language === 'zh' ? `自动（当前上限 ${effectiveStreamDisplayLimit.toLocaleString()}）` : `Automatic (current cap ${effectiveStreamDisplayLimit.toLocaleString()})`}</option>
+              {[...new Set([10_000, 30_000, 100_000, 300_000, 500_000, 1_000_000, catalog.manifest.totalCount])].sort((a, b) => a - b).map(value => <option value={value} key={value}>{value === catalog.manifest!.totalCount ? t('catalogDrawLimitAll') : value.toLocaleString()}</option>)}
+            </select></label>
+            {streamAdaptiveDisplay && <p className="catalog-result-note">{language === 'zh'
+              ? '自动模式按当前设备档位的初始上限起步；数据已有点且发生真实绘制时采样，包括分片加载期间。连续帧尾达标才逐步增加绘制上限，慢帧会降低上限；静止画面和没有重绘的帧不计入。绘制数不会超过本次实际算出的行数；要增加可用星体，请提高“读取行数”。'
+              : 'Automatic mode starts at the initial cap for the current device tier. It samples only when populated data is actually redrawn, including during shard loading. Sustained fast frame tails raise the draw cap, while slow frames lower it; idle frames without a redraw do not count. It never draws more rows than were computed; raise the row request to make more bodies available.'}</p>}
             <p className="catalog-result-note">{t('catalogStreamExplanation')}</p>
             {streamMetadataMaximumBytes > 0 && <p className="catalog-result-note">{language === 'zh'
               ? `当前预算允许每片最多 ${(streamMetadataMaximumBytes/1024/1024).toFixed(1)} MiB 的源元数据；超限时需提高预算。容量包含元数据解析预留，不代表浏览器总内存上限。`
@@ -512,10 +558,10 @@ export function CatalogWorkspace() {
 
         <section className="catalog-map glass-panel">
           <div className="map-caption"><span>{t('catalogModeCaption')}</span><strong>{streaming ? t('catalogStreamSnapshot') : `${Math.floor(pointCloud.positions.length / 2).toLocaleString()} / ${resultTotal.toLocaleString()}`}</strong></div>
-          {streaming && catalog.manifest ? <CatalogStreamCanvas onRestarted={resumeAutomaticStream} onStopped={stopAutomaticStream} onSourceSelectionChange={receiveSourceSelection} prioritySources={streamRequest.prioritySources} selectedSources={streamSelections} focusedSource={streamFocus} key={streamRequest.id} manifest={catalog.manifest} filters={catalog.filters} julianDay={streamRequest.epoch} targetJulianDay={streamRetainEpochs ? catalogEpoch : streamRequest.epoch} retainEpochs={streamRetainEpochs} appendRows={streamAppendRows} maximumTemporalDriftAU={streamTemporalBudget} requestedRows={streamLimit} budgetBytes={streamBudget} viewRadiusAU={streamRadius} displayMode={streamDisplay} displayLimit={streamDisplayLimit} mode={streamMode} priority={streamPriority} rotation={streamRotation} /> : pointCloud.positions.length === pointRecords.length * 2 && pointRecords.length ? <CatalogPointCanvas
+          {streaming && catalog.manifest ? <CatalogStreamCanvas onRestarted={resumeAutomaticStream} onStopped={stopAutomaticStream} onSourceSelectionChange={receiveSourceSelection} onSourceRowsComplete={receiveCompletedStreamRows} activeRenderSampling={streamAdaptiveDisplay && streaming} onActiveRenderFrameDuration={recordActiveRenderFrameDuration} prioritySources={streamRequest.prioritySources} selectedSources={streamSelections} focusedSource={streamFocus} key={streamRequest.id} manifest={catalog.manifest} filters={catalog.filters} julianDay={streamRequest.epoch} targetJulianDay={streamRetainEpochs ? catalogEpoch : streamRequest.epoch} retainEpochs={streamRetainEpochs} appendRows={streamAppendRows} maximumTemporalDriftAU={streamTemporalBudget} requestedRows={requestedStreamRows} budgetBytes={streamBudget} viewRadiusAU={streamRadius} displayMode={streamDisplay} displayLimit={effectiveStreamDisplayLimit} mode={streamMode} priority={streamPriority} rotation={streamRotation} /> : pointCloud.positions.length === pointRecords.length * 2 && pointRecords.length ? <CatalogPointCanvas
             records={pointRecords}
             positions={pointCloud.positions}
-            viewRadiusAU={catalog.filters.semiMajorAxis[1] || 50}
+            viewRadiusAU={sampleViewRadiusAU}
             ariaLabel={t('catalogPointAria')}
             unavailableLabel={t('catalogRenderUnavailable')}
             retryLabel={t('retry')}

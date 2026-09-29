@@ -7,6 +7,13 @@ export interface Type21Metadata { dimension: number; recordSize: number; recordC
 type ReadWord = (address: number) => number;
 const fail = (message: string): never => { throw new Error(`Invalid SPK type 21: ${message}`); };
 
+/** Private scratch for one synchronous SPK-kernel evaluator. The returned
+ * state remains owned by the caller; only the bounded recurrence buffers are reused. */
+export interface Type21Scratch { fc: Float64Array; wc: Float64Array; w: Float64Array }
+export function createType21Scratch(): Type21Scratch {
+  return { fc: new Float64Array(25), wc: new Float64Array(25), w: new Float64Array(27) };
+}
+
 export function inspectType21(read: ReadWord, start: number, end: number, endEt: number): Type21Metadata {
   const dimension = read(end - 1), recordCount = read(end);
   return inspectDifferenceLines(read, start, end, endEt, dimension, recordCount, 2);
@@ -55,7 +62,7 @@ function inspectDifferenceLines(read: ReadWord, start: number, end: number, endE
   return { dimension, recordSize, recordCount, epochsAddress };
 }
 
-export function evaluateType21(read: ReadWord, start: number, meta: Type21Metadata, et: number): number[] {
+export function evaluateType21(read: ReadWord, start: number, meta: Type21Metadata, et: number, scratch?: Type21Scratch): number[] {
   // First final epoch >= ET, including exact record/directory endpoints.
   let low = 0, high = meta.recordCount;
   while (low < high) {
@@ -66,7 +73,9 @@ export function evaluateType21(read: ReadWord, start: number, meta: Type21Metada
   const address = start + low * meta.recordSize, dimension = meta.dimension;
   const at = (offset: number) => read(address + offset);
   const delta = et - at(0), maximumOrderPlusOne = at(4 * dimension + 7);
-  const fc = new Float64Array(dimension), wc = new Float64Array(dimension), w = new Float64Array(dimension + 2);
+  if (scratch && (scratch.fc.length < dimension || scratch.wc.length < dimension || scratch.w.length < dimension + 2)) fail('evaluation workspace is undersized');
+  const fc = scratch?.fc ?? new Float64Array(dimension), wc = scratch?.wc ?? new Float64Array(dimension), w = scratch?.w ?? new Float64Array(dimension + 2);
+  fc.fill(0); wc.fill(0); w.fill(0);
   fc[0] = 1;
   let tp = delta;
   for (let j = 1; j <= maximumOrderPlusOne - 2; j++) {

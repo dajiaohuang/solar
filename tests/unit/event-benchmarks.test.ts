@@ -27,7 +27,7 @@ describe('JPL Horizons event fixture', () => {
     const windowDays = 1 / 1_440
     const plan = eventSamplingPlan([], windowDays)
     expect(plan.actualSamples).toBe(80)
-    expect(plan.maximumResolvablePeriodDays).toBeCloseTo(windowDays * 36 / (plan.actualSamples - 1), 14)
+    expect(plan.periodAt36NominalIntervalsDays).toBeCloseTo(windowDays * 36 / (plan.actualSamples - 1), 14)
   })
 
   it('rejects a requested grid whose Julian Day samples collapse to duplicate epochs', () => {
@@ -88,6 +88,6 @@ describe('JPL Horizons event fixture', () => {
     expect(plan.actualSamples).toBe(720)
     expect(plan.requiredSamples).toBeGreaterThan(plan.actualSamples)
     expect(plan.capped).toBe(true)
-    expect(plan.maximumResolvablePeriodDays).toBeGreaterThan(80)
+    expect(plan.periodAt36NominalIntervalsDays).toBeGreaterThan(80)
   })
 })

@@ -69,6 +69,23 @@ function run(manifest: AsteroidManifest, onTile: (tile: CatalogStreamTile) => Pr
 }
 
 describe('bounded source catalog streaming', () => {
+  it('verifies legacy magnitude bytes before applying unknown-magnitude filters', async () => {
+    const { manifest, files, rehash } = fixture(1, 1)
+    const index = new DataView(files.get('catalog-index.bin')!)
+    index.setInt16(16, 9999, true)
+    const path = 'meta/chunk-0000.json'
+    const metadata = JSON.parse(new TextDecoder().decode(files.get(path)!))
+    metadata[0].absoluteMagnitude = 99.99
+    files.set(path, new TextEncoder().encode(JSON.stringify(metadata)).buffer)
+    rehash()
+    expect((await run(manifest, async () => {}, { filters: { ...filters, magnitudeStatus: 'unknown' } })).drawnRows).toBe(1)
+    expect((await run(manifest, async () => {}, { filters: { ...filters, magnitudeStatus: 'known' } })).drawnRows).toBe(0)
+    metadata[0].absoluteMagnitude = 99.98
+    files.set(path, new TextEncoder().encode(JSON.stringify(metadata)).buffer)
+    rehash()
+    await expect(run(manifest, async () => {}, { filters: { ...filters, absoluteMagnitude: [-100, 100] } })).rejects.toThrow('metadata differs')
+  })
+
   it('prepares selected append rows in priority-shard order and reports capacity omissions', async () => {
     const { manifest,files } = fixture(6,2)
     const request = { manifest, filters, mode: '2d' as const, julianDay: 2461287.5,
@@ -389,9 +406,9 @@ describe('bounded source catalog streaming', () => {
       candidateLocators: new Uint32Array([0, 1, 0, 1, 6, 0]), filters: { ...filters, query: 'named', magnitudeStatus: 'unknown' },
     })
     expect(result).toMatchObject({ drawnRows: 1, complete: true })
-    // Both candidate shards match the name. Magnitude eligibility is checked
-    // against source metadata alongside their original orbital records.
-    expect(requests.filter(path => path.startsWith('binary/'))).toEqual(['binary/chunk-0000.bin','binary/chunk-0006.bin'])
+    // Exact metadata rejects the known-magnitude trailing shard before reading
+    // orbital bytes; only the eligible unknown-magnitude shard is propagated.
+    expect(requests.filter(path => path.startsWith('binary/'))).toEqual(['binary/chunk-0000.bin'])
     await expect(run(manifest, async () => {}, { filters: { ...filters, query: 'named' } })).resolves.toMatchObject({ drawnRows: 13, complete: true })
   })
 
@@ -454,10 +471,20 @@ describe('bounded source catalog streaming', () => {
     const plan = planCatalogStream(full, full.totalCount, 512 * 1024 * 1024)
     expect(plan.capacity).toBe(full.totalCount)
     expect(plan.reservedBytes).toBeLessThanOrEqual(plan.budgetBytes)
-    const constrained = planCatalogStream(full,full.totalCount,256*1024*1024)
+    const constrained = planCatalogStream(full,full.totalCount,192*1024*1024)
     expect(constrained.capacity).toBeGreaterThan(0)
     expect(constrained.capacity).toBeLessThan(full.totalCount)
     expect(constrained.reservedBytes).toBeLessThanOrEqual(constrained.budgetBytes)
     expect(planCatalogStream(full, full.totalCount, 64 * 1024 * 1024).capacity).toBe(0)
+  })
+
+  it('reserves candidate locator memory only for the supplied list and its bitmaps', () => {
+    const { manifest } = fixture()
+    const noCandidates = planCatalogStream(manifest,manifest.totalCount,32*1024*1024)
+    const emptyCandidates = planCatalogStream(manifest,manifest.totalCount,32*1024*1024,'2d',false,0,0)
+    const allCandidates = planCatalogStream(manifest,manifest.totalCount,32*1024*1024,'2d',false,0,manifest.totalCount)
+    expect(emptyCandidates.reservedBytes-noCandidates.reservedBytes).toBe(Math.ceil(manifest.totalCount/8)+manifest.chunkCount)
+    expect(allCandidates.reservedBytes-emptyCandidates.reservedBytes).toBe(manifest.totalCount*2*Uint32Array.BYTES_PER_ELEMENT)
+    expect(() => planCatalogStream(manifest,manifest.totalCount,32*1024*1024,'2d',false,0,manifest.totalCount+1)).toThrow('candidate locator reserve')
   })
 })

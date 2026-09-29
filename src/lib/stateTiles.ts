@@ -1,16 +1,20 @@
-import { AU_IN_KM } from '../engine/units'
+import { AU_IN_KM } from '../engine/units.ts'
 import type { BackendFrame, BackendStateEvidence, StateTileAudit } from './backendFrames'
 import type { BodyId, CelestialBody, Vector3 } from '../types'
-import { CurrentPositions } from './currentPositions'
+import { CurrentPositions } from './currentPositions.ts'
+import { retryAfterDelayMs, waitForRetry } from './retryableHttpResponse'
 
 export const STATE_TILE_MAGIC = Uint8Array.from([0x53, 0x4c, 0x52, 0x54, 0x49, 0x4c, 0x45, 0x00])
-export const STATE_TILE_VERSION = 1
-export const STATE_TILE_HEADER_BYTES = 200
+export const STATE_TILE_VERSION = 2
+export const STATE_TILE_HEADER_BYTES = 208
 export const STATE_TILE_STRIDE = 6
 export const STATE_TILE_FIELD_MASK = 3
+const TILE_CONTRACT_CODES = { timeScale: 1, frame: 1, stateOrigin: 1, distanceUnit: 1, velocityUnit: 1 } as const
 export const STATE_TILE_CONCURRENCY = 2
 export const STATE_TILE_API_VERSION = 'solar.api/v1'
 export const MAX_STATE_PLAN_BODIES = 32_768
+export const MAX_STATE_PLAN_REQUEST_BYTES = 8 * 1024 * 1024
+const LEGACY_STATE_PLAN_REQUEST_BYTES = 1024 * 1024
 export const MAX_STATE_PLAN_TILES = 32_768
 export const MAX_STATE_TILE_BYTES = 64 * 1024 * 1024
 export const STATE_TILE_MEDIA_TYPE = 'application/vnd.solar.state-tile+binary'
@@ -25,6 +29,7 @@ export type StateTileMetadata = {
   datasetVersion: string
   datasetSha256?: string
   kernelSha256?: string
+  sourceChainSha256?: string
   model: string
   centerId: string
   validityStartEt?: number
@@ -39,7 +44,8 @@ export type StateTileMetadata = {
   sourceRecord?: boolean
 }
 
-const EVIDENCE_STRINGS = ['id', 'source', 'datasetVersion', 'datasetSha256', 'kernelSha256', 'model', 'centerId', 'stateEvidence', 'missingReason', 'identityStatus'] as const
+const EVIDENCE_STRINGS = ['id', 'source', 'datasetVersion', 'datasetSha256', 'kernelSha256', 'model', 'centerId', 'stateEvidence', 'missingReason', 'identityStatus', 'sourceChainSha256'] as const
+const SOURCE_CHAIN_STRING_COLUMN = EVIDENCE_STRINGS.indexOf('sourceChainSha256')
 const EVIDENCE_NUMBERS = ['validityStartEt', 'validityEndEt', 'evidenceWindowStartEt', 'evidenceWindowEndEt'] as const
 
 /** Internal verified-worker transfer, not an alternative network format. */
@@ -69,7 +75,7 @@ class StateTileEvidence {
         || !Array.isArray(columns.strings) || !columns.strings.length
         || !(columns.stringIndexes instanceof Uint32Array) || columns.stringIndexes.length !== length * EVIDENCE_STRINGS.length
         || !(columns.numbers instanceof Float64Array) || columns.numbers.length !== length * EVIDENCE_NUMBERS.length
-        || !(columns.flags instanceof Uint8Array) || columns.flags.length !== length) fail('worker evidence columns are invalid')
+        || !(columns.flags instanceof Uint8Array) || columns.flags.length !== length || columns.flags.some(flags => (flags & ~0b1111) !== 0)) fail('worker evidence columns are invalid')
       // Provenance, numeric values and string ordinals were checked by the
       // decoder in our own worker. Adopt transferred storage without rebuilding
       // an interning Map or materializing/reparsing every metadata row on the UI.
@@ -86,13 +92,13 @@ class StateTileEvidence {
     for (let index = 0; index < length; index++) {
       const row = readValidatedRow(index)
       for (let column = 0; column < EVIDENCE_STRINGS.length; column++) {
-        const value = row[EVIDENCE_STRINGS[column]]!
+        const value = row[EVIDENCE_STRINGS[column]] ?? ''
         let ordinal = dictionary.get(value)
         if (ordinal === undefined) { ordinal = this.#strings.length; this.#strings.push(value); dictionary.set(value, ordinal) }
         this.#stringIndexes[column * length + index] = ordinal
       }
       for (let column = 0; column < EVIDENCE_NUMBERS.length; column++) this.#numbers[column * length + index] = row[EVIDENCE_NUMBERS[column]]!
-      this.#flags[index] = Number(row.validityPresent) | (Number(row.evidenceWindowPresent) << 1) | (Number(row.sourceRecord) << 2)
+      this.#flags[index] = Number(row.validityPresent) | (Number(row.evidenceWindowPresent) << 1) | (Number(row.sourceRecord) << 2) | (Number(Boolean(row.sourceChainSha256)) << 3)
     }
   }
 
@@ -121,7 +127,10 @@ class StateTileEvidence {
   rowAt(index: number): StateTileMetadata {
     this.#check(index)
     const row: Record<string, string | number | boolean> = {}
-    for (let column = 0; column < EVIDENCE_STRINGS.length; column++) row[EVIDENCE_STRINGS[column]] = this.#strings[this.#stringIndexes[column * this.length + index]]
+    for (let column = 0; column < EVIDENCE_STRINGS.length; column++) {
+      if (column === SOURCE_CHAIN_STRING_COLUMN && !(this.#flags[index] & 8)) continue
+      row[EVIDENCE_STRINGS[column]] = this.#strings[this.#stringIndexes[column * this.length + index]]
+    }
     for (let column = 0; column < EVIDENCE_NUMBERS.length; column++) row[EVIDENCE_NUMBERS[column]] = this.#numbers[column * this.length + index]
     row.validityPresent = Boolean(this.#flags[index] & 1)
     row.evidenceWindowPresent = Boolean(this.#flags[index] & 2)
@@ -138,6 +147,11 @@ export type StateTile = {
   stride: number
   fieldMask: number
   epochJd: number
+  timeScale: 'TDB'
+  frame: 'ECLIPJ2000'
+  stateOriginId: 'naif:0'
+  distanceUnit: 'km'
+  velocityUnit: 'km/s'
   metadata: StateTileEvidence
   exactBitmap: Uint8Array
   approximateBitmap: Uint8Array
@@ -155,7 +169,8 @@ function restoreTransferredStateTile(tile: TransferredStateTile): StateTile {
   if (!(tile.states instanceof Float64Array) || tile.states.length !== tile.recordCount * STATE_TILE_STRIDE
     || !(tile.exactBitmap instanceof Uint8Array) || !(tile.approximateBitmap instanceof Uint8Array) || !(tile.missingBitmap instanceof Uint8Array)
     || [tile.exactBitmap, tile.approximateBitmap, tile.missingBitmap].some(bitmap => bitmap.length !== bitmapBytes(tile.recordCount))
-    || tile.stride !== STATE_TILE_STRIDE || tile.fieldMask !== STATE_TILE_FIELD_MASK) fail('worker tile columns are invalid')
+    || tile.stride !== STATE_TILE_STRIDE || tile.fieldMask !== STATE_TILE_FIELD_MASK || tile.timeScale !== 'TDB'
+    || tile.frame !== 'ECLIPJ2000' || tile.stateOriginId !== 'naif:0' || tile.distanceUnit !== 'km' || tile.velocityUnit !== 'km/s') fail('worker tile columns are invalid')
   return { ...tile, metadata: new StateTileEvidence(tile.recordCount, tile.metadata) }
 }
 
@@ -166,6 +181,8 @@ export type StateTileManifest = {
   catalogVersion: string
   catalogManifestSha256: string
   inventoryManifestSha256?: string
+  maxPlanIds: number
+  maxPlanBytes: number
   planPath?: string
   tilePath?: string
 }
@@ -182,6 +199,8 @@ export type StateTilePlan = {
   timeScale: 'TDB'
   frame: 'ECLIPJ2000'
   stateOriginId: 'naif:0'
+  distanceUnit: 'km'
+  velocityUnit: 'km/s'
   stride: number
   fieldMask: number
   tileCount: number
@@ -227,10 +246,25 @@ function bitmapBytes(recordCount: number) { return Math.ceil(recordCount / 8) }
 function hasBit(bitmap: Uint8Array, index: number) { return (bitmap[index >> 3] & (1 << (index & 7))) !== 0 }
 function setBit(bitmap: Uint8Array, index: number) { bitmap[index >> 3] |= 1 << (index & 7) }
 function isNonEmptyString(value: unknown): value is string { return typeof value === 'string' && value.trim().length > 0 }
+function jsonStringByteLength(value: string) {
+  let bytes = 2
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index)
+    if (code === 0x22 || code === 0x5c || code === 0x08 || code === 0x09 || code === 0x0a || code === 0x0c || code === 0x0d) bytes += 2
+    else if (code < 0x20 || (code >= 0xd800 && code <= 0xdfff && !(code <= 0xdbff && index + 1 < value.length && value.charCodeAt(index + 1) >= 0xdc00 && value.charCodeAt(index + 1) <= 0xdfff))) bytes += 6
+    else if (code >= 0xd800 && code <= 0xdbff) { bytes += 4; index++ }
+    else if (code <= 0x7f) bytes++
+    else if (code <= 0x7ff) bytes += 2
+    else bytes += 3
+  }
+  return bytes
+}
 
-/** Stable deduplication and protocol-sized partitioning without dropping IDs. */
-export function chunkStatePlanIds(bodyIds: readonly string[], maxIds = MAX_STATE_PLAN_BODIES): string[][] {
+/** Stable deduplication and wire-byte-aware partitioning without dropping IDs. */
+export function chunkStatePlanIds(bodyIds: readonly string[], maxIds = MAX_STATE_PLAN_BODIES,
+  maxBytes = MAX_STATE_PLAN_REQUEST_BYTES, epochJd = 0): string[][] {
   if (!Number.isSafeInteger(maxIds) || maxIds < 1 || maxIds > MAX_STATE_PLAN_BODIES) fail('plan chunk size is invalid')
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_STATE_PLAN_REQUEST_BYTES || !Number.isFinite(epochJd)) fail('plan request byte budget is invalid')
   const unique: string[] = []
   const seen = new Set<string>()
   for (const rawId of bodyIds) {
@@ -239,8 +273,22 @@ export function chunkStatePlanIds(bodyIds: readonly string[], maxIds = MAX_STATE
     seen.add(id)
     unique.push(id)
   }
+  const encoder = new TextEncoder()
+  const emptyBytes = encoder.encode(JSON.stringify({ ids: [], epochJd, frame: 'ECLIPJ2000', timeScale: 'TDB', fieldMask: ['position', 'velocity'], precision: 'exact' })).byteLength
+  if (emptyBytes > maxBytes) fail('plan request fixed fields exceed the advertised byte budget')
   const chunks: string[][] = []
-  for (let start = 0; start < unique.length; start += maxIds) chunks.push(unique.slice(start, start + maxIds))
+  let chunk: string[] = [], bytes = emptyBytes
+  for (const id of unique) {
+    const idBytes = jsonStringByteLength(id)
+    const addition = idBytes + (chunk.length ? 1 : 0)
+    if (chunk.length && (chunk.length >= maxIds || bytes + addition > maxBytes)) {
+      chunks.push(chunk); chunk = []; bytes = emptyBytes
+    }
+    const singleIdBytes = idBytes
+    if (bytes + singleIdBytes > maxBytes) fail('a body ID exceeds the advertised plan request byte budget')
+    chunk.push(id); bytes += singleIdBytes + (chunk.length > 1 ? 1 : 0)
+  }
+  if (chunk.length) chunks.push(chunk)
   return chunks
 }
 
@@ -251,11 +299,26 @@ export function validateStateTileManifest(raw: unknown): StateTileManifest {
   if (typeof value.catalogVersion !== 'string' || !value.catalogVersion) fail('manifest catalog version is invalid')
   if (!isSha(value.catalogManifestSha256)) fail('manifest catalog hash is invalid')
   if (value.inventoryManifestSha256 !== undefined && !isSha(value.inventoryManifestSha256)) fail('manifest inventory hash is invalid')
-  return { apiVersion: STATE_TILE_API_VERSION, catalogVersion: value.catalogVersion, catalogManifestSha256: value.catalogManifestSha256, inventoryManifestSha256: value.inventoryManifestSha256 as string | undefined, planPath: value.planPath as string | undefined, tilePath: value.tilePath as string | undefined }
+  const limits = value.limits === undefined ? undefined : value.limits
+  if (limits !== undefined && (!limits || typeof limits !== 'object' || Array.isArray(limits))) fail('manifest limits are invalid')
+  const planLimits = limits as Record<string, unknown> | undefined
+  const maxPlanIds = planLimits?.maxIds === undefined ? MAX_STATE_PLAN_BODIES : planLimits.maxIds
+  const maxPlanBytes = planLimits?.maxPlanBytes === undefined ? LEGACY_STATE_PLAN_REQUEST_BYTES : planLimits.maxPlanBytes
+  if (!Number.isSafeInteger(maxPlanIds) || (maxPlanIds as number) < 1 || (maxPlanIds as number) > MAX_STATE_PLAN_BODIES
+    || !Number.isSafeInteger(maxPlanBytes) || (maxPlanBytes as number) < 1 || (maxPlanBytes as number) > MAX_STATE_PLAN_REQUEST_BYTES) fail('manifest plan limits are invalid')
+  return { apiVersion: STATE_TILE_API_VERSION, catalogVersion: value.catalogVersion, catalogManifestSha256: value.catalogManifestSha256,
+    inventoryManifestSha256: value.inventoryManifestSha256 as string | undefined, maxPlanIds: maxPlanIds as number, maxPlanBytes: maxPlanBytes as number,
+    planPath: value.planPath as string | undefined, tilePath: value.tilePath as string | undefined }
 }
 
 class StateTileProtocolError extends Error {}
-class StateTileRetryableError extends Error {}
+class StateTileRetryableError extends Error {
+  readonly retryAfterMs?: number
+  constructor(message: string, retryAfterMs?: number) {
+    super(message)
+    this.retryAfterMs = retryAfterMs
+  }
+}
 
 function retryableStatus(status: number) { return status === 408 || status === 429 || status >= 500 }
 function normalizedContentType(response: Response) { return (response.headers.get('content-type') ?? '').split(';', 1)[0].trim().toLowerCase() }
@@ -266,49 +329,65 @@ function contentLength(response: Response, limit: number) {
   return value
 }
 
-export async function readBounded(response: Response, expectedType: string, limit: number) {
-  if (normalizedContentType(response) !== expectedType) throw new StateTileProtocolError('State tile content type is invalid')
-  const expectedLength = contentLength(response, limit)
-  if (!response.body) {
-    const body = new Uint8Array(await response.arrayBuffer())
-    if (body.byteLength !== expectedLength) throw new StateTileProtocolError('State tile content length mismatch')
-    return body
-  }
-  const reader = response.body.getReader(); const chunks: Uint8Array[] = []; let total = 0
+export async function readBounded(response: Response, expectedType: string, limit: number, signal?: AbortSignal) {
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  let cancellation: Promise<void> | undefined
+  const cancelRead = () => cancellation ??= (reader ? reader.cancel() : response.body?.cancel())?.catch(() => undefined) ?? Promise.resolve()
+  const abort = () => { void cancelRead() }
+  signal?.addEventListener('abort', abort, { once: true })
   try {
+    signal?.throwIfAborted()
+    if (!Number.isSafeInteger(limit) || limit < 0) throw new StateTileProtocolError('Invalid response byte limit')
+    if (normalizedContentType(response) !== expectedType) throw new StateTileProtocolError('State tile content type is invalid')
+    const expectedLength = contentLength(response, limit)
+    if (!response.body) {
+      const body = new Uint8Array(await response.arrayBuffer())
+      signal?.throwIfAborted()
+      if (body.byteLength !== expectedLength) throw new StateTileProtocolError('State tile content length mismatch')
+      return body
+    }
+    // Keep one admitted output allocation instead of retaining all transport
+    // fragments and then allocating a second full-sized concatenation buffer.
+    const body = new Uint8Array(expectedLength)
+    reader = response.body.getReader()
+    let total = 0
     while (true) {
       const next = await reader.read()
+      signal?.throwIfAborted()
       if (next.done) break
       if (!next.value) throw new StateTileProtocolError('State tile body has no chunk')
-      total += next.value.byteLength
-      if (total > limit || total > expectedLength) throw new StateTileProtocolError('State tile body exceeds declared size')
-      chunks.push(next.value)
+      if (next.value.byteLength > expectedLength-total) throw new StateTileProtocolError('State tile body exceeds declared size')
+      body.set(next.value, total); total += next.value.byteLength
     }
     if (total !== expectedLength) throw new StateTileProtocolError('State tile content length mismatch')
+    return body
   } catch (error) {
-    await reader.cancel().catch(() => undefined)
+    // Join the same cancellation started by the abort listener. Pending reads
+    // can settle before underlying cleanup; callers must retain their permits
+    // until this operation has settled, including on explicit cancellation.
+    await cancelRead()
     throw error
-  } finally { reader.releaseLock() }
-  const body = new Uint8Array(total); let offset = 0
-  for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength }
-  return body
+  } finally { signal?.removeEventListener('abort', abort); reader?.releaseLock() }
 }
 
-export async function readStateTileJson(response: Response, name: string) {
+export async function readStateTileJson(response: Response, name: string, maximumBytes = 4 * 1024 * 1024, signal?: AbortSignal) {
   const cancel = () => response.body?.cancel().catch(() => undefined)
-  if (!response.ok) { await cancel(); throw new Error(`${name} HTTP ${response.status}`) }
-  if (normalizedContentType(response) !== 'application/json') { await cancel(); throw new StateTileProtocolError(`${name} content type is invalid`) }
-  let length: number
-  try { length = contentLength(response, 4 * 1024 * 1024) } catch (error) { await cancel(); throw error }
   try {
-    if (!response.body) {
-      const text = await response.text()
-      if (new TextEncoder().encode(text).byteLength !== length) throw new StateTileProtocolError(`${name} content length mismatch`)
-      return JSON.parse(text) as unknown
-    }
-    const bytes = await readBounded(response, 'application/json', 4 * 1024 * 1024)
+    signal?.throwIfAborted()
+    if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1 || maximumBytes > 16 * 1024 * 1024) throw new StateTileProtocolError('Invalid JSON response byte limit')
+    if (!response.ok) throw new Error(`${name} HTTP ${response.status}`)
+    if (normalizedContentType(response) !== 'application/json') throw new StateTileProtocolError(`${name} content type is invalid`)
+    const length = contentLength(response, maximumBytes)
+    const bytes = await readBounded(response, 'application/json', maximumBytes, signal)
+    signal?.throwIfAborted()
     if (bytes.byteLength !== length) throw new StateTileProtocolError(`${name} content length mismatch`)
-    return JSON.parse(new TextDecoder().decode(bytes)) as unknown
+    // Validate the received bytes, not a lossy decode/re-encode of source IDs.
+    // readBounded also handles responses without an exposed stream.
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    signal?.throwIfAborted()
+    const result: unknown = JSON.parse(text)
+    signal?.throwIfAborted()
+    return result
   } catch (error) {
     await cancel()
     throw error
@@ -335,7 +414,7 @@ export function validateStateTilePlan(raw: unknown, manifest: StateTileManifest,
   })
   if (tiles[0]?.ordinalStart !== 0 || tiles.some((tile, index) => index > 0 && tile.ordinalStart !== tiles[index - 1].ordinalStart + tiles[index - 1].recordCount) || tiles.reduce((sum, tile) => sum + tile.recordCount, 0) !== bodyCount) fail('plan record count or ordinal continuity mismatch')
   if (requestIds.length !== bodyCount || !isSha(expectedRequestIdsSha256) || value.requestIdsSha256 !== expectedRequestIdsSha256) fail('plan request identity mismatch')
-  return { apiVersion: STATE_TILE_API_VERSION, catalogVersion: value.catalogVersion, planHash, requestIdsSha256: value.requestIdsSha256 as string, requestIds: [...requestIds], catalogManifestSha256: value.catalogManifestSha256, inventoryManifestSha256: value.inventoryManifestSha256 as string | undefined, epochJd: value.epochJd, timeScale: 'TDB', frame: 'ECLIPJ2000', stateOriginId: 'naif:0', stride: STATE_TILE_STRIDE, fieldMask: STATE_TILE_FIELD_MASK, tileCount, recordCount: bodyCount, exactCount, approximateCount, missingCount, tiles }
+  return { apiVersion: STATE_TILE_API_VERSION, catalogVersion: value.catalogVersion, planHash, requestIdsSha256: value.requestIdsSha256 as string, requestIds: [...requestIds], catalogManifestSha256: value.catalogManifestSha256, inventoryManifestSha256: value.inventoryManifestSha256 as string | undefined, epochJd: value.epochJd, timeScale: 'TDB', frame: 'ECLIPJ2000', stateOriginId: 'naif:0', distanceUnit: 'km', velocityUnit: 'km/s', stride: STATE_TILE_STRIDE, fieldMask: STATE_TILE_FIELD_MASK, tileCount, recordCount: bodyCount, exactCount, approximateCount, missingCount, tiles }
 }
 
 export async function decodeStateTile(input: ArrayBuffer | Uint8Array, expected: { planHash: string; catalogManifestSha256: string; inventoryManifestSha256?: string; sequence?: number; tileCount?: number }): Promise<StateTile> {
@@ -360,6 +439,9 @@ export async function decodeStateTile(input: ArrayBuffer | Uint8Array, expected:
   const missingBitmapOffset = view.getUint32(60, true)
   const statesOffset = view.getUint32(64, true)
   const statesLength = view.getUint32(68, true)
+  if (view.getUint8(200) !== TILE_CONTRACT_CODES.timeScale || view.getUint8(201) !== TILE_CONTRACT_CODES.frame
+    || view.getUint8(202) !== TILE_CONTRACT_CODES.stateOrigin || view.getUint8(203) !== TILE_CONTRACT_CODES.distanceUnit
+    || view.getUint8(204) !== TILE_CONTRACT_CODES.velocityUnit || view.getUint8(205) !== 0 || view.getUint8(206) !== 0 || view.getUint8(207) !== 0) fail('scientific contract is unsupported')
   if (stride !== STATE_TILE_STRIDE || fieldMask !== STATE_TILE_FIELD_MASK || !Number.isFinite(epochJd) || recordCount < 1 || recordCount > MAX_STATE_PLAN_BODIES || tileCount < 1 || tileCount > MAX_STATE_PLAN_TILES || sequence >= tileCount) fail('numeric fields are invalid')
   if (expected.sequence !== undefined && sequence !== expected.sequence) fail('sequence mismatch')
   if (expected.tileCount !== undefined && tileCount !== expected.tileCount) fail('tile count mismatch')
@@ -372,6 +454,7 @@ export async function decodeStateTile(input: ArrayBuffer | Uint8Array, expected:
   if (await digest(payload) !== payloadHash) fail('payload checksum mismatch')
   const metadataEnd = metadataOffset + metadataLength
   if (bytes[metadataEnd - 1] !== 10) fail('metadata is not canonical NDJSON')
+  if (bytes.subarray(missingBitmapOffset + bitmapLength, statesOffset).some(value => value !== 0)) fail('alignment padding is nonzero')
   const textDecoder = new TextDecoder('utf-8', { fatal: true })
   const exactBitmap = bytes.slice(exactBitmapOffset, exactBitmapOffset + bitmapLength); const approximateBitmap = bytes.slice(approximateBitmapOffset, approximateBitmapOffset + bitmapLength); const missingBitmap = bytes.slice(missingBitmapOffset, missingBitmapOffset + bitmapLength)
   const usedBits = recordCount & 7
@@ -389,16 +472,19 @@ export async function decodeStateTile(input: ArrayBuffer | Uint8Array, expected:
     // metadata String nor an array of parsed row objects is retained.
     const row = JSON.parse(textDecoder.decode(bytes.subarray(cursor, end))) as StateTileMetadata
     if (!row || typeof row.id !== 'string' || !row.id) fail('metadata id is invalid')
+    if (row.sourceChainSha256 !== undefined && row.sourceChainSha256 !== '' && !isSha(row.sourceChainSha256)) fail('source-chain provenance is invalid')
     const exact = hasBit(exactBitmap, index); const approximate = hasBit(approximateBitmap, index); const missing = hasBit(missingBitmap, index)
     if (Number(exact) + Number(approximate) + Number(missing) !== 1) fail('bitmap has non-exclusive state status')
     if (approximate) fail('approximate state is not allowed')
     if (typeof row.source !== 'string' || typeof row.datasetVersion !== 'string' || typeof row.datasetSha256 !== 'string' || typeof row.kernelSha256 !== 'string' || typeof row.model !== 'string' || typeof row.centerId !== 'string' || typeof row.validityStartEt !== 'number' || !Number.isFinite(row.validityStartEt) || typeof row.validityEndEt !== 'number' || !Number.isFinite(row.validityEndEt) || typeof row.validityPresent !== 'boolean' || typeof row.stateEvidence !== 'string' || typeof row.evidenceWindowStartEt !== 'number' || !Number.isFinite(row.evidenceWindowStartEt) || typeof row.evidenceWindowEndEt !== 'number' || !Number.isFinite(row.evidenceWindowEndEt) || typeof row.evidenceWindowPresent !== 'boolean' || typeof row.missingReason !== 'string' || typeof row.identityStatus !== 'string' || typeof row.sourceRecord !== 'boolean') fail('metadata fields are incomplete')
+    if (row.validityPresent && row.validityStartEt > row.validityEndEt) fail('validity window is reversed')
+    if (row.evidenceWindowPresent && row.evidenceWindowStartEt > row.evidenceWindowEndEt) fail('evidence window is reversed')
     if (exact) {
       const expectedDatasetHash = row.sourceRecord ? expected.inventoryManifestSha256 : expected.catalogManifestSha256
-      if (!expectedDatasetHash || !isNonEmptyString(row.source) || !isNonEmptyString(row.datasetVersion) || row.datasetSha256 !== expectedDatasetHash || !isNonEmptyString(row.model) || !['spk-original', 'source-kernel-state-at-audit-epoch'].includes(row.model) || !isNonEmptyString(row.stateEvidence) || !isNonEmptyString(row.centerId)) fail('exact metadata is missing provenance')
+      if (!expectedDatasetHash || !isNonEmptyString(row.source) || !isNonEmptyString(row.datasetVersion) || row.datasetSha256 !== expectedDatasetHash || !isNonEmptyString(row.sourceChainSha256) || !isSha(row.sourceChainSha256) || !isNonEmptyString(row.model) || !['spk-original', 'source-kernel-state-at-audit-epoch'].includes(row.model) || !isNonEmptyString(row.stateEvidence) || row.centerId !== 'naif:0') fail('exact metadata is missing provenance or has a non-barycentric origin')
       if (row.model === 'spk-original' && !isSha(row.kernelSha256)) fail('exact kernel provenance is invalid')
       if (row.model === 'source-kernel-state-at-audit-epoch' && (!row.sourceRecord || !isNonEmptyString(row.identityStatus) || !isSha(row.kernelSha256))) fail('snapshot provenance is invalid')
-      if (isNonEmptyString(row.missingReason)) fail('exact metadata has a missing reason')
+      if (row.missingReason !== '') fail('exact metadata has a missing reason')
       if (row.validityPresent && (row.validityStartEt > row.validityEndEt || !Number.isFinite(epochEt) || epochEt < row.validityStartEt - 0.0001 || epochEt > row.validityEndEt + 0.0001)) fail('state outside validity')
       if (row.evidenceWindowPresent && (row.evidenceWindowStartEt > row.evidenceWindowEndEt || !Number.isFinite(epochEt) || epochEt < row.evidenceWindowStartEt - 0.0001 || epochEt > row.evidenceWindowEndEt + 0.0001)) fail('state outside evidence window')
     } else if (!isNonEmptyString(row.missingReason)) fail('missing metadata is missing a reason')
@@ -414,7 +500,7 @@ export async function decodeStateTile(input: ArrayBuffer | Uint8Array, expected:
     if (hasBit(missingBitmap, Math.floor(index / stride)) && value !== 0) fail('missing state must be all zero')
     states[index] = value
   }
-  return { sequence, tileCount, ordinalStart, recordCount, stride, fieldMask, epochJd, metadata, exactBitmap, approximateBitmap, missingBitmap, states, planHash, catalogManifestSha256: catalogHash, inventoryManifestSha256: inventoryHash, payloadSha256: payloadHash }
+  return { sequence, tileCount, ordinalStart, recordCount, stride, fieldMask, epochJd, timeScale: 'TDB', frame: 'ECLIPJ2000', stateOriginId: 'naif:0', distanceUnit: 'km', velocityUnit: 'km/s', metadata, exactBitmap, approximateBitmap, missingBitmap, states, planHash, catalogManifestSha256: catalogHash, inventoryManifestSha256: inventoryHash, payloadSha256: payloadHash }
 }
 
 export async function encodeStateTile(input: { sequence: number; tileCount: number; ordinalStart: number; epochJd: number; metadata: StateTileMetadata[]; exact?: readonly number[]; approximate?: readonly number[]; states: Float64Array; planHash: string; catalogManifestSha256: string; inventoryManifestSha256?: string }): Promise<ArrayBuffer> {
@@ -426,19 +512,19 @@ export async function encodeStateTile(input: { sequence: number; tileCount: numb
   const metadataBytes = new TextEncoder().encode(input.metadata.map(row => JSON.stringify(row)).join('\n') + '\n')
   const metadataOffset = STATE_TILE_HEADER_BYTES; const exactOffset = metadataOffset + metadataBytes.length; const approximateOffset = exactOffset + bitmapSize; const missingOffset = approximateOffset + bitmapSize; const statesOffset = Math.ceil((missingOffset + bitmapSize) / 8) * 8; const statesBytes = new Uint8Array(input.states.length * 8); const statesView = new DataView(statesBytes.buffer); for (let index = 0; index < input.states.length; index += 1) statesView.setFloat64(index * 8, input.states[index], true)
   const total = statesOffset + statesBytes.length; const output = new Uint8Array(total); output.set(metadataBytes, metadataOffset); output.set(exact, exactOffset); output.set(approximate, approximateOffset); output.set(missing, missingOffset); output.set(statesBytes, statesOffset)
-  const payloadHash = await digest(output.slice(STATE_TILE_HEADER_BYTES)); const view = new DataView(output.buffer); output.set(STATE_TILE_MAGIC, 0); view.setUint16(8, STATE_TILE_VERSION, true); view.setUint16(10, STATE_TILE_HEADER_BYTES, true); view.setUint32(12, input.sequence, true); view.setUint32(16, input.tileCount, true); view.setUint32(20, input.ordinalStart, true); view.setUint32(24, recordCount, true); view.setUint16(28, STATE_TILE_STRIDE, true); view.setUint16(30, STATE_TILE_FIELD_MASK, true); view.setFloat64(32, input.epochJd, true); view.setUint32(40, metadataOffset, true); view.setUint32(44, metadataBytes.length, true); view.setUint32(48, exactOffset, true); view.setUint32(52, bitmapSize, true); view.setUint32(56, approximateOffset, true); view.setUint32(60, missingOffset, true); view.setUint32(64, statesOffset, true); view.setUint32(68, statesBytes.length, true); output.set(bytesFromHex(input.planHash), 72); output.set(bytesFromHex(input.catalogManifestSha256), 104); if (input.inventoryManifestSha256) output.set(bytesFromHex(input.inventoryManifestSha256), 136); output.set(bytesFromHex(payloadHash), 168)
+  const payloadHash = await digest(output.slice(STATE_TILE_HEADER_BYTES)); const view = new DataView(output.buffer); output.set(STATE_TILE_MAGIC, 0); view.setUint16(8, STATE_TILE_VERSION, true); view.setUint16(10, STATE_TILE_HEADER_BYTES, true); view.setUint32(12, input.sequence, true); view.setUint32(16, input.tileCount, true); view.setUint32(20, input.ordinalStart, true); view.setUint32(24, recordCount, true); view.setUint16(28, STATE_TILE_STRIDE, true); view.setUint16(30, STATE_TILE_FIELD_MASK, true); view.setFloat64(32, input.epochJd, true); view.setUint32(40, metadataOffset, true); view.setUint32(44, metadataBytes.length, true); view.setUint32(48, exactOffset, true); view.setUint32(52, bitmapSize, true); view.setUint32(56, approximateOffset, true); view.setUint32(60, missingOffset, true); view.setUint32(64, statesOffset, true); view.setUint32(68, statesBytes.length, true); output.set(bytesFromHex(input.planHash), 72); output.set(bytesFromHex(input.catalogManifestSha256), 104); if (input.inventoryManifestSha256) output.set(bytesFromHex(input.inventoryManifestSha256), 136); output.set(bytesFromHex(payloadHash), 168); output.set([TILE_CONTRACT_CODES.timeScale, TILE_CONTRACT_CODES.frame, TILE_CONTRACT_CODES.stateOrigin, TILE_CONTRACT_CODES.distanceUnit, TILE_CONTRACT_CODES.velocityUnit], 200)
   return output.buffer
 }
 
 export function assembleStateTiles(tiles: readonly StateTile[], plan: StateTilePlan): StateTile[] {
   const bySequence = new Map<number, StateTile>()
-  for (const tile of tiles) { if (tile.tileCount !== plan.tileCount || tile.planHash !== plan.planHash || tile.catalogManifestSha256 !== plan.catalogManifestSha256 || tile.inventoryManifestSha256 !== plan.inventoryManifestSha256) fail('tile does not belong to plan'); const previous = bySequence.get(tile.sequence); if (previous && previous.payloadSha256 !== tile.payloadSha256) fail('conflicting duplicate tile'); bySequence.set(tile.sequence, tile) }
+  for (const tile of tiles) { if (tile.tileCount !== plan.tileCount || tile.planHash !== plan.planHash || tile.catalogManifestSha256 !== plan.catalogManifestSha256 || tile.inventoryManifestSha256 !== plan.inventoryManifestSha256 || tile.timeScale !== plan.timeScale || tile.frame !== plan.frame || tile.stateOriginId !== plan.stateOriginId || tile.distanceUnit !== plan.distanceUnit || tile.velocityUnit !== plan.velocityUnit) fail('tile does not belong to plan'); const previous = bySequence.get(tile.sequence); if (previous && previous.payloadSha256 !== tile.payloadSha256) fail('conflicting duplicate tile'); bySequence.set(tile.sequence, tile) }
   if (bySequence.size !== plan.tileCount || plan.tiles.some(descriptor => !bySequence.has(descriptor.sequence))) fail('tile set is incomplete')
   const ordered = [...bySequence.values()].sort((a, b) => a.sequence - b.sequence)
   let exactCount = 0, approximateCount = 0, missingCount = 0
   ordered.forEach((tile, index) => {
     const descriptor = plan.tiles[index]
-    if (tile.ordinalStart !== descriptor.ordinalStart || tile.recordCount !== descriptor.recordCount || tile.epochJd !== plan.epochJd) fail('tile descriptor mismatch')
+    if (tile.ordinalStart !== descriptor.ordinalStart || tile.recordCount !== descriptor.recordCount || tile.epochJd !== plan.epochJd || tile.timeScale !== plan.timeScale || tile.frame !== plan.frame || tile.stateOriginId !== plan.stateOriginId || tile.distanceUnit !== plan.distanceUnit || tile.velocityUnit !== plan.velocityUnit) fail('tile descriptor or scientific contract mismatch')
     // Count each verified row once, after duplicate tiles have been reconciled.
     // Plan totals are scientific coverage claims, not optional display hints.
     for (let row = 0; row < tile.recordCount; row += 1) {
@@ -454,6 +540,8 @@ export function assembleStateTiles(tiles: readonly StateTile[], plan: StateTileP
 }
 
 export async function fetchStateTiles(params: { base: string; plan: StateTilePlan; signal: AbortSignal; fetcher?: typeof fetch; acquireTile?: import('./stateTileAdmission').AcquireStateTile }): Promise<StateTile[]> {
+  params.signal.throwIfAborted()
+  params = { ...params, plan: { ...params.plan, requestIds: [...params.plan.requestIds], tiles: params.plan.tiles.map(tile => ({ ...tile })) } }
   const fetcher = params.fetcher ?? fetch
   const results = new Map<number, StateTile>()
   const controller = new AbortController()
@@ -462,18 +550,21 @@ export async function fetchStateTiles(params: { base: string; plan: StateTilePla
   if (params.signal.aborted) cancel()
   const signal = controller.signal
   let cursor = 0
+  let failed = false
   let firstError: unknown
   const checkCancellation = () => { if (signal.aborted) throw new DOMException('Aborted', 'AbortError') }
   const worker = async () => {
-    while (firstError === undefined) {
+    while (!failed) {
       checkCancellation()
       const descriptor = params.plan.tiles[cursor++]
       if (!descriptor) return
       let reason: unknown
+      let completed = false
       for (let attempt = 0; attempt < 2; attempt += 1) {
         checkCancellation()
         const release = await params.acquireTile?.(signal)
         let response: Response | undefined
+        let retryDelay = 100
         try {
           checkCancellation()
           response = await fetcher(descriptor.url ?? `${params.base}/v1/state/tiles`, {
@@ -481,11 +572,11 @@ export async function fetchStateTiles(params: { base: string; plan: StateTilePla
             body: JSON.stringify({ planId: params.plan.planHash, sequence: descriptor.sequence }), signal,
           })
           if (!response.ok) {
-            const error = new StateTileRetryableError(`State tile HTTP ${response.status}`)
+            const error = new StateTileRetryableError(`State tile HTTP ${response.status}`, retryAfterDelayMs(response))
             if (!retryableStatus(response.status)) throw new StateTileProtocolError(error.message)
             throw error
           }
-          const body = await readBounded(response, STATE_TILE_MEDIA_TYPE, MAX_STATE_TILE_BYTES)
+          const body = await readBounded(response, STATE_TILE_MEDIA_TYPE, MAX_STATE_TILE_BYTES, signal)
           checkCancellation()
           let tile: StateTile
           try {
@@ -499,24 +590,33 @@ export async function fetchStateTiles(params: { base: string; plan: StateTilePla
           const previous = results.get(tile.sequence)
           if (previous && previous.payloadSha256 !== tile.payloadSha256) fail('conflicting duplicate tile')
           results.set(tile.sequence, tile)
-          reason = undefined
+          completed = true
           break
         } catch (error) {
           reason = error
           checkCancellation()
           if (error instanceof StateTileProtocolError || !(error instanceof StateTileRetryableError) && attempt === 1) break
+          if (error instanceof StateTileRetryableError) retryDelay = error.retryAfterMs ?? retryDelay
         } finally {
           // Header/status rejection can leave an unread body. Keep admission
           // until its cancellation completes, including before a tile retry.
           await response?.body?.cancel().catch(() => undefined)
           release?.()
         }
+        if (attempt === 0) await waitForRetry(retryDelay, signal)
       }
-      if (reason !== undefined) { firstError = reason; throw reason }
+      if (!completed) throw reason
     }
   }
   try {
-    await Promise.all(Array.from({ length: Math.min(STATE_TILE_CONCURRENCY, params.plan.tiles.length) }, () => worker()))
+    // Observe each terminal lane failure and cancel peers. Each lane settles
+    // only after its finally blocks have released transport admission.
+    // Drain every lane before exposing failure to a caller that may start again.
+    await Promise.all(Array.from({ length: Math.min(STATE_TILE_CONCURRENCY, params.plan.tiles.length) }, () => worker().catch(error => {
+      if (!failed) { failed = true; firstError = error }
+      cancel()
+    })))
+    if (failed) throw firstError
     checkCancellation()
     return assembleStateTiles([...results.values()], params.plan)
   } catch (error) {
@@ -550,14 +650,26 @@ export class StateTileSnapshot implements BackendStateEvidence {
   readonly catalogManifestSha256: string
   readonly inventoryManifestSha256?: string
   readonly epochJd: number
+  readonly timeScale: 'TDB'
+  readonly frame: 'ECLIPJ2000'
+  readonly stateOriginId: 'naif:0'
+  readonly distanceUnit: 'km'
+  readonly velocityUnit: 'km/s'
 
   constructor(tiles: readonly StateTile[], requestedIds: ReadonlyMap<BodyId, string>, bindings?: Omit<StateTileSnapshotTransfer, 'tiles'>) {
     this.#tiles = [...tiles]
     this.catalogManifestSha256 = tiles[0]?.catalogManifestSha256 ?? ''
     this.inventoryManifestSha256 = tiles[0]?.inventoryManifestSha256
     this.epochJd = tiles[0]?.epochJd ?? NaN
+    this.timeScale = tiles[0]?.timeScale ?? 'TDB'
+    this.frame = tiles[0]?.frame ?? 'ECLIPJ2000'
+    this.stateOriginId = tiles[0]?.stateOriginId ?? 'naif:0'
+    this.distanceUnit = tiles[0]?.distanceUnit ?? 'km'
+    this.velocityUnit = tiles[0]?.velocityUnit ?? 'km/s'
     for (const tile of tiles) {
-      if (tile.catalogManifestSha256 !== this.catalogManifestSha256 || tile.inventoryManifestSha256 !== this.inventoryManifestSha256 || tile.epochJd !== this.epochJd) fail('snapshot identity or epoch mismatch')
+      if (tile.catalogManifestSha256 !== this.catalogManifestSha256 || tile.inventoryManifestSha256 !== this.inventoryManifestSha256 || tile.epochJd !== this.epochJd
+        || tile.timeScale !== this.timeScale || tile.frame !== this.frame || tile.stateOriginId !== this.stateOriginId
+        || tile.distanceUnit !== this.distanceUnit || tile.velocityUnit !== this.velocityUnit) fail('snapshot identity, epoch or scientific contract mismatch')
     }
     if (bindings) {
       const count = bindings.bodyIds.length
@@ -568,35 +680,63 @@ export class StateTileSnapshot implements BackendStateEvidence {
       this.#tileIndexes = bindings.tileIndexes; this.#rowIndexes = bindings.rowIndexes
       return
     }
+    // In the normal request path, requested identities and verified tile rows
+    // retain the same stable order. Bind that one-to-one case directly so a
+    // million-row snapshot does not need a second transient ID-to-row Map.
+    // Alias identities or a different caller order continue through the map
+    // path below, which resolves them without relying on ordinal coincidence.
+    const sourceRecordCount = tiles.reduce((count, tile) => count + tile.recordCount, 0)
+    if (sourceRecordCount === requestedIds.size) {
+      const entries = requestedIds.entries()
+      const tileIndexes = new Uint32Array(sourceRecordCount)
+      const rowIndexes = new Uint32Array(sourceRecordCount)
+      let index = 0, orderedIdentities = true
+      for (let tileIndex = 0; tileIndex < tiles.length && orderedIdentities; tileIndex++) {
+        const tile = tiles[tileIndex]
+        for (let row = 0; row < tile.recordCount; row++) {
+          const entry = entries.next()
+          if (entry.done || entry.value[1] !== tile.metadata.idAt(row)) {
+            orderedIdentities = false
+            break
+          }
+          const bodyId = entry.value[0]
+          this.#bodyIds.push(bodyId); this.#byBody.set(bodyId, index)
+          tileIndexes[index] = tileIndex; rowIndexes[index] = row
+          index++
+        }
+      }
+      if (orderedIdentities && index === sourceRecordCount && entries.next().done) {
+        this.#tileIndexes = tileIndexes; this.#rowIndexes = rowIndexes
+        return
+      }
+      this.#bodyIds.length = 0; this.#byBody.clear()
+    }
     // A single construction-only identity index binds aliases without
     // duplicating their six-vectors. Tile/row columns refer to source storage.
-    const sourceOrdinals = new Map<string, number>()
-    let count = 0
-    for (const tile of tiles) {
+    const sourceLocations = new Map<string, number>()
+    for (let tileIndex = 0; tileIndex < tiles.length; tileIndex++) {
+      const tile = tiles[tileIndex]
       for (let row = 0; row < tile.recordCount; row++) {
         const id = tile.metadata.idAt(row)
-        if (sourceOrdinals.has(id)) fail('duplicate resolved identity')
-        sourceOrdinals.set(id, count++)
-      }
-    }
-    const tileForSource = new Uint32Array(count), rowForSource = new Uint32Array(count)
-    let offset = 0
-    for (let tileIndex = 0; tileIndex < tiles.length; tileIndex++) {
-      for (let row = 0; row < tiles[tileIndex].recordCount; row++, offset++) {
-        tileForSource[offset] = tileIndex; rowForSource[offset] = row
+        if (sourceLocations.has(id)) fail('duplicate resolved identity')
+        // Each tile has at most MAX_STATE_PLAN_BODIES rows. Packing its row
+        // with the tile ordinal avoids two temporary Uint32Arrays over every
+        // received record while preserving arbitrary alias lookup below.
+        sourceLocations.set(id, tileIndex * MAX_STATE_PLAN_BODIES + row)
       }
     }
     let received = 0
-    for (const backendId of requestedIds.values()) if (sourceOrdinals.has(backendId)) received++
+    for (const backendId of requestedIds.values()) if (sourceLocations.has(backendId)) received++
     this.#tileIndexes = new Uint32Array(received)
     this.#rowIndexes = new Uint32Array(received)
     for (const [bodyId, backendId] of requestedIds) {
-      const ordinal = sourceOrdinals.get(backendId)
-      if (ordinal === undefined) continue
+      const location = sourceLocations.get(backendId)
+      if (location === undefined) continue
       const index = this.#bodyIds.length
       this.#bodyIds.push(bodyId); this.#byBody.set(bodyId, index)
-      this.#tileIndexes[index] = tileForSource[ordinal]
-      this.#rowIndexes[index] = rowForSource[ordinal]
+      const tileIndex = Math.floor(location / MAX_STATE_PLAN_BODIES)
+      this.#tileIndexes[index] = tileIndex
+      this.#rowIndexes[index] = location - tileIndex * MAX_STATE_PLAN_BODIES
     }
   }
 

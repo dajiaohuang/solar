@@ -22,8 +22,10 @@ export const SOLAR_RADIATION_PRESSURE = Object.freeze({
 export function parseSolarRadiationPressure(value: unknown): SolarRadiationPressure {
   const input = value as Record<string, unknown> | null
   const fields = ['pressureAt1AuNewtonPerSquareMeter', 'areaSquareMeters', 'massKg', 'reflectivityCoefficient'] as const
+  const sourceText = typeof input?.source === 'string' ? input.source : ''
+  const sourceBytes = sourceText.length <= 8192 ? new TextEncoder().encode(sourceText).byteLength : 8193
   if (!input || input.model !== 'constant-radial-srp' || input.illumination !== 'unshadowed' ||
-      typeof input.source !== 'string' || !input.source.trim() || input.source.length > 8192 ||
+      typeof input.source !== 'string' || !input.source.trim() || sourceBytes > 8192 ||
       fields.some(key => typeof input[key] !== 'number' || !Number.isFinite(input[key]) || (input[key] as number) <= 0) ||
       Object.keys(input).some(key => !['model', 'illumination', 'source', ...fields].includes(key))) {
     throw new RangeError('Solar radiation pressure requires an explicit unshadowed radial model, positive finite SI parameters and a source; unknown fields are rejected')

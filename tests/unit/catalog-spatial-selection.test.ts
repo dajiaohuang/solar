@@ -80,7 +80,7 @@ it('rejects nonfinite source positions and invalid view or row contracts', async
   const positions = new Float32Array([0, 0, Infinity, 0])
   await expect(selectCatalogSpatialPoints(positions, 2, view, () => false, noYield)).rejects.toThrow('position')
   for (const count of [-1, .5, 3, NaN]) await expect(selectCatalogSpatialPoints(positions, count, view, () => false, noYield)).rejects.toThrow('view')
-  for (const invalid of [{ ...view, radius: 0 }, { ...view, aspect: Infinity }, { ...view, maximumPoints: 0 }, { ...view, maximumPoints: 1_000_001 }]) {
+  for (const invalid of [{ ...view, radius: 0 }, { ...view, aspect: Infinity }, { ...view, maximumPoints: 0 }, { ...view, maximumPoints: Number.MAX_SAFE_INTEGER + 1 }]) {
     await expect(selectCatalogSpatialPoints(positions, 1, invalid, () => false, noYield)).rejects.toThrow('view')
   }
 })

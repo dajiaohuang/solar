@@ -56,7 +56,7 @@ it('rejects non-elliptic or non-finite rows from the elliptic catalog path', () 
 })
 
 it('binds summary coverage to the source and returns owned ranges', () => {
-  const summary: CatalogSummary = { schemaVersion: 2, datasetMode: 'full', totalCount: 1,
+  const summary: CatalogSummary = { schemaVersion: 3, datasetMode: 'full', totalCount: 1,
     sourceSha256: sourceHash, categoryCounts: { MBA: 1 }, magnitudeKnownCount: 0, magnitudeUnknownCount: 1,
     numericRanges: { semiMajorAxisAU: [2.7, 2.7], eccentricity: [0.1, 0.1], inclinationDeg: [10, 10], epochJd: [2451545, 2451545] } }
   const bound = bindCatalogSummary(summary, manifest)
@@ -64,6 +64,11 @@ it('binds summary coverage to the source and returns owned ranges', () => {
   summary.categoryCounts.MBA = 99
   expect(bound.numericRanges.semiMajorAxisAU).toEqual([2.7, 2.7])
   expect(bound.categoryCounts).toEqual({ MBA: 1 })
+  const legacy = bindCatalogSummary({ ...bound, schemaVersion: 2 }, manifest)
+  expect(legacy).not.toHaveProperty('magnitudeKnownCount')
+  expect(legacy).not.toHaveProperty('magnitudeUnknownCount')
+  expect(bindCatalogSummary(summary, manifest).magnitudeKnownCount).toBe(0)
+  expect(() => bindCatalogSummary({ ...bound, schemaVersion: 2, magnitudeKnownCount: 1 }, manifest)).toThrow()
   for (const patch of [{ magnitudeKnownCount: 1 }, { sourceSha256: digest('other source') },
     { categoryCounts: { APO: 1 } }, { numericRanges: { ...bound.numericRanges, eccentricity: [1, 1] as [number, number] } }]) {
     expect(() => bindCatalogSummary({ ...bound, ...patch }, manifest)).toThrow()

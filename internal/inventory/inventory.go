@@ -91,13 +91,16 @@ type indexFields struct {
 // current-state identities. Avoid decoding Orbit and other large source
 // fields for every one of the 1.5M rows during startup.
 type indexKernelEvidence struct {
-	AuditET           float64              `json:"auditEt"`
-	Target            int                  `json:"target"`
-	Segments          []indexKernelSegment `json:"segments"`
-	StateAtAuditEpoch *indexEvidenceState  `json:"stateAtAuditEpoch"`
+	AuditET            float64             `json:"auditEt"`
+	Target             int                 `json:"target"`
+	SourceKernelSHA256 string              `json:"sourceKernelSha256"`
+	SourceChainSHA256  string              `json:"sourceChainSha256"`
+	SourceSegment      *indexKernelSegment `json:"sourceSegment"`
+	StateAtAuditEpoch  *indexEvidenceState `json:"stateAtAuditEpoch"`
 }
 type indexKernelSegment struct {
 	KernelID string  `json:"kernelId"`
+	Center   int     `json:"center"`
 	StartET  float64 `json:"startEt"`
 	EndET    float64 `json:"endEt"`
 	Frame    int     `json:"frame"`
@@ -115,19 +118,18 @@ type indexVector struct {
 
 func validIndexSnapshotEvidence(fields indexFields) bool {
 	e := fields.KernelEvidence
-	if e == nil || e.StateAtAuditEpoch == nil || !finiteIndex(e.AuditET) || (e.Target != 0 && fields.NAIFID != 0 && e.Target != fields.NAIFID) {
+	if e == nil || e.StateAtAuditEpoch == nil || e.SourceSegment == nil || e.SourceSegment.KernelID == "" || !validSHA256(e.SourceKernelSHA256) || !validSHA256(e.SourceChainSHA256) || !finiteIndex(e.AuditET) || (e.Target != 0 && fields.NAIFID != 0 && e.Target != fields.NAIFID) {
+		return false
+	}
+	segment := e.SourceSegment
+	if !finiteIndex(segment.StartET) || !finiteIndex(segment.EndET) || segment.EndET < segment.StartET || segment.StartET > e.AuditET || segment.EndET < e.AuditET || (segment.Frame != 1 && segment.Frame != 17) || (segment.Type != 1 && segment.Type != 2 && segment.Type != 3 && segment.Type != 17 && segment.Type != 21) {
 		return false
 	}
 	s := e.StateAtAuditEpoch
 	if !finiteIndex(s.Position.X) || !finiteIndex(s.Position.Y) || !finiteIndex(s.Position.Z) || !finiteIndex(s.Velocity.X) || !finiteIndex(s.Velocity.Y) || !finiteIndex(s.Velocity.Z) {
 		return false
 	}
-	for _, segment := range e.Segments {
-		if segment.KernelID != "" && finiteIndex(segment.StartET) && finiteIndex(segment.EndET) && segment.EndET >= segment.StartET && segment.StartET <= e.AuditET && segment.EndET >= e.AuditET && segment.Frame == 1 && (segment.Type == 1 || segment.Type == 2 || segment.Type == 3 || segment.Type == 17 || segment.Type == 21) {
-			return true
-		}
-	}
-	return false
+	return true
 }
 
 func finiteIndex(value float64) bool { return !math.IsNaN(value) && !math.IsInf(value, 0) }
@@ -164,7 +166,7 @@ type Inventory struct {
 	// index has been built and temporary decode/sort buffers have been released.
 	// It is evidence for this load and runtime, not a portable allocator size.
 	indexHeapBytes uint64
-	sources        map[string]struct{}
+	sourceCounts   map[string]int
 	models         map[string]map[string]struct{}
 	blocks         *blockCache
 }
@@ -379,7 +381,7 @@ func Load(dir string) (*Inventory, error) {
 		return nil, fmt.Errorf("inventory shard counts do not match declared total")
 	}
 	sum := sha256.Sum256(raw)
-	i := &Inventory{dir: abs, m: m, hash: hex.EncodeToString(sum[:]), sources: make(map[string]struct{}), models: make(map[string]map[string]struct{}), blocks: newBlockCache(BlockCacheBytes)}
+	i := &Inventory{dir: abs, m: m, hash: hex.EncodeToString(sum[:]), sourceCounts: make(map[string]int), models: make(map[string]map[string]struct{}), blocks: newBlockCache(BlockCacheBytes)}
 	runtime.GC()
 	var before runtime.MemStats
 	runtime.ReadMemStats(&before)
@@ -493,12 +495,22 @@ func (i *Inventory) IndexStats() map[string]int {
 // SourceIdentities reports source labels collected while the bounded startup
 // index was built; serving capabilities never rescans the inventory shards.
 func (i *Inventory) SourceIdentities() []string {
-	values := make([]string, 0, len(i.sources))
-	for source := range i.sources {
+	values := make([]string, 0, len(i.sourceCounts))
+	for source := range i.sourceCounts {
 		values = append(values, source)
 	}
 	sort.Strings(values)
 	return values
+}
+
+// SourceRecordCounts returns per-source populations collected during the
+// existing bounded index pass; it does not reread inventory blocks.
+func (i *Inventory) SourceRecordCounts() map[string]int {
+	out := make(map[string]int, len(i.sourceCounts))
+	for source, count := range i.sourceCounts {
+		out[source] = count
+	}
+	return out
 }
 
 // SourceIdentityModels reports only model combinations observed or selected
@@ -776,7 +788,7 @@ func (i *Inventory) buildIndex() error {
 				return fmt.Errorf("inventory row %d/%d has no stable id", si, row)
 			}
 			if fields.Source != "" {
-				i.sources[fields.Source] = struct{}{}
+				i.sourceCounts[fields.Source]++
 				models := i.models[fields.Source]
 				if models == nil {
 					models = make(map[string]struct{})

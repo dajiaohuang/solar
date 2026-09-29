@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -16,17 +17,30 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.CompletionService;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.function.Consumer;
 
-/** Manifest/plan/tile orchestration with bounded sequential backpressure. */
+/** Manifest/plan/tile orchestration with memory-admitted bounded tile concurrency. */
 public final class StateTileService implements Closeable {
     private static final String API_VERSION = "solar.api/v1";
     private static final int MAX_PLAN_BYTES = 8 * 1024 * 1024;
     private static final int MAX_AGGREGATE_ROWS = 2_000_000;
     private static final long MAX_RESIDENT_STATE_BYTES = 1536L * 1024L * 1024L;
     private static final int TILE_SIZE = 16_384;
+    private static final int MAX_CONCURRENT_TILES = 2;
     private final String baseUrl;
     private final StateTileCache cache;
     private final RequestControl requestControl = new RequestControl();
+    private final ExecutorService tileWorkers = Executors.newFixedThreadPool(MAX_CONCURRENT_TILES, task -> {
+        Thread thread = new Thread(task, "solar-state-tile");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     public StateTileService(String address, File cacheDirectory) throws IOException {
         this(address, new StateTileCache(cacheDirectory));
@@ -47,14 +61,14 @@ public final class StateTileService implements Closeable {
     }
 
     /** Cancel all work owned by this service, including a blocked HTTP read. */
-    public void cancel() { requestControl.cancel(); }
+    public void cancel() { requestControl.cancel(); tileWorkers.shutdownNow(); }
 
     /**
      * A service is single-use from the UI's perspective. Closing is idempotent
      * and prevents a late worker from publishing a result after its owner has
      * left the screen.
      */
-    @Override public void close() { requestControl.cancel(); }
+    @Override public void close() { cancel(); }
 
     private static final class RequestControl implements StateTileClient.Cancellation {
         private final AtomicBoolean cancelled = new AtomicBoolean();
@@ -92,6 +106,29 @@ public final class StateTileService implements Closeable {
         }
     }
 
+    private static final class TileRequest {
+        final String planId, catalogHash, inventoryHash;
+        final int sequence, tileCount, ordinalStart, ordinalCount;
+        final double epochJd;
+
+        TileRequest(String planId, String catalogHash, String inventoryHash, int sequence, int tileCount,
+                    int ordinalStart, int ordinalCount, double epochJd) {
+            this.planId = planId; this.catalogHash = catalogHash; this.inventoryHash = inventoryHash;
+            this.sequence = sequence; this.tileCount = tileCount; this.ordinalStart = ordinalStart;
+            this.ordinalCount = ordinalCount; this.epochJd = epochJd;
+        }
+
+        String requestKey() throws StateTileDecoder.ProtocolException {
+            return sha256((planId + ":" + sequence).getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    private static final class TileResult {
+        final int slot;
+        final StateTileDecoder.DecodedTile tile;
+        TileResult(int slot, StateTileDecoder.DecodedTile tile) { this.slot = slot; this.tile = tile; }
+    }
+
     public static final class Frame {
         public final double epochJd;
         public final String catalogHash;
@@ -99,10 +136,12 @@ public final class StateTileService implements Closeable {
         public final List<StateTileDecoder.Metadata> metadata;
         public final double[] states;
         public final boolean[] exact;
+        public final int exactCount;
 
-        private Frame(double epochJd, String catalogHash, String inventoryHash, List<StateTileDecoder.Metadata> metadata, double[] states, boolean[] exact) {
+        private Frame(double epochJd, String catalogHash, String inventoryHash, List<StateTileDecoder.Metadata> metadata, double[] states, boolean[] exact, int exactCount) {
             this.epochJd = epochJd; this.catalogHash = catalogHash; this.inventoryHash = inventoryHash;
             this.metadata = List.copyOf(metadata); this.states = states; this.exact = exact;
+            this.exactCount = exactCount;
         }
     }
 
@@ -112,6 +151,12 @@ public final class StateTileService implements Closeable {
 
     /** A directory selection must still match the current server inventory. */
     public Frame load(List<String> inputIds, double epochJd, SourceIdentityPage selectedPage) throws IOException {
+        return load(inputIds, epochJd, selectedPage, null);
+    }
+
+    /** Publishes one fully verified prefix only when more than one request plan is needed. */
+    public Frame load(List<String> inputIds, double epochJd, SourceIdentityPage selectedPage,
+                      Consumer<Frame> onInitialPartial) throws IOException {
         checkLoadCancelled();
         if (!Double.isFinite(epochJd) || inputIds == null || inputIds.isEmpty() || inputIds.size() > MAX_AGGREGATE_ROWS) throw new StateTileDecoder.ProtocolException("finite TDB epoch and bounded IDs are required");
         List<String> ids = normalizeIds(inputIds);
@@ -126,49 +171,60 @@ public final class StateTileService implements Closeable {
         require(string(manifest, "apiVersion").equals(API_VERSION), "manifest API version mismatch");
         String catalogVersion = string(manifest, "catalogVersion");
         require(!catalogVersion.isEmpty(), "manifest catalog version is missing");
+        int maxPlanIds = manifestLimit(manifest, "maxIds", StateTileDecoder.MAX_ROWS, StateTileDecoder.MAX_ROWS);
+        int maxPlanBytes = manifestLimit(manifest, "maxPlanBytes", 1024 * 1024, MAX_PLAN_BYTES);
+        List<List<String>> planChunks = chunkPlanIds(ids, epochJd, maxPlanIds, maxPlanBytes);
         StateAccumulator accumulator = new StateAccumulator(ids.size(), MAX_RESIDENT_STATE_BYTES);
-        for (int start = 0; start < ids.size(); start += StateTileDecoder.MAX_ROWS) {
+        for (List<String> chunk : planChunks) {
             checkLoadCancelled();
-            List<String> chunk = new ArrayList<>(ids.subList(start, Math.min(ids.size(), start + StateTileDecoder.MAX_ROWS)));
-            String request = "{\"ids\":" + stringsJson(chunk) + ",\"epochJd\":" + Double.toString(epochJd) + ",\"timeScale\":\"TDB\",\"frame\":\"ECLIPJ2000\",\"precision\":\"exact\",\"fieldMask\":[\"position\",\"velocity\"],\"tileSize\":" + TILE_SIZE + "}";
+            String request = statePlanRequest(chunk, epochJd);
+            require(request.getBytes(StandardCharsets.UTF_8).length <= maxPlanBytes, "state plan request exceeds advertised byte budget");
             Map<String, Object> plan = object(receive("v1/state/plan", request, false));
             validatePlan(plan, chunk, epochJd, catalogVersion, catalogHash, inventoryHash);
             String planId = string(plan, "planId");
             int tileCount = integer(plan, "tileCount"), exactCount = integer(plan, "exactCount");
             List<?> tileValues = list(plan, "tiles");
-            int decodedExact = 0, ordinal = 0;
-            for (int sequence = 0; sequence < tileValues.size(); sequence++) {
+            int decodedExact = 0, ordinal = 0, sequence = 0;
+            while (sequence < tileValues.size()) {
                 checkLoadCancelled();
                 Map<String, Object> descriptor = object(tileValues.get(sequence));
                 int descriptorSequence = integer(descriptor, "sequence");
                 int descriptorStart = integer(descriptor, "ordinalStart");
                 int descriptorCount = integer(descriptor, "ordinalCount");
                 require(descriptorSequence == sequence && descriptorStart == ordinal && descriptorCount > 0 && descriptorCount <= chunk.size() - ordinal, "plan tile ordering is invalid");
-                String requestKey = sha256((planId + ":" + sequence).getBytes(StandardCharsets.UTF_8));
-                byte[] cached;
-                try { cached = cache.getByRequestKey(requestKey); }
-                catch (IOException unavailable) { cached = null; }
-                checkLoadCancelled();
-                StateTileDecoder.DecodedTile tile;
-                if (cached != null) {
-                    try {
-                        tile = StateTileDecoder.decode(cached, planId, catalogHash, inventoryHash, sequence, tileCount);
-                    } catch (StateTileDecoder.ProtocolException corrupted) {
-                        // A request-key file can have a valid payload digest but
-                        // stale protocol metadata. Evict it and recover once from
-                        // the authoritative tile endpoint.
-                        cache.invalidate(requestKey);
-                        tile = fetchTileWithRetry(planId, sequence, tileCount, catalogHash, inventoryHash, requestKey);
-                    }
-                } else {
-                    tile = fetchTileWithRetry(planId, sequence, tileCount, catalogHash, inventoryHash, requestKey);
+                TileRequest first = new TileRequest(planId, catalogHash, inventoryHash, sequence, tileCount,
+                        descriptorStart, descriptorCount, epochJd);
+                TileRequest second = null;
+                if (sequence + 1 < tileValues.size()) {
+                    Map<String, Object> next = object(tileValues.get(sequence + 1));
+                    int nextStart = descriptorStart + descriptorCount;
+                    int nextCount = integer(next, "ordinalCount");
+                    require(integer(next, "sequence") == sequence + 1 && integer(next, "ordinalStart") == nextStart
+                            && nextCount > 0 && nextCount <= chunk.size() - nextStart,
+                            "plan tile ordering is invalid");
+                    second = new TileRequest(planId, catalogHash, inventoryHash, sequence + 1, tileCount,
+                            nextStart, nextCount, epochJd);
                 }
-                checkLoadCancelled();
-                require(tile.recordCount == descriptorCount && tile.ordinalStart == descriptorStart && tile.epochJd == epochJd, "tile descriptor mismatch");
-                decodedExact += accumulator.append(tile, ids, start + ordinal);
-                ordinal += descriptorCount;
+                boolean parallel = second != null && accumulator.hasTileWorkingRoom(descriptorCount, second.ordinalCount);
+                if (!parallel) accumulator.requireTileWorkingRoom(descriptorCount);
+                StateTileDecoder.DecodedTile[] tiles = parallel
+                        ? fetchTilePair(first, second)
+                        : new StateTileDecoder.DecodedTile[] { loadTile(first) };
+                for (int offset = 0; offset < tiles.length; offset++) {
+                    checkLoadCancelled();
+                    TileRequest request = offset == 0 ? first : second;
+                    StateTileDecoder.DecodedTile tile = tiles[offset];
+                    require(tile.recordCount == request.ordinalCount && tile.ordinalStart == request.ordinalStart && tile.epochJd == epochJd, "tile descriptor mismatch");
+                    decodedExact += accumulator.append(tile, ids, start + ordinal);
+                    ordinal += request.ordinalCount;
+                }
+                sequence += tiles.length;
             }
             require(ordinal == chunk.size() && decodedExact == exactCount, "incomplete plan or precision count mismatch");
+            if (start == 0 && start + chunk.size() < ids.size() && onInitialPartial != null) {
+                Frame partial = accumulator.initialSnapshot(epochJd, catalogHash, inventoryHash);
+                if (partial != null) onInitialPartial.accept(partial);
+            }
         }
         checkLoadCancelled();
         Frame frame = accumulator.finish(epochJd, catalogHash, inventoryHash);
@@ -192,6 +248,73 @@ public final class StateTileService implements Closeable {
         throw failure == null ? new IOException("state tile fetch failed") : failure;
     }
 
+    private StateTileDecoder.DecodedTile loadTile(TileRequest request) throws IOException {
+        String requestKey = request.requestKey();
+        byte[] cached;
+        try { cached = cache.getByRequestKey(requestKey); }
+        catch (IOException unavailable) { cached = null; }
+        checkLoadCancelled();
+        StateTileDecoder.DecodedTile tile;
+        if (cached != null) {
+            try {
+                tile = StateTileDecoder.decode(cached, request.planId, request.catalogHash,
+                        request.inventoryHash, request.sequence, request.tileCount);
+            } catch (StateTileDecoder.ProtocolException corrupted) {
+                // An interrupted decode does not establish corruption.
+                checkLoadCancelled();
+                // A request-key file can have a valid payload digest but stale
+                // protocol metadata; recover once from the authoritative endpoint.
+                cache.invalidate(requestKey);
+                tile = fetchTileWithRetry(request.planId, request.sequence, request.tileCount,
+                        request.catalogHash, request.inventoryHash, requestKey);
+            }
+        } else {
+            tile = fetchTileWithRetry(request.planId, request.sequence, request.tileCount,
+                    request.catalogHash, request.inventoryHash, requestKey);
+        }
+        checkLoadCancelled();
+        require(tile.recordCount == request.ordinalCount && tile.ordinalStart == request.ordinalStart
+                        && tile.epochJd == request.epochJd,
+                "tile descriptor mismatch");
+        return tile;
+    }
+
+    private StateTileDecoder.DecodedTile[] fetchTilePair(TileRequest first, TileRequest second) throws IOException {
+        CompletionService<TileResult> completed = new ExecutorCompletionService<>(tileWorkers);
+        List<Future<TileResult>> futures = new ArrayList<>(MAX_CONCURRENT_TILES);
+        futures.add(completed.submit(() -> new TileResult(0, loadTile(first))));
+        futures.add(completed.submit(() -> new TileResult(1, loadTile(second))));
+        StateTileDecoder.DecodedTile[] result = new StateTileDecoder.DecodedTile[MAX_CONCURRENT_TILES];
+        try {
+            for (int i = 0; i < MAX_CONCURRENT_TILES; i++) {
+                TileResult tile = completed.take().get();
+                result[tile.slot] = tile.tile;
+            }
+            require(result[0] != null && result[1] != null, "state tile batch was incomplete");
+            return result;
+        } catch (InterruptedException interrupted) {
+            cancelTileBatch(futures);
+            Thread.currentThread().interrupt();
+            throw new StateTileDecoder.ProtocolException("state tile fetch cancelled");
+        } catch (ExecutionException failure) {
+            cancelTileBatch(futures);
+            Throwable cause = failure.getCause();
+            if (cause instanceof IOException) throw (IOException) cause;
+            if (cause instanceof Error) throw (Error) cause;
+            throw new IOException("state tile fetch failed", cause);
+        } catch (IOException failure) {
+            cancelTileBatch(futures);
+            throw failure;
+        }
+    }
+
+    private void cancelTileBatch(List<Future<TileResult>> futures) {
+        for (Future<TileResult> future : futures) future.cancel(true);
+        // A batch failure invalidates the single-use load; disconnect its peer
+        // immediately so a blocked network read cannot outlive the failed plan.
+        requestControl.cancel();
+    }
+
     /** Single final primitive allocation; budget is an estimate, not a process RSS cap. */
     static final class StateAccumulator {
         private final double[] states;
@@ -200,6 +323,7 @@ public final class StateTileService implements Closeable {
         private final long budget;
         private long residentBytes;
         private int size;
+        private int totalExactCount;
         private boolean finished;
 
         StateAccumulator(int rows, long budget) throws StateTileDecoder.ProtocolException {
@@ -240,15 +364,55 @@ public final class StateTileService implements Closeable {
             }
             metadata.addAll(tile.metadata);
             size += tile.recordCount;
+            totalExactCount += exactCount;
             residentBytes = nextBytes;
             return exactCount;
+        }
+
+        void requireTileWorkingRoom(int rows) throws StateTileDecoder.ProtocolException {
+            checkCancelled();
+            require(!finished && rows > 0 && rows <= StateTileDecoder.MAX_ROWS,
+                    "invalid tile working-set row bound");
+            require(tileWorkingBytes(rows) <= budget - residentBytes,
+                    "insufficient native state budget for tile read and decode workspace");
+        }
+
+        boolean hasTileWorkingRoom(int firstRows, int secondRows) throws StateTileDecoder.ProtocolException {
+            checkCancelled();
+            require(!finished && firstRows > 0 && firstRows <= StateTileDecoder.MAX_ROWS
+                    && secondRows > 0 && secondRows <= StateTileDecoder.MAX_ROWS,
+                    "invalid tile working-set row bound");
+            long workingBytes = tileWorkingBytes(firstRows) + tileWorkingBytes(secondRows);
+            return workingBytes <= budget - residentBytes;
+        }
+
+        private static long tileWorkingBytes(int rows) {
+            // Admission allowance, not an allocator/RSS theorem: raw payload and
+            // decode/string expansion, row objects/primitive buffers, one-row scratch.
+            return 4L * StateTileDecoder.MAX_TILE_BYTES + rows * 1024L + 8L * 1024L * 1024L;
         }
 
         Frame finish(double epochJd, String catalogHash, String inventoryHash) throws StateTileDecoder.ProtocolException {
             checkCancelled();
             require(!finished && size == exact.length, "incomplete native state assembly");
             finished = true;
-            return new Frame(epochJd, catalogHash, inventoryHash, metadata, states, exact);
+            return new Frame(epochJd, catalogHash, inventoryHash, metadata, states, exact, totalExactCount);
+        }
+
+        Frame initialSnapshot(double epochJd, String catalogHash, String inventoryHash) throws StateTileDecoder.ProtocolException {
+            checkCancelled();
+            require(!finished && size > 0 && size < exact.length,
+                    "initial native state snapshot is not a strict verified prefix");
+            // One early frame adds only the verified prefix's final-sized arrays
+            // and one metadata reference list. Decline streaming when that
+            // temporary resident copy would exceed the same conservative budget.
+            long snapshotBytes = (long) size * (StateTileDecoder.STRIDE * Double.BYTES + 1L + 8L);
+            if (snapshotBytes > budget - residentBytes) return null;
+            residentBytes += snapshotBytes;
+            double[] prefixStates = Arrays.copyOf(states, size * StateTileDecoder.STRIDE);
+            boolean[] prefixExact = Arrays.copyOf(exact, size);
+            return new Frame(epochJd, catalogHash, inventoryHash, metadata.subList(0, size),
+                    prefixStates, prefixExact, totalExactCount);
         }
     }
 
@@ -289,6 +453,50 @@ public final class StateTileService implements Closeable {
         }
     }
 
+    private static int manifestLimit(Map<String, Object> manifest, String key, int fallback, int maximum) throws StateTileDecoder.ProtocolException {
+        Object rawLimits = manifest.get("limits");
+        if (rawLimits == null) return fallback;
+        Map<String, Object> limits = object(rawLimits);
+        if (!limits.containsKey(key)) return fallback;
+        int value = integer(limits, key);
+        require(value > 0 && value <= maximum, "manifest plan limit is invalid: " + key);
+        return value;
+    }
+    private static List<List<String>> chunkPlanIds(List<String> ids, double epochJd, int maxIds, int maxBytes) throws StateTileDecoder.ProtocolException {
+        int fixedBytes = statePlanRequest(Collections.emptyList(), epochJd).getBytes(StandardCharsets.UTF_8).length;
+        require(fixedBytes <= maxBytes, "state plan fixed fields exceed advertised byte budget");
+        List<List<String>> chunks = new ArrayList<>();
+        List<String> chunk = new ArrayList<>();
+        int bytes = fixedBytes;
+        for (String id : ids) {
+            int idBytes = jsonStringByteLength(id);
+            int addition = idBytes + (chunk.isEmpty() ? 0 : 1);
+            if (!chunk.isEmpty() && (chunk.size() >= maxIds || bytes + addition > maxBytes)) {
+                chunks.add(chunk); chunk = new ArrayList<>(); bytes = fixedBytes;
+            }
+            require(bytes + idBytes <= maxBytes, "body ID exceeds advertised state plan byte budget");
+            chunk.add(id); bytes += idBytes + (chunk.size() > 1 ? 1 : 0);
+        }
+        if (!chunk.isEmpty()) chunks.add(chunk);
+        return chunks;
+    }
+    private static String statePlanRequest(List<String> ids, double epochJd) {
+        return "{\"ids\":" + stringsJson(ids) + ",\"epochJd\":" + Double.toString(epochJd) + ",\"timeScale\":\"TDB\",\"frame\":\"ECLIPJ2000\",\"precision\":\"exact\",\"fieldMask\":[\"position\",\"velocity\"],\"tileSize\":" + TILE_SIZE + "}";
+    }
+    private static int jsonStringByteLength(String value) {
+        int bytes = 2;
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '"' || c == '\\' || c == '\b' || c == '\f' || c == '\n' || c == '\r' || c == '\t') bytes += 2;
+            else if (c < 0x20) bytes += 6;
+            else if (Character.isHighSurrogate(c) && i + 1 < value.length() && Character.isLowSurrogate(value.charAt(i + 1))) { bytes += 4; i++; }
+            else if (Character.isSurrogate(c)) bytes++;
+            else if (c <= 0x7f) bytes++;
+            else if (c <= 0x7ff) bytes += 2;
+            else bytes += 3;
+        }
+        return bytes;
+    }
     private static List<String> normalizeIds(List<String> input) throws StateTileDecoder.ProtocolException { List<String> result = new ArrayList<>(input.size()); Set<String> seen = new HashSet<>(); for (String raw : input) { if (raw == null) throw new StateTileDecoder.ProtocolException("body ID is null"); String id = raw.trim(); if (id.isEmpty() || id.getBytes(StandardCharsets.UTF_8).length > 1024 || !seen.add(id)) throw new StateTileDecoder.ProtocolException("body IDs must be unique and bounded"); result.add(id); } return result; }
     private static String stringsJson(List<String> values) { StringBuilder out = new StringBuilder("["); for (int i = 0; i < values.size(); i++) { if (i > 0) out.append(','); out.append(jsonString(values.get(i))); } return out.append(']').toString(); }
     private static String jsonString(String value) { StringBuilder out = new StringBuilder("\""); for (int i = 0; i < value.length(); i++) { char c = value.charAt(i); if (c == '"' || c == '\\') out.append('\\').append(c); else if (c == '\b') out.append("\\b"); else if (c == '\f') out.append("\\f"); else if (c == '\n') out.append("\\n"); else if (c == '\r') out.append("\\r"); else if (c == '\t') out.append("\\t"); else if (c < 0x20) out.append(String.format("\\u%04x", (int) c)); else out.append(c); } return out.append('"').toString(); }
@@ -306,7 +514,7 @@ public final class StateTileService implements Closeable {
     private static double number(Map<String, Object> value, String key) throws StateTileDecoder.ProtocolException { Object result = value.get(key); if (!(result instanceof Number) || !Double.isFinite(((Number) result).doubleValue())) throw new StateTileDecoder.ProtocolException("invalid number: " + key); return ((Number) result).doubleValue(); }
     private static boolean isHash(String value) { if (value == null || value.length() != 64) return false; for (int i = 0; i < value.length(); i++) { char c = value.charAt(i); if (!(c >= '0' && c <= '9' || c >= 'a' && c <= 'f')) return false; } return true; }
     private static long metadataBytes(StateTileDecoder.Metadata row) {
-        return 512L + stringBytes(row.id) + stringBytes(row.source) + stringBytes(row.datasetVersion) + stringBytes(row.datasetSha256) + stringBytes(row.kernelSha256) + stringBytes(row.model) + stringBytes(row.centerId) + stringBytes(row.stateEvidence) + stringBytes(row.missingReason) + stringBytes(row.identityStatus);
+        return 520L + stringBytes(row.id) + stringBytes(row.source) + stringBytes(row.datasetVersion) + stringBytes(row.datasetSha256) + stringBytes(row.kernelSha256) + stringBytes(row.sourceChainSha256) + stringBytes(row.model) + stringBytes(row.centerId) + stringBytes(row.stateEvidence) + stringBytes(row.missingReason) + stringBytes(row.identityStatus);
     }
     private static long stringBytes(String value) { return value == null ? 0L : (long) value.length() * Character.BYTES; }
     private static void require(boolean condition, String message) throws StateTileDecoder.ProtocolException { if (!condition) throw new StateTileDecoder.ProtocolException(message); }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/dajiaohuang/solar/backend/internal/earthorientation"
 	"github.com/dajiaohuang/solar/backend/internal/httpapi"
 	"github.com/dajiaohuang/solar/backend/internal/inventory"
+	"github.com/dajiaohuang/solar/backend/internal/orbituncertainty"
 )
 
 func main() {
@@ -30,12 +32,14 @@ func main() {
 func run() error {
 	dataDir := flag.String("data-dir", "src/data", "directory containing ephemeris-manifest.json and ephemerisBodies.json")
 	listen := flag.String("listen", ":8787", "HTTP listen address")
-	maxConcurrent := flag.Int("max-concurrent", 8, "maximum concurrent scientific requests")
+	maxConcurrent := flag.Int("max-concurrent", 8, "maximum concurrent requests in the general lane")
 	computeWorkers := flag.Int("compute-workers", 0, "maximum concurrent evaluation blocks; 0 follows GOMAXPROCS")
 	inventoryDir := flag.String("inventory-dir", "", "optional audited source-inventory directory containing manifest.json and JSONL shards")
 	coverageReport := flag.String("coverage-report", "", "optional pinned coverage audit report; requires matching full catalog and inventory")
 	eopManifest := flag.String("earth-orientation", "", "optional SHA-256-pinned IERS manifest for ground observations")
 	pckPath := flag.String("body-radii", "", "optional original pck00011.tpc for ground sphere contact searches")
+	orbitSPK := flag.String("orbit-spk", "", "optional pinned DE440 subset for covariance propagation; requires orbit-gm")
+	orbitGM := flag.String("orbit-gm", "", "optional pinned gm_de440.tpc for covariance propagation; requires orbit-spk")
 	flag.Parse()
 
 	cat, inv, err := loadData(*dataDir, *inventoryDir)
@@ -72,7 +76,48 @@ func run() error {
 	server.ConfigureComputeWorkers(*computeWorkers)
 	server.ConfigureEarthOrientation(eop)
 	server.ConfigureBodyRadii(radii)
+	if (*orbitSPK == "") != (*orbitGM == "") {
+		return fmt.Errorf("orbit-spk and orbit-gm must be supplied together")
+	}
+	if *orbitSPK != "" {
+		spkBytes, err := readOrbitSource(*orbitSPK, 5558272)
+		if err != nil {
+			return fmt.Errorf("orbit SPK configuration failed: %w", err)
+		}
+		gmBytes, err := readOrbitSource(*orbitGM, 1<<20)
+		if err != nil {
+			return fmt.Errorf("orbit GM configuration failed: %w", err)
+		}
+		source, err := orbituncertainty.NewDE440Source(context.Background(), spkBytes, gmBytes)
+		if err != nil {
+			return fmt.Errorf("orbit source configuration failed: %w", err)
+		}
+		server.ConfigureOrbitSource(source)
+	}
 	return runServer(server, *listen, cat)
+}
+
+func readOrbitSource(path string, limit int) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > int64(limit) {
+		return nil, fmt.Errorf("expected regular nonempty source file of at most %d bytes", limit)
+	}
+	data, err := io.ReadAll(io.LimitReader(file, int64(limit)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) == 0 || len(data) > limit {
+		return nil, fmt.Errorf("source file exceeds byte budget")
+	}
+	return data, nil
 }
 
 // Configured data failures must stop startup before a healthy HTTP endpoint

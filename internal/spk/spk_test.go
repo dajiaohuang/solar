@@ -3,10 +3,13 @@ package spk
 import (
 	"encoding/binary"
 	"encoding/json"
+	"io"
 	"math"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestType17MatchesIndependentCSPICEOracle(t *testing.T) {
@@ -106,6 +109,72 @@ func TestOpenUsesBoundedLazyReaderAt(t *testing.T) {
 	repeated := k.ReadStats()
 	if repeated.CacheHits <= evaluated.CacheHits {
 		t.Fatalf("repeat evaluation did not reuse page cache: evaluated=%+v repeated=%+v", evaluated, repeated)
+	}
+}
+
+type gatedPageReader struct {
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+	mu      sync.Mutex
+	reads   int
+}
+
+func (r *gatedPageReader) ReadAt(dst []byte, _ int64) (int, error) {
+	r.mu.Lock()
+	r.reads++
+	r.mu.Unlock()
+	r.once.Do(func() { close(r.started) })
+	<-r.release
+	for i := range dst {
+		dst[i] = 0x5a
+	}
+	return len(dst), nil
+}
+
+func TestConcurrentPageReadsCoalesce(t *testing.T) {
+	const readers = 8
+	reader := &gatedPageReader{started: make(chan struct{}), release: make(chan struct{})}
+	source := newPageSource(reader, 1024, nil, 1024, 1024)
+	results := make(chan error, readers)
+	for range readers {
+		go func() {
+			data, err := source.pageData(0)
+			if err == nil && (len(data) != 1024 || data[0] != 0x5a || data[len(data)-1] != 0x5a) {
+				err = io.ErrUnexpectedEOF
+			}
+			results <- err
+		}()
+	}
+	<-reader.started
+	deadline := time.NewTimer(2 * time.Second)
+	defer deadline.Stop()
+	for {
+		source.mu.Lock()
+		misses := source.stats.CacheMisses
+		source.mu.Unlock()
+		if misses == readers {
+			break
+		}
+		select {
+		case <-deadline.C:
+			close(reader.release)
+			t.Fatalf("only %d concurrent readers reached the page flight", misses)
+		case <-time.After(time.Millisecond):
+		}
+	}
+	close(reader.release)
+	for range readers {
+		if err := <-results; err != nil {
+			t.Fatal(err)
+		}
+	}
+	reader.mu.Lock()
+	reads := reader.reads
+	reader.mu.Unlock()
+	stats := source.Stats()
+	if reads != 1 || stats.PageLoads != 1 || stats.LoadedBytes != 1024 {
+		t.Fatalf("same-page misses were not coalesced: reads=%d stats=%+v", reads, stats)
 	}
 }
 

@@ -34,7 +34,7 @@ const HISTORY_OPTIONS = [90, 365, 1825, 4383, 7300, 12053, 43830, 90580]
 // Keep familiar primary bodies discoverable on the first page, independently
 // of selection so checking a body never moves the focused checkbox.
 const BODY_KIND_ORDER: Record<CelestialBody['kind'], number> = {
-  star: 0, planet: 1, dwarfPlanet: 2, moon: 3, asteroid: 4, spacecraft: 5, sourceRecord: 6,
+  star: 0, planet: 1, dwarfPlanet: 2, moon: 3, asteroid: 4, comet: 5, spacecraft: 6, sourceRecord: 7,
 }
 const BODY_KIND_TRANSLATION = {
   star: 'bodyKindStar',
@@ -42,6 +42,7 @@ const BODY_KIND_TRANSLATION = {
   moon: 'bodyKindMoon',
   dwarfPlanet: 'bodyKindDwarfPlanet',
   asteroid: 'bodyKindAsteroid',
+  comet: 'bodyKindComet',
   spacecraft: 'bodyKindSpacecraft',
   sourceRecord: 'bodyKindSourceRecord',
 } as const

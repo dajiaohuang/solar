@@ -222,12 +222,24 @@ func leapSeconds(mjd float64) (float64, error) {
 	return seconds, nil
 }
 
-// AtUTC interpolates UT1-TAI, not the discontinuous UT1-UTC. This preserves the
+// AtUTC accepts a single-part Julian Date for compatibility. Prefer AtUTCParts
+// when the epoch is already available in SOFA's two-part form.
+func (t *Table) AtUTC(jd float64) (Sample, error) {
+	return t.atMJD(jd - gofa.DJM0)
+}
+
+// AtUTCParts interpolates from a two-part UTC quasi-Julian Date without first
+// collapsing the parts into a full Julian Date. UTC quasi-JD fractions retain
+// the variable length of leap-second days.
+func (t *Table) AtUTCParts(jd1, jd2 float64) (Sample, error) {
+	return t.atMJD((jd1 - gofa.DJM0) + jd2)
+}
+
+// atMJD interpolates UT1-TAI, not the discontinuous UT1-UTC. This preserves the
 // published leap-second jump. There is no extrapolation through gaps or beyond
 // the file's available observations/predictions. Published sigma values use the
 // larger endpoint value; they are not a propagated confidence interval.
-func (t *Table) AtUTC(jd float64) (Sample, error) {
-	mjd := jd - gofa.DJM0
+func (t *Table) atMJD(mjd float64) (Sample, error) {
 	if math.IsNaN(mjd) || math.IsInf(mjd, 0) || len(t.entries) < 2 || mjd < t.entries[0].MJD || mjd > t.entries[len(t.entries)-1].MJD {
 		return Sample{}, fmt.Errorf("UTC epoch is outside the available IERS EOP coverage")
 	}
@@ -238,7 +250,7 @@ func (t *Table) AtUTC(jd float64) (Sample, error) {
 		left = t.entries[index-1]
 	}
 	if right.MJD-left.MJD > 1.01 {
-		return Sample{}, fmt.Errorf("IERS EOP coverage has a gap at UTC JD %.9f", jd)
+		return Sample{}, fmt.Errorf("IERS EOP coverage has a gap at UTC MJD %.9f", mjd)
 	}
 	u := 0.0
 	if right.MJD > left.MJD {

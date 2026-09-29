@@ -27,7 +27,13 @@ export function buildSpacecraftFrame(
   const resolver = createBodyPositionResolver(bodiesById, julianDay)
   const reference = bodyPositionOrNull(resolver, referenceId)
   if (!reference) return { currentPositions: EMPTY_CURRENT_POSITIONS, trajectories: [], trajectoryUnavailableBodyIds: spacecraft.map((body) => body.id) }
-  const visible = spacecraft.filter((body) => julianDay >= body.trajectoryPoints[0].jd)
+  // These are finite, milestone-dated teaching paths. Keep the current marker
+  // inside their authored interval instead of freezing it at the last point.
+  const visible = spacecraft.filter((body) => {
+    const firstJulianDay = body.trajectoryPoints[0].jd
+    const lastJulianDay = body.trajectoryPoints[body.trajectoryPoints.length - 1].jd
+    return julianDay >= firstJulianDay && julianDay <= lastJulianDay
+  })
   const coordinates = new Float64Array(visible.length * 3)
   for (let index = 0; index < visible.length; index++) {
     const body = visible[index]

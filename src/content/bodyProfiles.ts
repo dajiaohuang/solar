@@ -39,6 +39,14 @@ export const BODY_PROFILES: Record<string, BodyProfile> = {
     significance: { en: 'Its orbit provides a readable reference point for main-belt element space, resonance gaps, and object-level provenance.', zh: '它的轨道是阅读主带元素空间、共振空隙与对象级来源信息的良好参照。' },
     sources: [{ label: 'NASA Ceres facts', url: 'https://science.nasa.gov/dwarf-planets/ceres/facts/' }],
   },
+  '67p': {
+    overview: { en: 'Jupiter-family comet 67P/Churyumov–Gerasimenko, shown from a source-pinned JPL Horizons small-body SPK.', zh: '木星族彗星 67P/丘留莫夫－格拉西缅科，使用已固定来源的 JPL Horizons 小天体 SPK 展示。' },
+    significance: { en: 'Its asymmetric outgassing model is part of the orbit solution. SPK interpolation precision does not encode the comet orbit’s physical uncertainty.', zh: '轨道解包含不对称释气模型；SPK 插值精度不表达彗星轨道的物理不确定度。' },
+    sources: [
+      { label: 'JPL Horizons', url: 'https://ssd.jpl.nasa.gov/horizons/' },
+      { label: 'JPL Small-Body Database', url: 'https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=67P' },
+    ],
+  },
   pluto: {
     overview: { en: 'A trans-Neptunian dwarf planet on an eccentric, inclined orbit near a 3:2 mean-motion resonance with Neptune.', zh: '一颗外海王星矮行星，位于偏心且倾斜的轨道上，并同海王星接近 3:2 平均运动共振。' },
     significance: { en: 'Pluto demonstrates why orbit crossing, period ratio, and long-term dynamical protection are related but distinct claims.', zh: '冥王星说明轨道相交、周期比与长期动力学保护彼此相关，却是不同层次的主张。' },
@@ -54,7 +62,8 @@ export function fallbackBodyProfile(kind: BodyKind, orbitClass?: string): Pick<B
     moon: { en: 'A cataloged natural satellite. Its identity does not imply that a position or orbit model is available for the selected date.', zh: '已收录的天然卫星身份；收录不代表在所选日期已有位置或轨道模型。' },
     dwarfPlanet: { en: 'A curated dwarf-planet orbit for comparative exploration.', zh: '用于比较探索的策展矮行星轨道。' },
     asteroid: { en: `A traceable ${orbitClass ?? 'small-body'} osculating orbit from the active catalog or JPL SBDB.`, zh: `来自当前目录或 JPL SBDB 的可追溯${orbitClass ?? '小天体'}密切轨道。` },
-    spacecraft: { en: 'A milestone-dated schematic spacecraft teaching path.', zh: '按任务里程碑日期构建的航天器教学示意路径。' },
+    comet: { en: 'A comet trajectory from a source-pinned ephemeris. Its covered interval does not imply equal physical accuracy or a quantified uncertainty bound.', zh: '来自来源固定星历的彗星轨迹；覆盖时间范围不代表全程具有相同物理精度或已量化的不确定度界。' },
+    spacecraft: { en: 'A spacecraft identity. Consult the model and source labels for the selected trajectory; identity alone does not establish state availability.', zh: '航天器身份。请按模型和来源标签区分所选轨迹；收录身份不代表已有可用状态。' },
   }
   return { overview: labels[kind], significance: { en: 'Use the orbit, context, and source tabs to separate computed values from model boundaries.', zh: '通过轨道、背景与来源页签区分计算数值和模型边界。' } }
 }

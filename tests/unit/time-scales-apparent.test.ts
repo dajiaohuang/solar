@@ -17,6 +17,11 @@ describe('NAIF time-scale approximation', () => {
     expect(() => utcJulianDayToTdb(2_440_000)).toThrow(/1972/)
     expect(utcTimeScaleQuality(2_500_000).status).toBe('future-uncertain')
   })
+  it('keeps the published UTC offset supported through the announced NAIF LSK interval', () => {
+    expect(utcTimeScaleQuality(2461586.5)).toMatchObject({ leapSeconds: 37, status: 'supported' })
+    expect(utcTimeScaleQuality(2461587.5)).toMatchObject({ leapSeconds: 37, status: 'future-uncertain' })
+    expect(utcTimeScaleQuality(2461587.5).sources).toContain('https://naif.jpl.nasa.gov/naif/announcements.html')
+  })
 })
 
 const state = (position: [number, number, number], velocity: [number, number, number] = [0, 0, 0]) => () => ({ position, velocity })

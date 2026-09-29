@@ -15,7 +15,7 @@ struct ProtocolTests {
     }
 
     static func fixture() throws -> Data {
-        let common: [String: Any] = ["source": "protocol-test-fixture", "datasetVersion": "fixture", "datasetSha256": hashB, "kernelSha256": hashA, "model": "spk-original", "centerId": "naif:0", "validityStartEt": 0, "validityEndEt": 0, "validityPresent": true, "stateEvidence": "fixture-only", "evidenceWindowStartEt": 0, "evidenceWindowEndEt": 0, "evidenceWindowPresent": false]
+        let common: [String: Any] = ["source": "protocol-test-fixture", "datasetVersion": "fixture", "datasetSha256": hashB, "kernelSha256": hashA, "sourceChainSha256": hashA, "model": "spk-original", "centerId": "naif:0", "validityStartEt": 0, "validityEndEt": 0, "validityPresent": true, "stateEvidence": "fixture-only", "evidenceWindowStartEt": 0, "evidenceWindowEndEt": 0, "evidenceWindowPresent": false]
         var metadata = Data()
         for (index, id) in ids.enumerated() {
             var row = common; row["id"] = id; row["missingReason"] = index == 0 ? "" : "no-kernel"
@@ -58,6 +58,7 @@ struct ProtocolTests {
             "auditEt": 500, "timeScale": "TDB seconds past J2000", "frame": "ECLIPJ2000",
             "requestedWindow": ["startEt": 0, "endEt": 1000, "timeScale": "TDB seconds past J2000"],
             "counts": ["sourceRecords": 10, "mappedSourceRecords": 3, "unresolvedSourceRecords": 7, "explicitNaifTargets": 2, "availableTargetsAtAuditEpoch": 2],
+            "sourceCounts": ["synthetic": 10],
             "windowCounts": ["dependencyCoveredTargets": 1, "targetsWithDependencyGaps": 1, "numericallyCertifiedWholeWindowTargets": NSNull()],
             "coverage": [["datasetVersion": "fixture", "source": "synthetic", "model": "spk-at-audit-epoch", "auditEt": 500, "frame": "ECLIPJ2000", "exact": 3, "approximate": 0, "missing": 7]],
             "unresolvedReasons": ["no-explicit-naif-mapping": 6, "unresolved-component": 1]
@@ -365,10 +366,7 @@ struct ProtocolTests {
         var boundary = try JSONSerialization.jsonObject(with: coverage) as! [String: Any]
         boundary["auditEt"] = -Double.greatestFiniteMagnitude
         boundary["requestedWindow"] = ["startEt": -1.5, "endEt": 1.5, "timeScale": "TDB seconds past J2000"]
-        boundary["counts"] = ["sourceRecords": 0, "mappedSourceRecords": 0, "unresolvedSourceRecords": 0, "explicitNaifTargets": 0, "availableTargetsAtAuditEpoch": 0]
-        boundary["windowCounts"] = ["dependencyCoveredTargets": 0, "targetsWithDependencyGaps": 0, "numericallyCertifiedWholeWindowTargets": NSNull()]
-        boundary["coverage"] = [["datasetVersion": "fixture", "source": "synthetic", "model": "none", "auditEt": boundary["auditEt"] as! Double, "frame": "ECLIPJ2000", "exact": 0, "approximate": 0, "missing": 0]]
-        boundary["unresolvedReasons"] = [String: UInt64]()
+        boundary["coverage"] = [["datasetVersion": "fixture", "source": "synthetic", "model": "spk-at-audit-epoch", "auditEt": boundary["auditEt"] as! Double, "frame": "ECLIPJ2000", "exact": 3, "approximate": 0, "missing": 7]]
         _ = try NativeCoverageReport(validating: JSONSerialization.data(withJSONObject: boundary), catalogManifest: coverageManifest)
         try coverageRejects(coverage, manifest: coverageManifest) { $0["sourceBytesVerified"] = false }
         try coverageRejects(coverage, manifest: coverageManifest) { $0["windowCounts"] = ["dependencyCoveredTargets": 1, "targetsWithDependencyGaps": 1] }
@@ -413,22 +411,46 @@ struct ProtocolTests {
         for index in values.indices { precondition(tile.states[index].bitPattern == values[index].bitPattern) }
         var frame = NativeStateFrame(epochJd: expected.epochJd, catalogHash: hashB, inventoryHash: nil,
             metadata: Array(tile.metadata.reversed()), states: Array(repeating: 0, count: 12), exact: [true, true])
+        guard let initialFrame = NativeStateFrame.verifiedPrefix(of: frame, exactCount: 2, budgetRemaining: Int.max) else {
+            throw StateTileFailure.invalid("Verified initial frame could not be copied.")
+        }
+        precondition(initialFrame.frame.metadata.count == 2 && initialFrame.frame.states.count == 12
+            && initialFrame.frame.exact == [true, true] && initialFrame.frame.verifiedExactCount == 2
+            && initialFrame.residentBytes > 0)
+        precondition(NativeStateFrame.verifiedPrefix(of: frame, exactCount: 2, budgetRemaining: 0) == nil)
         // Large absolute origin and small displacement must be subtracted as
         // Float64 before any Float32 conversion. Reference is last in the list.
         frame.states[0] = 1_000_000_001; frame.states[6] = 1_000_000_000
+        precondition(initialFrame.frame.states[0] == 0 && initialFrame.frame.states[6] == 0)
         let sourceBits = frame.states.map(\.bitPattern)
         let projected = try NativeProjection.make(frame: frame, reference: ids[0], limit: 2)
-        precondition(projected.points == [SIMD3<Float>.zero, SIMD3<Float>(5, 0, 0)] && projected.candidates == 2)
+        precondition(projected.points == [SIMD2<Float>.zero, SIMD2<Float>(4.75, 0)] && projected.candidates == 2)
+        precondition(MemoryLayout<SIMD2<Float>>.stride == 2 * MemoryLayout<Float>.stride)
+        var diagonalFrame = frame
+        diagonalFrame.states[7] = -1; diagonalFrame.states[8] = -1
+        let radialProjection = try NativeProjection.make(frame: diagonalFrame, reference: ids[0], limit: 2, mode3D: true)
+        guard let radialPayload = radialProjection.geometryPayload, radialPayload.count == 2 else { preconditionFailure("3D projection omitted its compact geometry payload") }
+        let vertexStride = MemoryLayout<SIMD3<Float>>.stride
+        func radialComponent(_ component: Int) -> Float {
+            let byteOffset = vertexStride + component * MemoryLayout<Float>.stride
+            var bits = UInt32.zero
+            for byte in 0..<MemoryLayout<UInt32>.size {
+                bits |= UInt32(radialPayload.vertices[byteOffset + byte]) << (byte * 8)
+            }
+            return Float(bitPattern: bits)
+        }
+        let radialDistance = hypot(hypot(Double(radialComponent(0)), Double(radialComponent(1))), Double(radialComponent(2)))
+        precondition(abs(radialDistance - 4.75) < 1e-5)
         let capped = try NativeProjection.make(frame: frame, reference: ids[0], limit: 1)
-        precondition(capped.points == [.zero] && capped.candidates == 2)
+        precondition(capped.points == [SIMD2<Float>.zero] && capped.candidates == 2)
         let reduced = try projected.limited(to: 1)
         precondition(reduced.points == capped.points && reduced.candidates == 2)
         precondition(reduced.identity != projected.identity)
         let unchanged = try projected.limited(to: 10)
         precondition(unchanged.identity == projected.identity)
-        let fullExtent = NativeProjection(points: [.zero, SIMD3<Float>(1, 2, 3), SIMD3<Float>(5, 5, 5)], candidates: 3)
+        let fullExtent = NativeProjection(points: [.zero, SIMD2<Float>(1, 2), SIMD2<Float>(5, 5)], candidates: 3)
         let smallerExtent = try fullExtent.limited(to: 2)
-        precondition(smallerExtent.points == [.zero, SIMD3<Float>(1, 2, 3)] && smallerExtent.candidates == 3)
+        precondition(smallerExtent.points == [.zero, SIMD2<Float>(1, 2)] && smallerExtent.candidates == 3)
         precondition(frame.states.map(\.bitPattern) == sourceBits)
         var invalidLimitRejected = false
         do { _ = try projected.limited(to: 0) } catch { invalidLimitRejected = true }
@@ -466,7 +488,15 @@ struct ProtocolTests {
             if let window = sampler.record(Double(index) * 0.034) { sampled = window }
         }
         precondition(sampled?.samples == 30 && abs((sampled?.p50Ms ?? 0) - 34) < 0.000_001 && abs((sampled?.p95Ms ?? 0) - 34) < 0.000_001)
-        precondition(abs((sampled?.droppedRatio ?? 0) - 0.5) < 0.000_001)
+        precondition(abs((sampled?.droppedRatio ?? 0) - (1 - (1000.0 / 60) / 34)) < 0.000_001)
+        sampler.reset()
+        sampled = nil
+        var timestamp = 0.0
+        for _ in 0..<62 {
+            timestamp += 0.020
+            if let window = sampler.record(timestamp) { sampled = window; break }
+        }
+        precondition(abs((sampled?.droppedRatio ?? 0) - (1.0 / 6)) < 0.000_001)
         var dynamic = NativeDisplayPressure()
         let slowWindow = NativeFrameWindow(samples: 60, p50Ms: 20, p95Ms: 30, droppedRatio: 0.1)
         precondition(!dynamic.sample(mode3D: true, available: 100_000, window: slowWindow, now: 1))
@@ -627,7 +657,7 @@ struct ProtocolTests {
         }
         let manifest = try JSONDecoder().decode(GoldenManifest.self, from: read("manifest.json", limit: 8 * 1024 * 1024))
         let catalog = try object("catalog-manifest.json"), plan = try object("plan.json")
-        guard manifest.format == "solar.state-tile-fixture/v1",
+        guard manifest.format == "solar.state-tile-fixture/v2",
               let catalogHash = catalog["catalogManifestSha256"] as? String,
               let planHash = plan["planId"] as? String,
               let descriptors = plan["tiles"] as? [[String: Any]] else {
@@ -657,6 +687,8 @@ struct ProtocolTests {
                 sequence: sequence, tileCount: manifest.tiles.count, ordinalStart: item.ordinalStart,
                 epochJd: manifest.epochJd, ids: expectedIDs)
             let decoded = try StateTileDecoder.decode(bytes, expected: expected)
+            precondition(decoded.timeScale == "TDB" && decoded.frame == "ECLIPJ2000" && decoded.stateOriginId == "naif:0")
+            precondition(decoded.distanceUnit == "km" && decoded.velocityUnit == "km/s")
             precondition(decoded.payloadHash == item.payloadSha256)
             for (row, item) in item.expectedRows.enumerated() {
                 precondition(item.status == "exact" || item.status == "missing")

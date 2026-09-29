@@ -2,6 +2,8 @@ package io.github.dajiaohuang.solaratlas;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 
@@ -37,6 +39,45 @@ public class StateAccumulatorTest {
         assertEquals("approximate-state-not-allowed", frame.metadata.get(1).missingReason);
         assertThrows(StateTileDecoder.ProtocolException.class, () -> accumulator.finish(2461287.5, CATALOG, null));
         assertThrows(StateTileDecoder.ProtocolException.class, () -> accumulator.append(tile(ids.get(0), true, 0), ids, 0));
+    }
+
+    @Test
+    public void initialSnapshotOwnsOnlyTheVerifiedPrefixAndHonorsResidentBudget() throws Exception {
+        StateTileService.StateAccumulator accumulator = new StateTileService.StateAccumulator(3, 64 * 1024);
+        List<String> ids = List.of("naif:399", "unknown", "naif:301");
+        accumulator.append(tile(ids.get(0), true, 12.5), ids, 0);
+        accumulator.append(tile(ids.get(1), false, 0), ids, 1);
+        StateTileService.Frame partial = accumulator.initialSnapshot(2461287.5, CATALOG, null);
+        assertNotNull(partial);
+        assertEquals(2, partial.metadata.size());
+        assertEquals(12, partial.states.length);
+        assertArrayEquals(new boolean[]{true, false}, partial.exact);
+        assertEquals(1, partial.exactCount);
+
+        Field storage = StateTileService.StateAccumulator.class.getDeclaredField("states");
+        storage.setAccessible(true);
+        double[] accumulatorStates = (double[]) storage.get(accumulator);
+        double original = accumulatorStates[0];
+        accumulatorStates[0] = -999;
+        assertEquals(12.5, partial.states[0], 0);
+        accumulatorStates[0] = original;
+        accumulator.append(tile(ids.get(2), true, -42), ids, 2);
+        assertEquals(18, accumulator.finish(2461287.5, CATALOG, null).states.length);
+        assertEquals(12.5, partial.states[0], 0);
+        assertEquals(0, partial.states[6], 0);
+        assertEquals("unknown", partial.metadata.get(1).id);
+
+        StateTileDecoder.DecodedTile first = tile("naif:399", true, 1);
+        java.lang.reflect.Method metadataSizer = StateTileService.class.getDeclaredMethod(
+                "metadataBytes", StateTileDecoder.Metadata.class);
+        metadataSizer.setAccessible(true);
+        long rowBytes = (Long) metadataSizer.invoke(null, first.metadata.get(0));
+        long baseBytes = 96L + 3L * (StateTileDecoder.STRIDE * Double.BYTES + 1L + 16L);
+        long snapshotBytes = StateTileDecoder.STRIDE * Double.BYTES + 1L + 8L;
+        long tightBudget = baseBytes + rowBytes + snapshotBytes - 1L;
+        StateTileService.StateAccumulator tight = new StateTileService.StateAccumulator(3, tightBudget);
+        tight.append(first, List.of("naif:399", "naif:301", "naif:10"), 0);
+        assertNull(tight.initialSnapshot(2461287.5, CATALOG, null));
     }
 
     @Test
