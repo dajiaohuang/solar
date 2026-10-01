@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { createFrameInvalidator } from '../lib/frameInvalidation'
 import { ScreenPointIndex } from '../lib/screenPointIndex'
+import { CooperativeScreenPicker } from '../lib/cooperativeScreenPicker'
+import { catalogFramingRadius } from '../lib/catalogScenePresentation'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { PREPARE_CANVAS_CAPTURE_EVENT } from '../lib/canvasCapture'
 import { cameraDistanceForFit, cameraRangeForFit, clamp3dZoom, sceneFramingForRadius } from '../lib/camera3d'
@@ -188,6 +190,9 @@ export function TrajectoryCanvas3D({
     [catalogPositions3D, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z])
   const raycasterRef = useRef(new THREE.Raycaster())
   const pickingRef = useRef<{ key: string; positions: unknown; width: number; height: number; count: number; index: ScreenPointIndex } | null>(null)
+  const [catalogPicker] = useState(() => new CooperativeScreenPicker())
+  useEffect(() => () => catalogPicker.cancel(), [catalogPicker])
+  useEffect(() => { catalogPicker.cancel() }, [catalogPicker, catalogPositions3D, catalogDrawCount, catalogOrigin])
   const positionsRef = useRef(currentPositions)
   const lastTouchTapRef = useRef<{ bodyId: string; timestamp: number } | null>(null)
   const touchGestureRef = useRef<{ pointerId: number; startX: number; startY: number; moved: boolean } | null>(null)
@@ -526,16 +531,9 @@ export function TrajectoryCanvas3D({
         const coordinates = trajectory.coordinates
         for (let offset = 0; offset < coordinates.length; offset += 3) radius = Math.max(radius, Math.hypot(coordinates[offset], coordinates[offset + 1], coordinates[offset + 2]))
       }
-      // Fit the complete ready sample once so later adaptive draw-range growth
-      // cannot introduce points outside the user's initial catalog framing.
+      // Fit the main population; outliers remain available by zooming out.
       const catalogCount = Math.min(catalogAppearance ? catalogAppearance.length / 2 : catalogRecords.length, Math.floor(catalogPositions3D.length / 3))
-      for (let index = 0; index < catalogCount; index += 1) {
-        radius = Math.max(radius, Math.hypot(
-          catalogPositions3D[index * 3] - catalogOrigin.x,
-          catalogPositions3D[index * 3 + 1] - catalogOrigin.y,
-          catalogPositions3D[index * 3 + 2] - catalogOrigin.z,
-        ))
-      }
+      radius = Math.max(radius, catalogFramingRadius(catalogPositions3D, 3, catalogCount, { x: catalogOrigin.x, y: catalogOrigin.y, z: catalogOrigin.z }))
       resources.contentRadius = radius
       resources.nearestRadius = nearest
       applySceneFraming(resources)
@@ -655,22 +653,28 @@ export function TrajectoryCanvas3D({
       role="img"
       aria-label={ariaLabel}
       onClick={(event) => {
+        catalogPicker.supersede()
         const hit = intersectBody(event)
         if (hit) { onBodySelect?.(hit.id); return }
         const resources = resourcesRef.current
         if (!onCatalogSelect || !resources?.catalogPoints.visible) return
         const rect = event.currentTarget.getBoundingClientRect(), positions = resources.catalogPoints.geometry.getAttribute('position')
-        const projected = new THREE.Vector3()
-        let nearest = -1, distance = 49
-        for (let index = 0; index < resources.catalogPoints.geometry.drawRange.count; index++) {
-          projected.fromBufferAttribute(positions, index).project(resources.camera)
-          if (projected.z < -1 || projected.z > 1) continue
-          const dx = (projected.x + 1) * rect.width / 2 - (event.clientX - rect.left)
-          const dy = (1 - projected.y) * rect.height / 2 - (event.clientY - rect.top)
-          const squared = dx * dx + dy * dy
-          if (squared < distance) { nearest = index; distance = squared }
-        }
-        if (nearest >= 0) onCatalogSelect(nearest)
+        resources.camera.updateMatrixWorld()
+        const count = resources.catalogPoints.geometry.drawRange.count
+        const cameraKey = () => `${resources.camera.matrixWorld.elements.join(',')}:${resources.camera.projectionMatrix.elements.join(',')}`
+        const matrixKey = cameraKey()
+        const version = positions instanceof THREE.BufferAttribute ? positions.version : positions.data.version
+        const key = `${rect.width}:${rect.height}:${count}:${version}:${matrixKey}`
+        const projected = new THREE.Vector3(), camera = resources.camera.clone()
+        void catalogPicker.nearest(positions, key, rect.width, rect.height, count, row => {
+          projected.fromBufferAttribute(positions, row).project(camera)
+          return projected.z < -1 || projected.z > 1 ? null : { x: (projected.x + 1) * rect.width / 2, y: (1 - projected.y) * rect.height / 2 }
+        }, () => {
+          const currentRect = containerRef.current?.getBoundingClientRect()
+          return resourcesRef.current === resources && resources.catalogPoints.visible && resources.catalogPoints.geometry.getAttribute('position') === positions
+            && resources.catalogPoints.geometry.drawRange.count === count && (positions instanceof THREE.BufferAttribute ? positions.version : positions.data.version) === version
+            && currentRect?.width === rect.width && currentRect.height === rect.height && cameraKey() === matrixKey
+        }, event.clientX - rect.left, event.clientY - rect.top).then(nearest => { if (nearest >= 0) onCatalogSelect(nearest) })
       }}
       onDoubleClick={(event) => { const hit = intersectBody(event); if (hit) onReferenceChange?.(hit.id) }}
       onPointerDown={(event) => {

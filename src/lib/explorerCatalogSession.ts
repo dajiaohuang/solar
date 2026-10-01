@@ -8,7 +8,8 @@ import type { CatalogStreamRequest, CatalogStreamResponse } from '../workers/cat
 export function planExplorerCatalog(manifest: AsteroidManifest, rows: number, budgetBytes: number, mode: '2d' | '3d') {
   if (!Number.isSafeInteger(rows) || rows < 1 || !Number.isSafeInteger(budgetBytes) || budgetBytes < 1 || budgetBytes > 1024 * 1024 * 1024) throw new Error('Invalid Explorer catalog budget')
   const requested = Math.min(rows, manifest.totalCount)
-  const extraBytesPerRow = 160
+  // Includes the lazy xy projection and two panes' screen picking indices.
+  const extraBytesPerRow = 208
   // Find a capacity whose additional scene storage fits beside the worker plan.
   let low = 0, high = requested
   while (low < high) {

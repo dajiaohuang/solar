@@ -46,6 +46,8 @@ import { saveTextExport } from '../../lib/platform'
 import { sourcePinFor } from '../../lib/sourceScene'
 import type { TranslationKey } from '../../i18n/en'
 import { uiActions } from '../../state/ui-store'
+import { catalogFramingRadius } from '../../lib/catalogScenePresentation'
+import { julianDayToDate } from '../../lib/julianDate'
 
 const TrajectoryCanvas3D = lazy(async () => {
   const module = await import('../../components/TrajectoryCanvas3D')
@@ -203,16 +205,8 @@ function FrameView({
     // The 3D renderer fits its own xyz data. Do not scan a spatial buffer as
     // planar pairs or compute an unused 2D extent while 3D is active.
     if (!catalogOrigin || simulation.viewMode !== '2d') return 0
-    const count = Math.min(catalogDrawCount, Math.floor(catalogPositions.length / 2))
-    let radius = 0
-    for (let index = 0; index < count; index += 1) {
-      radius = Math.max(radius, Math.hypot(
-        catalogPositions[index * 2] - catalogOrigin.x,
-        catalogPositions[index * 2 + 1] - catalogOrigin.y,
-      ))
-    }
-    return radius > 0 ? radius * 1.08 : 0
-  }, [catalogDrawCount, catalogOrigin, catalogPositions, simulation.viewMode])
+    return catalogFramingRadius(catalogPositions, 2, catalogPositions.length / 2, catalogOrigin)
+  }, [catalogOrigin, catalogPositions, simulation.viewMode])
   const suggested = Math.max(focusSuggested, catalogSuggested)
   const orbitEllipses = useMemo(() => {
     void ephemerisRevision
@@ -554,7 +548,11 @@ export function ExplorerWorkspace() {
       <ControlDrawer bodies={allBodies} referenceOptions={allBodies.filter((body) => body.source !== 'schematic')} onResetView={resetView} trajectoryAudit={primaryFrame.trajectoryAudit ?? (PRODUCT_PROFILE === 'full' ? null : undefined)} />
         <main className="explorer-stage">
         <SimulationControls />
-        {simulation.showCatalogCloud && PRODUCT_PROFILE === 'full' && <section className="catalog-scene-controls glass-panel" aria-label={language === 'zh' ? '主场景目录' : 'Scene catalog'}>
+        {simulation.showCatalogCloud && PRODUCT_PROFILE === 'full' && <details name="explorer-scene-controls" className="catalog-scene-controls glass-panel">
+          <summary>{language === 'zh' ? '目录与时间' : 'Catalog and time'} · {catalogPopulation.toLocaleString()} · {catalogStream.error ? (language === 'zh' ? '加载失败' : 'Load failed') : streamEnabled && !catalogStream.snapshot ? (language === 'zh' ? '目录加载中' : 'Loading catalog') : Math.abs(requestedJulianDay - renderedJulianDay) > 1e-6
+            ? (language === 'zh' ? `时间追赶中（相差 ${Math.abs(requestedJulianDay - renderedJulianDay).toFixed(3)} 天）` : `Catching up (${Math.abs(requestedJulianDay - renderedJulianDay).toFixed(3)} days apart)`)
+            : (language === 'zh' ? '时间已同步' : 'Time synchronized')}</summary>
+          <div className="catalog-scene-options" aria-label={language === 'zh' ? '主场景目录' : 'Scene catalog'}>
           <label>{language === 'zh' ? '计算与显示来源' : 'Compute and display source'} <select aria-label={language === 'zh' ? '星体数量' : 'Catalog population'} value={catalog.explorerStreamRows ?? 0}
             onChange={event => catalogActions.patch({ explorerStreamRows: Number(event.target.value) || null })}>
             <option value={0}>{language === 'zh' ? '固定样本' : 'Fixed sample'}</option>
@@ -565,6 +563,8 @@ export function ExplorerWorkspace() {
             {[256, 512, 1024].map(value => <option key={value} value={value}>{value} MiB</option>)}
           </select></label>
           {streamEnabled && <>
+            {Math.abs(requestedJulianDay - renderedJulianDay) > 1e-6 && clock.isPlaying && <button type="button" onClick={simulationActions.pause}>{language === 'zh' ? '暂停，等待追赶' : 'Pause to catch up'}</button>}
+            <span>{language === 'zh' ? '显示时间' : 'Displayed time'} · {julianDayToDate(renderedJulianDay).toISOString().replace('T', ' ').slice(0, 19)} UTC · {language === 'zh' ? '目标时间' : 'Target time'} · {julianDayToDate(requestedJulianDay).toISOString().replace('T', ' ').slice(0, 19)} UTC</span>
             <span role="status" data-testid="explorer-catalog-status" data-computed={catalogStream.snapshot?.count ?? 0} data-drawn={primaryCatalogDrawCount} data-epoch={catalogStream.snapshot?.julianDay ?? ''}>{language === 'zh' ? '已计算' : 'Computed'} {catalogPopulation.toLocaleString()} · {language === 'zh' ? '主视图绘制' : 'Primary draw'} {primaryCatalogDrawCount.toLocaleString()} · {language === 'zh' ? '容量' : 'Capacity'} {catalogStream.capacity.toLocaleString()}
               {catalogStream.snapshot && ` · UTC JD ${catalogStream.snapshot.julianDay.toFixed(6)} · Δt ${(requestedJulianDay - catalogStream.snapshot.julianDay).toFixed(6)} d`}
               {!catalogStream.snapshot && !catalogStream.error && (language === 'zh' ? ' · 加载中' : ' · Loading')}
@@ -572,7 +572,8 @@ export function ExplorerWorkspace() {
             <button type="button" onClick={() => catalogActions.patch({ explorerStreamRows: null })}>{language === 'zh' ? '停止并返回样本' : 'Stop and return to sample'}</button>
           </>}
           <small>{language === 'zh' ? 'MPC 二体传播；逐体绘制受显示预算限制，不是相互引力模拟。内存规划不是实测峰值。' : 'MPC two-body propagation; individual draws follow the display budget, without mutual gravity. Memory plan is not measured peak usage.'}</small>
-        </section>}
+          </div>
+        </details>}
         {selection.sourceSceneError && <div className="error-banner" role="alert">{t(selection.sourceSceneError as TranslationKey)}</div>}
         {streamEnabled && catalogPickError && <div className="error-banner catalog-cloud-error" role="alert">{catalogPickError}</div>}
         {simulation.showCatalogCloud && !streamEnabled && catalog.sampleError && (
@@ -668,7 +669,7 @@ export function ExplorerWorkspace() {
           <select aria-label={t('distanceTo')} value={measuredBodyB} onChange={(event) => setMeasureB(event.target.value)}>{selectedBodies.map((body) => <option key={body.id} value={body.id}>{bodyDisplayName(body, language)}</option>)}</select>
           <strong>{measuredDistance === null ? '—' : `${measuredDistance.toFixed(5)} AU · ${(measuredDistance * 149_597_870.7).toLocaleString(undefined, { maximumFractionDigits: 0 })} km`}</strong>
         </div>
-        <details className="accessible-scene-controls glass-panel">
+        <details name="explorer-scene-controls" className="accessible-scene-controls glass-panel">
           <summary>{t('keyboardControls')}</summary>
           <div className="accessible-view-actions" aria-label={t('view')}>
             <button onClick={() => simulationActions.patch({ zoom: Math.min(12, simulation.zoom * 1.25) })}>{t('zoomIn')} +</button>

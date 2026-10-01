@@ -57,6 +57,7 @@ test('measure real MPC catalog computation in the main scene', async ({ page, br
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
   await page.locator('.simulation-bar input[type=date]').fill('2026-09-03')
   await page.locator('.simulation-bar .rate-field select').selectOption('1')
+  await page.locator('.catalog-scene-controls > summary').click()
   await page.getByLabel('Catalog memory budget', { exact: true }).selectOption('1024')
   const samples = []
   for (const mode of ['3D', '2D'] as const) {

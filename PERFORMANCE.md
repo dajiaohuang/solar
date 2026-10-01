@@ -52,17 +52,28 @@ Explorer permits one in-flight epoch, publishes only a complete snapshot, and
 waits for backend current states to catch up before requesting the next catalog
 epoch. It exposes computed rows, primary submitted draw count, admitted capacity,
 snapshot UTC JD and requested-time lag. No temporal reuse or mixed-epoch layer is
-presented as exact alignment. Its 256/512/1024 MiB plan includes 160 extra bytes
+presented as exact alignment. Its 256/512/1024 MiB plan includes 208 extra bytes
 per admitted row for scene storage and is not a measured process memory limit.
 The stream admits four concurrent shard reads and a separate
 four-tile upload window; the worker yields to messages after roughly 4 ms of
 cooperative work. Its planner charges the matching in-flight memory. Raising
 these limits requires updating that admission model and measuring both
-throughput and device responsiveness. In Explorer 2D, each new point epoch also
-scans the active draw prefix to preserve the exact visible-cloud radius. This
-is an O(draw-count) main-thread pass; replacing it with a bound could change
-camera framing, so it needs a source-equivalent profile and extent comparison
-before any change. The full MPCORB stream defaults to all loaded rows under its
+throughput and device responsiveness. Explorer retains canonical xyz stream
+snapshots across 2D/3D switches, lazily caching an xy projection for each complete
+epoch. Switching modes does not restart the stream or re-read source shards.
+Both initial camera fits sample at most 2,048 evenly spaced source ordinals and
+use the 95th percentile radius with 8% padding. This deliberately frames the
+main population rather than every distant outlier; selected bodies and trails
+can still widen the fit, and users can zoom out to discover distant points.
+This visual framing policy never changes admitted rows or source selection.
+Catalog click picking builds a screen grid on demand in 2,048-row batches,
+yields between batches, and reuses it while geometry, draw range and camera
+stay unchanged. Pending picks cancel when those inputs change or a newer click
+arrives. Crowded 2D body labels use priority-ordered placement and hide when
+no on-screen non-overlapping position fits. The collapsed catalog disclosure
+exposes loading and time lag; its expanded controls show displayed/target UTC
+times and let users pause playback while complete epochs catch up.
+The full MPCORB stream defaults to all loaded rows under its
 device-tier Auto draw cap, so the individual point count follows the adaptive
 limit instead of the number of occupied spatial cells. Above the cap, selection
 is deterministic and evenly spaced in upload order; spatial representatives

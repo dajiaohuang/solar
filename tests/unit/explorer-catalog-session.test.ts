@@ -72,7 +72,7 @@ it('charges scene buffers beside retained propagation and admits the full pinned
     const budget = 1024 * 1024 * 1024
     const plan = planExplorerCatalog(manifest, manifest.totalCount, budget, mode)
     expect(plan.capacity).toBe(manifest.totalCount)
-    expect(plan.workerBudget + plan.capacity * 160).toBeLessThanOrEqual(budget)
+    expect(plan.workerBudget + plan.capacity * 208).toBeLessThanOrEqual(budget)
     expect(planCatalogStream(manifest, plan.capacity, plan.workerBudget, mode, true).capacity).toBe(plan.capacity)
     expect(planExplorerCatalog(manifest, manifest.totalCount, 256 * 1024 * 1024, mode).capacity).toBeLessThan(manifest.totalCount)
   }

@@ -3,6 +3,22 @@ import { createExplorerCatalogSession, planExplorerCatalog, type ExplorerCatalog
 import type { AsteroidManifest, CatalogFilters } from '../types'
 import type { CatalogStreamRequest, CatalogStreamResponse } from '../workers/catalog-stream.protocol'
 
+const planarSnapshots = new WeakMap<ExplorerCatalogSnapshot, ExplorerCatalogSnapshot>()
+export function catalogSnapshotForMode(snapshot: ExplorerCatalogSnapshot | null, mode: '2d' | '3d') {
+  if (!snapshot || mode === '3d') return snapshot
+  let planar = planarSnapshots.get(snapshot)
+  if (!planar) {
+    const positions = new Float64Array(snapshot.count * 2)
+    for (let row = 0; row < snapshot.count; row++) {
+      positions[row * 2] = snapshot.positions[row * 3]
+      positions[row * 2 + 1] = snapshot.positions[row * 3 + 1]
+    }
+    planar = { ...snapshot, positions }
+    planarSnapshots.set(snapshot, planar)
+  }
+  return planar
+}
+
 export function useExplorerCatalog(manifest: AsteroidManifest | null, filters: CatalogFilters, mode: '2d' | '3d', rows: number | null, budgetBytes: number, julianDay: number) {
   const [generation, setGeneration] = useState(0)
   const [state, setState] = useState<{ key: object; snapshot: ExplorerCatalogSnapshot | null; error: string | null; loaded: number; capacity: number } | null>(null)
@@ -10,7 +26,8 @@ export function useExplorerCatalog(manifest: AsteroidManifest | null, filters: C
   const epoch = useRef(julianDay)
   useEffect(() => { epoch.current = julianDay }, [julianDay])
   // Identity changes hide old results immediately, before effect cleanup.
-  const identity = useMemo(() => ({ manifest, filters, mode, rows, budgetBytes, generation }), [manifest, filters, mode, rows, budgetBytes, generation])
+  // Both renderers share retained xyz propagation and immutable source ordinals.
+  const identity = useMemo(() => ({ manifest, filters, rows, budgetBytes, generation }), [manifest, filters, rows, budgetBytes, generation])
   useEffect(() => {
     if (!manifest || !rows) return
     let active = true, worker: Worker | undefined
@@ -22,10 +39,10 @@ export function useExplorerCatalog(manifest: AsteroidManifest | null, filters: C
       setState({ key: identity, snapshot: null, error: error instanceof Error ? error.message : String(error), loaded: 0, capacity: 0 })
     }
     try {
-      const plan = planExplorerCatalog(manifest, rows, budgetBytes, mode)
+      const plan = planExplorerCatalog(manifest, rows, budgetBytes, '3d')
       worker = new Worker(new URL('../workers/catalog-stream.worker.ts', import.meta.url), { type: 'module' })
       const send = (message: CatalogStreamRequest, transfer: Transferable[] = []) => worker!.postMessage(message, transfer)
-      const current = createExplorerCatalogSession(plan.capacity, mode, epoch.current, send, snapshot => {
+      const current = createExplorerCatalogSession(plan.capacity, '3d', epoch.current, send, snapshot => {
         if (active) setState({ key: identity, snapshot, error: null, loaded: snapshot.count, capacity: plan.capacity })
       })
       session.current = current
@@ -39,14 +56,16 @@ export function useExplorerCatalog(manifest: AsteroidManifest | null, filters: C
       }
       worker.onerror = event => fail(new Error(event.message || 'Catalog stream worker failed'))
       worker.onmessageerror = () => fail(new Error('Catalog stream response could not be decoded'))
-      send({ type: 'start', manifest, filters, mode, requestedRows: plan.capacity, budgetBytes: plan.workerBudget, retainEpochs: true, julianDay: epoch.current })
+      send({ type: 'start', manifest, filters, mode: '3d', requestedRows: plan.capacity, budgetBytes: plan.workerBudget, retainEpochs: true, julianDay: epoch.current })
     } catch (error) { queueMicrotask(() => fail(error)) }
     return () => { active = false; session.current?.dispose(); session.current = null; worker?.terminate() }
-  }, [identity, manifest, filters, mode, rows, budgetBytes])
+  }, [identity, manifest, filters, rows, budgetBytes])
   const advance = useCallback((targetEpoch: number) => {
     try { session.current?.request(targetEpoch) }
     catch (error) { setState(previous => previous ? { ...previous, snapshot: null, error: String(error) } : previous) }
   }, [])
   const retry = useCallback(() => setGeneration(value => value + 1), [])
-  return { ...(state?.key === identity ? state : { snapshot: null, error: null, loaded: 0, capacity: 0 }), advance, retry }
+  const current = state?.key === identity ? state : { snapshot: null, error: null, loaded: 0, capacity: 0 }
+  const snapshot = useMemo(() => catalogSnapshotForMode(current.snapshot, mode), [current.snapshot, mode])
+  return { ...current, snapshot, advance, retry }
 }

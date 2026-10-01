@@ -5,6 +5,8 @@ import type { LagrangePoint } from '../lib/lagrange'
 import type { AsteroidRecord, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector2 } from '../types'
 import type { CurrentPositions } from '../lib/currentPositions'
 import { ScreenPointIndex } from '../lib/screenPointIndex'
+import { CooperativeScreenPicker } from '../lib/cooperativeScreenPicker'
+import { placeSceneLabels } from '../lib/catalogScenePresentation'
 import { bodyDisplayName } from '../lib/bodyNames'
 import { buildGeometry, createGeometryBufferPool, type Geometry, type GeometryBufferPool, type OrbitEllipse } from '../lib/trajectoryGeometry2d'
 
@@ -341,6 +343,8 @@ export function TrajectoryCanvas({
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const resourcesRef = useRef<GlResources | null>(null)
   const pickingRef = useRef<{ positions: CurrentPositions; projection: Projection; index: ScreenPointIndex } | null>(null)
+  const [catalogPicker] = useState(() => new CooperativeScreenPicker())
+  useEffect(() => () => catalogPicker.cancel(), [catalogPicker])
   const geometryBuffersRef = useRef<GeometryBufferPool | null>(null)
   if (geometryBuffersRef.current === null) geometryBuffersRef.current = createGeometryBufferPool()
   const drawRef = useRef<(() => void) | null>(null)
@@ -383,6 +387,7 @@ export function TrajectoryCanvas({
     projection,
   ])
   const pointGeometryKey = useMemo(() => ({}), [asteroidOpacity, moonOpacity, planetOpacity, pointPositionKey, referenceBody])
+  useEffect(() => { catalogPicker.cancel() }, [catalogPicker, pointPositionKey])
   const pointGeometryCacheRef = useRef<{
     geometryKey: object
     positionKey: object
@@ -399,6 +404,14 @@ export function TrajectoryCanvas({
     }
     return [...majorBodies, ...asteroidBodies]
   }, [currentPositions])
+
+  const placedLabels = useMemo(() => {
+    const entries = [{ body: referenceBody, planarPosition: { x: 0, y: 0 } }, ...labels.filter(item => item.body.id !== referenceBody.id)]
+    const byId = new Map(entries.map(item => [item.body.id, item.body]))
+    return placeSceneLabels(entries.map(({ body, planarPosition }) => ({ id: body.id, ...projectPoint(planarPosition, projection),
+      width: Math.max(24, bodyDisplayName(body, language).length * 9) })), size.width, size.height)
+      .map(label => ({ ...label, body: byId.get(label.id)! }))
+  }, [labels, language, projection, referenceBody, size.width, size.height])
 
   const nearestPositionIndex = useCallback((screenPoint: Vector2, radiusAU: number) => {
     const picking = pickingRef.current
@@ -665,17 +678,15 @@ export function TrajectoryCanvas({
       onDoubleClick={handleDoubleClick}
       onPointerDown={handleTouchStart}
       onClick={event => {
+        catalogPicker.supersede()
         if (!onCatalogSelect || !catalogDrawCount) return
         const rect = event.currentTarget.getBoundingClientRect(), x = event.clientX - rect.left, y = event.clientY - rect.top
         if (nearestPositionIndex({ x, y }, 7 / projection.scale) >= 0) return
-        let nearest = -1, distance = 49
-        for (let index = 0; index < Math.min(catalogDrawCount, catalogPositions.length / 2); index++) {
-          const dx = projection.centerX + (catalogPositions[index * 2] - catalogOrigin.x - projection.offsetXAU) * projection.scale - x
-          const dy = projection.centerY - (catalogPositions[index * 2 + 1] - catalogOrigin.y - projection.offsetYAU) * projection.scale - y
-          const squared = dx * dx + dy * dy
-          if (squared < distance) { nearest = index; distance = squared }
-        }
-        if (nearest >= 0) onCatalogSelect(nearest)
+        const count = Math.min(catalogDrawCount, catalogPositions.length / 2)
+        void catalogPicker.nearest(catalogPositions, pointPositionKey, rect.width, rect.height, count, row => ({
+          x: projection.centerX + (catalogPositions[row * 2] - catalogOrigin.x - projection.offsetXAU) * projection.scale,
+          y: projection.centerY - (catalogPositions[row * 2 + 1] - catalogOrigin.y - projection.offsetYAU) * projection.scale,
+        }), () => Boolean(containerRef.current), x, y).then(nearest => { if (nearest >= 0) onCatalogSelect(nearest) })
       }}
       onPointerMove={handleTouchMove}
       onPointerUp={handleTouchEnd}
@@ -686,16 +697,6 @@ export function TrajectoryCanvas({
       <canvas ref={canvasRef} className="trajectory-canvas" role="img" aria-label={ariaLabel} data-position-count={currentPositions.length} data-trail-count={trajectories.filter(trail => trail.coordinates.length >= 6).length} />
 
       <div className="canvas-label-layer" aria-hidden="true">
-        <span
-          className="floating-label reference-floating-label"
-          style={{
-            left: `${(projectPoint({ x: 0, y: 0 }, projection).x / Math.max(size.width, 1)) * 100}%`,
-            top: `${(projectPoint({ x: 0, y: 0 }, projection).y / Math.max(size.height, 1)) * 100}%`,
-          }}
-        >
-          {bodyDisplayName(referenceBody, language)}
-        </span>
-
         {showEcliptic && [0.33, 0.66, 1.0].map((ratio) => {
           const ringAU = viewRadiusAU * ratio
           const ringPixelRadius = projection.drawableRadius * ratio
@@ -718,16 +719,13 @@ export function TrajectoryCanvas({
           )
         })}
 
-        {labels.map(({ body, planarPosition }) => {
-          const projected = projectPoint(planarPosition, projection)
-
+        {placedLabels.map(({ body, x, y }) => {
           return (
             <span
               key={body.id}
-              className={`floating-label ${body.kind === 'asteroid' || body.kind === 'comet' ? 'minor-floating-label' : ''}`}
+              className={`floating-label placed-floating-label ${body.id === referenceBody.id ? 'reference-floating-label' : ''} ${body.kind === 'asteroid' || body.kind === 'comet' ? 'minor-floating-label' : ''}`}
               style={{
-                left: `${(projected.x / Math.max(size.width, 1)) * 100}%`,
-                top: `${(projected.y / Math.max(size.height, 1)) * 100}%`,
+                left: `${x}px`, top: `${y}px`,
               }}
             >
               {bodyDisplayName(body, language)}

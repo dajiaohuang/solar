@@ -445,12 +445,30 @@ test('lazy-loads catalog samples only inside catalog workspaces and only once', 
 })
 
 test('streams the filtered catalog into both Explorer renderers and releases it on stop', async ({ page }) => {
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker
+    const audit = window as Window & { explorerStreamStarts: number }
+    audit.explorerStreamStarts = 0
+    window.Worker = class extends NativeWorker {
+      override postMessage(data: unknown, options?: Transferable[] | StructuredSerializeOptions) {
+        if ((data as { type?: string; retainEpochs?: boolean })?.type === 'start' && (data as { retainEpochs?: boolean }).retainEpochs) audit.explorerStreamStarts++
+        if ((data as { type?: string })?.type === 'epoch') {
+          // Hold the worker request to exercise the displayed/target time gap.
+          setTimeout(() => { if (Array.isArray(options)) super.postMessage(data, options); else super.postMessage(data, options) }, 1000)
+          return
+        }
+        if (Array.isArray(options)) super.postMessage(data, options)
+        else super.postMessage(data, options)
+      }
+    }
+  })
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))
   await installMockCatalog(page, { precomputed: true, profileSamples: { desktop: [0], mobile: [0] } })
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=4&catalogCloud=1&quality=max&dataset=mock-content-lite&catalogSample=desktop&catalogSampleCount=1&lang=en')
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
+  await page.locator('.catalog-scene-controls > summary').click()
   await page.getByLabel('Catalog population', { exact: true }).selectOption('100000')
   await expect(page.getByTestId('explorer-catalog-status')).toContainText('Computed 3 · Primary draw 3', { timeout: 20000 })
   await expect(page.locator('.frame-label small')).toContainText('catalog 3 / 3')
@@ -458,6 +476,30 @@ test('streams the filtered catalog into both Explorer renderers and releases it 
   await viewSwitch.getByRole('button', { name: '2D', exact: true }).click()
   await expect(page.locator('.trajectory-canvas')).toBeVisible()
   await expect(page.getByTestId('explorer-catalog-status')).toContainText('Computed 3 · Primary draw 3')
+  expect(await page.locator('.viz-canvas:has(canvas.trajectory-canvas)').evaluate(node => {
+    const viewport = node.getBoundingClientRect()
+    const labels = [...node.querySelectorAll('.placed-floating-label')].map(label => label.getBoundingClientRect())
+    return labels.length > 0 && labels.every((label, index) => label.left >= viewport.left && label.right <= viewport.right
+      && label.top >= viewport.top && label.bottom <= viewport.bottom && labels.slice(index + 1).every(other =>
+        label.right <= other.left || label.left >= other.right || label.bottom <= other.top || label.top >= other.bottom))
+  })).toBe(true)
+  await viewSwitch.getByRole('button', { name: '3D', exact: true }).click()
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
+  await expect(page.getByTestId('explorer-catalog-status')).toContainText('Computed 3 · Primary draw 3')
+  expect(await page.evaluate(() => (window as Window & { explorerStreamStarts: number }).explorerStreamStarts)).toBe(1)
+  const beforeSeek = await page.getByTestId('explorer-catalog-status').getAttribute('data-epoch')
+  await page.locator('.simulation-bar input[type=date]').fill('2026-09-03')
+  await expect(page.locator('.catalog-scene-controls > summary')).toContainText('Catching up')
+  expect(await page.getByTestId('explorer-catalog-status').getAttribute('data-epoch')).toBe(beforeSeek)
+  await page.locator('.simulation-bar').getByRole('button', { name: /Play/ }).click()
+  await page.getByRole('button', { name: 'Pause to catch up', exact: true }).click()
+  await expect(page.locator('.simulation-bar').getByRole('button', { name: /Play/ })).toBeVisible()
+  await expect(page.locator('.catalog-scene-controls > summary')).toContainText('Time synchronized', { timeout: 20000 })
+  expect(await page.getByTestId('explorer-catalog-status').getAttribute('data-epoch')).not.toBe(beforeSeek)
+  await page.locator('.accessible-scene-controls > summary').click()
+  await expect(page.locator('.catalog-scene-controls')).not.toHaveAttribute('open', '')
+  await page.locator('.catalog-scene-controls > summary').click()
+  await expect(page.locator('.accessible-scene-controls')).not.toHaveAttribute('open', '')
   await page.getByRole('button', { name: 'Stop and return to sample', exact: true }).click()
   await expect(page.getByTestId('explorer-catalog-status')).toHaveCount(0)
   await expect(page.locator('.frame-label small')).toContainText('catalog 1 / 1')
