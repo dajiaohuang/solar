@@ -88,6 +88,43 @@ needs stream-specific device measurements before claiming a performance gain.
 
 The scene URL records the immutable catalog sample, whether the cloud is enabled, and the requested quality profile. The optional Explorer stream size and local memory plan are session choices; they are not yet replayed by that URL. The effective adaptive draw count is also local. A comparison gives both frames the same deterministic prefix and discards any unshared remainder. See [the current direction receipt](docs/direction-correction-20260929.md) for bounded real-source evidence and its limitations.
 
+### Local full-catalog check, 2026-10-02
+
+The [raw receipt](docs/benchmarks/explorer-scene-20261002/explorer-capacity.json)
+records source SHA-256 fingerprints, the pinned dataset and backend manifests,
+Chromium 151, i9-14900KF and SwiftShader software graphics. Both modes computed
+all 1,561,171 rows, advanced time, caught up after pausing, and retained a live
+graphics context. The primary catalog draw at capture was 280,000 points.
+
+| Operation | Observed readiness | New stream starts / binary shard reads | Pause to synchronized time |
+| --- | ---: | ---: | ---: |
+| Initial 3D load | 10.354 s | 1 / 313 | 1.365 s |
+| Switch from 3D to 2D | 0.298 s | 0 / 0 | 1.399 s |
+
+The 3D RAF p50/p95/p99 were 50.1/66.7/83.3 ms; 2D was
+50.0/100.1/116.7 ms. These short software-renderer samples do not establish
+physical GPU smoothness, sustained performance or peak memory usage. The
+1,024 MiB setting remains a memory plan. Readiness includes browser automation
+and, for the mode switch, the click and the lazy planar projection.
+
+Two real 2D catalog clicks displayed Pallas and Kiselev in the inspector after
+0.877 s and 0.870 s. Those are observed click-to-inspector times including data
+fetches, React updates and Playwright polling, not isolated index lookup times.
+The picker check follows an explicit date seek and three 1.25x zoom steps;
+candidate coordinates come from a bounded prefix of the actual uploaded point
+buffer, excluding focus-marker hit areas. Diagnostics run after RAF sampling.
+The check exposed a missing success return from catalog insertion: a picked body
+was selected but never focused. Catalog admission now returns true on success
+and retains false for preview rejection. Catalog picking caches also exclude
+unrelated focus-body updates and unchanged origin object identities.
+
+Focused validation passed: 22 unit tests including preview guards, desktop and
+mobile mock-scene regressions, and one real-source desktop browser check. Build
+and artifact verification passed. No full suite, push, release or deployment was
+performed. [3D capture](docs/benchmarks/explorer-scene-20261002/catalog-3D.png)
+and [2D capture](docs/benchmarks/explorer-scene-20261002/catalog-2D.png) show the
+scene before the separate picker diagnostic.
+
 ## Android exact-state display controller
 
 Android's current-state budget is independent of the Web catalog-cloud policy:

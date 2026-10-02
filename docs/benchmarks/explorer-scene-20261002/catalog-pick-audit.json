@@ -1,0 +1,22 @@
+{
+  "points": [
+    {
+      "x": 881.1255869269371,
+      "y": 370.3520231246948
+    },
+    {
+      "x": 886.7898616939783,
+      "y": 438.05038446187973
+    }
+  ],
+  "picks": [
+    {
+      "clickToInspectorMs": 876.6546000000017,
+      "selectedName": "Pallas"
+    },
+    {
+      "clickToInspectorMs": 870.3264999999956,
+      "selectedName": "Kiselev"
+    }
+  ]
+}

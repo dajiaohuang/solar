@@ -3,6 +3,20 @@ import { CooperativeScreenPicker } from '../../src/lib/cooperativeScreenPicker'
 import { catalogFramingRadius, placeSceneLabels } from '../../src/lib/catalogScenePresentation'
 import { catalogSnapshotForMode } from '../../src/hooks/useExplorerCatalog'
 import type { ExplorerCatalogSnapshot } from '../../src/lib/explorerCatalogSession'
+import { selectionActions, selectionStore } from '../../src/state/selection-store'
+import type { CelestialBody } from '../../src/types'
+
+it('reports successful catalog admission so a picked body can receive focus', () => {
+  const previous = selectionStore.getState()
+  const body = { id: 'asteroid:1', name: 'Ceres', kind: 'asteroid' } as CelestialBody
+  try {
+    expect(selectionActions.addCatalogBodies([body], true)).toBe(true)
+    selectionActions.focus(body.id)
+    expect(selectionStore.getState().focusedId).toBe(body.id)
+    expect(selectionStore.getState().selectedIds).toContain(body.id)
+    expect(selectionStore.getState().catalogBodies[body.id]).toBe(body)
+  } finally { selectionStore.setState(previous) }
+})
 
 it('reuses one spatial snapshot and planar projection without changing ordinals or epochs', () => {
   const snapshot = { positions: new Float64Array([1, 2, 30, 4, 5, 60]), count: 2, julianDay: 2460000.5,

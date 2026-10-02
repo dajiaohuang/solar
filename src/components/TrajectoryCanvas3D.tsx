@@ -192,7 +192,7 @@ export function TrajectoryCanvas3D({
   const pickingRef = useRef<{ key: string; positions: unknown; width: number; height: number; count: number; index: ScreenPointIndex } | null>(null)
   const [catalogPicker] = useState(() => new CooperativeScreenPicker())
   useEffect(() => () => catalogPicker.cancel(), [catalogPicker])
-  useEffect(() => { catalogPicker.cancel() }, [catalogPicker, catalogPositions3D, catalogDrawCount, catalogOrigin])
+  useEffect(() => { catalogPicker.cancel() }, [catalogPicker, catalogPositions3D, catalogDrawCount, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z])
   const positionsRef = useRef(currentPositions)
   const lastTouchTapRef = useRef<{ bodyId: string; timestamp: number } | null>(null)
   const touchGestureRef = useRef<{ pointerId: number; startX: number; startY: number; moved: boolean } | null>(null)

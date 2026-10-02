@@ -100,6 +100,7 @@ export const selectionActions = {
         ? [...new Set([...state.selectedIds, ...bodies.map((body) => body.id)])]
         : state.selectedIds,
     }))
+    return true
   },
   clearCatalogBodies() {
     selectionStore.setState((state) => ({

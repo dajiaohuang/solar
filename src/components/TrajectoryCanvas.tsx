@@ -387,7 +387,10 @@ export function TrajectoryCanvas({
     projection,
   ])
   const pointGeometryKey = useMemo(() => ({}), [asteroidOpacity, moonOpacity, planetOpacity, pointPositionKey, referenceBody])
-  useEffect(() => { catalogPicker.cancel() }, [catalogPicker, pointPositionKey])
+  // Focus-body updates do not change the catalog's projected coordinates.
+  const catalogPickingKey = useMemo(() => ({ positions: catalogPositions, count: catalogDrawCount, projection,
+    x: catalogOrigin.x, y: catalogOrigin.y }), [catalogPositions, catalogDrawCount, projection, catalogOrigin.x, catalogOrigin.y])
+  useEffect(() => { catalogPicker.cancel() }, [catalogPicker, catalogPickingKey])
   const pointGeometryCacheRef = useRef<{
     geometryKey: object
     positionKey: object
@@ -683,7 +686,7 @@ export function TrajectoryCanvas({
         const rect = event.currentTarget.getBoundingClientRect(), x = event.clientX - rect.left, y = event.clientY - rect.top
         if (nearestPositionIndex({ x, y }, 7 / projection.scale) >= 0) return
         const count = Math.min(catalogDrawCount, catalogPositions.length / 2)
-        void catalogPicker.nearest(catalogPositions, pointPositionKey, rect.width, rect.height, count, row => ({
+        void catalogPicker.nearest(catalogPositions, catalogPickingKey, rect.width, rect.height, count, row => ({
           x: projection.centerX + (catalogPositions[row * 2] - catalogOrigin.x - projection.offsetXAU) * projection.scale,
           y: projection.centerY - (catalogPositions[row * 2 + 1] - catalogOrigin.y - projection.offsetYAU) * projection.scale,
         }), () => Boolean(containerRef.current), x, y).then(nearest => { if (nearest >= 0) onCatalogSelect(nearest) })
