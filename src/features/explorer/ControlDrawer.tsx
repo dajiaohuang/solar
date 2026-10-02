@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { PagedBodyList } from '../../components/PagedBodyList'
+import { NumberDraftInput } from '../../components/NumberDraftInput'
 import { fetchSbdbBody } from '../../data/loaders/sbdb'
 import { SCENE_PRESETS } from '../../data/presets'
 import { availabilityAttributes, bodyAvailability, catalogAvailability, PRODUCT_PROFILE, sceneAvailability } from '../../lib/productAvailability'
@@ -211,11 +212,11 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView, trajector
         <div className="view-offset-grid">
           <label className="field">
             <span>{t('offsetX')}</span>
-            <input type="number" step="0.1" disabled={!capabilities.offset} value={simulation.viewOffset.x} onChange={(event) => simulationActions.patch({ viewOffset: { ...simulation.viewOffset, x: Number(event.target.value) || 0 } })} />
+            <NumberDraftInput step="0.1" disabled={!capabilities.offset} value={simulation.viewOffset.x} onValueChange={x => simulationActions.patch({ viewOffset: { ...simulation.viewOffset, x } })} />
           </label>
           <label className="field">
             <span>{t('offsetY')}</span>
-            <input type="number" step="0.1" disabled={!capabilities.offset} value={simulation.viewOffset.y} onChange={(event) => simulationActions.patch({ viewOffset: { ...simulation.viewOffset, y: Number(event.target.value) || 0 } })} />
+            <NumberDraftInput step="0.1" disabled={!capabilities.offset} value={simulation.viewOffset.y} onValueChange={y => simulationActions.patch({ viewOffset: { ...simulation.viewOffset, y } })} />
           </label>
         </div>
         {!capabilities.offset && <p className="fine-print">{t('offset2dOnly')}</p>}
@@ -230,7 +231,7 @@ export function ControlDrawer({ bodies, referenceOptions, onResetView, trajector
           ['showHillSphere', 'hill', capabilities.hillSphere], ['showLaplaceSoi', 'soi', capabilities.laplaceSoi], ['showSpacecraft', 'spacecraft', capabilities.spacecraft],
         ] as const).map(([property, label, supported]) => (
           <label className="toggle-row" key={property}>
-            <input type="checkbox" {...(property === 'showSpacecraft' ? availabilityAttributes(sceneAvailability({ layers: ['spacecraft'] })) : {})} disabled={!supported} checked={simulation[property]} onChange={(event) => simulationActions.patch({ [property]: event.target.checked })} />
+            <input type="checkbox" {...(property === 'showSpacecraft' ? availabilityAttributes(sceneAvailability({ layers: ['spacecraft'] })) : {})} disabled={!supported} checked={supported && simulation[property]} onChange={(event) => simulationActions.patch({ [property]: event.target.checked })} />
             <span>{t(label)}{!supported ? ` · ${t('twoDOnly')}` : ''}{property === 'showSpacecraft' && !sceneAvailability({ layers: ['spacecraft'] }).available ? ` · ${t('fullVersion')}` : ''}</span>
           </label>
         ))}

@@ -49,6 +49,7 @@ export class SimulationClock {
   seek(julianDay: number) {
     if (!Number.isFinite(julianDay)) return
     this.julianDay = julianDay
+    this.lastTimestamp = null
     this.seekRevision += 1
     this.publish()
   }

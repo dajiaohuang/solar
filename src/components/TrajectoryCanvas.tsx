@@ -7,6 +7,7 @@ import type { CurrentPositions } from '../lib/currentPositions'
 import { ScreenPointIndex } from '../lib/screenPointIndex'
 import { CooperativeScreenPicker } from '../lib/cooperativeScreenPicker'
 import { placeSceneLabels } from '../lib/catalogScenePresentation'
+import { usePointPickGesture } from '../hooks/usePointPickGesture'
 import { bodyDisplayName } from '../lib/bodyNames'
 import { buildGeometry, createGeometryBufferPool, type Geometry, type GeometryBufferPool, type OrbitEllipse } from '../lib/trajectoryGeometry2d'
 
@@ -22,6 +23,7 @@ type Props = {
   showOrbits?: boolean
   orbitEllipses?: OrbitEllipse[]
   onReferenceChange?: (bodyId: string) => void
+  onBodySelect?: (bodyId: string) => void
   onHover?: (body: CelestialBody | null, distance: number, x: number, y: number) => void
   lagrangePoints?: { body: CelestialBody; points: LagrangePoint[] }[]
   influenceCircles?: {
@@ -319,6 +321,7 @@ export function TrajectoryCanvas({
   showOrbits,
   orbitEllipses,
   onReferenceChange,
+  onBodySelect,
   onHover,
   lagrangePoints,
   influenceCircles,
@@ -344,6 +347,7 @@ export function TrajectoryCanvas({
   const resourcesRef = useRef<GlResources | null>(null)
   const pickingRef = useRef<{ positions: CurrentPositions; projection: Projection; index: ScreenPointIndex } | null>(null)
   const [catalogPicker] = useState(() => new CooperativeScreenPicker())
+  const pickGesture = usePointPickGesture()
   useEffect(() => () => catalogPicker.cancel(), [catalogPicker])
   const geometryBuffersRef = useRef<GeometryBufferPool | null>(null)
   if (geometryBuffersRef.current === null) geometryBuffersRef.current = createGeometryBufferPool()
@@ -413,7 +417,7 @@ export function TrajectoryCanvas({
     const byId = new Map(entries.map(item => [item.body.id, item.body]))
     return placeSceneLabels(entries.map(({ body, planarPosition }) => ({ id: body.id, ...projectPoint(planarPosition, projection),
       width: Math.max(24, bodyDisplayName(body, language).length * 9) })), size.width, size.height)
-      .map(label => ({ ...label, body: byId.get(label.id)! }))
+      .map(label => ({ ...label, body: byId.get(label.id)!, anchor: projectPoint(entries.find(item => item.body.id === label.id)!.planarPosition, projection) }))
   }, [labels, language, projection, referenceBody, size.width, size.height])
 
   const nearestPositionIndex = useCallback((screenPoint: Vector2, radiusAU: number) => {
@@ -567,7 +571,7 @@ export function TrajectoryCanvas({
 
   const handleDoubleClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
-      if (!onReferenceChange) {
+      if (!onReferenceChange || !pickGesture.allowClick()) {
         return
       }
 
@@ -577,14 +581,14 @@ export function TrajectoryCanvas({
         y: event.clientY - rect.top,
       }
 
-      const nearestIndex = nearestPositionIndex(clickPoint, viewRadiusAU * 0.06)
+      const nearestIndex = nearestPositionIndex(clickPoint, 9 / projection.scale)
       const nearestBody = nearestIndex >= 0 ? currentPositions.bodyAt(nearestIndex).id : null
 
       if (nearestBody) {
         onReferenceChange(nearestBody)
       }
     },
-    [currentPositions, nearestPositionIndex, onReferenceChange, viewRadiusAU],
+    [currentPositions, nearestPositionIndex, onReferenceChange, pickGesture, projection.scale],
   )
 
   const handleMouseMove = useCallback(
@@ -592,6 +596,7 @@ export function TrajectoryCanvas({
       if (!onHover) {
         return
       }
+      if (pickGesture.isInteracting()) { onHover(null, 0, 0, 0); return }
 
       const rect = event.currentTarget.getBoundingClientRect()
       const clickPoint = {
@@ -599,7 +604,7 @@ export function TrajectoryCanvas({
         y: event.clientY - rect.top,
       }
 
-      const nearestIndex = nearestPositionIndex(clickPoint, viewRadiusAU * 0.06)
+      const nearestIndex = nearestPositionIndex(clickPoint, 9 / projection.scale)
 
       if (nearestIndex >= 0) {
         onHover(currentPositions.bodyAt(nearestIndex), currentPositions.distanceAt(nearestIndex), event.clientX, event.clientY)
@@ -607,20 +612,21 @@ export function TrajectoryCanvas({
         onHover(null, 0, 0, 0)
       }
     },
-    [currentPositions, nearestPositionIndex, onHover, viewRadiusAU],
+    [currentPositions, nearestPositionIndex, onHover, pickGesture, projection.scale],
   )
 
   const handleTouchTap = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const rect = event.currentTarget.getBoundingClientRect()
     const nearestIndex = nearestPositionIndex(
       { x: event.clientX - rect.left, y: event.clientY - rect.top },
-      viewRadiusAU * 0.1,
+      12 / projection.scale,
     )
     if (nearestIndex < 0) {
       lastTouchTapRef.current = null
       return
     }
     const nearestItem = currentPositions.rowAt(nearestIndex)
+    onBodySelect?.(nearestItem.body.id)
     onHover?.(nearestItem.body, nearestItem.distance, event.clientX, event.clientY)
     const now = performance.now()
     const previous = lastTouchTapRef.current
@@ -630,7 +636,7 @@ export function TrajectoryCanvas({
     } else {
       lastTouchTapRef.current = { bodyId: nearestItem.body.id, timestamp: now }
     }
-  }, [currentPositions, nearestPositionIndex, onHover, onReferenceChange, viewRadiusAU])
+  }, [currentPositions, nearestPositionIndex, onBodySelect, onHover, onReferenceChange, projection.scale])
 
   const handleTouchStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== 'touch') return
@@ -663,9 +669,9 @@ export function TrajectoryCanvas({
     activeTouchPointersRef.current.delete(event.pointerId)
     const gesture = touchGestureRef.current
     touchGestureRef.current = null
-    if (!gesture || gesture.pointerId !== event.pointerId || gesture.moved) return
+    if (!gesture || gesture.pointerId !== event.pointerId || gesture.moved || !pickGesture.allowClick()) { lastTouchTapRef.current = null; return }
     handleTouchTap(event)
-  }, [handleTouchTap])
+  }, [handleTouchTap, pickGesture])
 
   const handleTouchCancel = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== 'touch') return
@@ -680,11 +686,17 @@ export function TrajectoryCanvas({
       ref={containerRef}
       onDoubleClick={handleDoubleClick}
       onPointerDown={handleTouchStart}
+      onPointerDownCapture={event => { pickGesture.start(event); catalogPicker.supersede() }}
+      onPointerMoveCapture={event => pickGesture.move(event)}
+      onPointerUpCapture={event => pickGesture.end(event)}
+      onPointerCancelCapture={event => pickGesture.cancel(event)}
       onClick={event => {
         catalogPicker.supersede()
-        if (!onCatalogSelect || !catalogDrawCount) return
+        if (!pickGesture.allowClick()) return
         const rect = event.currentTarget.getBoundingClientRect(), x = event.clientX - rect.left, y = event.clientY - rect.top
-        if (nearestPositionIndex({ x, y }, 7 / projection.scale) >= 0) return
+        const hit = nearestPositionIndex({ x, y }, 9 / projection.scale)
+        if (hit >= 0) { onBodySelect?.(currentPositions.bodyAt(hit).id); return }
+        if (!onCatalogSelect || !catalogDrawCount) return
         const count = Math.min(catalogDrawCount, catalogPositions.length / 2)
         void catalogPicker.nearest(catalogPositions, catalogPickingKey, rect.width, rect.height, count, row => ({
           x: projection.centerX + (catalogPositions[row * 2] - catalogOrigin.x - projection.offsetXAU) * projection.scale,
@@ -722,10 +734,11 @@ export function TrajectoryCanvas({
           )
         })}
 
-        {placedLabels.map(({ body, x, y }) => {
+        {placedLabels.map(({ body, x, y, anchor }) => {
           return (
             <span
               key={body.id}
+                data-body-id={body.id} data-anchor-x={anchor.x} data-anchor-y={anchor.y}
               className={`floating-label placed-floating-label ${body.id === referenceBody.id ? 'reference-floating-label' : ''} ${body.kind === 'asteroid' || body.kind === 'comet' ? 'minor-floating-label' : ''}`}
               style={{
                 left: `${x}px`, top: `${y}px`,

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { CatalogPointCanvas } from '../../components/CatalogPointCanvas'
+import { NumberDraftInput } from '../../components/NumberDraftInput'
 import { CatalogStreamCanvas } from '../../components/CatalogStreamCanvas'
 import { planCatalogStream, type CatalogStreamPriority, type CatalogSourceSelection } from '../../lib/catalogStreaming'
 import { requireCatalogAccess } from '../../lib/productAccess'
@@ -620,5 +621,5 @@ export function CatalogWorkspace() {
 }
 
 function RangeFields({ label, minimumLabel, maximumLabel, value, onChange, step }: { label: string; minimumLabel: string; maximumLabel: string; value: [number, number]; onChange: (value: [number, number]) => void; step: string }) {
-  return <div className="range-fields"><span>{label}</span><input aria-label={`${label}: ${minimumLabel}`} type="number" value={value[0]} step={step} onChange={(event) => onChange([Number(event.target.value), value[1]])} /><b>—</b><input aria-label={`${label}: ${maximumLabel}`} type="number" value={value[1]} step={step} onChange={(event) => onChange([value[0], Number(event.target.value)])} /></div>
+  return <div className="range-fields"><span>{label}</span><NumberDraftInput aria-label={`${label}: ${minimumLabel}`} value={value[0]} step={step} onValueChange={minimum => onChange([minimum, value[1]])} /><b>—</b><NumberDraftInput aria-label={`${label}: ${maximumLabel}`} value={value[1]} step={step} onValueChange={maximum => onChange([value[0], maximum])} /></div>
 }

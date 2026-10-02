@@ -17,7 +17,15 @@ const knownBackendIds = new Set([
   ...satelliteCatalog.bodies.filter(body => body.naifId !== undefined).map(body => backendBodyId(body)),
 ])
 
-function fixtureState(id: string) {
+function fixtureState(id: string, separated = false) {
+  if (separated) {
+    const positions: Record<string, number[]> = {
+      'sun': [0, 0, 0], 'mercury': [1, 0, 0], 'venus': [-2, 0, 0],
+      'earth': [0, 3, 0], 'naif:301': [0, 3.1, 0], 'mars': [0, -4, 0],
+      'jupiter': [5, 4, 0], 'saturn': [-6, -4, 0],
+    }
+    if (positions[id]) return [...positions[id].map(value => value * 149597870.7), 0, 0, 0]
+  }
   let hash = 17
   for (const character of id) hash = (hash * 31 + character.charCodeAt(0)) >>> 0
   const x = (hash % 100_000) + 1
@@ -32,7 +40,7 @@ function unavailableIdsAt(epochJd: number) {
 
 type StateTileActivity = { active: number; peak: number; completed: number }
 
-async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: boolean, missingStateTileIds: string[], stateTileRowsPerTile: number, stateTileDelayMs: number, activity: StateTileActivity) {
+async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: boolean, missingStateTileIds: string[], stateTileRowsPerTile: number, stateTileDelayMs: number, activity: StateTileActivity, separatedStateTilePositions: boolean) {
   if (!Number.isInteger(stateTileRowsPerTile) || stateTileRowsPerTile < 1 || stateTileRowsPerTile > 32768) throw new Error('Invalid fixture tile size')
   if (!Number.isFinite(stateTileDelayMs) || stateTileDelayMs < 0) throw new Error('Invalid fixture tile delay')
   const cancellations = new Map<Request, () => void>()
@@ -91,7 +99,7 @@ async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: b
           kernelSha256: 'b'.repeat(64), sourceChainSha256: 'c'.repeat(64), model: present[index] ? 'spk-original' : '', centerId: 'naif:0', validityStartEt: -1e12, validityEndEt: 1e12, validityPresent: true,
           stateEvidence: present[index] ? 'fixture-kernel' : '', evidenceWindowStartEt: 0, evidenceWindowEndEt: 0, evidenceWindowPresent: false,
           missingReason: present[index] ? '' : unavailable.has(id) ? 'kernel-coverage-gap' : 'unknown-identity', identityStatus: '', sourceRecord: false }))
-        const states = new Float64Array(ids.length * 6); ids.forEach((id, index) => { if (present[index]) states.set(fixtureState(id), index * 6) })
+        const states = new Float64Array(ids.length * 6); ids.forEach((id, index) => { if (present[index]) states.set(fixtureState(id, separatedStateTilePositions), index * 6) })
         append(Buffer.from(await encodeStateTile({ sequence: 0, tileCount: 1, ordinalStart: 0, epochJd, metadata, exact: present.flatMap((value, index) => value ? [index] : []), states, planHash: planId, catalogManifestSha256: catalogHash })))
         totalExact += exactCount; totalMissing += ids.length - exactCount
       }
@@ -135,7 +143,7 @@ async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: b
       const unavailableByEpoch = new Set([...unavailableIdsAt(plan.epochJd), ...missingStateTileIds])
       const present = tileIds.map(id => knownBackendIds.has(id) && !unavailableByEpoch.has(id))
       const metadata: StateTileMetadata[] = tileIds.map((id, index) => ({ id, availability: present[index] ? 'operational' : 'missing', precision: 'exact', source: knownBackendIds.has(id) ? source : '', datasetVersion: knownBackendIds.has(id) ? datasetVersion : '', datasetSha256: catalogHash, kernelSha256: 'b'.repeat(64), sourceChainSha256: 'c'.repeat(64), model: present[index] || unavailableByEpoch.has(id) ? 'spk-original' : '', centerId: knownBackendIds.has(id) ? 'naif:0' : '', validityStartEt: -1e12, validityEndEt: 1e12, validityPresent: true, stateEvidence: present[index] ? 'fixture-kernel' : '', evidenceWindowStartEt: -1e12, evidenceWindowEndEt: 1e12, evidenceWindowPresent: false, missingReason: present[index] ? '' : unavailableByEpoch.has(id) ? 'kernel-coverage-gap' : 'unknown-identity', identityStatus: '', sourceRecord: false }))
-      const states = new Float64Array(tileIds.length * 6); tileIds.forEach((id, index) => { if (present[index]) states.set(fixtureState(id), index * 6) })
+      const states = new Float64Array(tileIds.length * 6); tileIds.forEach((id, index) => { if (present[index]) states.set(fixtureState(id, separatedStateTilePositions), index * 6) })
       const tile = await encodeStateTile({ sequence, tileCount: Math.ceil(plan.bodyIds.length / stateTileRowsPerTile), ordinalStart, epochJd: plan.epochJd, metadata, exact: present.flatMap((value, index) => value ? [index] : []), states, planHash: body.planId!, catalogManifestSha256: catalogHash })
       const tileBytes = Buffer.from(tile); const payloadHash = tileBytes.subarray(168, 200).toString('hex')
       if (work.cancelled()) return
@@ -148,7 +156,8 @@ async function installStateTilesBackend(page: Page, mismatchedStateTileCounts: b
   })
 }
 
-export const test = base.extend<{ stateTilesBackend: void; stateTileActivity: StateTileActivity; mismatchedStateTileCounts: boolean; missingStateTileIds: string[]; stateTileRowsPerTile: number; stateTileDelayMs: number }>({
+export const test = base.extend<{ stateTilesBackend: void; stateTileActivity: StateTileActivity; mismatchedStateTileCounts: boolean; missingStateTileIds: string[]; stateTileRowsPerTile: number; stateTileDelayMs: number; separatedStateTilePositions: boolean }>({
+  separatedStateTilePositions: [false, { option: true }],
   mismatchedStateTileCounts: [false, { option: true }],
   missingStateTileIds: [[], { option: true }],
   stateTileRowsPerTile: [32768, { option: true }],
@@ -156,8 +165,8 @@ export const test = base.extend<{ stateTilesBackend: void; stateTileActivity: St
   // not silently disable slow-network acceptance before the first request.
   stateTileDelayMs: [0, { option: true }],
   stateTileActivity: async ({ page }, provide) => { void page; await provide({ active: 0, peak: 0, completed: 0 }) },
-  stateTilesBackend: [async ({ page, mismatchedStateTileCounts, missingStateTileIds, stateTileRowsPerTile, stateTileDelayMs, stateTileActivity }, use) => {
-    await installStateTilesBackend(page, mismatchedStateTileCounts, missingStateTileIds, stateTileRowsPerTile, stateTileDelayMs, stateTileActivity)
+  stateTilesBackend: [async ({ page, mismatchedStateTileCounts, missingStateTileIds, stateTileRowsPerTile, stateTileDelayMs, stateTileActivity, separatedStateTilePositions }, use) => {
+    await installStateTilesBackend(page, mismatchedStateTileCounts, missingStateTileIds, stateTileRowsPerTile, stateTileDelayMs, stateTileActivity, separatedStateTilePositions)
     await use()
   }, { auto: true }],
 })

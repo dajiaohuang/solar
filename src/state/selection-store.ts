@@ -88,6 +88,7 @@ export const selectionActions = {
   focus(focusedId: BodyId | null) {
     if (!availabilityActions.require(bodyAvailability(focusedId))) return false
     selectionStore.setState({ focusedId })
+    return true
   },
   addCatalogBodies(bodies: CelestialBody[], select = false) {
     if (!availabilityActions.require(sceneAvailability({ bodies: bodies.map(body => body.id) }))) return false

@@ -48,7 +48,7 @@ test('first-run deck, story, and evidence surfaces have no serious automated acc
   await page.goto('./?v=4&page=catalog')
   await expect(page.getByRole('heading', { name: /Catalog|小天体目录/ })).toBeVisible()
   await expectSingleApplicationLandmarks(page)
-  const rangeNames = await page.locator('input[type="number"]').evaluateAll((inputs) => inputs.map((input) => input.getAttribute('aria-label')))
+  const rangeNames = await page.locator('.range-fields input[type="number"]').evaluateAll((inputs) => inputs.map((input) => input.getAttribute('aria-label')))
   expect(rangeNames).toHaveLength(10)
   expect(new Set(rangeNames).size).toBe(10)
   expect(rangeNames.every((name) => name && /Minimum|Maximum|最小值|最大值/.test(name))).toBe(true)
@@ -56,7 +56,7 @@ test('first-run deck, story, and evidence surfaces have no serious automated acc
 
   await page.goto('./?v=4&page=catalog&lang=zh')
   await expect(page.getByRole('heading', { name: '小天体目录' })).toBeVisible()
-  const chineseRangeNames = await page.locator('input[type="number"]').evaluateAll((inputs) => inputs.map((input) => input.getAttribute('aria-label')))
+  const chineseRangeNames = await page.locator('.range-fields input[type="number"]').evaluateAll((inputs) => inputs.map((input) => input.getAttribute('aria-label')))
   expect(chineseRangeNames).toHaveLength(10)
   expect(new Set(chineseRangeNames).size).toBe(10)
   expect(chineseRangeNames.every((name) => name && /最小值|最大值/.test(name))).toBe(true)

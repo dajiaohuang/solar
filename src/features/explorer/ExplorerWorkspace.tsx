@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { TrajectoryCanvas } from '../../components/TrajectoryCanvas'
+import { SceneTooltip } from '../../components/SceneTooltip'
 import { SPACECRAFT } from '../../data/spacecraft'
 import { BODY_PHYSICAL } from '../../data/physical'
 import { useSimulationClock } from '../../engine/clock/useSimulationClock'
@@ -77,6 +78,7 @@ type FrameViewProps = {
   seekRevision: number
   onFrame: (frame: TrajectoryFrameData) => void
   onHover: (item: { body: CelestialBody; distance: number; x: number; y: number } | null) => void
+  onBodySelect: (id: BodyId) => void
   catalogAppearance?: Uint8Array
   onCatalogSelect?: (ordinal: number) => void
   catalogRecords: AsteroidRecord[]
@@ -110,6 +112,7 @@ function FrameView({
   seekRevision,
   onFrame,
   onHover,
+  onBodySelect,
   catalogAppearance,
   onCatalogSelect,
   catalogRecords,
@@ -306,7 +309,7 @@ function FrameView({
             stateFitRadius={backendFrame ? baseFrame.maxDistance : undefined}
             detailBodyIds={detailBodyIds}
             onReferenceChange={(id) => { if (bodiesById.has(id)) simulationActions.patch({ referenceId: id }) }}
-            onBodySelect={selectionActions.focus}
+            onBodySelect={onBodySelect}
             onHover={(body, distance, x, y) => onHover(body ? { body, distance, x, y } : null)}
             lagrangePoints={lagrangePoints}
             showEcliptic={simulation.showEcliptic}
@@ -338,6 +341,7 @@ function FrameView({
           showOrbits={simulation.showOrbits}
           orbitEllipses={orbitEllipses}
           onReferenceChange={(id) => { if (bodiesById.has(id)) simulationActions.patch({ referenceId: id }) }}
+          onBodySelect={onBodySelect}
           onHover={(body, distance, x, y) => onHover(body ? { body, distance, x, y } : null)}
           lagrangePoints={lagrangePoints}
           influenceCircles={influenceCircles}
@@ -501,8 +505,14 @@ export function ExplorerWorkspace() {
     : ''
   const [primaryFrame, setPrimaryFrame] = useState<TrajectoryFrameData>({ currentPositions: EMPTY_CURRENT_POSITIONS, trajectories: [], trajectoryUnavailableBodyIds: [], maxDistance: 0 })
   const [secondaryFrame, setSecondaryFrame] = useState<TrajectoryFrameData>({ currentPositions: EMPTY_CURRENT_POSITIONS, trajectories: [], trajectoryUnavailableBodyIds: [], maxDistance: 0 })
-  const [hovered, setHovered] = useState<{ body: CelestialBody; distance: number; x: number; y: number } | null>(null)
+  const hoverContext = `${simulation.viewMode}:${simulation.referenceId}:${clock.seekRevision}`
+  const [hoverState, setHoverState] = useState<({ body: CelestialBody; distance: number; x: number; y: number; context: string }) | null>(null)
+  const hovered = hoverState?.context === hoverContext ? hoverState : null
+  const updateHover = useCallback<FrameViewProps['onHover']>(item => setHoverState(item ? { ...item, context: hoverContext } : null), [hoverContext])
   const [inspectorOpen, setInspectorOpen] = useState(false)
+  const selectBody = useCallback((id: BodyId) => {
+    selectionActions.focus(id)
+  }, [])
   const pickController = useRef<AbortController | null>(null)
   const [catalogPickError, setCatalogPickError] = useState<string | null>(null)
   useEffect(() => () => { pickController.current?.abort() }, [catalog.manifest, catalog.filters, streamEnabled])
@@ -606,7 +616,8 @@ export function ExplorerWorkspace() {
             trajectoryJulianDay={trajectoryJulianDay}
             seekRevision={clock.seekRevision}
             onFrame={setPrimaryFrame}
-            onHover={setHovered}
+            onHover={updateHover}
+            onBodySelect={selectBody}
             catalogRecords={catalogRecords}
             catalogAppearance={streamEnabled ? catalogStream.snapshot?.appearance : undefined}
             onCatalogSelect={streamEnabled ? selectCatalogPoint : undefined}
@@ -639,7 +650,8 @@ export function ExplorerWorkspace() {
               trajectoryJulianDay={trajectoryJulianDay}
               seekRevision={clock.seekRevision}
               onFrame={setSecondaryFrame}
-              onHover={setHovered}
+              onHover={updateHover}
+              onBodySelect={selectBody}
               catalogRecords={catalogRecords}
               catalogAppearance={streamEnabled ? catalogStream.snapshot?.appearance : undefined}
               onCatalogSelect={streamEnabled ? selectCatalogPoint : undefined}
@@ -678,13 +690,13 @@ export function ExplorerWorkspace() {
           </div>
           <PagedBodyList as="ul" label={t('selectedObjectList')} bodies={selectedBodies}>{body => <li key={body.id}>
             <span><i style={{ background: body.color }} />{bodyDisplayName(body, language)}</span>
-            <button onClick={() => selectionActions.focus(body.id)}>{t('focusObject')}</button>
+            <button onClick={() => { if (selectionActions.focus(body.id)) setInspectorOpen(true) }}>{t('focusObject')}</button>
             <button onClick={() => simulationActions.patch({ referenceId: body.id })}>{t('setReference')}</button>
           </li>}</PagedBodyList>
         </details>
-        {hovered && <div className="atlas-tooltip" style={{ left: hovered.x + 14, top: hovered.y + 12 }}>
+        {hovered && <SceneTooltip x={hovered.x} y={hovered.y}>
           <strong>{bodyDisplayName(hovered.body, language)}</strong><span>{formatDistanceAU(hovered.distance, language)}</span>
-        </div>}
+        </SceneTooltip>}
       </main>
       {inspectorOpen && <BodyInspector key={focusedBody?.id ?? 'none'} body={focusedBody} currentPositions={inspectorPositions} bodiesById={bodiesById} backendFrame={inspectorBackendFrame} />}
     </div>

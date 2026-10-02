@@ -1,5 +1,37 @@
 # Performance budgets
 
+## Interaction audit, 2026-10-03
+
+Explorer now focuses named bodies from a 2D click and a completed touch tap.
+Both renderers reject selection/reference changes from drags, pinches and
+cancelled pointers, including gestures that return to their starting point.
+Global pointer release/blur handling prevents a gesture released outside the
+canvas from blocking the next interaction. Hover picking pauses during dragging;
+2D hover/reference hit radii use pixels rather than a fraction of scene radius.
+Tooltips remain inside the viewport and expire on view/reference/date changes.
+
+Switching to 3D preserves the session's planar offsets and layer choices;
+unsupported controls remain disabled and visibly unchecked. Returning to 2D
+restores those choices. Numeric/date inputs retain incomplete editing drafts,
+and seeking a playing clock discards the elapsed frame interval before the seek.
+Keyboard object focus opens the inspector; canvas focus preserves its layout so
+the reference-change gesture does not move the target between clicks.
+
+Focused validation: 21 unit checks and 21 final Chromium browser checks passed;
+the desktop-only exclusion of a touch-device test was intentional. Another 20
+desktop/mobile checks covered navigation, scene history/save/export, keyboard
+search, reproducible story/mission URLs, catalog streaming, viewport controls
+and WebGL-loss recovery. The final browser run rebuilt the production app.
+The accessible numeric-range assertion now selects the actual range fields,
+rather than counting the unrelated catalog radius control. Automated serious
+and critical accessibility checks passed. Scoped lint had no errors and three
+existing dependency warnings. The receipt is
+[interaction-audit-20261003](docs/benchmarks/interaction-audit-20261003/receipt.json).
+These are fixture-backed Chromium checks, including touch emulation; they do
+not establish physical-device performance, live ephemeris acceptance,
+Firefox/WebKit behavior, full-suite acceptance or deployment. Publication
+remains paused; no remote issue/PR coverage was created in this local audit.
+
 Solar Atlas treats the million-object catalog as a columnar filtering problem, not as a million JavaScript objects or meshes. The Observation Deck uses two deliberately separate render layers:
 
 - **Focus layer:** named, selectable bodies with current positions, trajectories, labels, inspection, and analysis. The 160-body 3D and 320-body 2D limits budget historical-trail computation and 3D detail meshes; they do not truncate current-position requests. Explorer submits the complete selected set to its current-state path when the state planner admits the request. In 3D, positions outside the detail set remain visible as batched point markers. Source coverage and planner admission still determine which states are exact, approximate, missing, or rejected.

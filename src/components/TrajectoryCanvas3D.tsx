@@ -4,6 +4,7 @@ import { createFrameInvalidator } from '../lib/frameInvalidation'
 import { ScreenPointIndex } from '../lib/screenPointIndex'
 import { CooperativeScreenPicker } from '../lib/cooperativeScreenPicker'
 import { catalogFramingRadius } from '../lib/catalogScenePresentation'
+import { usePointPickGesture } from '../hooks/usePointPickGesture'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { PREPARE_CANVAS_CAPTURE_EVENT } from '../lib/canvasCapture'
 import { cameraDistanceForFit, cameraRangeForFit, clamp3dZoom, sceneFramingForRadius } from '../lib/camera3d'
@@ -191,6 +192,7 @@ export function TrajectoryCanvas3D({
   const raycasterRef = useRef(new THREE.Raycaster())
   const pickingRef = useRef<{ key: string; positions: unknown; width: number; height: number; count: number; index: ScreenPointIndex } | null>(null)
   const [catalogPicker] = useState(() => new CooperativeScreenPicker())
+  const pickGesture = usePointPickGesture()
   useEffect(() => () => catalogPicker.cancel(), [catalogPicker])
   useEffect(() => { catalogPicker.cancel() }, [catalogPicker, catalogPositions3D, catalogDrawCount, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z])
   const positionsRef = useRef(currentPositions)
@@ -652,8 +654,13 @@ export function TrajectoryCanvas3D({
       data-testid="trajectory-canvas-3d"
       role="img"
       aria-label={ariaLabel}
+      onPointerDownCapture={event => { pickGesture.start(event); catalogPicker.supersede() }}
+      onPointerMoveCapture={event => pickGesture.move(event)}
+      onPointerUpCapture={event => pickGesture.end(event)}
+      onPointerCancelCapture={event => pickGesture.cancel(event)}
       onClick={(event) => {
         catalogPicker.supersede()
+        if (!pickGesture.allowClick()) return
         const hit = intersectBody(event)
         if (hit) { onBodySelect?.(hit.id); return }
         const resources = resourcesRef.current
@@ -676,7 +683,7 @@ export function TrajectoryCanvas3D({
             && currentRect?.width === rect.width && currentRect.height === rect.height && cameraKey() === matrixKey
         }, event.clientX - rect.left, event.clientY - rect.top).then(nearest => { if (nearest >= 0) onCatalogSelect(nearest) })
       }}
-      onDoubleClick={(event) => { const hit = intersectBody(event); if (hit) onReferenceChange?.(hit.id) }}
+      onDoubleClick={(event) => { if (!pickGesture.allowClick()) return; const hit = intersectBody(event); if (hit) onReferenceChange?.(hit.id) }}
       onPointerDown={(event) => {
         if (event.pointerType !== 'touch') return
         activeTouchPointersRef.current.add(event.pointerId)
@@ -706,7 +713,7 @@ export function TrajectoryCanvas3D({
         activeTouchPointersRef.current.delete(event.pointerId)
         const gesture = touchGestureRef.current
         touchGestureRef.current = null
-        if (!gesture || gesture.pointerId !== event.pointerId || gesture.moved) return
+        if (!gesture || gesture.pointerId !== event.pointerId || gesture.moved || !pickGesture.allowClick()) { lastTouchTapRef.current = null; return }
         const hit = intersectBody(event)
         if (!hit) {
           lastTouchTapRef.current = null
@@ -714,6 +721,7 @@ export function TrajectoryCanvas3D({
         }
         const now = performance.now()
         const previous = lastTouchTapRef.current
+        onBodySelect?.(hit.id)
         if (previous?.bodyId === hit.id && now - previous.timestamp < 420) {
           onReferenceChange?.(hit.id)
           lastTouchTapRef.current = null
@@ -728,6 +736,7 @@ export function TrajectoryCanvas3D({
         lastTouchTapRef.current = null
       }}
       onMouseMove={(event) => {
+        if (pickGesture.isInteracting()) { onHover?.(null, 0, 0, 0); return }
         const hit = intersectBody(event)
         const position = hit && hit.positionIndex >= 0 ? positionsRef.current.rowAt(hit.positionIndex) : null
         if (position) onHover?.(position.body, position.distance, event.clientX, event.clientY)
