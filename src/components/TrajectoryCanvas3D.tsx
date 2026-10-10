@@ -621,6 +621,7 @@ export function TrajectoryCanvas3D({
       id: hits[0].object.userData.bodyId as string,
       positionIndex: hits[0].object.userData.positionOrdinal as number,
     }
+    if (resources.pointBodyOrdinals.length === 0) return null
     // Pixel-distance picking matches the fixed-pixel points at every zoom.
     const positions = resources.currentPoints.geometry.getAttribute('position')
     const version = positions instanceof THREE.BufferAttribute ? positions.version : positions.data.version

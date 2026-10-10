@@ -39,7 +39,7 @@ test('real worker propagates joint samples and exports reproducible complete dra
   await expect(result).toHaveCount(0)
   await panel.getByLabel('SBDB covariance JSON file').setInputFiles('tests/fixtures/sbdb-bennu-covariance.json')
   await panel.getByText('Propagate nonlinear orbit samples',{ exact: true }).click()
-  await expect(panel).toContainText('Additional fitted parameters have no matched force model')
+  await expect(panel).toContainText('Unsupported covariance axes: RHO')
   await expect(panel.getByRole('button',{ name: 'Adopt conditional model and propagate samples' })).toHaveCount(0)
 })
 

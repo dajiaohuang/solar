@@ -32,8 +32,12 @@ export function SimulationControls() {
           onFocus={() => { setDateDraft(toDateInput(clock.julianDay)); setEditingDate(true) }}
           onBlur={() => setEditingDate(false)}
           onChange={(event) => {
-            setDateDraft(event.target.value)
-            if (event.target.value && Number.isFinite(event.target.valueAsNumber)) simulationActions.seek(dateToJulianDay(new Date(`${event.target.value}T12:00:00Z`)))
+            const value = event.target.value
+            setDateDraft(value)
+            // Date inputs can fall back to text; validate the ISO calendar date
+            // itself rather than requiring valueAsNumber from a native picker.
+            const date = new Date(`${value}T12:00:00Z`)
+            if (Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value) simulationActions.seek(dateToJulianDay(date))
           }}
         />
       </label>

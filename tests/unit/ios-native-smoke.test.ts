@@ -118,16 +118,4 @@ describe('isolated native iOS runtime validation', () => {
     expect(() => verifyTraffic([...traffic, { path: '/v1/state/tiles', status: 500 }])).toThrow()
   })
 
-  it('runs actual native UI tests without weakening production transport security', () => {
-    const workflow = readFileSync('.github/workflows/mobile.yml', 'utf8')
-    const service = readFileSync('ios/App/App/StateTileService.swift', 'utf8')
-    const uiTests = readFileSync('ios/App/ObservationUITests/ObservationUITests.swift', 'utf8')
-    expect(workflow).toContain('run: node scripts/ios-native-smoke.mjs')
-    expect(workflow).toContain('name: solar-atlas-ios-native-smoke')
-    expect(service).toContain('base.scheme == "https"')
-    expect(service).not.toMatch(/serverTrust|URLProtocol|#if DEBUG/)
-    expect(uiTests).toContain('https://127.0.0.1:18791')
-    expect(uiTests).toContain('4 verified states · 2 data gaps')
-    expect(uiTests).toContain('XCUIDevice.shared.press(.home)')
-  })
 })

@@ -112,7 +112,7 @@ describe('state tile binary protocol', () => {
     expect(Array.isArray(decoded.metadata)).toBe(false)
     expect(decoded.metadata.length).toBe(count)
     expect(decoded.metadata.numericByteLength).toBe(count * (11 * 4 + 4 * 8 + 1))
-    expect(decoded.metadata.internedStringCount).toBe(count + 8)
+    expect(decoded.metadata.internedStringCount).toBe(count + 9)
     const readRow = vi.spyOn(decoded.metadata, 'rowAt')
     // Check every ordinal, without constructing tens of thousands of matcher
     // objects or deep-comparing a 1.5 MiB typed array as JavaScript properties.

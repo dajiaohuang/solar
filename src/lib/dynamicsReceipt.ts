@@ -11,6 +11,7 @@ import { checkCovariancePushforward } from './covariancePushforwardReceipt.ts'
 import { checkIntegrationReceipt } from './integrationReceipt.ts'
 import { checkEnsembleInitialReceipt } from './ensembleInitialReceipt.ts'
 import { checkDe440MassReceipt } from './de440MassReceipt.ts'
+import { compensatedFloat64Dot } from '../engine/numerics/compensatedMatrixProduct.ts'
 
 const AU_KM = 149597870.7, DAY_SECONDS = 86400
 
@@ -38,8 +39,8 @@ function checkCovarianceCoordinates(value: unknown) {
   for (let i = 0; i < 6; i++) {
     if (covariance[i][i] < 0 || sigmas[i] < 0 || sigmas[i] !== Math.sqrt(covariance[i][i])) throw new Error('Covariance standard deviation differs from its variance')
     for (let j = 0; j < 6; j++) {
-      // Match covariancePropagation's left-to-right reduction in the same runtime.
-      const expected = root[i].reduce((sum, entry, k) => sum+entry*root[j][k], 0)
+      // Replay the producer's declared compensated covariance arithmetic.
+      const expected = compensatedFloat64Dot(root[i], root[j])
       if (!Number.isFinite(expected) || covariance[i][j] !== covariance[j][i] || covariance[i][j] !== expected) {
         throw new Error('Covariance matrix differs from its square-root factor')
       }

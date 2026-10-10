@@ -172,7 +172,7 @@ func TestEvaluationCacheCoalescesIdenticalInFlightWork(t *testing.T) {
 		}
 	}
 	if calls.Load() != 1 || cache.coalesced != 1 || len(cache.flights) != 0 {
-		t.Fatalf("duplicate evaluation work: calls=%d stats=%+v", calls.Load(), cache)
+		t.Fatalf("duplicate evaluation work: calls=%d coalesced=%d flights=%d", calls.Load(), cache.coalesced, len(cache.flights))
 	}
 }
 
@@ -209,7 +209,7 @@ func TestEvaluationCacheKeepsPriorityScopesIndependent(t *testing.T) {
 		}
 	}
 	if calls.Load() != 2 || cache.coalesced != 0 || len(cache.flights) != 0 || len(cache.entries) != 1 {
-		t.Fatalf("priority scopes were not isolated: calls=%d stats=%+v", calls.Load(), cache)
+		t.Fatalf("priority scopes were not isolated: calls=%d coalesced=%d flights=%d entries=%d", calls.Load(), cache.coalesced, len(cache.flights), len(cache.entries))
 	}
 }
 

@@ -51,7 +51,7 @@ test('measure real Gaia source loading and retained-buffer zoom', async ({ page,
     if (collectionMode) await capacityButton.click()
     else await panel.getByLabel('Gaia manifest and chunk JSON files').setInputFiles(manifests[0].files)
     const completion = panel.getByTestId('gaia-complete')
-    await expect(completion).toContainText(uniqueRows.toLocaleString('en-US')+' unique stars displayed')
+    await expect(completion).toContainText(uniqueRows.toLocaleString('en-US')+' unique stars drawn')
     const loadMilliseconds = performance.now()-started
     const loadWindow = await completion.evaluate(node => {
       const readInteger = (name: string) => {

@@ -10,7 +10,7 @@ import { CATALOG_TRANSFER_WINDOW } from '../lib/catalogTransferWindow'
 import type { CatalogRotation } from '../lib/catalogProjection'
 import { catalogTemporalDisplacementAU } from '../engine/ephemeris/catalogTemporalBudget'
 import type { CatalogEpochResult } from '../lib/catalogEpochStore'
-import { CATALOG_EPOCH_TILE_ROWS, CATALOG_EPOCH_UPLOAD_SLOTS } from '../lib/catalogEpochCapacity'
+import { CATALOG_EPOCH_TILE_ROWS, CATALOG_EPOCH_TRANSFER_ROWS, CATALOG_EPOCH_UPLOAD_SLOTS } from '../lib/catalogEpochCapacity'
 import { saveTextExport } from '../lib/platform'
 import { BUILD_INFO } from '../lib/buildInfo'
 import { encodeCatalogEpochs, encodeCatalogMask } from '../lib/catalogEvidenceEncoding'
@@ -921,7 +921,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
               if (!timing || ![timing.computeAndYield,timing.propagation,timing.cooperativeYield,
                 timing.tileOwnershipWait,timing.reuseAckWait,timing.total]
                   .every(value => Number.isFinite(value) && value >= 0) ||
-                  timing.tileRows !== CATALOG_EPOCH_TILE_ROWS ||
+                  timing.tileRows !== CATALOG_EPOCH_TRANSFER_ROWS ||
                   timing.maxUnacknowledgedTiles !== CATALOG_EPOCH_UPLOAD_SLOTS || !Number.isSafeInteger(timing.peakUnacknowledgedTiles) ||
                   timing.peakUnacknowledgedTiles < (response.recomputedRows === 0 ? 0 : 1) ||
                   timing.peakUnacknowledgedTiles > timing.maxUnacknowledgedTiles) {
@@ -981,7 +981,7 @@ export function CatalogStreamCanvas({ manifest, filters, julianDay, requestedRow
               if (!Number.isSafeInteger(response.testedRows) || !Number.isSafeInteger(response.skippedRows) || response.testedRows! < 0 || response.skippedRows! < 0 ||
                   response.testedRows!+response.skippedRows! !== response.count || response.visible > response.testedRows!) throw new Error('Invalid catalog spatial work counters')
             }
-            if ((detail.displayMode === 'spatial') !== Boolean(response.countOverlay)) throw new Error('Catalog screen-count overlay does not match display mode')
+            if ((detail.displayMode === 'spatial' && response.count > detail.displayLimit) !== Boolean(response.countOverlay)) throw new Error('Catalog screen-count overlay does not match display budget')
             const countOverlaySummary = response.countOverlay
               ? drawCatalogScreenCountOverlay(countOverlayCanvasRef.current!, response.countOverlay)
               : undefined

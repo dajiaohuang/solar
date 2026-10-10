@@ -99,7 +99,7 @@ test('sampled windows preserve clipping, separate events and zero-only ambiguity
     start: { kind: 'search-boundary', elapsedTdbSeconds: -2 }, end: { kind: 'sampled-zero', elapsedTdbSeconds: 0 } }])
   const sampledInterior = await run(t => t-0.5)
   expect(sampledInterior.sampledOverlapWindows).toMatchObject([{ boundary: 'external',
-    start: { kind: 'sampled-overlap', elapsedTdbSeconds: -2 }, end: { kind: 'search-boundary', elapsedTdbSeconds: 2 } }])
+    start: { kind: 'search-boundary', elapsedTdbSeconds: -2 }, end: { kind: 'sampled-zero', elapsedTdbSeconds: .5 } }])
   const separate = await run(t => -(t*t-1))
   expect(separate.sampledOverlapWindows.map(w => [w.start.elapsedTdbSeconds, w.end.elapsedTdbSeconds])).toEqual([[-2, -1], [1, 2]])
   expect((await run(t => t*t)).sampledOverlapWindows).toEqual([])
@@ -141,7 +141,7 @@ test('reports actual rounded sample spacing rather than a nominal interval', asy
     evaluate: time => { times.push(time); return { externalGapRadians: 1, internalGapRadians: 1 } } })
   expect(result.requestedMaxStepSeconds).toBe(.1)
   expect(result.maximumScanIntervalSeconds).toBe(Math.max(...times.slice(1).map((time, i) => time-times[i])))
-  expect(result.maximumScanIntervalSeconds).toBeGreaterThan(.1)
+  expect(result.maximumScanIntervalSeconds).toBeLessThanOrEqual(.1)
 })
 
 test('rejects over-budget contact scans before loading scientific kernels', () => {

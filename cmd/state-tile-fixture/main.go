@@ -131,7 +131,7 @@ func main() {
 	var inventoryCleanup func()
 	inventoryPath := strings.TrimSpace(*inventoryDir)
 	if synthetic && inventoryPath == "" {
-		inventoryPath, inventoryCleanup, err = makeSyntheticInventory()
+		inventoryPath, inventoryCleanup, err = makeSyntheticInventory(loadedDir)
 		if err != nil {
 			fatalf("prepare synthetic inventory: %v", err)
 		}
@@ -320,7 +320,7 @@ func makeSyntheticData(source string) (string, func(), error) {
 		return "", func() {}, err
 	}
 	sum := sha256.Sum256(raw)
-	manifest := fmt.Sprintf(`{"id":"synthetic-state-tile-v1","profile":"fixture","contract":"Original SPK types 2/3/17/21","files":[{"id":"synthetic","path":"synthetic.bsp","targets":[-210001],"startEt":0,"endEt":1000,"solutionKernelIds":["synthetic"],"bytes":%d,"sha256":"%s"}]}`, len(raw), hex.EncodeToString(sum[:]))
+	manifest := fmt.Sprintf(`{"id":"synthetic-state-tile-v1","profile":"fixture","contract":"Original SPK types 2/3/17/21","files":[{"id":"synthetic","path":"synthetic.bsp","targets":[-210001],"startEt":0,"endEt":1000,"solutionKernelIds":[],"bytes":%d,"sha256":"%s"}]}`, len(raw), hex.EncodeToString(sum[:]))
 	if err := os.WriteFile(filepath.Join(dir, "ephemeris-manifest.json"), []byte(manifest), 0600); err != nil {
 		cleanup()
 		return "", func() {}, err
@@ -341,7 +341,12 @@ func defaultSyntheticIDs() []string {
 	return []string{"naif:-210001", "sb:synthetic:operational", "sb:synthetic:snapshot", "unknown:fixture"}
 }
 
-func makeSyntheticInventory() (string, func(), error) {
+func makeSyntheticInventory(dataDir string) (string, func(), error) {
+	kernelBytes, err := os.ReadFile(filepath.Join(dataDir, "synthetic.bsp"))
+	if err != nil {
+		return "", func() {}, err
+	}
+	kernelHash := sha256.Sum256(kernelBytes)
 	dir, err := os.MkdirTemp("", "solar-state-tile-inventory-")
 	if err != nil {
 		return "", func() {}, err
@@ -349,7 +354,7 @@ func makeSyntheticInventory() (string, func(), error) {
 	cleanup := func() { _ = os.RemoveAll(dir) }
 	rows := []map[string]any{
 		{"id": "sb:synthetic:operational", "name": "Synthetic operational alias", "source": "synthetic", "naifId": -210001, "aliases": []string{"synthetic-operational"}, "identityStatus": "confirmed", "geometryStatus": "synthetic", "ephemerisStatus": "validated"},
-		{"id": "sb:synthetic:snapshot", "name": "Synthetic audit snapshot", "source": "synthetic", "naifId": -210002, "identityStatus": "confirmed", "geometryStatus": "synthetic", "ephemerisStatus": "validated", "kernelEvidence": map[string]any{"auditEt": syntheticAuditET, "target": -210002, "segments": []any{map[string]any{"kernelId": "synthetic", "startEt": 0, "endEt": 1000, "center": 399, "frame": 1, "type": 2}}, "stateAtAuditEpoch": map[string]any{"position": map[string]any{"x": 1, "y": 2, "z": 3}, "velocity": map[string]any{"x": 4, "y": 5, "z": 6}}}},
+		{"id": "sb:synthetic:snapshot", "name": "Synthetic audit snapshot", "source": "synthetic", "naifId": -210002, "identityStatus": "confirmed", "geometryStatus": "synthetic", "ephemerisStatus": "validated", "kernelEvidence": map[string]any{"auditEt": syntheticAuditET, "target": -210002, "sourceKernelSha256": hex.EncodeToString(kernelHash[:]), "sourceChainSha256": strings.Repeat("d", 64), "sourceSegment": map[string]any{"kernelId": "synthetic", "startEt": 0, "endEt": 1000, "center": 399, "frame": 1, "type": 2}, "segments": []any{map[string]any{"kernelId": "synthetic", "startEt": 0, "endEt": 1000, "center": 399, "frame": 1, "type": 2}}, "stateAtAuditEpoch": map[string]any{"position": map[string]any{"x": 1, "y": 2, "z": 3}, "velocity": map[string]any{"x": 4, "y": 5, "z": 6}}}},
 	}
 	var raw bytes.Buffer
 	for _, row := range rows {

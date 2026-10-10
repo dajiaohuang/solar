@@ -121,14 +121,15 @@ test('3D drag returning to its start does not focus a body, while a fresh click 
 })
 
 test('hover stays within the viewport and clears when seeking or switching views', async ({ page }) => {
-  await page.goto('./?v=4&view=2d&lang=en')
-  await expect(page.getByTestId('ephemeris-status').locator(':scope > summary')).not.toContainText('Loading')
+  await page.goto('./?v=4&view=2d&lang=en&bodies=mercury&ref=sun&speed=0')
+  await expect(page.getByTestId('ephemeris-status').locator(':scope > summary')).toContainText('1/1')
   const label = page.locator('.placed-floating-label[data-body-id="mercury"]')
   await expect(label).toBeVisible()
-  const point = await label.evaluate(node => {
+  const markerPoint = () => label.evaluate(node => {
     const element = node as HTMLElement, bounds = node.closest('.viz-canvas')!.getBoundingClientRect()
     return { x: bounds.left + Number(element.dataset.anchorX), y: bounds.top + Number(element.dataset.anchorY) }
   })
+  const point = await markerPoint()
   await page.mouse.move(point.x, point.y)
   const tooltip = page.locator('.atlas-tooltip')
   await expect(tooltip).toContainText('Mercury')
@@ -137,8 +138,10 @@ test('hover stays within the viewport and clears when seeking or switching views
   expect(box.x + box.width).toBeLessThanOrEqual(viewport.width - 8)
   expect(box.y + box.height).toBeLessThanOrEqual(viewport.height - 8)
   await page.locator('.simulation-bar input[type=date]').fill('2027-01-02')
+  await page.locator('.simulation-bar input[type=date]').press('Tab')
   await expect(tooltip).toHaveCount(0)
-  await page.mouse.move(point.x + 20, point.y); await page.mouse.move(point.x, point.y)
+  const nextPoint = await markerPoint()
+  await page.mouse.move(nextPoint.x + 20, nextPoint.y); await page.mouse.move(nextPoint.x, nextPoint.y)
   await expect(tooltip).toBeVisible()
   await page.locator('.simulation-bar').getByRole('button', { name: '3D', exact: true }).click()
   await expect(tooltip).toHaveCount(0)

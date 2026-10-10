@@ -175,6 +175,7 @@ public final class StateTileService implements Closeable {
         int maxPlanBytes = manifestLimit(manifest, "maxPlanBytes", 1024 * 1024, MAX_PLAN_BYTES);
         List<List<String>> planChunks = chunkPlanIds(ids, epochJd, maxPlanIds, maxPlanBytes);
         StateAccumulator accumulator = new StateAccumulator(ids.size(), MAX_RESIDENT_STATE_BYTES);
+        int start = 0;
         for (List<String> chunk : planChunks) {
             checkLoadCancelled();
             String request = statePlanRequest(chunk, epochJd);
@@ -212,11 +213,11 @@ public final class StateTileService implements Closeable {
                         : new StateTileDecoder.DecodedTile[] { loadTile(first) };
                 for (int offset = 0; offset < tiles.length; offset++) {
                     checkLoadCancelled();
-                    TileRequest request = offset == 0 ? first : second;
+                    TileRequest tileRequest = offset == 0 ? first : second;
                     StateTileDecoder.DecodedTile tile = tiles[offset];
-                    require(tile.recordCount == request.ordinalCount && tile.ordinalStart == request.ordinalStart && tile.epochJd == epochJd, "tile descriptor mismatch");
+                    require(tile.recordCount == tileRequest.ordinalCount && tile.ordinalStart == tileRequest.ordinalStart && tile.epochJd == epochJd, "tile descriptor mismatch");
                     decodedExact += accumulator.append(tile, ids, start + ordinal);
-                    ordinal += request.ordinalCount;
+                    ordinal += tileRequest.ordinalCount;
                 }
                 sequence += tiles.length;
             }
@@ -225,6 +226,7 @@ public final class StateTileService implements Closeable {
                 Frame partial = accumulator.initialSnapshot(epochJd, catalogHash, inventoryHash);
                 if (partial != null) onInitialPartial.accept(partial);
             }
+            start += chunk.size();
         }
         checkLoadCancelled();
         Frame frame = accumulator.finish(epochJd, catalogHash, inventoryHash);

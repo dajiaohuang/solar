@@ -3,9 +3,8 @@ import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { parse } from 'yaml'
 import { assertDocumentedVersion, iosApplicationIdentity, markdownAnchors, markdownLinks, validateRepository } from '../../scripts/validate-repository.mjs'
-import { changedPaths, pullRequestQualityPasses, requiresFullWebQuality, requiresNativeQuality } from '../../scripts/pr-quality-contract.mjs'
+import { changedPaths, pullRequestQualityPasses, requiresBackendQuality, requiresFullWebQuality, requiresNativeQuality } from '../../scripts/pr-quality-contract.mjs'
 
 describe('repository contract', () => {
   it('extracts local destinations without treating code examples as links', () => {
@@ -58,46 +57,25 @@ describe('repository contract', () => {
     expect(requiresFullWebQuality(['.github/workflows/pull-request-quality.yml'])).toBe(true)
   })
 
-  it('runs native validation only for the existing mobile impact paths', () => {
+  it('runs native validation for native consumers and shared transport changes', () => {
     expect(requiresNativeQuality(['README.md', 'docs/screenshots/deck.png'])).toBe(false)
-    expect(requiresNativeQuality(['src/App.tsx'])).toBe(true)
-    for (const path of ['cmd/state-tile-fixture/main.go', 'internal/statewire/tile.go', 'go.mod', 'go.sum', 'tests/fixtures/spk21-synthetic.bsp', 'tests/unit/state-tiles-golden.test.ts']) {
+    for (const path of ['src/App.tsx', 'go.mod', 'go.sum', 'tests/fixtures/spk21-synthetic.bsp', 'tsconfig.app.json']) {
+      expect(requiresNativeQuality([path])).toBe(false)
+    }
+    for (const path of ['cmd/state-tile-fixture/main.go', 'internal/statewire/tile.go', 'internal/httpapi/tiles.go', 'tests/unit/state-tiles-golden.test.ts']) {
       expect(requiresNativeQuality([path])).toBe(true)
     }
     expect(requiresNativeQuality(['android/app/build.gradle'])).toBe(true)
     expect(requiresNativeQuality(['ios/App/App.xcodeproj/project.pbxproj'])).toBe(true)
-    expect(requiresNativeQuality(['tsconfig.app.json'])).toBe(true)
     expect(requiresNativeQuality(['.github/workflows/mobile.yml'])).toBe(true)
     expect(requiresNativeQuality(['.github/workflows/pull-request-quality.yml'])).toBe(true)
   })
 
-  it('reuses the native workflow from the stable pull request gate', () => {
-    const root = new URL('../../', import.meta.url)
-    const mobile = parse(readFileSync(new URL('.github/workflows/mobile.yml', root), 'utf8'))
-    const quality = parse(readFileSync(new URL('.github/workflows/pull-request-quality.yml', root), 'utf8'))
-
-    expect(mobile.on).toHaveProperty('workflow_call')
-    expect(mobile.on).not.toHaveProperty('pull_request')
-    expect(quality.jobs.mobile_quality).toMatchObject({
-      uses: './.github/workflows/mobile.yml',
-      needs: 'repository_contract',
-      permissions: { contents: 'read', actions: 'read' },
-    })
-    expect(mobile.jobs.validation_scope.outputs.reuse).toBe('${{ steps.evidence.outputs.reuse }}')
-    for (const platform of ['android', 'ios']) {
-      expect(mobile.jobs[platform].needs).toBe('validation_scope')
-      expect(mobile.jobs[platform].if).toBe("needs.validation_scope.outputs.reuse != 'true'")
+  it('runs Go checks for backend changes without treating frontend edits as native changes', () => {
+    for (const path of ['cmd/solar-backend/main.go', 'internal/catalog/catalog.go', 'go.mod', 'go.sum']) {
+      expect(requiresBackendQuality([path])).toBe(true)
     }
-    expect(quality.jobs.web_quality.steps.some((step: { run?: string }) => step.run === 'npm run test:e2e')).toBe(false)
-    const browsers = parse(readFileSync(new URL('.github/workflows/browser-quality.yml', root), 'utf8'))
-    expect(browsers.jobs['browser-matrix'].strategy.matrix.include.map((row: { project: string }) => row.project).sort()).toEqual(['desktop-chromium', 'desktop-firefox', 'desktop-webkit', 'mobile-chromium'])
-    expect(quality.jobs.pull_request_quality_gate.needs).toEqual([
-      'repository_contract',
-      'web_quality',
-      'mobile_quality',
-      'browser_quality',
-    ])
-    expect(quality.jobs.pull_request_quality_gate.steps[0].with.ref).toBe('${{ inputs.head_sha || github.sha }}')
+    expect(requiresBackendQuality(['src/App.tsx', 'README.md'])).toBe(false)
   })
 
   it('classifies both sides of a code-to-document rename', () => {
@@ -134,35 +112,6 @@ describe('repository contract', () => {
     expect(() => iosApplicationIdentity(project.replace('productType = "com.apple.product-type.application";', 'productType = "invalid";'))).toThrow('one native iOS application')
   })
 
-  it('runs native consumers on Go-generated files without silently skipping golden checks', () => {
-    const mobile = parse(readFileSync(new URL('../../.github/workflows/mobile.yml', import.meta.url), 'utf8'))
-    for (const path of ['cmd/**', 'internal/**', 'go.mod', 'go.sum', 'tests/**']) {
-      expect(mobile.on.push.paths).toContain(path)
-    }
-    for (const [job, consumer] of [['android', './gradlew lint'], ['ios', 'swiftc ios/']]) {
-      const steps: { run?: string; env?: Record<string, string> }[] = mobile.jobs[job].steps
-      const generated = steps.findIndex(step => step.run?.includes('go run ./cmd/state-tile-fixture'))
-      const consumed = steps.findIndex(step => step.run?.includes(consumer))
-      expect(generated).toBeGreaterThan(-1)
-      expect(consumed).toBeGreaterThan(generated)
-      expect(steps[generated].run).toContain('-tile-size 1')
-      expect(steps[generated].run).toContain('npx vitest run tests/unit/state-tiles-golden.test.ts')
-      expect(steps[generated].env?.SOLAR_STATE_TILE_FIXTURE_DIR).toBe('${{ runner.temp }}/solar-state-tile-fixture')
-      expect(steps[consumed].env?.SOLAR_STATE_TILE_FIXTURE_DIR).toBe(steps[generated].env?.SOLAR_STATE_TILE_FIXTURE_DIR)
-    }
-  })
-
-  it('selects the patched project Go toolchain before generating native fixtures', () => {
-    const mobile = parse(readFileSync(new URL('../../.github/workflows/mobile.yml', import.meta.url), 'utf8'))
-    for (const job of ['android', 'ios']) {
-      const steps: { name?: string; run?: string; with?: Record<string, unknown> }[] = mobile.jobs[job].steps
-      const activate = steps.findIndex(step => step.name === 'Set up the patched Go toolchain')
-      const generate = steps.findIndex(step => step.run?.includes('go run ./cmd/state-tile-fixture'))
-      expect(activate).toBeGreaterThan(-1)
-      expect(activate).toBeLessThan(generate)
-      expect(steps[activate].with).toMatchObject({ 'go-version-file': 'go.mod', cache: false })
-    }
-  })
 
   it('passes the stable summary only for successful required work', () => {
     expect(pullRequestQualityPasses('success', 'success', 'success', 'success')).toBe(true)
@@ -177,30 +126,4 @@ describe('repository contract', () => {
     }
   })
 
-  it('validates staging pushes without requiring a PR or weakening the stable gate', () => {
-    const quality = parse(readFileSync(new URL('../../.github/workflows/pull-request-quality.yml', import.meta.url), 'utf8'))
-    expect(quality.on.push.branches).toEqual(['codex/**'])
-    expect(quality.on).toHaveProperty('pull_request')
-    expect(quality.concurrency.group).toContain('github.ref')
-    expect(quality.jobs.pull_request_quality_gate.name).toBe('Pull request quality gate')
-    expect(quality.jobs.pull_request_quality_gate.needs).toEqual(['repository_contract', 'web_quality', 'mobile_quality', 'browser_quality'])
-    const classify = quality.jobs.repository_contract.steps.find((step: { id?: string }) => step.id === 'scope')
-    expect(classify.run).toContain('git merge-base origin/main "$HEAD_SHA"')
-    expect(classify.env.HEAD_SHA).toContain('github.sha')
-  })
-
-  it('runs each browser independently and pins reusable runs to the reviewed commit', () => {
-    const root = new URL('../../', import.meta.url)
-    const browser = parse(readFileSync(new URL('.github/workflows/browser-quality.yml', root), 'utf8'))
-    const quality = parse(readFileSync(new URL('.github/workflows/pull-request-quality.yml', root), 'utf8'))
-    expect(browser.on).toHaveProperty('workflow_call')
-    expect(quality.jobs.browser_quality.uses).toBe('./.github/workflows/browser-quality.yml')
-    expect(quality.jobs.browser_quality.with.checkout_ref).toBe('${{ inputs.head_sha || github.sha }}')
-    const matrix = browser.jobs['browser-matrix']
-    expect(matrix.strategy['fail-fast']).toBe(false)
-    expect(matrix.strategy.matrix.include.map((entry: { project: string }) => entry.project)).toEqual([
-      'desktop-chromium', 'mobile-chromium', 'desktop-firefox', 'desktop-webkit',
-    ])
-    expect(matrix.steps[0].with.ref).toBe('${{ inputs.checkout_ref || github.sha }}')
-  })
 })

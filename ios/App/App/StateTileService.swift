@@ -118,6 +118,7 @@ actor StateTileService {
         guard residentBytes <= Self.residentStateBudget else {
             throw StateTileFailure.invalid("Reserved observation arrays exceed the native state memory budget.")
         }
+        var start = 0
         for chunk in planChunks {
             try Task.checkCancellation()
             let (planData, _) = try await receive(path: "v1/state/plan", body: Self.planRequest(ids: chunk, epochJd: epochJd), requestBodyLimit: maxPlanBytes)
@@ -230,6 +231,7 @@ actor StateTileService {
                     await onInitialPartial(snapshot.frame)
                 }
             }
+            start += chunk.count
         }
         try Task.checkCancellation()
         result.verifiedExactCount = totalExactCount

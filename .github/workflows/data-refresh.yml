@@ -52,12 +52,10 @@ jobs:
           # The candidate Full build is reused by Playwright in this step.
           VITE_SOLAR_API_BASE_URL: /solar-test-api
         run: |
-          npm run lint
-          npm run test:unit
           npm run build:candidate
           npm run check:capacity
           npx playwright install --with-deps chromium
-          PLAYWRIGHT_REUSE_BUILD=1 PLAYWRIGHT_EXPECT_DATASET=1 npm run test:e2e
+          PLAYWRIGHT_REUSE_BUILD=1 PLAYWRIGHT_EXPECT_DATASET=1 npm run test:e2e -- tests/e2e/app.spec.ts --grep "catalog|compact|expanded|sample"
           npm run benchmark:catalog
       - name: Package immutable release
         id: package

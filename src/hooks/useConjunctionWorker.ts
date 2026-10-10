@@ -130,12 +130,10 @@ export function useConjunctionWorker() {
   const cancel = useCallback(() => {
     const worker = workerRef.current
     if (!worker) return
+    latestRequestId.current += 1
+    workerRef.current = null
     setStatus('cancelled')
-    try { worker.postMessage({ type: 'cancel', requestId: latestRequestId.current }) }
-    catch {
-      worker.terminate()
-      if (workerRef.current === worker) workerRef.current = null
-    }
+    worker.terminate()
   }, [])
 
   const run = useCallback((params: RunEventAnalysisParams) => {

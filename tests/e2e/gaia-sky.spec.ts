@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => { await page.addInitScript(() => localStorag
 test('real Gaia worker uploads, zooms, selects and exports original source rows', async ({ page }) => {
   const panel = page.getByRole('region',{ name:'Gaia sky chart', exact:true })
   await panel.getByRole('button',{ name:'Open Pleiades-area example' }).click()
-  await expect(panel.getByTestId('gaia-complete')).toContainText('19 unique stars displayed')
+  await expect(panel.getByTestId('gaia-complete')).toContainText('19 unique stars drawn')
   await expect(panel).toContainText('65212004581252736')
   await expect(panel.getByTestId('gaia-position-uncertainty')).toContainText('Major / minor semiaxes')
   const canvas = panel.getByRole('img')
@@ -45,7 +45,7 @@ test('extended local Gaia source exports its full six-parameter solution', async
   const index=sources.findIndex((row:{source_id:string})=>row.source_id==='65212966653827840')
   expect(index).toBeGreaterThanOrEqual(0)
   await panel.getByLabel('Gaia manifest and chunk JSON files').setInputFiles([dir+'manifest.json',dir+'r11-d22.json'])
-  await expect(panel.getByTestId('gaia-complete')).toContainText('94 unique stars displayed')
+  await expect(panel.getByTestId('gaia-complete')).toContainText('94 unique stars drawn')
   await panel.getByLabel('Star row').fill(String(index+1))
   await expect(panel.getByTestId('gaia-six-parameter-covariance')).toContainText('Validated 6 × 6 matrix')
   const pending=page.waitForEvent('download')
@@ -61,10 +61,12 @@ test('extended local Gaia source exports its full six-parameter solution', async
 test('local imports reject corrupted source bytes without keeping a stale chart', async ({ page }) => {
   const panel = page.getByRole('region',{ name:'Gaia sky chart', exact:true })
   await panel.getByLabel('Gaia manifest and chunk JSON files').setInputFiles([root+'manifest.json',root+'r11-d22.json'])
-  await expect(panel.getByTestId('gaia-complete')).toContainText('19 unique stars displayed')
+  await expect(panel.getByTestId('gaia-complete')).toContainText('19 unique stars drawn')
+  const corrupted = await readFile(root+'r11-d22.json')
+  corrupted[0] ^= 1
   await panel.getByLabel('Gaia manifest and chunk JSON files').setInputFiles([
     { name:'manifest.json', mimeType:'application/json', buffer:await readFile(root+'manifest.json') },
-    { name:'r11-d22.json', mimeType:'application/json', buffer:Buffer.from('{}') },
+    { name:'r11-d22.json', mimeType:'application/json', buffer:corrupted },
   ])
   await expect(panel.getByRole('alert')).toContainText('hash mismatch')
   await expect(panel.getByRole('img')).toHaveCount(0)
@@ -89,7 +91,7 @@ test('a completed remote load reuses verified source bytes in the session worker
   await panel.getByLabel('Gaia manifest URLs (one per line, up to 8)').fill(new URL('gaia-cache/manifest.json',page.url()).href)
   for (let i=0;i<2;i++) {
     await panel.getByRole('button',{name:'Load sky-region collection',exact:true}).click()
-    await expect(panel.getByTestId('gaia-complete')).toContainText('19 unique stars displayed')
+    await expect(panel.getByTestId('gaia-complete')).toContainText('19 unique stars drawn')
     const pending = page.waitForEvent('download')
     await panel.getByRole('button',{name:'Export Gaia records and sources'}).click()
     const result = JSON.parse(await readFile((await (await pending).path())!,'utf8'))
@@ -103,7 +105,7 @@ test('combined packaged Gaia regions display each source ID once and retain aggr
   const panel = page.getByRole('region',{name:'Gaia sky chart',exact:true})
   await panel.getByRole('button',{name:'Combine both Pleiades manifests · deduplicate by source_id'}).click()
   const complete = panel.getByTestId('gaia-complete')
-  await expect(complete).toContainText('16,966 unique stars displayed')
+  await expect(complete).toContainText('16,966 unique stars drawn')
   await expect(complete).toContainText('21,426 source rows verified')
   await expect(complete).toContainText('4,460 overlapping rows deduplicated')
   await expect(complete).toContainText('8 chunks')

@@ -1,6 +1,5 @@
 /// <reference lib="webworker" />
-import { decodeGaiaManifest, gaiaHash, streamGaiaChunks } from '../lib/gaiaChunks'
-import { readBounded } from '../lib/stateTiles'
+import { decodeGaiaManifest, gaiaHash, readGaiaJsonResponse, streamGaiaChunks } from '../lib/gaiaChunks'
 import { GaiaSourceCache } from '../lib/gaiaCache'
 import { packGaiaSourcesAndDisplay } from '../lib/gaiaPackedSources'
 import { planGaiaCollection } from '../lib/gaiaCollection'
@@ -85,7 +84,7 @@ async function fetchRegionManifest(value: string, signal: AbortSignal, checkDead
   const response = await fetch(url, { signal, redirect: 'error' })
   try { checkDeadline() } catch (error) { await response.body?.cancel().catch(() => undefined); throw error }
   if (!response.ok) { await response.body?.cancel().catch(() => undefined); throw new Error(`Gaia manifest HTTP ${response.status}`) }
-  const bytes = await readBounded(response, 'application/json', capacity.maxManifestBytes, signal)
+  const bytes = await readGaiaJsonResponse(response, capacity.maxManifestBytes, signal)
   checkDeadline()
   const manifest = decodeGaiaManifest(bytes), manifestSha256 = await gaiaHash(bytes)
   checkDeadline()
@@ -271,7 +270,9 @@ scope.onmessage = async event => {
                 { ...plan.projection, maximumRadiusDeg: capacity.maxProjectionRadiusDegrees }, chunkSignal, seenSourceIds)
               uniqueRows += packed.sources.rowCount; duplicateRows += packed.duplicateRows
               sequence++
-              const ack = waitForUpload(sequence, chunk.descriptor.rows, chunkSignal, controller, uploadPeaks)
+              // Upload ownership outlives the chunk reader, whose signal ends
+              // when packing returns. Only the whole load may revoke its ACK.
+              const ack = waitForUpload(sequence, chunk.descriptor.rows, controller.signal, controller, uploadPeaks)
               try {
                 chunkSignal.throwIfAborted()
                 post({ type: 'chunk', catalogIndex, sequence, path: chunk.descriptor.path, inputRows: chunk.descriptor.rows,

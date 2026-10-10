@@ -16,7 +16,7 @@ function metadata(id: string, exact: boolean): StateTileMetadata {
     evidenceWindowStartEt: -100, evidenceWindowEndEt: 100, evidenceWindowPresent: true,
     missingReason: exact ? '' : 'synthetic-gap', identityStatus: '', sourceRecord: false }
 }
-async function tile(start: number, count: number) {
+async function tile(start: number, count: number, hash = planHash) {
   const records = [], exact: number[] = [], states = new Float64Array(count * 6)
   for (let row = 0; row < count; row++) {
     const id = start + row, available = id % 7 !== 0
@@ -28,8 +28,8 @@ async function tile(start: number, count: number) {
   }
   if (start === 0 && count > 1) states[6] = -0
   const encoded = await encodeStateTile({ sequence: 0, tileCount: 1, ordinalStart: 0, epochJd,
-    metadata: records, exact, states, planHash, catalogManifestSha256 })
-  return { decoded: await decodeStateTile(encoded, { planHash, catalogManifestSha256 }), states, encoded }
+    metadata: records, exact, states, planHash: hash, catalogManifestSha256 })
+  return { decoded: await decodeStateTile(encoded, { planHash: hash, catalogManifestSha256 }), states, encoded }
 }
 
 describe('shared column-backed scientific snapshots', () => {
@@ -125,7 +125,7 @@ describe('shared column-backed scientific snapshots', () => {
     const requested = new Map([['body', 'source:1']])
     expect(() => new StateTileSnapshot([decoded, decoded], requested)).toThrow(/duplicate resolved identity/)
     for (const change of [{ epochJd: epochJd + 1 }, { catalogManifestSha256: 'd'.repeat(64) }, { inventoryManifestSha256: 'e'.repeat(64) }]) {
-      expect(() => new StateTileSnapshot([decoded, { ...decoded, ...change }], requested)).toThrow(/snapshot identity or epoch mismatch/)
+      expect(() => new StateTileSnapshot([decoded, { ...decoded, ...change }], requested)).toThrow(/snapshot identity, epoch or scientific contract mismatch/)
     }
     const snapshot = new StateTileSnapshot([decoded], requested)
     for (const index of [-1, 1, 0.5, Infinity, NaN]) {
@@ -142,7 +142,7 @@ describe('shared column-backed scientific snapshots', () => {
   })
 
   it('publishes a verified first 32K plan while later plans load, then replaces it with the full multi-reference snapshot', async () => {
-    const source = [await tile(0, 32_768), await tile(32_768, 1)]
+    const source = [await tile(0, 32_768), await tile(32_768, 1, 'd'.repeat(64))]
     const bodyIds = Array.from({ length: 32_769 }, (_, index) => `source:${index}`)
     const requestedIds = new Map(bodyIds.map((id, index) => [`body:${index}`, id]))
     const bodies = [...requestedIds.keys()].map(body)
@@ -166,7 +166,7 @@ describe('shared column-backed scientific snapshots', () => {
         const tile = source[planIndex].decoded
         let exactCount = 0
         for (let row = 0; row < tile.recordCount; row++) if (tile.exactBitmap[row >> 3] & (1 << (row & 7))) exactCount++
-        return json({ apiVersion: 'solar.api/v1', catalogVersion: 'fixture', catalogManifestSha256, planId: planHash,
+        return json({ apiVersion: 'solar.api/v1', catalogVersion: 'fixture', catalogManifestSha256, planId: tile.planHash,
           requestIdsSha256: await digestStateTileRequestIds(request.ids), epochJd, timeScale: 'TDB', frame: 'ECLIPJ2000',
           precision: 'exact', stateOriginId: 'naif:0', distanceUnit: 'km', velocityUnit: 'km/s', stride: 6,
           fieldMask: ['position', 'velocity'], bodyCount: tile.recordCount, exactCount, approximateCount: 0,
@@ -174,7 +174,8 @@ describe('shared column-backed scientific snapshots', () => {
           tiles: [{ sequence: 0, ordinalStart: 0, ordinalCount: tile.recordCount }] })
       }
       if (url.endsWith('/state/tiles')) {
-        const item = source[planIndex]
+        const request = JSON.parse(String(init?.body)) as { planId: string }
+        const item = source.find(item => item.decoded.planHash === request.planId)!
         return new Response(item.encoded, { headers: { 'content-type': 'application/vnd.solar.state-tile+binary',
           'content-length': String(item.encoded.byteLength), etag: `"${item.decoded.payloadSha256}"` } })
       }

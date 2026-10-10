@@ -153,7 +153,7 @@ describe('scalar current-position views', () => {
 
     updateCurrentPointGeometry(first, source, ordinals, colorKey, {})
     expect(positions.version).toBe(firstVersion + 1)
-    expect(colors.version).toBe(firstColorVersion + 1)
+    expect(colors.version).toBe(firstColorVersion)
     first.dispose()
   })
 

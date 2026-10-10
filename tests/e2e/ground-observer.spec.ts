@@ -26,7 +26,7 @@ test('ground observation form keeps source evidence and exports the completed sn
   await page.getByRole('button', { name: 'Calculate ground observation', exact: true }).click()
   const result = page.getByRole('region', { name: 'Ground observation result' })
   await expect(result).toContainText('75.66593')
-  await expect(result).toContainText('IERS includes predictions')
+  await expect(result).toContainText('IERS input includes predicted components')
   await page.screenshot({ path: test.info().outputPath('ground-observer.png'), fullPage: true })
   const downloaded = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Export result and sources JSON', exact: true }).click()

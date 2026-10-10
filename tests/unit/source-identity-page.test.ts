@@ -4,7 +4,7 @@ import type { StateTileManifest } from '../../src/lib/stateTiles'
 
 const manifest: StateTileManifest = { apiVersion: 'solar.api/v1', catalogVersion: 'test', catalogManifestSha256: 'a'.repeat(64), inventoryManifestSha256: 'b'.repeat(64), maxPlanIds: 32_768, maxPlanBytes: 8 * 1024 * 1024 }
 const row = { id: 'sb:comet:1P', name: 'Halley', designation: '1P', category: 'comet', source: 'test-source', sourceRow: 1, identityStatus: 'source-designation', ephemerisStatus: 'not-mapped-to-bundled-kernel', naifId: 1000036, parentId: 'sun', parentResolution: 'index-match', centerId: 'sun', centerResolution: 'index-match', aliases: ['1P/Halley'], confirmation: 'confirmed', geometryStatus: 'open-conic-elements', identityEvidence: ['source-id', 'source-designation'] }
-function raw() { return { ...manifest, sourceRecords: true, identityAssertions: true, uniqueBodySemantics: 'not-deduplicated', totalRecords: 100, limit: 50, items: [row], nextPageToken: 'next' } }
+function raw() { return { ...manifest, sourceRecords: true, identityAssertions: true, uniqueBodySemantics: 'not-deduplicated', totalRecords: 100, limit: 50, items: Array.from({ length: 50 }, (_, index) => ({ ...row, id: index ? `source:${index}` : row.id, sourceRow: index + 1 })), nextPageToken: 'next' } }
 function json(value: unknown) {
   const body = JSON.stringify(value)
   return new Response(body, { headers: { 'content-type': 'application/json', 'content-length': String(new TextEncoder().encode(body).length) } })
@@ -20,7 +20,7 @@ describe('bounded all-source directory', () => {
     expect(page.items[0].aliases).toEqual(['1P/Halley'])
     expect(page.items[0].identityEvidence).toEqual(['source-id', 'source-designation'])
     expect(page.totalRecords).toBe(100)
-    expect(page.items).toHaveLength(1)
+    expect(page.items).toHaveLength(50)
     expect(page.items[0]).not.toHaveProperty('states')
   })
   it('rejects false counts, duplicate IDs, unsafe strings, large pages and stale manifest bindings', () => {

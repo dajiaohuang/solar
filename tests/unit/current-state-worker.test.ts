@@ -20,7 +20,7 @@ const json = (value: unknown) => { const text = JSON.stringify(value); return ne
 async function fixture(corrupt = false) {
   const ids = ['source:a', 'source:gap', 'source:ref']
   const metadata: StateTileMetadata[] = ids.map(id => ({ id, source: 'synthetic-worker', datasetVersion: 'fixture', datasetSha256: hash,
-    kernelSha256: 'c'.repeat(64), model: 'spk-original', centerId: 'naif:0', validityStartEt: -100, validityEndEt: 100,
+    kernelSha256: 'c'.repeat(64), sourceChainSha256: 'e'.repeat(64), model: 'spk-original', centerId: 'naif:0', validityStartEt: -100, validityEndEt: 100,
     validityPresent: true, evidenceWindowStartEt: -100, evidenceWindowEndEt: 100, evidenceWindowPresent: true,
     stateEvidence: id.endsWith('gap') ? '' : 'kernel', missingReason: id.endsWith('gap') ? 'synthetic-gap' : '', identityStatus: '', sourceRecord: false }))
   const states = new Float64Array([1e12 + 1 / 7, -0, 1 / 3, -0, 0.125, -1 / 7, 0, 0, 0, 0, 0, 0, 1e12, -0, 1 / 9, 0.25, 0, -0])

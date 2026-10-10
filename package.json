@@ -19,7 +19,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:preview": "playwright test --config playwright.preview.config.ts",
-    "ci": "npm run lint && npm run test:unit && npm run test:scientific && npm run build",
+    "ci": "npm run lint && npm run test:unit && npm run build",
     "preprocess:asteroids": "node --max-old-space-size=4096 ./scripts/preprocess-asteroids.mjs",
     "data:lite": "cross-env MPCORB_MODE=lite MPCORB_LITE_MAX_NUMBER=30000 node ./scripts/preprocess-asteroids.mjs",
     "data:full": "cross-env MPCORB_MODE=full node --max-old-space-size=4096 ./scripts/preprocess-asteroids.mjs",

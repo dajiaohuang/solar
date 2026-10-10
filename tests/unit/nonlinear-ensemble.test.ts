@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
+import { DynamicsSampleError } from '../../src/engine/dynamics/sampleFailure'
 import { expect, test, vi } from 'vitest'
 import { createDe440Dynamics, DE440_DYNAMICS_SOURCE, DE440_FORCE_IDS } from '../../src/engine/dynamics/de440Dynamics'
 import { propagateSourceOffsetEnsemble } from '../../src/engine/dynamics/nonlinearEnsemble'
@@ -71,7 +72,7 @@ test('refuses unmatched force parameters, excessive work and out-of-window epoch
 
 test('retains integration failures instead of treating the survivors as the original distribution', async () => {
   const dynamics = await create(), source = parseSbdbCovariance(eros)
-  const result = await propagateSourceOffsetEnsemble({ ...dynamics, derivative: () => { throw new RangeError('Point-mass exclusion reached') } },source,new Float64Array(12),86400)
+  const result = await propagateSourceOffsetEnsemble({ ...dynamics, derivative: () => { throw new DynamicsSampleError('Point-mass exclusion reached') } },source,new Float64Array(12),86400)
   expect([...result.valid]).toEqual([0,0])
   expect(result.failures.map(f => [f.index,f.stage])).toEqual([[0,'integration'],[1,'integration']])
   expect(result.evaluations).toBe(2)

@@ -20,21 +20,15 @@ concurrency:
 
 jobs:
   browser-matrix:
-    name: Browser quality / ${{ matrix.project }}
+    name: Browser quality / ${{ matrix.browser }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - project: desktop-chromium
-            browser: chromium
-          - project: mobile-chromium
-            browser: chromium
-          - project: desktop-firefox
-            browser: firefox
-          - project: desktop-webkit
-            browser: webkit
+        # PRs exercise both Chromium viewports in one installation/build.
+        # Weekly/manual runs add the two independent browser engines.
+        browser: ${{ fromJSON(inputs.checkout_ref != '' && '["chromium"]' || '["chromium","firefox","webkit"]') }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -51,13 +45,18 @@ jobs:
           FULL_BROWSER_MATRIX: 1
           PLAYWRIGHT_FIREFOX_HEADED: ${{ matrix.browser == 'firefox' && '1' || '0' }}
           LIBGL_ALWAYS_SOFTWARE: 1
-          BROWSER_PROJECT: ${{ matrix.project }}
-        run: xvfb-run --auto-servernum npm run test:e2e -- --project="$BROWSER_PROJECT" --workers=2
+          BROWSER_ENGINE: ${{ matrix.browser }}
+        run: |
+          if [ "$BROWSER_ENGINE" = "chromium" ]; then
+            npm run test:e2e -- --project=desktop-chromium --project=mobile-chromium --workers=2
+          else
+            xvfb-run --auto-servernum npm run test:e2e -- --project="desktop-$BROWSER_ENGINE" --workers=2
+          fi
       - name: Upload browser diagnostics
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: browser-quality-report-${{ matrix.project }}
+          name: browser-quality-report-${{ matrix.browser }}
           path: |
             playwright-report
             test-results

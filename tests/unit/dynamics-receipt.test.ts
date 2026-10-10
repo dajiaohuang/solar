@@ -11,10 +11,31 @@ import { sampleSbdbCovariance } from '../../src/engine/ephemeris/covarianceSampl
 import { dynamicsCalculation, type DynamicsRequest } from '../../src/workers/dynamics.protocol'
 import { dynamicsSourceBase64 } from '../../src/lib/dynamicsSourceBytes'
 import { checkDynamicsReceipt } from '../../src/lib/dynamicsReceipt'
+import { propagateDynamicsCovariance } from '../../src/engine/dynamics/covariancePropagation'
 import eros from '../fixtures/sbdb-eros-covariance.json'
 
 const spk = readFileSync(`public/data/ephemerides/${DE440_DYNAMICS_SOURCE.path}`)
 const gmText = readFileSync('src/data/gm_de440.tpc','utf8')
+
+test('accepts compensated covariance receipts and rejects a changed matrix', async () => {
+  const raw = Buffer.from(JSON.stringify(eros)), initialBytes = raw.buffer.slice(raw.byteOffset,raw.byteOffset+raw.byteLength)
+  const payload = JSON.parse(raw.toString('utf8')), source = parseSbdbCovariance(payload)
+  const request: DynamicsRequest = { kind: 'covariance', initialBytes, durationSeconds: 86400,
+    exclusionKm: 0, compareRefinement: false, solarRelativity: true }
+  const dynamics = await createDe440Dynamics({ spkBytes: spk.buffer.slice(spk.byteOffset,spk.byteOffset+spk.byteLength), gmText,
+    referenceEpochTdb: source.solutionEpochTdb, elapsedRangeSeconds: [0,86400],
+    exclusionKm: Object.fromEntries(DE440_FORCE_IDS.map(id => [id,0])), solarRelativity: true })
+  const result = await propagateDynamicsCovariance(dynamics,source,request.durationSeconds)
+  const originalBase64 = dynamicsSourceBase64(initialBytes), hash = createHash('sha256').update(raw).digest('hex')
+  const receipt = { schemaVersion: 1, calculation: dynamicsCalculation(request),
+    sourceFile: { sha256: hash, bytes: raw.byteLength, originalBase64, payload }, ...result }
+  const verify = (value: unknown) => checkDynamicsReceipt(value,request,hash,raw.byteLength,payload,originalBase64)
+  await expect(verify(receipt)).resolves.toBeUndefined()
+  const changed = structuredClone(receipt)
+  changed.finalCoordinates.matrix[0][1] *= 1.01
+  changed.finalCoordinates.matrix[1][0] = changed.finalCoordinates.matrix[0][1]
+  await expect(verify(changed)).rejects.toThrow('Covariance matrix differs from its square-root factor')
+})
 
 test('accepts a producer ensemble receipt and rejects source-inconsistent initial states', async () => {
   const raw = Buffer.from(JSON.stringify(eros)), initialBytes = raw.buffer.slice(raw.byteOffset,raw.byteOffset+raw.byteLength)

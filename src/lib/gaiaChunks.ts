@@ -1,4 +1,4 @@
-import { readBounded } from './stateTiles'
+import { readBoundedStream } from '../data/cache/boundedStream'
 import columns from '../data/gaiaColumns.json'
 import columnsV2 from '../data/gaiaColumnsV2.json'
 import capacity from '../data/gaiaCapacity.json'
@@ -17,6 +17,16 @@ const number = (v: unknown): v is number => typeof v === 'number' && Number.isFi
 const integer = (v: unknown, min: number, max: number): v is number => number(v) && Number.isInteger(v) && v >= min && v <= max
 const pair = (v: unknown): v is [number, number] => Array.isArray(v) && v.length === 2 && v.every(number)
 const cancelled = (signal: AbortSignal) => { if (signal.aborted) throw new DOMException('Gaia loading cancelled', 'AbortError') }
+/** Fetch exposes decoded bytes, so compressed/chunked HTTP lengths cannot
+ * describe this source. Bound the decoded stream; chunk hashes and sizes are
+ * checked separately against the immutable Gaia manifest. */
+export async function readGaiaJsonResponse(response: Response, limit: number, signal: AbortSignal) {
+  if ((response.headers.get('content-type') ?? '').split(';', 1)[0].trim().toLowerCase() !== 'application/json' || !response.body) {
+    await response.body?.cancel().catch(() => undefined)
+    throw new Error('Gaia source response must contain a JSON body')
+  }
+  return new Uint8Array(await readBoundedStream(response.body, limit, signal))
+}
 function hasExactEnumerableColumns(row: object, keys: ReadonlySet<string>) {
   let count = 0
   for (const key in row) {
@@ -245,7 +255,7 @@ export async function streamGaiaChunks(options: {
               const response = await fetcher(new URL(descriptor.path, base), { signal: controller.signal, redirect: 'error' })
               try { check() } catch (error) { await response.body?.cancel().catch(() => undefined); throw error }
               if (!response.ok) { await response.body?.cancel().catch(() => undefined); throw new Error(`Gaia chunk HTTP ${response.status}`) }
-              bytes = await readBounded(response, 'application/json', descriptor.bytes, controller.signal)
+              bytes = await readGaiaJsonResponse(response, descriptor.bytes, controller.signal)
             }
             check()
             if (!(bytes instanceof Uint8Array) || bytes.byteLength !== descriptor.bytes || await gaiaHash(bytes) !== descriptor.sha256) throw new Error('Gaia chunk source hash mismatch')

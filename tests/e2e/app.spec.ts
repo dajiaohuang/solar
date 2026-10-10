@@ -447,14 +447,17 @@ test('lazy-loads catalog samples only inside catalog workspaces and only once', 
 test('streams the filtered catalog into both Explorer renderers and releases it on stop', async ({ page }) => {
   await page.addInitScript(() => {
     const NativeWorker = window.Worker
-    const audit = window as Window & { explorerStreamStarts: number }
+    const audit = window as Window & { explorerStreamStarts: number; releaseCatalogEpochs: () => void }
     audit.explorerStreamStarts = 0
+    let holdEpochs = true
+    const heldEpochs: (() => void)[] = []
+    audit.releaseCatalogEpochs = () => { holdEpochs = false; heldEpochs.splice(0).forEach(send => send()) }
     window.Worker = class extends NativeWorker {
       override postMessage(data: unknown, options?: Transferable[] | StructuredSerializeOptions) {
         if ((data as { type?: string; retainEpochs?: boolean })?.type === 'start' && (data as { retainEpochs?: boolean }).retainEpochs) audit.explorerStreamStarts++
-        if ((data as { type?: string })?.type === 'epoch') {
+        if ((data as { type?: string })?.type === 'epoch' && holdEpochs) {
           // Hold the worker request to exercise the displayed/target time gap.
-          setTimeout(() => { if (Array.isArray(options)) super.postMessage(data, options); else super.postMessage(data, options) }, 1000)
+          heldEpochs.push(() => { if (Array.isArray(options)) super.postMessage(data, options); else super.postMessage(data, options) })
           return
         }
         if (Array.isArray(options)) super.postMessage(data, options)
@@ -489,10 +492,12 @@ test('streams the filtered catalog into both Explorer renderers and releases it 
   expect(await page.evaluate(() => (window as Window & { explorerStreamStarts: number }).explorerStreamStarts)).toBe(1)
   const beforeSeek = await page.getByTestId('explorer-catalog-status').getAttribute('data-epoch')
   await page.locator('.simulation-bar input[type=date]').fill('2026-09-03')
+  await page.locator('.simulation-bar input[type=date]').press('Tab')
   await expect(page.locator('.catalog-scene-controls > summary')).toContainText('Catching up')
   expect(await page.getByTestId('explorer-catalog-status').getAttribute('data-epoch')).toBe(beforeSeek)
   await page.locator('.simulation-bar').getByRole('button', { name: /Play/ }).click()
   await page.getByRole('button', { name: 'Pause to catch up', exact: true }).click()
+  await page.evaluate(() => (window as Window & { releaseCatalogEpochs: () => void }).releaseCatalogEpochs())
   await expect(page.locator('.simulation-bar').getByRole('button', { name: /Play/ })).toBeVisible()
   await expect(page.locator('.catalog-scene-controls > summary')).toContainText('Time synchronized', { timeout: 20000 })
   expect(await page.getByTestId('explorer-catalog-status').getAttribute('data-epoch')).not.toBe(beforeSeek)
@@ -719,6 +724,7 @@ test('streams an expanded source snapshot beyond the sample and restores its act
   expect(requests.slice(before).filter(url => url.endsWith('/meta/chunk-0000.json'))).toHaveLength(1)
   expect(requests.slice(before).filter(url => url.endsWith('/binary/chunk-0000.bin'))).toHaveLength(1)
   const afterLoad = requests.length
+  await page.getByRole('combobox', { name: 'Map detail', exact: true }).selectOption('spatial')
   await page.getByRole('spinbutton', { name: 'Map radius (AU)', exact: true }).fill('20')
   await expect.poll(() => page.evaluate(() => {
     const selection = (window as SelectionWindow).heldSelections
@@ -893,11 +899,10 @@ test('filters source magnitudes exactly and excludes shards using exact orbital 
   const canvas = page.getByTestId('catalog-stream-canvas')
   await expect(canvas).toHaveAttribute('data-phase', 'complete')
   await expect(canvas).toHaveAttribute('data-drawn-rows', '1')
-  // H filtering validates source metadata and orbital rows instead of treating
-  // the compact magnitude column as source-precision scientific evidence.
-  await expect(canvas).toHaveAttribute('data-source-rows', '3')
+  // The compact index rejects known-H shards before the exact source filter.
+  await expect(canvas).toHaveAttribute('data-source-rows', '1')
   await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
-  expect(requests.slice(before).map(path => path.split('/').at(-1)).sort()).toEqual(['chunk-0000.bin', 'chunk-0001.bin', 'chunk-0002.bin'])
+  expect(requests.slice(before).map(path => path.split('/').at(-1))).toEqual(['chunk-0001.bin'])
   await page.getByRole('spinbutton', { name: 'a (AU): Minimum', exact: true }).fill('70')
   await expect(canvas).toHaveCount(0)
   await expect(page.locator('.catalog-table')).not.toContainText('Beta')
@@ -919,6 +924,7 @@ test('keeps an under-budget catalog complete and updates visibility without relo
   await installMockCatalog(page, { precomputed: true, presetDataset: true, sampleCount: 1, chunkSize: 1000 })
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=4&page=catalog&lang=en&jd=2461287.5')
+  await page.getByRole('combobox', { name: 'Map detail', exact: true }).selectOption('spatial')
   await page.getByRole('button', { name: /Load expanded snapshot/ }).click()
   const canvas = page.getByTestId('catalog-stream-canvas')
   await expect(canvas).toHaveAttribute('data-phase', 'complete')
@@ -1722,13 +1728,13 @@ test('falls back safely when a shared mission URL has invalid parameters', async
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
 
-test('discloses the derived Earth geocenter and out-of-range mission extrapolation bilingually', async ({ page }) => {
+test('discloses the Hohmann Earth-system seed and out-of-range mission extrapolation bilingually', async ({ page }) => {
   await page.goto('./?v=4&page=mission&from=earth&to=mars&depart=2050-06-01&arrive=2050-12-01&lang=en')
   await expect(page.getByText(/year 2051 is outside the 1800–2050 validity interval/)).toBeVisible()
 
   await page.goto('./?v=4&page=mission&from=earth&to=mars&depart=2051-01-01&arrive=2051-09-01&lang=en')
   await expect(page.getByText('Mission endpoint model boundary')).toBeVisible()
-  await expect(page.getByText(/geocenter derived from the JPL Table 1 EMB seed/)).toBeVisible()
+  await expect(page.getByText(/Hohmann baseline uses the Earth-system semi-major axis from the EMB seed/)).toBeVisible()
   await expect(page.getByText(/year 2052 is outside the 1800–2050 validity interval/)).toBeVisible()
 
   await page.goto('./?v=4&page=mission&from=ceres&to=pluto&depart=2051-01-01&arrive=2051-09-01&lang=en')
@@ -1736,13 +1742,13 @@ test('discloses the derived Earth geocenter and out-of-range mission extrapolati
 
   await page.goto('./?v=4&page=mission&from=earth&to=mars&depart=2051-01-01&arrive=2051-09-01&lang=zh')
   await expect(page.getByText('任务端点模型边界')).toBeVisible()
-  await expect(page.getByText(/由 JPL 表 1 地月质心种子.*推导的地心/)).toBeVisible()
+  await expect(page.getByText(/圆轨道霍曼基线使用地月系统质心种子的半长轴/)).toBeVisible()
   await expect(page.getByText(/2052 超出 JPL 行星近似根数的 1800–2050 有效区间/)).toBeVisible()
 })
 
 test('publishes the exact planetary model provenance in Evidence and the Earth profile', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  // This regression exercises the explicitly retained fallback provenance.
+  // Evidence retains fallback provenance while the backend supplies exact states.
   await page.route('**/data/ephemerides/**', (route) => route.abort())
   await page.goto('./?v=4&page=about&lang=en')
   await expect(page.getByText('jpl-approx-table-1')).toBeVisible()
@@ -1756,7 +1762,7 @@ test('publishes the exact planetary model provenance in Evidence and the Earth p
   await page.getByRole('button', { name: 'Show body details' }).click()
   await page.getByRole('tab', { name: 'Context' }).click()
   await expect(page.getByText('Rendered point')).toBeVisible()
-  await expect(page.getByText('Earth geocenter derived from the EMB seed')).toBeVisible()
+  await expect(page.getByText('Earth geocenter from the active ephemeris')).toBeVisible()
   await expect(page.getByText('Orbit seed represents')).toBeVisible()
   await expect(page.getByText('Earth–Moon barycenter', { exact: true })).toBeVisible()
 })

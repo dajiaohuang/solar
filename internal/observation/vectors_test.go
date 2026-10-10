@@ -70,7 +70,11 @@ func TestIndependentGroundStationAndReceptionVectors(t *testing.T) {
 		if math.Abs(math.Sqrt(p[0]*p[0]+p[1]*p[1]+p[2]*p[2])-*b.RangeKM) > 1e-6 {
 			t.Fatal("vector norm and range disagree")
 		}
-		if *b.LightTimeResidualSeconds > lightTimeToleranceSeconds || *b.EmissionJDTDB != r.JDTDB-*b.LightTimeSeconds/86400 {
+		// The JD-only evaluator rounds each epoch to one binary64 Julian day.
+		// The final light-time residual remains subject to the independent solver
+		// tolerance; serialized epoch consistency allows one representable JD step.
+		emissionRoundingDays := math.Nextafter(r.JDTDB, math.Inf(1)) - r.JDTDB
+		if *b.LightTimeResidualSeconds > lightTimeToleranceSeconds || math.Abs(*b.EmissionJDTDB-(r.JDTDB-*b.LightTimeSeconds/86400)) > emissionRoundingDays {
 			t.Fatal("reported light time does not belong to the evaluated emission epoch")
 		}
 	}

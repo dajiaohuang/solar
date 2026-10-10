@@ -210,8 +210,9 @@ describe('adaptive render budget', () => {
       missedFrameRatio: 1,
     })
     expect(state).toBe(adjusted)
-    state = advance(state, policy, { nowMs: 9_000, p95FrameTimeMs: 40, missedFrameRatio: 1 })
-    expect(state.consecutiveSlowWindows).toBe(1)
+    state = advance(state, policy, { nowMs: 4_000 + RENDER_BUDGET_COOLDOWN_MS, p95FrameTimeMs: 40, missedFrameRatio: 1 })
+    expect(state.count).toBeLessThan(adjusted.count)
+    expect(state.lastAdjustmentAtMs).toBe(4_000 + RENDER_BUDGET_COOLDOWN_MS)
   })
 
   it('does not sample while hidden, warming up, or paused', () => {
@@ -261,13 +262,13 @@ describe('comparison render budgets', () => {
   it('keeps the full budget for one frame and shares it across two frames', () => {
     expect(splitRenderBudget(250_000, false)).toEqual({ primary: 250_000, secondary: 0 })
     expect(splitRenderBudget(250_000, true)).toEqual({ primary: 125_000, secondary: 125_000 })
-    expect(splitRenderBudget(255_000, true)).toEqual({ primary: 125_000, secondary: 125_000 })
+    expect(splitRenderBudget(255_000, true)).toEqual({ primary: 127_500, secondary: 127_500 })
   })
 
-  it('normalizes arbitrary totals to the shared 5000-object quantum', () => {
-    expect(splitRenderBudget(252_499, false)).toEqual({ primary: 250_000, secondary: 0 })
+  it('preserves available rows and leaves at most one odd row unused', () => {
+    expect(splitRenderBudget(252_499, false)).toEqual({ primary: 252_499, secondary: 0 })
     const split = splitRenderBudget(252_499, true)
-    expect(split).toEqual({ primary: 125_000, secondary: 125_000 })
+    expect(split).toEqual({ primary: 126_249, secondary: 126_249 })
     expect(split.primary + split.secondary).toBeLessThanOrEqual(252_499)
   })
 

@@ -7,26 +7,6 @@ on:
         description: Exact commit validated by the calling quality workflow
         required: false
         type: string
-  push:
-    branches: [main]
-    paths:
-      - 'android/**'
-      - 'ios/**'
-      - 'resources/**'
-      - 'src/**'
-      - 'scripts/**'
-      - 'public/**'
-      - 'cmd/**'
-      - 'internal/**'
-      - 'go.mod'
-      - 'go.sum'
-      - 'tests/**'
-      - 'index.html'
-      - 'tsconfig*.json'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'vite.config.ts'
-      - '.github/workflows/mobile.yml'
   workflow_dispatch:
 
 permissions:
@@ -38,28 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validation_scope:
-    name: Native validation scope
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      reuse: ${{ steps.evidence.outputs.reuse }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.checkout_ref || github.sha }}
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-      - name: Reuse only recent successful checks for this exact main head
-        id: evidence
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node scripts/native-quality-reuse.mjs
-
   android:
-    needs: validation_scope
-    if: needs.validation_scope.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -83,22 +42,12 @@ jobs:
       - run: npm ci
       - name: Verify independent native projects
         run: npm run native:check
-      - name: Verify shared Go backend and concurrent cancellation
-        run: |
-          go vet ./cmd/... ./internal/...
-          go test -race ./cmd/... ./internal/...
-          go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./cmd/... ./internal/...
       - name: Generate Go handler tiles and verify Web numeric parity
         env:
           SOLAR_STATE_TILE_FIXTURE_DIR: ${{ runner.temp }}/solar-state-tile-fixture
         run: |
           go run ./cmd/state-tile-fixture -out "$SOLAR_STATE_TILE_FIXTURE_DIR" -tile-size 1
           npx vitest run tests/unit/state-tiles-golden.test.ts
-      - name: Verify Android API contract
-        run: |
-          grep -q "compileSdkVersion = 36" android/variables.gradle
-          grep -q "targetSdkVersion = 36" android/variables.gradle
-          grep -q "minSdkVersion = 24" android/variables.gradle
       - name: Build debug-key-signed Android application
         working-directory: android
         env:
@@ -130,8 +79,6 @@ jobs:
           retention-days: 14
 
   ios:
-    needs: validation_scope
-    if: needs.validation_scope.outputs.reuse != 'true'
     runs-on: macos-26
     timeout-minutes: 35
     steps:

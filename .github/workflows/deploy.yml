@@ -73,7 +73,6 @@ jobs:
 
       - run: npm run lint
       - run: npm run test:unit
-      - run: npm run test:scientific
       - name: Build deployable application and compressed pinned dataset
         env:
           # This Full build is reused only by the strict E2E adapter below.

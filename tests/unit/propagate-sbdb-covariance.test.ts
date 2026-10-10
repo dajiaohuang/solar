@@ -19,7 +19,7 @@ test('conditional covariance CLI exports source/model evidence, preserves existi
   for (const [path, hash] of Object.entries(receipt.implementationSha256)) {
     expect(hash).toBe(createHash('sha256').update(await readFile(path)).digest('hex'))
   }
-  await expect(propagateCovarianceFile(source, output, options)).rejects.toMatchObject({ code: 'EEXIST' })
+  await expect(propagateCovarianceFile(source, output, options)).rejects.toMatchObject({ outputPublished: false, cause: { code: 'EEXIST' } })
   expect(await readFile(output, 'utf8')).toBe(bytes)
   const unused = join(directory, 'rejected.json')
   await expect(propagateCovarianceFile('tests/fixtures/sbdb-bennu-covariance.json', unused, options)).rejects.toThrow('no axes will be dropped')

@@ -287,7 +287,7 @@ export function buildGeometry(
   }
 
   const trailIds = new Set(trajectories.map(item => item.body.id)), distanceByBodyId = new Map<string, number>()
-  for (let index = 0; index < currentPositions.length; index++) {
+  for (let index = 0; trailIds.size && index < currentPositions.length; index++) {
     const id = currentPositions.bodyAt(index).id
     if (trailIds.has(id)) distanceByBodyId.set(id, currentPositions.distanceAt(index))
   }
@@ -378,7 +378,7 @@ export function buildGeometry(
   return {
     linePositions: linePositions.subarray(0, lineCursor * 4),
     lineColors: lineColors.subarray(0, lineCursor * 8),
-    pointPositions: cachedPoints?.pointPositions ?? pointPositions.subarray(0, pointCursor * 2),
+    pointPositions: cachedPoints?.pointPositions ?? cachedPointPositions ?? pointPositions.subarray(0, pointCursor * 2),
     pointColors: cachedPoints?.pointColors ?? pointColors.subarray(0, pointCursor * 4),
     pointSizes: cachedPoints?.pointSizes ?? cachedPointSizes ?? pointSizes.subarray(0, pointCursor),
   }

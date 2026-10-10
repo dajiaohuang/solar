@@ -67,7 +67,7 @@ it('binds summary coverage to the source and returns owned ranges', () => {
   const legacy = bindCatalogSummary({ ...bound, schemaVersion: 2 }, manifest)
   expect(legacy).not.toHaveProperty('magnitudeKnownCount')
   expect(legacy).not.toHaveProperty('magnitudeUnknownCount')
-  expect(bindCatalogSummary(summary, manifest).magnitudeKnownCount).toBe(0)
+  expect(bindCatalogSummary(bound, manifest).magnitudeKnownCount).toBe(0)
   expect(() => bindCatalogSummary({ ...bound, schemaVersion: 2, magnitudeKnownCount: 1 }, manifest)).toThrow()
   for (const patch of [{ magnitudeKnownCount: 1 }, { sourceSha256: digest('other source') },
     { categoryCounts: { APO: 1 } }, { numericRanges: { ...bound.numericRanges, eccentricity: [1, 1] as [number, number] } }]) {

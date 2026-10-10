@@ -33,8 +33,8 @@ describe('shared physical ephemeris integration', () => {
     const late = 2463000.5
     expect(kernelCoverage(body('haumea'), late).model).toBe('approximate-fallback')
   })
-  it('covers 657 exact body centers and accounts for every remaining identity gap', () => {
-    expect(majorBodies.filter((entry) => kernelCoverage(entry, jd).model === 'jpl-spk')).toHaveLength(657)
+  it('covers 659 exact body centers and accounts for every remaining identity gap', () => {
+    expect(majorBodies.filter((entry) => kernelCoverage(entry, jd).model === 'jpl-spk')).toHaveLength(659)
     expect(majorBodies.filter(entry => kernelCoverage(entry, jd).model !== 'jpl-spk').map(entry => entry.id).sort()).toEqual([
       'makemake', 'naif:120000617', 'naif:920000617', 'sat:planet:saturn:provisional:S/2009 S1',
     ].sort())
@@ -259,12 +259,13 @@ describe('shared physical ephemeris integration', () => {
     }
   })
 
-  it('retains frozen fallback seeds against their original packaged source pool, not newly selected solutions', () => {
-    const seededSourceKernelIds = new Set(seeds.bodies.map((entry) => entry.sourceKernelId))
-    const seededDependencyKernelIds = new Set(loadedKernels().filter((kernel) => seededSourceKernelIds.has(kernel.id)).flatMap((kernel) => kernel.solutionKernelIds ?? []))
-    const originalSources = loadedKernels().filter(kernel => (!kernel.dependencyOnly && kernel.solutionKernelIds === undefined) || seededSourceKernelIds.has(kernel.id) || seededDependencyKernelIds.has(kernel.id))
-    const pool = createKernelResolver(originalSources, (seeds.epochJd - 2451545) * SECONDS_PER_DAY)
+  it('retains frozen fallback seeds against their pinned target roots and resolved parent centers', () => {
+    const originalSources = loadedKernels()
     for (const entry of seeds.bodies) {
+      const root = loadedKernels().find(kernel => kernel.id === entry.sourceKernelId)!
+      // Freeze this seed's target root while retaining independently resolved
+      // parent centers. Later roots that happen to overlap must not replace it.
+      const pool = createKernelResolver([...originalSources.filter(kernel => kernel.id !== root.id), root], (seeds.epochJd - 2451545) * SECONDS_PER_DAY)
       const parentId = bodyNaifId(body(entry.parentId))!
       const actual = pool.relative(entry.naifId, parentId)!
       expect(actual, `${entry.id} (${entry.sourceKernelId})`).not.toBeNull()

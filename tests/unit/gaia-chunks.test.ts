@@ -30,6 +30,20 @@ test('rejects modified hashes and epoch/budget violations before publishing', as
   const bad = structuredClone(manifest); bad.chunks[0].path = '../outside.json'
   await expect(streamGaiaChunks({ ...options, manifest: bad })).rejects.toThrow(/descriptor/)
 })
+test('verifies decoded Gaia chunks from compressed chunked HTTP responses', async () => {
+  const publish = vi.fn(async () => {})
+  const result = await streamGaiaChunks({ manifest, region, baseUrl: 'https://example.test/gaia/', signal: new AbortController().signal,
+    fetcher: vi.fn(async () => new Response(raw, { headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip' } })), onChunk: publish })
+  expect(result.verifiedRows).toBe(19)
+  expect(publish).toHaveBeenCalledTimes(1)
+})
+test('rejects decoded Gaia expansion beyond its manifest size before publication', async () => {
+  const publish = vi.fn(async () => {})
+  await expect(streamGaiaChunks({ manifest, region, baseUrl: 'https://example.test/gaia/', signal: new AbortController().signal,
+    fetcher: vi.fn(async () => new Response(Buffer.concat([raw, Buffer.from(' ')]), { headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip', 'Content-Length': '1' } })),
+    onChunk: publish })).rejects.toThrow(/exceeds/)
+  expect(publish).not.toHaveBeenCalled()
+})
 async function syntheticPartition() {
   // Synthetic queue/budget geometry only; never a scientific or capacity oracle.
   const source = JSON.parse(raw.toString()).sources[0], files = new Map<string, Uint8Array>()

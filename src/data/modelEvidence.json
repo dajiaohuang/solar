@@ -122,15 +122,15 @@
       },
       "pagesManifest": {
         "id": "jpl-satellite-expansion-20260904-pages",
-          "sha256": "a4c976d0d4804b7d37b165eff27dffb0a9b247f3707ab652b104ef09de34f822",
-          "bytes": 280753152,
-          "fileCount": 672
+        "sha256": "2a6a2627820aa560f937cecf093da2de61045fb57eec342eaf94778b70ebc686",
+        "bytes": 386497536,
+        "fileCount": 685
       },
       "fullManifest": {
         "id": "jpl-satellite-expansion-20260904-full",
-          "sha256": "1bef7b8b06007f66fcafb9ab7de4cbe65f9a4682c2c7dd6e667b4c34514cf7f7",
-          "bytes": 1188151296,
-          "fileCount": 672
+        "sha256": "6611e75b5dfc3fdc19a00dd517c0987f5afe79c292c1957634c579073b28220d",
+        "bytes": 1294291968,
+        "fileCount": 685
       },
       "sourceBackedSatelliteBatches": {
         "mars": [
