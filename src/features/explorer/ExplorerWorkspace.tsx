@@ -564,6 +564,7 @@ export function ExplorerWorkspace() {
             ? (language === 'zh' ? `时间追赶中（相差 ${Math.abs(requestedJulianDay - renderedJulianDay).toFixed(3)} 天）` : `Catching up (${Math.abs(requestedJulianDay - renderedJulianDay).toFixed(3)} days apart)`)
             : (language === 'zh' ? '时间已同步' : 'Time synchronized')}</summary>
           <div className="catalog-scene-options" aria-label={language === 'zh' ? '主场景目录' : 'Scene catalog'}>
+          {SEGMENTED_WEB && <small>{language === 'zh' ? '默认使用小样本。切换到大量天体会下载完整筛选索引（约 37 MB）及所需轨道；播放和换参考系复用已下载数据。' : 'The default uses a small sample. Large populations download the full filter index (about 37 MB) plus required orbits; playback and frame changes reuse loaded data.'}</small>}
           <label>{language === 'zh' ? '计算与显示来源' : 'Compute and display source'} <select aria-label={language === 'zh' ? '星体数量' : 'Catalog population'} value={catalog.explorerStreamRows ?? 0}
             onChange={event => catalogActions.patch({ explorerStreamRows: Number(event.target.value) || null })}>
             <option value={0}>{language === 'zh' ? '固定样本' : 'Fixed sample'}</option>

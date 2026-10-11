@@ -1,4 +1,5 @@
 import { readBoundedStream } from '../../data/cache/boundedStream'
+import { fetchImmutableArrayBuffer, parseMaybeGzipJson } from '../../data/cache/indexedDb'
 import { evaluateApproximation, segmentAt, type ApproximationSegment } from './segmentedApproximation'
 import { utcJulianDayToEt } from './timeScales'
 import type { CelestialBody } from '../../types'
@@ -58,7 +59,7 @@ export function approximationRequestKey(selected: readonly CelestialBody[], utcJ
 }
 
 async function responseBytes(path: string, limit: number) {
-  const response = await fetch(`${root()}${path.split('/').map(encodeURIComponent).join('/')}`, { redirect: 'error' })
+  const response = await fetch(`${root()}${path.split('/').map(encodeURIComponent).join('/')}`, { redirect: 'error', cache: 'no-cache' })
   if (!response.ok || !response.body) throw new Error(`Approximation HTTP ${response.status}: ${path}`)
   const bytes = new Uint8Array(await readBoundedStream(response.body, limit))
   // Handle both gzip files and hosts that already applied Content-Encoding.
@@ -78,7 +79,14 @@ function awaitConsumer<T>(operation: Promise<T>, signal?: AbortSignal): Promise<
 export async function loadApproximationManifest() {
   if (manifest) return manifest
   if (!manifestPending) manifestPending = (async () => {
-    const value = JSON.parse(new TextDecoder().decode(await responseBytes('manifest.json', 8 * 1048576))) as ApproximationManifest
+    const pointer = JSON.parse(new TextDecoder().decode(await responseBytes('index.json', 1024))) as { path: string; bytes: number; sha256: string }
+    if (!/^manifests\/[a-f0-9]{64}\.json\.gz$/.test(pointer.path) || !digestPattern.test(pointer.sha256)
+      || pointer.path !== `manifests/${pointer.sha256}.json.gz` || !Number.isSafeInteger(pointer.bytes)
+      || pointer.bytes <= 0 || pointer.bytes > 16 * 1048576) throw new Error('Invalid approximation delivery index')
+    let value!: ApproximationManifest
+    await fetchImmutableArrayBuffer(`${root()}${pointer.path}`, async bytes => {
+      value = await parseMaybeGzipJson<ApproximationManifest>(bytes, pointer.bytes, undefined, pointer.sha256)
+    })
     if (value.schemaVersion !== 1 || value.model !== 'piecewise-chebyshev-best-sampled-v1'
       || value.frame !== 'ECLIPJ2000' || value.timeScale !== 'TDB' || value.positionUnit !== 'km' || value.velocityUnit !== 'km/s'
       || !digestPattern.test(value.sourceManifestSha256) || !Array.isArray(value.bodies) || value.bodies.length > 4096
@@ -86,7 +94,7 @@ export async function loadApproximationManifest() {
     const identities = new Set<string>()
     const chunkPaths = new Set<string>()
     for (const body of value.bodies) {
-      if (!body.id || identities.has(body.id) || !body.parentId || !Array.isArray(body.chunks) || body.chunks.length > 256
+      if (!body.id || identities.has(body.id) || !body.parentId || !Array.isArray(body.chunks) || body.chunks.length > 4096
         || typeof body.available !== 'boolean' || typeof body.seedModel !== 'boolean') throw new Error('Invalid approximation body')
       identities.add(body.id)
       let end = -Infinity
@@ -122,10 +130,11 @@ async function loadChunk(body: ApproximationBody, descriptor: ApproximationChunk
     const promise = (async () => {
       emit({ loading: snapshot.loading + 1 })
       try {
-        const bytes = await responseBytes(descriptor.path, descriptor.bytes)
-        const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(n => n.toString(16).padStart(2, '0')).join('')
-        if (bytes.byteLength !== descriptor.bytes || hash !== descriptor.sha256) throw new Error('Approximation source hash mismatch')
-        const value = JSON.parse(new TextDecoder().decode(bytes)) as ChunkDocument
+        const url = `${root()}${descriptor.path.split('/').map(encodeURIComponent).join('/')}`
+        let value!: ChunkDocument
+        await fetchImmutableArrayBuffer(url, async bytes => {
+          value = await parseMaybeGzipJson<ChunkDocument>(bytes, descriptor.bytes, undefined, descriptor.sha256)
+        })
         if (value.schemaVersion !== 1 || value.id !== body.id || value.parentId !== body.parentId
           || value.sourceManifestSha256 !== manifest!.sourceManifestSha256 || !Array.isArray(value.segments)
           || value.segments.length !== descriptor.segmentCount || !value.sourceKernelHashes?.length
@@ -142,12 +151,12 @@ async function loadChunk(body: ApproximationBody, descriptor: ApproximationChunk
         if (value.segments[0]?.startEt !== descriptor.startEt || end !== descriptor.endEt) throw new Error('Approximation window differs from descriptor')
         // Only one window and selected history are retained, not the full
         // multi-decade archive. FIFO eviction bounds each main/worker realm.
-        while (residentBytes + bytes.byteLength > 128 * 1048576 && chunks.size) {
+        while (residentBytes + descriptor.bytes > 128 * 1048576 && chunks.size) {
           const path = chunks.keys().next().value!
           residentBytes -= residentSizes.get(path)!; chunks.delete(path); residentSizes.delete(path)
         }
-        chunks.set(descriptor.path, value); residentBytes += bytes.byteLength
-        residentSizes.set(descriptor.path, bytes.byteLength)
+        chunks.set(descriptor.path, value); residentBytes += descriptor.bytes
+        residentSizes.set(descriptor.path, descriptor.bytes)
         emit({ error: null }, true)
       } finally { emit({ loading: snapshot.loading - 1 }); pending.delete(descriptor.path) }
     })()

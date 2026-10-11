@@ -110,6 +110,7 @@ function acquireRequest(url: string, signal?: AbortSignal) {
 export function datasetVersionFromUrl(url: string) {
   try {
     const pathname = new URL(url, globalThis.location?.href ?? 'https://solar-atlas.invalid/').pathname
+    if (/\/data\/approximation\/(?:chunks|manifests)\//.test(pathname)) return 'approximation'
     const preview = pathname.match(/\/data\/asteroids\/preview\/([a-f0-9]{64})\/releases\/([^/]+)\//)
     if (preview) return `preview:${preview[1]}:${decodeURIComponent(preview[2])}`
     const match = pathname.match(/\/data\/asteroids\/releases\/([^/]+)\//)
@@ -121,6 +122,9 @@ export function datasetVersionFromUrl(url: string) {
 
 export function isObsoleteDatasetVersion(storedVersion: string, activeVersion: string) {
   if (storedVersion === activeVersion) return false
+  // Content-addressed approximation chunks coexist with catalog releases.
+  // A catalog upgrade must not discard still reusable scientific coefficients.
+  if (storedVersion !== 'legacy' && (storedVersion === 'approximation' || activeVersion === 'approximation')) return false
   // Pre-profile records have no trustworthy release identity. Other products
   // coexist in this database and share its global LRU byte budget.
   if (storedVersion === 'legacy') return true

@@ -4,7 +4,24 @@ import { join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 
 export async function verifyApproximationAssets(root) {
-  const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8'))
+  const manifestBytes = await readFile(join(root, 'manifest.json'))
+  const manifest = JSON.parse(manifestBytes)
+  let compressedManifestBytes = 0
+  try {
+    const packed = await readFile(join(root, 'manifest.json.gz'))
+    if (!gunzipSync(packed, { maxOutputLength: 16 * 1048576 }).equals(manifestBytes)) throw new Error('Compressed approximation manifest mismatch')
+    compressedManifestBytes = packed.byteLength
+  } catch (error) { if (error.code !== 'ENOENT') throw error }
+  let indexedManifestBytes = 0
+  const indexBytes = await readFile(join(root, 'index.json')).catch(error => { if (error.code !== 'ENOENT') throw error; return null })
+  if (indexBytes) {
+    const index = JSON.parse(indexBytes)
+    const digest = createHash('sha256').update(manifestBytes).digest('hex')
+    if (index.path !== `manifests/${digest}.json.gz` || index.sha256 !== digest || index.bytes !== manifestBytes.byteLength) throw new Error('Invalid approximation delivery index')
+    const packed = await readFile(join(root, index.path))
+    if (!gunzipSync(packed, { maxOutputLength: index.bytes }).equals(manifestBytes)) throw new Error('Indexed approximation manifest mismatch')
+    indexedManifestBytes = indexBytes.byteLength + packed.byteLength
+  }
   const source = await readFile('src/data/ephemeris-manifest-full.json')
   const hash = bytes => createHash('sha256').update(bytes).digest('hex')
   if (manifest.schemaVersion !== 1 || manifest.model !== 'piecewise-chebyshev-best-sampled-v1'
@@ -23,5 +40,5 @@ export async function verifyApproximationAssets(root) {
     paths.add(chunk.path); bytes += raw.byteLength; packagedBytes += packed.byteLength
   }
   if (bytes !== manifest.totalBytes) throw new Error('Approximation byte total mismatch')
-  return { manifest, paths, bytes: packagedBytes + (await readFile(join(root, 'manifest.json'))).byteLength }
+  return { manifest, paths, bytes: packagedBytes + manifestBytes.byteLength + compressedManifestBytes + indexedManifestBytes }
 }

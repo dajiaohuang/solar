@@ -10,6 +10,7 @@ import { jsonDocument, productDelivery, sha256 } from './lib/product-delivery.ts
 import { previewDatasetPlan, verifyPreviewSourceChecksums } from './lib/preview-dataset.mjs'
 import { verifyEphemerisAssets } from './lib/verify-ephemeris-assets.mjs'
 import { verifyApproximationAssets } from './lib/verify-approximation-assets.mjs'
+import { packageApproximation } from './lib/package-approximation.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const CACHE_FILE = join(ROOT, '.cache', 'solar-build-info.json')
@@ -96,17 +97,7 @@ async function copyStaticPublic() {
     await copyFile(source, destination)
   }
   if (approximation) {
-    const packaged = structuredClone(approximation.manifest)
-    for (const body of packaged.bodies) for (const chunk of body.chunks) {
-      const source = join(APPROXIMATION_ROOT, chunk.path)
-      const alreadyCompressed = chunk.path.endsWith('.gz')
-      if (!alreadyCompressed) chunk.path += '.gz'
-      const destination = join(DIST, 'data', 'approximation', chunk.path)
-      await mkdir(dirname(destination), { recursive: true })
-      if (alreadyCompressed) await copyFile(source, destination)
-      else await gzipFile(source, destination)
-    }
-    await writeFile(join(DIST, 'data', 'approximation', 'manifest.json'), JSON.stringify({ ...packaged, chunkCompression: 'gzip' }))
+    await packageApproximation(APPROXIMATION_ROOT, join(DIST, 'data', 'approximation'), approximation.manifest)
   }
   // Only the pinned profile is shipped, even if a developer generated a larger
   // local pack in public/. Fail closed for missing or changed coefficients.

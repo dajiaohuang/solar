@@ -29,6 +29,7 @@ import { selectionActions, selectionStore } from '../../state/selection-store'
 import { uiActions } from '../../state/ui-store'
 import { simulationActions, simulationStore } from '../../state/simulation-store'
 import { PRODUCT_PROFILE } from '../../lib/productAvailability'
+import { SEGMENTED_WEB } from '../../lib/webExecution'
 import type { AsteroidManifest, AsteroidRecord, AsteroidSectionCursor, MagnitudeStatus } from '../../types'
 import { bodyDisplayName } from '../../lib/bodyNames'
 import { catalogSampleErrorMessage } from '../../lib/catalogSampleProfile'
@@ -64,7 +65,7 @@ export function CatalogWorkspace() {
   // An untouched desktop request follows the installed release's full row
   // count. Keep mobile conservative; an explicit user choice stays pinned.
   const [streamLimit, setStreamLimit] = useState<number | null>(null)
-  const requestedStreamRows = streamLimit ?? (window.innerWidth <= 800 ? 30_000 : (catalog.manifest?.totalCount ?? 1_000_000))
+  const requestedStreamRows = streamLimit ?? (SEGMENTED_WEB || window.innerWidth <= 800 ? 30_000 : (catalog.manifest?.totalCount ?? 1_000_000))
   const [streamRetainEpochs, setStreamRetainEpochs] = useState(false)
   const [streamAppend, setStreamAppend] = useState(false)
   const streamAppendRows = streamRetainEpochs && streamAppend ? 256 : 0
@@ -481,6 +482,7 @@ export function CatalogWorkspace() {
             <p className="catalog-result-note">{language === 'zh' ? '筛选范围决定参与计算的轨道；视野半径独立决定地图显示尺度。' : 'Orbit filters choose which records are computed; the view radius independently sets the map scale.'}</p>
           </>}
           {catalog.manifest?.compactIndex && <div className="catalog-stream-controls">
+            {SEGMENTED_WEB && <p className="catalog-result-note">{language === 'zh' ? '默认使用 8,000 条样本。全目录扫描或分片计算首次会下载约 37 MB 筛选索引及所需分片；按名称搜索无需加载整个索引。' : 'Uses an 8,000-row sample by default. Full scans and streamed computation first download about 37 MB of filter index plus required shards; name searches do not load that full index.'}</p>}
             <label className="field"><span>{language === 'zh' ? '目录数组与 GPU 预算（MiB）' : 'Catalog array and GPU budget (MiB)'}</span><select value={streamBudget} onChange={event => setStreamBudget(Number(event.target.value))}>
               {[64, 128, 256, 384, 512].map(value => <option key={value} value={value*1024*1024}>{value}</option>)}
             </select></label>

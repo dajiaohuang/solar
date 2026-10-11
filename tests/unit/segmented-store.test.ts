@@ -17,7 +17,10 @@ async function setup(corrupt = false, compressed = false) {
     bodies: [{ id: 'sun', parentId: 'sun', origin: true, seedModel: false, available: true, chunks: [] },
       { id: 'earth', parentId: 'sun', seedModel: false, available: true, chunks: [{ path: compressed ? 'chunks/earth%3A-0.json.gz' : 'chunks/earth-0.json', bytes: Buffer.byteLength(raw),
         sha256: createHash('sha256').update(raw).digest('hex'), startEt: et - 86400, endEt: et + 86400, segmentCount: 1 }] }] }
-  const fetch = vi.fn(async (url: string) => new Response(url.endsWith('manifest.json') ? JSON.stringify(manifest) : compressed ? new Uint8Array(gzipSync(raw)) : corrupt ? raw.replace('"earth"', '"other"') : raw))
+  const manifestRaw = JSON.stringify(manifest), manifestSha256 = createHash('sha256').update(manifestRaw).digest('hex')
+  const fetch = vi.fn(async (url: string) => new Response(url.endsWith('index.json')
+    ? JSON.stringify({ path: `manifests/${manifestSha256}.json.gz`, sha256: manifestSha256, bytes: Buffer.byteLength(manifestRaw) })
+    : url.includes('/manifests/') ? new Uint8Array(gzipSync(manifestRaw)) : compressed ? new Uint8Array(gzipSync(raw)) : corrupt ? raw.replace('"earth"', '"other"') : raw))
   vi.stubGlobal('fetch', fetch)
   const store = await import('../../src/engine/ephemeris/segmentedStore')
   return { store, fetch, selected: [{ id: 'earth' }] as CelestialBody[] }
@@ -31,7 +34,7 @@ it('loads only the selected epoch, shares verified chunks, and has no state outs
   expect(store.approximationRequestKey(custom, 2461287.5)).toContain('earth-0.json')
   expect(store.approximationRequestKey(custom, 2461290)).toBe('[]')
   await store.ensureApproximation(selected, 2461287.75)
-  expect(fetch).toHaveBeenCalledTimes(2)
+  expect(fetch).toHaveBeenCalledTimes(3)
   expect(store.approximationForBody('earth', 2461290).state).toBeNull()
   expect(store.approximationForBody('earth', 2400000).state).toBeNull()
   expect(store.getApproximationSnapshot().loading).toBe(0)
@@ -39,7 +42,7 @@ it('loads only the selected epoch, shares verified chunks, and has no state outs
 
 it('rejects changed bytes before publishing positions', async () => {
   const { store, selected } = await setup(true)
-  await expect(store.ensureApproximation(selected, 2461287.5)).rejects.toThrow('hash mismatch')
+  await expect(store.ensureApproximation(selected, 2461287.5)).rejects.toThrow('SHA-256 mismatch')
   expect(store.approximationForBody('earth', 2461287.5).state).toBeNull()
   expect(store.getApproximationSnapshot().loading).toBe(0)
 })
@@ -48,7 +51,7 @@ it('decodes bounded gzip and escapes literal percent signs in content-addressed 
   const { store, fetch, selected } = await setup(false, true)
   await store.ensureApproximation(selected, 2461287.5)
   expect(store.approximationForBody('earth', 2461287.5).state?.position.x).toBe(1)
-  expect(fetch.mock.calls[1][0]).toContain('earth%253A-0.json.gz')
+  expect(fetch.mock.calls[2][0]).toContain('earth%253A-0.json.gz')
 })
 
 it('cancels a waiting consumer without waiting for a shared manifest transfer', async () => {

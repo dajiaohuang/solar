@@ -5,9 +5,11 @@ import { classifyRenderDevice } from '../lib/renderBudget'
 import { catalogActions, catalogStore } from '../state/catalog-store'
 import type { CatalogSampleProfile } from '../types'
 import { PRODUCT_PROFILE, PREVIEW_PROFILE } from '../lib/productAvailability'
+import { SEGMENTED_WEB } from '../lib/webExecution'
 
 export function catalogSampleSize(): CatalogSampleProfile {
   if (PRODUCT_PROFILE === 'preview') return PREVIEW_PROFILE.catalog.profile as CatalogSampleProfile
+  if (SEGMENTED_WEB) return 'mobile'
   return classifyRenderDevice(
     window.innerWidth,
     window.matchMedia('(pointer: coarse) and (max-width: 1180px)').matches,

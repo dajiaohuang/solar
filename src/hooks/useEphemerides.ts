@@ -8,7 +8,7 @@ import { uiStore } from '../state/ui-store'
 import { missionStore } from '../state/mission-store'
 import { simulationClock } from '../engine/clock/SimulationClock'
 import { SEGMENTED_WEB } from '../lib/webExecution'
-import { approximationRequestKey, ensureApproximation, getApproximationSnapshot, subscribeApproximation } from '../engine/ephemeris/segmentedStore'
+import { approximationRequestKey, ensureApproximation, getApproximationManifest, loadApproximationManifest, getApproximationSnapshot, subscribeApproximation } from '../engine/ephemeris/segmentedStore'
 
 const builtInById = new Map(builtInSceneBodies.map(body => [body.id, body]))
 const subscribe = SEGMENTED_WEB ? subscribeApproximation : subscribeEphemerides
@@ -72,7 +72,12 @@ export function useEphemerisLoading() {
       const attempt = ++generation
       const controller = new AbortController()
       pendingController = controller
-      const operation = SEGMENTED_WEB ? ensureApproximation(bodies, julianDay, julianDay, controller.signal) : ensureKernelFiles(ids, controller.signal)
+      // URL restoration can change the scene while its manifest is loading.
+      // Re-read the selected bodies afterwards, rather than downloading the
+      // initial default scene that the user never requested.
+      const operation = SEGMENTED_WEB
+        ? getApproximationManifest() ? ensureApproximation(bodies, julianDay, julianDay, controller.signal) : loadApproximationManifest()
+        : ensureKernelFiles(ids, controller.signal)
       void operation.then(() => {
         if (SEGMENTED_WEB && active && generation === attempt && !controller.signal.aborted) load()
       }).catch(() => {
