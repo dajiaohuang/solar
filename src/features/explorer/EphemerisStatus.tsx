@@ -9,8 +9,40 @@ import { summarizeBackendCoverage } from '../../lib/backendCoverage'
 import { BackendCoverageLedger } from './BackendCoverageLedger'
 import { PagedBodyList } from '../../components/PagedBodyList'
 import type { ExactBackendCoverageCounts } from '../../lib/backendCoverage'
+import { SEGMENTED_WEB, isDynamicOrbitBody } from '../../lib/webExecution'
+import { getApproximationManifest, ensureApproximation } from '../../engine/ephemeris/segmentedStore'
+import { bodyPositionOrNull, createBodyPositionResolver } from '../../lib/ephemeris'
+import { builtInSceneBodies } from '../../app/bodyRegistry'
 
-export function EphemerisStatus({ bodies, references, julianDay, historyDays, exactCoverageCounts, backendStatus, backendFrame }: { bodies: CelestialBody[]; references: CelestialBody[]; julianDay: number; historyDays: number; exactCoverageCounts: ExactBackendCoverageCounts; backendFrame?: BackendFrame | null; backendStatus?: { configured: boolean; loading: boolean; error: string | null; publishedEpochUtcJd?: number | null; requestedEpochUtcJd?: number } }) {
+export function EphemerisStatus(props: Parameters<typeof KernelEphemerisStatus>[0]) {
+  return SEGMENTED_WEB ? <SegmentedEphemerisStatus {...props} /> : <KernelEphemerisStatus {...props} />
+}
+
+function SegmentedEphemerisStatus({ bodies, references, julianDay }: Parameters<typeof KernelEphemerisStatus>[0]) {
+  const state = useEphemerides()
+  const { language, t } = useI18n()
+  const manifest = getApproximationManifest()
+  const resolve = createBodyPositionResolver(new Map([...builtInSceneBodies, ...bodies, ...references].map(body => [body.id, body])), julianDay)
+  const missing = bodies.filter(body => !bodyPositionOrNull(resolve, body.id))
+  return <details className="ephemeris-status glass-panel" data-testid="ephemeris-status" data-model="segmented-approximation">
+    <summary>{language === 'zh' ? '分段轨道近似' : 'Segmented orbit approximation'}: {bodies.length - missing.length}/{bodies.length} · {state.loading ? t('loading') : language === 'zh' ? '浏览器本地求值' : 'Browser evaluation'}</summary>
+    <p>{language === 'zh' ? '每段仅保留候选中抽样误差最小的一套近似；有效范围外无覆盖，不外推。' : 'Each segment retains the candidate with the lowest sampled error. No coverage or extrapolation outside its valid interval.'}</p>
+    <p>{language === 'zh' ? '误差阈值（相对来源内核的验证点，不是连续误差界或物理不确定度）' : 'Validation thresholds against source kernels at sampled points; not continuous bounds or physical uncertainty'}: {manifest?.positionToleranceKm ?? 5} km · {manifest?.velocityToleranceKmS ?? .005} km/s.</p>
+    <p>{language === 'zh' ? '参考系' : 'References'}: {references.map(body => `${body.id}: ${bodyPositionOrNull(resolve, body.id) ? language === 'zh' ? '有覆盖' : 'covered' : language === 'zh' ? '无覆盖' : 'no coverage'}`).join(', ')}</p>
+    {manifest && <PagedBodyList as="ul" label={language === 'zh' ? '各天体覆盖范围（TDB；区间内也可能有缺口）' : 'Body coverage (TDB; intervals may contain gaps)'} bodies={bodies}>{body => {
+      const coverage = manifest.bodies.find(entry => entry.id === body.id)
+      const first = coverage?.chunks[0], last = coverage?.chunks.at(-1)
+      const date = (et: number) => new Date(Date.UTC(2000, 0, 1, 12) + et * 1000).toISOString().slice(0, 10)
+      return <li key={body.id}>{body.id}: {first && last ? `${date(first.startEt)} – ${date(last.endEt)} TDB` : coverage?.origin ? language === 'zh' ? '参考原点' : 'Reference origin' : body.source === 'mpcorb' ? 'MPCORB / Kepler' : language === 'zh' ? '无覆盖' : 'No coverage'}</li>
+    }}</PagedBodyList>}
+    {missing.length > 0 && <><p role="status">{language === 'zh' ? '无覆盖' : 'No coverage'}: {missing.length}</p><PagedBodyList as="ul" label={t('bodyStateUnavailable')} bodies={missing}>{body => <li key={body.id}>{body.id}</li>}</PagedBodyList></>}
+    {bodies.some(isDynamicOrbitBody) && <p>{language === 'zh' ? 'MPCORB、SBDB 和自定义轨道使用原有二体轨道近似，没有全量精确星历或上述拟合误差保证。' : 'MPCORB, SBDB and custom orbits use the existing two-body approximation, without full exact ephemerides or the fit error receipt above.'}</p>}
+    {julianDay >= 2441317.5 && utcTimeScaleQuality(julianDay).status === 'future-uncertain' && <p role="status">{t('ephemerisFutureTime')}</p>}
+    {state.error && <><p role="alert">{state.error}</p><button onClick={() => { void ensureApproximation([...bodies, ...references], julianDay).catch(() => undefined) }}>{t('loadEphemerides')}</button></>}
+  </details>
+}
+
+function KernelEphemerisStatus({ bodies, references, julianDay, historyDays, exactCoverageCounts, backendStatus, backendFrame }: { bodies: CelestialBody[]; references: CelestialBody[]; julianDay: number; historyDays: number; exactCoverageCounts: ExactBackendCoverageCounts; backendFrame?: BackendFrame | null; backendStatus?: { configured: boolean; loading: boolean; error: string | null; publishedEpochUtcJd?: number | null; requestedEpochUtcJd?: number } }) {
   const state = useEphemerides()
   const { t, language } = useI18n()
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -44,6 +76,7 @@ export function EphemerisStatus({ bodies, references, julianDay, historyDays, ex
     : null, [bodies, backendFrame, backendStatus?.configured, detailsOpen])
   const localCoverage = useMemo(() => {
     if (backendStatus?.configured && (!detailsOpen || !localEvidenceOpen)) return null
+    void state.revision
     let coveredCount = 0
     const unavailableBodies: CelestialBody[] = [], fallbackBodies: CelestialBody[] = []
     for (const body of bodies) {

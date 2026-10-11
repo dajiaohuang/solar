@@ -24,6 +24,8 @@ import { uiActions } from '../../state/ui-store'
 import type { BodyId, CelestialBody } from '../../types'
 import type { CurrentPositions } from '../../lib/currentPositions'
 import type { BackendFrame } from '../../lib/backendFrames'
+import { SEGMENTED_WEB, isDynamicOrbitBody } from '../../lib/webExecution'
+import { approximationForBody } from '../../engine/ephemeris/segmentedStore'
 
 type Props = { body: CelestialBody | null; currentPositions: CurrentPositions; bodiesById: Map<BodyId, CelestialBody>; backendFrame?: BackendFrame | null }
 type Tab = 'overview' | 'orbit' | 'physical' | 'context' | 'sources'
@@ -36,6 +38,8 @@ export function BodyInspector({ body, currentPositions, bodiesById, backendFrame
   const ephemerisRevision = useEphemerisRevision()
   const { referenceId, comparisonReferenceId, comparisonEnabled, viewMode } = simulationStore.useStore()
   const backendMode = backendFrame !== undefined && body?.source !== 'schematic'
+  const approximation = SEGMENTED_WEB && body ? approximationForBody(body.id, clock.julianDay) : null
+  const segmentedBody = SEGMENTED_WEB && body && (approximation?.body || !isDynamicOrbitBody(body))
   const inspectedEpoch = backendFrame?.epochJd ?? clock.julianDay
   const backendRow = useMemo(() => {
     if (!backendMode || !backendFrame || !body) return null
@@ -63,7 +67,7 @@ export function BodyInspector({ body, currentPositions, bodiesById, backendFrame
     if (!body || backendMode) return null
     const parent = bodiesById.get(body.parentId ?? 'sun')
     const osculating = parent ? currentOsculatingElements(body, parent, clock.julianDay) : null
-    const elements = osculating ?? (body.orbit ? getInstantaneousElements(body.orbit, clock.julianDay) : null)
+    const elements = osculating ?? (!segmentedBody && body.orbit ? getInstantaneousElements(body.orbit, clock.julianDay) : null)
     if (!elements) return null
     const physical = BODY_PHYSICAL[body.id]
     const parentPhysical = BODY_PHYSICAL[body.parentId ?? 'sun']
@@ -79,7 +83,7 @@ export function BodyInspector({ body, currentPositions, bodiesById, backendFrame
       ),
       influence: physical && parentPhysical ? computeInfluenceRadii(elements.semiMajorAxisAU, elements.eccentricity, physical.massKg, parentPhysical.massKg) : null,
     }
-  }, [body, bodiesById, clock.julianDay, ephemerisRevision, backendMode])
+  }, [body, bodiesById, clock.julianDay, ephemerisRevision, backendMode, segmentedBody])
   const moonPhase = useMemo(() => {
     void ephemerisRevision
     if (body?.id !== 'moon' || backendMode) return null
@@ -101,7 +105,10 @@ export function BodyInspector({ body, currentPositions, bodiesById, backendFrame
     : satelliteEvidence ? t('illustrativeSatelliteModel')
     : body.orbitRepresents === 'earth-moon-barycenter' ? t('earthOrbitSeedModel')
     : body.orbit.model === 'planetaryApprox' ? t('jplApproxModel') : t('ellipticTwoBodyModel')
-  const modelDescription = backendMode
+  const modelDescription = segmentedBody
+    ? approximation?.state ? language === 'zh' ? '分段 Chebyshev 轨道近似' : 'Segmented Chebyshev orbit approximation'
+      : language === 'zh' ? '无覆盖；不外推' : 'No coverage; no extrapolation'
+    : backendMode
     ? backendRow ? `${backendRow.model || (language === 'zh' ? '无状态模型' : 'No state model')} · ${backendRow.precision}`
       : language === 'zh' ? '当前后端帧未包含此目标' : 'Target not included in the current backend frame'
     : hasEphemeris ? `${t('physicalEphemerides')} · ${t('geometricStates')}` : fallbackDescription
@@ -177,7 +184,7 @@ export function BodyInspector({ body, currentPositions, bodiesById, backendFrame
       {tab === 'sources' && <SatelliteIdentityReadout body={body} sources />}
       {viewMode === '3d' && <p className="fine-print">{t('schematicMarkerScale')}</p>}
       {hasEphemeris && <p className="fine-print">{t('ephemerisBoundary')}</p>}
-      {tab === 'orbit' && !backendMode && <p className="fine-print">{t(details?.isOsculating ? 'osculatingElements' : 'seedElementsOnly')}</p>}
+      {tab === 'orbit' && !backendMode && <p className="fine-print">{segmentedBody ? language === 'zh' ? '由分段近似状态推导的瞬时根数；不是精确 SPK 状态或长期传播规律。' : 'Instantaneous elements from the segmented approximation; not an exact SPK state or a long-term propagation law.' : t(details?.isOsculating ? 'osculatingElements' : 'seedElementsOnly')}</p>}
       {tab === 'orbit' && observer && !backendMode && <ObservationReadout body={body} observer={observer} julianDay={clock.julianDay} />}
       {tab === 'orbit' && backendMode && <BackendSnapshotReadout frame={backendFrame ?? null} body={body} reference={bodiesById.get(comparisonEnabled ? comparisonReferenceId : referenceId)} />}
       {tab === 'orbit' && <GroundObserverReadout key={body.id} body={body} julianDay={inspectedEpoch} />}

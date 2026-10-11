@@ -30,7 +30,11 @@
     "benchmark:spk": "node --experimental-strip-types ./scripts/benchmark-spk.mjs",
     "audit:scientific-assets": "node --experimental-strip-types ./scripts/audit-scientific-assets.mjs",
     "check:capacity": "node ./scripts/check-capacity.mjs",
-    "check:repository": "node ./scripts/validate-yaml.mjs && node ./scripts/validate-repository.mjs"
+    "check:repository": "node ./scripts/validate-yaml.mjs && node ./scripts/validate-repository.mjs",
+    "build:vercel": "node ./scripts/build-vercel.mjs",
+    "precompute:vercel": "node --experimental-strip-types ./scripts/build-segmented-ephemerides.mjs",
+    "verify:vercel-data": "node --experimental-strip-types ./scripts/verify-segmented-ephemerides.mjs",
+    "test:vercel": "playwright test --config playwright.vercel.config.ts"
   },
   "dependencies": {
     "@types/three": "^0.184.0",

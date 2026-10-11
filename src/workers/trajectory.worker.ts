@@ -4,6 +4,8 @@ import { createBodyPositionResolver } from '../lib/ephemeris'
 import { ensureKernelFiles, kernelsForWindow } from '../engine/ephemeris/kernelStore'
 import { getRelativePositions } from '../lib/referenceFrame'
 import { createTrajectoryAccumulator } from '../lib/trajectorySamples'
+import { SEGMENTED_WEB } from '../lib/webExecution'
+import { ensureApproximation } from '../engine/ephemeris/segmentedStore'
 import type {
   BodyId,
   CelestialBody,
@@ -31,17 +33,22 @@ async function compute(request: TrajectoryWorkerRequest) {
   if (!Number.isSafeInteger(sampleCount) || sampleCount > 600 || request.bodies.length > 320) throw new Error('Trajectory detail budget exceeded')
   const loadController = new AbortController()
   activeLoadController = loadController
-  try { await ensureKernelFiles(request.ephemerisFiles ?? [], loadController.signal) }
+  const bodiesById = new Map<BodyId, CelestialBody>(request.resolutionBodies.map((body) => [body.id, body]))
+  const reference = bodiesById.get(request.referenceId)
+  const approximationBodies = reference ? [...request.bodies, reference] : request.bodies
+  try {
+    if (SEGMENTED_WEB) await ensureApproximation(approximationBodies, request.centerJulianDay, request.centerJulianDay, loadController.signal)
+    else await ensureKernelFiles(request.ephemerisFiles ?? [], loadController.signal)
+  }
   catch (error) {
     if (loadController.signal.aborted || cancelled()) { reportCancelled(); return }
     throw error
   } finally {
-    if (activeLoadController === loadController) activeLoadController = null
+    if (!SEGMENTED_WEB && activeLoadController === loadController) activeLoadController = null
   }
   if (cancelled()) { reportCancelled(); return }
   const accumulator = createTrajectoryAccumulator(request.bodies, sampleCount)
   const kernels = kernelsForWindow(request.centerJulianDay - request.historyDays, request.centerJulianDay, request.ephemerisFiles ?? [])
-  const bodiesById = new Map<BodyId, CelestialBody>(request.resolutionBodies.map((body) => [body.id, body]))
   let sliceStarted = performance.now()
   for (let index = 0; index < sampleCount; index += 1) {
     if (cancelled()) {
@@ -50,6 +57,13 @@ async function compute(request: TrajectoryWorkerRequest) {
     }
     const progress = index / (sampleCount - 1)
     const julianDay = index === sampleCount-1 ? request.centerJulianDay : request.centerJulianDay - request.historyDays + progress * request.historyDays
+    // Load just the sampled epoch and its center dependencies. Long histories
+    // never retain decades of coefficients in the worker at once.
+    if (SEGMENTED_WEB) {
+      try { await ensureApproximation(approximationBodies, julianDay, julianDay, loadController.signal) }
+      catch (error) { if (cancelled() || loadController.signal.aborted) { reportCancelled(); return }; throw error }
+      if (cancelled()) { reportCancelled(); return }
+    }
     const resolve = createBodyPositionResolver(bodiesById, julianDay, kernels)
     const positions = getRelativePositions(request.bodies, request.referenceId, resolve)
     accumulator.append(positions)
@@ -71,6 +85,7 @@ async function compute(request: TrajectoryWorkerRequest) {
     return
   }
   const packed = accumulator.finish()
+  if (activeLoadController === loadController) activeLoadController = null
   const response: TrajectoryWorkerResponse = { type: 'result', requestId: request.requestId, packed }
   workerScope.postMessage(response, [packed.offsets.buffer, packed.coordinates.buffer])
 }

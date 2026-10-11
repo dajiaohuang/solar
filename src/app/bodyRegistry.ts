@@ -1,4 +1,6 @@
 import { useMemo, useSyncExternalStore } from 'react'
+import { SEGMENTED_WEB } from '../lib/webExecution'
+import { subscribeApproximation, getApproximationSnapshot } from '../engine/ephemeris/segmentedStore'
 import { subscribeEphemerides, getEphemerisSnapshot } from '../engine/ephemeris/kernelStore'
 import { majorBodies } from '../data/majorBodies'
 import { SCIENTIFIC_SPACECRAFT } from '../data/scientificSpacecraft'
@@ -13,7 +15,7 @@ export const majorBodiesWithPhysicalData = majorBodies.map((body) => ({
 export const builtInSceneBodies: CelestialBody[] = [...majorBodiesWithPhysicalData, ...SCIENTIFIC_SPACECRAFT]
 
 export function useBodyRegistry() {
-  const ephemerides = useSyncExternalStore(subscribeEphemerides, getEphemerisSnapshot)
+  const ephemerides = useSyncExternalStore(SEGMENTED_WEB ? subscribeApproximation : subscribeEphemerides, SEGMENTED_WEB ? getApproximationSnapshot : getEphemerisSnapshot)
   const ephemerisRevision = ephemerides.revision
   const { catalogBodies, selectedIds } = selectionStore.useStore()
   return useMemo(() => {

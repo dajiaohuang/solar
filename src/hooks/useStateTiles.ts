@@ -1,3 +1,4 @@
+import { SEGMENTED_WEB } from '../lib/webExecution'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { utcJulianDayToTdb } from '../engine/ephemeris/timeScales'
 import { PRODUCT_PROFILE } from '../lib/productAvailability'
@@ -21,7 +22,7 @@ export function stateTileRequestToken(params: { isPlaying: boolean; sample: numb
 export function sampleStateTileEpoch(epochUtcJd: number, isPlaying: boolean) { if (isPlaying) return epochUtcJd; return epochUtcJd }
 export function shouldStartStateTileSample(params: { isPlaying: boolean; requestActive: boolean; latestSample: number; requestedSample: number }) { return params.isPlaying && !params.requestActive && params.latestSample > params.requestedSample }
 
-function apiBase() { const configured = import.meta.env.VITE_SOLAR_API_BASE_URL; return typeof configured === 'string' && configured.trim() ? configured.trim().replace(/\/+$/, '') : null }
+function apiBase() { if (SEGMENTED_WEB) return null; const configured = import.meta.env.VITE_SOLAR_API_BASE_URL; return typeof configured === 'string' && configured.trim() ? configured.trim().replace(/\/+$/, '') : null }
 export type StateTileFrameSnapshot = { frames: ReadonlyMap<BodyId, BackendFrame>; publishedEpochUtcJd: number; identityKey?: string; complete?: boolean }
 
 export function useStateTiles(params: { bodies: CelestialBody[]; resolutionBodies: CelestialBody[]; referenceIds: BodyId[]; epochUtcJd: number; isPlaying?: boolean; seekRevision?: number; includeSunDependency?: boolean; sourcePin?: SourceScenePin }) {

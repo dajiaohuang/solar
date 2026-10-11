@@ -7,6 +7,7 @@ import { useSimulationClock } from '../../engine/clock/useSimulationClock'
 import { buildSpacecraftFrame } from '../../engine/ephemeris/spacecraft'
 import { computeInfluenceRadii } from '../../engine/ephemeris/spheresOfInfluence'
 import { useTrajectoryWorker } from '../../hooks/useTrajectoryWorker'
+import { SEGMENTED_WEB } from '../../lib/webExecution'
 import { useEphemerisRevision } from '../../hooks/useEphemerides'
 import { useCatalogPointWorker } from '../../hooks/useCatalogPointWorker'
 import { useCatalogSample } from '../../hooks/useCatalogSample'
@@ -458,7 +459,7 @@ export function ExplorerWorkspace() {
       const evidence = currentStates.frames.values().next().value?.evidence
       return createBackendPositionResolver(bodyId => evidence?.positionAu(bodyId), renderedJulianDay)
     }
-    if (PRODUCT_PROFILE === 'preview') return createBodyPositionResolver(bodiesById, renderedJulianDay)
+    if (PRODUCT_PROFILE === 'preview' || SEGMENTED_WEB) return createBodyPositionResolver(bodiesById, renderedJulianDay)
     return (bodyId: BodyId) => { throw new MissingBodyStateError(bodyId, renderedJulianDay) }
   }, [bodiesById, currentStates.configured, currentStates.frames, renderedJulianDay, ephemerisRevision])
   const renderBudget = useAdaptiveRenderBudget({
@@ -535,7 +536,7 @@ export function ExplorerWorkspace() {
   const focusedBody = selection.focusedId
     ? bodiesById.get(selection.focusedId) ?? SPACECRAFT.find((body) => body.id === selection.focusedId) ?? null
     : null
-  const inspectorBackendFrame = PRODUCT_PROFILE === 'full'
+  const inspectorBackendFrame = PRODUCT_PROFILE === 'full' && !SEGMENTED_WEB
     ? currentStates.frames.get(simulation.comparisonEnabled ? simulation.comparisonReferenceId : simulation.referenceId) ?? null
     : undefined
   const inspectorPositions = inspectorBackendFrame !== undefined && focusedBody?.source !== 'schematic'
@@ -555,7 +556,7 @@ export function ExplorerWorkspace() {
 
   return (
     <div className={`explorer-workspace ${inspectorOpen ? 'inspector-open' : ''}`}>
-      <ControlDrawer bodies={allBodies} referenceOptions={allBodies.filter((body) => body.source !== 'schematic')} onResetView={resetView} trajectoryAudit={primaryFrame.trajectoryAudit ?? (PRODUCT_PROFILE === 'full' ? null : undefined)} />
+      <ControlDrawer bodies={allBodies} referenceOptions={allBodies.filter((body) => body.source !== 'schematic')} onResetView={resetView} trajectoryAudit={primaryFrame.trajectoryAudit ?? (PRODUCT_PROFILE === 'full' && !SEGMENTED_WEB ? null : undefined)} />
         <main className="explorer-stage">
         <SimulationControls />
         {simulation.showCatalogCloud && PRODUCT_PROFILE === 'full' && <details name="explorer-scene-controls" className="catalog-scene-controls glass-panel">
@@ -635,7 +636,7 @@ export function ExplorerWorkspace() {
             isPlaying={clock.isPlaying}
             render3DReady={render3DReady}
             cameraResetKey={cameraResetKey}
-            backendFrame={currentStates.configured ? (currentStates.frames.get(simulation.referenceId) ?? null) : (PRODUCT_PROFILE === 'full' ? null : undefined)}
+            backendFrame={currentStates.configured ? (currentStates.frames.get(simulation.referenceId) ?? null) : (PRODUCT_PROFILE === 'full' && !SEGMENTED_WEB ? null : undefined)}
             backendStatus={{ ...currentStates, requestedEpochUtcJd: requestedJulianDay }}
           />
           {simulation.comparisonEnabled && (
@@ -669,7 +670,7 @@ export function ExplorerWorkspace() {
               isPlaying={clock.isPlaying}
               render3DReady={render3DReady}
               cameraResetKey={cameraResetKey}
-              backendFrame={currentStates.configured ? (currentStates.frames.get(simulation.comparisonReferenceId) ?? null) : (PRODUCT_PROFILE === 'full' ? null : undefined)}
+              backendFrame={currentStates.configured ? (currentStates.frames.get(simulation.comparisonReferenceId) ?? null) : (PRODUCT_PROFILE === 'full' && !SEGMENTED_WEB ? null : undefined)}
               backendStatus={{ ...currentStates, requestedEpochUtcJd: requestedJulianDay }}
             />
           )}

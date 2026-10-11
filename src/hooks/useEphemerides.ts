@@ -6,24 +6,29 @@ import { selectionStore } from '../state/selection-store'
 import { simulationStore } from '../state/simulation-store'
 import { uiStore } from '../state/ui-store'
 import { missionStore } from '../state/mission-store'
+import { simulationClock } from '../engine/clock/SimulationClock'
+import { SEGMENTED_WEB } from '../lib/webExecution'
+import { approximationRequestKey, ensureApproximation, getApproximationSnapshot, subscribeApproximation } from '../engine/ephemeris/segmentedStore'
 
 const builtInById = new Map(builtInSceneBodies.map(body => [body.id, body]))
+const subscribe = SEGMENTED_WEB ? subscribeApproximation : subscribeEphemerides
+const getSnapshot = SEGMENTED_WEB ? getApproximationSnapshot : getEphemerisSnapshot
 
 export function useEphemerides() {
-  return useSyncExternalStore(subscribeEphemerides, getEphemerisSnapshot)
+  return useSyncExternalStore(subscribe, getSnapshot)
 }
 
-const getRevision = () => getEphemerisSnapshot().revision
-const getBusy = () => getEphemerisSnapshot().loading > 0
+const getRevision = () => getSnapshot().revision
+const getBusy = () => getSnapshot().loading > 0
 
 /** Stable primitive snapshots avoid rendering scientific views on status-only
  * changes while retaining React's external-store consistency checks. */
 export function useEphemerisRevision() {
-  return useSyncExternalStore(subscribeEphemerides, getRevision)
+  return useSyncExternalStore(subscribe, getRevision)
 }
 
 export function useEphemerisBusy() {
-  return useSyncExternalStore(subscribeEphemerides, getBusy)
+  return useSyncExternalStore(subscribe, getBusy)
 }
 
 /** No large transfer before the first-visit choice; Web assets load on demand. */
@@ -52,7 +57,8 @@ export function useEphemerisLoading() {
         return body ? [body] : []
       })
       const ids = kernelFilesForBodies(bodies)
-      const key = JSON.stringify(ids)
+      const julianDay = simulationClock.getJulianDay()
+      const key = SEGMENTED_WEB ? approximationRequestKey(bodies, julianDay) : JSON.stringify(ids)
       if (requested === key) return
       if (currentKey !== key) {
         pendingController?.abort()
@@ -66,7 +72,10 @@ export function useEphemerisLoading() {
       const attempt = ++generation
       const controller = new AbortController()
       pendingController = controller
-      void ensureKernelFiles(ids, controller.signal).catch(() => {
+      const operation = SEGMENTED_WEB ? ensureApproximation(bodies, julianDay, julianDay, controller.signal) : ensureKernelFiles(ids, controller.signal)
+      void operation.then(() => {
+        if (SEGMENTED_WEB && active && generation === attempt && !controller.signal.aborted) load()
+      }).catch(() => {
         // Clock/store updates cannot turn a persistent failure into a busy
         // retry loop. Manual loading remains available after these retries.
         if (!active || generation !== attempt || controller.signal.aborted || retryCount >= 3) return
@@ -83,6 +92,7 @@ export function useEphemerisLoading() {
     }
     load()
     const unsubscribe = [selectionStore.subscribe(load), simulationStore.subscribe(load), uiStore.subscribe(load), missionStore.subscribe(load)]
+    if (SEGMENTED_WEB) unsubscribe.push(simulationClock.subscribe(load))
     window.addEventListener(ONBOARDING_RENDER_READY_EVENT, load)
     return () => {
       active = false

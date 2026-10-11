@@ -2,6 +2,7 @@
 
 > **Development direction:** three independent Web, Android and iOS frontend projects sharing one backend. GitHub Pages is the curated Web preview. Native work is still a first vertical-slice prototype: Android has local real-SPK HTTPS emulator UI/cache evidence for its GLES point renderer (see MOBILE.md), and iOS has passed macOS CI protocol/build checks and real-SPK HTTPS simulator smoke tests (physical-device and full-feature validation remain pending; see MOBILE.md). No native client release is claimed. See [product direction and acceptance criteria](./docs/product-direction.md).
 
+A standalone Vercel edition using precomputed segmented orbit approximations is available locally: see [build, coverage and deployment instructions](./docs/vercel-delivery.md).
 The independent [Go backend implementation](./backend/README.md) is available for local execution. Full Web exact positions use its audited manifest → plan → binary state-tile transport only when the deployer supplies `VITE_SOLAR_API_BASE_URL`; Pages remains curated and static when that variable is absent. One plan currently covers up to 32,768 identities without the former 510-row Web truncation. There is currently no official public full-Web backend URL.
 
 **A browser-native Solar System dynamics and small-body atlas with reproducible scenes, traceable data, and explicit model boundaries.**

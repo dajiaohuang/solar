@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildCurrentPositions } from '../lib/trajectory'
 import { kernelFilesForBodies } from '../engine/ephemeris/kernelStore'
+import { SEGMENTED_WEB } from '../lib/webExecution'
 import { useEphemerisBusy, useEphemerisRevision } from './useEphemerides'
 import type {
   BodyId,
@@ -52,7 +53,7 @@ export function useTrajectoryWorker(params: Params) {
   const [progress, setProgress] = useState(0)
   const [isComputing, setIsComputing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const backendEnabled = PRODUCT_PROFILE === 'full'
+  const backendEnabled = PRODUCT_PROFILE === 'full' && !SEGMENTED_WEB
   const ephemerisRevision = useEphemerisRevision()
   const ephemerisBusy = useEphemerisBusy()
   const bodiesById = useMemo(
@@ -60,7 +61,7 @@ export function useTrajectoryWorker(params: Params) {
     [resolutionBodies],
   )
   const trajectoryKernelIdsKey = useMemo(() => {
-    if (backendEnabled) return '[]'
+    if (backendEnabled || SEGMENTED_WEB) return '[]'
     const targets = [...trajectoryBodies]
     const referenceBody = bodiesById.get(referenceId) ?? bodies.find(body => body.id === referenceId)
     if (referenceBody && !targets.some(body => body.id === referenceId)) targets.push(referenceBody)

@@ -7,6 +7,7 @@ import { utcJulianDayToEt } from './timeScales'
 import type { CelestialBody } from '../../types'
 import type { RuntimeKernelFile } from './runtimeManifest'
 import { reserveKernelBuffers } from './kernelBufferBudget'
+import { SEGMENTED_WEB } from '../../lib/webExecution'
 
 export type KernelFile = RuntimeKernelFile & { sourceIdentity?: unknown }
 export const EPHEMERIS_MANIFEST = manifestData as { schemaVersion: number; id: string; profile?: string; files: KernelFile[] }
@@ -306,6 +307,7 @@ export async function ensureKernelFiles(ids: string[], signal?: AbortSignal) {
 }
 
 export function kernelFilesForBodies(bodies: { id: string; naifId?: number }[]) {
+  if (SEGMENTED_WEB) return []
   const targets = new Set(bodies.map(bodyNaifId).filter((id) => id !== undefined))
   return selectEphemerisFiles(EPHEMERIS_MANIFEST.files, targets).map(file => file.id)
 }

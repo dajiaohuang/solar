@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path'
 import { jsonDocument, productDelivery, sha256 } from './lib/product-delivery.ts'
 import { previewDatasetPlan } from './lib/preview-dataset.mjs'
 import { verifyEphemerisAssets } from './lib/verify-ephemeris-assets.mjs'
+import { verifyApproximationAssets } from './lib/verify-approximation-assets.mjs'
 
 const dist = resolve('dist')
 
@@ -107,7 +108,14 @@ const availabilityText = await readFile(join(dist, 'product-availability.json'),
 if (availabilityText !== jsonDocument(delivery.availability) || sha256(availabilityText) !== buildInfo.productAvailabilitySha256) throw new Error('Product availability identity mismatch')
 if (capacity.productProfile !== delivery.product || capacity.productAvailabilitySha256 !== delivery.availabilitySha256) throw new Error('Capacity report product identity mismatch')
 if (await readFile(join(dist, 'ephemeris-manifest.json'), 'utf8') !== jsonDocument(delivery.manifest)) throw new Error('Packaged ephemeris manifest differs from runtime selection')
-const ephemerisBytes = await verifyEphemerisAssets(join(dist, 'data', 'ephemerides'), delivery.manifest.files)
+const segmented = buildInfo.webExecution === 'segmented'
+const ephemerisBytes = segmented ? 0 : await verifyEphemerisAssets(join(dist, 'data', 'ephemerides'), delivery.manifest.files)
+if (segmented) {
+  const approximation = await verifyApproximationAssets(join(dist, 'data', 'approximation'))
+  if (capacity.approximationTotalBytes !== approximation.bytes) throw new Error('Approximation capacity mismatch')
+  if ((await filesUnder(join(dist, 'data', 'ephemerides'))).length) throw new Error('Static Vercel build must not contain raw SPK files')
+  if ((await readFile(join(dist, 'index.html'), 'utf8')).includes('/solar/')) throw new Error('Vercel shell contains the Pages base path')
+}
 if (capacity.ephemerisTotalBytes !== ephemerisBytes) throw new Error('Capacity report ephemeris size mismatch')
 const gaiaFiles = await filesUnder(join(dist, 'data', 'gaia'))
 const gaiaBytes = (await Promise.all(gaiaFiles.map(async (path) => (await stat(path)).size))).reduce((sum, size) => sum + size, 0)

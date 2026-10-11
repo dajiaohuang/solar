@@ -29,3 +29,7 @@ __pycache__/
 *.njsproj
 *.sln
 *.sw?
+
+# Reproducible precomputed Vercel assets
+public/data/approximation
+test-results-vercel
