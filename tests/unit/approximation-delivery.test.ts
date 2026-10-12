@@ -1,5 +1,10 @@
 import { expect, it } from 'vitest'
-import { splitApproximationDocument } from '../../scripts/lib/package-approximation.mjs'
+import { splitApproximationDocument, packageApproximation } from '../../scripts/lib/package-approximation.mjs'
+import { verifyApproximationAssets } from '../../scripts/lib/verify-approximation-assets.mjs'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { dirname, join, resolve } from 'node:path'
+import { createHash } from 'node:crypto'
+import { gunzipSync, gzipSync } from 'node:zlib'
 import { datasetVersionFromUrl, isObsoleteDatasetVersion } from '../../src/data/cache/indexedDb'
 
 it('splits delivery units without changing scientific coefficients, boundaries or identity', () => {
@@ -22,4 +27,31 @@ it('keeps content-addressed coefficients when a catalog release changes', () => 
   expect(isObsoleteDatasetVersion('approximation', 'mpcorb-new')).toBe(false)
   expect(isObsoleteDatasetVersion('mpcorb-current', 'approximation')).toBe(false)
   expect(isObsoleteDatasetVersion('mpcorb-old', 'mpcorb-new')).toBe(true)
+})
+
+it('verifies the packaged bulk index against the full receipt, including hash-valid mutations', async () => {
+  const base = resolve('.cache'), hash = (raw: Uint8Array | string) => createHash('sha256').update(raw).digest('hex')
+  await mkdir(base, { recursive: true })
+  const root = await mkdtemp(join(base, 'delivery-check-'))
+  try {
+    const destination = join(root, 'output'), sourceManifestPath = 'src/data/ephemeris-manifest-vercel-wide.json'
+    const manifest = { schemaVersion: 1, model: 'piecewise-chebyshev-best-sampled-v1', sourceManifestPath,
+      sourceManifestSha256: hash(await readFile(sourceManifestPath)), totalBytes: 0,
+      bodies: [{ id: 'sun', parentId: 'sun', origin: true, available: true, seedModel: false, chunks: [] }] }
+    await packageApproximation(root, destination, manifest)
+    await expect(verifyApproximationAssets(destination)).resolves.toMatchObject({ manifest: { totalBytes: 0 } })
+    const pointer = JSON.parse(await readFile(join(destination, 'index.json'), 'utf8'))
+    const browser = JSON.parse(gunzipSync(await readFile(join(destination, pointer.path))).toString())
+    const changed = JSON.stringify({ ...JSON.parse(await readFile(join(destination, 'manifest.json'), 'utf8')), totalBytes: 1 })
+    const sha256 = hash(changed), path = `indices/${sha256}.json.gz`
+    await writeFile(join(destination, path), gzipSync(changed))
+    browser.bulkIndex = { path, sha256, bytes: Buffer.byteLength(changed) }
+    const raw = JSON.stringify(browser), manifestHash = hash(raw), manifestPath = `manifests/${manifestHash}.json.gz`
+    await writeFile(join(destination, manifestPath), gzipSync(raw))
+    await writeFile(join(destination, 'index.json'), JSON.stringify({ ...pointer, path: manifestPath, sha256: manifestHash, bytes: Buffer.byteLength(raw) }))
+    await expect(verifyApproximationAssets(destination)).rejects.toThrow('Bulk index differs from full receipt')
+  } finally {
+    if (dirname(root) !== base) throw new Error('Unexpected test workspace')
+    await rm(root, { recursive: true, force: true })
+  }
 })

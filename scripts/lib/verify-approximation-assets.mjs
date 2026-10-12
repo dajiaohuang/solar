@@ -29,6 +29,16 @@ export async function verifyApproximationAssets(root) {
     if (index.layout === 'body-indexed-v1') {
       const browser = JSON.parse(raw)
       if (browser.sourceManifestSha256 !== manifest.sourceManifestSha256 || browser.bodies.length !== manifest.bodies.length) throw new Error('Indexed approximation source identity mismatch')
+      if (browser.bulkIndex) {
+        const descriptor = browser.bulkIndex
+        if (descriptor.path !== `indices/${descriptor.sha256}.json.gz` || !/^[a-f0-9]{64}$/.test(descriptor.sha256)
+          || !Number.isSafeInteger(descriptor.bytes) || descriptor.bytes <= 0 || descriptor.bytes > 16 * 1048576) throw new Error('Invalid bulk index path or size')
+        const compressed = await readFile(join(root, descriptor.path)), data = gunzipSync(compressed, { maxOutputLength: descriptor.bytes })
+        if (data.length !== descriptor.bytes || createHash('sha256').update(data).digest('hex') !== descriptor.sha256
+          || !data.equals(manifestBytes)) throw new Error('Bulk index differs from full receipt')
+        bodyIndexBytes += compressed.length; indexPaths.add(descriptor.path)
+        delete browser.bulkIndex
+      }
       for (let number = 0; number < manifest.bodies.length; number++) {
         const body = browser.bodies[number], expected = manifest.bodies[number]
         if (body.index) {
