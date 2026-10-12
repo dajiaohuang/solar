@@ -20,6 +20,7 @@ export function useEphemerides() {
 
 const getRevision = () => getSnapshot().revision
 const getBusy = () => getSnapshot().loading > 0
+const getError = () => getSnapshot().error
 
 /** Stable primitive snapshots avoid rendering scientific views on status-only
  * changes while retaining React's external-store consistency checks. */
@@ -29,6 +30,10 @@ export function useEphemerisRevision() {
 
 export function useEphemerisBusy() {
   return useSyncExternalStore(subscribe, getBusy)
+}
+
+export function useEphemerisError() {
+  return useSyncExternalStore(subscribe, getError)
 }
 
 /** No large transfer before the first-visit choice; Web assets load on demand. */
@@ -56,7 +61,7 @@ export function useEphemerisLoading() {
         const body = Object.hasOwn(selection.catalogBodies, id) ? selection.catalogBodies[id] : builtInById.get(id)
         return body ? [body] : []
       })
-      const ids = kernelFilesForBodies(bodies)
+      const ids = SEGMENTED_WEB ? [] : kernelFilesForBodies(bodies)
       const julianDay = simulationClock.getJulianDay()
       const key = SEGMENTED_WEB ? approximationRequestKey(bodies, julianDay) : JSON.stringify(ids)
       if (requested === key) return

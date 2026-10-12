@@ -252,6 +252,13 @@ async function loadChunk(body: ApproximationBody, descriptor: ApproximationChunk
 
 export async function ensureApproximation(builtIns: readonly CelestialBody[], startUtcJd: number, endUtcJd = startUtcJd, signal?: AbortSignal) {
   signal?.throwIfAborted()
+  emit({ loading: snapshot.loading + 1 })
+  try { await ensureWindow(builtIns, startUtcJd, endUtcJd, signal) }
+  finally { emit({ loading: snapshot.loading - 1 }) }
+}
+
+async function ensureWindow(builtIns: readonly CelestialBody[], startUtcJd: number, endUtcJd: number, signal?: AbortSignal) {
+  signal?.throwIfAborted()
   if (endUtcJd < startUtcJd) throw new RangeError('Invalid approximation window')
   await awaitConsumer(loadApproximationManifest(), signal)
   signal?.throwIfAborted()

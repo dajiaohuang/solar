@@ -15,19 +15,21 @@ export const majorBodiesWithPhysicalData = majorBodies.map((body) => ({
 export const builtInSceneBodies: CelestialBody[] = [...majorBodiesWithPhysicalData, ...SCIENTIFIC_SPACECRAFT]
 
 export function useBodyRegistry() {
-  const ephemerides = useSyncExternalStore(SEGMENTED_WEB ? subscribeApproximation : subscribeEphemerides, SEGMENTED_WEB ? getApproximationSnapshot : getEphemerisSnapshot)
-  const ephemerisRevision = ephemerides.revision
+  const ephemerisRevision = useSyncExternalStore(SEGMENTED_WEB ? subscribeApproximation : subscribeEphemerides,
+    SEGMENTED_WEB ? () => getApproximationSnapshot().revision : () => getEphemerisSnapshot().revision)
   const { catalogBodies, selectedIds } = selectionStore.useStore()
-  return useMemo(() => {
+  const registry = useMemo(() => {
     // Pinned inventory records can share canonical IDs with built-ins. Keep
     // their selected source ownership, without duplicate list/worker rows.
     const bodiesById = new Map<BodyId, CelestialBody>([...builtInSceneBodies, ...Object.values(catalogBodies)].map((body) => [body.id, body]))
     const allBodies = [...bodiesById.values()]
     return {
-      ephemerisRevision,
       allBodies,
       bodiesById,
       selectedBodies: selectedIds.map((id) => bodiesById.get(id)).filter((body): body is CelestialBody => Boolean(body)),
     }
-  }, [catalogBodies, selectedIds, ephemerisRevision])
+  }, [catalogBodies, selectedIds])
+  // Installing coefficients changes available positions, not body identity.
+  // Stable selection/maps keep camera ownership and worker scene keys intact.
+  return { ...registry, ephemerisRevision }
 }

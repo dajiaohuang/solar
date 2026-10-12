@@ -1,6 +1,53 @@
 import { expect, test } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 
+test('3D camera survives cold coefficient loading and playback updates positions without restarting histories every tick', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('solar-atlas-first-run-v1', 'complete')
+    const original = Worker.prototype.postMessage
+    const tracking = window as Window & { trajectoryRequests?: number }
+    tracking.trajectoryRequests = 0
+    Worker.prototype.postMessage = function (...args: Parameters<Worker['postMessage']>) {
+      const message = args[0] as { type?: string; centerJulianDay?: number }
+      if (message?.type === 'compute' && typeof message.centerJulianDay === 'number') tracking.trajectoryRequests!++
+      return original.apply(this, args)
+    }
+  })
+  await page.route('**/data/approximation/chunks/**', async route => {
+    await new Promise(resolve => setTimeout(resolve, 1200))
+    await route.continue()
+  })
+  await page.goto('?v=4&lang=en&view=3d&bodies=sun,earth,moon,mars,naif:401&ref=sun&jd=2461287.5&history=30&speed=30')
+  const canvas = page.getByTestId('trajectory-canvas-3d')
+  await expect(canvas).toBeVisible()
+  await expect(canvas).toHaveAttribute('data-fit-generation', /[1-9]\d*/)
+  const fit = await canvas.getAttribute('data-fit-generation')
+  const before = await canvas.getAttribute('data-camera-position')
+  const box = (await canvas.boundingBox())!
+  await page.mouse.move(box.x + box.width * .6, box.y + box.height * .5)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width * .75, box.y + box.height * .65, { steps: 12 })
+  await page.mouse.up()
+  await expect(canvas).not.toHaveAttribute('data-camera-position', before!)
+  const dragged = await canvas.getAttribute('data-camera-position')
+  await expect(page.locator('.ephemeris-status > summary')).toContainText('5/5')
+  await expect(page.locator('.compute-progress')).toHaveCount(0)
+  await expect(canvas).toHaveAttribute('data-fit-generation', fit!)
+  await expect(canvas).toHaveAttribute('data-camera-position', dragged!)
+  const requests = await page.evaluate(() => (window as Window & { trajectoryRequests: number }).trajectoryRequests)
+  await page.getByRole('button', { name: '▶ Play', exact: true }).click()
+  await expect.poll(async () => Number(await canvas.getAttribute('data-live-frame-count'))).toBeGreaterThan(60)
+  await expect(page.getByTestId('history-sampled-window')).toBeVisible()
+  await expect(canvas).toHaveAttribute('data-fit-generation', fit!)
+  await expect(canvas).toHaveAttribute('data-camera-position', dragged!)
+  const after = await page.evaluate(() => (window as Window & { trajectoryRequests: number }).trajectoryRequests)
+  expect(after - requests).toBeLessThanOrEqual(6)
+  await page.getByRole('button', { name: '❚❚ Pause', exact: true }).click()
+  await page.locator('.simulation-bar input[type=date]').fill('2052-01-01')
+  await expect(page.locator('.ephemeris-status > summary')).toContainText('1/5')
+  await expect(canvas).toHaveAttribute('data-position-count', '1')
+})
+
 test('real segmented build renders both views, transforms frames, seeks and plays without backend or SPK transfers', async ({ page, context, request }) => {
   expect((await (await request.get('build-info.json')).json()).webExecution).toBe('segmented')
   const requests: string[] = [], failures: string[] = [], errors: string[] = []

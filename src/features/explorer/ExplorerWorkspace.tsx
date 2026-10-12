@@ -50,6 +50,7 @@ import type { TranslationKey } from '../../i18n/en'
 import { uiActions } from '../../state/ui-store'
 import { catalogFramingRadius } from '../../lib/catalogScenePresentation'
 import { julianDayToDate } from '../../lib/julianDate'
+import { buildCurrentPositions } from '../../lib/trajectory'
 
 const TrajectoryCanvas3D = lazy(async () => {
   const module = await import('../../components/TrajectoryCanvas3D')
@@ -162,7 +163,7 @@ function FrameView({
   const visibleCatalogDrawCount = simulation.showCatalogCloud && !catalogOrigin ? 0 : catalogDrawCount
   const visibleCatalogRecords = visibleCatalogDrawCount > 0 ? catalogRecords : EMPTY_CATALOG_RECORDS
   const visibleCatalogPositions = visibleCatalogDrawCount > 0 ? catalogPositions : EMPTY_CATALOG_POSITIONS
-  const { frame: baseFrame, progress, isComputing, error } = useTrajectoryWorker({
+  const { frame: baseFrame, progress, isComputing, error, historyEpochUtcJd } = useTrajectoryWorker({
     bodies: selectedBodies,
     trajectoryBodies,
     resolveBodyPosition: resolveCurrentPosition,
@@ -172,6 +173,7 @@ function FrameView({
     trajectoryJulianDay,
     historyDays: simulation.historyDays,
     seekRevision,
+    isPlaying,
     // Inventory expansion must not silently undersample short-period moons.
     // Only historical trails are budgeted; current positions keep all selections.
     sampleCount: Math.min(simulation.sampleCount, 240),
@@ -195,12 +197,13 @@ function FrameView({
     : baseFrame.currentPositions, [backendFrame, baseFrame.currentPositions, stateDisplay.limitPerPane, statePriorityIds])
   const displayPositions = useMemo(() => concatCurrentPositions(displayedStates, spacecraftFrame.currentPositions), [displayedStates, spacecraftFrame.currentPositions])
   const backendStateAvailable = Boolean(backendFrame)
-  const spacecraftFitIds = useMemo(() => {
-    const positions = spacecraftFrame.currentPositions
-    return Array.from({ length: positions.length }, (_, index) => positions.bodyAt(index).id).sort().join(',')
-  }, [spacecraftFrame.currentPositions])
-  const stateFitToken = useMemo(() => ({}),
-    [backendStateAvailable, selectedBodies, baseFrame.currentPositions.length, spacecraftFitIds])
+  const selectedSceneIds = selectedBodies.map(body => body.id).join('\0')
+  const stateFitToken = useMemo(() => ({ backendStateAvailable, selectedSceneIds, showSpacecraft: simulation.showSpacecraft }),
+    [backendStateAvailable, selectedSceneIds, simulation.showSpacecraft])
+  const livePositions = useMemo(() => SEGMENTED_WEB && !simulation.showCatalogCloud ? (epoch: number) => {
+    const positions = buildCurrentPositions({ bodies: selectedBodies, bodiesById, referenceId: referenceBody.id, julianDay: epoch }).currentPositions
+    return simulation.showSpacecraft ? concatCurrentPositions(positions, buildSpacecraftFrame(SPACECRAFT, referenceBody.id, bodiesById, epoch).currentPositions) : positions
+  } : undefined, [selectedBodies, bodiesById, referenceBody.id, simulation.showSpacecraft, simulation.showCatalogCloud])
   useEffect(() => onFrame(frame), [frame, onFrame])
   const focusSuggested = useMemo(() => getSuggestedViewRadius(
     selectedBodies.map((body) => body.id), referenceBody.id, bodiesById, baseFrame.maxDistance,
@@ -264,6 +267,9 @@ function FrameView({
       <div className="frame-overlays" onWheel={event => event.stopPropagation()}>
       <div className="frame-label"><span>{bodyDisplayName(referenceBody, language)}</span><small>{simulation.viewMode.toUpperCase()}{simulation.showCatalogCloud ? ` · ${t('catalogCloudRendered')} ${visibleCatalogDrawCount.toLocaleString()} / ${catalogSampleTotal.toLocaleString()} · ${qualityLabel} · JD ${julianDay.toFixed(3)}` : ''}</small></div>
       <EphemerisStatus bodies={selectedBodies} references={[referenceBody]} julianDay={julianDay} historyDays={simulation.historyDays} exactCoverageCounts={exactCoverageCounts} backendStatus={backendStatus} backendFrame={backendFrame} />
+      {isPlaying && historyEpochUtcJd !== null && baseFrame.trajectories.length > 0 && <div className="frame-layer-budget glass-panel" data-testid="history-sampled-window">
+        {language === 'zh' ? '历史轨迹采样窗口' : 'Historical trail sample window'}: UTC JD {(historyEpochUtcJd - simulation.historyDays).toFixed(3)} → {historyEpochUtcJd.toFixed(3)}
+      </div>}
       {frame.trajectoryAudit && <details className="frame-layer-budget glass-panel" data-testid="backend-trajectory-audit"
         data-start-utc-jd={frame.trajectoryAudit.startUtcJd} data-end-utc-jd={frame.trajectoryAudit.endUtcJd}
         data-samples={frame.trajectoryAudit.epochsTdbJd.length} data-trails={baseFrame.trajectories.length}>
@@ -306,8 +312,9 @@ function FrameView({
             referenceBody={referenceBody}
             trajectories={frame.trajectories}
             currentPositions={displayPositions}
+            livePositions={isPlaying ? livePositions : undefined}
             stateFitToken={stateFitToken}
-            stateFitRadius={backendFrame ? baseFrame.maxDistance : undefined}
+            stateFitRadius={backendFrame ? baseFrame.maxDistance : focusSuggested}
             detailBodyIds={detailBodyIds}
             onReferenceChange={(id) => { if (bodiesById.has(id)) simulationActions.patch({ referenceId: id }) }}
             onBodySelect={onBodySelect}

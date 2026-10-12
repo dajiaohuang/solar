@@ -18,3 +18,21 @@ it('does not apply elapsed time before a seek to the newly selected date', () =>
   expect(clock.getSnapshot().isPlaying).toBe(false)
   clock.dispose()
 })
+
+it('publishes exact frame epochs independently of the throttled UI and stops on pause', () => {
+  let frame: FrameRequestCallback = () => {}
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frame = callback; return 1 })
+  vi.stubGlobal('cancelAnimationFrame', vi.fn())
+  const clock = new SimulationClock(125), epochs: number[] = [], ui = vi.fn()
+  const unsubscribe = clock.subscribeFrames(epoch => epochs.push(epoch))
+  clock.subscribe(ui)
+  clock.seek(2460000.5); clock.setRate(-30); clock.play(); ui.mockClear()
+  for (const t of [1000, 1016, 1032, 1048, 1064]) frame(t)
+  expect(epochs).toHaveLength(5)
+  expect(epochs.at(-1)).toBe(clock.getJulianDay())
+  expect(epochs.at(-1)).toBeLessThan(epochs[0])
+  expect(ui.mock.calls.length).toBeLessThan(epochs.length)
+  unsubscribe(); frame(1080); expect(epochs).toHaveLength(5)
+  clock.pause(); frame(1096); expect(epochs).toHaveLength(5)
+  clock.dispose()
+})

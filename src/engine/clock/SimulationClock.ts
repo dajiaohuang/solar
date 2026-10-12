@@ -24,6 +24,7 @@ export class SimulationClock {
   private revision = 0
   private seekRevision = 0
   private listeners = new Set<Listener>()
+  private frameListeners = new Set<(julianDay: number) => void>()
   private readonly publishIntervalMs: number
   private snapshot: ClockSnapshot = {
     julianDay: this.julianDay,
@@ -44,6 +45,12 @@ export class SimulationClock {
   subscribe = (listener: Listener) => {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
+  }
+
+  /** Render positions at the clock's frame cadence without publishing React UI. */
+  subscribeFrames = (listener: (julianDay: number) => void) => {
+    this.frameListeners.add(listener)
+    return () => { this.frameListeners.delete(listener) }
   }
 
   seek(julianDay: number) {
@@ -87,6 +94,7 @@ export class SimulationClock {
   dispose() {
     this.pause()
     this.listeners.clear()
+    this.frameListeners.clear()
   }
 
   private schedule() {
@@ -102,6 +110,7 @@ export class SimulationClock {
       this.julianDay += elapsedSeconds * this.rateDaysPerSecond
     }
     this.lastTimestamp = timestamp
+    for (const listener of this.frameListeners) listener(this.julianDay)
     if (timestamp - this.lastPublishedAt >= this.publishIntervalMs) {
       this.lastPublishedAt = timestamp
       this.publish()

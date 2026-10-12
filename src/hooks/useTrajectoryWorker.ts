@@ -30,6 +30,7 @@ type Params = {
   sampleCount: number
   seekRevision?: number
   currentFrame?: BackendFrame | null
+  isPlaying?: boolean
 }
 
 export function useTrajectoryWorker(params: Params) {
@@ -40,7 +41,7 @@ export function useTrajectoryWorker(params: Params) {
     resolutionBodies,
     referenceId,
     currentJulianDay,
-    trajectoryJulianDay,
+    trajectoryJulianDay: requestedTrajectoryJulianDay,
     historyDays,
     sampleCount,
     currentFrame,
@@ -53,6 +54,19 @@ export function useTrajectoryWorker(params: Params) {
   const [progress, setProgress] = useState(0)
   const [isComputing, setIsComputing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [playbackEpoch, setPlaybackEpoch] = useState(requestedTrajectoryJulianDay)
+  const latestPlayback = useRef({ epoch: requestedTrajectoryJulianDay, busy: isComputing })
+  useEffect(() => { latestPlayback.current = { epoch: requestedTrajectoryJulianDay, busy: isComputing } }, [requestedTrajectoryJulianDay, isComputing])
+  useEffect(() => {
+    if (!params.isPlaying) return
+    // Seek immediately. Otherwise admit a new history only after the previous
+    // worker has settled; rapid playback must not continually cancel it.
+    const refresh = () => { if (!latestPlayback.current.busy) setPlaybackEpoch(latestPlayback.current.epoch) }
+    queueMicrotask(() => setPlaybackEpoch(latestPlayback.current.epoch))
+    const timer = setInterval(refresh, 1000)
+    return () => clearInterval(timer)
+  }, [params.isPlaying, params.seekRevision])
+  const trajectoryJulianDay = params.isPlaying ? playbackEpoch : requestedTrajectoryJulianDay
   const backendEnabled = PRODUCT_PROFILE === 'full' && !SEGMENTED_WEB
   const ephemerisRevision = useEphemerisRevision()
   const ephemerisBusy = useEphemerisBusy()
@@ -61,18 +75,23 @@ export function useTrajectoryWorker(params: Params) {
     [resolutionBodies],
   )
   const trajectoryKernelIdsKey = useMemo(() => {
+    void ephemerisRevision
     if (backendEnabled || SEGMENTED_WEB) return '[]'
     const targets = [...trajectoryBodies]
     const referenceBody = bodiesById.get(referenceId) ?? bodies.find(body => body.id === referenceId)
     if (referenceBody && !targets.some(body => body.id === referenceId)) targets.push(referenceBody)
     return JSON.stringify(kernelFilesForBodies(targets))
-  }, [backendEnabled, trajectoryBodies, bodies, bodiesById, referenceId])
+  }, [backendEnabled, trajectoryBodies, bodies, bodiesById, referenceId, ephemerisRevision])
   const trajectoryKernelIds = useMemo(() => JSON.parse(trajectoryKernelIdsKey) as string[], [trajectoryKernelIdsKey])
   const kernelKey = backendEnabled ? '' : trajectoryKernelIdsKey
   const ephemerisLoading = !backendEnabled && ephemerisBusy
   const requestKey = useMemo(() => backendEnabled ? '' : JSON.stringify([referenceId, trajectoryJulianDay, historyDays, sampleCount, kernelKey, trajectoryBodies, resolutionBodies]),
     [backendEnabled, referenceId, trajectoryJulianDay, historyDays, sampleCount, kernelKey, trajectoryBodies, resolutionBodies])
   const [completedRequestKey, setCompletedRequestKey] = useState<string | null>(null)
+  const sceneKey = useMemo(() => JSON.stringify([referenceId, historyDays, sampleCount, kernelKey, trajectoryBodies, resolutionBodies, params.seekRevision]),
+    [referenceId, historyDays, sampleCount, kernelKey, trajectoryBodies, resolutionBodies, params.seekRevision])
+  const [completedSceneKey, setCompletedSceneKey] = useState<string | null>(null)
+  const [completedEpoch, setCompletedEpoch] = useState<number | null>(null)
   const configured = import.meta.env.VITE_SOLAR_API_BASE_URL
   const backend = useBackendTrajectoryWorker({ enabled: backendEnabled && currentFrame !== null,
     base: typeof configured === 'string' && configured.trim() ? configured.trim().replace(/\/+$/, '') : null,
@@ -141,8 +160,6 @@ export function useTrajectoryWorker(params: Params) {
       setIsComputing(true)
       setProgress(0)
       setError(null)
-      setTrajectories([])
-      setTrajectoryUnavailableBodyIds([])
     })
 
     const fail = (message: string) => {
@@ -167,6 +184,8 @@ export function useTrajectoryWorker(params: Params) {
         setTrajectories(views)
         setTrajectoryUnavailableBodyIds(response.packed.trajectoryUnavailableBodyIds ?? [])
         setCompletedRequestKey(requestKey)
+        setCompletedSceneKey(sceneKey)
+        setCompletedEpoch(trajectoryJulianDay)
         setProgress(1)
         setIsComputing(false)
       } else if (response.type === 'error') {
@@ -202,7 +221,7 @@ export function useTrajectoryWorker(params: Params) {
         catch { worker.terminate(); workerRef.current = null }
       }
     }
-  }, [backendEnabled, trajectoryBodies, trajectoryKernelIds, bodiesById, ephemerisLoading, historyDays, referenceId, requestKey, resolutionBodies, sampleCount, trajectoryJulianDay])
+  }, [backendEnabled, trajectoryBodies, trajectoryKernelIds, bodiesById, ephemerisLoading, historyDays, referenceId, requestKey, resolutionBodies, sampleCount, trajectoryJulianDay, sceneKey])
 
   useEffect(() => () => {
     workerRef.current?.terminate()
@@ -210,21 +229,23 @@ export function useTrajectoryWorker(params: Params) {
     workerKernelIdsRef.current.clear()
   }, [])
 
+  const historyReady = completedRequestKey === requestKey || Boolean(params.isPlaying && completedSceneKey === sceneKey)
   const frame = useMemo(() => ({
     ...(currentFrame !== undefined
       ? (currentFrame ? { ...currentFrame, trajectoryUnavailableBodyIds: [] as BodyId[] } : { currentPositions: EMPTY_CURRENT_POSITIONS, missingBodyIds: bodies.map(body => body.id), maxDistance: 0, trajectoryUnavailableBodyIds: [] as BodyId[] })
       : localCurrent),
-    trajectories: backendEnabled ? backend.trajectories : completedRequestKey === requestKey
+    trajectories: backendEnabled ? backend.trajectories : historyReady
       ? trajectories.filter(sample => !(currentFrame ? currentFrame.missingBodyIds : localCurrent.missingBodyIds).includes(sample.body.id))
       : [],
-    trajectoryUnavailableBodyIds: backendEnabled ? backend.unavailableBodyIds : completedRequestKey === requestKey ? trajectoryUnavailableBodyIds : [],
+    trajectoryUnavailableBodyIds: backendEnabled ? backend.unavailableBodyIds : historyReady ? trajectoryUnavailableBodyIds : [],
     trajectoryAudit: backendEnabled ? backend.audit : undefined,
-  }), [backendEnabled, backend.audit, backend.trajectories, backend.unavailableBodyIds, bodies, completedRequestKey, currentFrame, localCurrent, requestKey, trajectories, trajectoryUnavailableBodyIds])
+  }), [backendEnabled, backend.audit, backend.trajectories, backend.unavailableBodyIds, bodies, historyReady, currentFrame, localCurrent, trajectories, trajectoryUnavailableBodyIds])
 
   return {
     frame,
     progress: backendEnabled ? backend.progress : progress,
     isComputing: backendEnabled ? backend.isComputing : isComputing,
     error: backendEnabled ? backend.error : error,
+    historyEpochUtcJd: !backendEnabled && historyReady ? completedEpoch : null,
   }
 }

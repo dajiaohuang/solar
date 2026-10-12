@@ -2,6 +2,7 @@ import * as THREE from 'three'
 
 /** Derive only the active renderer's Float32 XZY buffer, reusing it on ticks. */
 export function updateTrajectoryLineGeometry(geometry: THREE.BufferGeometry, coordinates: Float64Array, breakBefore?: Uint8Array) {
+  if (geometry.userData.coordinates === coordinates && geometry.userData.breakBefore === breakBefore) return geometry
   let attribute = geometry.getAttribute('position') as THREE.BufferAttribute | undefined
   if (!attribute || attribute.array.length !== coordinates.length) {
     geometry.dispose()
@@ -31,6 +32,8 @@ export function updateTrajectoryLineGeometry(geometry: THREE.BufferGeometry, coo
   edges.needsUpdate = true
   geometry.setDrawRange(0, edgeCount)
   geometry.computeBoundingSphere()
+  geometry.userData.coordinates = coordinates
+  geometry.userData.breakBefore = breakBefore
   return geometry
 }
 

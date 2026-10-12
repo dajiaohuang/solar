@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useEphemerides } from '../../hooks/useEphemerides'
+import { useEphemerides, useEphemerisRevision, useEphemerisBusy, useEphemerisError } from '../../hooks/useEphemerides'
 import { useI18n } from '../../i18n/context'
 import { EPHEMERIS_MANIFEST, ensureKernelFiles, kernelCoverage, kernelFilesForBodies, kernelsForWindow, loadedKernelIds } from '../../engine/ephemeris/kernelStore'
 import { utcTimeScaleQuality } from '../../engine/ephemeris/timeScales'
@@ -19,7 +19,8 @@ export function EphemerisStatus(props: Parameters<typeof KernelEphemerisStatus>[
 }
 
 function SegmentedEphemerisStatus({ bodies, references, julianDay }: Parameters<typeof KernelEphemerisStatus>[0]) {
-  const state = useEphemerides()
+  useEphemerisRevision()
+  const state = { loading: useEphemerisBusy(), error: useEphemerisError() }
   const { language, t } = useI18n()
   const manifest = getApproximationManifest()
   const resolve = createBodyPositionResolver(new Map([...builtInSceneBodies, ...bodies, ...references].map(body => [body.id, body])), julianDay)

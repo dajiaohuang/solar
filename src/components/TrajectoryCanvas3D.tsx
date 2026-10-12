@@ -13,11 +13,13 @@ import { createCatalogPointMaterial, createTrajectoryScene, updateTrajectoryLine
 import { updateCurrentPointGeometry, updateCatalogPointGeometry } from '../lib/pointGeometry3d'
 import type { AsteroidRecord, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector3 } from '../types'
 import type { CurrentPositions } from '../lib/currentPositions'
+import { simulationClock } from '../engine/clock/SimulationClock'
 
 type Props = {
   referenceBody: CelestialBody
   trajectories: TrajectorySample[]
   currentPositions: CurrentPositions
+  livePositions?: (julianDay: number) => CurrentPositions
   stateFitToken: object
   stateFitRadius?: number
   detailBodyIds?: string[]
@@ -153,6 +155,7 @@ export function TrajectoryCanvas3D({
   referenceBody,
   trajectories,
   currentPositions,
+  livePositions,
   stateFitToken,
   stateFitRadius,
   detailBodyIds,
@@ -209,6 +212,41 @@ export function TrajectoryCanvas3D({
   const [unavailable, setUnavailable] = useState<string | null>(null)
   useEffect(() => { onUnavailableRef.current = onUnavailable; fallbackLabelRef.current = fallbackLabel }, [fallbackLabel, onUnavailable])
   useEffect(() => { positionsRef.current = currentPositions }, [currentPositions])
+
+  useEffect(() => {
+    if (!livePositions) return
+    // The simulation engine owns this cadence. Only coordinates are uploaded;
+    // neither React, sampled histories nor the camera are rebuilt per frame.
+    return simulationClock.subscribeFrames(epoch => {
+      const resources = resourcesRef.current, container = containerRef.current
+      if (!resources || !container || document.hidden) return
+      const next = livePositions(epoch), previous = positionsRef.current
+      let sameMembership = next.length === previous.length
+      for (let index = 0; sameMembership && index < next.length; index++) sameMembership = next.bodyAt(index).id === previous.bodyAt(index).id
+      if (!sameMembership) {
+        // Coverage may change at a chunk boundary. Hide stale states until the
+        // next authoritative React frame installs the new membership.
+        for (const mesh of resources.bodyMeshes.values()) mesh.visible = false
+        resources.currentPoints.visible = false
+        resources.invalidate()
+        return
+      }
+      positionsRef.current = next
+      for (const mesh of resources.bodyMeshes.values()) {
+        const ordinal = mesh.userData.positionOrdinal as number
+        mesh.visible = true
+        if (ordinal >= 0) mesh.position.set(next.coordinateAt(ordinal, 0), next.coordinateAt(ordinal, 2), next.coordinateAt(ordinal, 1))
+      }
+      const saturn = resources.bodyMeshes.get('saturn')
+      if (saturn && resources.saturnRing.visible) resources.saturnRing.position.copy(saturn.position)
+      resources.currentPoints.geometry = updateCurrentPointGeometry(resources.currentPoints.geometry, next, resources.pointBodyOrdinals,
+        resources.currentPoints.geometry.userData.colorKey, epoch)
+      resources.currentPoints.visible = resources.pointBodyOrdinals.length > 0
+      container.dataset.liveEpoch = String(epoch)
+      container.dataset.liveFrameCount = String(Number(container.dataset.liveFrameCount ?? 0) + 1)
+      resources.invalidate()
+    })
+  }, [livePositions])
 
   useEffect(() => {
     const container = containerRef.current
@@ -492,6 +530,7 @@ export function TrajectoryCanvas3D({
         resources.scene.add(mesh)
       }
       mesh.userData.markerRadius = radiusFor(item.body)
+      mesh.visible = true
       mesh.userData.positionOrdinal = bodyPositionOrdinals.get(id) ?? -1
       mesh.scale.setScalar(mesh.userData.markerRadius * resources.bodyScale)
       if (item.position3D) mesh.position.copy(toThree(item.position3D))
@@ -503,7 +542,7 @@ export function TrajectoryCanvas3D({
         resources.bodyMeshes.delete(id)
       }
     }
-    resources.currentPoints.geometry = updateCurrentPointGeometry(resources.currentPoints.geometry, currentPositions, resources.pointBodyOrdinals, pointPositionKey, pointPositionKey)
+    resources.currentPoints.geometry = updateCurrentPointGeometry(resources.currentPoints.geometry, currentPositions, resources.pointBodyOrdinals, pointColorKey, pointPositionKey)
     resources.currentPoints.visible = pointCount > 0
     if (containerRef.current) {
       containerRef.current.dataset.positionCount = String(currentPositions.length)
@@ -516,7 +555,7 @@ export function TrajectoryCanvas3D({
     // user camera moves during clock playback while keeping story/catalog
     // scenes (including outbound spacecraft paths) discoverable.
     const catalogReady = catalogDrawCount > 0 && catalogPositions3D.length >= 3
-    const fitKey = `${referenceBody.id}|selected-state|${trajectories.map((item) => `${item.body.id}:${item.coordinates.length / 3}`).sort().join(',')}|${catalogReady ? catalogFitKey : ''}|${resetViewKey}`
+    const fitKey = `${referenceBody.id}|selected-state|${catalogReady ? catalogFitKey : ''}|${resetViewKey}`
     if (fitKeyRef.current !== fitKey || stateFitTokenRef.current !== stateFitToken) {
       fitKeyRef.current = fitKey
       stateFitTokenRef.current = stateFitToken
