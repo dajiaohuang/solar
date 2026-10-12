@@ -35,6 +35,16 @@ test('3D camera survives cold coefficient loading and playback updates positions
   await expect(canvas).toHaveAttribute('data-fit-generation', fit!)
   await expect(canvas).toHaveAttribute('data-camera-position', dragged!)
   const requests = await page.evaluate(() => (window as Window & { trajectoryRequests: number }).trajectoryRequests)
+  await page.locator('.rate-field select').selectOption('365')
+  await page.evaluate(() => {
+    const tracking = window as Window & { markerCounts: number[]; markerRaf: number }
+    tracking.markerCounts = []
+    const sample = () => {
+      tracking.markerCounts.push(Number(document.querySelector<HTMLElement>('[data-testid="trajectory-canvas-3d"]')?.dataset.visibleMarkerCount ?? 0))
+      tracking.markerRaf = requestAnimationFrame(sample)
+    }
+    tracking.markerRaf = requestAnimationFrame(sample)
+  })
   await page.getByRole('button', { name: '▶ Play', exact: true }).click()
   await expect.poll(async () => Number(await canvas.getAttribute('data-live-frame-count'))).toBeGreaterThan(60)
   await expect(page.getByTestId('history-sampled-window')).toBeVisible()
@@ -43,6 +53,12 @@ test('3D camera survives cold coefficient loading and playback updates positions
   const after = await page.evaluate(() => (window as Window & { trajectoryRequests: number }).trajectoryRequests)
   expect(after - requests).toBeLessThanOrEqual(6)
   await page.getByRole('button', { name: '❚❚ Pause', exact: true }).click()
+  const minimumVisible = await page.evaluate(() => {
+    const tracking = window as Window & { markerCounts: number[]; markerRaf: number }
+    cancelAnimationFrame(tracking.markerRaf)
+    return Math.min(...tracking.markerCounts)
+  })
+  expect(minimumVisible).toBeGreaterThanOrEqual(1)
   await page.locator('.simulation-bar input[type=date]').fill('2052-01-01')
   await expect(page.locator('.ephemeris-status > summary')).toContainText('1/5')
   await expect(canvas).toHaveAttribute('data-position-count', '1')

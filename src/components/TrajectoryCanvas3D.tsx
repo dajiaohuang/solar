@@ -67,6 +67,7 @@ type SceneResources = {
   currentPoints: THREE.Points
   pointOrdinalStorage: Uint32Array
   pointBodyOrdinals: Uint32Array
+  pointBodies: CelestialBody[]
   pointPartitionKey: object | null
   pointDetailedIds: Set<string>
   pointBodyPositions: Map<string, RenderedBodyPosition>
@@ -93,6 +94,10 @@ function toThree(position: { x: number; y: number; z: number }) {
 }
 
 function updateCameraData(container: HTMLDivElement, resources: SceneResources, appliedZoom: number, fitGeneration: number) {
+  let markers = resources.currentPoints.visible ? resources.currentPoints.geometry.drawRange.count : 0
+  if (!Number.isFinite(markers)) markers = 0
+  for (const mesh of resources.bodyMeshes.values()) if (mesh.visible) markers++
+  container.dataset.visibleMarkerCount = String(markers)
   container.dataset.cameraDistance = resources.camera.position.distanceTo(resources.controls.target).toPrecision(12)
   container.dataset.cameraPosition = resources.camera.position.toArray().map((value) => value.toPrecision(12)).join(',')
   container.dataset.sceneRadius = String(resources.contentRadius)
@@ -223,30 +228,40 @@ export function TrajectoryCanvas3D({
       const next = livePositions(epoch), previous = positionsRef.current
       let sameMembership = next.length === previous.length
       for (let index = 0; sameMembership && index < next.length; index++) sameMembership = next.bodyAt(index).id === previous.bodyAt(index).id
-      if (!sameMembership) {
-        // Coverage may change at a chunk boundary. Hide stale states until the
-        // next authoritative React frame installs the new membership.
-        for (const mesh of resources.bodyMeshes.values()) mesh.visible = false
-        resources.currentPoints.visible = false
-        resources.invalidate()
-        return
-      }
+      const ordinals = sameMembership ? null : new Map(Array.from({ length: next.length }, (_, index) => [next.bodyAt(index).id, index]))
       positionsRef.current = next
-      for (const mesh of resources.bodyMeshes.values()) {
-        const ordinal = mesh.userData.positionOrdinal as number
-        mesh.visible = true
+      for (const [id, mesh] of resources.bodyMeshes) {
+        const ordinal = ordinals ? ordinals.get(id) ?? -1 : mesh.userData.positionOrdinal as number
+        mesh.userData.positionOrdinal = ordinal
+        mesh.visible = ordinal >= 0 || id === referenceBody.id && next.length > 0
         if (ordinal >= 0) mesh.position.set(next.coordinateAt(ordinal, 0), next.coordinateAt(ordinal, 2), next.coordinateAt(ordinal, 1))
       }
+      let colorKey: unknown = resources.currentPoints.geometry.userData.colorKey
+      if (ordinals) {
+        // A missing chunk removes only affected bodies, never the whole scene.
+        let count = 0
+        const pointIds: string[] = []
+        for (const body of resources.pointBodies) {
+          const ordinal = ordinals.get(body.id)
+          if (ordinal === undefined) continue
+          resources.pointOrdinalStorage[count++] = ordinal
+          pointIds.push(body.id)
+        }
+        resources.pointBodyOrdinals = resources.pointOrdinalStorage.subarray(0, count)
+        colorKey = pointIds.join('\0')
+      }
       const saturn = resources.bodyMeshes.get('saturn')
+      resources.saturnRing.visible = Boolean(saturn?.visible && showSaturnRings)
       if (saturn && resources.saturnRing.visible) resources.saturnRing.position.copy(saturn.position)
       resources.currentPoints.geometry = updateCurrentPointGeometry(resources.currentPoints.geometry, next, resources.pointBodyOrdinals,
-        resources.currentPoints.geometry.userData.colorKey, epoch)
+        colorKey, epoch)
       resources.currentPoints.visible = resources.pointBodyOrdinals.length > 0
       container.dataset.liveEpoch = String(epoch)
+      container.dataset.positionCount = String(next.length)
       container.dataset.liveFrameCount = String(Number(container.dataset.liveFrameCount ?? 0) + 1)
       resources.invalidate()
     })
-  }, [livePositions])
+  }, [livePositions, referenceBody.id, showSaturnRings])
 
   useEffect(() => {
     const container = containerRef.current
@@ -345,6 +360,7 @@ export function TrajectoryCanvas3D({
       currentPoints,
       pointOrdinalStorage: new Uint32Array(),
       pointBodyOrdinals: new Uint32Array(),
+      pointBodies: [],
       pointPartitionKey: null,
       pointDetailedIds: new Set(),
       pointBodyPositions: new Map(),
@@ -521,6 +537,7 @@ export function TrajectoryCanvas3D({
       resources.pointBodyPositions = bodyPositions
       resources.pointBodyPositionOrdinals = bodyPositionOrdinals
       resources.pointBodyOrdinals = resources.pointOrdinalStorage.subarray(0, pointCount)
+      resources.pointBodies = Array.from(resources.pointBodyOrdinals, index => framePositions.bodyAt(index))
       resources.pointPartitionKey = framePositionKey
     }
     const { pointDetailedIds: detailedIds, pointBodyPositions: bodyPositions, pointBodyPositionOrdinals: bodyPositionOrdinals } = resources
