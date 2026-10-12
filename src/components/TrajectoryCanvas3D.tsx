@@ -458,6 +458,11 @@ export function TrajectoryCanvas3D({
     if (!resources) return
     resources.eclipticGroup.visible = showEcliptic
     resources.glow.visible = showGlow && referenceBody.id === 'sun'
+    // A history result can commit between throttled UI ticks. Installing it
+    // must not rewind live markers to the older UI epoch.
+    const framePositions = livePositions?.(simulationClock.getJulianDay()) ?? currentPositions
+    const framePositionKey = livePositions ? framePositions : pointPositionKey
+    positionsRef.current = framePositions
 
     const activeLineIds = new Set<string>()
     for (const trajectory of trajectories) {
@@ -486,22 +491,22 @@ export function TrajectoryCanvas3D({
       }
     }
 
-    if (resources.pointPartitionKey !== pointPositionKey) {
-      const detailedIds = new Set(detailBodyIds?.slice(0, 160) ?? Array.from({ length: Math.min(160, currentPositions.length) }, (_, index) => currentPositions.bodyAt(index).id))
+    if (resources.pointPartitionKey !== framePositionKey) {
+      const detailedIds = new Set(detailBodyIds?.slice(0, 160) ?? Array.from({ length: Math.min(160, framePositions.length) }, (_, index) => framePositions.bodyAt(index).id))
       detailedIds.add(referenceBody.id)
       const bodyPositions = new Map<string, RenderedBodyPosition>()
       const bodyPositionOrdinals = new Map<string, number>()
       // Reuse ordinal storage across frame epochs; geometric growth avoids
       // reallocating for every incremental increase in selection.
-      if (resources.pointOrdinalStorage.length < currentPositions.length) {
-        const capacity = Math.max(256, 2 ** Math.ceil(Math.log2(currentPositions.length)))
+      if (resources.pointOrdinalStorage.length < framePositions.length) {
+        const capacity = Math.max(256, 2 ** Math.ceil(Math.log2(framePositions.length)))
         resources.pointOrdinalStorage = new Uint32Array(capacity)
       }
       let pointCount = 0
-      for (let index = 0; index < currentPositions.length; index++) {
-        const id = currentPositions.bodyAt(index).id
+      for (let index = 0; index < framePositions.length; index++) {
+        const id = framePositions.bodyAt(index).id
         if (detailedIds.has(id)) {
-          bodyPositions.set(id, currentPositions.rowAt(index))
+          bodyPositions.set(id, framePositions.rowAt(index))
           bodyPositionOrdinals.set(id, index)
         }
         else resources.pointOrdinalStorage[pointCount++] = index
@@ -516,7 +521,7 @@ export function TrajectoryCanvas3D({
       resources.pointBodyPositions = bodyPositions
       resources.pointBodyPositionOrdinals = bodyPositionOrdinals
       resources.pointBodyOrdinals = resources.pointOrdinalStorage.subarray(0, pointCount)
-      resources.pointPartitionKey = pointPositionKey
+      resources.pointPartitionKey = framePositionKey
     }
     const { pointDetailedIds: detailedIds, pointBodyPositions: bodyPositions, pointBodyPositionOrdinals: bodyPositionOrdinals } = resources
     const pointCount = resources.pointBodyOrdinals.length
@@ -542,10 +547,12 @@ export function TrajectoryCanvas3D({
         resources.bodyMeshes.delete(id)
       }
     }
-    resources.currentPoints.geometry = updateCurrentPointGeometry(resources.currentPoints.geometry, currentPositions, resources.pointBodyOrdinals, pointColorKey, pointPositionKey)
+    let sameMembership = framePositions.length === currentPositions.length
+    for (let index = 0; sameMembership && index < framePositions.length; index++) sameMembership = framePositions.bodyAt(index).id === currentPositions.bodyAt(index).id
+    resources.currentPoints.geometry = updateCurrentPointGeometry(resources.currentPoints.geometry, framePositions, resources.pointBodyOrdinals, sameMembership ? pointColorKey : framePositionKey, framePositionKey)
     resources.currentPoints.visible = pointCount > 0
     if (containerRef.current) {
-      containerRef.current.dataset.positionCount = String(currentPositions.length)
+      containerRef.current.dataset.positionCount = String(framePositions.length)
       containerRef.current.dataset.detailCount = String(resources.bodyMeshes.size)
       containerRef.current.dataset.statePointCount = String(pointCount)
       containerRef.current.dataset.trailCount = String(resources.trajectoryLines.size)
@@ -562,8 +569,8 @@ export function TrajectoryCanvas3D({
       fitGenerationRef.current += 1
       let radius = stateFitRadius ?? 0
       let nearest = Infinity
-      for (let index = 0; index < currentPositions.length; index++) {
-        const distance = currentPositions.distanceAt(index)
+      for (let index = 0; index < framePositions.length; index++) {
+        const distance = framePositions.distanceAt(index)
         radius = Math.max(radius, distance)
         if (distance > 0) nearest = Math.min(nearest, distance)
       }
@@ -614,7 +621,7 @@ export function TrajectoryCanvas3D({
     const container = containerRef.current
     if (container) updateCameraData(container, resources, appliedZoomRef.current, fitGenerationRef.current)
     resources.invalidate()
-  }, [catalogAppearance, catalogDrawCount, catalogFitKey, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z, catalogPositions3D, catalogRecords.length, currentPositions, detailBodyIds, lagrangePoints, pointColorKey, pointPositionKey, referenceBody, resetViewKey, showEcliptic, showGlow, showSaturnRings, stateFitToken, stateFitRadius, trajectories, zoomLevel])
+  }, [catalogAppearance, catalogDrawCount, catalogFitKey, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z, catalogPositions3D, catalogRecords.length, currentPositions, detailBodyIds, lagrangePoints, livePositions, pointColorKey, pointPositionKey, referenceBody, resetViewKey, showEcliptic, showGlow, showSaturnRings, stateFitToken, stateFitRadius, trajectories, zoomLevel])
 
   useEffect(() => {
     const resources = resourcesRef.current
