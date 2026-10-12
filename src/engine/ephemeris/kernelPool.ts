@@ -189,6 +189,13 @@ export function createKernelResolver(sourceKernels: readonly LoadedKernel[], et:
     sourceChain(target: number): readonly SourceChainSegment[] | null {
       return resolveChainIn(target, contextFor(target))
     },
+    /** The observer lineage chosen by relative(), including source-local centers. */
+    relativeSourceChains(target: number, observer: number) {
+      const context = contextFor(target)
+      const observerInPool = contexts.get(context)?.some(({ kernel }) => coversTargetAt(kernel, observer, et)) ?? false
+      return { target: resolveChainIn(target, context),
+        observer: resolveChainIn(observer, observer === 0 || observerInPool ? context : contextFor(observer)) }
+    },
     relative(target: number, observer: number): GeometricState | null {
       const context = contextFor(target)
       const body = resolveIn(target, context)

@@ -20,8 +20,9 @@ const PUBLIC = join(ROOT, 'public')
 const APPROXIMATION_ROOT = resolve(process.env.SOLAR_ATLAS_APPROXIMATION_DIR ?? join(PUBLIC, 'data', 'approximation'))
 const SEGMENTED = process.env.SOLAR_ATLAS_WEB_EXECUTION === 'segmented'
 const SITE_BASE = SEGMENTED ? `${(process.env.SOLAR_ATLAS_SITE_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : 'http://localhost:4173')).replace(/\/+$/, '')}/` : 'https://dajiaohuang.github.io/solar/'
-const MAX_ARTIFACT_BYTES = SEGMENTED ? 950_000_000 : 700 * 1024 * 1024
-const WARN_ARTIFACT_BYTES = SEGMENTED ? 900_000_000 : 600 * 1024 * 1024
+// Engineering storage budgets, independent of plan-specific CLI source uploads.
+const MAX_ARTIFACT_BYTES = SEGMENTED ? 1_500_000_000 : 700 * 1024 * 1024
+const WARN_ARTIFACT_BYTES = SEGMENTED ? 1_400_000_000 : 600 * 1024 * 1024
 const DELIVERY = productDelivery(process.env.SOLAR_ATLAS_PRODUCT_PROFILE, process.env.SOLAR_ATLAS_EPHEMERIS_PROFILE)
 const EPHEMERIS_PROFILE = DELIVERY.scientificProfile
 
@@ -484,7 +485,8 @@ async function writeManifestsAndCapacity(buildInfo, dataset) {
   const approximationEvidence = SEGMENTED ? {
     model: 'piecewise-chebyshev-best-sampled-v1', manifest: 'data/approximation/manifest.json',
     validation: 'Candidate errors are measured at 66 off-node samples per fitted interval, relative to its local source state. They are not continuous bounds or physical uncertainties.',
-    outsideCoverage: 'no-state-no-extrapolation', sourceDelivery: 'coefficients-only-no-raw-spk',
+    outsideCoverage: 'no-state-outside-published-window; explicitly-labeled-two-body-forecasts-in-source-gaps', sourceDelivery: 'lossless-float64-coefficients-and-forecast-parameters-only-no-raw-spk',
+    forecastBoundary: 'Backtest errors are measured inside source windows. Prediction errors outside source coverage are unknown; no maneuver, perturbation, collision or existence model.',
     scientificTests: 'The existing report below validates source and analysis contracts; it does not independently certify the generated approximation archive.',
   } : undefined
   const publishedScientificValidation = { ...scientificValidation, modelWindow, modelEvidence, approximationEvidence, build: buildInfo, dataset }

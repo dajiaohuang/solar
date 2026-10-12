@@ -25,7 +25,7 @@ import type { BodyId, CelestialBody } from '../../types'
 import type { CurrentPositions } from '../../lib/currentPositions'
 import type { BackendFrame } from '../../lib/backendFrames'
 import { SEGMENTED_WEB, isDynamicOrbitBody } from '../../lib/webExecution'
-import { approximationForBody } from '../../engine/ephemeris/segmentedStore'
+import { approximationForBody, predictionForBody } from '../../engine/ephemeris/segmentedStore'
 
 type Props = { body: CelestialBody | null; currentPositions: CurrentPositions; bodiesById: Map<BodyId, CelestialBody>; backendFrame?: BackendFrame | null }
 type Tab = 'overview' | 'orbit' | 'physical' | 'context' | 'sources'
@@ -40,6 +40,7 @@ export function BodyInspector({ body, currentPositions, bodiesById, backendFrame
   const backendMode = backendFrame !== undefined && body?.source !== 'schematic'
   const approximation = SEGMENTED_WEB && body ? approximationForBody(body.id, clock.julianDay) : null
   const segmentedBody = SEGMENTED_WEB && body && (approximation?.body || !isDynamicOrbitBody(body))
+  const forecast = SEGMENTED_WEB && body ? predictionForBody(body.id, clock.julianDay) : null
   const inspectedEpoch = backendFrame?.epochJd ?? clock.julianDay
   const backendRow = useMemo(() => {
     if (!backendMode || !backendFrame || !body) return null
@@ -105,7 +106,9 @@ export function BodyInspector({ body, currentPositions, bodiesById, backendFrame
     : satelliteEvidence ? t('illustrativeSatelliteModel')
     : body.orbitRepresents === 'earth-moon-barycenter' ? t('earthOrbitSeedModel')
     : body.orbit.model === 'planetaryApprox' ? t('jplApproxModel') : t('ellipticTwoBodyModel')
-  const modelDescription = segmentedBody
+  const modelDescription = forecast
+    ? language === 'zh' ? '二体轨道预测；源覆盖外误差未知，忽略摄动、机动和碰撞。' : 'Two-body orbit forecast; errors outside source coverage are unknown. Perturbations, maneuvers and collisions are omitted.'
+    : segmentedBody
     ? approximation?.state ? language === 'zh' ? '分段 Chebyshev 轨道近似' : 'Segmented Chebyshev orbit approximation'
       : language === 'zh' ? '无覆盖；不外推' : 'No coverage; no extrapolation'
     : backendMode

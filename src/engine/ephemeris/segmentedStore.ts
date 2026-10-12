@@ -3,11 +3,14 @@ import { fetchImmutableArrayBuffer, parseMaybeGzipJson } from '../../data/cache/
 import { evaluateApproximation, segmentAt, type ApproximationSegment } from './segmentedApproximation'
 import { utcJulianDayToEt } from './timeScales'
 import type { CelestialBody } from '../../types'
+import { propagateTwoBody, type ForecastWindow } from './twoBodyForecast'
+import { decodeApproximationBinary } from './approximationBinary'
 
 export type ApproximationChunk = { path: string; bytes: number; sha256: string; startEt: number; endEt: number;
-  segmentCount: number; sampledPositionErrorKm: number; sampledVelocityErrorKmS: number }
+  segmentCount: number; sampledPositionErrorKm: number; sampledVelocityErrorKmS: number; encoding?: 'binary-chebyshev-v1' }
 export type ApproximationBody = { id: string; parentId: string; origin?: boolean; seedModel: boolean;
-  available: boolean; chunks: ApproximationChunk[]; missingIntervals: number[][] }
+  available: boolean; chunks: ApproximationChunk[]; missingIntervals: number[][]; forecasts?: ForecastWindow[];
+  index?: { path: string; bytes: number; sha256: string; windows: [number, number][] } }
 export type ApproximationManifest = { schemaVersion: 1; model: string; frame: 'ECLIPJ2000'; timeScale: 'TDB';
   positionUnit: 'km'; velocityUnit: 'km/s'; sourceManifestSha256: string; validation: string;
   positionToleranceKm: number; velocityToleranceKmS: number; bodies: ApproximationBody[]; totalBytes: number }
@@ -21,6 +24,7 @@ let manifestPending: Promise<ApproximationManifest> | null = null
 const bodies = new Map<string, ApproximationBody>()
 const chunks = new Map<string, ChunkDocument>()
 const pending = new Map<string, Promise<void>>()
+const loadedIndices = new Set<string>()
 const residentSizes = new Map<string, number>()
 let residentBytes = 0
 const digestPattern = /^[a-f0-9]{64}$/
@@ -50,8 +54,17 @@ export function approximationRequestKey(selected: readonly CelestialBody[], utcJ
     visited.add(id)
     const body = bodies.get(id)
     if (!body) return
-    const descriptor = descriptorAt(body, et)
-    if (descriptor) paths.add(descriptor.path)
+    if (body.index) {
+      // Descriptor readiness must not change the request key mid-transfer.
+      // Small immutable window metadata identifies the delivery interval.
+      let low = 0, high = body.index.windows.length
+      while (low < high) { const mid = (low + high) >>> 1; if (body.index.windows[mid][0] <= et) low = mid + 1; else high = mid }
+      const number = low - 1, window = body.index.windows[number]
+      paths.add(`${body.index.path}@${window && et <= window[1] ? number : 'gap'}`)
+    } else {
+      const descriptor = descriptorAt(body, et)
+      if (descriptor) paths.add(descriptor.path)
+    }
     if (body.parentId !== id) add(body.parentId)
   }
   selected.forEach(body => { add(body.id); if (!bodies.has(body.id) && body.parentId) add(body.parentId) })
@@ -97,9 +110,36 @@ export async function loadApproximationManifest() {
       if (!body.id || identities.has(body.id) || !body.parentId || !Array.isArray(body.chunks) || body.chunks.length > 4096
         || typeof body.available !== 'boolean' || typeof body.seedModel !== 'boolean') throw new Error('Invalid approximation body')
       identities.add(body.id)
+      if (body.index && (!/^indices\/[a-f0-9]{64}\.json\.gz$/.test(body.index.path)
+        || body.index.path !== `indices/${body.index.sha256}.json.gz` || !digestPattern.test(body.index.sha256)
+        || !Number.isSafeInteger(body.index.bytes) || body.index.bytes <= 0 || body.index.bytes > 2 * 1048576
+        || !Array.isArray(body.index.windows) || !body.index.windows.length || body.index.windows.length > 4096
+        || body.index.windows.some((window, number, windows) => !Array.isArray(window) || window.length !== 2
+          || !window.every(finite) || window[1] <= window[0] || number > 0 && window[0] < windows[number - 1][1])
+        || body.chunks.length)) throw new Error('Invalid approximation body index')
+      if (body.forecasts !== undefined) {
+        if (!Array.isArray(body.forecasts) || body.forecasts.length > 512) throw new Error('Invalid forecast budget')
+        let end = -Infinity
+        for (const forecast of body.forecasts) {
+          if (forecast.model !== 'two-body-universal' || forecast.uncertainty !== 'unknown-outside-source-coverage'
+            || ![forecast.startEt, forecast.endEt, forecast.seedEt, forecast.gmKm3S2].every(finite)
+            || forecast.startEt < end || forecast.endEt <= forecast.startEt || forecast.gmKm3S2 <= 0
+            || !forecast.parameterSource || !forecast.sourceHashes?.length || forecast.sourceHashes.some(hash => !digestPattern.test(hash))
+            || !['source-fit', 'horizons-vector'].includes(forecast.anchorSource)
+            || !forecast.sourceUrls?.length || forecast.sourceUrls.some(url => !/^https:\/\//.test(url))
+            || !forecast.seed?.position || !forecast.seed?.velocity
+            || !(['x', 'y', 'z'] as const).every(axis => finite(forecast.seed.position[axis]) && finite(forecast.seed.velocity[axis]))
+            || !Number.isSafeInteger(forecast.backtest?.samples) || forecast.backtest.samples < 0
+            || !finite(forecast.backtest.maximumOffsetDays) || forecast.backtest.maximumOffsetDays < 0
+            || [forecast.backtest.maximumPositionErrorKm, forecast.backtest.maximumVelocityErrorKmS].some(value => value !== null && (!finite(value) || value < 0))) throw new Error('Invalid forecast provenance, state or backtest')
+          end = forecast.endEt
+          if (body.chunks.some(chunk => forecast.startEt < chunk.endEt && forecast.endEt > chunk.startEt)) throw new Error('Forecast overlaps a source-fit interval')
+        }
+      }
       let end = -Infinity
       for (const chunk of body.chunks) {
-        if (!/^chunks\/[a-zA-Z0-9:%._-]+\.json(?:\.gz)?$/.test(chunk.path) || chunkPaths.has(chunk.path) || !digestPattern.test(chunk.sha256)
+        if (!/^chunks\/[a-zA-Z0-9:%._-]+\.(?:json|bin)(?:\.gz)?$/.test(chunk.path) || chunkPaths.has(chunk.path) || !digestPattern.test(chunk.sha256)
+          || chunk.encoding !== undefined && chunk.encoding !== 'binary-chebyshev-v1'
           || !Number.isSafeInteger(chunk.bytes) || chunk.bytes <= 0 || chunk.bytes > 16 * 1048576
           || !finite(chunk.startEt) || !finite(chunk.endEt) || chunk.startEt < end || chunk.endEt <= chunk.startEt) throw new Error('Invalid approximation chunk')
         end = chunk.endEt
@@ -124,6 +164,41 @@ export async function loadApproximationManifest() {
   })().catch(error => { manifestPending = null; throw error })
   return manifestPending
 }
+async function loadBodyIndex(body: ApproximationBody) {
+  const index = body.index
+  if (!index || loadedIndices.has(body.id)) return
+  if (!pending.has(index.path)) {
+    const promise = (async () => {
+      emit({ loading: snapshot.loading + 1 })
+      try {
+        let document!: { schemaVersion: number; id: string; parentId: string; sourceManifestSha256: string; chunks: ApproximationChunk[] }
+        await fetchImmutableArrayBuffer(`${root()}${index.path}`, async bytes => {
+          document = await parseMaybeGzipJson(bytes, index.bytes, undefined, index.sha256)
+        })
+        if (document.schemaVersion !== 1 || document.id !== body.id || document.parentId !== body.parentId
+          || document.sourceManifestSha256 !== manifest!.sourceManifestSha256 || !Array.isArray(document.chunks)
+          || document.chunks.length !== index.windows.length) throw new Error('Invalid body index identity')
+        let end = -Infinity
+        const paths = new Set<string>()
+        for (const [number, chunk] of document.chunks.entries()) {
+          if (!/^chunks\/[a-zA-Z0-9:%._-]+\.(?:json|bin)(?:\.gz)?$/.test(chunk.path) || paths.has(chunk.path)
+            || !digestPattern.test(chunk.sha256) || chunk.encoding !== 'binary-chebyshev-v1'
+            || !Number.isSafeInteger(chunk.bytes) || chunk.bytes <= 0 || chunk.bytes > 16 * 1048576
+            || !finite(chunk.startEt) || !finite(chunk.endEt) || chunk.startEt < end || chunk.endEt <= chunk.startEt
+            || !Number.isSafeInteger(chunk.segmentCount) || chunk.segmentCount <= 0
+            || chunk.startEt !== index.windows[number][0] || chunk.endEt !== index.windows[number][1]
+            || body.forecasts?.some(forecast => forecast.startEt < chunk.endEt && forecast.endEt > chunk.startEt)) throw new Error('Invalid body index descriptor')
+          paths.add(chunk.path); end = chunk.endEt
+        }
+        body.chunks = document.chunks; loadedIndices.add(body.id)
+      } catch (error) {
+        emit({ error: error instanceof Error ? error.message : String(error) }); throw error
+      } finally { emit({ loading: snapshot.loading - 1 }); pending.delete(index.path) }
+    })()
+    pending.set(index.path, promise)
+  }
+  await pending.get(index.path)
+}
 async function loadChunk(body: ApproximationBody, descriptor: ApproximationChunk) {
   if (chunks.has(descriptor.path)) return
   if (!pending.has(descriptor.path)) {
@@ -133,7 +208,17 @@ async function loadChunk(body: ApproximationBody, descriptor: ApproximationChunk
         const url = `${root()}${descriptor.path.split('/').map(encodeURIComponent).join('/')}`
         let value!: ChunkDocument
         await fetchImmutableArrayBuffer(url, async bytes => {
-          value = await parseMaybeGzipJson<ChunkDocument>(bytes, descriptor.bytes, undefined, descriptor.sha256)
+          if (descriptor.encoding !== 'binary-chebyshev-v1') {
+            value = await parseMaybeGzipJson<ChunkDocument>(bytes, descriptor.bytes, undefined, descriptor.sha256)
+            return
+          }
+          let raw = new Uint8Array(bytes)
+          if (raw[0] === 0x1f && raw[1] === 0x8b) {
+            raw = new Uint8Array(await readBoundedStream(new Blob([raw]).stream().pipeThrough(new DecompressionStream('gzip')), descriptor.bytes))
+          }
+          const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', raw))].map(byte => byte.toString(16).padStart(2, '0')).join('')
+          if (raw.byteLength !== descriptor.bytes || hash !== descriptor.sha256) throw new Error('Approximation binary SHA-256 mismatch')
+          value = decodeApproximationBinary(raw) as ChunkDocument
         })
         if (value.schemaVersion !== 1 || value.id !== body.id || value.parentId !== body.parentId
           || value.sourceManifestSha256 !== manifest!.sourceManifestSha256 || !Array.isArray(value.segments)
@@ -157,7 +242,7 @@ async function loadChunk(body: ApproximationBody, descriptor: ApproximationChunk
         }
         chunks.set(descriptor.path, value); residentBytes += descriptor.bytes
         residentSizes.set(descriptor.path, descriptor.bytes)
-        emit({ error: null }, true)
+        emit({ error: null })
       } finally { emit({ loading: snapshot.loading - 1 }); pending.delete(descriptor.path) }
     })()
     pending.set(descriptor.path, promise)
@@ -181,6 +266,14 @@ export async function ensureApproximation(builtIns: readonly CelestialBody[], st
     if (body.parentId !== id) add(body.parentId)
   }
   builtIns.forEach(body => { add(body.id); if (!bodies.has(body.id) && body.parentId) add(body.parentId) })
+  const indices = [...required.values()]
+  let nextIndex = 0
+  await Promise.all(Array.from({ length: Math.min(4, indices.length) }, async () => {
+    while (nextIndex < indices.length) {
+      signal?.throwIfAborted()
+      await awaitConsumer(loadBodyIndex(indices[nextIndex++]), signal)
+    }
+  }))
   const descriptors = [...required.values()].flatMap(body => {
     const point = startEt === endEt ? descriptorAt(body, startEt) : null
     const selected = startEt === endEt ? point ? [point] : [] : body.chunks.filter(chunk => chunk.startEt <= endEt && chunk.endEt >= startEt)
@@ -195,15 +288,29 @@ export async function ensureApproximation(builtIns: readonly CelestialBody[], st
   try {
     await Promise.all(Array.from({ length: Math.min(4, requests.length) }, async () => { while (next < requests.length) { signal?.throwIfAborted(); await awaitConsumer(requests[next++](), signal) } }))
     signal?.throwIfAborted()
+    // Publish one coherent requested window. Per-index/chunk invalidations
+    // repeatedly rebuilt every selected trajectory during large cold loads.
+    emit({ error: null }, true)
   } catch (error) { if (!signal?.aborted) emit({ error: error instanceof Error ? error.message : String(error) }); throw error }
 }
 export function approximationForBody(id: string, utcJd: number) {
   const body = bodies.get(id)
-  if (!body) return { body: null, state: null, segment: null }
-  if (utcJd < 2441317.5) return { body, state: null, segment: null }
+  if (!body) return { body: null, state: null, segment: null, forecast: null }
+  if (utcJd < 2441317.5) return { body, state: null, segment: null, forecast: null }
   const et = utcJulianDayToEt(utcJd)
+  if (body.index && !loadedIndices.has(id)) return { body, state: null, segment: null, forecast: null }
   const descriptor = descriptorAt(body, et)
   const document = descriptor && chunks.get(descriptor.path)
   const segment = document ? segmentAt(document.segments, et) : null
-  return { body, segment, state: segment ? evaluateApproximation(segment, et) : null }
+  const forecast = !descriptor ? body.forecasts?.find(window => window.startEt <= et && window.endEt >= et) ?? null : null
+  return { body, segment, forecast, state: segment ? evaluateApproximation(segment, et) : forecast
+    ? propagateTwoBody(forecast.seed, forecast.gmKm3S2, et - forecast.seedEt) : null }
+}
+
+/** Parent forecasts affect a child's absolute state too. */
+export function predictionForBody(id: string, utcJd: number, seen = new Set<string>()): ForecastWindow | null {
+  if (seen.has(id)) return null
+  seen.add(id)
+  const result = approximationForBody(id, utcJd)
+  return result.forecast ?? (result.body && result.body.parentId !== id ? predictionForBody(result.body.parentId, utcJd, seen) : null)
 }

@@ -65,9 +65,10 @@ export default defineConfig(({ command }) => {
     worker: { plugins: () => [manifestPlugin()] },
     base,
     publicDir: command === 'serve' ? 'public' : false,
-    // Dataset pipeline tests publish temporary directories atomically. Watching
-    // those generated files can hold Windows handles across their rename.
-    server: { watch: { ignored: ['**/.dataset-test-*/**', '**/test-results/**', '**/test-results-preview/**'] } },
+    // Immutable science archives are not code inputs. Large generated trees
+    // stall module transforms and hold Windows handles across publication.
+    server: { watch: { ignored: ['**/.cache/**', '**/public/data/**', '**/dist/**', '**/.dataset-test-*/**',
+      '**/test-results/**', '**/test-results-preview/**', '**/test-results-vercel/**'] } },
     define: {
       // Pages is a static snapshot even when a developer's .env contains the
       // full client's backend URL. Never carry that endpoint into this build.

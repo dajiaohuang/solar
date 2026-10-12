@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { readFileSync } from 'node:fs'
 
 test('real segmented build renders both views, transforms frames, seeks and plays without backend or SPK transfers', async ({ page, context, request }) => {
   expect((await (await request.get('build-info.json')).json()).webExecution).toBe('segmented')
@@ -25,8 +26,8 @@ test('real segmented build renders both views, transforms frames, seeks and play
   await expect(page.locator('canvas.trajectory-canvas')).toHaveCount(2)
   await expect(page.locator('canvas.trajectory-canvas').first()).toHaveAttribute('data-position-count', '5')
   await page.locator('.simulation-bar input[type=date]').fill('2049-01-01')
-  await expect(page.locator('.ephemeris-status > summary').first()).toContainText('3/5')
-  await expect(page.locator('canvas.trajectory-canvas').first()).toHaveAttribute('data-position-count', '3')
+  await expect(page.locator('.ephemeris-status > summary').first()).toContainText('5/5')
+  await expect(page.locator('canvas.trajectory-canvas').first()).toHaveAttribute('data-position-count', '5')
   await page.locator('.simulation-bar input[type=date]').fill('2027-01-01')
   await expect(page.locator('.ephemeris-status > summary').first()).toContainText('5/5')
   await page.locator('.rate-field select').selectOption('365')
@@ -42,6 +43,47 @@ test('real segmented build renders both views, transforms frames, seeks and play
   expect(requests.filter(url => /\/v1\/|\.bsp(?:\?|$)|horizons\.jpl/.test(url))).toEqual([])
   expect(requests.some(url => url.includes('/data/approximation/chunks/'))).toBe(true)
   expect(failures).toEqual([])
+  expect(errors).toEqual([])
+})
+
+test('forecast scenes preserve rendering and reference changes with explicit provenance and unknown uncertainty', async ({ page }) => {
+  const missing = 'sat:planet:saturn:provisional:S/2009 S1'
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto(`?v=4&lang=en&view=2d&bodies=${encodeURIComponent(`sun,eris,makemake,naif:-61,${missing}`)}&ref=sun&jd=2469442.5&history=30`)
+  await expect(page.locator('.ephemeris-status > summary')).toContainText('4/5')
+  await expect(page.locator('.ephemeris-status > summary')).toContainText('Forecast 3')
+  await expect(page.locator('canvas.trajectory-canvas')).toHaveAttribute('data-position-count', '4')
+  await page.locator('.ephemeris-status > summary').click()
+  await expect(page.locator('.ephemeris-status')).toContainText('do not bound errors outside that window')
+  await expect(page.locator('.ephemeris-status')).toContainText('Maximum local backtest errors')
+  await expect(page.locator('.ephemeris-status')).toContainText('unresolved system-orbit proxy')
+  await expect(page.locator('.ephemeris-status a[href*="horizons.api"]')).toHaveCount(1)
+  await page.locator('.advanced-controls > summary').click()
+  await page.locator('[data-story-target="frame"] select').first().selectOption('makemake')
+  await expect(page.locator('canvas.trajectory-canvas')).toHaveAttribute('data-position-count', '4')
+  await page.getByRole('button', { name: '3D', exact: true }).click()
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
+  await page.locator('.simulation-bar input[type=date]').fill('2052-01-01')
+  await expect(page.locator('.ephemeris-status > summary')).toContainText('1/5')
+})
+
+test('the complete audited non-small population renders at the far end of the window', async ({ page }) => {
+  const audit = JSON.parse(readFileSync('docs/benchmarks/non-small-coverage-20261012/report.json', 'utf8')) as { rows: { id: string }[] }
+  const ids = audit.rows.map(body => body.id), errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto(`?v=4&lang=en&view=2d&bodies=${encodeURIComponent(ids.join(','))}&ref=sun&jd=2469442.5&history=30`)
+  await page.locator('.ephemeris-status > summary').click()
+  await expect(page.locator('.ephemeris-status [role=alert]')).toHaveCount(0)
+  try {
+    await expect(page.locator('.ephemeris-status > summary')).toContainText('492/493', { timeout: 45_000 })
+  } catch (error) {
+    console.log('Full-scene load errors:', await page.locator('.ephemeris-status [role=alert]').allTextContents(), errors)
+    throw error
+  }
+  await expect(page.locator('canvas.trajectory-canvas')).toHaveAttribute('data-position-count', '492')
+  await page.getByRole('button', { name: '3D', exact: true }).click()
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
   expect(errors).toEqual([])
 })
 
@@ -73,7 +115,7 @@ test('small scene stays below its download budget and reuses coefficients after 
   await page.goto('?v=4&lang=en&view=2d&bodies=sun,earth,moon,mars,naif:401&ref=sun&jd=2461287.5&history=30')
   await expect(page.locator('canvas.trajectory-canvas')).toHaveAttribute('data-position-count', '5')
   await expect.poll(async () => Number(await page.locator('canvas.trajectory-canvas').getAttribute('data-trail-count'))).toBeGreaterThan(0)
-  const chunkPaths = [...new Set(urls.filter(url => /\/data\/approximation\/(?:chunks|manifests)\//.test(url)).map(url => new URL(url).pathname))]
+  const chunkPaths = [...new Set(urls.filter(url => /\/data\/approximation\/(?:chunks|manifests|indices)\//.test(url)).map(url => new URL(url).pathname))]
   await expect.poll(() => page.evaluate(async paths => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open('solar-atlas-data-v1')
@@ -87,6 +129,22 @@ test('small scene stays below its download budget and reuses coefficients after 
       return paths.every(path => keys.includes(path))
     } finally { database.close() }
   }, chunkPaths)).toBe(true)
+  const accounting = await page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('solar-atlas-data-v1')
+      request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error)
+    })
+    try {
+      const records = await new Promise<Array<{ buffer?: ArrayBuffer; kind?: string; totalBytes?: number }>>((resolve, reject) => {
+        const request = database.transaction('immutable-responses').objectStore('immutable-responses').getAll()
+        request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error)
+      })
+      return { actual: records.reduce((sum, record) => sum + (record.buffer?.byteLength ?? 0), 0),
+        recorded: records.find(record => record.kind === 'cache-total-v1')?.totalBytes }
+    } finally { database.close() }
+  })
+  expect(accounting.recorded).toBe(accounting.actual)
+  expect(accounting.actual).toBeLessThanOrEqual(256 * 1024 * 1024)
   const bytes = (await Promise.all(sizes)).reduce((sum, value) => sum + value, 0)
   console.log(`Five-body, 30-day approximation cold payload: ${bytes} bytes`)
   expect(bytes).toBeLessThan(2 * 1024 * 1024)
@@ -95,7 +153,7 @@ test('small scene stays below its download budget and reuses coefficients after 
   await page.reload()
   await expect(page.locator('canvas.trajectory-canvas')).toHaveAttribute('data-position-count', '5')
   await expect.poll(async () => Number(await page.locator('canvas.trajectory-canvas').getAttribute('data-trail-count'))).toBeGreaterThan(0)
-  expect(urls.slice(beforeReload).filter(url => /\/data\/approximation\/(?:chunks|manifests)\//.test(url))).toEqual([])
+  expect(urls.slice(beforeReload).filter(url => /\/data\/approximation\/(?:chunks|manifests|indices)\//.test(url))).toEqual([])
   const reloadBytes = (await Promise.all(sizes.slice(beforeReloadSizes))).reduce((sum, value) => sum + value, 0)
   console.log(`Cached approximation reload payload: ${reloadBytes} bytes`)
   expect(reloadBytes).toBeLessThan(1024)

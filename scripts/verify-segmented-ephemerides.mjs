@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { verifyApproximationAssets } from './lib/verify-approximation-assets.mjs'
@@ -7,9 +7,9 @@ import { SpkKernel } from '../src/engine/ephemeris/spk.ts'
 import { createKernelResolver } from '../src/engine/ephemeris/kernelPool.ts'
 import { evaluateApproximation } from '../src/engine/ephemeris/segmentedApproximation.ts'
 
-const root = 'public/data/approximation'
+const root = process.argv[2] ?? 'public/data/approximation'
 const { manifest } = await verifyApproximationAssets(root)
-const source = JSON.parse(await readFile('src/data/ephemeris-manifest-full.json', 'utf8'))
+const source = JSON.parse(await readFile(manifest.sourceManifestPath ?? 'src/data/ephemeris-manifest-full.json', 'utf8'))
 const loaded = new Map()
 let tested = 0, maximumPositionErrorKm = 0, maximumVelocityErrorKmS = 0
 for (const body of manifest.bodies) {
@@ -19,7 +19,7 @@ for (const body of manifest.bodies) {
   for (const id of loaded.keys()) if (!wanted.has(id)) loaded.delete(id)
   for (const file of files) {
     if (loaded.has(file.id)) continue
-    const bytes = await readFile(join('public/data/ephemerides', file.path))
+    const bytes = await readFile(file.localPath ?? join('public/data/ephemerides', file.path))
     if (bytes.byteLength !== file.bytes || createHash('sha256').update(bytes).digest('hex') !== file.sha256) throw new Error(`Source bytes changed: ${file.id}`)
     loaded.set(file.id, { id: file.id, sha256: file.sha256, dependencyOnly: file.dependencyOnly, solutionKernelIds: file.solutionKernelIds,
       kernel: new SpkKernel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)) })
@@ -45,4 +45,7 @@ for (const body of manifest.bodies) {
     }
   }
 }
-console.log(JSON.stringify({ tested, maximumPositionErrorKm, maximumVelocityErrorKmS, boundary: 'Independent sampled fit error relative to each local source state; not a continuous bound or physical uncertainty.' }, null, 2))
+const report = { sourceManifestSha256: manifest.sourceManifestSha256, tested, maximumPositionErrorKm, maximumVelocityErrorKmS,
+  boundary: 'Independent sampled fit error relative to each local source state; not a continuous bound or physical uncertainty.' }
+if (process.argv[3]) await writeFile(process.argv[3], JSON.stringify(report, null, 2))
+console.log(JSON.stringify(report, null, 2))

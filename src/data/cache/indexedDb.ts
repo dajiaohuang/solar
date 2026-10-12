@@ -5,6 +5,7 @@ import { CatalogHttpError } from './catalogHttpError'
 const DATABASE_NAME = 'solar-atlas-data-v1'
 const DATABASE_VERSION = 2
 const STORE_NAME = 'immutable-responses'
+const CACHE_TOTAL_KEY = '__solar_cache_total_v1__'
 const MAX_DATASET_CACHE_BYTES = 256 * 1024 * 1024
 const MIN_FREE_STORAGE_BYTES = 16 * 1024 * 1024
 const OPTIONAL_CACHE_PHASE_MS = 1500
@@ -110,7 +111,7 @@ function acquireRequest(url: string, signal?: AbortSignal) {
 export function datasetVersionFromUrl(url: string) {
   try {
     const pathname = new URL(url, globalThis.location?.href ?? 'https://solar-atlas.invalid/').pathname
-    if (/\/data\/approximation\/(?:chunks|manifests)\//.test(pathname)) return 'approximation'
+    if (/\/data\/approximation\/(?:chunks|manifests|indices)\//.test(pathname)) return 'approximation'
     const preview = pathname.match(/\/data\/asteroids\/preview\/([a-f0-9]{64})\/releases\/([^/]+)\//)
     if (preview) return `preview:${preview[1]}:${decodeURIComponent(preview[2])}`
     const match = pathname.match(/\/data\/asteroids\/releases\/([^/]+)\//)
@@ -223,36 +224,60 @@ async function pruneDatasetCache(activeVersion: string, maximumBytes: number, in
     try {
       transaction = database.transaction(STORE_NAME, 'readwrite')
       const store = transaction.objectStore(STORE_NAME)
-      const activeEntries: Array<{ key: IDBValidKey; byteLength: number; lastAccessed: number }> = []
-      const cursorRequest = store.openCursor()
-      cursorRequest.onsuccess = () => {
-        if (settled) return
-        const cursor = cursorRequest.result
-        if (!cursor) {
-          activeEntries.sort((left, right) => right.lastAccessed - left.lastAccessed)
-          // Reserve the new record and replace the old key in this same
-          // transaction. Concurrent writers (including other tabs) serialize
-          // here, so a burst cannot exceed the budget between periodic prunes.
-          let retainedBytes = incoming?.record.byteLength ?? 0
-          for (const entry of activeEntries) {
-            if (retainedBytes + entry.byteLength > maximumBytes) store.delete(entry.key)
-            else retainedBytes += entry.byteLength
+      const scan = () => {
+        const activeEntries: Array<{ key: IDBValidKey; byteLength: number; lastAccessed: number }> = []
+        const cursorRequest = store.openCursor()
+        cursorRequest.onsuccess = () => {
+          if (settled) return
+          const cursor = cursorRequest.result
+          if (!cursor) {
+            activeEntries.sort((left, right) => right.lastAccessed - left.lastAccessed)
+            // Reserve and replace in one transaction, including sibling tabs.
+            let retainedBytes = incoming?.record.byteLength ?? 0
+            for (const entry of activeEntries) {
+              if (retainedBytes + entry.byteLength > maximumBytes) store.delete(entry.key)
+              else retainedBytes += entry.byteLength
+            }
+            if (incoming) store.put(incoming.record, incoming.key)
+            store.put({ kind: 'cache-total-v1', activeVersion, totalBytes: retainedBytes }, CACHE_TOTAL_KEY)
+            return
           }
-          if (incoming) store.put(incoming.record, incoming.key)
-          return
+          if (cursor.primaryKey === CACHE_TOTAL_KEY) {
+            // Internal byte accounting is replaced atomically after this scan.
+          } else if (incoming && cursor.primaryKey === incoming.key) {
+            // Replacement bytes were reserved above; do not count the old copy.
+          } else if (!isCacheRecord(cursor.value) || isObsoleteDatasetVersion(cursor.value.datasetVersion, activeVersion)) {
+            cursor.delete()
+          } else {
+            // Keep metadata rather than retaining the complete cache buffers.
+            activeEntries.push({ key: cursor.primaryKey, byteLength: cursor.value.byteLength, lastAccessed: cursor.value.lastAccessed })
+          }
+          cursor.continue()
         }
-        if (incoming && cursor.primaryKey === incoming.key) {
-          // Replacement bytes were reserved above; do not count the old copy.
-        } else if (!isCacheRecord(cursor.value) || isObsoleteDatasetVersion(cursor.value.datasetVersion, activeVersion)) {
-          cursor.delete()
-        } else {
-          // Retain only metadata. Keeping each record also retains every large
-          // ArrayBuffer until sorting completes (up to the whole cache budget).
-          activeEntries.push({ key: cursor.primaryKey, byteLength: cursor.value.byteLength, lastAccessed: cursor.value.lastAccessed })
-        }
-        cursor.continue()
+        cursorRequest.onerror = finish
       }
-      cursorRequest.onerror = finish
+      if (!incoming) scan()
+      else {
+        // All writers serialize in this same transaction. Below the quota,
+        // maintain the exact total without reading every cached ArrayBuffer
+        // again for each small immutable index/coefficient write.
+        const total = store.get(CACHE_TOTAL_KEY), previous = store.get(incoming.key)
+        let completed = 0
+        const update = () => {
+          if (++completed !== 2 || settled) return
+          const oldBytes = isCacheRecord(previous.result) ? previous.result.byteLength : 0
+          const receipt = total.result as { kind?: string; activeVersion?: string; totalBytes?: number } | undefined
+          const bytes = receipt?.totalBytes
+          if (receipt?.kind === 'cache-total-v1' && receipt.activeVersion === activeVersion
+            && Number.isSafeInteger(bytes) && bytes! >= oldBytes && bytes! <= MAX_DATASET_CACHE_BYTES
+            && bytes! - oldBytes + incoming.record.byteLength <= maximumBytes) {
+            store.put(incoming.record, incoming.key)
+            store.put({ kind: 'cache-total-v1', activeVersion, totalBytes: bytes! - oldBytes + incoming.record.byteLength }, CACHE_TOTAL_KEY)
+          } else scan()
+        }
+        total.onsuccess = update; previous.onsuccess = update
+        total.onerror = finish; previous.onerror = finish
+      }
       transaction.oncomplete = finish
       transaction.onerror = finish
       transaction.onabort = finish

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { gzipSync, gunzipSync } from 'node:zlib'
+import { encodeApproximationBinary } from '../../src/engine/ephemeris/approximationBinary.ts'
 
 // Smaller delivery units reduce unused coefficients downloaded after a seek.
 // Never alter a polynomial, its interval, units, or measured error receipts.
@@ -30,13 +31,13 @@ export async function packageApproximation(sourceRoot, destinationRoot, manifest
       const packed = await readFile(join(sourceRoot, original.path))
       const document = JSON.parse(original.path.endsWith('.gz') ? gunzipSync(packed, { maxOutputLength: original.bytes }) : packed)
       for (const group of splitApproximationDocument(document)) {
-        const raw = Buffer.from(JSON.stringify(group))
+        const raw = Buffer.from(encodeApproximationBinary(group))
         const sha256 = createHash('sha256').update(raw).digest('hex')
-        const path = `chunks/${encodeURIComponent(body.id)}-${output.length}-${sha256.slice(0, 16)}.json.gz`
+        const path = `chunks/${encodeURIComponent(body.id)}-${output.length}-${sha256.slice(0, 16)}.bin.gz`
         const compressed = gzipSync(raw, { level: 9 })
         await writeFile(join(destinationRoot, path), compressed)
         maximumChunkBytes = Math.max(maximumChunkBytes, compressed.byteLength)
-        output.push({ path, bytes: raw.byteLength, sha256, startEt: group.segments[0].startEt,
+        output.push({ path, encoding: 'binary-chebyshev-v1', bytes: raw.byteLength, sha256, startEt: group.segments[0].startEt,
           endEt: group.segments.at(-1).endEt, segmentCount: group.segments.length,
           sampledPositionErrorKm: Math.max(...group.segments.map(segment => segment.sampledPositionErrorKm)),
           sampledVelocityErrorKmS: Math.max(...group.segments.map(segment => segment.sampledVelocityErrorKmS)) })
@@ -49,9 +50,24 @@ export async function packageApproximation(sourceRoot, destinationRoot, manifest
   if (Buffer.byteLength(rawManifest) > 16 * 1048576) throw new Error('Packaged approximation manifest exceeds browser delivery budget')
   await writeFile(join(destinationRoot, 'manifest.json'), rawManifest)
   await writeFile(join(destinationRoot, 'manifest.json.gz'), gzipSync(rawManifest, { level: 9 }))
-  const manifestSha256 = createHash('sha256').update(rawManifest).digest('hex')
+  // Keep the complete offline receipt, but visitors need descriptors only for
+  // selected bodies. Forecast parameters and all identities stay in the root.
+  const browserManifest = JSON.parse(rawManifest)
+  await mkdir(join(destinationRoot, 'indices'), { recursive: true })
+  for (const body of browserManifest.bodies) {
+    if (!body.chunks.length) continue
+    const raw = JSON.stringify({ schemaVersion: 1, id: body.id, parentId: body.parentId,
+      sourceManifestSha256: browserManifest.sourceManifestSha256, chunks: body.chunks })
+    const sha256 = createHash('sha256').update(raw).digest('hex')
+    const path = `indices/${sha256}.json.gz`
+    await writeFile(join(destinationRoot, path), gzipSync(raw, { level: 9 }))
+    body.index = { path, bytes: Buffer.byteLength(raw), sha256, windows: body.chunks.map(chunk => [chunk.startEt, chunk.endEt]) }
+    body.chunks = []
+  }
+  const browserRaw = JSON.stringify(browserManifest)
+  const manifestSha256 = createHash('sha256').update(browserRaw).digest('hex')
   const path = `manifests/${manifestSha256}.json.gz`
   await mkdir(join(destinationRoot, 'manifests'), { recursive: true })
-  await writeFile(join(destinationRoot, path), gzipSync(rawManifest, { level: 9 }))
-  await writeFile(join(destinationRoot, 'index.json'), JSON.stringify({ path, bytes: Buffer.byteLength(rawManifest), sha256: manifestSha256 }))
+  await writeFile(join(destinationRoot, path), gzipSync(browserRaw, { level: 9 }))
+  await writeFile(join(destinationRoot, 'index.json'), JSON.stringify({ layout: 'body-indexed-v1', path, bytes: Buffer.byteLength(browserRaw), sha256: manifestSha256 }))
 }
