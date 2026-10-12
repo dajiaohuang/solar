@@ -33,6 +33,7 @@ it('verifies the packaged bulk index against the full receipt, including hash-va
   const base = resolve('.cache'), hash = (raw: Uint8Array | string) => createHash('sha256').update(raw).digest('hex')
   await mkdir(base, { recursive: true })
   const root = await mkdtemp(join(base, 'delivery-check-'))
+  if (dirname(root) !== base) throw new Error('Unexpected test workspace')
   try {
     const destination = join(root, 'output'), sourceManifestPath = 'src/data/ephemeris-manifest-vercel-wide.json'
     const manifest = { schemaVersion: 1, model: 'piecewise-chebyshev-best-sampled-v1', sourceManifestPath,
@@ -51,7 +52,6 @@ it('verifies the packaged bulk index against the full receipt, including hash-va
     await writeFile(join(destination, 'index.json'), JSON.stringify({ ...pointer, path: manifestPath, sha256: manifestHash, bytes: Buffer.byteLength(raw) }))
     await expect(verifyApproximationAssets(destination)).rejects.toThrow('Bulk index differs from full receipt')
   } finally {
-    if (dirname(root) !== base) throw new Error('Unexpected test workspace')
     await rm(root, { recursive: true, force: true })
   }
 })

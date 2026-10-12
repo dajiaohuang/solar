@@ -71,3 +71,32 @@ are not invented. The Sun reference origin remains visible during acquisition.
 The permanent cold-load/365-days-per-second camera test now uses the actual
 default seven bodies. It passed locally in 6.1 seconds with 1.2-second delayed
 coefficient responses; the old hosted code failed this same scenario.
+
+Final local default-scene playback profile after loading, 1280×800 SwiftShader:
+459 frames in 10 seconds, median interval 16.7 ms, p95 33.4 ms, maximum 33.5 ms,
+median nine draw calls, zero long tasks and zero camera resets. This is software
+GPU evidence, not physical-device certification. The final local six-test suite
+passed in 32.6 seconds: default cold-load camera check 5.2 seconds, complete
+population 17.0 seconds, five-body cold coefficient payload 274589 bytes and
+cached reload 424 bytes. Two phone-viewport checks passed in 8.5 seconds.
+
+## Verified final production release
+
+The `14c8aef` runtime artifact is live at https://solar-five-woad.vercel.app/ as
+`dpl_3YXLk6MDPaf1Kr2M7JTEWLpstykj` on the existing Hobby basic machine.
+Build-info, health and approximation pointer matched local bytes and hashes.
+The later asset-verification and receipt commits modify build checks, tests and
+documentation only; the served runtime identity remains `14c8aef`.
+
+Five ordinary hosted checks passed in 19.6 seconds. The actual default seven-body
+cold-load drag/365-days-per-second check passed in 8.8 seconds, correcting the
+previous hosted failure. The complete population passed separately in 41.9
+seconds, with 492 valid positions and one unique bulk index path. Its observation
+timeout was 300 seconds; the repository's local test retains its 45-second limit.
+Three hosted Chromium iPhone-13 viewport checks passed in 11.6 seconds, including
+the default-scene playback test. No physical-device validation was performed.
+
+The source/runtime full CI passed 1309 tests with nine explicit skips; the new
+verification-only fixture separately passed, including a checksum-valid mutated
+bulk index rejection. Final typecheck, scoped lint and production artifact
+verification passed. See `vercel-playback-20261013/deployment.json` for the receipt.
