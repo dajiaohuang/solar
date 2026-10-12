@@ -1,0 +1,94 @@
+{
+  "checkedAt": "2026-10-12T11:27:34.069Z",
+  "origin": "https://solar-five-woad.vercel.app",
+  "deploymentId": "dpl_5Zi7FkDEYd2nBRi1f75JUQsGcckZ",
+  "plan": "hobby",
+  "buildInfo": {
+    "version": "0.11.0",
+    "commitSha": "255693ed4f75d4bed4b6ee6e9ff6d3ca81a86c1e",
+    "buildTime": "2026-10-12T11:18:56.669Z",
+    "environment": "vercel",
+    "datasetVersion": "mpcorb-26bbcb75e45b7cbb-full",
+    "ephemerisProfile": "full",
+    "productProfile": "full",
+    "productAvailabilitySha256": "17660ac8ce2cd749c23f12174ac258d0f018040fc11234bff2736b0e922d1b55",
+    "webExecution": "segmented",
+    "catalogUrl": null
+  },
+  "checks": [
+    {
+      "path": "build-info.json",
+      "status": 200,
+      "sha256": "eee9fccf352ea4c5889dd08aec2f7be0262e8d374642d804a7d75511cd30b835",
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "byteLength": 417
+    },
+    {
+      "path": "health.json",
+      "status": 200,
+      "sha256": "90aca243af34b999bf228d743bc43e483cade72b3de3a3d26e038b441b7fc14e",
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "byteLength": 983
+    },
+    {
+      "path": "data/approximation/index.json",
+      "status": 200,
+      "sha256": "cfdfa075ca411c5d90e792d7440a85de7bf8990259c613bfc1648135acd63dff",
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "byteLength": 212
+    }
+  ],
+  "deploymentUrl": "https://solar-4ixt88n6z-dajiaohuangdjh.vercel.app",
+  "readyState": "READY",
+  "target": "production",
+  "deploymentMethod": "Verified local build; Build Output API v3; vercel deploy --prebuilt --prod --archive=tgz --yes --scope dajiaohuangdjh",
+  "staticArtifactMiB": 1215.5,
+  "deploymentFiles": 38058,
+  "gitAutoDeployConnected": false,
+  "hostedVerification": {
+    "normalSuite": {
+      "passed": 4,
+      "failed": 1,
+      "failedReason": "Full-population first load exceeded the original local-test 45-second limit; no data or page errors were reported."
+    },
+    "fullPopulationFollowup": {
+      "passed": 1,
+      "timeoutSeconds": 300,
+      "observedDurationApproxSeconds": 66,
+      "expectedPopulation": 493,
+      "renderedPositions": 492,
+      "epoch": "2049-01-01",
+      "switchedTo3D": true,
+      "pageErrors": 0
+    },
+    "ordinaryFlows": [
+      "2D/3D rendering",
+      "reference-frame transforms",
+      "split comparison",
+      "time seeking",
+      "forward/reverse simulation speed",
+      "forecast provenance and unknown uncertainty",
+      "explicit missing states and out-of-window coverage",
+      "Bennu full-catalog search"
+    ],
+    "fiveBodyThirtyDayApproximation": {
+      "coldBytes": 274527,
+      "cachedReloadBytes": 424,
+      "repeatedImmutableRequests": 0,
+      "excludes": [
+        "Application JavaScript",
+        "Catalog",
+        "HTTP headers"
+      ]
+    },
+    "visualChecks": {
+      "desktop": "1440x900",
+      "mobile": "390x844",
+      "mobileDocumentScrollWidth": 390,
+      "fiveBodyPositionCount": 5,
+      "consoleErrors": 0
+    }
+  },
+  "scientificBoundary": "2000-01-01 through 2051-01-01 TDB model coverage. Forecasts are explicitly labeled; local backtests do not bound errors beyond source intervals. S/2009 S1 remains unavailable because it has no admitted source anchor.",
+  "billingBoundary": "Account plan confirmed Hobby. Actual usage/cost beyond the deployment receipt was not audited; payload checks do not estimate total site bandwidth."
+}
