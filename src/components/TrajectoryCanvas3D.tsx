@@ -240,7 +240,7 @@ export function TrajectoryCanvas3D({
       for (const [id, mesh] of resources.bodyMeshes) {
         const ordinal = ordinals ? ordinals.get(id) ?? -1 : mesh.userData.positionOrdinal as number
         mesh.userData.positionOrdinal = ordinal
-        mesh.visible = ordinal >= 0 || id === referenceBody.id && next.length > 0
+        mesh.visible = ordinal >= 0 || id === referenceBody.id && (next.length > 0 || id === 'sun')
         if (ordinal >= 0) mesh.position.set(next.coordinateAt(ordinal, 0), next.coordinateAt(ordinal, 2), next.coordinateAt(ordinal, 1))
       }
       let colorKey: unknown = resources.currentPoints.geometry.userData.colorKey

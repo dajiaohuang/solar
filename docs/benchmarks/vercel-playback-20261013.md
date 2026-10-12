@@ -55,3 +55,19 @@ least 128 unresolved body indices now request one content-addressed complete
 index; small selections retain individual indices. Both paths validate the
 same identities, descriptor windows and source authority before coefficients
 are admitted. Coefficients remain selected by epoch and requested history.
+
+## Actual default-scene regression
+
+The user identified the default seven selections as the worst scene: Mercury,
+Venus, Earth, Moon, Mars, Jupiter and Saturn, with the Sun as reference origin.
+The earlier five-body check missed two playback failures in this scene:
+main-thread chunk acquisition terminated the independent history worker, and
+temporary current-state misses hid otherwise verified historical trails.
+
+Segmented workers now finish independently of main-thread downloads, and
+playback retains the previous coherent historical samples with their displayed
+sample epoch. Current markers still use the current epoch; unavailable states
+are not invented. The Sun reference origin remains visible during acquisition.
+The permanent cold-load/365-days-per-second camera test now uses the actual
+default seven bodies. It passed locally in 6.1 seconds with 1.2-second delayed
+coefficient responses; the old hosted code failed this same scenario.

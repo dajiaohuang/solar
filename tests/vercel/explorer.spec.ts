@@ -17,7 +17,7 @@ test('3D camera survives cold coefficient loading and playback updates positions
     await new Promise(resolve => setTimeout(resolve, 1200))
     await route.continue()
   })
-  await page.goto('?v=4&lang=en&view=3d&bodies=sun,earth,moon,mars,naif:401&ref=sun&jd=2461287.5&history=30&speed=30')
+  await page.goto('?v=4&lang=en&view=3d&bodies=mercury,venus,earth,moon,mars,jupiter,saturn&ref=sun&jd=2461287.5&history=30&speed=30')
   const canvas = page.getByTestId('trajectory-canvas-3d')
   await expect(canvas).toBeVisible()
   await expect(canvas).toHaveAttribute('data-fit-generation', /[1-9]\d*/)
@@ -30,7 +30,7 @@ test('3D camera survives cold coefficient loading and playback updates positions
   await page.mouse.up()
   await expect(canvas).not.toHaveAttribute('data-camera-position', before!)
   const dragged = await canvas.getAttribute('data-camera-position')
-  await expect(page.locator('.ephemeris-status > summary')).toContainText('5/5')
+  await expect(page.locator('.ephemeris-status > summary')).toContainText('7/7')
   await expect(page.locator('.compute-progress')).toHaveCount(0)
   await expect(canvas).toHaveAttribute('data-fit-generation', fit!)
   await expect(canvas).toHaveAttribute('data-camera-position', dragged!)
@@ -60,8 +60,8 @@ test('3D camera survives cold coefficient loading and playback updates positions
   })
   expect(minimumVisible).toBeGreaterThanOrEqual(1)
   await page.locator('.simulation-bar input[type=date]').fill('2052-01-01')
-  await expect(page.locator('.ephemeris-status > summary')).toContainText('1/5')
-  await expect(canvas).toHaveAttribute('data-position-count', '1')
+  await expect(page.locator('.ephemeris-status > summary')).toContainText('0/7')
+  await expect(canvas).toHaveAttribute('data-position-count', '0')
 })
 
 test('real segmented build renders both views, transforms frames, seeks and plays without backend or SPK transfers', async ({ page, context, request }) => {

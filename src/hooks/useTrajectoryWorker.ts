@@ -84,7 +84,10 @@ export function useTrajectoryWorker(params: Params) {
   }, [backendEnabled, trajectoryBodies, bodies, bodiesById, referenceId, ephemerisRevision])
   const trajectoryKernelIds = useMemo(() => JSON.parse(trajectoryKernelIdsKey) as string[], [trajectoryKernelIdsKey])
   const kernelKey = backendEnabled ? '' : trajectoryKernelIdsKey
-  const ephemerisLoading = !backendEnabled && ephemerisBusy
+  // Segmented workers acquire their own bounded immutable window. A main-
+  // thread seek/download must not terminate a history already in flight;
+  // at high playback rates it otherwise never reaches a complete result.
+  const ephemerisLoading = !backendEnabled && !SEGMENTED_WEB && ephemerisBusy
   const requestKey = useMemo(() => backendEnabled ? '' : JSON.stringify([referenceId, trajectoryJulianDay, historyDays, sampleCount, kernelKey, trajectoryBodies, resolutionBodies]),
     [backendEnabled, referenceId, trajectoryJulianDay, historyDays, sampleCount, kernelKey, trajectoryBodies, resolutionBodies])
   const [completedRequestKey, setCompletedRequestKey] = useState<string | null>(null)
@@ -235,11 +238,12 @@ export function useTrajectoryWorker(params: Params) {
       ? (currentFrame ? { ...currentFrame, trajectoryUnavailableBodyIds: [] as BodyId[] } : { currentPositions: EMPTY_CURRENT_POSITIONS, missingBodyIds: bodies.map(body => body.id), maxDistance: 0, trajectoryUnavailableBodyIds: [] as BodyId[] })
       : localCurrent),
     trajectories: backendEnabled ? backend.trajectories : historyReady
-      ? trajectories.filter(sample => !(currentFrame ? currentFrame.missingBodyIds : localCurrent.missingBodyIds).includes(sample.body.id))
+      ? SEGMENTED_WEB && params.isPlaying ? trajectories
+        : trajectories.filter(sample => !(currentFrame ? currentFrame.missingBodyIds : localCurrent.missingBodyIds).includes(sample.body.id))
       : [],
     trajectoryUnavailableBodyIds: backendEnabled ? backend.unavailableBodyIds : historyReady ? trajectoryUnavailableBodyIds : [],
     trajectoryAudit: backendEnabled ? backend.audit : undefined,
-  }), [backendEnabled, backend.audit, backend.trajectories, backend.unavailableBodyIds, bodies, historyReady, currentFrame, localCurrent, trajectories, trajectoryUnavailableBodyIds])
+  }), [backendEnabled, backend.audit, backend.trajectories, backend.unavailableBodyIds, bodies, historyReady, currentFrame, localCurrent, params.isPlaying, trajectories, trajectoryUnavailableBodyIds])
 
   return {
     frame,
