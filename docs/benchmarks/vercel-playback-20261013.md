@@ -39,3 +39,19 @@ local scheduling; they are not hosted billing measurements.
 The attempted `d2d7869` release was blocked by Vercel commit-author access checks.
 Its deployment ID is `dpl_G8YnRbw3fz8oZ8mxBebVYm8FKFzK`. The production alias
 still serves the original release until a later deployment is verified.
+
+## First optimized release
+
+`ecce355` was subsequently deployed successfully as
+`dpl_EDBk6TkU8HrWL7ZQvP4C5bKaie8b`, using the authenticated owner's actual
+commit email. Production build-info, health and approximation pointer matched
+the verified local artifact byte for byte. Five hosted interaction/download
+checks and two Chromium phone-viewport checks passed. Full-population cold
+loading passed separately with an extended observation timeout, taking about
+84 seconds; the local 45-second load check passed in 24.7 seconds.
+
+This exposed a remaining network round-trip cost. Large selections with at
+least 128 unresolved body indices now request one content-addressed complete
+index; small selections retain individual indices. Both paths validate the
+same identities, descriptor windows and source authority before coefficients
+are admitted. Coefficients remain selected by epoch and requested history.

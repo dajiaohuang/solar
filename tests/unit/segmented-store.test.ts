@@ -147,3 +147,67 @@ it('rejects a checksum-valid body index belonging to another identity', async ()
   await expect(store.ensureApproximation(selected, 2461287.5)).rejects.toThrow('Invalid body index identity')
   expect(store.approximationForBody('earth', 2461287.5).state).toBeNull()
 })
+
+async function bulkFixture(corruptIdentity = false) {
+  vi.resetModules()
+  const et = utcJulianDayToEt(2461287.5), source = 'a'.repeat(64)
+  const files = new Map<string, string | Uint8Array>()
+  const digest = (raw: string | Buffer) => createHash('sha256').update(raw).digest('hex')
+  const entries = Array.from({ length: 128 }, (_, number) => {
+    const id = `body-${number}`
+    const raw = Buffer.from(encodeApproximationBinary({ schemaVersion: 1, id, parentId: 'sun', sourceManifestSha256: source,
+      sourceKernelHashes: ['b'.repeat(64)], segments: [{ startEt: et - 86400, endEt: et + 86400,
+        coefficients: [[number + 1, ...Array(8).fill(0)], Array(9).fill(0), Array(9).fill(0)], sampledPositionErrorKm: 0, sampledVelocityErrorKmS: 0 }] }))
+    const path = `chunks/${id}.bin.gz`
+    files.set(path, new Uint8Array(gzipSync(raw)))
+    return { id, parentId: 'sun', available: true, seedModel: false, chunks: [{ path, encoding: 'binary-chebyshev-v1',
+      bytes: raw.byteLength, sha256: digest(raw), startEt: et - 86400, endEt: et + 86400, segmentCount: 1 }] }
+  })
+  const origin = { id: 'sun', parentId: 'sun', origin: true, available: true, seedModel: false, chunks: [] }
+  const complete = { schemaVersion: 1, model: 'piecewise-chebyshev-best-sampled-v1', frame: 'ECLIPJ2000', timeScale: 'TDB',
+    positionUnit: 'km', velocityUnit: 'km/s', sourceManifestSha256: source, positionToleranceKm: 5, velocityToleranceKmS: .005,
+    bodies: [origin, ...entries] }
+  const bulk = structuredClone(complete)
+  if (corruptIdentity) bulk.bodies.at(-1)!.parentId = 'other'
+  const rawBulk = JSON.stringify(bulk), bulkHash = digest(rawBulk), bulkPath = `indices/${bulkHash}.json.gz`
+  files.set(bulkPath, new Uint8Array(gzipSync(rawBulk)))
+  const browser = { ...complete, bulkIndex: { path: bulkPath, sha256: bulkHash, bytes: Buffer.byteLength(rawBulk) },
+    bodies: [origin, ...entries.map(body => {
+      const raw = JSON.stringify({ schemaVersion: 1, id: body.id, parentId: body.parentId, sourceManifestSha256: source, chunks: body.chunks })
+      const sha256 = digest(raw), path = `indices/${sha256}.json.gz`
+      files.set(path, new Uint8Array(gzipSync(raw)))
+      return { ...body, chunks: [], index: { path, sha256, bytes: Buffer.byteLength(raw), windows: body.chunks.map(chunk => [chunk.startEt, chunk.endEt]) } }
+    })] }
+  const rootRaw = JSON.stringify(browser), rootHash = digest(rootRaw), rootPath = `manifests/${rootHash}.json.gz`
+  files.set(rootPath, new Uint8Array(gzipSync(rootRaw)))
+  files.set('index.json', JSON.stringify({ path: rootPath, sha256: rootHash, bytes: Buffer.byteLength(rootRaw) }))
+  const fetch = vi.fn(async (url: string) => {
+    const value = files.get(url.split('/data/approximation/')[1])
+    if (value === undefined) throw new Error(`Unexpected request ${url}`)
+    return new Response(value)
+  })
+  vi.stubGlobal('fetch', fetch)
+  return { store: await import('../../src/engine/ephemeris/segmentedStore'), fetch, bulkPath,
+    selected: entries.map(body => ({ id: body.id })) as CelestialBody[] }
+}
+
+it('amortizes large-scene indices into one verified transfer without changing positions', async () => {
+  const { store, fetch, selected, bulkPath } = await bulkFixture()
+  await store.ensureApproximation(selected, 2461287.5)
+  expect(fetch.mock.calls.filter(([url]) => url.includes('/indices/')).map(([url]) => url.split('/data/approximation/')[1])).toEqual([bulkPath])
+  for (let index = 0; index < selected.length; index++) expect(store.approximationForBody(selected[index].id, 2461287.5).state?.position.x).toBe(index + 1)
+})
+
+it('retains individual index delivery for small selections', async () => {
+  const { store, fetch, selected, bulkPath } = await bulkFixture()
+  await store.ensureApproximation(selected.slice(0, 1), 2461287.5)
+  expect(fetch.mock.calls).toHaveLength(4)
+  expect(fetch.mock.calls.some(([url]) => url.endsWith(bulkPath))).toBe(false)
+})
+
+it('rejects a hash-valid bulk index with a changed identity before admitting any body', async () => {
+  const { store, selected } = await bulkFixture(true)
+  await expect(store.ensureApproximation(selected, 2461287.5)).rejects.toThrow('Invalid bulk index body')
+  expect(store.approximationForBody(selected[0].id, 2461287.5).state).toBeNull()
+  expect(store.getApproximationSnapshot().loading).toBe(0)
+})

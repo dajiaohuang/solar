@@ -13,7 +13,8 @@ export type ApproximationBody = { id: string; parentId: string; origin?: boolean
   index?: { path: string; bytes: number; sha256: string; windows: [number, number][] } }
 export type ApproximationManifest = { schemaVersion: 1; model: string; frame: 'ECLIPJ2000'; timeScale: 'TDB';
   positionUnit: 'km'; velocityUnit: 'km/s'; sourceManifestSha256: string; validation: string;
-  positionToleranceKm: number; velocityToleranceKmS: number; bodies: ApproximationBody[]; totalBytes: number }
+  positionToleranceKm: number; velocityToleranceKmS: number; bodies: ApproximationBody[]; totalBytes: number;
+  bulkIndex?: { path: string; bytes: number; sha256: string } }
 type ChunkDocument = { schemaVersion: 1; id: string; parentId: string; sourceManifestSha256: string;
   sourceKernelHashes: string[]; segments: ApproximationSegment[] }
 const root = () => `${import.meta.env.BASE_URL}data/approximation/`
@@ -105,6 +106,9 @@ export async function loadApproximationManifest() {
       || !digestPattern.test(value.sourceManifestSha256) || !Array.isArray(value.bodies) || value.bodies.length > 4096
       || !finite(value.positionToleranceKm) || value.positionToleranceKm <= 0 || !finite(value.velocityToleranceKmS) || value.velocityToleranceKmS <= 0) throw new Error('Invalid static approximation manifest')
     const identities = new Set<string>()
+    if (value.bulkIndex && (!/^indices\/[a-f0-9]{64}\.json\.gz$/.test(value.bulkIndex.path)
+      || value.bulkIndex.path !== `indices/${value.bulkIndex.sha256}.json.gz` || !digestPattern.test(value.bulkIndex.sha256)
+      || !Number.isSafeInteger(value.bulkIndex.bytes) || value.bulkIndex.bytes <= 0 || value.bulkIndex.bytes > 16 * 1048576)) throw new Error('Invalid bulk index descriptor')
     const chunkPaths = new Set<string>()
     for (const body of value.bodies) {
       if (!body.id || identities.has(body.id) || !body.parentId || !Array.isArray(body.chunks) || body.chunks.length > 4096
@@ -164,6 +168,58 @@ export async function loadApproximationManifest() {
   })().catch(error => { manifestPending = null; throw error })
   return manifestPending
 }
+type BodyIndexDocument = { schemaVersion: number; id: string; parentId: string; sourceManifestSha256: string; chunks: ApproximationChunk[] }
+function validateBodyIndex(body: ApproximationBody, document: BodyIndexDocument) {
+  if (document.schemaVersion !== 1 || document.id !== body.id || document.parentId !== body.parentId
+    || document.sourceManifestSha256 !== manifest!.sourceManifestSha256 || !Array.isArray(document.chunks)
+    || document.chunks.length !== body.index!.windows.length) throw new Error('Invalid body index identity')
+  let end = -Infinity
+  const paths = new Set<string>()
+  for (const [number, chunk] of document.chunks.entries()) {
+    if (!/^chunks\/[a-zA-Z0-9:%._-]+\.(?:json|bin)(?:\.gz)?$/.test(chunk.path) || paths.has(chunk.path)
+      || !digestPattern.test(chunk.sha256) || chunk.encoding !== 'binary-chebyshev-v1'
+      || !Number.isSafeInteger(chunk.bytes) || chunk.bytes <= 0 || chunk.bytes > 16 * 1048576
+      || !finite(chunk.startEt) || !finite(chunk.endEt) || chunk.startEt < end || chunk.endEt <= chunk.startEt
+      || !Number.isSafeInteger(chunk.segmentCount) || chunk.segmentCount <= 0
+      || chunk.startEt !== body.index!.windows[number][0] || chunk.endEt !== body.index!.windows[number][1]
+      || body.forecasts?.some(forecast => forecast.startEt < chunk.endEt && forecast.endEt > chunk.startEt)) throw new Error('Invalid body index descriptor')
+    paths.add(chunk.path); end = chunk.endEt
+  }
+}
+
+async function loadBulkIndex() {
+  const descriptor = manifest?.bulkIndex
+  if (!descriptor) return
+  if (!pending.has(descriptor.path)) {
+    const promise = (async () => {
+      let document!: ApproximationManifest
+      await fetchImmutableArrayBuffer(root() + descriptor.path, async bytes => {
+        document = await parseMaybeGzipJson(bytes, descriptor.bytes, undefined, descriptor.sha256)
+      })
+      if (document.schemaVersion !== 1 || document.sourceManifestSha256 !== manifest!.sourceManifestSha256
+        || !Array.isArray(document.bodies) || document.bodies.length !== bodies.size) throw new Error('Invalid bulk index identity')
+      const selected = new Map<string, ApproximationChunk[]>()
+      const seen = new Set<string>()
+      for (const entry of document.bodies) {
+        const body = bodies.get(entry.id)
+        if (!body || seen.has(entry.id) || entry.parentId !== body.parentId) throw new Error('Invalid bulk index body')
+        seen.add(entry.id)
+        if (!body.index) {
+          if (entry.chunks.length) throw new Error('Unexpected bulk index chunks')
+          continue
+        }
+        validateBodyIndex(body, { ...entry, schemaVersion: document.schemaVersion, sourceManifestSha256: document.sourceManifestSha256 })
+        selected.set(body.id, entry.chunks)
+      }
+      // Validate every identity before installing any descriptors. Bulk delivery
+      // changes request granularity, never coefficient admission or coverage.
+      for (const [id, descriptors] of selected) { bodies.get(id)!.chunks = descriptors; loadedIndices.add(id) }
+    })().finally(() => pending.delete(descriptor.path))
+    pending.set(descriptor.path, promise)
+  }
+  await pending.get(descriptor.path)
+}
+
 async function loadBodyIndex(body: ApproximationBody) {
   const index = body.index
   if (!index || loadedIndices.has(body.id)) return
@@ -175,21 +231,7 @@ async function loadBodyIndex(body: ApproximationBody) {
         await fetchImmutableArrayBuffer(`${root()}${index.path}`, async bytes => {
           document = await parseMaybeGzipJson(bytes, index.bytes, undefined, index.sha256)
         })
-        if (document.schemaVersion !== 1 || document.id !== body.id || document.parentId !== body.parentId
-          || document.sourceManifestSha256 !== manifest!.sourceManifestSha256 || !Array.isArray(document.chunks)
-          || document.chunks.length !== index.windows.length) throw new Error('Invalid body index identity')
-        let end = -Infinity
-        const paths = new Set<string>()
-        for (const [number, chunk] of document.chunks.entries()) {
-          if (!/^chunks\/[a-zA-Z0-9:%._-]+\.(?:json|bin)(?:\.gz)?$/.test(chunk.path) || paths.has(chunk.path)
-            || !digestPattern.test(chunk.sha256) || chunk.encoding !== 'binary-chebyshev-v1'
-            || !Number.isSafeInteger(chunk.bytes) || chunk.bytes <= 0 || chunk.bytes > 16 * 1048576
-            || !finite(chunk.startEt) || !finite(chunk.endEt) || chunk.startEt < end || chunk.endEt <= chunk.startEt
-            || !Number.isSafeInteger(chunk.segmentCount) || chunk.segmentCount <= 0
-            || chunk.startEt !== index.windows[number][0] || chunk.endEt !== index.windows[number][1]
-            || body.forecasts?.some(forecast => forecast.startEt < chunk.endEt && forecast.endEt > chunk.startEt)) throw new Error('Invalid body index descriptor')
-          paths.add(chunk.path); end = chunk.endEt
-        }
+        validateBodyIndex(body, document)
         body.chunks = document.chunks; loadedIndices.add(body.id)
       } catch (error) {
         emit({ error: error instanceof Error ? error.message : String(error) }); throw error
@@ -274,6 +316,10 @@ async function ensureWindow(builtIns: readonly CelestialBody[], startUtcJd: numb
   }
   builtIns.forEach(body => { add(body.id); if (!bodies.has(body.id) && body.parentId) add(body.parentId) })
   const indices = [...required.values()]
+  if (manifest!.bulkIndex && indices.filter(body => body.index && !loadedIndices.has(body.id)).length >= 128) {
+    await awaitConsumer(loadBulkIndex(), signal)
+    signal?.throwIfAborted()
+  }
   let nextIndex = 0
   await Promise.all(Array.from({ length: Math.min(4, indices.length) }, async () => {
     while (nextIndex < indices.length) {

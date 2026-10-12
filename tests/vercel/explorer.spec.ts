@@ -132,7 +132,8 @@ test('forecast scenes preserve rendering and reference changes with explicit pro
 
 test('the complete audited non-small population renders at the far end of the window', async ({ page }) => {
   const audit = JSON.parse(readFileSync('docs/benchmarks/non-small-coverage-20261012/report.json', 'utf8')) as { rows: { id: string }[] }
-  const ids = audit.rows.map(body => body.id), errors: string[] = []
+  const ids = audit.rows.map(body => body.id), errors: string[] = [], indexPaths = new Set<string>()
+  page.on('request', request => { if (request.url().includes('/data/approximation/indices/')) indexPaths.add(new URL(request.url()).pathname) })
   page.on('pageerror', error => errors.push(error.message))
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto(`?v=4&lang=en&view=2d&bodies=${encodeURIComponent(ids.join(','))}&ref=sun&jd=2469442.5&history=30`)
@@ -147,6 +148,7 @@ test('the complete audited non-small population renders at the far end of the wi
   await expect(page.locator('canvas.trajectory-canvas')).toHaveAttribute('data-position-count', '492')
   await page.getByRole('button', { name: '3D', exact: true }).click()
   await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
+  expect(indexPaths.size).toBe(1)
   expect(errors).toEqual([])
 })
 

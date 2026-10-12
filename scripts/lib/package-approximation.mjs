@@ -54,6 +54,12 @@ export async function packageApproximation(sourceRoot, destinationRoot, manifest
   // selected bodies. Forecast parameters and all identities stay in the root.
   const browserManifest = JSON.parse(rawManifest)
   await mkdir(join(destinationRoot, 'indices'), { recursive: true })
+  // Large restored scenes amortize hundreds of index round trips. Small
+  // selections retain individual indices and their original download budget.
+  const bulkSha256 = createHash('sha256').update(rawManifest).digest('hex')
+  const bulkPath = `indices/${bulkSha256}.json.gz`
+  await writeFile(join(destinationRoot, bulkPath), gzipSync(rawManifest, { level: 9 }))
+  browserManifest.bulkIndex = { path: bulkPath, sha256: bulkSha256, bytes: Buffer.byteLength(rawManifest) }
   for (const body of browserManifest.bodies) {
     if (!body.chunks.length) continue
     const raw = JSON.stringify({ schemaVersion: 1, id: body.id, parentId: body.parentId,
