@@ -213,6 +213,12 @@ test('small scene stays below its download budget and reuses coefficients after 
   expect(bytes).toBeLessThan(2 * 1024 * 1024)
   const beforeReload = urls.length
   const beforeReloadSizes = sizes.length
+  const payloadTimestamp = await page.evaluate(async key => {
+    const db = await new Promise<IDBDatabase>(resolve => { const open = indexedDB.open('solar-atlas-data-v1'); open.onsuccess = () => resolve(open.result) })
+    try {
+      return await new Promise<number>(resolve => { const read = db.transaction('immutable-responses').objectStore('immutable-responses').get(key); read.onsuccess = () => resolve(read.result.lastAccessed) })
+    } finally { db.close() }
+  }, chunkPaths[0])
   await page.reload()
   await expect(page.locator('canvas.trajectory-canvas')).toHaveAttribute('data-position-count', '5')
   await expect.poll(async () => Number(await page.locator('canvas.trajectory-canvas').getAttribute('data-trail-count'))).toBeGreaterThan(0)
@@ -220,5 +226,17 @@ test('small scene stays below its download budget and reuses coefficients after 
   const reloadBytes = (await Promise.all(sizes.slice(beforeReloadSizes))).reduce((sum, value) => sum + value, 0)
   console.log(`Cached approximation reload payload: ${reloadBytes} bytes`)
   expect(reloadBytes).toBeLessThan(1024)
+  // A cache hit updates its tiny LRU record without rewriting the payload.
+  const access = await page.evaluate(async key => {
+    const db = await new Promise<IDBDatabase>(resolve => { const open = indexedDB.open('solar-atlas-data-v1'); open.onsuccess = () => resolve(open.result) })
+    try {
+      const transaction = db.transaction(['immutable-responses', 'immutable-access'])
+      const read = (store: string) => new Promise<unknown>(resolve => { const request = transaction.objectStore(store).get(key); request.onsuccess = () => resolve(request.result) })
+      const [payload, touched] = await Promise.all([read('immutable-responses'), read('immutable-access')])
+      return { payload: (payload as { lastAccessed: number }).lastAccessed, touched: touched as number }
+    } finally { db.close() }
+  }, chunkPaths[0])
+  expect(access.payload).toBe(payloadTimestamp)
+  expect(access.touched).toBeGreaterThan(payloadTimestamp)
   expect(urls.some(url => /catalog-index\.bin|catalog-sample-.*\.(?:bin|json)/.test(url))).toBe(false)
 })

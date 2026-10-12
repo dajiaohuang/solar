@@ -3,8 +3,9 @@ import { CatalogAdmission, catalogAdmission } from './catalogAdmission'
 import { CatalogHttpError } from './catalogHttpError'
 
 const DATABASE_NAME = 'solar-atlas-data-v1'
-const DATABASE_VERSION = 2
+const DATABASE_VERSION = 3
 const STORE_NAME = 'immutable-responses'
+const ACCESS_STORE_NAME = 'immutable-access'
 const CACHE_TOTAL_KEY = '__solar_cache_total_v1__'
 const MAX_DATASET_CACHE_BYTES = 256 * 1024 * 1024
 const MIN_FREE_STORAGE_BYTES = 16 * 1024 * 1024
@@ -166,6 +167,7 @@ function openDatabase() {
       if (!request.result.objectStoreNames.contains(STORE_NAME)) {
         request.result.createObjectStore(STORE_NAME)
       }
+      if (!request.result.objectStoreNames.contains(ACCESS_STORE_NAME)) request.result.createObjectStore(ACCESS_STORE_NAME)
     }
     request.onsuccess = () => finish(request.result)
     request.onerror = () => finish(null)
@@ -222,39 +224,54 @@ async function pruneDatasetCache(activeVersion: string, maximumBytes: number, in
     }
     const timer = setTimeout(finish, OPTIONAL_CACHE_PHASE_MS)
     try {
-      transaction = database.transaction(STORE_NAME, 'readwrite')
+      transaction = database.transaction([STORE_NAME, ACCESS_STORE_NAME], 'readwrite')
       const store = transaction.objectStore(STORE_NAME)
+      const access = transaction.objectStore(ACCESS_STORE_NAME)
       const scan = () => {
         const activeEntries: Array<{ key: IDBValidKey; byteLength: number; lastAccessed: number }> = []
-        const cursorRequest = store.openCursor()
-        cursorRequest.onsuccess = () => {
-          if (settled) return
-          const cursor = cursorRequest.result
-          if (!cursor) {
-            activeEntries.sort((left, right) => right.lastAccessed - left.lastAccessed)
-            // Reserve and replace in one transaction, including sibling tabs.
-            let retainedBytes = incoming?.record.byteLength ?? 0
-            for (const entry of activeEntries) {
-              if (retainedBytes + entry.byteLength > maximumBytes) store.delete(entry.key)
-              else retainedBytes += entry.byteLength
-            }
-            if (incoming) store.put(incoming.record, incoming.key)
-            store.put({ kind: 'cache-total-v1', activeVersion, totalBytes: retainedBytes }, CACHE_TOTAL_KEY)
-            return
-          }
-          if (cursor.primaryKey === CACHE_TOTAL_KEY) {
-            // Internal byte accounting is replaced atomically after this scan.
-          } else if (incoming && cursor.primaryKey === incoming.key) {
-            // Replacement bytes were reserved above; do not count the old copy.
-          } else if (!isCacheRecord(cursor.value) || isObsoleteDatasetVersion(cursor.value.datasetVersion, activeVersion)) {
-            cursor.delete()
-          } else {
-            // Keep metadata rather than retaining the complete cache buffers.
-            activeEntries.push({ key: cursor.primaryKey, byteLength: cursor.value.byteLength, lastAccessed: cursor.value.lastAccessed })
-          }
+        const times = new Map<IDBValidKey, number>()
+        const accessCursor = access.openCursor()
+        accessCursor.onsuccess = () => {
+          const cursor = accessCursor.result
+          if (!cursor) { scanPayloads(); return }
+          if (typeof cursor.value === 'number') times.set(cursor.primaryKey, cursor.value)
           cursor.continue()
         }
-        cursorRequest.onerror = finish
+        accessCursor.onerror = finish
+        const scanPayloads = () => {
+          const cursorRequest = store.openCursor()
+          cursorRequest.onsuccess = () => {
+            if (settled) return
+            const cursor = cursorRequest.result
+            if (!cursor) {
+              activeEntries.sort((left, right) => right.lastAccessed - left.lastAccessed)
+              // Reserve and replace in one transaction, including sibling tabs.
+              let retainedBytes = incoming?.record.byteLength ?? 0
+              for (const entry of activeEntries) {
+                if (retainedBytes + entry.byteLength > maximumBytes) { store.delete(entry.key); access.delete(entry.key) }
+                else retainedBytes += entry.byteLength
+              }
+              if (incoming) { store.put(incoming.record, incoming.key); access.put(incoming.record.lastAccessed, incoming.key) }
+              for (const key of times.keys()) access.delete(key)
+              store.put({ kind: 'cache-total-v1', activeVersion, totalBytes: retainedBytes }, CACHE_TOTAL_KEY)
+              return
+            }
+            if (cursor.primaryKey === CACHE_TOTAL_KEY) {
+              // Internal byte accounting is replaced atomically after this scan.
+            } else if (incoming && cursor.primaryKey === incoming.key) {
+              // Replacement bytes were reserved above; do not count the old copy.
+            } else if (!isCacheRecord(cursor.value) || isObsoleteDatasetVersion(cursor.value.datasetVersion, activeVersion)) {
+              cursor.delete()
+              access.delete(cursor.primaryKey)
+            } else {
+              // Keep metadata rather than retaining the complete cache buffers.
+              activeEntries.push({ key: cursor.primaryKey, byteLength: cursor.value.byteLength, lastAccessed: Math.max(cursor.value.lastAccessed, times.get(cursor.primaryKey) ?? 0) })
+            }
+            times.delete(cursor.primaryKey)
+            cursor.continue()
+          }
+          cursorRequest.onerror = finish
+        }
       }
       if (!incoming) scan()
       else {
@@ -272,6 +289,7 @@ async function pruneDatasetCache(activeVersion: string, maximumBytes: number, in
             && Number.isSafeInteger(bytes) && bytes! >= oldBytes && bytes! <= MAX_DATASET_CACHE_BYTES
             && bytes! - oldBytes + incoming.record.byteLength <= maximumBytes) {
             store.put(incoming.record, incoming.key)
+            access.put(incoming.record.lastAccessed, incoming.key)
             store.put({ kind: 'cache-total-v1', activeVersion, totalBytes: bytes! - oldBytes + incoming.record.byteLength }, CACHE_TOTAL_KEY)
           } else scan()
         }
@@ -317,7 +335,7 @@ async function readCache(key: string, signal?: AbortSignal) {
     signal?.addEventListener('abort', cancel, { once: true })
     if (signal?.aborted) { cancel(); return }
     try {
-      transaction = database.transaction(STORE_NAME, 'readwrite')
+      transaction = database.transaction(STORE_NAME, 'readonly')
       const store = transaction.objectStore(STORE_NAME)
       const request = store.get(key)
       request.onsuccess = () => {
@@ -327,13 +345,19 @@ async function readCache(key: string, signal?: AbortSignal) {
         if (isCacheRecord(request.result) && request.result.datasetVersion === datasetVersionFromUrl(key) &&
             request.result.byteLength > 0 && request.result.byteLength <= MAX_CATALOG_ARTIFACT_BYTES) {
           cached = request.result.buffer
-          store.put({ ...request.result, lastAccessed: Date.now() } satisfies CacheRecord, key)
-        } else if (request.result !== undefined) store.delete(key)
+        }
       }
       request.onerror = () => finish(null)
       transaction.onabort = () => finish(null)
       transaction.onerror = () => finish(null)
-      transaction.oncomplete = () => finish(cached)
+      transaction.oncomplete = () => {
+        if (cached) {
+          // This separate metadata store never serializes payload readers or
+          // clones an ArrayBuffer merely to record an LRU cache hit.
+          try { database.transaction(ACCESS_STORE_NAME, 'readwrite').objectStore(ACCESS_STORE_NAME).put(Date.now(), key) } catch { /* Optional LRU touch. */ }
+        }
+        finish(cached)
+      }
     } catch {
       finish(null)
     }
@@ -365,8 +389,9 @@ async function invalidateCache(key: string) {
     }
     const timer = setTimeout(finish, OPTIONAL_CACHE_PHASE_MS)
     try {
-      transaction = database.transaction(STORE_NAME, 'readwrite')
+      transaction = database.transaction([STORE_NAME, ACCESS_STORE_NAME], 'readwrite')
       transaction.objectStore(STORE_NAME).delete(key)
+      transaction.objectStore(ACCESS_STORE_NAME).delete(key)
       transaction.oncomplete = finish; transaction.onabort = finish; transaction.onerror = finish
     } catch { finish() }
   })

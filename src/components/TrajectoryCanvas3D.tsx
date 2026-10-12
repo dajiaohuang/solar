@@ -14,6 +14,9 @@ import { updateCurrentPointGeometry, updateCatalogPointGeometry } from '../lib/p
 import type { AsteroidRecord, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector3 } from '../types'
 import type { CurrentPositions } from '../lib/currentPositions'
 import { simulationClock } from '../engine/clock/SimulationClock'
+import { SEGMENTED_WEB } from '../lib/webExecution'
+import { updateBodyMarkerInstances } from '../lib/bodyMarkerInstances3d'
+import { updateTrailBatch } from '../lib/trailBatches3d'
 
 type Props = {
   referenceBody: CelestialBody
@@ -55,7 +58,10 @@ type SceneResources = {
   controls: OrbitControls
   bodyGeometry: THREE.SphereGeometry
   bodyMeshes: Map<string, THREE.Mesh>
+  bodyInstances: THREE.InstancedMesh | null
   trajectoryLines: Map<string, THREE.LineSegments>
+  trailBatches: [THREE.LineSegments, THREE.LineSegments] | null
+  trailSources: TrajectorySample[]
   auxiliaryGroup: THREE.Group
   lagrangeGeometry: THREE.SphereGeometry
   lagrangeMeshes: Map<string, THREE.Mesh>
@@ -98,6 +104,7 @@ function updateCameraData(container: HTMLDivElement, resources: SceneResources, 
   if (!Number.isFinite(markers)) markers = 0
   for (const mesh of resources.bodyMeshes.values()) if (mesh.visible) markers++
   container.dataset.visibleMarkerCount = String(markers)
+  container.dataset.markerDrawCalls = String(resources.bodyInstances ? Number(resources.bodyInstances.visible) : markers)
   container.dataset.cameraDistance = resources.camera.position.distanceTo(resources.controls.target).toPrecision(12)
   container.dataset.cameraPosition = resources.camera.position.toArray().map((value) => value.toPrecision(12)).join(',')
   container.dataset.sceneRadius = String(resources.contentRadius)
@@ -348,7 +355,10 @@ export function TrajectoryCanvas3D({
       controls,
       bodyGeometry: new THREE.SphereGeometry(1, 16, 12),
       bodyMeshes: new Map(),
+      bodyInstances: null,
       trajectoryLines: new Map(),
+      trailBatches: null,
+      trailSources: [],
       auxiliaryGroup,
       lagrangeGeometry,
       lagrangeMeshes: new Map(),
@@ -372,7 +382,24 @@ export function TrajectoryCanvas3D({
       grid,
     }
     resourcesRef.current = resources
+    if (SEGMENTED_WEB) {
+      resources.bodyInstances = new THREE.InstancedMesh(resources.bodyGeometry, new THREE.MeshBasicMaterial({ color: 0xffffff }), 161)
+      resources.bodyInstances.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+      resources.bodyInstances.frustumCulled = false
+      resources.bodyInstances.count = 0
+      scene.add(resources.bodyInstances)
+      const trailBatch = (opacity: number) => new THREE.LineSegments(new THREE.BufferGeometry(),
+        new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity }))
+      resources.trailBatches = [trailBatch(0.68), trailBatch(0.3)]
+      scene.add(...resources.trailBatches)
+    }
     const invalidator = createFrameInvalidator(() => {
+      if (resources.bodyInstances) updateBodyMarkerInstances(resources.bodyInstances, resources.bodyMeshes, controls.target)
+      if (resources.trailBatches) {
+        updateTrailBatch(resources.trailBatches[0], resources.trailSources, false, controls.target)
+        updateTrailBatch(resources.trailBatches[1], resources.trailSources, true, controls.target)
+        container.dataset.trailDrawCalls = String(resources.trailBatches.filter(line => line.visible).length)
+      }
       updateCameraData(container, resources, appliedZoomRef.current, fitGenerationRef.current)
       renderer.render(scene, camera)
     })
@@ -406,8 +433,10 @@ export function TrajectoryCanvas3D({
       controls.removeEventListener('change', render)
       controls.dispose()
       for (const line of resources.trajectoryLines.values()) disposeObject(line)
+      for (const line of resources.trailBatches ?? []) disposeObject(line)
       for (const mesh of resources.bodyMeshes.values()) (mesh.material as THREE.Material).dispose()
       resources.bodyGeometry.dispose()
+      if (resources.bodyInstances) (resources.bodyInstances.material as THREE.Material).dispose()
       for (const mesh of resources.lagrangeMeshes.values()) (mesh.material as THREE.Material).dispose()
       resources.lagrangeGeometry.dispose()
       disposeObject(resources.saturnRing)
@@ -479,6 +508,7 @@ export function TrajectoryCanvas3D({
     const framePositions = livePositions?.(simulationClock.getJulianDay()) ?? currentPositions
     const framePositionKey = livePositions ? framePositions : pointPositionKey
     positionsRef.current = framePositions
+    resources.trailSources = trajectories
 
     const activeLineIds = new Set<string>()
     for (const trajectory of trajectories) {
@@ -494,7 +524,7 @@ export function TrajectoryCanvas3D({
           opacity: trajectory.body.kind === 'asteroid' || trajectory.body.kind === 'comet' ? 0.3 : 0.68,
         }))
         resources.trajectoryLines.set(trajectory.body.id, line)
-        resources.scene.add(line)
+        if (!resources.trailBatches) resources.scene.add(line)
       } else {
         line.geometry = updateTrajectoryLineGeometry(line.geometry, source, trajectory.breakBefore)
       }
@@ -549,7 +579,7 @@ export function TrajectoryCanvas3D({
         mesh = new THREE.Mesh(resources.bodyGeometry, new THREE.MeshBasicMaterial({ color: item.body.color }))
         mesh.userData.bodyId = id
         resources.bodyMeshes.set(id, mesh)
-        resources.scene.add(mesh)
+        if (!resources.bodyInstances) resources.scene.add(mesh)
       }
       mesh.userData.markerRadius = radiusFor(item.body)
       mesh.visible = true
@@ -679,7 +709,10 @@ export function TrajectoryCanvas3D({
     )
     resources.camera.updateMatrixWorld()
     raycasterRef.current.setFromCamera(pointer, resources.camera)
-    const hits = raycasterRef.current.intersectObjects([...resources.bodyMeshes.values()], false)
+    const pickable = [...resources.bodyMeshes.values()].filter(mesh => mesh.visible)
+    // Batched marker proxies do not belong to the scene graph.
+    for (const mesh of pickable) mesh.updateMatrixWorld()
+    const hits = raycasterRef.current.intersectObjects(pickable, false)
     if (hits[0]) return {
       id: hits[0].object.userData.bodyId as string,
       positionIndex: hits[0].object.userData.positionOrdinal as number,
