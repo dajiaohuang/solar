@@ -1,4 +1,4 @@
-// Repackage complete original type 2/3/21 records, never resample or fit states.
+// Repackage complete original type 1/2/3/17/21 records, never resample or fit states.
 // DAF/SPK layout: https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/spk.html
 import { createHash } from 'node:crypto'
 import { mkdir, open, writeFile } from 'node:fs/promises'
@@ -115,7 +115,7 @@ export async function cropSpk(source, { startEt, endEt, targets }) {
   const output = []
   let dataBytes = 0
   for (const segment of selected) {
-    if (![2, 3, 17, 21].includes(segment.type) || ![1, 17].includes(segment.frame)) throw new Error(`Unsupported selected SPK ${segment.target}: type ${segment.type}, frame ${segment.frame}`)
+    if (![1, 2, 3, 17, 21].includes(segment.type) || ![1, 17].includes(segment.frame)) throw new Error(`Unsupported selected SPK ${segment.target}: type ${segment.type}, frame ${segment.frame}`)
     if (segment.type === 17) {
       if (segment.endAddress - segment.startAddress + 1 !== 12) throw new Error('Invalid type 17 record size')
       const raw = await source.read((segment.startAddress - 1) * 8, 12 * 8)
@@ -130,17 +130,19 @@ export async function cropSpk(source, { startEt, endEt, targets }) {
       dataBytes += data.length
       continue
     }
-    if (segment.type === 21) {
+    if (segment.type === 1 || segment.type === 21) {
       const readDouble = (bytes, offset) => input.double(bytes, offset)
-      const footer = await source.read((segment.endAddress - 2) * 8, 16)
-      const maxdim = readDouble(footer, 0), count = readDouble(footer, 8)
+      const tailWords = segment.type === 1 ? 1 : 2
+      const footer = await source.read((segment.endAddress - tailWords) * 8, tailWords * 8)
+      const maxdim = segment.type === 1 ? 15 : readDouble(footer, 0)
+      const count = readDouble(footer, (tailWords - 1) * 8)
       const dlsize = 4 * maxdim + 11
       const directoryCount = Math.floor(count / 100)
-      const expectedWords = count * dlsize + count + directoryCount + 2
-      if (!Number.isInteger(maxdim) || maxdim < 15 || maxdim > 25 || !Number.isInteger(count) || count < 1 || count > 1e7 || !Number.isSafeInteger(expectedWords) || expectedWords !== segment.endAddress - segment.startAddress + 1 || !Number.isSafeInteger(dlsize)) throw new Error('Invalid type 21 directory')
+      const expectedWords = count * dlsize + count + directoryCount + tailWords
+      if (!Number.isInteger(maxdim) || maxdim < 15 || maxdim > 25 || !Number.isInteger(count) || count < 1 || count > 1e7 || !Number.isSafeInteger(expectedWords) || expectedWords !== segment.endAddress - segment.startAddress + 1 || !Number.isSafeInteger(dlsize)) throw new Error('Invalid modified-difference directory')
       const epochStart = segment.startAddress - 1 + count * dlsize
       const epochBytes = count * 8
-      if (!Number.isSafeInteger(epochStart) || !Number.isSafeInteger(epochBytes) || epochBytes <= 0) throw new Error('Invalid type 21 directory')
+      if (!Number.isSafeInteger(epochStart) || !Number.isSafeInteger(epochBytes) || epochBytes <= 0) throw new Error('Invalid modified-difference directory')
       const epochs = new Array(count)
       const chunkBytes = Math.min(MAX_RANGE_BYTES, 8 * 1024 * 1024)
       for (let offset = 0; offset < epochBytes; offset += chunkBytes) {
@@ -149,18 +151,18 @@ export async function cropSpk(source, { startEt, endEt, targets }) {
         for (let at = 0; at < length; at += 8) epochs[offset / 8 + at / 8] = readDouble(bytes, at)
       }
       for (let index = 0; index < epochs.length; index++) {
-        if (!Number.isFinite(epochs[index]) || (index > 0 && epochs[index] <= epochs[index - 1])) throw new Error('Invalid type 21 epochs')
+        if (!Number.isFinite(epochs[index]) || (index > 0 && epochs[index] <= epochs[index - 1])) throw new Error('Invalid modified-difference epochs')
       }
       const directoryStart = epochStart + count
       if (directoryCount) {
         const directoryBytes = directoryCount * 8
-        if (!Number.isSafeInteger(directoryBytes) || directoryBytes > MAX_RANGE_BYTES) throw new Error('Invalid type 21 directory')
+        if (!Number.isSafeInteger(directoryBytes) || directoryBytes > MAX_RANGE_BYTES) throw new Error('Invalid modified-difference directory')
         const directory = await source.read(directoryStart * 8, directoryBytes)
         for (let index = 0; index < directoryCount; index++) {
-          if (readDouble(directory, index * 8) !== epochs[(index + 1) * 100 - 1]) throw new Error('Invalid type 21 epoch directory')
+          if (readDouble(directory, index * 8) !== epochs[(index + 1) * 100 - 1]) throw new Error(`Invalid type ${segment.type} epoch directory`)
         }
       }
-      if (segment.startEt > epochs[epochs.length - 1] || segment.endEt > epochs[epochs.length - 1] || segment.startEt > segment.endEt) throw new Error('Invalid type 21 coverage')
+      if (segment.startEt > epochs[epochs.length - 1] || segment.endEt > epochs[epochs.length - 1] || segment.startEt > segment.endEt) throw new Error('Invalid modified-difference coverage')
       const from = Math.max(startEt, segment.startEt), to = Math.min(endEt, segment.endEt)
       const first = epochs.findIndex((epoch) => epoch >= from)
       const last = epochs.findIndex((epoch) => epoch >= to)
@@ -168,20 +170,20 @@ export async function cropSpk(source, { startEt, endEt, targets }) {
       const recordBytes = (last - first + 1) * dlsize * 8
       const selectedEpochBytes = (last - first + 1) * 8
       const selectedDirectoryCount = Math.floor((last - first + 1) / 100)
-      const rawBytes = recordBytes + selectedEpochBytes + (selectedDirectoryCount + 2) * 8
+      const rawBytes = recordBytes + selectedEpochBytes + (selectedDirectoryCount + tailWords) * 8
       if (!Number.isSafeInteger(rawBytes) || recordBytes > MAX_RANGE_BYTES || dataBytes + rawBytes + 32 > MAX_OUTPUT_BYTES - 3 * 1024) throw new Error('Cropped SPK exceeds safety limit')
       const raw = await source.read((segment.startAddress - 1 + first * dlsize) * 8, recordBytes)
       // Fail closed before publishing a crop, not only when the app loads it.
       for (let record = 0; record < last - first + 1; record++) {
         const word = index => readDouble(raw, (record * dlsize + index) * 8)
-        for (let index = 0; index < dlsize; index++) if (!Number.isFinite(word(index))) throw new Error('Invalid type 21 difference line')
+        for (let index = 0; index < dlsize; index++) if (!Number.isFinite(word(index))) throw new Error('Invalid modified-difference record')
         const kqmax1 = word(4 * maxdim + 7)
-        if (!Number.isInteger(kqmax1) || kqmax1 < 3 || kqmax1 > maxdim + 1) throw new Error('Invalid type 21 integration order')
+        if (!Number.isInteger(kqmax1) || kqmax1 < 3 || kqmax1 > (segment.type === 1 ? 15 : maxdim + 1)) throw new Error('Invalid modified-difference integration order')
         for (let axis = 0; axis < 3; axis++) {
           const order = word(4 * maxdim + 8 + axis)
-          if (!Number.isInteger(order) || order < 0 || order > Math.min(maxdim, kqmax1 - 1)) throw new Error('Invalid type 21 component order')
+          if (!Number.isInteger(order) || order < 0 || order > Math.min(maxdim, kqmax1 - 1)) throw new Error('Invalid modified-difference component order')
         }
-        for (let index = 1; index <= kqmax1 - 2; index++) if (word(index) === 0) throw new Error('Invalid type 21 step size')
+        for (let index = 1; index <= kqmax1 - 2; index++) if (word(index) === 0) throw new Error('Invalid modified-difference step size')
       }
       const data = Buffer.alloc(rawBytes)
       for (let offset = 0; offset < raw.length; offset += 8) data.writeDoubleLE(readDouble(raw, offset), offset)
@@ -190,7 +192,8 @@ export async function cropSpk(source, { startEt, endEt, targets }) {
       outOffset += selectedEpochBytes
       for (let index = 99; index < last - first + 1; index += 100) data.writeDoubleLE(epochs[first + index], outOffset + ((index - 99) / 100) * 8)
       outOffset += selectedDirectoryCount * 8
-      data.writeDoubleLE(maxdim, outOffset); data.writeDoubleLE(last - first + 1, outOffset + 8)
+      if (segment.type === 21) { data.writeDoubleLE(maxdim, outOffset); outOffset += 8 }
+      data.writeDoubleLE(last - first + 1, outOffset)
       output.push({ ...segment, startEt: from, endEt: to, data })
       dataBytes += data.length
       continue

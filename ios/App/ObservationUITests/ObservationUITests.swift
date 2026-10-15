@@ -45,8 +45,32 @@ final class ObservationUITests: XCTestCase {
     }
 
     private func reveal(_ app: XCUIApplication, _ element: XCUIElement) {
-        for _ in 0..<10 { if isRevealed(app, element) { return }; app.swipeUp() }
-        for _ in 0..<10 { if isRevealed(app, element) { return }; app.swipeDown() }
+        for attempt in 0..<24 {
+            if isRevealed(app, element) { return }
+            let navigation = app.navigationBars.firstMatch
+            let top = navigation.exists ? max(app.frame.minY, navigation.frame.maxY) : app.frame.minY
+            let bottom = app.frame.maxY - 20
+            let middle = (top + bottom) / 2
+            var travel = min(240, (bottom - top) * 0.35)
+            var upward = attempt < 12
+            if element.exists, element.frame.height > 0 {
+                let frame = element.frame
+                if frame.maxY > bottom {
+                    upward = true
+                    travel = min(travel, max(40, frame.maxY - bottom + 20))
+                } else if frame.minY < top {
+                    upward = false
+                    travel = min(travel, max(40, top - frame.minY + 20))
+                }
+            }
+            // A bounded drag corrects a partially visible row without the
+            // full-screen fling that previously skipped it in both directions.
+            let startY = middle + (upward ? travel / 2 : -travel / 2)
+            let endY = middle + (upward ? -travel / 2 : travel / 2)
+            let origin = app.coordinate(withNormalizedOffset: .zero)
+            origin.withOffset(CGVector(dx: app.frame.width * 0.5, dy: startY - app.frame.minY))
+                .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: app.frame.width * 0.5, dy: endY - app.frame.minY)))
+        }
         XCTAssertTrue(isRevealed(app, element), "Element could not be revealed: \(element.debugDescription)")
     }
 
@@ -60,6 +84,20 @@ final class ObservationUITests: XCTestCase {
                        "Disclosure did not reach \(expected): \(element.debugDescription)")
     }
 
+    private func enableSwitch(_ app: XCUIApplication, _ element: XCUIElement) {
+        reveal(app, element)
+        if element.value as? String != "1" {
+            // SwiftUI exposes a row-sized Switch containing the actual UISwitch.
+            // The row center is its text label and did not toggle it on iOS 26.5.
+            let control = element.switches.firstMatch
+            if control.exists { reveal(app, control); control.tap() }
+            else { element.tap() }
+        }
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value == %@", "1"), object: element)
+        XCTAssertEqual(XCTWaiter.wait(for: [enabled], timeout: 5), .completed,
+                       "Switch did not enable: \(element.debugDescription)")
+    }
+
     private func waitForDisplayed(_ app: XCUIApplication, mode3D: Bool) {
         // The simulator can inherit actual host thermal pressure. Check exact
         // state counts and only valid mode-specific limits, not a nominal host.
@@ -69,6 +107,90 @@ final class ObservationUITests: XCTestCase {
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
         XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 30), .completed, element.debugDescription)
         XCTAssertTrue(app.staticTexts["observation.pressure"].exists)
+    }
+
+    func testOriginalGaiaFilesThroughSystemPickerAndLiveBackend() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-native.backend.address", "https://127.0.0.1:18791", "-native.onboarding.complete", "YES", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        // List materializes off-screen rows only after scrolling. Wait for the
+        // visible deck before using the bounded reveal helper below.
+        XCTAssertTrue(app.buttons["observation.mode"].waitForExistence(timeout: 15))
+        reveal(app, app.buttons["stellar.disclosure"]); app.buttons["stellar.disclosure"].tap()
+        for (control, filename) in [("manifest", "manifest.json"), ("rows", "rows.csv")] {
+            let button = app.buttons["stellar.\(control)"]
+            reveal(app, button); button.tap()
+            // UIDocumentPicker may reopen its last folder. Otherwise navigate
+            // via its normal Browse / On My iPhone / Solar Gaia Fixtures hierarchy.
+            let stem = String(filename.split(separator: ".")[0])
+            // Files icon-mode cells append type/date/size to the filename.
+            // Match that observed cell, rather than its non-opening text label.
+            let match = NSPredicate(format: "label == %@ OR label == %@ OR label BEGINSWITH %@ OR label BEGINSWITH %@", filename, stem, filename + ", ", stem + ", ")
+            var file = app.cells.matching(match).firstMatch
+            if !file.waitForExistence(timeout: 3) {
+                // The remote Files tab bar can arrive after the initial file
+                // query on a cold simulator. Do not silently skip navigation:
+                // the captured failure remained on the empty Recents screen.
+                let browse = app.tabBars["DOC.browsingModeTabBar"].buttons["Browse"]
+                XCTAssertTrue(browse.waitForExistence(timeout: 10), app.debugDescription)
+                let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: browse)
+                XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed, app.debugDescription)
+                browse.tap()
+                // Browse resumes its last directory, not necessarily Locations.
+                // The captured hierarchy resumed Solar Atlas with this parent
+                // navigation button; a StaticText query cannot find that button.
+                let localParent = app.navigationBars["FullDocumentManagerViewControllerNavigationBar"].buttons["On My iPhone"]
+                if localParent.waitForExistence(timeout: 3) {
+                    localParent.tap()
+                } else {
+                    let local = app.staticTexts["On My iPhone"].firstMatch
+                    XCTAssertTrue(local.waitForExistence(timeout: 5), app.debugDescription)
+                    local.tap()
+                }
+                // In icon mode the label is a child of the file-provider cell;
+                // activate the folder cell itself so Files enters the directory.
+                let folder = app.cells.matching(NSPredicate(format: "label BEGINSWITH %@", "Solar Gaia Fixtures")).firstMatch
+                XCTAssertTrue(folder.waitForExistence(timeout: 5), app.debugDescription)
+                folder.tap()
+                file = app.cells.matching(match).firstMatch
+            }
+            XCTAssertTrue(file.waitForExistence(timeout: 15), app.debugDescription)
+            // Files can replace its thumbnail while a preview loads, making
+            // Image.tap lose its hit point. Cell.tap lands on the filename and
+            // does not open the document in icon mode. Tap the observed preview
+            // center while retaining the real picker and import assertions.
+            let fileReady = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true AND enabled == true"), object: file)
+            XCTAssertEqual(XCTWaiter.wait(for: [fileReady], timeout: 10), .completed, app.debugDescription)
+            let thumbnail = file.images.firstMatch
+            XCTAssertTrue(thumbnail.waitForExistence(timeout: 5), app.debugDescription)
+            let thumbnailFrame = thumbnail.frame
+            XCTAssertGreaterThan(thumbnailFrame.width, 0)
+            XCTAssertGreaterThan(thumbnailFrame.height, 0)
+            XCTAssertTrue(file.frame.contains(thumbnailFrame), app.debugDescription)
+            thumbnail.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.collectionViews["File View"])
+            XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 10), .completed, app.debugDescription)
+            reveal(app, app.staticTexts["stellar.status"])
+            waitForLabel(app.staticTexts["stellar.status"], "Original file loaded.")
+        }
+        let rv = app.switches["stellar.rv"], covariance = app.switches["stellar.covariance"]
+        enableSwitch(app, rv); enableSwitch(app, covariance)
+        reveal(app, app.buttons["stellar.load"])
+        XCTAssertTrue(app.buttons["stellar.load"].isEnabled, "Verified files and RV adoption must enable calculation")
+        app.buttons["stellar.load"].tap()
+        waitForLabel(app.staticTexts["stellar.status"], "Gaia DR3 65212004581252736 · J2026.0 TCB")
+        let result = app.staticTexts["stellar.result"]
+        let raLine = try XCTUnwrap(result.label.split(separator: "\n").first { $0.hasPrefix("RA (deg): ") }, result.label)
+        let ra = try XCTUnwrap(Double(raLine.dropFirst("RA (deg): ".count)), result.label)
+        // The 12-significant-digit display omits trailing zeros. Compare the
+        // numerical value within its displayed precision, not padded text.
+        XCTAssertEqual(ra, 56.6929443290, accuracy: 1e-10, result.label)
+        XCTAssertTrue(result.label.contains("0.357911"), result.label)
+        reveal(app, app.buttons["stellar.export"])
+        screenshot(app, "stellar-system-picker-live-go")
+        reveal(app, app.buttons["stellar.disclosure"]); app.buttons["stellar.disclosure"].tap()
+        XCTAssertFalse(app.buttons["stellar.export"].exists)
     }
 
     func testRealEarthMoonStatesAndNativeModes() {

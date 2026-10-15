@@ -21,30 +21,34 @@ Before submitting a change, run:
 npm run lint
 npm run check:repository
 npm run test:unit
-npm run test:scientific
 npm run build
 npm run test:e2e
 npm run check:capacity
 ```
 
-Every pull request must pass the read-only `Repository contract` check, which parses repository metadata, verifies local Markdown links and anchors, and keeps the Web, Android, iOS, citation, and bilingual README identities synchronized. Pull requests that change code, configuration, workflows, or production assets must also pass `Web quality`: lint, unit and scientific validation, a production build and capacity check, Chromium interaction/accessibility coverage, and Lighthouse budgets. Documentation-only changes intentionally skip the expensive browser job, but never skip the repository contract. Branch protection requires only the stable `Pull request quality gate` summary from GitHub Actions, including for administrators; the summary fails unless every applicable job succeeds. The workflow has read-only repository access and does not deploy.
+Every pull request must pass the read-only `Repository contract` check, which parses repository metadata, verifies local Markdown links and anchors, and keeps application identities synchronized. Code changes also run lint, the unit suite (including scientific reference tests), a production build, capacity checks, dependency scanning, and one Chromium job covering desktop/mobile interaction and accessibility. Go changes run backend vet, race tests and vulnerability scanning. Native application, native harness and shared transport changes run Android/iOS validation. Documentation-only changes skip application jobs. The stable `Pull request quality gate` fails unless every applicable job succeeds; it does not deploy.
 
 Scientific changes should add a unit fixture or a reproducible scene, cite a primary source, state the model and validity range, and distinguish numerical precision from physical uncertainty. UI changes must preserve English and Chinese coverage, keyboard access, mobile behavior, and reduced-motion preferences.
 
 Renderer changes must keep the focus layer and catalog cloud separate. Named focus bodies may carry trajectories, labels, picking, and analysis; bulk catalog objects belong in shared typed arrays and a bounded GPU point buffer. Preserve the default zero-sample-request Observation Deck, the 3D-to-2D fallback, and both mobile and desktop Playwright coverage. Treat memory and CPU APIs as conservative hints only; require measured real-device evidence before claiming that a hardware tier is guaranteed smooth.
 
-The same required summary also includes the Chromium desktop/mobile, Firefox
-and WebKit browser matrix for code changes. Browser jobs run independently so
-one failure does not cancel the other evidence. Linux Firefox runs under Xvfb
-with Mesa software graphics to exercise actual WebGL2; these checks are not
-physical-device GPU or performance measurements. Run the complete matrix locally
-with `FULL_BROWSER_MATRIX=1 npm run test:e2e` (use `cross-env` on Windows).
+Firefox and WebKit run in the weekly/manual browser matrix. Linux Firefox uses
+Xvfb and Mesa to exercise WebGL2; these checks are not physical-device performance
+measurements. Run the complete matrix with `FULL_BROWSER_MATRIX=1 npm run test:e2e`
+(use `cross-env` on Windows). Lighthouse and the pinned real-dataset preview checks
+belong to publication. `npm run test:scientific` remains a focused local command;
+CI does not repeat tests already included in `npm run test:unit`.
+
+Keep tests that execute a maintained user flow, public API, critical regression,
+independent numerical reference, or necessary data/transport boundary. Avoid
+assertions about source strings, private implementation layout or workflow shape.
+Real-source capacity measurements remain opt-in rather than routine CI gates.
 
 ## Native applications
 
-Use Go 1.26.8 or a newer supported patched release, as required by `go.mod`.
+Use Go 1.26.9 or a newer supported patched release, as required by `go.mod`.
 Validate the shared Go backend with `go vet ./cmd/... ./internal/...` and
-`go test ./cmd/... ./internal/...`. The Linux native quality job also runs
+`go test ./cmd/... ./internal/...`. The Linux backend quality job also runs
 `go test -race ./cmd/... ./internal/...`; local race detection requires a
 supported C compiler and CGO. Cancellation tests cover request isolation,
 descriptor scans and coefficient reads without changing state arithmetic.

@@ -1,13 +1,14 @@
-import { loadGroundPayload, type GroundStation, type GroundObservation } from './groundObservation'
+import { GROUND_FUTURE_LEAP_UNCERTAINTY_START_UTC, loadGroundPayload, type GroundStation, type GroundObservation } from './groundObservation'
 import { STATE_TILE_API_VERSION } from './stateTiles'
 import pck from '../data/pck00011.source.json'
 
 export type GroundContactRequest = { startUtc: string; endUtc: string; station: GroundStation; foregroundId: number; backgroundId: number; aberration: 'CN' }
 export type GroundContact = { boundary: 'external' | 'internal'; direction: 'enter' | 'exit' | 'sampled-zero'; utc: string; elapsedTaiSeconds: number; bracketSeconds: [number, number]; bracketUtc: [string, string] }
-export type GroundWindowEdge = Omit<GroundContact, 'boundary' | 'direction'> & { kind: 'search-boundary' | 'sampled-zero' | 'bracketed-contact' }
+export type GroundWindowEdge = Omit<GroundContact, 'boundary' | 'direction'> & { kind: 'search-boundary' | 'sampled-zero' | 'sampled-overlap' | 'bracketed-contact' }
 export type GroundOverlapWindow = { boundary: 'external' | 'internal'; start: GroundWindowEdge; end: GroundWindowEdge; durationSeconds: number; numericalDurationBoundsSeconds: [number, number] }
 type Geometry = { classification: 'none' | 'partial' | 'annular' | 'total'; separationRadians: number; foregroundAngularRadiusRadians: number; backgroundAngularRadiusRadians: number; externalGapRadians: number; internalGapRadians: number }
-export type GroundContacts = Pick<GroundObservation, 'apiVersion' | 'catalogVersion' | 'catalogManifestSha256'> & {
+export type GroundContacts = Pick<GroundObservation, 'apiVersion' | 'catalogVersion' | 'catalogManifestSha256' | 'earthOrientation'> & {
+  earthOrientationCoverageMjdUtc: [number, number]
   result: { model: string; request: GroundContactRequest; durationSeconds: number; contacts: GroundContact[]; sampledOverlapWindows?: GroundOverlapWindow[]; evaluations: number
     startGeometry: Geometry; endGeometry: Geometry; sources: GroundObservation['result']['sources']; earthOrientation: GroundObservation['earthOrientation']
     radiusSourceSha256: string; radiusSourceUrl: string; warnings: string[]; possibleMissedEvents: true; contract: Record<string, unknown> }
@@ -18,15 +19,17 @@ const hash = (value: unknown) => typeof value === 'string' && /^[a-f0-9]{64}$/.t
 const utc = (value: unknown): value is string => typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/.test(value)
 
 export function validateGroundContacts(raw: unknown, request: GroundContactRequest): GroundContacts {
-  const value = object(raw), r = object(value.result), echo = object(r.request), station = object(echo.station), eop = object(r.earthOrientation), contract = object(r.contract)
+  const value = object(raw), r = object(value.result), echo = object(r.request), station = object(echo.station), eop = object(r.earthOrientation), manifest = object(value.earthOrientation), coverage = value.earthOrientationCoverageMjdUtc, contract = object(r.contract)
   const reject = () => { throw new Error('Contact identity or scientific contract mismatch') }
   if (value.apiVersion !== STATE_TILE_API_VERSION || typeof value.catalogVersion !== 'string' || !hash(value.catalogManifestSha256)
     || r.model !== 'earth-station-cn-spherical-contacts-v1' || echo.startUtc !== request.startUtc || echo.endUtc !== request.endUtc || echo.aberration !== 'CN'
     || echo.foregroundId !== request.foregroundId || echo.backgroundId !== request.backgroundId || Object.entries(request.station).some(([key, expected]) => station[key] !== expected)
     || !hash(eop.sha256) || eop.sourceUrl !== 'https://data.iers.org/products/eop/rapid/standard/finals2000A.all' || typeof eop.retrievedAt !== 'string' || !Number.isFinite(Date.parse(eop.retrievedAt))
+    || !hash(manifest.sha256) || manifest.sha256 !== eop.sha256 || manifest.sourceUrl !== eop.sourceUrl || manifest.retrievedAt !== eop.retrievedAt
+    || !Array.isArray(coverage) || coverage.length !== 2 || !coverage.every(finite) || coverage[0] >= coverage[1]
     || r.radiusSourceSha256 !== pck.sha256 || r.radiusSourceUrl !== pck.url || r.possibleMissedEvents !== true
     || !finite(r.durationSeconds) || r.durationSeconds < 1 || r.durationSeconds > 86401 || !finite(r.evaluations) || !Number.isInteger(r.evaluations) || r.evaluations < 1 || r.evaluations > 8192
-    || contract.timeAxis !== 'TAI-elapsed-SI-seconds' || contract.coverage !== 'sampled-sign-changes-only' || contract.stepSeconds !== 30 || contract.toleranceSeconds !== .05
+    || contract.timeAxis !== 'TAI-elapsed-SI-seconds' || contract.coverage !== 'sampled-sign-changes-only' || contract.futureLeapSecondUncertaintyStartUTC !== GROUND_FUTURE_LEAP_UNCERTAINTY_START_UTC || contract.stepSeconds !== 30 || contract.toleranceSeconds !== .05
     || contract.maxEvaluations !== 8192 || contract.maxContacts !== 512 || contract.physicalTimingUncertaintySeconds !== null
     || !Array.isArray(r.warnings) || !r.warnings.every(v => typeof v === 'string') || !Array.isArray(r.contacts) || r.contacts.length > 512 || !Array.isArray(r.sources)) reject()
   for (const rawGeometry of [r.startGeometry, r.endGeometry]) {
@@ -42,7 +45,11 @@ export function validateGroundContacts(raw: unknown, request: GroundContactReque
     if (!['external', 'internal'].includes(c.boundary as string) || !['enter', 'exit', 'sampled-zero'].includes(c.direction as string) || !utc(c.utc)
       || !finite(c.elapsedTaiSeconds) || c.elapsedTaiSeconds < previous || c.elapsedTaiSeconds > (r.durationSeconds as number)
       || !Array.isArray(bracket) || bracket.length !== 2 || !bracket.every(finite) || bracket[0] < 0 || bracket[0] > c.elapsedTaiSeconds || bracket[1] < c.elapsedTaiSeconds || bracket[1] > (r.durationSeconds as number) || bracket[1]-bracket[0] > .05+1e-9
-      || !Array.isArray(times) || times.length !== 2 || !times.every(utc) || times[0] > c.utc || times[1] < c.utc) reject()
+      || !Array.isArray(times) || times.length !== 2 || !times.every(utc) || times[0] > c.utc || times[1] < c.utc
+      || c.elapsedTaiSeconds !== bracket[0] + (bracket[1]-bracket[0])/2
+      || c.direction === 'sampled-zero' && (bracket[0] !== c.elapsedTaiSeconds || bracket[1] !== c.elapsedTaiSeconds)
+      || bracket[0] === c.elapsedTaiSeconds && times[0] !== c.utc
+      || bracket[1] === c.elapsedTaiSeconds && times[1] !== c.utc) reject()
     previous = c.elapsedTaiSeconds as number
   }
   const expected = new Set([399, 10, request.foregroundId, request.backgroundId].map(id => `naif:${id}`))
@@ -61,13 +68,16 @@ export function validateGroundContacts(raw: unknown, request: GroundContactReque
       for (const edge of [start, end]) {
         const at = edge.elapsedTaiSeconds, b = edge.bracketSeconds, times = edge.bracketUtc
         if (!finite(at) || at < 0 || at > (r.durationSeconds as number) || !utc(edge.utc)
-          || !['search-boundary', 'sampled-zero', 'bracketed-contact'].includes(edge.kind as string)
+          || !['search-boundary', 'sampled-zero', 'sampled-overlap', 'bracketed-contact'].includes(edge.kind as string)
           || !Array.isArray(b) || b.length !== 2 || !b.every(finite) || b[0] < 0 || b[0] > at || b[1] < at || b[1] > (r.durationSeconds as number) || b[1]-b[0] > .05+1e-9
           || !Array.isArray(times) || times.length !== 2 || !times.every(utc) || times[0] > edge.utc || times[1] < edge.utc
+          || at !== b[0] + (b[1]-b[0])/2
+          || b[0] === at && times[0] !== edge.utc || b[1] === at && times[1] !== edge.utc
           || (edge.kind === 'search-boundary') !== (at === 0 || at === r.durationSeconds)
           || edge.kind !== 'bracketed-contact' && (b[0] !== at || b[1] !== at)) reject()
-        if (edge.kind !== 'search-boundary' && !(r.contacts as GroundContact[]).some(c => c.boundary === span.boundary && c.elapsedTaiSeconds === at && c.utc === edge.utc
+        if (edge.kind !== 'search-boundary' && edge.kind !== 'sampled-overlap' && !(r.contacts as GroundContact[]).some(c => c.boundary === span.boundary && c.elapsedTaiSeconds === at && c.utc === edge.utc
           && c.bracketSeconds[0] === (b as number[])[0] && c.bracketSeconds[1] === (b as number[])[1]
+          && c.bracketUtc[0] === (times as string[])[0] && c.bracketUtc[1] === (times as string[])[1]
           && (edge.kind === 'sampled-zero' ? c.direction === 'sampled-zero' : c.direction === (edge === start ? 'enter' : 'exit')))) reject()
       }
       const a = start as GroundWindowEdge, b = end as GroundWindowEdge, bounds = span.numericalDurationBoundsSeconds
@@ -83,5 +93,6 @@ export function validateGroundContacts(raw: unknown, request: GroundContactReque
 }
 
 export function loadGroundContacts(base: string | null, profile: 'full' | 'preview', request: GroundContactRequest, signal: AbortSignal, fetcher: typeof fetch = fetch): Promise<GroundContacts> {
+  request = { ...request, station: { ...request.station } }
   return loadGroundPayload(base, profile, '/v1/observation/contacts', request, signal, raw => validateGroundContacts(raw, request), fetcher)
 }

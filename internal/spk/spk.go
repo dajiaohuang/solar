@@ -6,6 +6,7 @@ package spk
 import (
 	"container/list"
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -39,31 +40,40 @@ const (
 )
 
 type ReadStats struct {
-	PageSize    int
-	MaxBytes    int64
-	CachedBytes int64
-	LoadedBytes int64
-	PageLoads   uint64
-	CacheHits   uint64
-	CacheMisses uint64
+	PageSize            int
+	MaxBytes            int64
+	CachedBytes         int64
+	LoadedBytes         int64
+	IntegrityIndexBytes int64
+	PageLoads           uint64
+	CacheHits           uint64
+	CacheMisses         uint64
 }
 
 type pageSource struct {
-	reader io.ReaderAt
-	size   int64
-	close  io.Closer
-	page   int64
-	max    int64
-	mu     sync.Mutex
-	items  map[int64]*list.Element
-	order  *list.List
-	bytes  int64
-	stats  ReadStats
+	reader     io.ReaderAt
+	size       int64
+	close      io.Closer
+	page       int64
+	max        int64
+	pageHashes [][32]byte
+	mu         sync.Mutex
+	items      map[int64]*list.Element
+	loading    map[int64]*pageLoad
+	order      *list.List
+	bytes      int64
+	stats      ReadStats
 }
 
 type pageEntry struct {
 	index int64
 	data  []byte
+}
+
+type pageLoad struct {
+	ready chan struct{}
+	data  []byte
+	err   error
 }
 
 func newPageSource(reader io.ReaderAt, size int64, closer io.Closer, pageSize int, maxBytes int64) *pageSource {
@@ -73,7 +83,7 @@ func newPageSource(reader io.ReaderAt, size int64, closer io.Closer, pageSize in
 	if maxBytes < int64(pageSize*minimumCachePageSize) {
 		maxBytes = int64(pageSize * minimumCachePageSize)
 	}
-	return &pageSource{reader: reader, size: size, close: closer, page: int64(pageSize), max: maxBytes, items: make(map[int64]*list.Element), order: list.New(), stats: ReadStats{PageSize: pageSize, MaxBytes: maxBytes}}
+	return &pageSource{reader: reader, size: size, close: closer, page: int64(pageSize), max: maxBytes, items: make(map[int64]*list.Element), loading: make(map[int64]*pageLoad), order: list.New(), stats: ReadStats{PageSize: pageSize, MaxBytes: maxBytes}}
 }
 
 func (p *pageSource) ReadAt(dst []byte, off int64) (int, error) {
@@ -115,45 +125,58 @@ func (p *pageSource) pageData(index int64) ([]byte, error) {
 		return data, nil
 	}
 	p.stats.CacheMisses++
+	if loading := p.loading[index]; loading != nil {
+		p.mu.Unlock()
+		<-loading.ready
+		return loading.data, loading.err
+	}
+	loading := &pageLoad{ready: make(chan struct{})}
+	p.loading[index] = loading
 	p.mu.Unlock()
+
 	start := index * p.page
 	length := p.page
 	if remaining := p.size - start; remaining < length {
 		length = remaining
 	}
 	if length <= 0 {
-		return nil, io.EOF
+		loading.err = io.EOF
+	} else {
+		data := make([]byte, int(length))
+		n, err := p.reader.ReadAt(data, start)
+		if err != nil && err != io.EOF {
+			loading.err = err
+		} else {
+			data = data[:n]
+			if p.pageHashes != nil && (n != int(length) || index >= int64(len(p.pageHashes)) || sha256.Sum256(data) != p.pageHashes[index]) {
+				loading.err = fmt.Errorf("SPK integrity: page %d does not match its verified digest", index)
+			} else {
+				loading.data = data
+			}
+		}
 	}
-	data := make([]byte, int(length))
-	n, err := p.reader.ReadAt(data, start)
-	if err != nil && err != io.EOF {
-		return nil, err
-	}
-	data = data[:n]
+
 	p.mu.Lock()
-	// Another reader may have populated this page while the file read was in
-	// progress; retaining the existing page keeps accounting deterministic.
-	if element := p.items[index]; element != nil {
-		p.order.MoveToFront(element)
-		p.mu.Unlock()
-		return element.Value.(*pageEntry).data, nil
+	if loading.err == nil {
+		element := p.order.PushFront(&pageEntry{index: index, data: loading.data})
+		p.items[index] = element
+		p.bytes += int64(len(loading.data))
+		p.stats.CachedBytes = p.bytes
+		p.stats.LoadedBytes += int64(len(loading.data))
+		p.stats.PageLoads++
+		for p.bytes > p.max && p.order.Len() > 1 {
+			old := p.order.Back()
+			entry := old.Value.(*pageEntry)
+			p.bytes -= int64(len(entry.data))
+			delete(p.items, entry.index)
+			p.order.Remove(old)
+		}
+		p.stats.CachedBytes = p.bytes
 	}
-	element := p.order.PushFront(&pageEntry{index: index, data: data})
-	p.items[index] = element
-	p.bytes += int64(len(data))
-	p.stats.CachedBytes = p.bytes
-	p.stats.LoadedBytes += int64(len(data))
-	p.stats.PageLoads++
-	for p.bytes > p.max && p.order.Len() > 1 {
-		old := p.order.Back()
-		entry := old.Value.(*pageEntry)
-		p.bytes -= int64(len(entry.data))
-		delete(p.items, entry.index)
-		p.order.Remove(old)
-	}
-	p.stats.CachedBytes = p.bytes
+	delete(p.loading, index)
+	close(loading.ready)
 	p.mu.Unlock()
-	return data, nil
+	return loading.data, loading.err
 }
 
 func (p *pageSource) Stats() ReadStats {
@@ -209,13 +232,45 @@ func Open(path string) (*Kernel, error) {
 }
 
 func OpenWithCache(path string, pageSize int, maxCacheBytes int64) (*Kernel, error) {
+	return openWithCacheAndPageHashes(path, pageSize, maxCacheBytes, nil)
+}
+
+// OpenWithPageHashes opens an SPK whose lazily read pages must match digests
+// produced by an earlier whole-file verification. The hashes are retained
+// without copying to avoid doubling the integrity index during open; callers
+// must not modify pageHashes after this call.
+func OpenWithPageHashes(path string, pageSize int, maxCacheBytes int64, pageHashes [][32]byte) (*Kernel, error) {
+	if pageHashes == nil {
+		return nil, fmt.Errorf("SPK integrity: verified page digests are required")
+	}
+	return openWithCacheAndPageHashes(path, pageSize, maxCacheBytes, pageHashes)
+}
+
+func openWithCacheAndPageHashes(path string, pageSize int, maxCacheBytes int64, pageHashes [][32]byte) (*Kernel, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, err
 	}
+	if pageSize < minimumPageSize {
+		pageSize = minimumPageSize
+	}
+	if pageHashes != nil {
+		pageCount := int64(0)
+		if info.Size() > 0 {
+			pageCount = 1 + (info.Size()-1)/int64(pageSize)
+		}
+		if pageCount != int64(len(pageHashes)) {
+			return nil, fmt.Errorf("SPK integrity: got %d page digests for %d pages", len(pageHashes), pageCount)
+		}
+	}
 	// No descriptor is retained per manifest entry. A page miss opens the file
 	// only for its bounded ReadAt, while hot coefficient pages stay in memory.
-	k := &Kernel{source: newPageSource(pathReaderAt(path), info.Size(), nil, pageSize, maxCacheBytes), size: info.Size()}
+	source := newPageSource(pathReaderAt(path), info.Size(), nil, pageSize, maxCacheBytes)
+	source.pageHashes = pageHashes
+	if pageHashes != nil {
+		source.stats.IntegrityIndexBytes = int64(len(pageHashes)) * sha256.Size
+	}
+	k := &Kernel{source: source, size: info.Size()}
 	if _, err := k.parse(); err != nil {
 		_ = k.Close()
 		return nil, err
@@ -352,7 +407,7 @@ func (k *Kernel) evaluate(target int, et float64) (State, bool, error) {
 		if s.Target != target || et < s.StartET || et > s.EndET {
 			continue
 		}
-		if (s.Frame != 1 && s.Frame != 17) || (s.Type != 2 && s.Type != 3 && s.Type != 17 && s.Type != 21) {
+		if (s.Frame != 1 && s.Frame != 17) || (s.Type != 1 && s.Type != 2 && s.Type != 3 && s.Type != 17 && s.Type != 21) {
 			unsupported = s
 			break
 		}
@@ -399,7 +454,7 @@ func (k *Kernel) eval21Correct(s Segment, et float64) ([6]float64, error) {
 		return out, fmt.Errorf("SPK type 21 epoch outside coverage")
 	}
 	off, delta := s.Start+lo*m.RecordSize, et-k.addr(s.Start+lo*m.RecordSize)
-	if err := k.validateType21Record(off, m); err != nil {
+	if err := k.validateType21Record(off, m, s.Type); err != nil {
 		return out, err
 	}
 	max := int(k.addr(off + 4*m.Dimension + 7))
@@ -457,15 +512,19 @@ func (k *Kernel) eval21Correct(s Segment, et float64) ([6]float64, error) {
 	return out, nil
 }
 
-func (k *Kernel) validateType21Record(off int, m type21Meta) error {
+func (k *Kernel) validateType21Record(off int, m type21Meta, segmentType int) error {
 	for j := 0; j < m.RecordSize; j++ {
 		if !finite(k.addr(off + j)) {
 			return fmt.Errorf("invalid SPK type 21 record")
 		}
 	}
 	max := k.addr(off + 4*m.Dimension + 7)
-	if max != math.Trunc(max) || max < 3 || max > float64(m.Dimension+1) {
-		return fmt.Errorf("invalid SPK type 21 order")
+	limit := m.Dimension + 1
+	if segmentType == 1 {
+		limit = 15
+	}
+	if max != math.Trunc(max) || max < 3 || max > float64(limit) {
+		return fmt.Errorf("invalid SPK type %d order", segmentType)
 	}
 	for axis := 0; axis < 3; axis++ {
 		order := k.addr(off + 4*m.Dimension + 8 + axis)
@@ -497,7 +556,7 @@ func (k *Kernel) parseSegment(d, i []float64) (Segment, error) {
 		s.type17 = true
 		return s, nil
 	}
-	if s.Type == 21 {
+	if s.Type == 1 || s.Type == 21 {
 		m, err := k.inspect21(s)
 		if err != nil {
 			return Segment{}, err
@@ -526,6 +585,10 @@ func (k *Kernel) parseSegment(d, i []float64) (Segment, error) {
 }
 
 func (k *Kernel) evalCheb(s Segment, et float64) ([6]float64, error) {
+	return k.evalChebAtOffset(s, et, 0)
+}
+
+func (k *Kernel) evalChebAtOffset(s Segment, et, offsetSeconds float64) ([6]float64, error) {
 	var out [6]float64
 	init, interval := k.addr(s.End-3), k.addr(s.End-2)
 	if !finite(init) || !finite(interval) || interval <= 0 {
@@ -538,9 +601,20 @@ func (k *Kernel) evalCheb(s Segment, et float64) ([6]float64, error) {
 	if idx >= s.Records {
 		idx = s.Records - 1
 	}
+	// Division can round to the adjacent record at an exact boundary. Retain
+	// the split epoch's sign relative to that boundary before choosing a record.
+	if idx > 0 && (et-(init+float64(idx)*interval))+offsetSeconds < 0 {
+		idx--
+	}
+	if idx+1 < s.Records && (et-(init+float64(idx+1)*interval))+offsetSeconds >= 0 {
+		idx++
+	}
 	off := s.Start + idx*s.RecordSize
 	mid, rad := k.addr(off), k.addr(off+1)
-	x := (et - mid) / rad
+	if !finite(mid) || !finite(rad) || rad <= 0 {
+		return out, fmt.Errorf("invalid SPK record midpoint or radius")
+	}
+	x := ((et - mid) + offsetSeconds) / rad
 	if !finite(x) || math.Abs(x) > 1+1e-10 {
 		return out, fmt.Errorf("SPK epoch outside record")
 	}
@@ -661,16 +735,43 @@ func (k *Kernel) eval17(s Segment, et float64) ([6]float64, error) {
 }
 
 func (k *Kernel) inspect21(s Segment) (type21Meta, error) {
-	dim, n := k.addr(s.End-1), k.addr(s.End)
-	if dim != math.Trunc(dim) || n != math.Trunc(n) || dim < 15 || dim > 25 || n < 1 || n > 1e7 {
-		return type21Meta{}, fmt.Errorf("invalid SPK type 21 dimensions")
+	// Type 1 is the fixed dimension-15 MDA format. Its footer contains
+	// only N, whereas type 21 stores MAXDIM,N. The evaluator is shared.
+	dim, n, tail := 15.0, k.addr(s.End), 1
+	if s.Type == 21 {
+		dim, tail = k.addr(s.End-1), 2
+	}
+	if !finite(dim) || !finite(n) || dim != math.Trunc(dim) || n != math.Trunc(n) || dim < 15 || dim > 25 || n < 1 || n > 1e7 {
+		return type21Meta{}, fmt.Errorf("invalid SPK type %d dimensions", s.Type)
 	}
 	rs := 4*int(dim) + 11
 	dc := int(n) / 100
-	if s.End-s.Start+1 != int(n)*(rs+1)+dc+2 {
-		return type21Meta{}, fmt.Errorf("invalid SPK type 21 layout")
+	if s.End-s.Start+1 != int(n)*(rs+1)+dc+tail {
+		return type21Meta{}, fmt.Errorf("invalid SPK type %d layout", s.Type)
 	}
 	epochs := s.Start + int(n)*rs
+	previous := math.Inf(-1)
+	for index := 0; index < int(n); index++ {
+		if err := k.contextError(); err != nil {
+			return type21Meta{}, err
+		}
+		epoch := k.addr(epochs + index)
+		if !finite(epoch) || epoch <= previous {
+			return type21Meta{}, fmt.Errorf("invalid SPK type %d record epochs", s.Type)
+		}
+		previous = epoch
+	}
+	if previous < s.EndET {
+		return type21Meta{}, fmt.Errorf("invalid SPK type %d record coverage", s.Type)
+	}
+	for index := 0; index < dc; index++ {
+		if err := k.contextError(); err != nil {
+			return type21Meta{}, err
+		}
+		if k.addr(epochs+int(n)+index) != k.addr(epochs+(index+1)*100-1) {
+			return type21Meta{}, fmt.Errorf("invalid SPK type %d epoch directory", s.Type)
+		}
+	}
 	return type21Meta{int(dim), rs, int(n), epochs}, nil
 }
 func (k *Kernel) f64(off int) float64 {

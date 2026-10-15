@@ -1,4 +1,4 @@
-# Exact state tiles v1
+# Exact state tiles: API v1, binary envelope v2
 
 State tiles are the current high-volume exact-position transport shared by the
 Go backend, full Web client and independent Android/iOS clients. They replace the removed columnar JSON
@@ -10,7 +10,8 @@ embeds these unchanged binary tiles in one progressively consumed response.
 ## Request sequence
 
 1. `GET /v1/catalog/manifest` pins `apiVersion`, catalog version, catalog
-   manifest SHA-256, optional inventory manifest SHA-256 and hard limits.
+   manifest SHA-256, optional inventory manifest SHA-256 and hard limits,
+   including `limits.maxIds` and `limits.maxPlanBytes` for plan requests.
 2. `POST /v1/state/plan` submits 1–32,768 unique IDs, one finite TDB Julian
    date, `ECLIPJ2000`, `precision: "exact"`, and
    `fieldMask: ["position","velocity"]`. `tileSize` defaults to 16,384 and is
@@ -25,22 +26,40 @@ embeds these unchanged binary tiles in one progressively consumed response.
    Live plans are retained in a bounded LRU for two minutes. Repeating a tile
    request produces identical bytes without repeating numerical evaluation.
 
-Plans and tiles are bounded independently: plan JSON is capped at 8 MiB and
-each tile at 64 MiB. A plan may contain multiple tiles. A larger UI selection
-is stably deduplicated and partitioned into multiple plans instead of being
-silently truncated. Clients fetch at most two tiles concurrently and publish
-only after every plan's complete set validates.
+Plans and tiles are bounded independently: each state-plan request and response
+is capped at 8 MiB and each binary tile at 64 MiB. The catalog manifest reports
+the plan input ceiling as `limits.maxPlanBytes`; capabilities reports it as
+`limits.statePlanBytesMax`. Web, Android and iOS partition each selection by
+both the advertised ID count and the actual UTF-8 JSON request size, then check
+the serialized body against that same ceiling before sending. If an older
+manifest omits plan limits, clients use the previous 1 MiB request ceiling.
+Other JSON request routes keep their independently configured limits. A plan
+may contain multiple tiles. A larger UI selection is stably deduplicated and
+partitioned into multiple plans instead of being silently truncated. Web,
+Android and iOS fetch at most two tiles concurrently
+and publish only after every plan's complete set validates. Native clients
+reserve both tile working sets against their resident-state budget before
+starting a pair; if only one tile fits, they fetch serially. Every result is
+validated and accumulated in plan order regardless of response completion
+order. On iOS, the cache actor owns bounded file reads, writes and quota
+eviction, while payload hashing, metadata validation and Float64 state decoding
+run in cancellable utility tasks. This lets an already-admitted pair use two
+CPU workers without raising the two-tile concurrency or resident-memory limits.
+It removes actor-level decode serialization; device throughput and peak memory
+still require native measurement.
 
 ## Binary envelope
 
 All integers and Float64 values are little-endian. The fixed header is exactly
-200 bytes.
+208 bytes. API routes remain `/v1`; wire version 2 makes each binary tile carry
+its own scientific contract, so decoders do not infer units or frame from a
+separate response.
 
 | Offset | Bytes | Field |
 | ---: | ---: | --- |
 | 0 | 8 | ASCII `SLRTILE` plus NUL |
-| 8 | 2 | wire version (`1`) |
-| 10 | 2 | header bytes (`200`) |
+| 8 | 2 | wire version (`2`) |
+| 10 | 2 | header bytes (`208`) |
 | 12 | 4 | tile sequence |
 | 16 | 4 | total tile count |
 | 20 | 4 | first plan ordinal |
@@ -60,31 +79,59 @@ All integers and Float64 values are little-endian. The fixed header is exactly
 | 104 | 32 | raw catalog-manifest SHA-256 |
 | 136 | 32 | raw inventory-manifest SHA-256, or zeros when absent |
 | 168 | 32 | SHA-256 of every byte after the header |
+| 200 | 1 | time-scale code (`1`: TDB) |
+| 201 | 1 | frame code (`1`: ECLIPJ2000) |
+| 202 | 1 | state-origin code (`1`: solar-system barycenter, `naif:0`) |
+| 203 | 1 | distance-unit code (`1`: km) |
+| 204 | 1 | velocity-unit code (`1`: km/s) |
+| 205 | 3 | reserved; all bytes must be zero |
 
 The payload contains one NDJSON metadata object per row, three equally sized
 bitmaps, zero padding to an eight-byte boundary, and row-major Float64
 `[x,y,z,vx,vy,vz]` states. Units are km and km/s. All present states use
 ECLIPJ2000 coordinates relative to the solar-system barycenter (`naif:0`).
+The header contract codes are mandatory and currently admit only the values in
+the table. Per-row metadata still carries source identity, model, validity and
+missing-reason evidence; the header states the shared epoch scale, frame,
+origin and units once for the entire tile.
 
 Exactly one status bit must be set per row. This transport is exact-only, so
 an approximate bit is a protocol error. Exact rows require source, dataset,
-model and state-evidence provenance and must not carry a missing reason.
+model, state-evidence and a valid `sourceChainSha256` digest for the recursively
+resolved SPK center chain; they must not carry a missing reason. If a stored
+audit-epoch state lacks that lineage, the plan reports it as missing instead
+of promoting the snapshot to exact.
 `sourceRecord: false` binds `datasetSha256` to the catalog manifest;
 `sourceRecord: true` binds it to the inventory manifest. Operational provenance
 comes from the actual selected kernel and segment at the requested epoch,
-including its checksum, center and validity. An audited snapshot additionally
-requires its source identity status and verified evidence-kernel checksum.
+including its checksum, center, validity and recursively resolved source-chain
+digest. An audited snapshot additionally requires its source identity status,
+selected root-segment descriptor, verified root-kernel checksum and the same
+complete source-chain lineage.
+The v2 digest uses a shared byte layout: SHA-256 of the UTF-8 SSB domain seeds
+the chain; each selected segment hashes a NUL-terminated domain, little-endian
+uint32 kernel-ID byte length, UTF-8 kernel ID, raw kernel SHA-256, little-endian
+int32 target/center/frame/type, little-endian Float64 segment bounds and raw
+parent digest. Links are folded from SSB outwards, avoiding language-specific
+float text. The digest identifies provenance; it is not a signature or a
+numerical error bound.
 Its validity start and end both equal the single audit epoch; a separate
 evidence window describes the source kernel segment, not permission to reuse
 that snapshot at other times.
 Missing rows require a machine-readable reason and six zero state components.
-Every numeric component must be finite.
+Every numeric component must be finite. Present validity and evidence windows
+must contain the requested TDB epoch after conversion to ET, within a fixed
+0.0001-second rounding allowance; the Go writer and every client reject
+nonfinite or reversed present windows. Alignment padding is the minimum needed
+to reach the next eight-byte boundary, and every decoder requires its bytes to
+be zero. The JD/ET allowance reconciles Float64 conversion at the protocol
+boundary; it does not extend SPK segment coverage.
 
 ## Client rejection rules
 
 Before publishing a frame, a client rejects any response with a mismatched API
-or catalog version, manifest hash, plan hash, inventory hash, epoch, frame,
-origin, units, field mask, stride, tile count, sequence, ordinal span, section
+or catalog version, manifest hash, plan hash, inventory hash, epoch, time-scale
+code, frame code, origin code, unit code, field mask, stride, tile count, sequence, ordinal span, section
 offset, payload hash, metadata count, provenance/status relation, or nonfinite
 state. It also rejects incomplete or conflicting duplicate tile sets.
 After reconciling duplicate tiles, the client counts each row once and requires

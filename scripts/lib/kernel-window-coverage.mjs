@@ -1,4 +1,4 @@
-const TYPES = new Set([2, 3, 17, 21])
+const TYPES = new Set([1, 2, 3, 17, 21])
 const FRAMES = new Set([1, 17])
 const MAX_DEPTH = 32
 const MAX_KERNELS = 4096

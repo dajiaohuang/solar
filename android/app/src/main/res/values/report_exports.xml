@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="report_export_orbit">Orbit report snapshot</string>
+    <string name="report_export_stellar">Stellar report snapshot</string>
+    <string name="report_export_contacts">Ground-contact report snapshot</string>
+    <string name="report_export_saved">%1$s saved.</string>
+    <string name="report_export_failed">Could not save %1$s. A partial file may remain if writing started.</string>
+    <string name="report_export_not_queued">%1$s was not queued. Export capacity is unavailable; retry after an earlier export finishes.</string>
+</resources>

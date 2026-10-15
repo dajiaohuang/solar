@@ -148,7 +148,13 @@ describe('catalog loader cache isolation', () => {
       if (url.endsWith('/manifest.json')) return json(manifest)
       if (url.includes('/lookup/')) {
         lookups.push(url)
-        return fail ? new Response(null, { status: 503 }) : json(entries)
+        // Fixture lookup files use the producer's FNV-1a low-byte partition.
+        const bucket = url.split('/').at(-1)!.replace('.json', '')
+        return fail ? new Response(null, { status: 503 }) : json(entries.filter(record => {
+          let hash = 0x811c9dc5
+          for (const char of record.id) hash = Math.imul(hash ^ char.charCodeAt(0), 0x01000193)
+          return (hash >>> 0).toString(16).slice(-2).padStart(2, '0') === bucket
+        }))
       }
       if (url.includes('/meta/')) return json(entries)
       if (url.includes('/binary/')) return new Response(new Float64Array(entries.flatMap(() => [2451545, 2.5, .1, 5, 10, 20, 30, .25])))
@@ -181,19 +187,20 @@ describe('catalog loader cache isolation', () => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.endsWith('/manifest.json')) return json(manifest)
-      if (url.endsWith('.json')) return json([{ id: 'asteroid:bad' }])
+      if (url.endsWith('.json')) return json([entry])
       return new Response(new Float64Array([2451545, 2, .1, corrupt ? NaN : 0, 0, 0, 0, 1]))
     }))
     await loadAsteroidManifest('mpcorb-current-full')
-    await expect(loadAsteroidChunk('bad')).rejects.toThrow('Non-finite')
+    await expect(loadAsteroidChunk('chunk-0000')).rejects.toThrow('Non-finite')
     corrupt = false
-    await expect(loadAsteroidChunk('bad')).resolves.toHaveLength(1)
+    await expect(loadAsteroidChunk('chunk-0000')).resolves.toHaveLength(1)
   })
   it('does not let a missing requested version poison the current manifest promise', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.includes('/releases/missing-version/')) return new Response(null, { status: 404 })
-      if (url.endsWith('/dataset-version.json')) return json({ manifestPath: 'releases/mpcorb-current-full/manifest.json' })
+      if (url.endsWith('/dataset-version.json')) return json({ schemaVersion: 1, activeVersion: manifest.version,
+        mode: manifest.datasetMode, manifestPath: 'releases/mpcorb-current-full/manifest.json' })
       if (url.endsWith('/releases/mpcorb-current-full/manifest.json')) return json(manifest)
       return new Response(null, { status: 404 })
     })

@@ -3,8 +3,8 @@ import { createKernelResolver, kernelsCoveringInterval, type LoadedKernel } from
 
 // Deliberately distinguish position and velocity in metadata-only test kernels.
 function kernel(id: string, states: [number, number, number][], extra: Partial<LoadedKernel> = {}): LoadedKernel {
-  return { id, ...extra, kernel: {
-    segments: states.map(([target]) => ({ target, startEt: 0, endEt: 100 })),
+  return { id, sha256: 'a'.repeat(64), ...extra, kernel: {
+    segments: states.map(([target, center]) => ({ target, center, frame: 17, type: 2, startEt: 0, endEt: 100 })),
     evaluate: (target: number, et: number) => {
       const state = states.find(row => row[0] === target)
       return !state || et < 0 || et > 100 ? null : { center: state[1], frame: 17, position: { x: state[2], y: 0, z: 0 }, velocity: { x: state[2] / 10, y: 0, z: 0 } }
@@ -41,6 +41,14 @@ describe('explicit per-body SPK solution pools', () => {
     const resolver = createKernelResolver([legacy, newer, newMoon, observer], 50)
     expect(resolver.relative(506, 599)?.position.x).toBe(97)
     expect(resolver.relative(506, 0)?.position.x).toBe(202)
+  })
+  it('reports the observer source actually used by relative states', () => {
+    const observer = kernel('observer', [[599, 5, 5]])
+    const resolver = createKernelResolver([legacy, newer, newMoon, observer], 50)
+    expect(resolver.sourceChain(5)?.[0].kernelId).toBe('de440')
+    expect(resolver.relativeSourceChains(506, 5).observer?.[0].kernelId).toBe('de442')
+    expect(resolver.relativeSourceChains(506, 599).observer?.map(segment => segment.kernelId)).toEqual(['observer', 'de440'])
+    expect(resolver.relativeSourceChains(506, 0).observer).toEqual([])
   })
   it('rejects malformed dependency identities rather than relying on array accidents', () => {
     expect(() => createKernelResolver([legacy, legacy], 50)).toThrow('Duplicate')

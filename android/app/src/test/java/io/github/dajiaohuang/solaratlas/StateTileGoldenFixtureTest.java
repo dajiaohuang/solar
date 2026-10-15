@@ -27,7 +27,7 @@ public class StateTileGoldenFixtureTest {
         assertTrue("configured fixture directory is absent", Files.isDirectory(root));
 
         Map<String, Object> manifest = object(StateTileDecoder.parseJson(read(root.resolve("manifest.json"), MAX_MANIFEST_BYTES)));
-        assertEquals("solar.state-tile-fixture/v1", string(manifest, "format"));
+        assertEquals("solar.state-tile-fixture/v2", string(manifest, "format"));
         String catalogHash = string(manifest, "catalogManifestSha256");
         String inventoryHash = optionalString(manifest, "inventoryManifestSha256");
         Map<String, Object> catalog = object(StateTileDecoder.parseJson(read(root.resolve("catalog-manifest.json"), MAX_MANIFEST_BYTES)));
@@ -70,6 +70,11 @@ public class StateTileGoldenFixtureTest {
             assertEquals(string(descriptor, "sha256"), sha256(raw));
             assertEquals(string(descriptor, "payloadSha256"), StateTileDecoder.payloadHash(raw));
             StateTileDecoder.DecodedTile decoded = StateTileDecoder.decode(raw, planId, catalogHash, inventoryHash, sequence, tileCount);
+            assertEquals("TDB", decoded.timeScale);
+            assertEquals("ECLIPJ2000", decoded.frame);
+            assertEquals("naif:0", decoded.stateOriginId);
+            assertEquals("km", decoded.distanceUnit);
+            assertEquals("km/s", decoded.velocityUnit);
             accumulatedExact += accumulator.append(decoded, requestedIds, actualIds.size());
             List<?> expectedRows = list(descriptor, "expectedRows");
             assertEquals(integer(descriptor, "recordCount"), decoded.recordCount);

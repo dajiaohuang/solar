@@ -1,5 +1,33 @@
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import { createCatalogTransferWindow } from '../../src/lib/catalogTransferWindow'
+
+it('rejects late acknowledgements before a delayed timeout callback can erase the deadline', async () => {
+  const now = vi.spyOn(performance, 'now').mockReturnValue(0)
+  const window = createCatalogTransferWindow(new AbortController().signal, 1, 1000)
+  try {
+    let id = 0
+    const pending = expect(window.publish(value => { id = value })).rejects.toThrow('ACK exceeded 1000 ms')
+    now.mockReturnValue(1000)
+    window.acknowledge(id)
+    await pending
+    await expect(window.drain()).rejects.toThrow('ACK exceeded 1000 ms')
+    const send = vi.fn()
+    await expect(window.publish(send)).rejects.toThrow('ACK exceeded 1000 ms')
+    expect(send).not.toHaveBeenCalled()
+  } finally { window.dispose(); now.mockRestore() }
+})
+
+it('times out an unacknowledged partial window and clears its timer', async () => {
+  vi.useFakeTimers()
+  const window = createCatalogTransferWindow(new AbortController().signal, 4, 1000)
+  try {
+    await window.publish(() => {})
+    const pending = expect(window.drain()).rejects.toThrow('ACK exceeded 1000 ms')
+    await vi.advanceTimersByTimeAsync(1000)
+    await pending
+    expect(vi.getTimerCount()).toBe(0)
+  } finally { window.dispose(); vi.useRealTimers() }
+})
 
 it('holds the fourth publication until a real acknowledgement and drains the final partial window', async () => {
   const window = createCatalogTransferWindow(new AbortController().signal), ids: number[] = []
@@ -49,13 +77,18 @@ it('cancels publications and completion waiting on acknowledgements without leak
   window.dispose()
 })
 
-it('returns a failed send credit and rejects disposed or invalid windows', async () => {
+it('makes a failed send terminal and rejects disposed or invalid windows', async () => {
   const signal = new AbortController().signal, window = createCatalogTransferWindow(signal, 1)
   await expect(window.publish(() => { throw new Error('transfer failed') })).rejects.toThrow('transfer failed')
-  await window.drain()
-  const published = window.publish(id => window.acknowledge(id))
-  await published
+  await expect(window.drain()).rejects.toThrow('transfer failed')
+  let resent = false
+  await expect(window.publish(() => { resent = true })).rejects.toThrow('transfer failed')
+  expect(resent).toBe(false)
   window.dispose(); window.dispose()
-  await expect(window.publish(() => {})).rejects.toThrow('closed')
+  const fresh = createCatalogTransferWindow(signal,1)
+  await fresh.publish(id => fresh.acknowledge(id))
+  await fresh.drain()
+  fresh.dispose()
+  await expect(fresh.publish(() => {})).rejects.toThrow('closed')
   expect(() => createCatalogTransferWindow(signal, 0)).toThrow('Invalid')
 })

@@ -24,7 +24,7 @@ it('exports the source, adopted GM, complete joint matrix and reproducible offse
     expect(data.adoptedGM.sha256).toBe(createHash('sha256').update(await readFile('src/data/gm_de440.tpc')).digest('hex'))
     expect(data.sampling).toMatchObject({ count: 10, dimension: 8, seed: 17 })
     expect(data.sampling.offsets).toHaveLength(80)
-    await expect(convertCovarianceFile('tests/fixtures/sbdb-bennu-covariance.json', output)).rejects.toMatchObject({ code: 'EEXIST' })
+    await expect(convertCovarianceFile('tests/fixtures/sbdb-bennu-covariance.json', output)).rejects.toMatchObject({ outputPublished: false, cause: { code: 'EEXIST' } })
     expect(await readFile(output)).toEqual(first)
     const secondOutput = join(directory, 'second.json')
     await convertCovarianceFile('tests/fixtures/sbdb-bennu-covariance.json', secondOutput, { count: 10, seed: 17 })

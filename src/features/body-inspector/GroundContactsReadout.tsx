@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useI18n } from '../../i18n/context'
-import { loadGroundContacts, type GroundContacts, type GroundContactRequest } from '../../lib/groundContacts'
+import { loadGroundContacts, type GroundContacts, type GroundContactRequest, type GroundWindowEdge } from '../../lib/groundContacts'
 import type { GroundStation } from '../../lib/groundObservation'
 import { saveTextExport } from '../../lib/platform'
 import { PRODUCT_PROFILE } from '../../lib/productAvailability'
+import { GroundSourceEvidence } from './GroundSourceEvidence'
 
 export function GroundContactsReadout({ startUtc, station, base }: { startUtc: string; station: GroundStation; base: string }) {
   const { language } = useI18n(), zh = language === 'zh'
@@ -24,6 +25,12 @@ export function GroundContactsReadout({ startUtc, station, base }: { startUtc: s
     finally { if (active.current === controller) { active.current = null; setBusy(false) } }
   }
   const label = (boundary: 'external' | 'internal') => boundary === 'external' ? (zh ? '外接触' : 'External contact') : (zh ? '内接触' : 'Internal contact')
+  const edgeKind = (kind: GroundWindowEdge['kind']) => ({
+    'search-boundary': zh ? '搜索边界' : 'Search boundary',
+    'sampled-zero': zh ? '采样零值' : 'Sampled zero',
+    'sampled-overlap': zh ? '采样负间隙' : 'Sampled negative gap',
+    'bracketed-contact': zh ? '根定位接触' : 'Bracketed contact',
+  })[kind]
   const direction = { enter: zh ? '进入' : 'Enter', exit: zh ? '离开' : 'Exit', 'sampled-zero': zh ? '采样零值' : 'Sampled zero' }
   return <details className="ground-contacts">
     <summary>{zh ? '地面掩星与凌日接触' : 'Ground occultation and transit contacts'}</summary>
@@ -48,14 +55,16 @@ export function GroundContactsReadout({ startUtc, station, base }: { startUtc: s
           <strong>{span.boundary === 'external' ? (zh ? '圆盘重叠' : 'Disk overlap') : (zh ? '圆盘包含' : 'Disk containment')}</strong><br />
           <time>{span.start.utc}</time><br />→ <time>{span.end.utc}</time><br />
           {span.durationSeconds.toFixed(3)} s · {zh ? '数值持续时间范围' : 'Numerical duration bounds'}: {span.numericalDurationBoundsSeconds.map(n => n.toFixed(3)).join(' – ')} s<br />
-          {zh ? '边缘类型' : 'Edge kinds'}: {span.start.kind} / {span.end.kind}
+          {zh ? '边缘类型' : 'Edge kinds'}: {edgeKind(span.start.kind)} / {edgeKind(span.end.kind)}
         </p>)}
         {!result.result.sampledOverlapWindows.length && <p>{zh ? '没有推断出正时长的重叠区间。' : 'No positive-duration overlap inferred.'}</p>}
       </>}
       <p>{zh ? '起点 / 终点几何类型' : 'Start / end geometry'}: {result.result.startGeometry.classification} / {result.result.endGeometry.classification}</p>
       <p>{result.result.evaluations} {zh ? '次几何求值' : 'geometry evaluations'} · IERS {result.result.earthOrientation.retrievedAt}</p>
+      <GroundSourceEvidence earthOrientation={result.earthOrientation} eopCoverageMjdUtc={result.earthOrientationCoverageMjdUtc} sources={result.result.sources} zh={zh} />
       <p>{zh ? '最大窗口 86401 秒，扫描步长 30 秒，根区间容差 0.05 秒。物理时间不确定性未知；容差不是物理精度。' : 'Maximum window 86401 s; scan step 30 s; root tolerance 0.05 s. Physical timing uncertainty is unknown; tolerance is not physical accuracy.'}</p>
       {result.result.warnings.includes('iers-predicted-earth-orientation') && <p>{zh ? 'IERS 含预测值。' : 'IERS includes predictions.'}</p>}
+      {result.result.warnings.includes('future-leap-seconds-assumed') && <p>{zh ? 'UTC 时间换算自 2027-07-01 起延用最后已知闰秒偏移；这是未来假设。' : 'From 2027-07-01, UTC conversion holds the last known leap-second offset; this is a future assumption.'}</p>}
       <button type="button" onClick={() => { void saveTextExport(JSON.stringify(result, null, 2), 'solar-ground-contacts.json', 'application/json').catch(reason => setError(String(reason))) }}>{zh ? '导出地面接触与来源 JSON' : 'Export ground contacts and sources JSON'}</button>
     </section>}
   </details>

@@ -1,4 +1,21 @@
 import preview from '../../src/data/preview-profile.json' with { type: 'json' }
+import { createHash } from 'node:crypto'
+
+/** The complete descriptor binds copied sample hashes to the original source
+ * identity. Shipping it does not ship any of the full orbital shard bytes. */
+export function verifyPreviewSourceChecksums(report, source) {
+  if (report?.schemaVersion !== 1 || report.algorithm !== 'sha256' || !report.files ||
+      typeof report.files !== 'object' || Array.isArray(report.files)) throw new Error('Invalid preview source checksums')
+  const entries = Object.entries(report.files)
+  if (entries.length > 100000 || entries.some(([path, hash]) => !path || typeof hash !== 'string' || !/^[a-f0-9]{64}$/.test(hash))) {
+    throw new Error('Invalid preview source checksum entries')
+  }
+  const descriptor = Object.fromEntries(entries.filter(([path]) => /^(binary|meta|search|lookup)\//.test(path) || /^catalog-(index|sample|summary)/.test(path))
+    .sort(([left], [right]) => left.localeCompare(right)))
+  if (createHash('sha256').update(JSON.stringify(descriptor)).digest('hex') !== source.contentSha256) {
+    throw new Error('Preview checksum descriptor differs from source identity')
+  }
+}
 
 /** Explicit allowlist: adding a future full artifact cannot leak it to preview. */
 export function previewDatasetPlan(source, availabilitySha256) {
@@ -24,7 +41,7 @@ export function previewDatasetPlan(source, availabilitySha256) {
     },
   })
   return { manifest, sourcePaths: [
-    'manifest.json', 'provenance.json', 'validation-report.json', source.summaryPath,
+    'manifest.json', 'provenance.json', 'validation-report.json', 'checksums.json', source.summaryPath,
     sample.metadataPath, sample.binaryPath,
   ] }
 }

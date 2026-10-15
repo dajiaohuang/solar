@@ -1,4 +1,4 @@
-import { gaiaAstrometricCovariance } from './gaiaAstrometricCovariance'
+import { gaiaAstrometricCovariance } from './gaiaAstrometricCovariance.ts'
 import type { GaiaSource } from './gaiaChunks'
 
 export type StellarCovariance = {
@@ -28,10 +28,13 @@ export function validateStellarCovariance(raw: unknown, source: Record<string, u
       if (!(matrix[i][i] > 0)) reject()
       for (let j = 0; j <= i; j++) {
         if (matrix[i][j] !== matrix[j][i]) reject()
-        let value = matrix[i][j]/Math.sqrt(matrix[i][i]*matrix[j][j])
+        // Normalize with separate standard deviations: multiplying variances
+        // first can overflow/underflow although their correlation is finite.
+        let value = matrix[i][j]/Math.sqrt(matrix[i][i])/Math.sqrt(matrix[j][j])
+        if (!finite(value)) reject()
         for (let k = 0; k < j; k++) value -= lower[i][k]*lower[j][k]
-        if (i === j) { if (!(value > 0)) reject(); lower[i][j] = Math.sqrt(value) }
-        else lower[i][j] = value/lower[j][j]
+        if (i === j) { if (!finite(value) || !(value > 0)) reject(); lower[i][j] = Math.sqrt(value) }
+        else { lower[i][j] = value/lower[j][j]; if (!finite(lower[i][j])) reject() }
       }
     }
   }
@@ -40,11 +43,12 @@ export function validateStellarCovariance(raw: unknown, source: Record<string, u
   if (!astrometry.available || !finite(rvError) || rvError <= 0) return reject()
   for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) {
     const expected = i < 5 && j < 5 ? astrometry.matrix[i][j] : i === 5 && j === 5 ? rvError*rvError : 0
-    const inputScale = Math.sqrt(c.inputMatrix[i][i]*c.inputMatrix[j][j])
-    if (Math.abs(c.inputMatrix[i][j]-expected) > 1e-10*inputScale) reject()
+    const inputDifference = Math.abs(c.inputMatrix[i][j]-expected)/Math.sqrt(c.inputMatrix[i][i])/Math.sqrt(c.inputMatrix[j][j])
+    if (!finite(expected) || !finite(inputDifference) || inputDifference > 1e-10) reject()
     let output = 0
     for (let a = 0; a < 6; a++) for (let b = 0; b < 6; b++) output += c.jacobian[i][a]*c.inputMatrix[a][b]*c.jacobian[j][b]
-    if (!finite(output) || Math.abs(output-c.outputMatrix[i][j]) > 1e-10*Math.sqrt(c.outputMatrix[i][i]*c.outputMatrix[j][j])) reject()
+    const outputDifference = Math.abs(output-c.outputMatrix[i][j])/Math.sqrt(c.outputMatrix[i][i])/Math.sqrt(c.outputMatrix[j][j])
+    if (!finite(output) || !finite(outputDifference) || outputDifference > 1e-10) reject()
   }
   return c
 }

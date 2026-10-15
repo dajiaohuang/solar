@@ -1,13 +1,19 @@
-import type { SpkKernel } from './spk'
+import type { SpkKernel, SpkSegment } from './spk'
 import type { Vector3 } from '../../types'
 
 export type GeometricState = { position: Vector3; velocity: Vector3 }
 export type LoadedKernel = {
   id: string; kernel: SpkKernel;
+  /** Manifest digest of the exact bytes parsed into this kernel. */
+  sha256?: string;
   /** Ordered, complete dependency pool; the root itself is appended last. */
   solutionKernelIds?: readonly string[];
   /** Available inside explicit pools, never an implicit root override. */
   dependencyOnly?: boolean;
+}
+export type SourceChainSegment = {
+  kernelId: string; kernelSha256: string; target: number; center: number;
+  frame: number; type: number; startEt: number; endEt: number;
 }
 /** A scan must not acquire/drop a kernel halfway through a curve or event
  * bracket: that discontinuity can manufacture an extremum. Each target must
@@ -16,10 +22,18 @@ export type LoadedKernel = {
 export function kernelsCoveringInterval(kernels: readonly LoadedKernel[], startEt: number, endEt: number) {
   if (!Number.isFinite(startEt) || !Number.isFinite(endEt) || endEt < startEt) return []
   return kernels.filter(({ kernel }) => {
-    const targets = [...new Set(kernel.segments.map(segment => segment.target))]
-    return targets.length > 0 && targets.every(target => {
-      const segments = kernel.segments.filter(segment => segment.target === target)
-        .sort((a, b) => a.startEt - b.startEt)
+    if (kernel.coversAllTargetsForInterval) return kernel.coversAllTargetsForInterval(startEt, endEt)
+    // Group once rather than rescanning every segment for every target. Sort
+    // only these private arrays for lightweight structural kernel adapters.
+    const byTarget = new Map<number, SpkSegment[]>()
+    for (const segment of kernel.segments) {
+      const group = byTarget.get(segment.target)
+      if (group) group.push(segment)
+      else byTarget.set(segment.target, [segment])
+    }
+    if (!byTarget.size) return false
+    for (const segments of byTarget.values()) {
+      segments.sort((a, b) => a.startEt - b.startEt)
       let coveredUntil = startEt
       let started = false
       for (const segment of segments) {
@@ -27,16 +41,19 @@ export function kernelsCoveringInterval(kernels: readonly LoadedKernel[], startE
         if (segment.startEt > coveredUntil) break
         started = true
         coveredUntil = Math.max(coveredUntil, segment.endEt)
-        if (coveredUntil >= endEt) return true
+        if (coveredUntil >= endEt) break
       }
-      return started && coveredUntil >= endEt
-    })
+      if (!(started && coveredUntil >= endEt)) return false
+    }
+    return true
   })
 }
-const ZERO = { x: 0, y: 0, z: 0 }
+const ZERO = Object.freeze({ x: 0, y: 0, z: 0 })
 const OBLIQUITY = 84381.448 / 3600 * Math.PI / 180
 const add = (a: Vector3, b: Vector3): Vector3 => ({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z })
 const subtract = (a: Vector3, b: Vector3): Vector3 => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z })
+const coversTargetAt = (kernel: SpkKernel, target: number, et: number) =>
+  kernel.coversTargetAt?.(target, et) ?? kernel.segments.some(segment => segment.target === target && segment.startEt <= et && segment.endEt >= et)
 
 /** J2000 equatorial -> ECLIPJ2000, the fixed NAIF frame 17 rotation. */
 export function toEcliptic(vector: Vector3, frame: number): Vector3 {
@@ -50,29 +67,45 @@ export function toEcliptic(vector: Vector3, frame: number): Vector3 {
 }
 
 /** One epoch, one pool snapshot. Units remain km and km/s until the app boundary. */
-export function createKernelResolver(kernels: readonly LoadedKernel[], et: number) {
+export function createKernelResolver(sourceKernels: readonly LoadedKernel[], et: number) {
   if (!Number.isFinite(et)) throw new RangeError('Ephemeris time must be finite')
+  // Own selection metadata for this epoch. Caller list edits or dependency
+  // changes must not make the lazy contexts disagree with already cached states.
+  const kernels = sourceKernels.map(({ id, kernel, sha256, solutionKernelIds, dependencyOnly }) => ({
+    id, kernel, sha256, solutionKernelIds: solutionKernelIds?.slice(), dependencyOnly,
+  }))
   const byId = new Map(kernels.map(kernel => [kernel.id, kernel]))
   if (byId.size !== kernels.length) throw new Error('Duplicate SPK kernel identity')
   // Legacy unbound sources cannot acquire new dependency-only cores or new
   // explicitly bound satellite solutions merely because another body loaded.
   const legacy = kernels.filter(kernel => !kernel.dependencyOnly && kernel.solutionKernelIds === undefined)
   const contexts = new Map<string, readonly LoadedKernel[] | null>([['legacy', legacy]])
+  const targetContexts = new Map<number, string>()
+  const observerCoverage = new Map<string, boolean>()
   const cache = new Map<string, GeometricState | null>()
   const visiting = new Set<string>()
+  const chainCache = new Map<string, readonly SourceChainSegment[] | null>()
+  const chainVisiting = new Set<string>()
   const contextFor = (target: number): string => {
+    const cached = targetContexts.get(target)
+    if (cached !== undefined) return cached
     for (let index = kernels.length - 1; index >= 0; index--) {
       const root = kernels[index]
-      if (root.dependencyOnly || !root.kernel.segments.some(segment => segment.target === target && segment.startEt <= et && segment.endEt >= et)) continue
-      if (root.solutionKernelIds === undefined) return 'legacy'
+      if (root.dependencyOnly || !coversTargetAt(root.kernel, target, et)) continue
+      if (root.solutionKernelIds === undefined) {
+        targetContexts.set(target, 'legacy')
+        return 'legacy'
+      }
       const key = `root:${root.id}`
       if (!contexts.has(key)) {
         const ids = root.solutionKernelIds
         if (ids.includes(root.id) || new Set(ids).size !== ids.length) throw new Error('Invalid explicit SPK dependency pool')
         contexts.set(key, ids.every(id => byId.has(id)) ? [...ids.map(id => byId.get(id)!), root] : null)
       }
+      targetContexts.set(target, key)
       return key
     }
+    targetContexts.set(target, 'legacy')
     return 'legacy'
   }
   const resolveIn = (target: number, context: string): GeometricState | null => {
@@ -101,17 +134,81 @@ export function createKernelResolver(kernels: readonly LoadedKernel[], et: numbe
       return null
     } finally { visiting.delete(key) }
   }
-  const barycentric = (target: number) => resolveIn(target, contextFor(target))
+  const resolveChainIn = (target: number, context: string): readonly SourceChainSegment[] | null => {
+    if (target === 0) return Object.freeze([])
+    const pool = contexts.get(context)
+    if (!pool) return null
+    const key = `${context}/${target}`
+    if (chainCache.has(key)) return chainCache.get(key)!
+    if (chainVisiting.has(key) || chainVisiting.size > 32) throw new Error('Cyclic or excessively deep SPK source chain')
+    chainVisiting.add(key)
+    try {
+      for (let index = pool.length - 1; index >= 0; index--) {
+        const loaded = pool[index]
+        const state = loaded.kernel.evaluate(target, et)
+        if (!state) continue
+        // evaluate() follows DAF's last-covering-segment precedence. Match that
+        // returned center/frame while scanning backward to retain the selected
+        // descriptor, including its type and exact interval.
+        let selected: SpkSegment | undefined
+        for (let n = loaded.kernel.segments.length - 1; n >= 0; n--) {
+          const segment = loaded.kernel.segments[n]
+          if (segment.target === target && segment.center === state.center && segment.frame === state.frame && segment.startEt <= et && segment.endEt >= et) {
+            selected = segment
+            break
+          }
+        }
+        if (!selected || !loaded.sha256 || !/^[a-f0-9]{64}$/.test(loaded.sha256)) {
+          chainCache.set(key, null)
+          return null
+        }
+        const parent = resolveChainIn(state.center, context)
+        if (!parent) {
+          chainCache.set(key, null)
+          return null
+        }
+        const chain = Object.freeze([{ kernelId: loaded.id, kernelSha256: loaded.sha256, target,
+          center: selected.center, frame: selected.frame, type: selected.type,
+          startEt: selected.startEt, endEt: selected.endEt }, ...parent])
+        chainCache.set(key, chain)
+        return chain
+      }
+      chainCache.set(key, null)
+      return null
+    } finally { chainVisiting.delete(key) }
+  }
+  const barycentric = (target: number): GeometricState | null => {
+    const state = resolveIn(target, contextFor(target))
+    // Public results are caller-owned; internal center-chain cache entries stay
+    // private, including the shared SSB origin.
+    return state ? { position: { ...state.position }, velocity: { ...state.velocity } } : null
+  }
   return {
     barycentric,
+    /** Actual recursively selected segment lineage for this same epoch/pool. */
+    sourceChain(target: number): readonly SourceChainSegment[] | null {
+      return resolveChainIn(target, contextFor(target))
+    },
+    /** The observer lineage chosen by relative(), including source-local centers. */
+    relativeSourceChains(target: number, observer: number) {
+      const context = contextFor(target)
+      const observerInPool = contexts.get(context)?.some(({ kernel }) => coversTargetAt(kernel, observer, et)) ?? false
+      return { target: resolveChainIn(target, context),
+        observer: resolveChainIn(observer, observer === 0 || observerInPool ? context : contextFor(observer)) }
+    },
     relative(target: number, observer: number): GeometricState | null {
       const context = contextFor(target)
       const body = resolveIn(target, context)
       // Sun and included parent centers use the exact same source pool. An
       // unrelated observer may require its independently declared solution;
       // that comparison is not a claim of a single global dynamical fit.
-      const observerInPool = contexts.get(context)?.some(({ kernel }) => kernel.segments.some(segment => segment.target === observer && segment.startEt <= et && segment.endEt >= et))
-      const center = observer === 0 || observerInPool ? resolveIn(observer, context) : barycentric(observer)
+      const observerKey = `${context}/${observer}`
+      let observerInPool = observerCoverage.get(observerKey)
+      if (observerInPool === undefined) {
+        observerInPool = contexts.get(context)?.some(({ kernel }) => coversTargetAt(kernel, observer, et)) ?? false
+        observerCoverage.set(observerKey, observerInPool)
+      }
+      const center = observer === 0 || observerInPool ? resolveIn(observer, context) : resolveIn(observer, contextFor(observer))
       if (!body || !center) return null
       return { position: subtract(body.position, center.position), velocity: subtract(body.velocity, center.velocity) }
     },

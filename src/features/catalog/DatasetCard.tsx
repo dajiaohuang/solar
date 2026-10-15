@@ -5,7 +5,7 @@ import { PRODUCT_PROFILE } from '../../lib/productAvailability'
 
 export function DatasetCard({ compact = false }: { compact?: boolean }) {
   const catalog = catalogStore.useStore()
-  const { t } = useI18n()
+  const { t, language } = useI18n()
   if (!catalog.manifest) {
     const requestedVersion = catalog.requestedDatasetVersion
     const openCurrent = () => {
@@ -35,6 +35,12 @@ export function DatasetCard({ compact = false }: { compact?: boolean }) {
     <div className={`dataset-card ${compact ? 'compact' : ''}`}>
       <div className="dataset-status"><i /><span>{PRODUCT_PROFILE === 'preview' ? t('previewSample') : catalog.manifest.datasetMode?.toUpperCase() ?? 'LEGACY'}</span></div>
       {PRODUCT_PROFILE === 'preview' && <p className="preview-source-boundary">{t('previewSourceBoundary')}</p>}
+      {!compact && provenance?.recordOrigin === 'manifest-derived' && <p>{language === 'zh'
+        ? '来源报告文件缺失；以下来源信息由清单推导，未取得独立报告。'
+        : 'The provenance file is missing. Source information is derived from the manifest; no separate report was obtained.'}</p>}
+      {!compact && provenance?.recordOrigin === 'provenance-file' && <p>{language === 'zh'
+        ? '来源报告的声明与清单一致；这不代表已重新校验全部源文件内容。'
+        : 'Provenance declarations match the manifest; this does not establish revalidation of every source file.'}</p>}
       <dl>
         <div><dt>{t('version')}</dt><dd>{catalog.manifest.version}</dd></div>
         <div><dt>{t(PRODUCT_PROFILE === 'preview' ? 'previewSourceObjects' : 'objects')}</dt><dd>{catalog.manifest.totalCount.toLocaleString()}</dd></div>
@@ -54,6 +60,9 @@ export function DatasetCard({ compact = false }: { compact?: boolean }) {
           </>}
         </>}
       </dl>
+      {!compact && summary && <p>{language === 'zh'
+        ? '汇总计数与清单声明一致，范围已通过格式与轨道约束检查；未在此重新扫描全部目录记录。'
+        : 'Summary counts match the manifest; ranges pass structural and orbit-domain checks. All catalog rows have not been rescanned here.'}</p>}
       {!compact && catalog.manifest.capabilities?.includes('gzip-json-v1') && <div className="inline-actions">
         <a href={`${catalog.manifest.releasePath}/delivery-manifest.json`} target="_blank" rel="noreferrer">{t('deliveryManifest')}</a>
       </div>}

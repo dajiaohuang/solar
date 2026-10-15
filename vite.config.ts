@@ -33,6 +33,8 @@ function loadBuildInfo(): BuildInfo {
 }
 
 export default defineConfig(({ command }) => {
+  const segmented = process.env.SOLAR_ATLAS_WEB_EXECUTION === 'segmented'
+  const base = segmented ? '/' : '/solar/'
   const delivery = productDelivery(process.env.SOLAR_ATLAS_PRODUCT_PROFILE, process.env.SOLAR_ATLAS_EPHEMERIS_PROFILE)
   const manifestModule = resolve('src/data/selectedEphemerisManifest.ts').replace(/\\/g, '/')
   // Use a Vite root-relative URL: a Windows drive path becomes a forbidden
@@ -61,19 +63,21 @@ export default defineConfig(({ command }) => {
   return {
     plugins: [manifestPlugin(), react()],
     worker: { plugins: () => [manifestPlugin()] },
-    base: '/solar/',
+    base,
     publicDir: command === 'serve' ? 'public' : false,
-    // Dataset pipeline tests publish temporary directories atomically. Watching
-    // those generated files can hold Windows handles across their rename.
-    server: { watch: { ignored: ['**/.dataset-test-*/**', '**/test-results/**', '**/test-results-preview/**'] } },
+    // Immutable science archives are not code inputs. Large generated trees
+    // stall module transforms and hold Windows handles across publication.
+    server: { watch: { ignored: ['**/.cache/**', '**/public/data/**', '**/dist/**', '**/.dataset-test-*/**',
+      '**/test-results/**', '**/test-results-preview/**', '**/test-results-vercel/**'] } },
     define: {
       // Pages is a static snapshot even when a developer's .env contains the
       // full client's backend URL. Never carry that endpoint into this build.
-      ...(delivery.product === 'preview' ? { 'import.meta.env.VITE_SOLAR_API_BASE_URL': JSON.stringify('') } : {}),
+      ...(delivery.product === 'preview' || segmented ? { 'import.meta.env.VITE_SOLAR_API_BASE_URL': JSON.stringify('') } : {}),
+      __SOLAR_WEB_EXECUTION__: JSON.stringify(segmented ? 'segmented' : 'backend'),
       __SOLAR_BUILD_INFO__: JSON.stringify(loadBuildInfo()),
       __SOLAR_PRODUCT_PROFILE__: JSON.stringify(productProfile(process.env.SOLAR_ATLAS_PRODUCT_PROFILE)),
       __SOLAR_EPHEMERIS_PROFILE__: JSON.stringify(ephemerisProfile(process.env.SOLAR_ATLAS_EPHEMERIS_PROFILE)),
-      __SOLAR_DATA_ROOT__: JSON.stringify(delivery.product === 'preview' ? `/solar/${delivery.catalogDirectory}` : ''),
+      __SOLAR_DATA_ROOT__: JSON.stringify(segmented ? process.env.SOLAR_ATLAS_CATALOG_URL ?? '' : delivery.product === 'preview' ? `${base}${delivery.catalogDirectory}` : ''),
     },
     // Three.js is isolated in a lazy renderer chunk; 600 kB keeps the build
     // warning meaningful without flagging that deliberate route boundary.

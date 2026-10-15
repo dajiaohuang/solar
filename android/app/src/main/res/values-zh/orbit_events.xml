@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="orbit_event_mode">为输入样本搜索距离阈值事件</string>
+    <string name="orbit_event_intro">输入相对于来源历元、按时间先后排列的搜索窗口。每组六轴样本独立搜索。此模式不使用端点传播时长、太阳辐射压或协方差细化设置，不假设样本概率分布。</string>
+    <string name="orbit_event_start">相对于来源历元的起始偏移（TDB 秒）</string>
+    <string name="orbit_event_end">相对于来源历元的结束偏移（TDB 秒）</string>
+    <string name="orbit_event_target">目标 NAIF 编号：10 太阳；399 地球；301 月球；1 水星、2 金星、4 火星、5 木星、6 土星、7 天王星、8 海王星、9 冥王星系统质心</string>
+    <string name="orbit_event_distance">几何中心距离阈值（km；不是物理半径）</string>
+    <string name="orbit_event_step">最大扫描步长（秒）</string>
+    <string name="orbit_event_tolerance">数值定位容差（秒；不超过扫描步长）</string>
+    <string name="orbit_event_evaluations">每组样本标量求值上限（1–2048）</string>
+    <string name="orbit_event_limit">每组样本检出记录上限（1–128）</string>
+    <string name="orbit_event_run">搜索输入样本的事件</string>
+    <string name="orbit_event_previous">上一组来源样本</string>
+    <string name="orbit_event_next">下一组来源样本</string>
+    <string name="orbit_event_integer">请输入非负整数</string>
+    <string name="orbit_event_counts">样本：%1$d · 已搜索：%2$d · 失败：%3$d · 未完成：%4$d · 力求值：%5$d / 250000</string>
+    <string name="orbit_event_window">参考 JD TDB：%1$s · 搜索偏移：[%2$s, %3$s] 秒</string>
+    <string name="orbit_event_definition">目标 NAIF %1$d · 几何距离阈值 %2$s km</string>
+    <string name="orbit_event_zero">采样零点 · 方向未分类</string>
+    <string name="orbit_event_entry">采样符号由正转负 · 进入阈值候选</string>
+    <string name="orbit_event_exit">采样符号由负转正 · 离开阈值候选</string>
+    <string name="orbit_event_time">TDB 秒偏移：%1$s · 定位区间 [%2$s, %3$s]</string>
+    <string name="orbit_event_limits">仅搜索采样符号变化，可能漏掉相切及多次穿越。未检出不证明不存在事件；失败和未完成样本不等于无事件。数值区间不包含积分与物理不确定性。采用力模型下的同时几何距离不是视掩星或连续碰撞检测。所有样本共享后端 20 秒上下文和 250000 次力求值。不提供事件概率或独立精度声明。每次仅展开一组样本，导出保留全部样本与完整诊断。</string>
+    <string name="orbit_event_timing_intro">条件首次检出时间 · 输入样本的描述统计，不是事件概率或置信区间。更早的未分类零点会排除该样本。不同样本不一定对应同一个物理事件。区间不包含积分或物理误差；两组入选样本不代表尾部采样充分。导出保留全部入选和排除身份。</string>
+    <string name="orbit_event_timing_entry">首次检出的由正转负符号变化</string>
+    <string name="orbit_event_timing_exit">首次检出的由负转正符号变化</string>
+    <string name="orbit_event_timing_counts">入选：%1$d / %2$d · 失败：%3$d · 未完成：%4$d · 未检出：%5$d · 零点歧义：%6$d</string>
+    <string name="orbit_event_timing_unavailable">时间分位数不可用：入选样本不足两组。</string>
+    <string name="orbit_event_timing_quantile">%1$d%% · 秩 %2$d · TDB 偏移 %3$s 秒 · 数值区间 [%4$s, %5$s] 秒</string>
+</resources>

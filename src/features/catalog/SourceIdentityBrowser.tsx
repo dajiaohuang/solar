@@ -25,14 +25,22 @@ export function SourceIdentityBrowser({ onSelectPage }: Props) {
     // next-page request or state inspection. Query edits clear it separately.
     if (operation === 'first') setPage(null)
     const controller = new AbortController(); active.current = controller; setStatus('loading')
+    const deadline = performance.now() + 30_000
+    const checkDeadline = () => {
+      if (performance.now() >= deadline) controller.abort()
+      controller.signal.throwIfAborted()
+    }
     const timer = setTimeout(() => controller.abort(), 30_000)
     try {
+      checkDeadline()
       const params = { base, profile: PRODUCT_PROFILE, signal: controller.signal }
       if (operation === 'states' && page) {
         const inspected = await inspectSourceIdentityPage({ ...params, page, epochTdbJd: epoch.trim() ? Number(epoch) : NaN })
+        checkDeadline()
         if (active.current === controller) setResult(inspected)
       } else {
         const loaded = await loadSourceIdentityPage({ ...params, query: query.trim(), previous })
+        checkDeadline()
         if (active.current === controller) setPage(loaded)
       }
       if (active.current === controller) setStatus('idle')

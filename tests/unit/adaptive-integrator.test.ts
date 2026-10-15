@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { integrateAdaptive, type IntegrationOptions } from '../../src/engine/dynamics/adaptiveIntegrator'
 
 const settings = (overrides: Partial<IntegrationOptions> = {}): IntegrationOptions => ({
@@ -40,6 +40,17 @@ describe('bounded adaptive integration', () => {
     await expect(integrateAdaptive(settings({ maxStep: .001, signal: controller.signal,
       yieldControl: async () => { yields++; controller.abort() } }))).rejects.toMatchObject({ name: 'AbortError' })
     expect(yields).toBe(1)
+  })
+  it('yields after an expensive attempt before the fixed 32-attempt checkpoint', async () => {
+    let clock = 0, evaluations = 0
+    const timer = vi.spyOn(performance, 'now').mockImplementation(() => clock)
+    const controller = new AbortController()
+    try {
+      await expect(integrateAdaptive(settings({ duration: 10, signal: controller.signal,
+        derivative: (_t, _y, out) => { evaluations++; clock += 2; out[0] = 1 },
+        yieldControl: async () => { controller.abort() } }))).rejects.toMatchObject({ name: 'AbortError' })
+      expect(evaluations).toBe(7)
+    } finally { timer.mockRestore() }
   })
   it('rejects uninitialized derivatives and invalid settings', async () => {
     await expect(integrateAdaptive(settings({ derivative: () => {} }))).rejects.toThrow('every component')

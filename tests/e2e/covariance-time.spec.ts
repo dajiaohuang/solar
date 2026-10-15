@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { expect, test } from './fixtures'
-import reference from '../fixtures/dynamics-covariance-reference.json' with { type: 'json' }
+import reference from '../fixtures/dynamics-covariance-reference-20260926.json' with { type: 'json' }
 
 test.beforeEach(async ({ page }) => { await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete')) })
 
@@ -12,8 +12,8 @@ test('real worker propagates covariance and exports independently checked condit
   await panel.getByLabel('Adopt solar 1PN for covariance propagation').check()
   await panel.getByRole('button', { name: 'Adopt conditional DE440 model and propagate' }).click()
   const result = panel.getByTestId('covariance-time-result')
-  await expect(result).toContainText('2592000 s')
-  await expect(result.getByRole('row')).toHaveCount(7)
+  await expect(result.getByText('2592000', { exact: true })).toBeVisible()
+  await expect(result.getByRole('table', { name: 'Propagated formal standard deviations', exact: true }).getByRole('row')).toHaveCount(7)
   await expect(result.getByRole('img')).toHaveCount(1)
   expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth+1)).toBe(true)
   await result.screenshot({ path: test.info().outputPath('propagated-covariance.png') })
@@ -29,8 +29,10 @@ test('real worker propagates covariance and exports independently checked condit
   await panel.getByLabel('Covariance duration (TDB days)').fill('-10')
   await expect(result).toHaveCount(0)
   await panel.getByLabel('SBDB covariance JSON file').setInputFiles('tests/fixtures/sbdb-bennu-covariance.json')
+  await expect(panel).toContainText('101955 / 118')
+  await expect(panel.getByText('Propagate formal covariance in time', { exact: true })).toHaveCount(1)
   await panel.getByText('Propagate formal covariance in time', { exact: true }).click()
-  await expect(panel).toContainText('Extra source parameters have no matched force derivatives')
+  await expect(panel.locator('.covariance-time-propagation').filter({ has: page.getByText('Propagate formal covariance in time', { exact: true }) })).toContainText('Unsupported covariance axes: RHO')
   await expect(panel.getByRole('button', { name: 'Adopt conditional DE440 model and propagate' })).toHaveCount(0)
 })
 

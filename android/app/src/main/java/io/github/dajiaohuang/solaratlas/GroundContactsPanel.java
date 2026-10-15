@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Color;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.widget.Button;
@@ -19,7 +20,8 @@ final class GroundContactsPanel extends LinearLayout {
     private GroundContactsReport displayed;
     private final Handler main = new Handler(Looper.getMainLooper());
     private GroundContactsService service;
-    private Thread worker;
+    private final NativeProjectionPrefetch searchWork = new NativeProjectionPrefetch();
+    private final NativeUiResultSlot results = new NativeUiResultSlot();
     private Runnable deadline;
     private int generation;
     GroundContactsPanel(Context context, EditText backend, java.util.function.Consumer<byte[]> exportResult) {
@@ -51,27 +53,35 @@ final class GroundContactsPanel extends LinearLayout {
     }
     private void search() {
         clear(); final int requestId = generation;
+        final long resultToken = results.reset();
         final GroundContactsReport.Request request; final GroundContactsService current;
         try {
             request = new GroundContactsReport.Request(text(start), text(end), Double.parseDouble(text(longitude)), Double.parseDouble(text(latitude)), Double.parseDouble(text(height)), Integer.parseInt(text(foreground)), Integer.parseInt(text(background)));
             current = new GroundContactsService(text(backend));
         } catch (Exception error) { status.setText(getResources().getString(R.string.contacts_failed)+" · "+error.getMessage()); return; }
         service = current; load.setEnabled(false); cancel.setVisibility(VISIBLE); status.setText(R.string.contacts_loading);
+        final long expiresAt = SystemClock.elapsedRealtime() + 25_000;
         deadline = () -> { if (generation == requestId) { clear(); status.setText(R.string.contacts_timeout); } }; main.postDelayed(deadline, 25_000);
-        worker = new Thread(() -> {
+        searchWork.start(() -> {
             try {
+                if (Thread.currentThread().isInterrupted() || SystemClock.elapsedRealtime() >= expiresAt) throw new java.util.concurrent.CancellationException();
                 GroundContactsReport report = current.load(request);
-                main.post(() -> { if (requestId != generation) return; finish(); show(report); });
+                results.offer(resultToken, () -> { if (finishRequest(requestId, expiresAt)) show(report); });
             } catch (Exception error) {
-                main.post(() -> { if (requestId != generation) return; finish(); status.setText(getResources().getString(R.string.contacts_failed)+" · "+error.getMessage()); });
+                results.offer(resultToken, () -> { if (finishRequest(requestId, expiresAt)) status.setText(getResources().getString(R.string.contacts_failed)+" · "+error.getMessage()); });
             } finally { current.close(); }
-        }, "solar-ground-contacts"); worker.start();
+        }, "solar-ground-contacts");
     }
     void clear() {
-        generation++; if (worker != null) worker.interrupt(); if (service != null) service.close(); finish();
+        generation++; results.reset(); searchWork.cancel(); if (service != null) service.close(); finish();
         status.setText(R.string.contacts_idle); result.setText(""); displayed = null; export.setVisibility(GONE);
     }
-    private void finish() { if (deadline != null) main.removeCallbacks(deadline); deadline = null; worker = null; service = null; load.setEnabled(true); cancel.setVisibility(GONE); }
+    private boolean finishRequest(int token, long expiresAt) {
+        if (token != generation) return false;
+        if (SystemClock.elapsedRealtime() >= expiresAt) { clear(); status.setText(R.string.contacts_timeout); return false; }
+        finish(); return true;
+    }
+    private void finish() { if (deadline != null) main.removeCallbacks(deadline); deadline = null; service = null; load.setEnabled(true); cancel.setVisibility(GONE); }
     private void show(GroundContactsReport report) {
         displayed = report; export.setVisibility(VISIBLE);
         status.setText(getResources().getString(R.string.contacts_count, report.contacts.size(), report.evaluations));
@@ -92,7 +102,7 @@ final class GroundContactsPanel extends LinearLayout {
                 .append("\nIERS ").append(report.eopRetrievedAt).append('\n').append(report.eopHash).append("\nCatalog SHA-256\n").append(report.catalogHash);
         result.setText(text.toString());
     }
-    private String edgeLabel(String kind) { return getResources().getString(kind.equals("search-boundary") ? R.string.contacts_clipped : kind.equals("sampled-zero") ? R.string.contacts_zero : R.string.contacts_bracketed); }
+    private String edgeLabel(String kind) { return getResources().getString(kind.equals("search-boundary") ? R.string.contacts_clipped : kind.equals("sampled-zero") ? R.string.contacts_zero : kind.equals("sampled-overlap") ? R.string.contacts_sampled_overlap : R.string.contacts_bracketed); }
     void exportStatus(boolean success) { status.setText(success ? R.string.contacts_exported : R.string.contacts_export_failed); }
     private static String text(EditText view) { return view.getText().toString().trim(); }
     private Button button(int text, String tag) { Button v = new Button(getContext()); v.setText(text); v.setTag(tag); return v; }

@@ -5,6 +5,8 @@ import { createStore } from './createStore'
 
 export type { CatalogFilters } from '../types'
 type CatalogState = {
+  explorerStreamRows: number | null
+  explorerBudgetMiB: number
   mode: DatasetMode
   datasetVersion: string
   requestedDatasetVersion: string | null
@@ -27,6 +29,7 @@ type CatalogState = {
   loadProgress: number
   selectionScope: {
     datasetVersion: string
+    manifestIdentity: string
     filters: CatalogFilters
     count: number
   } | null
@@ -41,15 +44,19 @@ type CatalogState = {
 export const DEFAULT_CATALOG_FILTERS: CatalogFilters = {
   query: '',
   orbitClass: 'all',
-  semiMajorAxis: [0, 80],
+  // The pinned full MPCORB release reaches 4,688 AU. Keep selection bounds
+  // broad enough to include its distant orbits; map radius is independent.
+  semiMajorAxis: [0, 10_000],
   eccentricity: [0, 0.999],
   inclination: [0, 180],
   absoluteMagnitude: [-5, 40],
   magnitudeStatus: 'all',
-  perihelion: [0, 80],
+  perihelion: [0, 10_000],
 }
 
 const initialCatalogState: CatalogState = {
+  explorerStreamRows: null,
+  explorerBudgetMiB: 512,
   mode: 'lite',
   datasetVersion: 'unavailable',
   requestedDatasetVersion: null,
@@ -124,14 +131,19 @@ export const catalogActions = {
       isLoading: false,
     }))
   },
-  selectAllFiltered(datasetVersion: string, filters: CatalogFilters, count: number) {
+  selectAllFiltered(manifest: AsteroidManifest, filters: CatalogFilters, count: number) {
+    const state = catalogStore.getState()
+    if (state.manifest !== manifest || JSON.stringify(state.filters) !== JSON.stringify(filters) ||
+        state.exactFilteredTotal !== count || !state.activeResultScanKey || !Number.isSafeInteger(count) || count < 0) return false
     catalogStore.setState({
       selectionScope: {
-        datasetVersion,
+        datasetVersion: manifest.version,
+        manifestIdentity: JSON.stringify(manifest),
         filters: structuredClone(filters),
         count,
       },
     })
+    return true
   },
   clearCatalogSelection() {
     catalogStore.setState({ selectionScope: null })

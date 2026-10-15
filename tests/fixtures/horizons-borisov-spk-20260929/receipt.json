@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "source": "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27DES%3D1003639%3B%27&EPHEM_TYPE=SPK&OBJ_DATA=YES&START_TIME=%272019-01-01%27&STOP_TIME=%272031-01-01%27",
+    "retrievedAt": "2026-09-28T21:15:22.744Z",
+    "bytes": 292864,
+    "sha256": "8e2931d03595c01ab5c50d9d268376ee0024ebf881846dc1def6f2c1559e1705",
+    "responseSha256": "6e77026ca9792963aa3298b977485a9abcbf0bfcb0b96958cbf75aeb3f72c8b2",
+    "signature": {
+      "version": "1.2",
+      "source": "NASA/JPL Horizons API"
+    },
+    "target": 1003639,
+    "designation": "DES=1003639",
+    "from": "2019-01-01",
+    "to": "2031-01-01",
+    "timeScale": "TDB",
+    "solution": "*******************************************************************************\nJPL/HORIZONS                 Borisov (C/2019 Q4)           2026-Sep-28 14:15:26\nRec #:90004568 (+COV) Soln.date: 2024-Jun-24_15:49:04    # obs: 964 (2019-2020)\n \nIAU76/J2000 helio. ecliptic osc. elements (au, days, deg., period=Julian yrs):\n \n  EPOCH=  2458853.5 ! 2020-Jan-05.0000000 (TDB)    RMSW= n.a.\n   EC= 3.356475782676596   QR= 2.006520878500843   TP= 2458826.052845906\n   OM= 308.1477292269942   W= 209.1236864378081    IN= 44.05264247909138\n   A= -.8514922551937886   MA= 34.42947030737667   ADIST= 9.999999E99\n   PER= 9.999999E99        N= 1.254391264          ANGMOM= .050859365\n   DAN= -4.52423           DDN= 2.22307            L= 149.9695468\n   B= -19.7799936          MOID= 1.09291995        TP= 2019-Dec-08.5528459060\n \nComet physical (GM= km^3/s^2; RAD= km):\n   GM= n.a.                RAD= n.a.\n   M1=  13.8     M2=  n.a.     k1=  4.5    k2= n.a.     PHCOF= n.a.\nComet non-gravitational force model (AMRAT=m^2/kg;A1-A3=au/d^2;DT=days;R0=au):\n   AMRAT=  0.                                      DT=  -65.1301\n   A1= 4.85958814621E-8    A2= 1.879898667336E-8   A3= 2.835503220558E-9\n Non-standard or simulated/proxy model:\n   ALN=  1.            NK=  0.       NM=  2.       NN=  0.       R0=  1.\n\nCOMET comments \n1: soln ref.= JPL#54, data arc: 2019-02-24 to 2020-09-30\n2: k1=4.5;\n*******************************************************************************\n\nID= '1003639'\n\n"
+  }
+}

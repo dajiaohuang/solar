@@ -74,7 +74,7 @@ describe('immutable asteroid dataset publisher', () => {
       expect(pointer.generatedAt).not.toBe(sourceLastModifiedAt)
       expect(manifest).toMatchObject({
         schemaVersion: 3,
-        parserVersion: '3.2.0',
+        parserVersion: '3.3.0',
         totalCount: 3,
         chunkCount: 2,
         chunkSize: 2,

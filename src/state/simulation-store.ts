@@ -4,6 +4,7 @@ import { createStore } from './createStore'
 import type { RenderQuality } from '../types'
 import { sceneAvailability } from '../lib/productAvailability'
 import { availabilityActions } from './availability-store'
+import { SEGMENTED_WEB } from '../lib/webExecution'
 
 export type ViewMode = '2d' | '3d'
 
@@ -29,7 +30,7 @@ export const DEFAULT_SIMULATION_STATE: SimulationState = {
   referenceId: 'sun',
   comparisonReferenceId: 'earth',
   comparisonEnabled: false,
-  historyDays: 365,
+  historyDays: SEGMENTED_WEB ? 30 : 365,
   sampleCount: 180,
   viewMode: '3d',
   renderQuality: 'auto',

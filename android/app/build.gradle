@@ -22,6 +22,10 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+    // Original Gaia files are test inputs only, never production app assets.
+    sourceSets {
+        androidTest.assets.srcDir '../../tests/fixtures/gaia-six-20260923'
+    }
 }
 
 dependencies {

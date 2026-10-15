@@ -14,13 +14,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** Strict decoder for the Go statewire v1 envelope. No scientific values are generated here. */
+/** Strict decoder for the Go statewire v2 envelope. No scientific values are generated here. */
 public final class StateTileDecoder {
-    public static final int HEADER_BYTES = 200;
+    public static final int HEADER_BYTES = 208;
+    public static final int WIRE_VERSION = 2;
     public static final int STRIDE = 6;
     public static final int FIELD_MASK = 3;
     public static final int MAX_ROWS = 32768;
     public static final int MAX_TILE_BYTES = 64 * 1024 * 1024;
+    private static final int MAX_METADATA_LINE_BYTES = 1024 * 1024;
     private static final byte[] MAGIC = new byte[]{'S', 'L', 'R', 'T', 'I', 'L', 'E', 0};
     private static final String[] REQUIRED_METADATA_FIELDS = new String[]{
             "id", "source", "datasetVersion", "datasetSha256", "kernelSha256", "model", "centerId",
@@ -41,6 +43,7 @@ public final class StateTileDecoder {
         public final String datasetVersion;
         public final String datasetSha256;
         public final String kernelSha256;
+        public final String sourceChainSha256;
         public final String model;
         public final String centerId;
         public final String stateEvidence;
@@ -61,6 +64,9 @@ public final class StateTileDecoder {
             datasetVersion = string(values, "datasetVersion");
             datasetSha256 = string(values, "datasetSha256");
             kernelSha256 = string(values, "kernelSha256");
+            if (values.containsKey("sourceChainSha256") && !(values.get("sourceChainSha256") instanceof String)) throw new ProtocolException("source-chain digest must be a string");
+            sourceChainSha256 = values.containsKey("sourceChainSha256") ? string(values, "sourceChainSha256") : "";
+            if (!sourceChainSha256.isEmpty() && !isHash(sourceChainSha256)) throw new ProtocolException("invalid source-chain digest");
             model = string(values, "model");
             centerId = string(values, "centerId");
             stateEvidence = string(values, "stateEvidence");
@@ -83,27 +89,24 @@ public final class StateTileDecoder {
 
         private static String string(Map<String, Object> values, String key) throws ProtocolException {
             Object value = values.get(key);
-            if (value == null) return "";
             if (!(value instanceof String)) throw new ProtocolException("metadata field is not a string: " + key);
             return (String) value;
         }
 
         private static String requiredString(Map<String, Object> values, String key) throws ProtocolException {
             String value = string(values, key);
-            if (value.trim().isEmpty()) throw new ProtocolException("metadata identity is empty");
+            if (isBlank(value)) throw new ProtocolException("metadata identity is empty");
             return value;
         }
 
         private static boolean bool(Map<String, Object> values, String key) throws ProtocolException {
             Object value = values.get(key);
-            if (value == null) return false;
             if (!(value instanceof Boolean)) throw new ProtocolException("metadata field is not boolean: " + key);
             return (Boolean) value;
         }
 
         private static double number(Map<String, Object> values, String key) throws ProtocolException {
             Object value = values.get(key);
-            if (value == null) return 0;
             if (!(value instanceof Number)) throw new ProtocolException("metadata field is not numeric: " + key);
             return ((Number) value).doubleValue();
         }
@@ -115,6 +118,11 @@ public final class StateTileDecoder {
         public final long ordinalStart;
         public final int recordCount;
         public final double epochJd;
+        public final String timeScale = "TDB";
+        public final String frame = "ECLIPJ2000";
+        public final String stateOriginId = "naif:0";
+        public final String distanceUnit = "km";
+        public final String velocityUnit = "km/s";
         public final List<Metadata> metadata;
         public final byte[] exactBitmap;
         public final byte[] approximateBitmap;
@@ -149,9 +157,11 @@ public final class StateTileDecoder {
     public static DecodedTile decode(byte[] raw, String expectedPlanHash, String expectedCatalogHash,
                                      String expectedInventoryHash, Integer expectedSequence,
                                      Integer expectedTileCount) throws ProtocolException {
+        checkInterrupted();
         if (raw == null || raw.length < HEADER_BYTES || raw.length > MAX_TILE_BYTES) throw new ProtocolException("tile size exceeds 64 MiB or header");
         for (int i = 0; i < MAGIC.length; i++) if (raw[i] != MAGIC[i]) throw new ProtocolException("magic mismatch");
-        if (u16(raw, 8) != 1 || u16(raw, 10) != HEADER_BYTES) throw new ProtocolException("version/header mismatch");
+        if (u16(raw, 8) != WIRE_VERSION || u16(raw, 10) != HEADER_BYTES) throw new ProtocolException("version/header mismatch");
+        if (raw[200] != 1 || raw[201] != 1 || raw[202] != 1 || raw[203] != 1 || raw[204] != 1 || raw[205] != 0 || raw[206] != 0 || raw[207] != 0) throw new ProtocolException("unsupported scientific contract");
         int sequence = checkedInt(u32(raw, 12), "sequence");
         int tileCount = checkedInt(u32(raw, 16), "tile count");
         long ordinalStart = u32(raw, 20);
@@ -175,8 +185,11 @@ public final class StateTileDecoder {
         long expectedBitmapLength = (recordCount + 7L) / 8L;
         if (metadataOffset != HEADER_BYTES || metadataLength < 2 || metadataOffset + metadataLength > raw.length || raw[(int) (metadataOffset + metadataLength - 1)] != '\n' ||
                 exactOffset != metadataOffset + metadataLength || bitmapLength != expectedBitmapLength || approximateOffset != exactOffset + bitmapLength ||
-                missingOffset != approximateOffset + bitmapLength || statesOffset < missingOffset + bitmapLength || statesOffset % 8 != 0 ||
+                missingOffset != approximateOffset + bitmapLength || statesOffset != ((missingOffset + bitmapLength + 7L) & ~7L) ||
                 statesLength != recordCount * (long) STRIDE * 8L || statesOffset + statesLength != raw.length) throw new ProtocolException("invalid section offsets");
+        for (long offset = missingOffset + bitmapLength; offset < statesOffset; offset++) {
+            if (raw[(int) offset] != 0) throw new ProtocolException("nonzero alignment padding");
+        }
         if (!payloadHash.equals(computePayloadHash(raw))) throw new ProtocolException("payload checksum mismatch");
 
         List<Metadata> metadata = parseMetadata(raw, (int) metadataOffset, (int) metadataLength, recordCount);
@@ -185,21 +198,22 @@ public final class StateTileDecoder {
         Set<String> ids = new HashSet<>();
         double[] states = new double[recordCount * STRIDE];
         for (int row = 0; row < recordCount; row++) {
+            checkInterrupted();
             Metadata item = metadata.get(row);
             if (!ids.add(item.id)) throw new ProtocolException("duplicate metadata identity");
             boolean isExact = bit(exact, row), isApproximate = bit(approximate, row), isMissing = bit(missing, row);
             if ((isExact ? 1 : 0) + (isApproximate ? 1 : 0) + (isMissing ? 1 : 0) != 1 || isApproximate) throw new ProtocolException("invalid exact-only status bitmap");
             if (isExact) {
-                if (item.source.trim().isEmpty() || item.datasetVersion.trim().isEmpty() || !isHash(item.datasetSha256) || item.stateEvidence.trim().isEmpty() || item.centerId.trim().isEmpty() ||
+                if (isBlank(item.source) || isBlank(item.datasetVersion) || !isHash(item.datasetSha256) || !isHash(item.sourceChainSha256) || isBlank(item.stateEvidence) || !"naif:0".equals(item.centerId) ||
                         !("spk-original".equals(item.model) || "source-kernel-state-at-audit-epoch".equals(item.model)) ||
-                        "spk-original".equals(item.model) && !isHash(item.kernelSha256) || !item.missingReason.isEmpty()) throw new ProtocolException("invalid exact provenance");
+                        !isHash(item.kernelSha256) || !item.missingReason.isEmpty()) throw new ProtocolException("invalid exact provenance");
                 String expectedDatasetHash = item.sourceRecord ? expectedInventoryHash : expectedCatalogHash;
                 if (expectedDatasetHash == null || !item.datasetSha256.equals(expectedDatasetHash)) throw new ProtocolException("exact dataset hash is not bound to this manifest");
-                if ("source-kernel-state-at-audit-epoch".equals(item.model) && (!item.sourceRecord || item.identityStatus.trim().isEmpty())) throw new ProtocolException("snapshot source identity is missing");
+                if ("source-kernel-state-at-audit-epoch".equals(item.model) && (!item.sourceRecord || isBlank(item.identityStatus))) throw new ProtocolException("snapshot source identity is missing");
                 double epochEt = (epochJd - 2451545.0) * 86400.0;
                 if (item.validityPresent && (epochEt < item.validityStartEt - 0.0001 || epochEt > item.validityEndEt + 0.0001)) throw new ProtocolException("state is outside validity window");
                 if (item.evidenceWindowPresent && (epochEt < item.evidenceWindowStartEt - 0.0001 || epochEt > item.evidenceWindowEndEt + 0.0001)) throw new ProtocolException("state is outside evidence window");
-            } else if (item.missingReason.trim().isEmpty()) throw new ProtocolException("missing state has no reason");
+            } else if (isBlank(item.missingReason)) throw new ProtocolException("missing state has no reason");
             for (int component = 0; component < STRIDE; component++) {
                 long bits = u64(raw, statesOffset + (long) (row * STRIDE + component) * 8L);
                 double value = Double.longBitsToDouble(bits);
@@ -207,6 +221,7 @@ public final class StateTileDecoder {
                 states[row * STRIDE + component] = value;
             }
         }
+        checkInterrupted();
         return new DecodedTile(sequence, tileCount, ordinalStart, recordCount, epochJd, metadata, exact, approximate, missing, states,
                 planHash, catalogHash, hasInventory ? inventoryHash : null, payloadHash);
     }
@@ -236,10 +251,15 @@ public final class StateTileDecoder {
         int start = offset;
         int end = offset + length;
         while (start < end) {
+            checkInterrupted();
             if (result.size() >= expectedRows) throw new ProtocolException("metadata row count mismatch");
             int newline = start;
-            while (newline < end && raw[newline] != '\n') newline++;
-            if (newline == end || newline - start > 1024 * 1024) throw new ProtocolException("invalid metadata line");
+            while (newline < end && raw[newline] != '\n') {
+                if (newline - start >= MAX_METADATA_LINE_BYTES) throw new ProtocolException("metadata line exceeds 1 MiB");
+                if ((newline - start) % 4096 == 0) checkInterrupted();
+                newline++;
+            }
+            if (newline == end) throw new ProtocolException("invalid metadata line");
             int lineEnd = newline;
             if (lineEnd > start && raw[lineEnd - 1] == '\r') lineEnd--;
             if (lineEnd == start) throw new ProtocolException("empty metadata line");
@@ -257,10 +277,11 @@ public final class StateTileDecoder {
     }
 
     static final class JsonParser {
-        private final String text; private int position; private int nesting;
+        private final String text; private int position; private int nesting; private int nextCancellationCheck;
         JsonParser(String text) { this.text = text; }
-        Object parse() throws ProtocolException { Object value = value(); whitespace(); if (position != text.length()) throw new ProtocolException("trailing metadata JSON"); return value; }
+        Object parse() throws ProtocolException { cancelled(); Object value = value(); whitespace(); if (position != text.length()) throw new ProtocolException("trailing metadata JSON"); cancelled(); return value; }
         private Object value() throws ProtocolException {
+            cancelled();
             whitespace(); if (position >= text.length()) throw new ProtocolException("truncated metadata JSON");
             char c = text.charAt(position);
             if (c == '"') return string();
@@ -275,11 +296,48 @@ public final class StateTileDecoder {
         }
         private Map<String, Object> object() throws ProtocolException { Map<String, Object> result = new HashMap<>(); position++; whitespace(); if (take('}')) return result; while (true) { whitespace(); if (position >= text.length() || text.charAt(position) != '"') throw new ProtocolException("metadata object key is invalid"); String key = string(); if (result.containsKey(key)) throw new ProtocolException("duplicate metadata key"); whitespace(); require(':'); Object value = value(); result.put(key, value); whitespace(); if (take('}')) return result; require(','); } }
         private List<Object> array() throws ProtocolException { List<Object> result = new ArrayList<>(); position++; whitespace(); if (take(']')) return result; while (true) { result.add(value()); whitespace(); if (take(']')) return result; require(','); } }
-        private String string() throws ProtocolException { require('"'); StringBuilder result = new StringBuilder(); while (position < text.length()) { char c = text.charAt(position++); if (c == '"') return result.toString(); if (c < 0x20) throw new ProtocolException("control character in metadata string"); if (c != '\\') { result.append(c); continue; } if (position >= text.length()) throw new ProtocolException("truncated metadata escape"); char escaped = text.charAt(position++); switch (escaped) { case '"': case '\\': case '/': result.append(escaped); break; case 'b': result.append('\b'); break; case 'f': result.append('\f'); break; case 'n': result.append('\n'); break; case 'r': result.append('\r'); break; case 't': result.append('\t'); break; case 'u': result.append((char) hex4()); break; default: throw new ProtocolException("invalid metadata escape"); } } throw new ProtocolException("unterminated metadata string"); }
-        private double number() throws ProtocolException { int start = position; if (position < text.length() && text.charAt(position) == '-') position++; digits(); if (position < text.length() && text.charAt(position) == '.') { position++; digits(); } if (position < text.length() && (text.charAt(position) == 'e' || text.charAt(position) == 'E')) { position++; if (position < text.length() && (text.charAt(position) == '+' || text.charAt(position) == '-')) position++; digits(); } try { double value = Double.parseDouble(text.substring(start, position)); if (!finite(value)) throw new ProtocolException("nonfinite metadata number"); return value; } catch (NumberFormatException error) { throw new ProtocolException("invalid metadata number"); } }
-        private void digits() throws ProtocolException { int start = position; while (position < text.length() && Character.isDigit(text.charAt(position))) position++; if (start == position) throw new ProtocolException("metadata number has no digits"); }
-        private int hex4() throws ProtocolException { if (position + 4 > text.length()) throw new ProtocolException("truncated unicode escape"); int value = 0; for (int i = 0; i < 4; i++) { int digit = Character.digit(text.charAt(position++), 16); if (digit < 0) throw new ProtocolException("invalid unicode escape"); value = value * 16 + digit; } return value; }
-        private void whitespace() { while (position < text.length() && Character.isWhitespace(text.charAt(position))) position++; }
+        private String string() throws ProtocolException { require('"'); StringBuilder result = new StringBuilder(); while (position < text.length()) { checkpoint(); char c = text.charAt(position++); if (c == '"') return result.toString(); if (c < 0x20) throw new ProtocolException("control character in metadata string"); if (c != '\\') { result.append(c); continue; } if (position >= text.length()) throw new ProtocolException("truncated metadata escape"); char escaped = text.charAt(position++); switch (escaped) { case '"': case '\\': case '/': result.append(escaped); break; case 'b': result.append('\b'); break; case 'f': result.append('\f'); break; case 'n': result.append('\n'); break; case 'r': result.append('\r'); break; case 't': result.append('\t'); break; case 'u': result.append((char) hex4()); break; default: throw new ProtocolException("invalid metadata escape"); } } throw new ProtocolException("unterminated metadata string"); }
+        private double number() throws ProtocolException {
+            int start = position;
+            take('-');
+            if (take('0')) {
+                if (position < text.length() && asciiDigit(text.charAt(position))) throw new ProtocolException("leading zero in metadata number");
+            } else { digits(); }
+            if (take('.')) digits();
+            if (take('e') || take('E')) {
+                if (!take('+')) take('-');
+                digits();
+            }
+            try {
+                double value = Double.parseDouble(text.substring(start, position));
+                if (!finite(value)) throw new ProtocolException("nonfinite metadata number");
+                return value;
+            } catch (NumberFormatException error) { throw new ProtocolException("invalid metadata number"); }
+        }
+        private static boolean asciiDigit(char value) { return value >= '0' && value <= '9'; }
+        private void digits() throws ProtocolException { int start = position; while (position < text.length() && asciiDigit(text.charAt(position))) { checkpoint(); position++; } if (start == position) throw new ProtocolException("metadata number has no digits"); }
+        private int hex4() throws ProtocolException {
+            if (position + 4 > text.length()) throw new ProtocolException("truncated unicode escape");
+            int value = 0;
+            for (int i = 0; i < 4; i++) {
+                char c = text.charAt(position++);
+                int digit = asciiDigit(c) ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+                if (digit < 0) throw new ProtocolException("invalid unicode escape");
+                value = value * 16 + digit;
+            }
+            return value;
+        }
+        private void whitespace() throws ProtocolException {
+            while (position < text.length()) {
+                char c = text.charAt(position);
+                if (c != ' ' && c != '\t' && c != '\r' && c != '\n') break;
+                checkpoint(); position++;
+            }
+        }
+        // Value boundaries cover dense arrays/objects; character checkpoints also
+        // cover a single large base64 source string, number or whitespace run.
+        private void checkpoint() throws ProtocolException { if(position>=nextCancellationCheck){cancelled();nextCancellationCheck=position>Integer.MAX_VALUE-4096?Integer.MAX_VALUE:position+4096;} }
+        private void cancelled() throws ProtocolException { if(Thread.currentThread().isInterrupted())throw new ProtocolException("JSON parsing cancelled"); }
         private boolean take(char expected) { if (position < text.length() && text.charAt(position) == expected) { position++; return true; } return false; }
         private void require(char expected) throws ProtocolException { if (!take(expected)) throw new ProtocolException("invalid metadata JSON"); }
     }
@@ -292,8 +350,26 @@ public final class StateTileDecoder {
     private static boolean bit(byte[] bitmap, int row) { return (bitmap[row / 8] & (1 << (row % 8))) != 0; }
     private static void validateBitmapPadding(byte[] bitmap, int rows) throws ProtocolException { for (int row = rows; row < bitmap.length * 8; row++) if (bit(bitmap, row)) throw new ProtocolException("bitmap has bits beyond record count"); }
     private static boolean finite(double value) { return !Double.isNaN(value) && !Double.isInfinite(value); }
+    private static boolean isBlank(String value) {
+        if (value == null || value.isEmpty()) return true;
+        for (int offset = 0; offset < value.length();) {
+            int codePoint = value.codePointAt(offset);
+            if (!(Character.isWhitespace(codePoint) || Character.isSpaceChar(codePoint) || codePoint == 0x85)) return false;
+            offset += Character.charCount(codePoint);
+        }
+        return true;
+    }
     private static boolean isHash(String value) { if (value == null || value.length() != 64) return false; for (int i = 0; i < value.length(); i++) { char c = value.charAt(i); if (!(c >= '0' && c <= '9' || c >= 'a' && c <= 'f')) return false; } return true; }
     private static boolean allZero(byte[] value, int offset, int length) { for (int i = offset; i < offset + length; i++) if (value[i] != 0) return false; return true; }
     private static String hex(byte[] value, int offset, int length) { StringBuilder result = new StringBuilder(length * 2); for (int i = offset; i < offset + length; i++) result.append(String.format("%02x", value[i] & 255)); return result.toString(); }
-    private static String digest(byte[] value, int offset, int length) throws ProtocolException { try { MessageDigest digest = MessageDigest.getInstance("SHA-256"); digest.update(value, offset, length); return hex(digest.digest(), 0, 32); } catch (NoSuchAlgorithmException error) { throw new ProtocolException("SHA-256 unavailable"); } }
+    private static void checkInterrupted() throws ProtocolException { if(Thread.currentThread().isInterrupted())throw new ProtocolException("State tile decoding cancelled"); }
+    private static String digest(byte[] value, int offset, int length) throws ProtocolException {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            for (int start=offset; start<offset+length; start+=262144) {
+                checkInterrupted();digest.update(value,start,Math.min(262144,offset+length-start));
+            }
+            checkInterrupted();return hex(digest.digest(),0,32);
+        } catch (NoSuchAlgorithmException error) { throw new ProtocolException("SHA-256 unavailable"); }
+    }
 }

@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { createNativeCoverageResponder, nativeCoverageFixture, verifyNativeCoverageTraffic } from '../../scripts/native-coverage-fixture.mjs'
+import { validateCoverageReport } from '../../src/lib/coverageReport'
+import { validateStateTileManifest } from '../../src/lib/stateTiles'
 
 describe('explicitly synthetic native coverage transport', () => {
+  it('serves a reconciled population accepted by the production coverage contract', () => {
+    const reply = createNativeCoverageResponder()
+    const manifest = validateStateTileManifest(reply('GET', '/coverage-fixture/valid/v1/catalog/manifest')!.body)
+    const summary = reply('GET', '/coverage-fixture/valid/v1/coverage')!.body
+    expect(validateCoverageReport(summary, manifest).counts.sourceRecords).toBe(10)
+    const invalid = reply('GET', '/coverage-fixture/invalid/v1/coverage')!.body
+    expect(() => validateCoverageReport(invalid, manifest)).toThrow()
+  })
   it('never intercepts real manifest, plan or state routes', () => {
     const reply = createNativeCoverageResponder()
     for (const path of ['/v1/catalog/manifest', '/v1/coverage', '/v1/states/plan', '/v1/states/tiles/example']) expect(reply('GET', path)).toBeNull()

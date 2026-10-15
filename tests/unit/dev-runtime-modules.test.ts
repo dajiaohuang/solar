@@ -6,7 +6,9 @@ it('serves scientific registry dependencies through browser URLs under the appli
   const server = await createServer({
     configFile: fileURLToPath(new URL('../../vite.config.ts', import.meta.url)),
     logLevel: 'silent',
-    server: { host: '127.0.0.1', port: 0, watch: null },
+    // Vite's config merge skips null overrides; explicitly ignore all files
+    // for this HTTP-only module test instead of inheriting the app watcher.
+    server: { host: '127.0.0.1', port: 0, watch: { ignored: ['**/*'] } },
     optimizeDeps: { noDiscovery: true, include: [] },
   })
   try {

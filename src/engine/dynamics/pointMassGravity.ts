@@ -1,4 +1,5 @@
 import type { Derivative } from './adaptiveIntegrator'
+import { DynamicsSampleError } from './sampleFailure.ts'
 
 export type PointMass = {
   naifId: number
@@ -31,6 +32,7 @@ export function createPointMassGravity(inputMasses: readonly PointMass[], epheme
       ![start, end, ephemeris.referenceEpochTdb].every(Number.isFinite) || start > end || !ephemeris.source.trim() ||
       ephemeris.frame !== 'J2000' || ephemeris.origin !== 'SSB' || ephemeris.timeScale !== 'TDB' || ephemeris.aberration !== 'NONE') throw new RangeError('Invalid inertial point-mass model contract')
   const positions = new Float64Array(3 * masses.length), gradient = new Float64Array(9)
+  const delta = new Float64Array(3), unit = new Float64Array(3)
   // Bind metadata and evaluator once; caller changes cannot silently switch a run.
   const positionsAt = ephemeris.positions.bind(ephemeris)
   const derivative: Derivative = (elapsed, state, output) => {
@@ -38,21 +40,23 @@ export function createPointMassGravity(inputMasses: readonly PointMass[], epheme
     if (![6, 42].includes(state.length) || output.length !== state.length || !state.every(Number.isFinite)) throw new RangeError('Expected six-state or six-state plus row-major 6x6 transition matrix')
     positions.fill(NaN); positionsAt(elapsed, ids, positions)
     if (!positions.every(Number.isFinite)) throw new RangeError('Prescribed source did not supply every finite mass position')
-    output.fill(0); gradient.fill(0)
+    const variational = state.length === 42
+    output.fill(0)
+    if (variational) gradient.fill(0)
     output.set(state.subarray(3, 6))
     for (let index = 0; index < masses.length; index++) {
       const mass = masses[index]
-      const d = [positions[3*index] - state[0], positions[3*index+1] - state[1], positions[3*index+2] - state[2]]
-      const distance = Math.hypot(...d)
-      if (!Number.isFinite(distance) || distance <= mass.exclusionKm || distance === 0) throw new RangeError(`Point-mass exclusion reached for NAIF ${mass.naifId}`)
-      const unit = d.map(value => value / distance)
+      for (let axis = 0; axis < 3; axis++) delta[axis] = positions[3*index+axis] - state[axis]
+      const distance = Math.hypot(delta[0], delta[1], delta[2])
+      if (!Number.isFinite(distance) || distance <= mass.exclusionKm || distance === 0) throw new DynamicsSampleError(`Point-mass exclusion reached for NAIF ${mass.naifId}`)
+      for (let axis = 0; axis < 3; axis++) unit[axis] = delta[axis] / distance
       const acceleration = mass.gmKm3PerSecond2 / distance / distance, curvature = acceleration / distance
       for (let row = 0; row < 3; row++) {
         output[row+3] += acceleration * unit[row]
-        for (let column = 0; column < 3; column++) gradient[3*row+column] += curvature * (3*unit[row]*unit[column] - Number(row === column))
+        if (variational) for (let column = 0; column < 3; column++) gradient[3*row+column] += curvature * (3*unit[row]*unit[column] - Number(row === column))
       }
     }
-    if (state.length === 42) {
+    if (variational) {
       // dPhi/dt = [0 I; da/dr 0] Phi. This transition matrix conditions on
       // fixed force parameters and prescribed ephemerides; it is not a full
       // joint SBDB state/parameter covariance propagation.
@@ -61,7 +65,7 @@ export function createPointMassGravity(inputMasses: readonly PointMass[], epheme
         for (let k = 0; k < 3; k++) output[6 + (row+3)*6 + column] += gradient[3*row+k] * state[6 + k*6 + column]
       }
     }
-    if (!output.every(Number.isFinite)) throw new RangeError('Point-mass force or variational derivative became nonfinite')
+    if (!output.every(Number.isFinite)) throw new DynamicsSampleError('Point-mass force or variational derivative became nonfinite')
   }
   return { derivative, evidence: {
     model: 'restricted-newtonian-prescribed-point-masses' as const,

@@ -9,6 +9,8 @@ import { parseElementLine } from './lib/jpl-element-inventory.mjs'
 import { parsePlanetarySatellites, parseSmallBodySatellites } from './lib/satellite-inventory.mjs'
 import { downloadSnapshot, verifySnapshot, SOURCE_FILES, digest } from './lib/inventory-snapshot.mjs'
 import { inventoryKernels } from './lib/inventory-kernels.mjs'
+import { SPACECRAFT_IDENTITIES, SPACECRAFT_IDENTITY_SOURCE } from '../src/data/spacecraftIdentities.ts'
+import { ephemerisProfile } from '../src/data/ephemerisProfile.ts'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const DWARFS = new Set(['1', '134340', '136108', '136199', '136472'])
@@ -17,8 +19,9 @@ const increment = (map, key) => { map[key] = (map[key] ?? 0) + 1 }
 export const INVENTORY_SCHEMA_VERSION = 2
 export const INVENTORY_BLOCK_ROWS = 128
 
-export async function buildInventory({ sources, output, root = ROOT, auditEt = 841752000, shardSize = 5000 }) {
+export async function buildInventory({ sources, output, root = ROOT, auditEt = 841752000, shardSize = 5000, profile = 'pages' }) {
   if (!Number.isFinite(auditEt) || !Number.isSafeInteger(shardSize) || shardSize < 1 || shardSize > 10000) throw new Error('Invalid audit epoch or shard size')
+  const selectedProfile = ephemerisProfile(profile)
   const snapshot = await verifySnapshot(sources)
   const metadata = JSON.parse(await readFile(join(sources, SOURCE_FILES.metadata), 'utf8'))
   const expectedCounts = {}
@@ -32,9 +35,13 @@ export async function buildInventory({ sources, output, root = ROOT, auditEt = 8
   const satellites = parseSmallBodySatellites(JSON.parse(await readFile(join(sources, SOURCE_FILES.smallBodySatellites), 'utf8')))
   expectedCounts.planetarySatellites = planetary.expected
   expectedCounts.smallBodySatellites = satellites.length
-  const kernels = await inventoryKernels(root, auditEt)
+  expectedCounts.spacecraftIdentities = SPACECRAFT_IDENTITIES.length
+  const kernels = await inventoryKernels(root, auditEt, selectedProfile)
   const generatorFiles = []
-  for (const path of ['scripts/build-body-inventory.mjs', 'scripts/lib/inventory-snapshot.mjs', 'scripts/lib/jpl-element-inventory.mjs', 'scripts/lib/satellite-inventory.mjs', 'scripts/lib/inventory-kernels.mjs']) {
+  for (const path of ['scripts/build-body-inventory.mjs', 'scripts/validate-body-inventory.mjs', 'scripts/lib/inventory-snapshot.mjs', 'scripts/lib/jpl-element-inventory.mjs', 'scripts/lib/satellite-inventory.mjs', 'scripts/lib/inventory-kernels.mjs', 'scripts/lib/source-chain.mjs',
+    'src/data/spacecraftIdentities.ts', 'src/data/ephemerisTargets.ts', 'src/data/ephemerisProfile.ts',
+    'src/engine/ephemeris/kernelPool.ts', 'src/engine/ephemeris/spk.ts', 'src/engine/ephemeris/spkType17.ts', 'src/engine/ephemeris/spkType21.ts',
+    'internal/catalog/source_chain.go']) {
     generatorFiles.push({ path, sha256: digest(await readFile(join(ROOT, path))) })
   }
   await mkdir(output)
@@ -87,6 +94,11 @@ export async function buildInventory({ sources, output, root = ROOT, auditEt = 8
   for (const [target, name, category] of CORE) await append({ id: `naif:${target}`, designation: name, name, category,
     parentId: target === 10 ? null : target === 301 ? 'naif:399' : 'naif:10', confirmation: 'confirmed',
     geometryStatus: 'kernel-dependent', sourceRef: 'Bundled NAIF body-center identity' }, 'majorCenters', target)
+  for (const [index, body] of SPACECRAFT_IDENTITIES.entries()) await append({
+    id: `naif:${body.naifId}`, designation: body.name, name: body.name, category: 'spacecraft',
+    parentId: null, confirmation: 'confirmed', geometryStatus: 'kernel-dependent',
+    aliases: [body.id], sourceRef: { url: SPACECRAFT_IDENTITY_SOURCE, naifId: body.naifId, name: body.name },
+  }, 'spacecraftIdentities', index)
   // Pluto may be absent from the small-body element table. Keep one identity if
   // it is present, and retain the body center if the source excludes it.
   if (!seen.has('sb:asteroid:134340')) await append({ id: 'sb:asteroid:134340', designation: '134340', name: 'Pluto', category: 'dwarf-planet', parentId: 'naif:10', confirmation: 'confirmed', geometryStatus: 'kernel-dependent', sourceRef: 'Pluto body center in bundled NAIF kernel' }, 'majorCenters', 999)
@@ -110,20 +122,21 @@ export async function buildInventory({ sources, output, root = ROOT, auditEt = 8
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const args = process.argv.slice(2)
   if (args.includes('--help')) {
-    console.log('node --experimental-strip-types scripts/build-body-inventory.mjs [--download] --sources NEW_SNAPSHOT_DIR --output NEW_INVENTORY_DIR [--audit-et TDB_SECONDS]')
+    console.log('node --experimental-strip-types scripts/build-body-inventory.mjs [--download] --sources NEW_SNAPSHOT_DIR --output NEW_INVENTORY_DIR [--profile pages|full] [--audit-et TDB_SECONDS]')
   } else {
     const values = new Map()
     for (let i = 0; i < args.length; i++) {
       if (args[i] === '--download') { values.set(args[i], true); continue }
-      if (!['--sources', '--output', '--audit-et'].includes(args[i]) || !args[i + 1] || args[i + 1].startsWith('--')) throw new Error('Unknown or incomplete argument; use --help')
+      if (!['--sources', '--output', '--audit-et', '--profile'].includes(args[i]) || !args[i + 1] || args[i + 1].startsWith('--')) throw new Error('Unknown or incomplete argument; use --help')
       if (values.has(args[i])) throw new Error('Duplicate argument')
       values.set(args[i], args[++i])
     }
     if (!values.get('--sources') || !values.get('--output')) throw new Error('--sources and --output are required')
     const sources = resolve(values.get('--sources')), output = resolve(values.get('--output'))
+    const profile = ephemerisProfile(values.get('--profile'))
     if (sources === output) throw new Error('Source and output directories must differ')
     if (values.get('--download')) await downloadSnapshot(sources)
-    const result = await buildInventory({ sources, output, auditEt: values.has('--audit-et') ? Number(values.get('--audit-et')) : undefined })
-    console.log(JSON.stringify({ output, totalRecords: result.totalRecords, counts: result.counts, missingParents: result.missingParents }, null, 2))
+    const result = await buildInventory({ sources, output, profile, auditEt: values.has('--audit-et') ? Number(values.get('--audit-et')) : undefined })
+    console.log(JSON.stringify({ output, profile: result.kernels.profile, kernelManifestSha256: result.kernels.manifestSha256, totalRecords: result.totalRecords, counts: result.counts, missingParents: result.missingParents }, null, 2))
   }
 }

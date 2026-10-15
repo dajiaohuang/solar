@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "catalog": "Gaia DR3",
+  "table": "gaiadr3.gaia_source",
+  "frame": "ICRS",
+  "referenceEpochJulianYear": 2016,
+  "referenceEpochTimeScale": "TCB",
+  "implementation": {
+    "node": "v24.14.1",
+    "generatorSha256": "4913e37477c2131d6e07177b038104ac916b516f55e4706d5a506f8198b3f961",
+    "parserSha256": "2505cd8ee265a4e9f2b954939ee021b515040bbe78c4dacec96a1797d3247ad3",
+    "columnsSha256": "e4d9f897d13ea9184165b58694f060fe1745d76e54e4a30b943f96a3cd04bbaa"
+  },
+  "settings": {
+    "raDeg": 266.4,
+    "decDeg": -29,
+    "radiusDeg": 0.35,
+    "maxMagnitude": 18,
+    "maxRows": 100000
+  },
+  "columns": [
+    "source_id",
+    "ref_epoch",
+    "ra",
+    "dec",
+    "ra_error",
+    "dec_error",
+    "parallax",
+    "parallax_error",
+    "pmra",
+    "pmra_error",
+    "pmdec",
+    "pmdec_error",
+    "ra_dec_corr",
+    "ra_parallax_corr",
+    "ra_pmra_corr",
+    "ra_pmdec_corr",
+    "dec_parallax_corr",
+    "dec_pmra_corr",
+    "dec_pmdec_corr",
+    "parallax_pmra_corr",
+    "parallax_pmdec_corr",
+    "pmra_pmdec_corr",
+    "astrometric_params_solved",
+    "ruwe",
+    "phot_g_mean_mag",
+    "bp_rp",
+    "radial_velocity",
+    "radial_velocity_error"
+  ],
+  "rows": 9686,
+  "rowCountEvidence": {
+    "method": "top-plus-one-sentinel",
+    "limit": 100001,
+    "returnedRows": 9686,
+    "overflow": false
+  },
+  "catalogCompletenessCertified": false,
+  "units": {
+    "ra": "degree",
+    "dec": "degree",
+    "ra_error": "mas; alpha*cos(delta)",
+    "dec_error": "mas",
+    "parallax": "mas",
+    "pmra": "mas/Julian year; mu_alpha*cos(delta)",
+    "pmdec": "mas/Julian year",
+    "radial_velocity": "km/s"
+  },
+  "limitations": [
+    "A magnitude-limited cone is not full-sky data or a completeness guarantee.",
+    "Missing fields remain null. Negative parallax is retained; no inverse-parallax distances are inferred.",
+    "No proper-motion propagation, observer parallax, aberration, deflection, zero-point correction or occultation uncertainty model is applied.",
+    "Spatial bins describe returned coordinates at J2016.0, not bounds at arbitrary epochs."
+  ],
+  "documentation": [
+    "https://www.cosmos.esa.int/web/gaia/dr3",
+    "https://www.cosmos.esa.int/web/gaia-users/archive/programmatic-access",
+    "https://gea.esac.esa.int/archive/documentation/GDR3/Gaia_archive/chap_datamodel/sec_dm_main_source_catalogue/ssec_dm_gaia_source.html"
+  ],
+  "sources": [
+    {
+      "path": "rows.csv",
+      "bytes": 3188507,
+      "sha256": "92c183c8aace6164482d00dac5a069006f9b05a7bfeb1dd66d59e911624445a7",
+      "query": "SELECT TOP 100001 source_id,ref_epoch,ra,dec,ra_error,dec_error,parallax,parallax_error,pmra,pmra_error,pmdec,pmdec_error,ra_dec_corr,ra_parallax_corr,ra_pmra_corr,ra_pmdec_corr,dec_parallax_corr,dec_pmra_corr,dec_pmdec_corr,parallax_pmra_corr,parallax_pmdec_corr,pmra_pmdec_corr,astrometric_params_solved,ruwe,phot_g_mean_mag,bp_rp,radial_velocity,radial_velocity_error FROM gaiadr3.gaia_source WHERE CONTAINS(POINT('ICRS',ra,dec),CIRCLE('ICRS',266.4,-29,0.35))=1 AND phot_g_mean_mag<=18",
+      "url": "https://gea.esac.esa.int/tap-server/tap/async/d631f6d4-ba7b-11f1-924c-bc97e148b76b-O/results/result",
+      "jobUrl": "https://gea.esac.esa.int/tap-server/tap/async/d631f6d4-ba7b-11f1-924c-bc97e148b76b-O",
+      "cleanupPending": true,
+      "jobReceiptSha256": "0eb16593815a49c2c3037aac2c1176f06fa63ec1e584ce79e7b2a60036e9c83d",
+      "resumedFromReceipt": true,
+      "retrievedAt": "2026-09-27T17:13:50.443Z"
+    }
+  ],
+  "chunks": [
+    {
+      "path": "r53-d12.json",
+      "sha256": "e410f0522ff48a1399aee4d5dae79b5fcb14191310b07a68c9d78234cae609ec",
+      "bytes": 7246649,
+      "rows": 9686,
+      "raRangeDeg": [
+        265,
+        270
+      ],
+      "decRangeDeg": [
+        -30,
+        -25
+      ]
+    }
+  ]
+}

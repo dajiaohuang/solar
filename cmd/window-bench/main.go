@@ -9,8 +9,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/dajiaohuang/solar/backend/internal/catalog"
-	"github.com/dajiaohuang/solar/backend/internal/httpapi"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +18,10 @@ import (
 	"strconv"
 	"sync/atomic"
 	"time"
+
+	"github.com/dajiaohuang/solar/backend/internal/catalog"
+	"github.com/dajiaohuang/solar/backend/internal/httpapi"
+	"github.com/dajiaohuang/solar/backend/internal/statewire"
 )
 
 type evidence struct {
@@ -105,12 +107,8 @@ func run(dir, mode string, samples int) (evidence, string) {
 	consume := func(raw []byte) {
 		// Compare byte-identical complete tiles including source/epoch hashes,
 		// status bitmaps and the original Float64 payloads between both modes.
-		if len(raw) < 200 {
-			panic("truncated tile")
-		}
-		sum := sha256.Sum256(raw[200:])
-		if !bytes.Equal(sum[:], raw[168:200]) {
-			panic("tile checksum mismatch")
+		if _, err := statewire.ParseHeader(raw); err != nil {
+			panic(err)
 		}
 		digest.Write(raw)
 		out.Bytes += len(raw)

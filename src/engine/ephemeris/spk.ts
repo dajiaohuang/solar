@@ -1,4 +1,4 @@
-import { evaluateType21, inspectType21, type Type21Metadata } from './spkType21.ts';
+import { createType21Scratch, evaluateType21, inspectType1, inspectType21, type Type21Metadata } from './spkType21.ts';
 import { evaluateType17, inspectType17, type Type17Metadata } from './spkType17.ts';
 
 /**
@@ -20,6 +20,8 @@ export interface SpkSegment {
   recordSize: number;
   /** Present only for validated extended modified-difference records. */
   type21?: Type21Metadata;
+  /** Fixed dimension-15 modified-difference records (71 words). */
+  type1?: Type21Metadata;
   type17?: Type17Metadata;
 }
 
@@ -44,10 +46,15 @@ const MAX_SUMMARY_RECORDS = 1_000_000;
 function fail(message: string): never { throw new Error(`Invalid SPK: ${message}`); }
 
 export class SpkKernel {
-  readonly segments: SpkSegment[];
+  readonly segments: readonly SpkSegment[];
   private readonly view: DataView;
   private readonly little: boolean;
   private readonly bytes: number;
+  private readonly segmentsByTarget: ReadonlyMap<number, readonly SpkSegment[]>;
+  private coverageIntervalsByTarget: ReadonlyMap<number, readonly Readonly<{ startEt: number; endEt: number }>[]> | undefined;
+  // evaluate() and the recurrence helpers are synchronous and do not invoke
+  // caller code, so this per-kernel workspace cannot be concurrently re-entered.
+  private readonly type21Scratch = createType21Scratch();
 
   constructor(buffer: ArrayBuffer) {
     this.bytes = buffer.byteLength;
@@ -82,29 +89,112 @@ export class SpkKernel {
       previous = rec; rec = next;
     }
     if (previous !== last) fail('summary chain does not terminate at final summary record');
-    this.segments = summaries.map(s => this.parseSegment(s.d, s.i));
+    this.segments = Object.freeze(summaries.map(s => {
+      const segment = this.parseSegment(s.d, s.i);
+      // Descriptor order and validated control metadata are scientific input,
+      // shared by coverage queries and evaluation. Do not expose mutable forms.
+      if (segment.type1) Object.freeze(segment.type1);
+      if (segment.type17) Object.freeze(segment.type17);
+      if (segment.type21) Object.freeze(segment.type21);
+      return Object.freeze(segment);
+    }));
+    const mutableIndex = new Map<number, SpkSegment[]>();
+    for (const segment of this.segments) {
+      const group = mutableIndex.get(segment.target);
+      if (group) group.push(segment);
+      else mutableIndex.set(segment.target, [segment]);
+    }
+    const index = new Map<number, readonly SpkSegment[]>();
+    for (const [target, group] of mutableIndex) index.set(target, Object.freeze(group));
+    this.segmentsByTarget = index;
+    Object.defineProperty(this, 'segments', { writable: false, configurable: false });
+    Object.defineProperty(this, 'segmentsByTarget', { writable: false, configurable: false });
   }
 
   evaluate(target: number, et: number): SpkState | null {
     if (!Number.isFinite(target) || !Number.isFinite(et)) fail('target and epoch must be finite');
     let unsupported: SpkSegment | undefined;
     // DAF/SPK precedence is last matching segment (later segments override).
-    for (let n = this.segments.length - 1; n >= 0; n--) {
-      const s = this.segments[n];
-      if (s.target !== target || et < s.startEt || et > s.endEt) continue;
-      if (s.frame !== 1 && s.frame !== 17 || s.type !== 2 && s.type !== 3 && s.type !== 17 && s.type !== 21) { unsupported = s; break; }
+    const candidates = this.segmentsByTarget.get(target) ?? [];
+    for (let n = candidates.length - 1; n >= 0; n--) {
+      const s = candidates[n];
+      if (et < s.startEt || et > s.endEt) continue;
+      if (s.frame !== 1 && s.frame !== 17 || s.type !== 1 && s.type !== 2 && s.type !== 3 && s.type !== 17 && s.type !== 21) { unsupported = s; break; }
       if (s.type17) {
         const v = evaluateType17((address) => this.f64(this.addressOffset(address)), s.startAddress, et);
         return { position: v.position, velocity: v.velocity, center: s.center, frame: s.frame };
       }
-      if (s.type21) {
-        const v = evaluateType21((address) => this.f64(this.addressOffset(address)), s.startAddress, s.type21, et);
+      const differenceLines = s.type1 ?? s.type21;
+      if (differenceLines) {
+        const v = evaluateType21((address) => this.f64(this.addressOffset(address)), s.startAddress, differenceLines, et, this.type21Scratch);
         return { position: { x: v[0], y: v[1], z: v[2] }, velocity: { x: v[3], y: v[4], z: v[5] }, center: s.center, frame: s.frame };
       }
       return this.evaluateSegment(s, et);
     }
     if (unsupported) fail(`unsupported matching segment frame=${unsupported.frame} type=${unsupported.type}`);
     return null;
+  }
+
+  /** Split ET for Chebyshev sources. Keep the low part through record-relative
+   * subtraction rather than rounding it into a large seconds-since-J2000 value.
+   * Other segment types require their own split-time evaluators. */
+  evaluateChebyshevAtOffset(target: number, et: number, offsetSeconds: number): SpkState | null {
+    if (!Number.isSafeInteger(target) || !Number.isFinite(et) || !Number.isFinite(offsetSeconds)) fail('invalid split Chebyshev epoch');
+    // Error-free normalization before subtracting descriptor/record epochs.
+    // Otherwise a large cancelling pair can select a different record.
+    const high = et + offsetSeconds, carried = high - et;
+    if (!Number.isFinite(high)) fail('invalid split Chebyshev epoch');
+    offsetSeconds = (et - (high - carried)) + (offsetSeconds - carried);
+    et = high;
+    const candidates = this.segmentsByTarget.get(target) ?? [];
+    for (let n = candidates.length - 1; n >= 0; n--) {
+      const s = candidates[n];
+      if ((et - s.startEt) + offsetSeconds < 0 || (et - s.endEt) + offsetSeconds > 0) continue;
+      if ((s.frame !== 1 && s.frame !== 17) || (s.type !== 2 && s.type !== 3)) fail('split epoch requires a selected Type 2 or 3 segment');
+      return this.evaluateSegment(s, et, offsetSeconds);
+    }
+    return null;
+  }
+
+  /** Whether this target has any segment covering the scalar epoch. */
+  coversTargetAt(target: number, et: number): boolean {
+    if (!Number.isFinite(target) || !Number.isFinite(et)) return false;
+    return (this.segmentsByTarget.get(target) ?? []).some(segment => segment.startEt <= et && segment.endEt >= et);
+  }
+
+  /** Whether every target in this kernel continuously covers the full interval. */
+  coversAllTargetsForInterval(startEt: number, endEt: number): boolean {
+    if (!Number.isFinite(startEt) || !Number.isFinite(endEt) || endEt < startEt || !this.segmentsByTarget.size) return false;
+    const coverage = this.coverageIntervalsByTarget ?? (this.coverageIntervalsByTarget = this.buildCoverageIndex());
+    for (const intervals of coverage.values()) {
+      // Find the merged interval whose start is the last one at or before the
+      // query start. One interval can cover the request only if it also reaches
+      // the query end; gaps remain distinct components.
+      let low = 0;
+      let high = intervals.length;
+      while (low < high) {
+        const middle = (low + high) >>> 1;
+        if (intervals[middle].startEt <= startEt) low = middle + 1;
+        else high = middle;
+      }
+      const interval = intervals[low - 1];
+      if (!interval || interval.endEt < endEt) return false;
+    }
+    return true;
+  }
+
+  private buildCoverageIndex(): ReadonlyMap<number, readonly Readonly<{ startEt: number; endEt: number }>[]> {
+    const index = new Map<number, readonly Readonly<{ startEt: number; endEt: number }>[]>();
+    for (const [target, segments] of this.segmentsByTarget) {
+      const intervals: Array<{ startEt: number; endEt: number }> = [];
+      for (const segment of [...segments].sort((a, b) => a.startEt - b.startEt)) {
+        const previous = intervals[intervals.length - 1];
+        if (previous && segment.startEt <= previous.endEt) previous.endEt = Math.max(previous.endEt, segment.endEt);
+        else intervals.push({ startEt: segment.startEt, endEt: segment.endEt });
+      }
+      index.set(target, Object.freeze(intervals.map(interval => Object.freeze(interval))));
+    }
+    return index;
   }
 
   getRecordData(segment: SpkSegment): SpkRecordData {
@@ -129,15 +219,20 @@ export class SpkKernel {
       } };
   }
 
-  private evaluateSegment(s: SpkSegment, et: number): SpkState {
+  private evaluateSegment(s: SpkSegment, et: number, offsetSeconds = 0): SpkState {
     const terminal = this.addressOffset(s.endAddress - 3);
     const init = this.f64(terminal), interval = this.f64(terminal + 8);
     if (!Number.isFinite(init) || !Number.isFinite(interval) || interval <= 0 ||
         this.f64(terminal + 16) !== s.recordSize || this.f64(terminal + 24) !== s.recordCount) fail('invalid segment terminal metadata');
-    let index = Math.floor((et - init) / interval);
+    let index = Math.floor(((et - init) + offsetSeconds) / interval);
     if (index < 0) index = 0; if (index >= s.recordCount) index = s.recordCount - 1;
+    // Subtraction or division can round across a record boundary even for a
+    // scalar epoch. Compare the nearby boundary before selecting coefficients.
+    const start = init + index * interval;
+    if (index > 0 && (et - start) + offsetSeconds < 0) index--;
+    else if (index + 1 < s.recordCount && (et - (start + interval)) + offsetSeconds >= 0) index++;
     const offset = this.addressOffset(s.startAddress + index * s.recordSize);
-    const mid = this.f64(offset), radius = this.f64(offset + 8), x = (et - mid) / radius;
+    const mid = this.f64(offset), radius = this.f64(offset + 8), x = ((et - mid) + offsetSeconds) / radius;
     if (!Number.isFinite(x) || Math.abs(x) > 1 + 1e-10) fail('epoch falls outside selected record');
     const pos = [0, 0, 0], vel = [0, 0, 0], c = s.coefficientCount;
     for (let axis = 0; axis < 3; axis++) {
@@ -162,6 +257,10 @@ export class SpkKernel {
     if (type === 17) {
       const type17 = inspectType17((address) => this.f64(this.addressOffset(address)), startAddress, endAddress);
       return { target, center, frame, type, startEt, endEt, startAddress, endAddress, coefficientCount: 0, recordCount: 1, recordSize: 12, type17 };
+    }
+    if (type === 1) {
+      const type1 = inspectType1((address) => this.f64(this.addressOffset(address)), startAddress, endAddress, endEt);
+      return { target, center, frame, type, startEt, endEt, startAddress, endAddress, coefficientCount: 0, recordCount: type1.recordCount, recordSize: type1.recordSize, type1 };
     }
     if (type === 21) {
       if (endAddress - startAddress + 1 < 2) fail('truncated type 21 directory');

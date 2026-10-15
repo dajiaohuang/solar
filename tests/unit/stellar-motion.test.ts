@@ -4,9 +4,20 @@ import covarianceExperiment from '../fixtures/gaia-motion-covariance-experiment.
 import { loadStellarMotion, stellarSourceBase64, validateStellarMotion, type StellarMotionRequest } from '../../src/lib/stellarMotion'
 import { STATE_TILE_API_VERSION } from '../../src/lib/stateTiles'
 import { selectedGaiaCsvSource } from '../../src/lib/gaiaCsvSource'
+import { compactStellarMotionRows, expandStellarMotionRow } from '../../src/lib/stellarMotionResultStore'
 const request: StellarMotionRequest = { originalManifestBase64: experiment.originalManifestBase64, originalRowsCsvBase64: experiment.originalRowsCsvBase64, sourceId: experiment.result.sourceId, targetEpochJulianYearTCB: 2026, radialVelocityPolicy: 'spectroscopic-as-astrometric' }
 const envelope = () => ({ apiVersion: STATE_TILE_API_VERSION, experiment: structuredClone(experiment) })
 describe('original-source stellar client', () => {
+  it('preserves the per-row zero-radial-motion assumption in compact batch receipts', () => {
+    const sourceIds = BigInt64Array.from([1n, 2n])
+    const state = { raDeg: 12, decDeg: -4, parallaxMas: 2, pmraMasPerJulianYear: 1, pmdecMasPerJulianYear: -1, radialVelocityKmPerSecond: 0 }
+    const compact = compactStellarMotionRows([
+      { sourceId: '1', status: 'propagated', state, zeroRadialMotionAssumed: true },
+      { sourceId: '2', status: 'propagated', state },
+    ], sourceIds, 2)
+    expect(expandStellarMotionRow(compact, 0)).toMatchObject({ zeroRadialMotionAssumed: true })
+    expect(expandStellarMotionRow(compact, 1)?.zeroRadialMotionAssumed).toBeUndefined()
+  })
   it('validates optional covariance against source errors and the Jacobian transform', async () => {
     const covarianceRequest: StellarMotionRequest = { ...request, covariancePolicy:'independent-spectroscopic-rv' }
     const wire = () => ({ apiVersion:STATE_TILE_API_VERSION, experiment:structuredClone(covarianceExperiment) })
@@ -28,7 +39,7 @@ describe('original-source stellar client', () => {
   it('accepts the real Go experiment and preserves byte encoding', async () => {
     expect(await validateStellarMotion(envelope(), request)).toEqual(experiment)
     const bytes = Uint8Array.from(atob(request.originalRowsCsvBase64), v => v.charCodeAt(0))
-    expect(stellarSourceBase64(bytes, 8 << 20)).toBe(request.originalRowsCsvBase64)
+    expect(stellarSourceBase64(bytes, 16 << 20)).toBe(request.originalRowsCsvBase64)
     expect(() => stellarSourceBase64(bytes, 1)).toThrow('budget')
   })
   it('rejects wrong source, epoch, hashes, model, nonfinite states and missing limits', async () => {

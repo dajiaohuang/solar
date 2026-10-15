@@ -14,7 +14,7 @@ describe('preview rejects complete operations before scientific side effects', (
     expect(selectionActions.setSelectedIds(['earth', id])).toBe(false)
     selectionActions.toggle(id)
     selectionActions.focus(id)
-    selectionActions.addCatalogBodies([{ id, name: 'Restricted test body' } as CelestialBody], true)
+    expect(selectionActions.addCatalogBodies([{ id, name: 'Restricted test body' } as CelestialBody], true)).toBe(false)
     simulationActions.patch({ referenceId: id, zoom: 5 })
     uiActions.navigate('mission')
     uiActions.startStory('voyagers')

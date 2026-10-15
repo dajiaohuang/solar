@@ -45,16 +45,22 @@ public final class SourceIdentityPage {
         List<?> values = (List<?>) page.get("items");
         require(values.size() <= SIZE && values.size() <= totalRecords, "Identity page exceeds row budget");
         List<Row> decoded = new ArrayList<>(); Set<String> ids = new HashSet<>();
-        for (Object value : values) { Row row = new Row(object(value)); require(ids.add(row.id), "Duplicate source ID"); decoded.add(row); }
+        for (Object value : values) { checkCancelled(); Row row = new Row(object(value)); require(ids.add(row.id), "Duplicate source ID"); decoded.add(row); }
         rows = List.copyOf(decoded); next = text(page.get("nextPageToken"), true, 4096);
         require(next.isEmpty() || !rows.isEmpty(), "Empty identity page cannot advance");
+        checkCancelled();
     }
 
     static SourceIdentityPage decode(byte[] raw, byte[] manifest, String base, String query) throws StateTileDecoder.ProtocolException {
+        checkCancelled();
+        require(raw != null && raw.length > 0 && raw.length <= 256 * 1024, "Identity page byte budget exceeded");
+        require(manifest != null && manifest.length > 0 && manifest.length <= 8 * 1024 * 1024, "Identity manifest byte budget exceeded");
         return new SourceIdentityPage(object(StateTileDecoder.parseJson(raw)), object(StateTileDecoder.parseJson(manifest)), base, query);
     }
 
     void requireManifest(byte[] raw) throws StateTileDecoder.ProtocolException {
+        checkCancelled();
+        require(raw != null && raw.length > 0 && raw.length <= 8 * 1024 * 1024, "Identity manifest byte budget exceeded");
         Map<String, Object> manifest = object(StateTileDecoder.parseJson(raw));
         require("solar.api/v1".equals(manifest.get("apiVersion")) && catalogVersion.equals(manifest.get("catalogVersion"))
                 && catalogHash.equals(manifest.get("catalogManifestSha256")) && inventoryHash.equals(manifest.get("inventoryManifestSha256")), "Inventory changed; restart browsing");
@@ -94,6 +100,9 @@ public final class SourceIdentityPage {
     }
     @SuppressWarnings("unchecked") private static Map<String, Object> object(Object value) throws StateTileDecoder.ProtocolException {
         require(value instanceof Map, "Identity object required"); return (Map<String, Object>) value;
+    }
+    private static void checkCancelled() throws StateTileDecoder.ProtocolException {
+        require(!Thread.currentThread().isInterrupted(), "Source directory validation cancelled");
     }
     static void require(boolean condition, String message) throws StateTileDecoder.ProtocolException { if (!condition) throw new StateTileDecoder.ProtocolException(message); }
 }

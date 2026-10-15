@@ -10,3 +10,19 @@ export function catalogPointColor(orbitClass: string, flags: number) {
 }
 
 export function catalogPointSize(flags: number) { return flags & 2 ? 3.2 : flags & 1 ? 2.5 : 1.7 }
+
+/** Compact per-class/per-flag RGB8 + size-tenths lookup for large upload loops. */
+export function createCatalogPointStyleTable(orbitClasses: readonly string[]) {
+  const table = new Uint8Array(orbitClasses.length * 8 * 4)
+  for (let classIndex = 0; classIndex < orbitClasses.length; classIndex++) {
+    for (let flags = 0; flags < 8; flags++) {
+      const color = catalogPointColor(orbitClasses[classIndex], flags)
+      const offset = (classIndex * 8 + flags) * 4
+      table[offset] = Math.round(color[0] * 255)
+      table[offset + 1] = Math.round(color[1] * 255)
+      table[offset + 2] = Math.round(color[2] * 255)
+      table[offset + 3] = Math.round(catalogPointSize(flags) * 10)
+    }
+  }
+  return table
+}

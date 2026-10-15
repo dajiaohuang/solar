@@ -8,6 +8,7 @@ test('keeps the last verified frame and its epoch when a new time request fails'
   await expect(canvas).toHaveAttribute('data-position-count', '2')
   await page.route('**/solar-test-api/v1/state/plan*', route => route.fulfill({ status: 503, body: 'offline' }))
   await page.locator('.simulation-bar input[type="date"]').fill('2026-09-15')
+  await page.locator('.simulation-bar input[type="date"]').press('Tab')
   const status = page.getByTestId('ephemeris-status')
   await expect(status.locator(':scope > summary')).toContainText('rendered JD 2461287.500000')
   await status.locator(':scope > summary').click()

@@ -65,7 +65,7 @@ func newHermeticCoverageFixture(t *testing.T) hermeticCoverageFixture {
 		t.Fatal(err)
 	}
 	spkSum := sha256.Sum256(spk)
-	manifest := fmt.Sprintf(`{"id":"synthetic-coverage-v1","profile":"full","contract":"fixture","files":[{"id":"synthetic","path":"synthetic.bsp","targets":[-210001],"startEt":0,"endEt":1000,"solutionKernelIds":["synthetic"],"bytes":%d,"sha256":"%s"}]}`, len(spk), hex.EncodeToString(spkSum[:]))
+	manifest := fmt.Sprintf(`{"id":"synthetic-coverage-v1","profile":"full","contract":"fixture","files":[{"id":"synthetic","path":"synthetic.bsp","targets":[-210001],"startEt":0,"endEt":1000,"solutionKernelIds":[],"bytes":%d,"sha256":"%s"}]}`, len(spk), hex.EncodeToString(spkSum[:]))
 	if err := os.WriteFile(filepath.Join(dataDir, "ephemeris-manifest.json"), []byte(manifest), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func newHermeticCoverageFixture(t *testing.T) hermeticCoverageFixture {
 		t.Fatal(err)
 	}
 
-	chainCovered := []any{map[string]any{"target": -210001, "kernelId": "synthetic", "center": 0, "frame": 1, "type": 2, "startEt": 0, "endEt": 1000, "context": "fixture"}, map[string]any{"target": 0, "origin": "naif:0"}}
+	chainCovered := []any{map[string]any{"target": -210001, "kernelId": "synthetic", "center": 0, "frame": 1, "type": 2, "startEt": 0, "endEt": 1000, "context": "root:synthetic"}, map[string]any{"target": 0, "origin": "naif:0"}}
 	chainGap := []any{map[string]any{"target": -210001, "context": "legacy"}}
 	point := func(et float64, state string, reason string, chain []any) map[string]any {
 		return map[string]any{"et": et, "state": state, "reason": reason, "chain": chain}
@@ -126,7 +126,7 @@ func newHermeticCoverageFixture(t *testing.T) hermeticCoverageFixture {
 	interval := func(start, end float64, state, reason string, chain []any) map[string]any {
 		return map[string]any{"startEt": start, "endEt": end, "openness": "(start,end)", "state": state, "reason": reason, "chain": chain}
 	}
-	window := map[string]any{"target": -210001, "requested": map[string]any{"startEt": 0, "endEt": 1000}, "dependencyCoverage": map[string]any{"points": []any{point(0, "covered", "", chainCovered), point(500, "covered", "", chainCovered), point(1000, "gap", "fixture-gap", chainGap)}, "intervals": []any{interval(0, 500, "covered", "", chainCovered), interval(500, 1000, "gap", "fixture-gap", chainGap)}}, "gaps": []any{map[string]any{"kind": "point", "et": 1000, "reason": "fixture-gap", "chain": chainGap}, map[string]any{"kind": "interval", "startEt": 500, "endEt": 1000, "reason": "fixture-gap", "chain": chainGap}}, "meaning": "Descriptor and dependency availability only; fixture evidence."}
+	window := map[string]any{"target": -210001, "requested": map[string]any{"startEt": 0, "endEt": 1000}, "dependencyCoverage": map[string]any{"points": []any{point(0, "covered", "", chainCovered), point(500, "covered", "", chainCovered), point(1000, "gap", "target-absent-in-solution-pool", chainGap)}, "intervals": []any{interval(0, 500, "covered", "", chainCovered), interval(500, 1000, "gap", "target-absent-in-solution-pool", chainGap)}}, "gaps": []any{map[string]any{"kind": "point", "et": 1000, "reason": "target-absent-in-solution-pool", "chain": chainGap}, map[string]any{"kind": "interval", "startEt": 500, "endEt": 1000, "reason": "target-absent-in-solution-pool", "chain": chainGap}}, "meaning": "Descriptor and dependency availability only; fixture evidence."}
 	reportValue := map[string]any{"schemaVersion": 1, "purpose": "source-identity-and-dependency-window-audit", "inputInventorySha256": inv.ManifestHash(), "sourceSnapshotSha256": strings.Repeat("a", 64), "sourceBytesVerified": true, "kernels": map[string]any{"manifestId": cat.Version(), "profile": "full", "manifestSha256": cat.ManifestHash(), "auditEt": 500, "identityMappingSha256": strings.Repeat("b", 64), "satelliteCatalogSha256": strings.Repeat("c", 64), "timeScale": "TDB seconds past J2000", "frame": "ECLIPJ2000", "positionUnit": "km", "velocityUnit": "km/s", "meaning": "fixture"}, "requestedWindow": map[string]any{"startEt": 0, "endEt": 1000, "timeScale": "TDB seconds past J2000"}, "identity": map[string]any{"counts": map[string]any{"sourceRecords": 2, "mappedSourceRecords": 1, "unresolvedSourceRecords": 1, "explicitNaifTargets": 1, "availableTargetsAtAuditEpoch": 1}, "sourceCounts": map[string]any{"synthetic": 2}, "unresolvedReasons": map[string]any{"no-explicit-naif-mapping": 1}, "explicitTargetGroups": []any{map[string]any{"target": -210001, "key": "naif:-210001", "stateAtAuditEpoch": "state-available-at-audit-epoch", "evaluatedState": map[string]any{"position": map[string]any{"x": 1, "y": 2, "z": 3}, "velocity": map[string]any{"x": 4, "y": 5, "z": 6}}, "sourceRecords": []any{map[string]any{"id": "sb:fixture:operational", "ordinal": 0, "source": "synthetic", "sourceRow": 7}}}}}, "coverage": []any{map[string]any{"datasetVersion": cat.Version(), "source": "synthetic", "model": "spk-at-audit-epoch", "auditEt": 500, "frame": "ECLIPJ2000", "exact": 1, "approximate": 0, "missing": 1}}, "windowCounts": map[string]any{"dependencyCoveredTargets": 0, "targetsWithDependencyGaps": 1, "numericallyCertifiedWholeWindowTargets": nil}, "windows": []any{window}, "limitations": []string{"fixture"}}
 	reportBytes, err := json.MarshalIndent(reportValue, "", "  ")
 	if err != nil {
@@ -204,11 +204,11 @@ func TestHermeticCoverageRejectsTamperedReport(t *testing.T) {
 		t.Fatal(err)
 	}
 	mutations := map[string][]byte{
-		"inventory-hash": bytes.Replace(raw, []byte(fixture.Inventory.ManifestHash()), []byte(strings.Repeat("0", 64)), 1),
-		"count":          bytes.Replace(raw, []byte(`"mappedSourceRecords": 1`), []byte(`"mappedSourceRecords": 99999999`), 1),
-		"window-kind":    bytes.Replace(raw, []byte(`"kind": "point"`), []byte(`"kind": "invalid"`), 1),
-		"missing-audit":  bytes.Replace(raw, []byte(`"auditEt": 500`), []byte(`"auditEt": null`), 1),
-		"numeric-claim":  bytes.Replace(raw, []byte(`"numericallyCertifiedWholeWindowTargets": null`), []byte(`"numericallyCertifiedWholeWindowTargets": 0`), 1),
+		"inventory-hash":   bytes.Replace(raw, []byte(fixture.Inventory.ManifestHash()), []byte(strings.Repeat("0", 64)), 1),
+		"count":            bytes.Replace(raw, []byte(`"mappedSourceRecords": 1`), []byte(`"mappedSourceRecords": 99999999`), 1),
+		"window-kind":      bytes.Replace(raw, []byte(`"kind": "point"`), []byte(`"kind": "invalid"`), 1),
+		"missing-audit":    bytes.Replace(raw, []byte(`"auditEt": 500`), []byte(`"auditEt": null`), 1),
+		"numeric-claim":    bytes.Replace(raw, []byte(`"numericallyCertifiedWholeWindowTargets": null`), []byte(`"numericallyCertifiedWholeWindowTargets": 0`), 1),
 		"missing-coverage": bytes.Replace(raw, []byte(`"coverage": [`), []byte(`"coverage": null`), 1),
 	}
 	for name, mutated := range mutations {

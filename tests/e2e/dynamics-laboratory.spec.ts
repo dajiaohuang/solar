@@ -69,10 +69,15 @@ test('solar 1PN is explicitly adopted and exports its independently checked traj
   const result = panel.getByTestId('dynamics-result')
   await expect(result).toContainText('Solar 1PN adopted')
   await result.getByText('Inspect instantaneous orbit diagnostics', { exact: true }).click()
-  await expect(result.getByRole('table', { name: 'Initial and final osculating orbit' }).getByRole('row')).toHaveCount(7)
+  await expect(result.getByRole('table', { name: 'Initial and final osculating orbit' }).getByRole('row')).toHaveCount(9)
   await expect(result).toContainText('J2000 equatorial plane')
-  expect(await result.locator('.dynamics-diagnostics .uncertainty-table').evaluate(element => element.scrollWidth <= element.clientWidth+1)).toBe(true)
-  expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth+1)).toBe(true)
+  // Each diagnostic table owns horizontal scrolling; the panel must still fit.
+  for (const table of await result.locator('.dynamics-diagnostics .uncertainty-table').all()) {
+    await expect(table).toBeVisible()
+    await expect(table).toHaveCSS('overflow-x', 'auto')
+  }
+  const panelWidth = await panel.evaluate(element => ({ content: element.scrollWidth, viewport: element.clientWidth }))
+  expect(panelWidth.content).toBeLessThanOrEqual(panelWidth.viewport+1)
   await result.locator('.dynamics-diagnostics').screenshot({ path: test.info().outputPath('orbit-diagnostics.png') })
   const pending = page.waitForEvent('download')
   await result.getByRole('button', { name: 'Export experiment and sources JSON' }).click()

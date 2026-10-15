@@ -10,6 +10,19 @@ const gm = reference.masses[0].gmKm3PerSecond2
 const sun = Float64Array.from(reference.sourceStates[0].states[0])
 const correction = withSolarRelativity((_t, _y, out) => out.fill(0), () => sun, gm)
 
+test('state-only 1PN force remains identical across alternating variational evaluations', () => {
+  const out = new Float64Array(6), full = new Float64Array(42)
+  for (const offset of [0, 1000, -2000, 0]) {
+    const initial = reference.initial.map((value, i) => value+(i === 0 ? offset : 0))
+    correction(0, Float64Array.from(initial), out)
+    correction(0, withIdentityTransition(initial), full)
+    expect(out).toEqual(full.slice(0,6))
+    const fresh = new Float64Array(42)
+    withSolarRelativity((_t, _y, o) => o.fill(0), () => sun, gm)(0, withIdentityTransition(initial), fresh)
+    expect(full).toEqual(fresh)
+  }
+})
+
 test('solar acceleration and all six Jacobian columns match independent complex-step reference', () => {
   const out = new Float64Array(42)
   correction(0, withIdentityTransition(reference.initial), out)

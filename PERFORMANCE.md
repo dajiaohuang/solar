@@ -1,9 +1,41 @@
 # Performance budgets
 
+## Interaction audit, 2026-10-03
+
+Explorer now focuses named bodies from a 2D click and a completed touch tap.
+Both renderers reject selection/reference changes from drags, pinches and
+cancelled pointers, including gestures that return to their starting point.
+Global pointer release/blur handling prevents a gesture released outside the
+canvas from blocking the next interaction. Hover picking pauses during dragging;
+2D hover/reference hit radii use pixels rather than a fraction of scene radius.
+Tooltips remain inside the viewport and expire on view/reference/date changes.
+
+Switching to 3D preserves the session's planar offsets and layer choices;
+unsupported controls remain disabled and visibly unchecked. Returning to 2D
+restores those choices. Numeric/date inputs retain incomplete editing drafts,
+and seeking a playing clock discards the elapsed frame interval before the seek.
+Keyboard object focus opens the inspector; canvas focus preserves its layout so
+the reference-change gesture does not move the target between clicks.
+
+Focused validation: 21 unit checks and 21 final Chromium browser checks passed;
+the desktop-only exclusion of a touch-device test was intentional. Another 20
+desktop/mobile checks covered navigation, scene history/save/export, keyboard
+search, reproducible story/mission URLs, catalog streaming, viewport controls
+and WebGL-loss recovery. The final browser run rebuilt the production app.
+The accessible numeric-range assertion now selects the actual range fields,
+rather than counting the unrelated catalog radius control. Automated serious
+and critical accessibility checks passed. Scoped lint had no errors and three
+existing dependency warnings. The receipt is
+[interaction-audit-20261003](docs/benchmarks/interaction-audit-20261003/receipt.json).
+These are fixture-backed Chromium checks, including touch emulation; they do
+not establish physical-device performance, live ephemeris acceptance,
+Firefox/WebKit behavior, full-suite acceptance or deployment. Publication
+remains paused; no remote issue/PR coverage was created in this local audit.
+
 Solar Atlas treats the million-object catalog as a columnar filtering problem, not as a million JavaScript objects or meshes. The Observation Deck uses two deliberately separate render layers:
 
-- **Focus layer:** named, selectable bodies with trajectories, labels, inspection, and analysis. The limit is 160 bodies in 3D and 320 in 2D.
-- **Catalog cloud:** an optional single-buffer point cloud generated in a worker. It is off by default, so opening the Observation Deck requests no asteroid sample. Enabling it reuses the immutable mobile or desktop sample already identified in the scene URL.
+- **Focus layer:** named, selectable bodies with current positions, trajectories, labels, inspection, and analysis. The 160-body 3D and 320-body 2D limits budget historical-trail computation and 3D detail meshes; they do not truncate current-position requests. Explorer submits the complete selected set to its current-state path when the state planner admits the request. In 3D, positions outside the detail set remain visible as batched point markers. Source coverage and planner admission still determine which states are exact, approximate, missing, or rejected.
+- **Catalog cloud:** an optional worker-computed point cloud. It is off by default. The immutable mobile/desktop sample remains the default when enabled; full Web can instead select a filtered 100k, 500k or full catalog stream in the same observation scene. Scene streaming uses two atomic Float64 snapshots and packed appearance bytes, with a separate memory plan for retained worker elements and scene CPU/GPU buffers.
 
 The application opens in 3D and falls back to 2D if WebGL is unavailable or lost. On an untouched first visit, a lightweight spatial preview sits behind the tutorial choice and the interactive Three.js renderer chunk is downloaded and initialized only after the visitor chooses a path; returning visits initialize 3D directly. An idle paused 3D scene renders on demand. Continuous drawing runs for the playing catalog cloud, or for backend exact-state playback and pointer/wheel interaction as described below. The renderer does not retain its drawing buffer.
 
@@ -22,11 +54,108 @@ Viewport width selects mobile or desktop first; a coarse-pointer landscape devic
 
 2D Balanced is fixed at 8,000 conservative-mobile, 100,000 mobile or 500,000 desktop points. 2D Maximum starts at 8,000 / 150,000 / 500,000 respectively, with ranges 2,000–10,000 / 25,000–500,000 / 50,000–1,567,193. Its adaptive state is independent from 3D. These are catalog-cloud policies, not an exact-current-state admission controller.
 
-Auto and Maximum evaluate two-second frame windows after a two-second warm-up in both modes. 3D reports its draw-loop intervals; 2D samples animation-frame delivery while its clock-driven workload is active. Neither is a GPU timer or a physical-device SLO. Two consecutive slow windows (p90 above 28 ms or more than 15% long frames) reduce the count by 25%; four consecutive fast windows (p90 below 18.5 ms and fewer than 5% long frames) raise it by 12.5%, but only if loaded points exercise the current budget. Adjustments use 5,000-point quanta and a five-second cooldown. Hidden tabs, paused simulations, and warm-up periods do not influence the controller. Balanced is a deterministic fixed-count option.
+Auto and Maximum evaluate two-second callback-interval windows after a two-second warm-up in both modes. 3D reports its draw-loop intervals; 2D samples animation-frame delivery while its clock-driven workload is active. Neither is a GPU timer or a physical-device SLO. The shared controller records p50/p95/p99 and an estimated missed-60-Hz-slot ratio. Two consecutive slow windows (p95 above 18.5 ms, p99 above 28 ms, or missed slots above 5%) reduce the count by 25%; p95 above 33.3 ms or missed slots above 20% reduces after one. Four consecutive exercised windows at p95 <= 16.7 ms, p99 < 28 ms and missed slots < 2% raise it by 12.5%. If the loaded sample is below the policy minimum, slow-frame reductions use the actually exercised count and may descend to 2,000 rows (or the smaller available sample); this avoids lowering only an invisible ceiling. Undersized-sample adjustments use 1,000-point quanta to avoid a coarse jump over the 8,000/30,000-row Explorer samples; normal capacities retain 5,000-point quanta. A five-second cooldown remains in force. Hidden tabs, paused simulations, and warm-up periods do not influence the controller. Balanced is a deterministic fixed-count option.
 
-The raised ceilings are capacity envelopes for the single-buffer renderer, not proof that the current 8,000/30,000 display samples contain that many points or that every target device is smooth. The active count remains capped by loaded data, and real-device p90 frame time, dropped frames, memory, thermal state and context-loss evidence are required before making a hardware smoothness claim.
+The raised ceilings are capacity envelopes for the single-buffer renderer, not proof that the current 8,000/30,000 display samples contain that many points or that every target device is smooth. The active count remains capped by loaded data, and real-device p50/p95/p99 intervals, missed-frame estimate, memory, thermal state and context-loss evidence are required before making a hardware smoothness claim.
 
-The scene URL records the immutable catalog sample, whether the cloud is enabled, and the requested quality profile. It intentionally does not record the locally effective adaptive point count. A comparison gives both frames the same deterministic prefix and discards any unshared remainder. This preserves scientific replay while allowing each browser to protect interactivity.
+Explorer's 3D catalog buffer now materializes only the active per-pane draw
+prefix. The full ready Float64 catalog result remains available for camera fit
+and other consumers. When the source epoch and origin stay unchanged, adaptive
+budget growth writes only newly exposed rows; a new source epoch still rewrites
+the full displayed prefix. This removes hidden rows from each pane's GPU buffer
+and upload range, but is source-path evidence only, not a measured frame-rate or
+capacity claim.
+
+Explorer's adaptive cloud sampler uses the primary 2D canvas's RAF loop. If the
+canvas is already drawing continuously for state updates, each delivered frame
+is sampled once after the draw. If catalog epochs redraw it only on data changes,
+the same canvas-owned loop samples frame cadence without issuing extra draws;
+it records intervals only while the WebGL context is live and the draw callback
+is installed. This avoids a second independent RAF sampler and avoids treating
+a lost or not-yet-mounted canvas as live rendering capacity. The 3D canvas
+retains its own invalidation/render loop. This is source-path evidence, not
+measured GPU completion time or device performance.
+
+Both the Catalog workspace and Explorer can stream beyond immutable samples.
+Explorer now consumes retained stream epochs in its existing 2D/3D scene and
+reference frame. Catalog filters can be opened directly in that scene. The
+standalone Catalog canvas retains its own camera and specialized controls.
+Explorer permits one in-flight epoch, publishes only a complete snapshot, and
+waits for backend current states to catch up before requesting the next catalog
+epoch. It exposes computed rows, primary submitted draw count, admitted capacity,
+snapshot UTC JD and requested-time lag. No temporal reuse or mixed-epoch layer is
+presented as exact alignment. Its 256/512/1024 MiB plan includes 208 extra bytes
+per admitted row for scene storage and is not a measured process memory limit.
+The stream admits four concurrent shard reads and a separate
+four-tile upload window; the worker yields to messages after roughly 4 ms of
+cooperative work. Its planner charges the matching in-flight memory. Raising
+these limits requires updating that admission model and measuring both
+throughput and device responsiveness. Explorer retains canonical xyz stream
+snapshots across 2D/3D switches, lazily caching an xy projection for each complete
+epoch. Switching modes does not restart the stream or re-read source shards.
+Both initial camera fits sample at most 2,048 evenly spaced source ordinals and
+use the 95th percentile radius with 8% padding. This deliberately frames the
+main population rather than every distant outlier; selected bodies and trails
+can still widen the fit, and users can zoom out to discover distant points.
+This visual framing policy never changes admitted rows or source selection.
+Catalog click picking builds a screen grid on demand in 2,048-row batches,
+yields between batches, and reuses it while geometry, draw range and camera
+stay unchanged. Pending picks cancel when those inputs change or a newer click
+arrives. Crowded 2D body labels use priority-ordered placement and hide when
+no on-screen non-overlapping position fits. The collapsed catalog disclosure
+exposes loading and time lag; its expanded controls show displayed/target UTC
+times and let users pause playback while complete epochs catch up.
+The full MPCORB stream defaults to all loaded rows under its
+device-tier Auto draw cap, so the individual point count follows the adaptive
+limit instead of the number of occupied spatial cells. Above the cap, selection
+is deterministic and evenly spaced in upload order; spatial representatives
+remain available as an explicit mode with an exact in-view count overlay. This
+can increase the number of individually submitted bodies without increasing
+computed rows or the admitted memory ceiling, and it does not establish smooth
+frames on current-tree or mobile devices. Stream Auto now seeds its draw cap from the device-tier
+adaptive initial count; choosing a manual draw cap keeps that explicit value.
+The effective draw remains bounded by computed rows and the stream plan. This
+changes the starting workload, not the maximum or load-memory plan, and still
+needs stream-specific device measurements before claiming a performance gain.
+
+The scene URL records the immutable catalog sample, whether the cloud is enabled, and the requested quality profile. The optional Explorer stream size and local memory plan are session choices; they are not yet replayed by that URL. The effective adaptive draw count is also local. A comparison gives both frames the same deterministic prefix and discards any unshared remainder. See [the current direction receipt](docs/direction-correction-20260929.md) for bounded real-source evidence and its limitations.
+
+### Local full-catalog check, 2026-10-02
+
+The [raw receipt](docs/benchmarks/explorer-scene-20261002/explorer-capacity.json)
+records source SHA-256 fingerprints, the pinned dataset and backend manifests,
+Chromium 151, i9-14900KF and SwiftShader software graphics. Both modes computed
+all 1,561,171 rows, advanced time, caught up after pausing, and retained a live
+graphics context. The primary catalog draw at capture was 280,000 points.
+
+| Operation | Observed readiness | New stream starts / binary shard reads | Pause to synchronized time |
+| --- | ---: | ---: | ---: |
+| Initial 3D load | 10.354 s | 1 / 313 | 1.365 s |
+| Switch from 3D to 2D | 0.298 s | 0 / 0 | 1.399 s |
+
+The 3D RAF p50/p95/p99 were 50.1/66.7/83.3 ms; 2D was
+50.0/100.1/116.7 ms. These short software-renderer samples do not establish
+physical GPU smoothness, sustained performance or peak memory usage. The
+1,024 MiB setting remains a memory plan. Readiness includes browser automation
+and, for the mode switch, the click and the lazy planar projection.
+
+Two real 2D catalog clicks displayed Pallas and Kiselev in the inspector after
+0.877 s and 0.870 s. Those are observed click-to-inspector times including data
+fetches, React updates and Playwright polling, not isolated index lookup times.
+The picker check follows an explicit date seek and three 1.25x zoom steps;
+candidate coordinates come from a bounded prefix of the actual uploaded point
+buffer, excluding focus-marker hit areas. Diagnostics run after RAF sampling.
+The check exposed a missing success return from catalog insertion: a picked body
+was selected but never focused. Catalog admission now returns true on success
+and retains false for preview rejection. Catalog picking caches also exclude
+unrelated focus-body updates and unchanged origin object identities.
+
+Focused validation passed: 22 unit tests including preview guards, desktop and
+mobile mock-scene regressions, and one real-source desktop browser check. Build
+and artifact verification passed. No full suite, push, release or deployment was
+performed. [3D capture](docs/benchmarks/explorer-scene-20261002/catalog-3D.png)
+and [2D capture](docs/benchmarks/explorer-scene-20261002/catalog-2D.png) show the
+scene before the separate picker diagnostic.
 
 ## Android exact-state display controller
 
@@ -49,6 +178,20 @@ and controller state remain separate between 2D/3D. Coalesced callbacks and
 generation/PreparedPoints identity checks prevent old samples or prepared
 buffers from changing a newer observation. The Float64 scientific frame remains
 independent of the deterministic reference-first display prefix.
+
+Adaptive controllers estimate missed 60 Hz slots from total callback-window
+elapsed time and callback count. They no longer round each interval
+independently, which made irregular callback cadence overstate or understate
+missed slots. This remains a throughput estimate from renderer callbacks, not a
+compositor-presented-frame measurement.
+
+Native 2D staging stores two Float32 coordinates per displayed body: 8 bytes
+instead of Android's former 12-byte triple and iOS's 16-byte `SIMD3<Float>`
+stride. GLES supplies zero for the omitted planar z component; the iOS Canvas
+reads only x/y. Source states, exact-candidate counts, reference selection,
+scaling, and 3D buffers are unchanged. This reduces the planar coordinate
+allocation by one third on Android and one half on iOS; it does not establish a
+device-wide memory or frame-time result.
 
 Unit and small real-SPK emulator checks are not target-load SLO evidence.
 Physical 12 GB Android, 16/32 GB desktop, 60-second frame targets, 30 FPS fallback,
@@ -221,8 +364,10 @@ Reference-relative current positions are scalar views over that same scientific
 snapshot. Each frame retains two Uint32 ordinal columns (capacity eight bytes
 per selected body) and one three-value Float64 reference origin, not per-body
 vectors, a planar copy or an audit Map. Coordinates retain the original
-convert-to-AU-then-subtract arithmetic. Display selection stores Uint32 ordinals;
-joining the bounded spacecraft layer creates a view, not a copied full array.
+convert-to-AU-then-subtract arithmetic. Display selection stores Uint32 ordinals
+and transfers its fresh array into the scalar view, avoiding a second defensive
+copy; the general-purpose selector still makes its own copy. Joining the bounded
+spacecraft layer creates a view, not a copied full array.
 Both views keep full coverage and missing-reference semantics independent of
 display budgets. Scientific buffers are never converted to Float32 in place.
 
@@ -276,19 +421,29 @@ and never switch to approximate local science. Export expands the packed audit
 only on explicit download. Each epoch currently requires a plan and its tiles;
 multi-epoch transport optimization and device SLO measurements remain pending.
 
-The separately identified approximate catalog cloud now computes and transfers
-only the active view's Float32 positions: 8 bytes per object for 2D or 12 for 3D,
-instead of retaining both coordinate arrays. A mode or dataset change terminates
-the old worker, releases its source elements and invalidates the old output;
-the replacement worker reinitializes from the existing catalog records without
-downloading the sample again. This trades recomputation on a mode switch for
-single-mode resident output. An empty/disabled cloud creates no worker. The
-scheduler rejects mismatched mode, epoch or result size before publishing.
+The separately identified approximate catalog cloud computes and transfers
+only the active view's Float64 heliocentric positions: 16 bytes per object for
+2D or 24 for 3D. The Explorer then subtracts each pane's heliocentric origin in
+Float64 before writing Float32 display coordinates to its GPU geometry; the 3D
+color attribute uses RGB8. It does not retain both 2D and 3D coordinate arrays.
+Worker initialization briefly holds the transferred 8-Float64 source tuple
+(64 bytes per object) and its 10-Float64 prepared coefficients (80 bytes per
+object) together; the propagated result adds another 16 or 24 bytes per object.
+These are typed-array sizes, not measured peak heap: JavaScript record objects,
+GPU geometry, browser/worker overhead, and overlap with the previous epoch are
+additional. A mode or dataset change terminates the old worker, releases its
+source elements and invalidates the old output; the replacement worker
+reinitializes from existing catalog records without downloading the sample
+again. This trades recomputation on a mode switch for single-mode resident
+output. An empty/disabled cloud creates no worker. The scheduler rejects
+mismatched mode, epoch or result size before publishing.
 
 Byte-level regressions compare both modes with the existing two-body focus
-model, preserve the Float64 input elements, and test a million synthetic records
-(8 MB 2D / 12 MB 3D output, not measured heap usage). Actual worker tests verify
-single-buffer transfer/detachment; desktop/mobile browser tests cover 3D/2D/3D,
+model and preserve the Float64 input elements. The million-record Float32
+kernel case (8 MB 2D / 12 MB 3D) is not the worker output: the full worker's
+Float64 result uses 16 MB / 24 MB before renderer geometry and other copies, and
+neither figure measures peak heap. Actual worker checks verify
+single-buffer transfer/detachment; desktop/mobile browser checks cover 3D/2D/3D,
 Catalog/Explorer navigation and disabling the cloud, with at most one live
 catalog worker. These changes do not add exact ephemeris coverage or establish
 a real-device frame-rate claim. The renderer-sampling lifecycle assertion still
@@ -323,10 +478,12 @@ Before decoding request bodies or computing states, the service admits at most
 its configured worker count and queues at most 32 requests **per class** (96
 total). The three FIFO queues use weighted round robin: four interactive grants,
 two trajectory grants, then one bulk-directory grant, skipping empty queues.
-State plans/tiles, manifests and body/identity details are interactive;
-`POST /v1/trajectory` is trajectory work; `GET /v1/catalog`, `/v1/inventory` and
-`/v1/identities` are bulk-directory work. Priorities are server-selected, not a
-client field. A background precomputation service is not implemented.
+State plans/tiles, manifests and body/identity details are interactive unless a
+state plan/tile explicitly carries `workload=trajectory`; historical state
+windows and observation searches use the trajectory queue. `GET /v1/catalog`,
+`/v1/inventory` and `/v1/identities` are bulk-directory work. Priorities are
+server-selected, not a client field. A background precomputation service is not
+implemented.
 
 Each nonempty class gets a turn within seven grants under contention. This is
 non-preemptive admission fairness, **not** a latency guarantee: a running job

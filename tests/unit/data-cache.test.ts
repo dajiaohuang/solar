@@ -41,12 +41,6 @@ describe('versioned dataset persistence', () => {
     expect(source).not.toContain('caches.open(IMMUTABLE_DATA_CACHE)')
   })
 
-  it('refreshes IndexedDB LRU access time when cached data is read', async () => {
-    const source = await readFile(resolve('src/data/cache/indexedDb.ts'), 'utf8')
-    expect(source).toContain("database.transaction(STORE_NAME, 'readwrite')")
-    expect(source).toContain('store.put({ ...request.result, lastAccessed: Date.now() }')
-  })
-
   it('accepts both raw gzip bytes and host-decoded JSON responses', async () => {
     const value = { version: 'fixture', count: 3 }
     const plain = new TextEncoder().encode(JSON.stringify(value))

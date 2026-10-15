@@ -6,6 +6,7 @@ import { createKernelResolver, toEcliptic, type LoadedKernel } from '../../src/e
 import type { KernelFile } from '../../src/engine/ephemeris/kernelStore'
 import fixture from '../fixtures/satellite-pools-cspice.json'
 import { SMALL_BODY_PRIMARIES, SATELLITE_IDENTITIES } from '../../src/data/satelliteIdentities'
+import modelEvidence from '../../src/data/modelEvidence.json'
 
 const digest = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex')
 const manifestBytes = readFileSync('src/data/ephemeris-manifest-full.json')
@@ -110,12 +111,16 @@ describe('integrated satellite source pools and delivery profiles', () => {
   it('pins the independent oracle, manifest, dependency order and all roots', () => {
     expect(fixture.oracle).toBe('CSPICE N0067 spkgeo_c')
     expect(digest(readFileSync('scripts/reference/spk-pool-oracle.c'))).toBe(fixture.oracleSourceSha256)
-    expect(digest(manifestBytes)).toBe(fixture.manifestSha256)
+    expect(digest(manifestBytes)).toBe(modelEvidence.coverage.spkDelivery.fullManifest.sha256)
+    // The oracle retains the hash of its historical input manifest. Every
+    // covered root and dependency is still checked against its original bytes.
+    expect(fixture.manifestSha256).toBe('4d600f46c1b0d35ee440d416b19489e3de145058c3aa7f5744d64c480251a1c2')
     // The independent CSPICE fixture predates the latest Horizons batch; the
     // new roots have their own source/hash/state checks below and are not
     // silently treated as CSPICE oracle coverage.
     const oracleRoots = full.files.filter(file => !['horizons-asteroids-batch7-20260909', 'horizons-asteroids-batch8-20260909', 'horizons-asteroids-batch9-20260909', 'horizons-asteroids-batch10-20260909', 'horizons-asteroids-batch11-20260909', 'horizons-asteroids-batch12-20260909', 'horizons-asteroids-batch13-20260909', 'horizons-asteroids-batch14-20260909', 'horizons-asteroids-batch15-20260909', 'horizons-asteroids-batch16-20260910', 'horizons-asteroids-batch17-20260910', 'horizons-asteroids-batch18-20260910', 'horizons-asteroids-batch19-20260914', 'horizons-asteroids-batch20-20260914', 'horizons-asteroids-batch21-20260914', 'horizons-asteroids-batch22-20260914', 'horizons-asteroids-batch23-20260914', 'horizons-asteroids-batch24-20260914', 'horizons-asteroids-batch25-20260914', 'horizons-centaur-batch26-20260914', 'horizons-centaur-batch27-20260914', 'horizons-centaur-batch28-20260914', 'horizons-centaur-batch29-20260914', 'horizons-centaur-batch30-20260914', 'horizons-centaur-batch31-20260914', 'horizons-centaur-batch32-20260914', 'horizons-tno-batch33-20260914', 'horizons-tno-batch34-20260914', 'horizons-tno-batch35-20260914', 'horizons-tno-batch36-20260915'].includes(file.integrationBatch ?? '') && ((file.solutionKernelIds && !file.dependencyOnly) || file.id === 'de440s-2000-01-01-2051-01-01'))
-    expect(fixture.contexts.map(context => context.rootId)).toEqual(oracleRoots.map(file => file.id))
+    expect(fixture.contexts.map(context => context.rootId)).toEqual(oracleRoots.filter(file =>
+      !file.integrationBatch?.startsWith('spacecraft-') && !file.integrationBatch?.startsWith('juno-rec-')).map(file => file.id))
     expect(fixture.contexts).toHaveLength(445)
     expect(fixture.samples).toHaveLength(1422)
     for (const context of fixture.contexts) {
@@ -181,8 +186,8 @@ describe('integrated satellite source pools and delivery profiles', () => {
         expect(kernel.evaluate(target, file.endEt + 1)).toBeNull()
       }
     }
-    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(1181799424)
-    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(274401280)
+    expect(full.files.reduce((total, file) => total + file.bytes, 0)).toBe(1294291968)
+    expect(pages.files.reduce((total, file) => total + file.bytes, 0)).toBe(386497536)
   })
 
   it('pins the bounded Horizons asteroid snapshots without treating the API as immutable', () => {
@@ -438,10 +443,13 @@ describe('integrated satellite source pools and delivery profiles', () => {
       }
       expect(root.selectionEvidence.stateBoundary).toBe('Primary heliocentric state only; companion/system-center coverage is not included.')
     }
-    expect(full.files.some(file => file.id.startsWith('sb441-n16-2000002'))).toBe(false)
-    expect(full.files.some(file => file.id.startsWith('sb441-n16-2000004'))).toBe(false)
-    expect(full.files.some(file => file.id.startsWith('sb441-n16-2000010'))).toBe(false)
-    expect(full.files.some(file => file.id.startsWith('sb441-n16-2000016'))).toBe(false)
+    // Original seven-digit SB441 target identities remain separate from the
+    // eight-digit Horizons primary identities; neither source replaces the other.
+    for (const target of [2000002, 2000004, 2000010, 2000016]) {
+      const source = full.files.find(file => file.id.startsWith(`sb441-n16-${target}-`))!
+      expect(source.targets).toEqual([target])
+      expect(source.source).toBe('https://ssd.jpl.nasa.gov/ftp/eph/small_bodies/asteroids_de441/sb441-n16.bsp')
+    }
   })
 
   it('evaluates every batch-19 Horizons TNO root at both delivery profiles and preserves primary-only boundaries', () => {

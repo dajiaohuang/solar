@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Color;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.text.Editable;
 import android.text.InputFilter;
 import android.text.TextWatcher;
@@ -22,9 +23,10 @@ final class SourceIdentityPanel extends LinearLayout {
     private final TextView summary, records;
     private final Button toggle, load, next, cancel, select;
     private final Handler main = new Handler(Looper.getMainLooper());
+    private final NativeProjectionPrefetch pageWork = new NativeProjectionPrefetch();
+    private final NativeUiResultSlot results = new NativeUiResultSlot();
     private SourceIdentityPage page;
     private SourceIdentityService service;
-    private Thread worker;
     private Runnable deadline;
     private int generation;
 
@@ -64,29 +66,37 @@ final class SourceIdentityPanel extends LinearLayout {
 
     private void start(SourceIdentityPage previous) {
         clear(); summary.setText(R.string.identity_loading);
+        final long resultToken = results.reset();
         final int request = generation; final String address = backend.getText().toString().trim(), search = query.getText().toString();
         final SourceIdentityService requested;
         try { requested = new SourceIdentityService(address); }
         catch (Exception error) { summary.setText(R.string.identity_failed); return; }
         service = requested; load.setEnabled(false); cancel.setVisibility(VISIBLE);
+        final long expiresAt = SystemClock.elapsedRealtime() + 30_000;
         deadline = () -> { if (request == generation) { clear(); summary.setText(R.string.identity_failed); } };
         main.postDelayed(deadline, 30_000);
-        worker = new Thread(() -> {
+        pageWork.start(() -> {
             try {
+                if (Thread.currentThread().isInterrupted() || SystemClock.elapsedRealtime() >= expiresAt) throw new java.util.concurrent.CancellationException();
                 SourceIdentityPage result = requested.load(search, previous);
-                main.post(() -> { if (request == generation) { finish(); show(result); } });
+                results.offer(resultToken, () -> { if (finishRequest(request, expiresAt)) show(result); });
             } catch (Exception error) {
-                main.post(() -> { if (request == generation) { finish(); summary.setText(R.string.identity_failed); } });
+                results.offer(resultToken, () -> { if (finishRequest(request, expiresAt)) summary.setText(R.string.identity_failed); });
             } finally { requested.close(); }
-        }, "solar-identity-page"); worker.start();
+        }, "solar-identity-page");
     }
 
     void clear() {
-        generation++; if (worker != null) worker.interrupt(); if (service != null) service.close(); finish();
+        generation++; results.reset(); pageWork.cancel(); if (service != null) service.close(); finish();
         page = null; records.setText(""); summary.setText(R.string.identity_idle); next.setVisibility(GONE); select.setVisibility(GONE);
     }
+    private boolean finishRequest(int token, long expiresAt) {
+        if (token != generation) return false;
+        if (SystemClock.elapsedRealtime() >= expiresAt) { clear(); summary.setText(R.string.identity_failed); return false; }
+        finish(); return true;
+    }
     private void finish() {
-        if (deadline != null) main.removeCallbacks(deadline); deadline = null; worker = null; service = null;
+        if (deadline != null) main.removeCallbacks(deadline); deadline = null; service = null;
         load.setEnabled(true); cancel.setVisibility(GONE);
     }
     private void show(SourceIdentityPage result) {

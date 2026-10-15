@@ -21,4 +21,10 @@ describe('Moon phase geometry', () => {
     expect(lastQuarter.name).toBe('last-quarter')
     expect(firstQuarter.illuminatedFraction).toBeCloseTo(0.5, 2)
   })
+
+  it('retains a milliarcsecond phase angle near full Moon', () => {
+    const phase = computeMoonPhase(sun, earth, { x: 1.003, y: 1.46e-11, z: 0 })
+    expect(phase.phaseAngleDeg).toBeGreaterThan(0.99 / 3_600_000)
+    expect(phase.phaseAngleDeg).toBeLessThan(1.01 / 3_600_000)
+  })
 })

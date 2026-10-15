@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { Buffer } from 'node:buffer'
 import { assembleStateTiles, chunkStatePlanIds, StateTileSnapshot, decodeStateTile, digestStateTileRequestIds, encodeStateTile, fetchStateTiles, readStateTileJson, STATE_TILE_HEADER_BYTES, STATE_TILE_MAGIC, validateStateTileManifest, validateStateTilePlan } from '../../src/lib/stateTiles'
+import { ADVERTISED_QUEUE_RETRY, fetchRetryableResponse } from '../../src/lib/retryableHttpResponse'
 import { createStateTileAdmissionPool, createWorkerTileAdmission, serveStateTileAdmission } from '../../src/lib/stateTileAdmission'
 
 const catalogManifestSha256 = 'a'.repeat(64)
@@ -8,7 +9,7 @@ const planHash = 'b'.repeat(64)
 const manifest = validateStateTileManifest({ apiVersion: 'solar.api/v1', catalogVersion: 'fixture-v1', catalogManifestSha256 })
 const requestIdsSha256 = '125ce75f8a92d89605241d23e91b7da781560c79a07d06773b180563b11ae5d9'
 const plan = validateStateTilePlan({ apiVersion: 'solar.api/v1', planId: planHash, requestIdsSha256, catalogVersion: 'fixture-v1', catalogManifestSha256, epochJd: 2461287.5, timeScale: 'TDB', frame: 'ECLIPJ2000', precision: 'exact', stateOriginId: 'naif:0', distanceUnit: 'km', velocityUnit: 'km/s', fieldMask: ['position', 'velocity'], stride: 6, tileCount: 2, bodyCount: 2, exactCount: 2, approximateCount: 0, missingCount: 0, tiles: [{ sequence: 0, ordinalStart: 0, ordinalCount: 1 }, { sequence: 1, ordinalStart: 1, ordinalCount: 1 }] }, manifest, 2461287.5, ['earth', 'mars'], requestIdsSha256)
-const metadata = (id: string) => ({ id, availability: 'operational', precision: 'exact', source: 'fixture', datasetVersion: 'v1', datasetSha256: catalogManifestSha256, kernelSha256: 'c'.repeat(64), model: 'spk-original', centerId: 'naif:0', validityStartEt: -1e12, validityEndEt: 1e12, validityPresent: true, stateEvidence: 'kernel', evidenceWindowStartEt: -1e12, evidenceWindowEndEt: 1e12, evidenceWindowPresent: false, missingReason: '', identityStatus: '', sourceRecord: false })
+const metadata = (id: string) => ({ id, availability: 'operational', precision: 'exact', source: 'fixture', datasetVersion: 'v1', datasetSha256: catalogManifestSha256, kernelSha256: 'c'.repeat(64), sourceChainSha256: 'e'.repeat(64), model: 'spk-original', centerId: 'naif:0', validityStartEt: -1e12, validityEndEt: 1e12, validityPresent: true, stateEvidence: 'kernel', evidenceWindowStartEt: -1e12, evidenceWindowEndEt: 1e12, evidenceWindowPresent: false, missingReason: '', identityStatus: '', sourceRecord: false })
 
 async function tile(sequence: number, id: string, value: number) { return encodeStateTile({ sequence, tileCount: 2, ordinalStart: sequence, epochJd: 2461287.5, metadata: [metadata(id)], states: new Float64Array([value, value + 1, value + 2, 0, 0, 0]), planHash, catalogManifestSha256 }) }
 async function refreshPayloadChecksum(buffer: ArrayBuffer) { const bytes = new Uint8Array(buffer); const sum = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes.slice(STATE_TILE_HEADER_BYTES))); bytes.set(sum, 168); return bytes.buffer }
@@ -110,8 +111,8 @@ describe('state tile binary protocol', () => {
     const decoded = await decodeStateTile(buffer, { planHash, catalogManifestSha256 })
     expect(Array.isArray(decoded.metadata)).toBe(false)
     expect(decoded.metadata.length).toBe(count)
-    expect(decoded.metadata.numericByteLength).toBe(count * (10 * 4 + 4 * 8 + 1))
-    expect(decoded.metadata.internedStringCount).toBe(count + 8)
+    expect(decoded.metadata.numericByteLength).toBe(count * (11 * 4 + 4 * 8 + 1))
+    expect(decoded.metadata.internedStringCount).toBe(count + 9)
     const readRow = vi.spyOn(decoded.metadata, 'rowAt')
     // Check every ordinal, without constructing tens of thousands of matcher
     // objects or deep-comparing a 1.5 MiB typed array as JavaScript properties.
@@ -213,17 +214,30 @@ describe('state tile binary protocol', () => {
     expect(chunks.flat()).toEqual(Array.from(new Set(ids)))
   })
 
+  it('partitions by advertised encoded-request bytes as well as ID count', () => {
+    const limits = validateStateTileManifest({ apiVersion: 'solar.api/v1', catalogVersion: 'fixture-v1', catalogManifestSha256,
+      limits: { maxIds: 3, maxPlanBytes: 256 } })
+    const epochJd = 2461287.5
+    const ids = ['short', '"'.repeat(48), '🌌'.repeat(20), 'tail']
+    const chunks = chunkStatePlanIds(ids, limits.maxPlanIds, limits.maxPlanBytes, epochJd)
+    const bodies = chunks.map(chunk => JSON.stringify({ ids: chunk, epochJd, frame: 'ECLIPJ2000', timeScale: 'TDB',
+      fieldMask: ['position', 'velocity'], precision: 'exact' }))
+    expect(chunks.length).toBeGreaterThan(1)
+    expect(bodies.every(body => new TextEncoder().encode(body).byteLength <= limits.maxPlanBytes)).toBe(true)
+    expect(chunks.flat()).toEqual(ids)
+  })
+
   it('binds request IDs with length-prefixed UTF-8 bytes', async () => {
     await expect(digestStateTileRequestIds(['earth', 'mars'])).resolves.toBe(requestIdsSha256)
     await expect(digestStateTileRequestIds(['mars', 'earth'])).resolves.not.toBe(requestIdsSha256)
   })
 
-  it('uses the fixed little-endian 200-byte header and keeps Float64 states', async () => {
+  it('uses the fixed little-endian v2 header and keeps Float64 states', async () => {
     const buffer = await tile(0, 'earth', 1)
     const bytes = new Uint8Array(buffer)
     expect([...bytes.slice(0, 8)]).toEqual([...STATE_TILE_MAGIC])
     expect(bytes.slice(0, 8)).toEqual(Uint8Array.from([0x53, 0x4c, 0x52, 0x54, 0x49, 0x4c, 0x45, 0x00]))
-    const view = new DataView(buffer); expect(view.getUint16(8, true)).toBe(1); expect(view.getUint16(10, true)).toBe(STATE_TILE_HEADER_BYTES); expect(view.getUint32(12, true)).toBe(0); expect(view.getUint16(28, true)).toBe(6); expect(view.getUint16(30, true)).toBe(3); expect(view.getFloat64(32, true)).toBe(2461287.5)
+    const view = new DataView(buffer); expect(view.getUint16(8, true)).toBe(2); expect(view.getUint16(10, true)).toBe(STATE_TILE_HEADER_BYTES); expect(view.getUint32(12, true)).toBe(0); expect(view.getUint16(28, true)).toBe(6); expect(view.getUint16(30, true)).toBe(3); expect(view.getFloat64(32, true)).toBe(2461287.5); expect(Array.from(new Uint8Array(buffer).slice(200, 208))).toEqual([1, 1, 1, 1, 1, 0, 0, 0])
     const decoded = await decodeStateTile(buffer, { planHash, catalogManifestSha256, sequence: 0, tileCount: 2 }); expect(decoded.states).toBeInstanceOf(Float64Array); expect([...decoded.states.slice(0, 3)]).toEqual([1, 2, 3]); expect(decoded.metadata.idAt(0)).toBe('earth')
   })
 
@@ -239,6 +253,8 @@ describe('state tile binary protocol', () => {
     await expect(decodeStateTile(missing, { planHash, catalogManifestSha256 })).rejects.toThrow(/zero/i)
     const badProvenance = await encodeStateTile({ sequence: 0, tileCount: 1, ordinalStart: 0, epochJd: 2461287.5, metadata: [{ ...metadata('earth'), source: '', stateEvidence: '' }], states: new Float64Array(6), planHash, catalogManifestSha256 })
     await expect(decodeStateTile(badProvenance, { planHash, catalogManifestSha256 })).rejects.toThrow(/provenance/i)
+    const wrongOrigin = await encodeStateTile({ sequence: 0, tileCount: 1, ordinalStart: 0, epochJd: 2461287.5, metadata: [{ ...metadata('earth'), centerId: 'naif:399' }], states: new Float64Array(6), planHash, catalogManifestSha256 })
+    await expect(decodeStateTile(wrongOrigin, { planHash, catalogManifestSha256 })).rejects.toThrow(/origin/i)
     const badMissingReason = await encodeStateTile({ sequence: 0, tileCount: 1, ordinalStart: 0, epochJd: 2461287.5, metadata: [{ ...metadata('unknown'), missingReason: ' ' }], exact: [], states: new Float64Array(6), planHash, catalogManifestSha256 })
     await expect(decodeStateTile(badMissingReason, { planHash, catalogManifestSha256 })).rejects.toThrow(/reason/i)
   })
@@ -252,6 +268,8 @@ describe('state tile binary protocol', () => {
     await expect(decodeStateTile(badDataset, { planHash, catalogManifestSha256, inventoryManifestSha256: inventoryHash })).rejects.toThrow(/provenance/i)
     const badSnapshot = await encodeStateTile({ sequence: 0, tileCount: 1, ordinalStart: 0, epochJd: 2461287.5, metadata: [{ ...sourceSnapshot, sourceRecord: false, identityStatus: '', datasetSha256: catalogManifestSha256 }], states: new Float64Array(6), planHash, catalogManifestSha256, inventoryManifestSha256: inventoryHash })
     await expect(decodeStateTile(badSnapshot, { planHash, catalogManifestSha256, inventoryManifestSha256: inventoryHash })).rejects.toThrow(/snapshot/i)
+    const missingChain = await encodeStateTile({ sequence: 0, tileCount: 1, ordinalStart: 0, epochJd: 2461287.5, metadata: [{ ...sourceSnapshot, sourceChainSha256: '' }], states: new Float64Array(6), planHash, catalogManifestSha256, inventoryManifestSha256: inventoryHash })
+    await expect(decodeStateTile(missingChain, { planHash, catalogManifestSha256, inventoryManifestSha256: inventoryHash })).rejects.toThrow(/provenance/i)
   })
 
   it('rejects nonzero bitmap tail bits and noncanonical offsets', async () => {
@@ -284,6 +302,67 @@ describe('state tile binary protocol', () => {
     let active = 0; let maximum = 0; let attempts = 0; const buffers = [await tile(0, 'earth', 1), await tile(1, 'mars', 4)]
     const fetcher = vi.fn(async (_url: string, init?: RequestInit) => { active += 1; maximum = Math.max(maximum, active); await new Promise(resolve => setTimeout(resolve, 1)); active -= 1; const sequence = JSON.parse(String(init?.body)).sequence as number; if (sequence === 1 && attempts++ === 0) return response(buffers[1], false); return response(buffers[sequence]) }) as typeof fetch
     const result = await fetchStateTiles({ base: 'https://fixture', plan, signal: new AbortController().signal, fetcher }); expect(result.map(item => item.metadata.idAt(0))).toEqual(['earth', 'mars']); expect(attempts).toBe(2); expect(maximum).toBeLessThanOrEqual(2)
+  })
+
+  it('honors Retry-After after releasing its tile permit', async () => {
+    const pool = createStateTileAdmissionPool(1), buffers = [await tile(0, 'earth', 1), await tile(1, 'mars', 4)]
+    let retriedTileCalls = 0
+    let releases = 0, notifyReleased!: () => void
+    const bothReleased = new Promise<void>(resolve => { notifyReleased = resolve })
+    const acquireTile: typeof pool.acquire = async signal => {
+      const release = await pool.acquire(signal)
+      return () => { release(); if (++releases === 2) notifyReleased() }
+    }
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
+      const sequence = JSON.parse(String(init?.body)).sequence as number
+      if (sequence === 1 && retriedTileCalls++ === 0) return new Response(null, { status: 429, headers: { 'retry-after': '1' } })
+      return response(buffers[sequence])
+    }) as typeof fetch
+    vi.useFakeTimers()
+    try {
+      const pending = fetchStateTiles({ base: 'https://fixture', plan, signal: new AbortController().signal, fetcher, acquireTile })
+      // Crypto hashing completes on the native event loop, not fake timers.
+      // Observe both actual releases before advancing the retry clock.
+      await bothReleased
+      expect(fetcher).toHaveBeenCalledTimes(2)
+      expect(pool.snapshot()).toMatchObject({ active: 0, queued: 0 })
+      await vi.advanceTimersByTimeAsync(999)
+      expect(fetcher).toHaveBeenCalledTimes(2)
+      await vi.advanceTimersByTimeAsync(1)
+      const result = await pending
+      expect(result.map(item => item.metadata.idAt(0))).toEqual(['earth', 'mars'])
+      expect(retriedTileCalls).toBe(2)
+    } finally { vi.useRealTimers() }
+  })
+
+  it('retries a queued state-plan request after the advertised wait', async () => {
+    let calls = 0
+    const fetcher = vi.fn(async () => calls++ === 0
+      ? new Response(null, { status: 429, headers: { 'retry-after': '1' } })
+      : new Response('ok')) as typeof fetch
+    const signal = new AbortController().signal
+    vi.useFakeTimers()
+    try {
+      const pending = fetchRetryableResponse(fetcher, 'https://fixture/v1/state/plan', { method: 'POST' }, signal, ADVERTISED_QUEUE_RETRY)
+      await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1), { timeout: 100, interval: 1 })
+      await vi.advanceTimersByTimeAsync(999)
+      expect(fetcher).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(await pending).toBeInstanceOf(Response)
+      expect(fetcher).toHaveBeenCalledTimes(2)
+    } finally { vi.useRealTimers() }
+  })
+
+  it('does not replay queue-only requests without a queue hint or after a transport failure', async () => {
+    const signal = new AbortController().signal
+    const rejected = vi.fn(async () => new Response(null, { status: 429 })) as typeof fetch
+    const response = await fetchRetryableResponse(rejected, 'https://fixture/v1/observation', { method: 'POST' }, signal, ADVERTISED_QUEUE_RETRY)
+    expect(response.status).toBe(429)
+    expect(rejected).toHaveBeenCalledTimes(1)
+
+    const disconnected = vi.fn(async () => { throw new Error('connection lost') }) as typeof fetch
+    await expect(fetchRetryableResponse(disconnected, 'https://fixture/v1/stellar/motion', { method: 'POST' }, signal, ADVERTISED_QUEUE_RETRY)).rejects.toThrow('connection lost')
+    expect(disconnected).toHaveBeenCalledTimes(1)
   })
 
   it('aborts sibling transfers immediately when a tile fails without aborting the caller', async () => {

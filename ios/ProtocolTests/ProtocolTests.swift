@@ -2,6 +2,9 @@ import Foundation
 
 @main
 struct ProtocolTests {
+    // Independent protocol fixture: v2 carries the scientific tags in its
+    // 208-byte header. Do not derive these bytes from the production decoder.
+    static let fixtureHeaderBytes = 208
     static let hashA = String(repeating: "a", count: 64)
     static let hashB = String(repeating: "b", count: 64)
     static let ids = ["naif:10", "missing:fixture"]
@@ -15,24 +18,26 @@ struct ProtocolTests {
     }
 
     static func fixture() throws -> Data {
-        let common: [String: Any] = ["source": "protocol-test-fixture", "datasetVersion": "fixture", "datasetSha256": hashB, "kernelSha256": hashA, "model": "spk-original", "centerId": "naif:0", "validityStartEt": 0, "validityEndEt": 0, "validityPresent": true, "stateEvidence": "fixture-only", "evidenceWindowStartEt": 0, "evidenceWindowEndEt": 0, "evidenceWindowPresent": false]
+        let common: [String: Any] = ["source": "protocol-test-fixture", "datasetVersion": "fixture", "datasetSha256": hashB, "kernelSha256": hashA, "sourceChainSha256": hashA, "model": "spk-original", "centerId": "naif:0", "validityStartEt": 0, "validityEndEt": 0, "validityPresent": true, "stateEvidence": "fixture-only", "evidenceWindowStartEt": 0, "evidenceWindowEndEt": 0, "evidenceWindowPresent": false]
         var metadata = Data()
         for (index, id) in ids.enumerated() {
             var row = common; row["id"] = id; row["missingReason"] = index == 0 ? "" : "no-kernel"
             row["sourceRecord"] = false; row["identityStatus"] = ""
             metadata.append(try JSONSerialization.data(withJSONObject: row, options: [.sortedKeys])); metadata.append(10)
         }
-        let exact = 200 + metadata.count, approximate = exact + 1, missing = approximate + 1
+        let exact = fixtureHeaderBytes + metadata.count, approximate = exact + 1, missing = approximate + 1
         let states = (missing + 1 + 7) / 8 * 8
         var data = Data(count: states + 96)
         data.replaceSubrange(0..<8, with: [83, 76, 82, 84, 73, 76, 69, 0])
-        for (offset, value, width) in [(8, 1, 2), (10, 200, 2), (16, 1, 4), (24, 2, 4), (28, 6, 2), (30, 3, 2), (40, 200, 4), (44, metadata.count, 4), (48, exact, 4), (52, 1, 4), (56, approximate, 4), (60, missing, 4), (64, states, 4), (68, 96, 4)] {
+        for (offset, value, width) in [(8, 2, 2), (10, fixtureHeaderBytes, 2), (16, 1, 4), (24, 2, 4), (28, 6, 2), (30, 3, 2), (40, fixtureHeaderBytes, 4), (44, metadata.count, 4), (48, exact, 4), (52, 1, 4), (56, approximate, 4), (60, missing, 4), (64, states, 4), (68, 96, 4)] {
             put(&data, at: offset, value: UInt64(value), width: width)
         }
         put(&data, at: 32, value: Double(2_451_545).bitPattern, width: 8)
         data.replaceSubrange(72..<104, with: repeatElement(UInt8(0xaa), count: 32))
         data.replaceSubrange(104..<136, with: repeatElement(UInt8(0xbb), count: 32))
-        data.replaceSubrange(200..<exact, with: metadata)
+        // TDB, ECLIPJ2000, barycentric origin, km and km/s; reserved bytes zero.
+        for offset in 200...204 { data[offset] = 1 }
+        data.replaceSubrange(fixtureHeaderBytes..<exact, with: metadata)
         data[exact] = 1; data[missing] = 2
         for (index, value) in values.enumerated() { put(&data, at: states + index * 8, value: value.bitPattern, width: 8) }
         checksum(&data)
@@ -40,7 +45,7 @@ struct ProtocolTests {
     }
 
     static func checksum(_ data: inout Data) {
-        let hash = StateTileDecoder.sha256(data.subdata(in: 200..<data.count))
+        let hash = StateTileDecoder.sha256(data.subdata(in: fixtureHeaderBytes..<data.count))
         let bytes = stride(from: 0, to: hash.count, by: 2).map { index -> UInt8 in
             let start = hash.index(hash.startIndex, offsetBy: index)
             return UInt8(hash[start..<hash.index(start, offsetBy: 2)], radix: 16)!
@@ -58,6 +63,7 @@ struct ProtocolTests {
             "auditEt": 500, "timeScale": "TDB seconds past J2000", "frame": "ECLIPJ2000",
             "requestedWindow": ["startEt": 0, "endEt": 1000, "timeScale": "TDB seconds past J2000"],
             "counts": ["sourceRecords": 10, "mappedSourceRecords": 3, "unresolvedSourceRecords": 7, "explicitNaifTargets": 2, "availableTargetsAtAuditEpoch": 2],
+            "sourceCounts": ["synthetic": 10],
             "windowCounts": ["dependencyCoveredTargets": 1, "targetsWithDependencyGaps": 1, "numericallyCertifiedWholeWindowTargets": NSNull()],
             "coverage": [["datasetVersion": "fixture", "source": "synthetic", "model": "spk-at-audit-epoch", "auditEt": 500, "frame": "ECLIPJ2000", "exact": 3, "approximate": 0, "missing": 7]],
             "unresolvedReasons": ["no-explicit-naif-mapping": 6, "unresolved-component": 1]
@@ -204,7 +210,151 @@ struct ProtocolTests {
         print("Ground contacts: real HTTP capture, durations, source mutations and older responses passed")
     }
 
+    static func stellarMotionRequestChecks() async throws {
+        let directory = URL(fileURLWithPath: "tests/fixtures/gaia-six-20260923")
+        var manifest = try Data(contentsOf: directory.appendingPathComponent("manifest.json"))
+        var rows = try Data(contentsOf: directory.appendingPathComponent("rows.csv"))
+        let originalManifest = manifest, originalRows = rows
+        let source = "65212004581252736"
+        func make(_ manifest: Data, _ rows: Data,
+                  _ id: String = "65212004581252736", _ epoch: Double = 2026,
+                  _ rv: String = NativeStellarMotionRequest.rvPolicy, _ covariance: String? = nil) throws -> NativeStellarMotionRequest {
+            try NativeStellarMotionRequest(manifest: manifest, rows: rows, sourceId: id, epoch: epoch,
+                                          radialVelocityPolicy: rv, covariancePolicy: covariance)
+        }
+        func reject(_ operation: () throws -> Void) throws {
+            do { try operation() } catch { return }
+            throw StateTileFailure.invalid("Invalid stellar request accepted")
+        }
+        let request = try make(manifest, rows)
+        manifest[0] ^= 1; rows[0] ^= 1
+        precondition(request.originalManifestBase64 == originalManifest && request.originalRowsCsvBase64 == originalRows)
+        for policy in [nil, NativeStellarMotionRequest.independentRVPolicy] as [String?] {
+            let encoded = try make(originalManifest, originalRows, source, 2026, NativeStellarMotionRequest.rvPolicy, policy).bytes()
+            let object = try JSONSerialization.jsonObject(with: encoded) as! [String: Any]
+            precondition(Data(base64Encoded: object["originalManifestBase64"] as! String) == originalManifest)
+            precondition(Data(base64Encoded: object["originalRowsCsvBase64"] as! String) == originalRows)
+            precondition(object["sourceId"] as? String == source && object["targetEpochJulianYearTCB"] as? Double == 2026)
+            precondition(object["radialVelocityPolicy"] as? String == NativeStellarMotionRequest.rvPolicy)
+            precondition(object["covariancePolicy"] as? String == policy && object.count == (policy == nil ? 5 : 6))
+        }
+        for id in ["", "0", "01", "+1", "1.0", "1\n", "١", "9223372036854775808"] {
+            try reject { _ = try make(originalManifest, originalRows, id) }
+        }
+        _ = try make(originalManifest, originalRows, String(Int64.max), 1916)
+        _ = try make(originalManifest, originalRows, "1", 2116)
+        for epoch in [Double.nan, .infinity, -.infinity, 1915.999, 2116.001] {
+            try reject { _ = try make(originalManifest, originalRows, source, epoch) }
+        }
+        try reject { _ = try make(Data(), originalRows) }
+        try reject { _ = try make(originalManifest, Data()) }
+        try reject { _ = try make(Data(count: NativeStellarMotionRequest.maxManifestBytes + 1), originalRows) }
+        try reject { _ = try make(originalManifest, Data(count: NativeStellarMotionRequest.maxRowsBytes + 1)) }
+        try reject { _ = try make(originalManifest, originalRows, source, 2026, "") }
+        try reject { _ = try make(originalManifest, originalRows, source, 2026, NativeStellarMotionRequest.rvPolicy, "") }
+        // All-ones bytes produce slash-heavy base64; escaping each slash would
+        // incorrectly make valid maximum-size inputs exceed the wire budget.
+        let largest = try make(Data(repeating: 255, count: NativeStellarMotionRequest.maxManifestBytes), Data(repeating: 255, count: NativeStellarMotionRequest.maxRowsBytes))
+        let largestBytes = try largest.bytes()
+        precondition(largestBytes.count <= NativeStellarMotionRequest.maxWireBytes)
+        let cancelled = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try request.bytes()
+        }
+        do { _ = try await cancelled.value; preconditionFailure("Cancelled request encoded") }
+        catch is CancellationError { }
+        print("Stellar request: original-byte identity, policies, bounds and cancellation passed")
+    }
+
+    static func stellarMotionResponseChecks() async throws {
+        let directory = URL(fileURLWithPath: "tests/fixtures/gaia-six-20260923")
+        let manifest = try Data(contentsOf: directory.appendingPathComponent("manifest.json"))
+        let rows = try Data(contentsOf: directory.appendingPathComponent("rows.csv"))
+        for covariance in [false, true] {
+            let request = try NativeStellarMotionRequest(manifest: manifest, rows: rows, sourceId: "65212004581252736", epoch: 2026,
+                radialVelocityPolicy: NativeStellarMotionRequest.rvPolicy, covariancePolicy: covariance ? NativeStellarMotionRequest.independentRVPolicy : nil)
+            let file = covariance ? "gaia-motion-covariance-experiment.json" : "gaia-motion-experiment.json"
+            let originalExperiment = try Data(contentsOf: URL(fileURLWithPath: "tests/fixtures/" + file))
+            // Preserve the Go numeric tokens for the acceptance case; a
+            // Foundation deserialize/serialize round trip is a different input.
+            var raw = Data("{\"apiVersion\":\"solar.api/v1\",\"experiment\":".utf8)
+            raw.append(originalExperiment); raw.append(contentsOf: [125])
+            let experiment = try NativeStellarMotionReport.jsonObject(originalExperiment)
+            let report = try NativeStellarMotionReport(validating: raw, request: request)
+            precondition(report.originalResponse == raw && report.sourceId == request.sourceId && report.epoch == 2026)
+            precondition(abs(report.state[0] - 56.6929443290) < 1e-10 && (report.formalStandardDeviations != nil) == covariance)
+            if let sigma = report.formalStandardDeviations { precondition(sigma.count == 6 && abs(sigma[0] - 0.357911) < 1e-6) }
+            for mutation in 0..<(covariance ? 11 : 8) {
+                var changed = experiment
+                switch mutation {
+                case 0: changed["rowsSha256"] = String(repeating: "0", count: 64)
+                case 1: changed["originalManifestBase64"] = "e30="
+                case 2: var source = changed["selectedSource"] as! [String: Any]; source["pmra"] = 123; changed["selectedSource"] = source
+                case 3: var source = changed["selectedSource"] as! [String: Any]; source["source_id"] = 65212004581252736.0; changed["selectedSource"] = source
+                case 4: var result = changed["result"] as! [String: Any]; result["targetEpochJulianYearTCB"] = 2027; changed["result"] = result
+                case 5: changed["schemaVersion"] = true
+                case 6: var result = changed["result"] as! [String: Any]; var state = result["stateTCBCompatible"] as! [String: Any]; state["raDeg"] = true; result["stateTCBCompatible"] = state; changed["result"] = result
+                case 7: if covariance { changed.removeValue(forKey: "formalCovariance") } else { changed["formalCovariance"] = NSNull() }
+                case 8: var value = changed["formalCovariance"] as! [String: Any]; var matrix = value["jacobian"] as! [[Double]]; matrix[0][0] += 1; value["jacobian"] = matrix; changed["formalCovariance"] = value
+                case 9: var value = changed["formalCovariance"] as! [String: Any]; var matrix = value["outputMatrix"] as! [[Double]]; matrix[0][1] += 1; value["outputMatrix"] = matrix; changed["formalCovariance"] = value
+                default: var value = changed["formalCovariance"] as! [String: Any]; value["coordinateUnits"] = ["deg", "mas", "mas", "mas/Julian-year", "mas/Julian-year", "km/s"]; changed["formalCovariance"] = value
+                }
+                let invalid = try JSONSerialization.data(withJSONObject: ["apiVersion": "solar.api/v1", "experiment": changed])
+                var rejected = false
+                do { _ = try NativeStellarMotionReport(validating: invalid, request: request) } catch { rejected = true }
+                precondition(rejected, "Malformed stellar response accepted: \(mutation)")
+            }
+            let cancelled = Task {
+                withUnsafeCurrentTask { $0?.cancel() }
+                return try NativeStellarMotionReport(validating: raw, request: request)
+            }
+            do { _ = try await cancelled.value; preconditionFailure("Cancelled stellar response published") }
+            catch is CancellationError { }
+        }
+        print("Stellar response: real CLI replay, original CSV/hashes, covariance, mutations and cancellation passed")
+    }
+
+    static func stellarSourceReadChecks() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("solar-stellar-import-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("original.csv")
+        for limit in [NativeStellarMotionRequest.maxManifestBytes, NativeStellarMotionRequest.maxRowsBytes] {
+            let original = Data(repeating: 255, count: limit)
+            try original.write(to: file)
+            let loaded = try await StellarSourceReader.shared.read(file, limit: limit)
+            precondition(loaded == original)
+            for bytes in [Data(), Data(repeating: 255, count: limit + 1)] {
+                try bytes.write(to: file)
+                var rejected = false
+                do { _ = try await StellarSourceReader.shared.read(file, limit: limit) } catch { rejected = true }
+                precondition(rejected, "Empty or oversized original file accepted")
+            }
+        }
+        let originalFile = URL(fileURLWithPath: "tests/fixtures/gaia-six-20260923/rows.csv")
+        let expected = try Data(contentsOf: originalFile)
+        let loaded = try await StellarSourceReader.shared.read(originalFile, limit: NativeStellarMotionRequest.maxRowsBytes)
+        precondition(loaded == expected)
+        var invalidBudgetRejected = false
+        do { _ = try await StellarSourceReader.shared.read(originalFile, limit: Int.max) } catch { invalidBudgetRejected = true }
+        precondition(invalidBudgetRejected)
+        let cancelled = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await StellarSourceReader.shared.read(originalFile, limit: NativeStellarMotionRequest.maxRowsBytes)
+        }
+        do { _ = try await cancelled.value; preconditionFailure("Cancelled source read succeeded") }
+        catch is CancellationError { }
+        let recovered = try await StellarSourceReader.shared.read(originalFile, limit: NativeStellarMotionRequest.maxRowsBytes)
+        precondition(recovered == expected, "Cancelled import poisoned the shared reader")
+        print("Stellar source import: real bytes, exact budgets, overflow/empty refusal and cancellation recovery passed")
+    }
+
     static func main() async throws {
+        if CommandLine.arguments.contains("--stellar-source-only") { try await stellarSourceReadChecks(); return }
+        if CommandLine.arguments.contains("--stellar-motion-only") { try await stellarMotionRequestChecks(); try await stellarMotionResponseChecks(); try await stellarSourceReadChecks(); return }
+        try await stellarMotionRequestChecks()
+        try await stellarMotionResponseChecks()
+        try await stellarSourceReadChecks()
         try groundContacts()
         if CommandLine.arguments.contains("--ground-contacts-only") { return }
         try sourceIdentityChecks()
@@ -221,10 +371,7 @@ struct ProtocolTests {
         var boundary = try JSONSerialization.jsonObject(with: coverage) as! [String: Any]
         boundary["auditEt"] = -Double.greatestFiniteMagnitude
         boundary["requestedWindow"] = ["startEt": -1.5, "endEt": 1.5, "timeScale": "TDB seconds past J2000"]
-        boundary["counts"] = ["sourceRecords": 0, "mappedSourceRecords": 0, "unresolvedSourceRecords": 0, "explicitNaifTargets": 0, "availableTargetsAtAuditEpoch": 0]
-        boundary["windowCounts"] = ["dependencyCoveredTargets": 0, "targetsWithDependencyGaps": 0, "numericallyCertifiedWholeWindowTargets": NSNull()]
-        boundary["coverage"] = [["datasetVersion": "fixture", "source": "synthetic", "model": "none", "auditEt": boundary["auditEt"] as! Double, "frame": "ECLIPJ2000", "exact": 0, "approximate": 0, "missing": 0]]
-        boundary["unresolvedReasons"] = [String: UInt64]()
+        boundary["coverage"] = [["datasetVersion": "fixture", "source": "synthetic", "model": "spk-at-audit-epoch", "auditEt": boundary["auditEt"] as! Double, "frame": "ECLIPJ2000", "exact": 3, "approximate": 0, "missing": 7]]
         _ = try NativeCoverageReport(validating: JSONSerialization.data(withJSONObject: boundary), catalogManifest: coverageManifest)
         try coverageRejects(coverage, manifest: coverageManifest) { $0["sourceBytesVerified"] = false }
         try coverageRejects(coverage, manifest: coverageManifest) { $0["windowCounts"] = ["dependencyCoveredTargets": 1, "targetsWithDependencyGaps": 1] }
@@ -269,22 +416,46 @@ struct ProtocolTests {
         for index in values.indices { precondition(tile.states[index].bitPattern == values[index].bitPattern) }
         var frame = NativeStateFrame(epochJd: expected.epochJd, catalogHash: hashB, inventoryHash: nil,
             metadata: Array(tile.metadata.reversed()), states: Array(repeating: 0, count: 12), exact: [true, true])
+        guard let initialFrame = NativeStateFrame.verifiedPrefix(of: frame, exactCount: 2, budgetRemaining: Int.max) else {
+            throw StateTileFailure.invalid("Verified initial frame could not be copied.")
+        }
+        precondition(initialFrame.frame.metadata.count == 2 && initialFrame.frame.states.count == 12
+            && initialFrame.frame.exact == [true, true] && initialFrame.frame.verifiedExactCount == 2
+            && initialFrame.residentBytes > 0)
+        precondition(NativeStateFrame.verifiedPrefix(of: frame, exactCount: 2, budgetRemaining: 0) == nil)
         // Large absolute origin and small displacement must be subtracted as
         // Float64 before any Float32 conversion. Reference is last in the list.
         frame.states[0] = 1_000_000_001; frame.states[6] = 1_000_000_000
+        precondition(initialFrame.frame.states[0] == 0 && initialFrame.frame.states[6] == 0)
         let sourceBits = frame.states.map(\.bitPattern)
         let projected = try NativeProjection.make(frame: frame, reference: ids[0], limit: 2)
-        precondition(projected.points == [SIMD3<Float>.zero, SIMD3<Float>(5, 0, 0)] && projected.candidates == 2)
+        precondition(projected.points == [SIMD2<Float>.zero, SIMD2<Float>(4.75, 0)] && projected.candidates == 2)
+        precondition(MemoryLayout<SIMD2<Float>>.stride == 2 * MemoryLayout<Float>.stride)
+        var diagonalFrame = frame
+        diagonalFrame.states[7] = -1; diagonalFrame.states[8] = -1
+        let radialProjection = try NativeProjection.make(frame: diagonalFrame, reference: ids[0], limit: 2, mode3D: true)
+        guard let radialPayload = radialProjection.geometryPayload, radialPayload.count == 2 else { preconditionFailure("3D projection omitted its compact geometry payload") }
+        let vertexStride = MemoryLayout<SIMD3<Float>>.stride
+        func radialComponent(_ component: Int) -> Float {
+            let byteOffset = vertexStride + component * MemoryLayout<Float>.stride
+            var bits = UInt32.zero
+            for byte in 0..<MemoryLayout<UInt32>.size {
+                bits |= UInt32(radialPayload.vertices[byteOffset + byte]) << (byte * 8)
+            }
+            return Float(bitPattern: bits)
+        }
+        let radialDistance = hypot(hypot(Double(radialComponent(0)), Double(radialComponent(1))), Double(radialComponent(2)))
+        precondition(abs(radialDistance - 4.75) < 1e-5)
         let capped = try NativeProjection.make(frame: frame, reference: ids[0], limit: 1)
-        precondition(capped.points == [.zero] && capped.candidates == 2)
+        precondition(capped.points == [SIMD2<Float>.zero] && capped.candidates == 2)
         let reduced = try projected.limited(to: 1)
         precondition(reduced.points == capped.points && reduced.candidates == 2)
         precondition(reduced.identity != projected.identity)
         let unchanged = try projected.limited(to: 10)
         precondition(unchanged.identity == projected.identity)
-        let fullExtent = NativeProjection(points: [.zero, SIMD3<Float>(1, 2, 3), SIMD3<Float>(5, 5, 5)], candidates: 3)
+        let fullExtent = NativeProjection(points: [.zero, SIMD2<Float>(1, 2), SIMD2<Float>(5, 5)], candidates: 3)
         let smallerExtent = try fullExtent.limited(to: 2)
-        precondition(smallerExtent.points == [.zero, SIMD3<Float>(1, 2, 3)] && smallerExtent.candidates == 3)
+        precondition(smallerExtent.points == [.zero, SIMD2<Float>(1, 2)] && smallerExtent.candidates == 3)
         precondition(frame.states.map(\.bitPattern) == sourceBits)
         var invalidLimitRejected = false
         do { _ = try projected.limited(to: 0) } catch { invalidLimitRejected = true }
@@ -322,7 +493,15 @@ struct ProtocolTests {
             if let window = sampler.record(Double(index) * 0.034) { sampled = window }
         }
         precondition(sampled?.samples == 30 && abs((sampled?.p50Ms ?? 0) - 34) < 0.000_001 && abs((sampled?.p95Ms ?? 0) - 34) < 0.000_001)
-        precondition(abs((sampled?.droppedRatio ?? 0) - 0.5) < 0.000_001)
+        precondition(abs((sampled?.droppedRatio ?? 0) - (1 - (1000.0 / 60) / 34)) < 0.000_001)
+        sampler.reset()
+        sampled = nil
+        var timestamp = 0.0
+        for _ in 0..<62 {
+            timestamp += 0.020
+            if let window = sampler.record(timestamp) { sampled = window; break }
+        }
+        precondition(abs((sampled?.droppedRatio ?? 0) - (1.0 / 6)) < 0.000_001)
         var dynamic = NativeDisplayPressure()
         let slowWindow = NativeFrameWindow(samples: 60, p50Ms: 20, p95Ms: 30, droppedRatio: 0.1)
         precondition(!dynamic.sample(mode3D: true, available: 100_000, window: slowWindow, now: 1))
@@ -374,13 +553,18 @@ struct ProtocolTests {
         var overflowRejected = false
         do { _ = try NativeProjection.make(frame: frame, reference: ids[0], limit: 2) } catch { overflowRejected = true }
         precondition(overflowRejected)
-        try rejects(Data(data.prefix(199)))
+        try rejects(Data(data.prefix(fixtureHeaderBytes - 1)))
         var prefixed = Data([0]); prefixed.append(data)
         let sliced = try StateTileDecoder.decode(prefixed.dropFirst(), expected: expected)
         precondition(sliced.payloadHash == tile.payloadHash)
-        var bad = data; bad[200] ^= 1; try rejects(bad)
+        var bad = data
+        put(&bad, at: 8, value: 1, width: 2); try rejects(bad)
+        bad = data; put(&bad, at: 10, value: 200, width: 2); try rejects(bad)
+        bad = data; bad[200] ^= 1; try rejects(bad)
         bad = data; bad[201] = 0xff; checksum(&bad); try rejects(bad)
-        bad = data; bad[200] = 10; checksum(&bad); try rejects(bad)
+        bad = data; bad[207] = 1; try rejects(bad)
+        bad = data; bad[fixtureHeaderBytes] ^= 1; try rejects(bad)
+        bad = data; bad[fixtureHeaderBytes] = 10; checksum(&bad); try rejects(bad)
         // A second metadata line must not be accepted for a declared one-row
         // tile; the decoder scans only declared rows, never an unbounded split.
         bad = data
@@ -483,7 +667,7 @@ struct ProtocolTests {
         }
         let manifest = try JSONDecoder().decode(GoldenManifest.self, from: read("manifest.json", limit: 8 * 1024 * 1024))
         let catalog = try object("catalog-manifest.json"), plan = try object("plan.json")
-        guard manifest.format == "solar.state-tile-fixture/v1",
+        guard manifest.format == "solar.state-tile-fixture/v2",
               let catalogHash = catalog["catalogManifestSha256"] as? String,
               let planHash = plan["planId"] as? String,
               let descriptors = plan["tiles"] as? [[String: Any]] else {
@@ -513,6 +697,8 @@ struct ProtocolTests {
                 sequence: sequence, tileCount: manifest.tiles.count, ordinalStart: item.ordinalStart,
                 epochJd: manifest.epochJd, ids: expectedIDs)
             let decoded = try StateTileDecoder.decode(bytes, expected: expected)
+            precondition(decoded.timeScale == "TDB" && decoded.frame == "ECLIPJ2000" && decoded.stateOriginId == "naif:0")
+            precondition(decoded.distanceUnit == "km" && decoded.velocityUnit == "km/s")
             precondition(decoded.payloadHash == item.payloadSha256)
             for (row, item) in item.expectedRows.enumerated() {
                 precondition(item.status == "exact" || item.status == "missing")

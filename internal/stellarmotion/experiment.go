@@ -59,7 +59,7 @@ func FromCSVContext(ctx context.Context, manifestBytes, rowsBytes []byte, id str
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if len(manifestBytes) == 0 || len(manifestBytes) > 1<<20 || len(rowsBytes) == 0 || len(rowsBytes) > 8<<20 {
+	if len(manifestBytes) == 0 || len(manifestBytes) > 1<<20 || len(rowsBytes) == 0 || len(rowsBytes) > 16<<20 {
 		return nil, fmt.Errorf("Gaia source byte budget exceeded")
 	}
 	var manifest struct {
@@ -80,7 +80,7 @@ func FromCSVContext(ctx context.Context, manifestBytes, rowsBytes []byte, id str
 	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
 		return nil, err
 	}
-	if (manifest.Schema != 1 && manifest.Schema != 2) || manifest.Catalog != "Gaia DR3" || manifest.Table != "gaiadr3.gaia_source" || manifest.Frame != "ICRS" || manifest.Epoch != 2016 || manifest.Scale != "TCB" || manifest.Rows < 1 || manifest.Rows > 10000 {
+	if (manifest.Schema != 1 && manifest.Schema != 2) || manifest.Catalog != "Gaia DR3" || manifest.Table != "gaiadr3.gaia_source" || manifest.Frame != "ICRS" || manifest.Epoch != 2016 || manifest.Scale != "TCB" || manifest.Rows < 1 || manifest.Rows > 30000 {
 		return nil, fmt.Errorf("unsupported Gaia CSV manifest")
 	}
 	expectedColumns := 28
@@ -133,7 +133,7 @@ func FromCSVContext(ctx context.Context, manifestBytes, rowsBytes []byte, id str
 			return nil, err
 		}
 		count++
-		if count > 10000 {
+		if count > 30000 {
 			return nil, fmt.Errorf("Gaia row budget exceeded")
 		}
 		identity, err := strconv.ParseInt(row[0], 10, 64)

@@ -30,8 +30,21 @@ public final class StellarMotionReport {
     public static StellarMotionReport decode(byte[] raw, StellarMotionRequest request) throws IOException {
         require(raw!=null && raw.length>0 && raw.length<=MAX_BYTES,"Stellar response byte budget exceeded");
         checkCancelled();
-        Map<String,Object> envelope=object(StateTileDecoder.parseJson(raw)), e=object(envelope.get("experiment")), r=object(e.get("result"));
-        require("solar.api/v1".equals(envelope.get("apiVersion")) && number(e.get("schemaVersion"))==1,"Stellar API identity mismatch");
+        Map<String,Object> envelope=object(StateTileDecoder.parseJson(raw));
+        require("solar.api/v1".equals(envelope.get("apiVersion")),"Stellar API identity mismatch");
+        Values values=validateExperiment(envelope.get("experiment"),request);
+        return new StellarMotionReport(raw,request,values.state,values.deviations);
+    }
+    static final class Values {
+        final double[] state,deviations;
+        Values(double[] state,double[] deviations) { this.state=state;this.deviations=deviations; }
+    }
+    // Reuse source validation on a nested receipt without reserializing JSON
+    // or retaining a second copy of the complete outer response.
+    static Values validateExperiment(Object raw,StellarMotionRequest request) throws IOException {
+        checkCancelled();
+        Map<String,Object> e=object(raw), r=object(e.get("result"));
+        require(number(e.get("schemaVersion"))==1,"Stellar schema identity mismatch");
         byte[] manifest=request.manifestBytes(), rows=request.rowsBytes();
         require(StellarMotionRequest.base64(manifest).equals(e.get("originalManifestBase64")) && StellarMotionRequest.base64(rows).equals(e.get("originalRowsCsvBase64")),"Original source bytes mismatch");
         require(hash(manifest).equals(e.get("manifestSha256")) && hash(rows).equals(e.get("rowsSha256")),"Original source hash mismatch");
@@ -41,7 +54,8 @@ public final class StellarMotionReport {
             && "gofa-starpm-scaled-gaia-single-star-v1".equals(r.get("model")) && StellarMotionRequest.RV_POLICY.equals(r.get("radialVelocityPolicy"))
             && number(r.get("tdbCompatibleScaleFactor"))==1-1.550519768e-8,"Stellar model identity mismatch");
         texts(r.get("limitations")); text(e.get("provenanceBoundary"));
-        vector(r.get("sourceJdTdbParts"),2); vector(r.get("targetJdTdbParts"),2);
+        epochParts(r.get("sourceJdTdbParts"),2016);
+        epochParts(r.get("targetJdTdbParts"),request.targetEpochJulianYearTCB);
         Map<String,Object> values=object(r.get("stateTCBCompatible"));
         String[] fields={"raDeg","decDeg","parallaxMas","pmraMasPerJulianYear","pmdecMasPerJulianYear","radialVelocityKmPerSecond"};
         double[] state=new double[6];for(int i=0;i<6;i++)state[i]=number(values.get(fields[i]));
@@ -50,7 +64,18 @@ public final class StellarMotionReport {
         if(request.formalCovariance) deviations=covariance(object(e.get("formalCovariance")),source,request);
         else require(!e.containsKey("formalCovariance"),"Unrequested formal covariance");
         checkCancelled();
-        return new StellarMotionReport(raw,request,state,deviations);
+        return new Values(state,deviations);
+    }
+
+    private static void epochParts(Object raw,double yearTCB) throws IOException {
+        double[] parts=vector(raw,2);
+        require(Double.isFinite(yearTCB) && Math.abs(yearTCB-2016)<=100 && Math.abs(parts[0])<=10000000 && Math.abs(parts[1])<=10000000,"Stellar epoch domain mismatch");
+        // IAU 2006 B3 affine relation; preserve the J2000 split instead of
+        // summing a scalar JD. Two microseconds are a receipt-rounding policy.
+        double elapsed=(yearTCB-2000)*365.25;
+        double expected=elapsed-6.55e-5/86400-((2451545-2443144.5)+(elapsed-32.184/86400))*1.550519768e-8;
+        double difference=(parts[0]-2451545)+(parts[1]-expected);
+        require(Double.isFinite(difference) && Math.abs(difference)*86400<=2e-6,"Stellar TDB epoch does not match requested TCB epoch");
     }
 
     private static double[] covariance(Map<String,Object> c,Map<String,Object> source,StellarMotionRequest request) throws IOException {
@@ -68,18 +93,22 @@ public final class StellarMotionReport {
             double correlation=i==j?1:0;
             if(i<5 && j<5 && i!=j) {correlation=number(source.get(fields[Math.min(i,j)]+"_"+fields[Math.max(i,j)]+"_corr"));require(Math.abs(correlation)<=1,"Invalid source correlation");}
             double expected=correlation*sigma[i]*sigma[j];
-            require(Double.isFinite(expected) && Math.abs(expected-input[i][j])<=1e-10*Math.sqrt(input[i][i]*input[j][j]),"Covariance source errors mismatch");
+            double inputDifference=Math.abs(expected-input[i][j])/Math.sqrt(input[i][i])/Math.sqrt(input[j][j]);
+            require(Double.isFinite(expected) && Double.isFinite(inputDifference) && inputDifference<=1e-10,"Covariance source errors mismatch");
             double transformed=0;for(int a=0;a<6;a++)for(int b=0;b<6;b++)transformed+=jacobian[i][a]*input[a][b]*jacobian[j][b];
-            require(Double.isFinite(transformed) && Math.abs(transformed-output[i][j])<=1e-10*Math.sqrt(output[i][i]*output[j][j]),"Covariance Jacobian mismatch");
+            double outputDifference=Math.abs(transformed-output[i][j])/Math.sqrt(output[i][i])/Math.sqrt(output[j][j]);
+            require(Double.isFinite(transformed) && Double.isFinite(outputDifference) && outputDifference<=1e-10,"Covariance Jacobian mismatch");
         }
         double[] deviations=new double[6];for(int i=0;i<6;i++)deviations[i]=Math.sqrt(output[i][i]);return deviations;
     }
     private static void positive(double[][] matrix) throws IOException {
         double[][] lower=new double[6][6];
         for(int i=0;i<6;i++){require(matrix[i][i]>0,"Nonpositive covariance variance");for(int j=0;j<=i;j++){
-            require(matrix[i][j]==matrix[j][i],"Asymmetric covariance");double v=matrix[i][j]/Math.sqrt(matrix[i][i]*matrix[j][j]);
+            // Avoid multiplying variances before taking their square roots.
+            require(matrix[i][j]==matrix[j][i],"Asymmetric covariance");double v=matrix[i][j]/Math.sqrt(matrix[i][i])/Math.sqrt(matrix[j][j]);
+            require(Double.isFinite(v),"Nonfinite covariance correlation");
             for(int k=0;k<j;k++)v-=lower[i][k]*lower[j][k];
-            if(i==j){require(v>0 && Double.isFinite(v),"Covariance not positive definite");lower[i][j]=Math.sqrt(v);}else lower[i][j]=v/lower[j][j];
+            if(i==j){require(v>0 && Double.isFinite(v),"Covariance not positive definite");lower[i][j]=Math.sqrt(v);}else{lower[i][j]=v/lower[j][j];require(Double.isFinite(lower[i][j]),"Nonfinite covariance factor");}
         }}
     }
     private static Map<String,Object> selectedRow(byte[] bytes,String id) throws IOException {
@@ -94,7 +123,7 @@ public final class StellarMotionReport {
                 if(ch=='\r' && i+1<csv.length() && csv.charAt(i+1)=='\n')i++;
                 if(row.size()==1 && row.get(0).isEmpty()){row.clear();continue;}
                 if(header==null){header=new ArrayList<>(row);require(header.get(0).equals("source_id") && new java.util.HashSet<>(header).size()==header.size() && !header.contains(""),"Invalid CSV header");}
-                else {require(++count<=10000 && row.size()==header.size(),"CSV shape or row budget mismatch");if(row.get(0).equals(id)){require(selected==null,"Duplicate selected source");selected=new ArrayList<>(row);}}
+                else {require(++count<=30000 && row.size()==header.size(),"CSV shape or row budget mismatch");if(row.get(0).equals(id)){require(selected==null,"Duplicate selected source");selected=new ArrayList<>(row);}}
                 row.clear();
             } else if(ch=='"' && cell.length()==0 && !closed)quoted=true;
             else {require(!closed && ch!='"',"Malformed CSV quoting");cell.append(ch);}

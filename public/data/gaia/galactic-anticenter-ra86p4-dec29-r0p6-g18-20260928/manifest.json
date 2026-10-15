@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 2,
+  "catalog": "Gaia DR3",
+  "table": "gaiadr3.gaia_source",
+  "frame": "ICRS",
+  "referenceEpochJulianYear": 2016,
+  "referenceEpochTimeScale": "TCB",
+  "implementation": {
+    "node": "v24.14.1",
+    "generatorSha256": "4913e37477c2131d6e07177b038104ac916b516f55e4706d5a506f8198b3f961",
+    "parserSha256": "2505cd8ee265a4e9f2b954939ee021b515040bbe78c4dacec96a1797d3247ad3",
+    "columnsSha256": "9eaa34bac80e48f92d1e18d9099e5d59fbbeb72ceee3b347f52bb76f755eeebc"
+  },
+  "settings": {
+    "raDeg": 86.4,
+    "decDeg": 29,
+    "radiusDeg": 0.6,
+    "maxMagnitude": 18,
+    "maxRows": 20000
+  },
+  "columns": [
+    "source_id",
+    "ref_epoch",
+    "ra",
+    "dec",
+    "ra_error",
+    "dec_error",
+    "parallax",
+    "parallax_error",
+    "pmra",
+    "pmra_error",
+    "pmdec",
+    "pmdec_error",
+    "ra_dec_corr",
+    "ra_parallax_corr",
+    "ra_pmra_corr",
+    "ra_pmdec_corr",
+    "dec_parallax_corr",
+    "dec_pmra_corr",
+    "dec_pmdec_corr",
+    "parallax_pmra_corr",
+    "parallax_pmdec_corr",
+    "pmra_pmdec_corr",
+    "astrometric_params_solved",
+    "ruwe",
+    "phot_g_mean_mag",
+    "bp_rp",
+    "radial_velocity",
+    "radial_velocity_error",
+    "pseudocolour",
+    "pseudocolour_error",
+    "ra_pseudocolour_corr",
+    "dec_pseudocolour_corr",
+    "parallax_pseudocolour_corr",
+    "pmra_pseudocolour_corr",
+    "pmdec_pseudocolour_corr"
+  ],
+  "rows": 11157,
+  "rowCountEvidence": {
+    "method": "top-plus-one-sentinel",
+    "limit": 20001,
+    "returnedRows": 11157,
+    "overflow": false
+  },
+  "catalogCompletenessCertified": false,
+  "units": {
+    "ra": "degree",
+    "dec": "degree",
+    "ra_error": "mas; alpha*cos(delta)",
+    "dec_error": "mas",
+    "parallax": "mas",
+    "pmra": "mas/Julian year; mu_alpha*cos(delta)",
+    "pmdec": "mas/Julian year",
+    "radial_velocity": "km/s",
+    "pseudocolour": "inverse-micrometre",
+    "pseudocolour_error": "inverse-micrometre"
+  },
+  "limitations": [
+    "A magnitude-limited cone is not full-sky data or a completeness guarantee.",
+    "Missing fields remain null. Negative parallax is retained; no inverse-parallax distances are inferred.",
+    "No proper-motion propagation, observer parallax, aberration, deflection, zero-point correction or occultation uncertainty model is applied.",
+    "Spatial bins describe returned coordinates at J2016.0, not bounds at arbitrary epochs."
+  ],
+  "documentation": [
+    "https://www.cosmos.esa.int/web/gaia/dr3",
+    "https://www.cosmos.esa.int/web/gaia-users/archive/programmatic-access",
+    "https://gea.esac.esa.int/archive/documentation/GDR3/Gaia_archive/chap_datamodel/sec_dm_main_source_catalogue/ssec_dm_gaia_source.html"
+  ],
+  "sources": [
+    {
+      "path": "rows.csv",
+      "bytes": 3773146,
+      "sha256": "9677006429a8e2100cb20cebff2f2bd06b4024603f1f8c29de150c7fb94e64f9",
+      "query": "SELECT TOP 20001 source_id,ref_epoch,ra,dec,ra_error,dec_error,parallax,parallax_error,pmra,pmra_error,pmdec,pmdec_error,ra_dec_corr,ra_parallax_corr,ra_pmra_corr,ra_pmdec_corr,dec_parallax_corr,dec_pmra_corr,dec_pmdec_corr,parallax_pmra_corr,parallax_pmdec_corr,pmra_pmdec_corr,astrometric_params_solved,ruwe,phot_g_mean_mag,bp_rp,radial_velocity,radial_velocity_error,pseudocolour,pseudocolour_error,ra_pseudocolour_corr,dec_pseudocolour_corr,parallax_pseudocolour_corr,pmra_pseudocolour_corr,pmdec_pseudocolour_corr FROM gaiadr3.gaia_source WHERE CONTAINS(POINT('ICRS',ra,dec),CIRCLE('ICRS',86.4,29,0.6))=1 AND phot_g_mean_mag<=18",
+      "url": "https://gea.esac.esa.int/tap-server/tap/async/21c99b8a-bb55-11f1-b34c-bc97e148b76b-O/results/result",
+      "jobUrl": "https://gea.esac.esa.int/tap-server/tap/async/21c99b8a-bb55-11f1-b34c-bc97e148b76b-O",
+      "cleanupPending": false,
+      "jobReceiptSha256": "1ed38ee890c413d21f57545d911450e9c8fe249ff5a869e9279cd77e3bafae77",
+      "retrievedAt": "2026-09-28T15:56:25.105Z"
+    }
+  ],
+  "chunks": [
+    {
+      "path": "r17-d23.json",
+      "sha256": "43d2b0c0c6f01ed31132dc42feb3095c3310eb9b148d64542bfd242ae0e456ed",
+      "bytes": 10560932,
+      "rows": 11157,
+      "raRangeDeg": [
+        85,
+        90
+      ],
+      "decRangeDeg": [
+        25,
+        30
+      ]
+    }
+  ]
+}

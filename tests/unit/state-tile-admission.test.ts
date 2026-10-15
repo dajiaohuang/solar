@@ -19,7 +19,7 @@ describe('page-wide state-tile admission', () => {
     const third = pool.acquire(signal()).then(release => { order.push(3); return release })
     const fourth = pool.acquire(signal()).then(release => { order.push(4); return release })
     await expect(pool.acquire(signal())).rejects.toThrow(/queue is full/)
-    expect(pool.snapshot()).toEqual({ capacity: 2, maxQueued: 2, active: 2, queued: 2, peakActive: 2, admitted: 2, rejected: 1 })
+    expect(pool.snapshot()).toMatchObject({ capacity: 2, maxQueued: 2, active: 2, queued: 2, peakActive: 2, admitted: 2, rejected: 1 })
     first(); first()
     const releaseThird = await third
     expect(order).toEqual([3]); expect(pool.snapshot().active).toBe(2)
@@ -76,7 +76,7 @@ describe('page-wide state-tile admission', () => {
     cleanup.push(() => { worker.dispose(); channel.port1.close() })
     const controller = new AbortController(), pending = worker.acquire(controller.signal)
     const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
-    await vi.waitFor(() => expect(requests).toEqual([{ type: 'acquire', id: 1 }]))
+    await vi.waitFor(() => expect(requests).toEqual([{ type: 'acquire', id: 1, workload: 'interactive' }]))
     controller.abort(); await rejected
     channel.port1.postMessage({ type: 'granted', id: 1 })
     await vi.waitFor(() => expect(requests.map(request => request.type)).toEqual(['acquire', 'cancel', 'release']))

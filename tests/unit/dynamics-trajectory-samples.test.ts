@@ -10,6 +10,7 @@ for (const sign of [1, -1]) test(`bounded actual-node selection preserves endpoi
   expect(result.samples[0].elapsedTdbSeconds).toBe(0)
   expect(result.samples[result.samples.length-1].elapsedTdbSeconds).toBe(sign*10003)
   expect(result.acceptedSteps).toBe(10003)
+  expect(result.acceptedStepIndices).toEqual(result.samples.map(point => Math.abs(point.elapsedTdbSeconds)))
   expect(result.samples.slice(0, -1).every(point => Math.abs(point.elapsedTdbSeconds) % result.stride === 0)).toBe(true)
   expect(result.samples.every((point, i) => i === 0 || sign*(point.elapsedTdbSeconds-result.samples[i-1].elapsedTdbSeconds) > 0)).toBe(true)
 })

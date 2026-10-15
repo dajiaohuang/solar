@@ -1,0 +1,8 @@
+{
+  "archiveSha256": "9eb21d8a3b4b3c8ffce7807f2151fecdcd1209004398180284ef11d99e65d2bf",
+  "restoredBodies": 669,
+  "sourceManifestSha256": "50cde7f15544e36bf5076af8250740f451cc85c9be5795d037c553566bb7f46f",
+  "allReferencedChunkBytesVerified": true,
+  "manifestExactlyReproduced": true,
+  "boundary": "Local full-archive restoration only; no HTTP/hosted deployment validation."
+}

@@ -1,0 +1,23 @@
+{
+  "counts": {
+    "star": 1,
+    "planet": 8,
+    "moon": 473,
+    "dwarfPlanet": 5,
+    "spacecraft": 6
+  },
+  "total": 493,
+  "currentFullWindow": 5,
+  "fullWindowDescriptorCandidates": 463,
+  "actions": {
+    "origin-convention": 1,
+    "already-covered-current-window": 4,
+    "prepare-source-chain-and-fit": 458,
+    "partial-source-review": 24,
+    "identity-review-required": 2,
+    "mission-window-only": 4
+  },
+  "inspectedSources": 49,
+  "errors": 0,
+  "publishedTargetsNotInRegistry": 0
+}

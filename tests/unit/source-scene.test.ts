@@ -3,6 +3,7 @@ import { parseSourceScene, requireSourcePin, sourcePinFor, sourceRecordBody, sou
 import type { SourceIdentityPage } from '../../src/lib/sourceIdentityPage'
 
 const page: SourceIdentityPage = {
+  base: 'https://api.example',
   manifest: {
     apiVersion: 'solar.api/v1', catalogVersion: 'catalog-v1',
     catalogManifestSha256: 'a'.repeat(64), inventoryManifestSha256: 'b'.repeat(64),

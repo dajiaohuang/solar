@@ -30,6 +30,7 @@ export type BackendTrajectoryAudit = {
   planHashes: string[]
   tiles: { epochIndex: number; sequence: number; ordinalStart: number; recordCount: number; payloadSha256: string }[]
   gaps: { bodyId: string; epochIndex: number; reason: string }[]
+  sourceTransitions?: { bodyId: string; epochIndex: number; previousSourceOrdinal: number; sourceOrdinal: number }[]
 }
 
 export type BackendTrajectoryResult = { packed: PackedTrajectoryData; audit: BackendTrajectoryAudit }
@@ -37,7 +38,7 @@ export type BackendTrajectoryResult = { packed: PackedTrajectoryData; audit: Bac
 /** Explicit export only; live UI/worker storage remains column-packed. */
 export function exportBackendTrajectoryAudit(audit: BackendTrajectoryAudit) {
   return { ...audit, epochsTdbJd: Array.from(audit.epochsTdbJd), sourceOrdinals: Array.from(audit.sourceOrdinals),
-    boundary: 'Verified discrete samples only. Connecting lines are display interpolation, not certified continuous ephemerides.' }
+    boundary: 'Verified discrete samples only. Connecting lines are display interpolation, not certified continuous ephemerides. Edges are disconnected at detected sampled source/model/center changes; changes between samples or within an unchanged source are not independently certified.' }
 }
 
 /** Exact sampled states, not a continuous-orbit accuracy certificate. Only
@@ -57,6 +58,7 @@ export async function loadBackendTrajectories(params: {
   acquireTile?: import('./stateTileAdmission').AcquireStateTile
   onProgress?: (progress: number) => void
 }): Promise<BackendTrajectoryResult> {
+  const deadline = performance.now() + TRAJECTORY_DEADLINE_MS
   if (!Number.isFinite(params.centerUtcJd) || !Number.isFinite(params.historyDays) || params.historyDays <= 0 || params.historyDays > 365_250 || params.sampleCount < 2) throw new Error('Invalid backend trajectory window')
   // Validate the detail ceiling before allocating or starting any network I/O.
   const accumulator = createTrajectoryAccumulator(params.bodies, params.sampleCount)
@@ -66,10 +68,10 @@ export async function loadBackendTrajectories(params: {
   const uniqueBackendIds = [...new Set(backendIds)]
   const controller = new AbortController()
   const cancel = () => controller.abort(params.signal.reason)
-  params.signal.addEventListener('abort', cancel, { once: true })
-  if (params.signal.aborted) cancel()
-  const timer = setTimeout(() => controller.abort(new Error('Backend trajectory deadline exceeded')), TRAJECTORY_DEADLINE_MS)
-  const check = () => { if (controller.signal.aborted) throw controller.signal.reason ?? new DOMException('Aborted', 'AbortError') }
+  const check = () => {
+    if (performance.now() >= deadline) controller.abort(new Error('Backend trajectory deadline exceeded'))
+    controller.signal.throwIfAborted()
+  }
   // This opt-in can only lower state requests into the existing trajectory
   // queue, never promote directory/bulk traffic to an interactive priority.
   const fetcher: typeof fetch = (input, init) => {
@@ -83,13 +85,26 @@ export async function loadBackendTrajectories(params: {
     sourceOrdinals: new Uint32Array(params.sampleCount * bodyIds.length), sources: [], planHashes: [], tiles: [], gaps: [],
   }
   const sourceIndexes = new Map<string, number>(), gaps = new Set<string>()
+  const previousSources = new Map<string, { key: string; ordinal: number }>()
   let auditTextBytes = 0
+  const auditEncoder = new TextEncoder()
   const charge = (text: string) => {
-    auditTextBytes += new TextEncoder().encode(text).byteLength
+    auditTextBytes += auditEncoder.encode(text).byteLength
     if (auditTextBytes > TRAJECTORY_AUDIT_TEXT_BYTES) throw new Error('Backend trajectory provenance budget exceeded')
   }
+  // Register external resources only after synchronous allocations succeed.
+  params.signal.addEventListener('abort', cancel, { once: true })
+  if (params.signal.aborted) cancel()
+  const timer = setTimeout(() => controller.abort(new Error('Backend trajectory deadline exceeded')), Math.max(0, deadline-performance.now()))
   try {
-    const epochsTdbJd = Array.from({ length: params.sampleCount }, (_, index) => utcJulianDayToTdb(audit.startUtcJd + index / (params.sampleCount - 1) * params.historyDays))
+    check()
+    charge(JSON.stringify({ referenceId: audit.referenceId, bodyIds, backendIds }))
+    // Preserve the requested endpoints exactly before UTC-to-TDB conversion;
+    // subtracting and re-adding the history span can round the final UTC epoch.
+    const epochsTdbJd = Array.from({ length: params.sampleCount }, (_, index) => utcJulianDayToTdb(
+      index === 0 ? audit.startUtcJd : index === params.sampleCount-1 ? audit.endUtcJd
+        : audit.startUtcJd + index / (params.sampleCount - 1) * params.historyDays))
+    check()
     for await (const { epochIndex, manifest, plan, tiles } of fetchStateWindow({
       base: params.base, bodyIds: uniqueBackendIds, epochsTdbJd, signal: controller.signal, fetcher,
       acquireTile: params.acquireTile, expectedCatalogManifestSha256: params.expectedCatalogManifestSha256,
@@ -97,18 +112,20 @@ export async function loadBackendTrajectories(params: {
     })) {
       check()
       const epochTdbJd = epochsTdbJd[epochIndex]
+      if (epochIndex === 0) charge(JSON.stringify({ catalogManifestSha256: manifest.catalogManifestSha256, inventoryManifestSha256: manifest.inventoryManifestSha256 }))
       audit.catalogManifestSha256 = manifest.catalogManifestSha256
       audit.inventoryManifestSha256 = manifest.inventoryManifestSha256
       const snapshot = new StateTileSnapshot(tiles, requested)
       const referenceIndex = snapshot.indexOf(params.referenceBody.id)
       const referenceAvailable = referenceIndex >= 0 && snapshot.statusAt(referenceIndex) === 'exact'
       audit.epochsTdbJd[epochIndex] = epochTdbJd
-      audit.planHashes.push(plan.planHash)
       charge(plan.planHash)
+      audit.planHashes.push(plan.planHash)
       for (const tile of tiles) {
         const entry = { epochIndex, sequence: tile.sequence, ordinalStart: tile.ordinalStart, recordCount: tile.recordCount, payloadSha256: tile.payloadSha256 }
         charge(JSON.stringify(entry)); audit.tiles.push(entry)
       }
+      const changedSources = new Set<string>()
       for (let bodyIndex = 0; bodyIndex < bodyIds.length; bodyIndex++) {
         const bodyId = bodyIds[bodyIndex], index = snapshot.indexOf(bodyId)
         if (index < 0) throw new Error('Backend trajectory omitted a requested identity')
@@ -123,11 +140,26 @@ export async function loadBackendTrajectories(params: {
           sourceIndexes.set(key, sourceOrdinal); audit.sources.push(metadata)
         }
         audit.sourceOrdinals[epochIndex * bodyIds.length + bodyIndex] = sourceOrdinal
+        // Record validity ranges can change inside one source without a model
+        // switch. Compare source/model/center identities, not the whole row.
+        const continuityKey = JSON.stringify([metadata.source, metadata.kernelSha256, metadata.datasetVersion,
+          metadata.datasetSha256, metadata.model, metadata.centerId, metadata.stateEvidence, metadata.sourceChainSha256])
+        const previous = previousSources.get(bodyId)
+        if (previous && previous.key !== continuityKey) {
+          changedSources.add(bodyId)
+          const transition = { bodyId, epochIndex, previousSourceOrdinal: previous.ordinal, sourceOrdinal }
+          charge(JSON.stringify(transition)); (audit.sourceTransitions ??= []).push(transition)
+        }
+        previousSources.set(bodyId, { key: continuityKey, ordinal: sourceOrdinal })
         if (bodyIndex < params.bodies.length && !gaps.has(bodyId) && (!referenceAvailable || snapshot.statusAt(index) !== 'exact')) {
           const reason = referenceAvailable ? snapshot.missingReasonAt(index)
             : `reference-state-unavailable:${referenceIndex >= 0 ? snapshot.missingReasonAt(referenceIndex) : 'not-received'}`
-          audit.gaps.push({ bodyId, epochIndex, reason }); gaps.add(bodyId)
+          const gap = { bodyId, epochIndex, reason }
+          charge(JSON.stringify(gap)); audit.gaps.push(gap); gaps.add(bodyId)
         }
+      }
+      for (const body of params.bodies) {
+        if (changedSources.has(body.id) || changedSources.has(params.referenceBody.id)) accumulator.breakBeforeNextSample(body.id)
       }
       accumulator.appendCurrent(buildBackendFrame({ bodies: params.bodies, referenceId: params.referenceBody.id, evidence: snapshot }).currentPositions)
       params.onProgress?.((epochIndex + 1) / params.sampleCount)
@@ -135,7 +167,9 @@ export async function loadBackendTrajectories(params: {
       await new Promise<void>(resolve => setTimeout(resolve, 0))
     }
     check()
-    return { packed: accumulator.finish(), audit }
+    const packed = accumulator.finish()
+    check()
+    return { packed, audit }
   } finally {
     clearTimeout(timer)
     params.signal.removeEventListener('abort', cancel)

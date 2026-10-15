@@ -3,6 +3,7 @@ import { julianDayToDate, dateToJulianDay } from '../../lib/julianDate'
 import { simulationActions, simulationStore } from '../../state/simulation-store'
 import { useI18n } from '../../i18n/context'
 import { jplApproxValidityWarning } from '../../engine/ephemeris/modelValidity'
+import { useState } from 'react'
 
 function toDateInput(julianDay: number) {
   return julianDayToDate(julianDay).toISOString().slice(0, 10)
@@ -13,22 +14,30 @@ export function SimulationControls() {
   const simulation = simulationStore.useStore()
   const { t, language } = useI18n()
   const validityWarning = jplApproxValidityWarning(clock.julianDay, language)
+  const [editingDate, setEditingDate] = useState(false), [dateDraft, setDateDraft] = useState('')
   return (
     <div className={`simulation-bar glass-panel${validityWarning ? ' has-model-warning' : ''}`} data-story-target="time">
       <button type="button" className="primary-button" onClick={simulationActions.togglePlayback}>
         {clock.isPlaying ? `❚❚ ${t('pause')}` : `▶ ${t('play')}`}
       </button>
-      <div className="segmented-control" aria-label={t('view')}>
-        <button className={simulation.viewMode === '2d' ? 'active' : ''} onClick={() => simulationActions.patch({ viewMode: '2d' })}>2D</button>
-        <button className={simulation.viewMode === '3d' ? 'active' : ''} onClick={() => simulationActions.patch({ viewMode: '3d', viewOffset: { x: 0, y: 0 }, showOrbits: false, showHillSphere: false, showLaplaceSoi: false })}>3D</button>
+      <div className="segmented-control" role="group" aria-label={t('view')}>
+        <button aria-pressed={simulation.viewMode === '2d'} className={simulation.viewMode === '2d' ? 'active' : ''} onClick={() => simulationActions.patch({ viewMode: '2d' })}>2D</button>
+        <button aria-pressed={simulation.viewMode === '3d'} className={simulation.viewMode === '3d' ? 'active' : ''} onClick={() => simulationActions.patch({ viewMode: '3d' })}>3D</button>
       </div>
       <label className="compact-field">
         <span>{t('date')}</span>
         <input
           type="date"
-          value={toDateInput(clock.julianDay)}
+          value={editingDate ? dateDraft : toDateInput(clock.julianDay)}
+          onFocus={() => { setDateDraft(toDateInput(clock.julianDay)); setEditingDate(true) }}
+          onBlur={() => setEditingDate(false)}
           onChange={(event) => {
-            if (event.target.value) simulationActions.seek(dateToJulianDay(new Date(`${event.target.value}T12:00:00Z`)))
+            const value = event.target.value
+            setDateDraft(value)
+            // Date inputs can fall back to text; validate the ISO calendar date
+            // itself rather than requiring valueAsNumber from a native picker.
+            const date = new Date(`${value}T12:00:00Z`)
+            if (Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value) simulationActions.seek(dateToJulianDay(date))
           }}
         />
       </label>

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import fixture from '../fixtures/sbdb-eros-covariance.json'
 import bennu from '../fixtures/sbdb-bennu-covariance.json'
+import comet67p from '../fixtures/sbdb-67p-covariance.json'
 import { parseSbdbCovariance } from '../../src/data/loaders/sbdbCovariance'
 
 const clone = () => structuredClone(fixture)
@@ -18,10 +19,34 @@ describe('SBDB solution-epoch covariance', () => {
     // Source model_pars is ordered AMRAT, RHO; matrix labels say RHO, AMRAT.
     expect(result.nominal.slice(6)).toEqual([1191.534909615045, 2.635943157e-6])
     expect(result.units.slice(6)).toEqual(['kg/m^3', 'm^2/kg'])
+    expect(result.modelParameters).toEqual([
+      { index: 2, name: 'AMRAT', kind: 'EST', value: 2.635943157e-6, units: 'm^2/kg', sigma: 1.908e-7,
+        title: 'area-to-mass ratio', description: 'solar radiation pressure area-to-mass ratio' },
+      { index: 1, name: 'RHO', kind: 'EST', value: 1191.534909615045, units: 'kg/m^3', sigma: 0.892,
+        title: 'bulk density', description: 'bulk density' },
+    ])
     const reference = [0.00037979939641585424, 0.004625266334356518, 0.06429749689020275,
       0.29700898943633025, 0.6702390826376546, 1.021045063767839, 1.7852505347521974, 4.157153766785008]
     result.correlationEigenvalues.forEach((value, i) => expect(Math.abs(value - reference[i])).toBeLessThan(2e-14))
     result.matrix.forEach((row, i) => row.forEach((value, j) => expect(value).toBe(Number(bennu.orbit.covariance.data[i][j]))))
+  })
+
+  it('retains JPL 67P non-gravitational fit parameters and the full joint covariance', () => {
+    const bytes = readFileSync(new URL('../fixtures/sbdb-67p-covariance.json', import.meta.url))
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe('65e96d6b7950e1712131969d591d3234cb3956a0ef99803734366407aea81295')
+    const result = parseSbdbCovariance(comet67p)
+    expect(result).toMatchObject({ designation: '67P', spkId: '1000012', solutionId: 'K284/1',
+      solutionEpochTdb: 2457305.5, standardElementEpochTdb: 2457305.5,
+      labels: ['e', 'q', 'tp', 'node', 'peri', 'i', 'A1', 'A2', 'A3', 'DT'],
+      units: [null, 'au', 'd', 'deg', 'deg', 'deg', 'au/d^2', 'au/d^2', 'au/d^2', 'd'],
+      additionalParameters: ['A1', 'A2', 'A3', 'DT'] })
+    expect(result.modelParameters.map(({ index, name, kind, value, units }) => [index, name, kind, value, units])).toEqual([
+      [1, 'A1', 'EST', 1.042562555200506e-9, 'au/d^2'],
+      [2, 'A2', 'EST', -6.733588284934391e-11, 'au/d^2'],
+      [3, 'A3', 'EST', 2.960397918052828e-10, 'au/d^2'],
+      [4, 'DT', 'EST', 45.66665437504378, 'd'],
+    ])
+    expect(result.matrix).toEqual(comet67p.orbit.covariance.data.map(row => row.map(Number)))
   })
 
   it('retains the pinned response and agrees with independent NumPy correlation eigenvalues', () => {
@@ -61,6 +86,17 @@ describe('SBDB solution-epoch covariance', () => {
     result.correlationEigenvalues.forEach((value, i) => expect(Math.abs(value - reference.correlationEigenvalues[i])).toBeLessThan(2e-14))
   })
 
+  it('rejects model parameter covariance labels that contradict SBDB index order', () => {
+    const source = clone()
+    source.orbit.covariance.labels.push('A2', 'A1')
+    source.orbit.covariance.data = identity(8)
+    Reflect.set(source.orbit, 'model_pars', [
+      { n: 1, name: 'A1', kind: 'EST', value: '1e-12', units: 'au/d^2' },
+      { n: 2, name: 'A2', kind: 'EST', value: '2e-12', units: 'au/d^2' },
+    ])
+    expect(() => parseSbdbCovariance(source)).toThrow(/SBDB model index order/)
+  })
+
   it('retains additional estimated parameters and their correlations', () => {
     const source = clone()
     source.orbit.covariance.labels.push('A2')
@@ -71,9 +107,44 @@ describe('SBDB solution-epoch covariance', () => {
     expect(result.additionalParameters).toEqual(['A2'])
     expect(result.nominal[6]).toBe(-2e-14)
     expect(result.units[6]).toBe('au/d^2')
+    expect(result.modelParameters).toEqual([{ index: null, name: 'A2', kind: 'EST', value: -2e-14,
+      units: 'au/d^2', sigma: null, title: null, description: null }])
     expect(result.matrix[1][6]).toBe(0.25)
     Reflect.set(source.orbit, 'model_pars', [{ name: 'A2', kind: 'SET', value: '-2e-14', units: 'au/d^2' }])
-    expect(() => parseSbdbCovariance(source)).toThrow(/not estimated or considered/)
+    expect(() => parseSbdbCovariance(source)).toThrow(/not estimated/)
+  })
+
+  it.each([
+    ['unknown model kind', { name: 'A1', kind: 'UNKNOWN', value: '1e-12', units: 'au/d^2' }, /Unsupported kind/],
+    ['negative model sigma', { name: 'A1', kind: 'EST', value: '1e-12', sigma: '-1', units: 'au/d^2' }, /Invalid index or sigma/],
+    ['fractional model index', { name: 'A1', kind: 'EST', value: '1e-12', n: '1.5', units: 'au/d^2' }, /Invalid index or sigma/],
+    ['zero estimated model index', { name: 'A1', kind: 'EST', value: '1e-12', n: 0, units: 'au/d^2' }, /Invalid index or sigma/],
+    ['nonzero fixed model index', { name: 'A1', kind: 'SET', value: '1e-12', n: 1, units: 'au/d^2' }, /Invalid index or sigma/],
+  ] as const)('rejects %s metadata', (_name, parameter, expected) => {
+    const source = clone()
+    Reflect.set(source.orbit, 'model_pars', [parameter])
+    expect(() => parseSbdbCovariance(source)).toThrow(expected)
+  })
+
+  it('rejects duplicate estimated and considered parameter indices', () => {
+    const source = clone()
+    Reflect.set(source.orbit, 'model_pars', [
+      { n: 1, name: 'A1', kind: 'EST', value: '1e-12', units: 'au/d^2' },
+      { n: 1, name: 'A2', kind: 'CON', value: '2e-12', units: 'au/d^2' },
+    ])
+    expect(() => parseSbdbCovariance(source)).toThrow(/Duplicate model parameter index/)
+  })
+
+  it('accepts decimal covariance syntax without JavaScript radix or suffix coercions', () => {
+    const source = clone()
+    source.orbit.covariance.elements.find(element => element.name === 'e')!.value = ' +2.228078944584026e-1 '
+    source.orbit.covariance.data[0][0] = '.00000000000000008824897647015303'
+    expect(parseSbdbCovariance(source).nominal[0]).toBe(0.2228078944584026)
+    for (const value of ['0x1', '0b1', '1_000', '5 au', 'Infinity', 'NaN', '--1', '.', '1e', '']) {
+      const invalid = clone()
+      invalid.orbit.covariance.elements.find(element => element.name === 'e')!.value = value
+      expect(() => parseSbdbCovariance(invalid), `accepted non-decimal value ${JSON.stringify(value)}`).toThrow(/Nonfinite or missing/)
+    }
   })
 
   it('rejects a globally indefinite matrix even when all pairwise correlations are allowed', () => {

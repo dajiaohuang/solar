@@ -21,7 +21,7 @@ func testTile(rows int) Tile {
 	missing := make([]bool, rows)
 	states := make([]float64, rows*Stride)
 	for n := range metadata {
-		metadata[n] = Metadata{ID: "body-" + strconv.Itoa(n), Source: "kernel", DatasetVersion: "v1", DatasetSHA256: hex.EncodeToString(catalog[:]), KernelSHA256: hex.EncodeToString(plan[:]), Model: "spk-original", CenterID: "naif:0", StateEvidence: "kernel"}
+		metadata[n] = Metadata{ID: "body-" + strconv.Itoa(n), Source: "kernel", DatasetVersion: "v1", DatasetSHA256: hex.EncodeToString(catalog[:]), KernelSHA256: hex.EncodeToString(plan[:]), SourceChainSHA256: hex.EncodeToString(plan[:]), Model: "spk-original", CenterID: "naif:0", StateEvidence: "kernel"}
 		exact[n] = true
 	}
 	return Tile{Sequence: 0, TileCount: 1, EpochJD: 2451545, FieldMask: FieldState, PlanHash: plan, CatalogManifestHash: catalog, Metadata: metadata, Exact: exact, Approximate: make([]bool, rows), Missing: missing, States: states}
@@ -33,7 +33,7 @@ func TestEncodeUsesFixedLittleEndianHeaderAndChecksum(t *testing.T) {
 	tile, err := Encode(Tile{
 		Sequence: 1, TileCount: 2, OrdinalStart: 9, EpochJD: 2451545.25,
 		FieldMask: FieldState, PlanHash: plan, CatalogManifestHash: catalog,
-		Metadata: []Metadata{{ID: "earth", Source: "jpl", DatasetVersion: "v1", DatasetSHA256: hex.EncodeToString(catalog[:]), KernelSHA256: hex.EncodeToString(plan[:]), Model: "spk-original", StateEvidence: "kernel"}},
+		Metadata: []Metadata{{ID: "earth", Source: "jpl", DatasetVersion: "v1", DatasetSHA256: hex.EncodeToString(catalog[:]), KernelSHA256: hex.EncodeToString(plan[:]), SourceChainSHA256: hex.EncodeToString(plan[:]), Model: "spk-original", CenterID: "naif:0", StateEvidence: "kernel"}},
 		Exact:    []bool{true}, Approximate: []bool{false}, Missing: []bool{false},
 		States: []float64{1, 2, 3, 4, 5, 6},
 	})
@@ -44,8 +44,11 @@ func TestEncodeUsesFixedLittleEndianHeaderAndChecksum(t *testing.T) {
 	if !bytes.Equal(tile[:8], wantMagic) {
 		t.Fatalf("magic=%v want=%v", tile[:8], wantMagic)
 	}
-	if got := tile[8]; got != 1 || tile[9] != 0 || tile[10] != 200 || tile[11] != 0 {
+	if got := tile[8]; got != WireVersion || tile[9] != 0 || tile[10] != HeaderSize || tile[11] != 0 {
 		t.Fatalf("unexpected version/header bytes: %v", tile[8:12])
+	}
+	if !bytes.Equal(tile[200:205], []byte{TimeScaleTDB, FrameEclipJ2000, OriginNAIF0, DistanceUnitKM, VelocityUnitKMS}) || !bytes.Equal(tile[205:208], []byte{0, 0, 0}) {
+		t.Fatalf("unexpected self-describing contract bytes: %v", tile[200:208])
 	}
 	h, err := ParseHeader(tile)
 	if err != nil {
@@ -96,7 +99,7 @@ func TestParseHeaderRejectsBitmapLengthNotCeilRecordCount(t *testing.T) {
 	tile, err := Encode(Tile{
 		Sequence: 0, TileCount: 1, EpochJD: 2451545, FieldMask: FieldState,
 		PlanHash: plan, CatalogManifestHash: catalog,
-		Metadata: []Metadata{{ID: "earth", Source: "jpl", DatasetVersion: "v1", DatasetSHA256: hex.EncodeToString(catalog[:]), KernelSHA256: hex.EncodeToString(plan[:]), Model: "spk-original", StateEvidence: "kernel"}},
+		Metadata: []Metadata{{ID: "earth", Source: "jpl", DatasetVersion: "v1", DatasetSHA256: hex.EncodeToString(catalog[:]), KernelSHA256: hex.EncodeToString(plan[:]), SourceChainSHA256: hex.EncodeToString(plan[:]), Model: "spk-original", CenterID: "naif:0", StateEvidence: "kernel"}},
 		Exact:    []bool{true}, Approximate: []bool{false}, Missing: []bool{false}, States: make([]float64, 6),
 	})
 	if err != nil {
@@ -109,7 +112,9 @@ func TestParseHeaderRejectsBitmapLengthNotCeilRecordCount(t *testing.T) {
 }
 
 func TestEncodeRejectsBitmapOverlapAndNonFiniteState(t *testing.T) {
-	base := Tile{Sequence: 0, TileCount: 1, FieldMask: FieldState, EpochJD: 1, Metadata: []Metadata{{ID: "x", Source: "test", DatasetVersion: "v1", DatasetSHA256: strings.Repeat("a", 64), KernelSHA256: strings.Repeat("b", 64), Model: "spk-original", StateEvidence: "kernel"}}, Exact: []bool{true}, Approximate: []bool{false}, Missing: []bool{false}, States: make([]float64, 6)}
+	planHash := sha256.Sum256([]byte("plan"))
+	catalogHash := sha256.Sum256([]byte("catalog"))
+	base := Tile{Sequence: 0, TileCount: 1, FieldMask: FieldState, EpochJD: 1, PlanHash: planHash, CatalogManifestHash: catalogHash, Metadata: []Metadata{{ID: "x", Source: "test", DatasetVersion: "v1", DatasetSHA256: hex.EncodeToString(catalogHash[:]), KernelSHA256: strings.Repeat("b", 64), SourceChainSHA256: strings.Repeat("c", 64), Model: "spk-original", CenterID: "naif:0", StateEvidence: "kernel"}}, Exact: []bool{true}, Approximate: []bool{false}, Missing: []bool{false}, States: make([]float64, 6)}
 	base.Approximate[0] = true
 	if _, err := Encode(base); err == nil {
 		t.Fatal("expected overlapping bitmap rejection")
@@ -118,6 +123,45 @@ func TestEncodeRejectsBitmapOverlapAndNonFiniteState(t *testing.T) {
 	base.States[0] = math.NaN()
 	if _, err := Encode(base); err == nil {
 		t.Fatal("expected nonfinite state rejection")
+	}
+}
+
+func TestEncodeRejectsUnboundExactProvenance(t *testing.T) {
+	validSnapshot := func() Tile {
+		tile := testTile(1)
+		inventory := sha256.Sum256([]byte("inventory"))
+		tile.InventoryManifestHash = inventory
+		tile.Metadata[0].DatasetSHA256 = hex.EncodeToString(inventory[:])
+		tile.Metadata[0].Model = "source-kernel-state-at-audit-epoch"
+		tile.Metadata[0].SourceRecord = true
+		tile.Metadata[0].IdentityStatus = "source-designation"
+		return tile
+	}
+	if _, err := Encode(validSnapshot()); err != nil {
+		t.Fatalf("valid source snapshot rejected: %v", err)
+	}
+	cases := map[string]func(*Tile){
+		"missing center":             func(tile *Tile) { tile.Metadata[0].CenterID = "" },
+		"non-barycentric center":     func(tile *Tile) { tile.Metadata[0].CenterID = "naif:399" },
+		"missing source chain":       func(tile *Tile) { tile.Metadata[0].SourceChainSHA256 = "" },
+		"invalid source chain":       func(tile *Tile) { tile.Metadata[0].SourceChainSHA256 = "invalid" },
+		"dataset hash mismatch":      func(tile *Tile) { tile.Metadata[0].DatasetSHA256 = strings.Repeat("d", 64) },
+		"missing kernel hash":        func(tile *Tile) { tile.Metadata[0].KernelSHA256 = "" },
+		"missing inventory manifest": func(tile *Tile) { tile.InventoryManifestHash = [32]byte{} },
+		"missing source identity":    func(tile *Tile) { tile.Metadata[0].IdentityStatus = "" },
+		"not an inventory record": func(tile *Tile) {
+			tile.Metadata[0].SourceRecord = false
+			tile.Metadata[0].DatasetSHA256 = HashHex(tile.CatalogManifestHash)
+		},
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			tile := validSnapshot()
+			mutate(&tile)
+			if _, err := Encode(tile); err == nil {
+				t.Fatal("invalid exact provenance was accepted")
+			}
+		})
 	}
 }
 
@@ -153,7 +197,7 @@ func TestEncodeLimitedPreservesWireBytes(t *testing.T) {
 }
 
 func TestMetadataUpperBoundCoversJSONEscaping(t *testing.T) {
-	rows := []Metadata{{ID: "<body>\x00\"", Source: "太阳\\kernel", DatasetVersion: "v1", DatasetSHA256: strings.Repeat("a", 64), KernelSHA256: strings.Repeat("b", 64), Model: "spk-original", CenterID: "naif:0", StateEvidence: "kernel", MissingReason: "", IdentityStatus: "verified"}}
+	rows := []Metadata{{ID: "<body>\x00\"", Source: "太阳\\kernel", DatasetVersion: "v1", DatasetSHA256: strings.Repeat("a", 64), KernelSHA256: strings.Repeat("b", 64), SourceChainSHA256: strings.Repeat("c", 64), Model: "spk-original", CenterID: "naif:0", StateEvidence: "kernel", MissingReason: "", IdentityStatus: "verified"}}
 	bound, err := metadataUpperBound(rows)
 	if err != nil {
 		t.Fatal(err)

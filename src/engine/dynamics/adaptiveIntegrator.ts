@@ -5,6 +5,8 @@
  * event detection, stiffness handling or long-term symplectic claim is made.
  * Method: Dormand & Prince, J. Comput. Appl. Math. 6 (1980), 19–26.
  */
+import { DynamicsSampleError } from './sampleFailure.ts'
+
 export type Derivative = (elapsed: number, state: Float64Array, output: Float64Array) => void
 export type IntegrationOptions = {
   initial: ArrayLike<number>
@@ -18,6 +20,8 @@ export type IntegrationOptions = {
   signal?: AbortSignal
   /** Observes accepted endpoints only; receives an owned copy. */
   onAcceptedStep?: (elapsed: number, state: Float64Array) => void
+  /** Synchronous, read-only view of accepted state; valid only during callback. */
+  onAcceptedStepView?: (elapsed: number, state: ArrayLike<number>) => void
   /** Worker/event-loop cooperation; injectable for deterministic cancellation. */
   yieldControl?: () => Promise<void>
 }
@@ -31,13 +35,13 @@ const ERROR = [35/384 - 5179/57600, 0, 500/1113 - 7571/16695,
   125/192 - 393/640, -2187/6784 + 92097/339200, 11/84 - 187/2100, -1/40]
 
 export async function integrateAdaptive(options: IntegrationOptions) {
-  const { duration, relativeTolerance, maxStep, initialStep, maxAttempts, signal, derivative, onAcceptedStep } = options
+  const { duration, relativeTolerance, maxStep, initialStep, maxAttempts, signal, derivative, onAcceptedStep, onAcceptedStepView } = options
   const n = options.initial.length
   if (!Number.isSafeInteger(n) || n < 1 || n > 512 || !Number.isFinite(duration) ||
       !Number.isFinite(relativeTolerance) || relativeTolerance < 1e-14 || relativeTolerance > 1 ||
       !Number.isFinite(maxStep) || maxStep <= 0 || !Number.isFinite(initialStep) || initialStep <= 0 ||
       !Number.isSafeInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 200_000 ||
-      options.absoluteTolerance.length !== n) throw new RangeError('Invalid bounded integration settings')
+      options.absoluteTolerance.length !== n || onAcceptedStep !== undefined && onAcceptedStepView !== undefined) throw new RangeError('Invalid bounded integration settings')
   const state = Float64Array.from(options.initial), absolute = Float64Array.from(options.absoluteTolerance)
   if (!state.every(Number.isFinite) || !absolute.every(value => Number.isFinite(value) && value > 0)) throw new RangeError('Initial state and component tolerances must be finite, with positive tolerances')
   const cancelled = () => { if (signal?.aborted) throw new DOMException('Integration cancelled', 'AbortError') }
@@ -50,7 +54,7 @@ export async function integrateAdaptive(options: IntegrationOptions) {
   let smallestAcceptedStep = Infinity, largestAcceptedStep = 0, maxAcceptedErrorRatio = 0
   const evaluate = (time: number, input: Float64Array, output: Float64Array) => {
     cancelled()
-    if (!Number.isFinite(time) || !input.every(Number.isFinite)) throw new RangeError('Integration stage became nonfinite')
+    if (!Number.isFinite(time) || !input.every(Number.isFinite)) throw new DynamicsSampleError('Integration stage became nonfinite')
     // A partially written derivative cannot reuse old buffer contents.
     output.fill(NaN)
     derivative(time, input, output)
@@ -61,16 +65,27 @@ export async function integrateAdaptive(options: IntegrationOptions) {
   let stepSize = Math.min(initialStep, maxStep, Math.abs(duration))
   if (duration !== 0) evaluate(0, state, stages[0])
   const yieldControl = options.yieldControl ?? (() => new Promise<void>(resolve => setTimeout(resolve, 0)))
+  let sliceStarted = performance.now()
   while (direction * (duration - elapsed) > 0) {
     cancelled()
-    if (attempts >= maxAttempts) throw new RangeError('Integration exhausted its attempt budget before reaching the requested epoch')
-    if (attempts > 0 && attempts % 32 === 0) { await yieldControl(); cancelled() }
+    if (attempts >= maxAttempts) throw new DynamicsSampleError('Integration exhausted its attempt budget before reaching the requested epoch')
+    // A fixed attempt count alone can monopolize a worker when derivatives
+    // are expensive. Yield between attempts, never inside a numerical stage.
+    // This is a cooperation threshold, not a bound on one synchronous step.
+    if (attempts > 0 && (attempts % 32 === 0 || performance.now() - sliceStarted >= 8)) {
+      await yieldControl()
+      cancelled()
+      sliceStarted = performance.now()
+    }
     attempts++
     const remaining = Math.abs((duration - elapsed) + timeCompensation), magnitude = Math.min(stepSize, maxStep, remaining)
     const step = direction * magnitude, timeIncrement = step - timeCompensation
     const nextTime = magnitude === remaining ? duration : elapsed + timeIncrement
     const nextTimeCompensation = magnitude === remaining ? 0 : (nextTime - elapsed) - timeIncrement
-    if (elapsed + step === elapsed || !(magnitude > 0)) throw new RangeError('Integration step is below elapsed-time resolution')
+    // Judge progress using the compensated endpoint actually used by the
+    // stages. The uncorrected elapsed+step can round to elapsed even when the
+    // retained time correction makes nextTime advance representably.
+    if (!Number.isFinite(nextTime) || !(direction * (nextTime - elapsed) > 0) || !(magnitude > 0)) throw new DynamicsSampleError('Integration step is below elapsed-time resolution')
     for (let stage = 1; stage < 7; stage++) {
       for (let i = 0; i < n; i++) {
         let slope = 0
@@ -87,7 +102,7 @@ export async function integrateAdaptive(options: IntegrationOptions) {
       for (let j = 0; j < 7; j++) difference += ERROR[j] * stages[j][i]
       const scale = absolute[i] + relativeTolerance * Math.max(Math.abs(state[i]), Math.abs(trial[i]))
       const ratio = Math.abs(step * difference) / scale
-      if (!Number.isFinite(scale) || !Number.isFinite(ratio)) throw new RangeError('Integration error estimate became nonfinite')
+      if (!Number.isFinite(scale) || !Number.isFinite(ratio)) throw new DynamicsSampleError('Integration error estimate became nonfinite')
       errorRatio = Math.max(errorRatio, ratio)
     }
     const factor = errorRatio === 0 ? 5 : Math.min(5, Math.max(.1, .9 * errorRatio ** (-1/5)))
@@ -97,6 +112,7 @@ export async function integrateAdaptive(options: IntegrationOptions) {
       smallestAcceptedStep = Math.min(smallestAcceptedStep, magnitude)
       largestAcceptedStep = Math.max(largestAcceptedStep, magnitude)
       maxAcceptedErrorRatio = Math.max(maxAcceptedErrorRatio, errorRatio)
+      onAcceptedStepView?.(elapsed, state)
       onAcceptedStep?.(elapsed, state.slice())
     } else rejected++
     stepSize = magnitude * (errorRatio > 1 ? Math.min(1, factor) : factor)

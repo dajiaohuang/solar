@@ -49,47 +49,74 @@ func finite(v float64) bool { return !math.IsNaN(v) && !math.IsInf(v, 0) }
 // when the caller explicitly selects that approximation. Bounds limit supported
 // use, not physical accuracy. No distance override or velocity clamp is accepted.
 func Propagate(source Source, targetYearTCB float64, rvPolicy string) (*Result, error) {
-	if rvPolicy != "spectroscopic-as-astrometric" {
-		return nil, fmt.Errorf("explicit spectroscopic radial-velocity approximation required")
+	if err := validatePropagationInput(source, targetYearTCB, rvPolicy); err != nil {
+		return nil, err
 	}
-	if !sourceID.MatchString(source.ID) || source.Epoch != 2016 || (source.Solution != 31 && source.Solution != 95) {
-		return nil, fmt.Errorf("unsupported Gaia source identity, epoch or solution")
-	}
-	if _, err := strconv.ParseInt(source.ID, 10, 64); err != nil {
-		return nil, fmt.Errorf("source ID exceeds signed 64-bit range")
-	}
-	for _, v := range []*float64{source.RA, source.Dec, source.Parallax, source.PMRA, source.PMDec, source.RadialVelocity} {
-		if v == nil || !finite(*v) {
-			return nil, fmt.Errorf("complete finite astrometry and radial velocity required")
-		}
-	}
-	if *source.RA < 0 || *source.RA >= 360 || math.Abs(*source.Dec) >= 90 || *source.Parallax <= 0 || !finite(targetYearTCB) || math.Abs(targetYearTCB-source.Epoch) > 100 {
-		return nil, fmt.Errorf("stellar propagation outside supported input domain")
-	}
-	// Coordinate scaling t*=F t + constant, x*=F x leaves velocities unchanged.
-	// With the same fixed AU in metres, formal parallax and angular rates divide
-	// by F. Convert back before publishing any Gaia-compatible output.
 	const f = 1 - gofa.ELB
 	var ep1a, ep1b, ep2a, ep2b float64
 	gofa.Tcbtdb(gofa.DJ00, (source.Epoch-2000)*gofa.DJY, &ep1a, &ep1b)
 	gofa.Tcbtdb(gofa.DJ00, (targetYearTCB-2000)*gofa.DJY, &ep2a, &ep2b)
+	epoch := [2]float64{ep1a, ep1b}
+	target := [2]float64{ep2a, ep2b}
+	state, err := propagateStateValidatedWithEpochs(source, epoch, target)
+	if err != nil {
+		return nil, err
+	}
+	return &Result{Model: "gofa-starpm-scaled-gaia-single-star-v1", SourceID: source.ID, TargetEpochTCB: targetYearTCB, SourceTDB: epoch, TargetTDB: target, State: state, ScaleFactor: f, RadialVelocityPolicy: rvPolicy,
+		Limitations: []string{"Uniform rectilinear single-star motion with SOFA changing-light-time and special-relativistic treatment.", "Spectroscopic radial velocity is adopted as astrometric radial velocity; gravitational/convective and binary shifts are not corrected.", "Positive measured parallax supplies a nominal distance, not a Bayesian distance estimate.", "No uncertainty propagation, systematics, acceleration, Galactic potential, observer parallax, deflection or aberration.", "Numerical agreement is not a physical positional-accuracy certificate; missing inputs and SOFA warnings are rejected."}}, nil
+}
+
+// Callers validate the source contract once before entering the SOFA kernel.
+// Batch callers also pass shared TCB/TDB epoch parts to avoid per-row conversion.
+func propagateStateValidatedWithEpochs(source Source, sourceTDB, targetTDB [2]float64) (State, error) {
+	const f = 1 - gofa.ELB
 	dec := *source.Dec * gofa.DD2R
 	pmr := *source.PMRA * gofa.DMAS2R / math.Cos(dec) / f
 	pmd := *source.PMDec * gofa.DMAS2R / f
 	if !finite(pmr) || !finite(pmd) {
-		return nil, fmt.Errorf("unrepresentable catalog angular rate")
+		return State{}, fmt.Errorf("unrepresentable catalog angular rate")
 	}
 	var ra2, dec2, pmr2, pmd2, px2, rv2 float64
-	status := gofa.Starpm(*source.RA*gofa.DD2R, dec, pmr, pmd, *source.Parallax/1000/f, *source.RadialVelocity, ep1a, ep1b, ep2a, ep2b, &ra2, &dec2, &pmr2, &pmd2, &px2, &rv2)
+	status := gofa.Starpm(*source.RA*gofa.DD2R, dec, pmr, pmd, *source.Parallax/1000/f, *source.RadialVelocity, sourceTDB[0], sourceTDB[1], targetTDB[0], targetTDB[1], &ra2, &dec2, &pmr2, &pmd2, &px2, &rv2)
 	if status != 0 {
-		return nil, fmt.Errorf("SOFA stellar propagation refused modified or unconverged state: status %d", status)
+		return State{}, fmt.Errorf("SOFA stellar propagation refused modified or unconverged state: status %d", status)
 	}
 	state := State{ra2 * gofa.DR2D, dec2 * gofa.DR2D, px2 * 1000 * f, pmr2 * f * math.Cos(dec2) / gofa.DMAS2R, pmd2 * f / gofa.DMAS2R, rv2}
 	for _, v := range []float64{state.RA, state.Dec, state.Parallax, state.PMRA, state.PMDec, state.RadialVelocity} {
 		if !finite(v) {
-			return nil, fmt.Errorf("non-finite stellar state")
+			return State{}, fmt.Errorf("non-finite stellar state")
 		}
 	}
-	return &Result{Model: "gofa-starpm-scaled-gaia-single-star-v1", SourceID: source.ID, TargetEpochTCB: targetYearTCB, SourceTDB: [2]float64{ep1a, ep1b}, TargetTDB: [2]float64{ep2a, ep2b}, State: state, ScaleFactor: f, RadialVelocityPolicy: rvPolicy,
-		Limitations: []string{"Uniform rectilinear single-star motion with SOFA changing-light-time and special-relativistic treatment.", "Spectroscopic radial velocity is adopted as astrometric radial velocity; gravitational/convective and binary shifts are not corrected.", "Positive measured parallax supplies a nominal distance, not a Bayesian distance estimate.", "No uncertainty propagation, systematics, acceleration, Galactic potential, observer parallax, deflection or aberration.", "Numerical agreement is not a physical positional-accuracy certificate; missing inputs and SOFA warnings are rejected."}}, nil
+	return state, nil
+}
+
+func validatePropagationInput(source Source, targetYearTCB float64, rvPolicy string) error {
+	if rvPolicy != "spectroscopic-as-astrometric" {
+		return fmt.Errorf("explicit spectroscopic radial-velocity approximation required")
+	}
+	if !sourceID.MatchString(source.ID) || source.Epoch != 2016 || (source.Solution != 31 && source.Solution != 95) {
+		return fmt.Errorf("unsupported Gaia source identity, epoch or solution")
+	}
+	if _, err := strconv.ParseInt(source.ID, 10, 64); err != nil {
+		return fmt.Errorf("source ID exceeds signed 64-bit range")
+	}
+	if err := validatePropagationStateInputs(source); err != nil {
+		return err
+	}
+	if !finite(targetYearTCB) || math.Abs(targetYearTCB-source.Epoch) > 100 {
+		return fmt.Errorf("stellar propagation outside supported input domain")
+	}
+	return nil
+}
+
+func validatePropagationStateInputs(source Source) error {
+	for _, v := range []*float64{source.RA, source.Dec, source.Parallax, source.PMRA, source.PMDec, source.RadialVelocity} {
+		if v == nil || !finite(*v) {
+			return fmt.Errorf("complete finite astrometry and radial velocity required")
+		}
+	}
+	if *source.RA < 0 || *source.RA >= 360 || math.Abs(*source.Dec) >= 90 || *source.Parallax <= 0 {
+		return fmt.Errorf("stellar propagation outside supported input domain")
+	}
+	return nil
 }

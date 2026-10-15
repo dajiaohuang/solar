@@ -23,10 +23,10 @@ function baseline(bodies: CelestialBody[], referenceId: string, jd: number) {
 }
 const percentile = (values: number[], p: number) => [...values].sort((a, b) => a - b)[Math.floor((values.length - 1) * p)]
 
-it('measures real-source dual-frame state work without substituting point count for SPK coverage', () => {
+it('measures real-source dual-frame state work without substituting point count for SPK coverage', async () => {
   for (const file of EPHEMERIS_MANIFEST.files) {
     const bytes = readFileSync(`public/data/ephemerides/${file.path}`)
-    installKernel(file.id, bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
+    await installKernel(file.id, bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
   }
   const saturn = majorBodies.filter(body => body.id === 'saturn' || body.parentId === 'saturn')
   const rows = []

@@ -11,12 +11,12 @@ const catalogManifestSha256 = 'a'.repeat(64), planHash = 'b'.repeat(64), epochJd
 const body = (id: string): CelestialBody => ({ id, name: id, kind: 'asteroid', color: '#ffffff', size: 1, source: 'custom' })
 function metadata(id: string, exact: boolean): StateTileMetadata {
   return { id, source: 'synthetic-snapshot', datasetVersion: 'fixture', datasetSha256: catalogManifestSha256,
-    kernelSha256: 'c'.repeat(64), model: 'spk-original', centerId: 'naif:0',
+    kernelSha256: 'c'.repeat(64), sourceChainSha256: 'e'.repeat(64), model: 'spk-original', centerId: 'naif:0',
     validityStartEt: -100, validityEndEt: 100, validityPresent: true, stateEvidence: 'kernel',
     evidenceWindowStartEt: -100, evidenceWindowEndEt: 100, evidenceWindowPresent: true,
     missingReason: exact ? '' : 'synthetic-gap', identityStatus: '', sourceRecord: false }
 }
-async function tile(start: number, count: number) {
+async function tile(start: number, count: number, hash = planHash) {
   const records = [], exact: number[] = [], states = new Float64Array(count * 6)
   for (let row = 0; row < count; row++) {
     const id = start + row, available = id % 7 !== 0
@@ -28,8 +28,8 @@ async function tile(start: number, count: number) {
   }
   if (start === 0 && count > 1) states[6] = -0
   const encoded = await encodeStateTile({ sequence: 0, tileCount: 1, ordinalStart: 0, epochJd,
-    metadata: records, exact, states, planHash, catalogManifestSha256 })
-  return { decoded: await decodeStateTile(encoded, { planHash, catalogManifestSha256 }), states, encoded }
+    metadata: records, exact, states, planHash: hash, catalogManifestSha256 })
+  return { decoded: await decodeStateTile(encoded, { planHash: hash, catalogManifestSha256 }), states, encoded }
 }
 
 describe('shared column-backed scientific snapshots', () => {
@@ -125,7 +125,7 @@ describe('shared column-backed scientific snapshots', () => {
     const requested = new Map([['body', 'source:1']])
     expect(() => new StateTileSnapshot([decoded, decoded], requested)).toThrow(/duplicate resolved identity/)
     for (const change of [{ epochJd: epochJd + 1 }, { catalogManifestSha256: 'd'.repeat(64) }, { inventoryManifestSha256: 'e'.repeat(64) }]) {
-      expect(() => new StateTileSnapshot([decoded, { ...decoded, ...change }], requested)).toThrow(/snapshot identity or epoch mismatch/)
+      expect(() => new StateTileSnapshot([decoded, { ...decoded, ...change }], requested)).toThrow(/snapshot identity, epoch or scientific contract mismatch/)
     }
     const snapshot = new StateTileSnapshot([decoded], requested)
     for (const index of [-1, 1, 0.5, Infinity, NaN]) {
@@ -141,8 +141,8 @@ describe('shared column-backed scientific snapshots', () => {
     expect(empty.hasPosition('body')).toBe(false)
   })
 
-  it('loads both 32K-bounded plans before publishing one shared multi-reference snapshot and never publishes partial failures', async () => {
-    const source = [await tile(0, 32_768), await tile(32_768, 1)]
+  it('publishes a verified first 32K plan while later plans load, then replaces it with the full multi-reference snapshot', async () => {
+    const source = [await tile(0, 32_768), await tile(32_768, 1, 'd'.repeat(64))]
     const bodyIds = Array.from({ length: 32_769 }, (_, index) => `source:${index}`)
     const requestedIds = new Map(bodyIds.map((id, index) => [`body:${index}`, id]))
     const bodies = [...requestedIds.keys()].map(body)
@@ -166,7 +166,7 @@ describe('shared column-backed scientific snapshots', () => {
         const tile = source[planIndex].decoded
         let exactCount = 0
         for (let row = 0; row < tile.recordCount; row++) if (tile.exactBitmap[row >> 3] & (1 << (row & 7))) exactCount++
-        return json({ apiVersion: 'solar.api/v1', catalogVersion: 'fixture', catalogManifestSha256, planId: planHash,
+        return json({ apiVersion: 'solar.api/v1', catalogVersion: 'fixture', catalogManifestSha256, planId: tile.planHash,
           requestIdsSha256: await digestStateTileRequestIds(request.ids), epochJd, timeScale: 'TDB', frame: 'ECLIPJ2000',
           precision: 'exact', stateOriginId: 'naif:0', distanceUnit: 'km', velocityUnit: 'km/s', stride: 6,
           fieldMask: ['position', 'velocity'], bodyCount: tile.recordCount, exactCount, approximateCount: 0,
@@ -174,31 +174,40 @@ describe('shared column-backed scientific snapshots', () => {
           tiles: [{ sequence: 0, ordinalStart: 0, ordinalCount: tile.recordCount }] })
       }
       if (url.endsWith('/state/tiles')) {
-        const item = source[planIndex]
+        const request = JSON.parse(String(init?.body)) as { planId: string }
+        const item = source.find(item => item.decoded.planHash === request.planId)!
         return new Response(item.encoded, { headers: { 'content-type': 'application/vnd.solar.state-tile+binary',
           'content-length': String(item.encoded.byteLength), etag: `"${item.decoded.payloadSha256}"` } })
       }
       throw new Error(`Unexpected test request: ${url}`)
     }) as typeof fetch & ReturnType<typeof vi.fn>
     const publish = vi.fn()
-    const load = async () => {
+    const load = async (publishInitial = false) => {
       const observation = await loadCurrentStateObservation({ base: 'https://synthetic.example', epochTdbJd: epochJd,
-        epochUtcJd: epochJd - 0.001, selectedIds: bodies.map(body => body.id), requestedIds, referenceIds: ['body:1', 'body:2'], signal: controller.signal, fetcher })
+        epochUtcJd: epochJd - 0.001, selectedIds: bodies.map(body => body.id), publishInitialPartial: publishInitial, requestedIds, referenceIds: ['body:1', 'body:2'], signal: controller.signal, fetcher,
+        onInitialPartial: publishInitial ? partial => {
+          const partialFrames = framesFromCurrentStateObservation(partial.observation, partial.selectedIds.map(body), ['body:1', 'body:2'])
+          publish({ frames: partialFrames, publishedEpochUtcJd: partial.observation.epochUtcJd, partial: true })
+        } : undefined })
       const received = structuredClone(observation, { transfer: currentStateObservationTransfers(observation) })
       const frames = framesFromCurrentStateObservation(received, bodies, ['body:1', 'body:2'])
       publish({ frames, publishedEpochUtcJd: received.epochUtcJd })
       return { observation: received, frames }
     }
-    const loaded = await load()
+    const loaded = await load(true)
     expect(loaded.observation.planRecordCounts).toEqual([32_768, 1])
     expect(fetcher).toHaveBeenCalledTimes(5)
-    expect(publish).toHaveBeenCalledTimes(1)
+    expect(publish).toHaveBeenCalledTimes(2)
+    const initial = publish.mock.calls[0][0]
+    expect(initial.partial).toBe(true)
+    expect(initial.frames.get('body:1')!.evidence.length).toBe(32_768)
+    expect(initial.frames.get('body:1')!.currentPositions.length).toBe(32_768 - Math.ceil(32_768 / 7))
     const first = loaded.frames.get('body:1')!, second = loaded.frames.get('body:2')!
     expect(first.evidence).toBe(second.evidence)
     expect(first.evidence.length).toBe(bodyIds.length)
     expect(first.currentPositions.length).toBe(bodyIds.length - Math.ceil(bodyIds.length / 7))
-    expect(publish.mock.calls[0][0].publishedEpochUtcJd).toBe(epochJd - 0.001)
-    // Failure/cancellation after a complete first plan cannot publish that plan.
+    expect(publish.mock.calls[1][0].publishedEpochUtcJd).toBe(epochJd - 0.001)
+    // Callers that leave progressive publication disabled retain atomic results.
     planIndex = -1; failSecond = true; publish.mockClear()
     await expect(load()).rejects.toThrow('second plan unavailable')
     expect(publish).not.toHaveBeenCalled()

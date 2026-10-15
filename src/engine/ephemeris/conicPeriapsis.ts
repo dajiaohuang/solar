@@ -3,6 +3,14 @@ export type PeriapsisConic = {
   inclinationRadians: number; ascendingNodeRadians: number; argumentOfPeriapsisRadians: number
 }
 
+/** Known domain, numeric-range or convergence failure of a conic evaluation. */
+export class ConicEvaluationError extends RangeError {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ConicEvaluationError'
+  }
+}
+
 function stumpff(z: number) {
   if (Math.abs(z) < 0.1) {
     let c = 0.5, s = 1/6, ct = c, st = s
@@ -21,10 +29,10 @@ function stumpff(z: number) {
  * This is not an SPK trajectory or a non-gravitational comet force model. */
 export function propagatePeriapsisConic(conic: PeriapsisConic, elapsedTdbSeconds: number) {
   const { periapsisKm:q, eccentricity:e, gmKm3PerSecond2:mu, inclinationRadians:i, ascendingNodeRadians:o, argumentOfPeriapsisRadians:w } = conic
-  if (![q,e,mu,i,o,w,elapsedTdbSeconds].every(Number.isFinite) || q <= 0 || e < 0 || mu <= 0 || i < 0 || i > Math.PI) throw new RangeError('Invalid periapsis conic')
+  if (![q,e,mu,i,o,w,elapsedTdbSeconds].every(Number.isFinite) || q <= 0 || e < 0 || mu <= 0 || i < 0 || i > Math.PI) throw new ConicEvaluationError('Invalid periapsis conic')
   const speed = Math.sqrt(mu/q), timeScale = q/speed, beta = 1-e
   let tau = elapsedTdbSeconds/timeScale
-  if (!Number.isFinite(tau) || !Number.isFinite(speed) || !(speed > 0) || !Number.isFinite(timeScale) || !(timeScale > 0)) throw new RangeError('Conic exceeds numerical range')
+  if (!Number.isFinite(tau) || !Number.isFinite(speed) || !(speed > 0) || !Number.isFinite(timeScale) || !(timeScale > 0)) throw new ConicEvaluationError('Conic exceeds numerical range')
   if (beta > 0) {
     const period = 2*Math.PI/beta**1.5
     if (Number.isFinite(period)) {
@@ -40,7 +48,7 @@ export function propagatePeriapsisConic(conic: PeriapsisConic, elapsedTdbSeconds
   }
   let low = 0, high = Math.min(1,target), converged = target === 0
   for (let step = 0; step < 128 && evaluate(high).value < target; step++) high *= 2
-  if (evaluate(high).value < target) throw new RangeError('Conic root could not be bracketed')
+  if (evaluate(high).value < target) throw new ConicEvaluationError('Conic root could not be bracketed')
   let x = high
   for (let step = 0; step < 128 && !converged; step++) {
     const result = evaluate(x), residual = result.value-target, correction = residual/result.derivative
@@ -52,7 +60,7 @@ export function propagatePeriapsisConic(conic: PeriapsisConic, elapsedTdbSeconds
     if (candidate === x) { converged = true; break }
     x = candidate
   }
-  if (!converged) throw new RangeError('Conic root did not converge')
+  if (!converged) throw new ConicEvaluationError('Conic root did not converge')
   x *= sign
   const {c,t} = evaluate(x), radius = 1+e*x*x*c, transverse = Math.sqrt(1+e)
   const px = q*(1-x*x*c), py = q*transverse*x*t
@@ -63,6 +71,6 @@ export function propagatePeriapsisConic(conic: PeriapsisConic, elapsedTdbSeconds
   const rotate = (a: number,b: number) => ({ x:(co*cw-so*sw*ci)*a+(-co*sw-so*cw*ci)*b,
     y:(so*cw+co*sw*ci)*a+(-so*sw+co*cw*ci)*b, z:sw*si*a+cw*si*b })
   const positionKm = rotate(px,py), velocityKmPerSecond = rotate(vx,vy)
-  if (![...Object.values(positionKm),...Object.values(velocityKmPerSecond)].every(Number.isFinite)) throw new RangeError('Conic state exceeds numerical range')
+  if (![...Object.values(positionKm),...Object.values(velocityKmPerSecond)].every(Number.isFinite)) throw new ConicEvaluationError('Conic state exceeds numerical range')
   return { positionKm, velocityKmPerSecond }
 }

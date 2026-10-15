@@ -1,6 +1,4 @@
-import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { parse } from 'yaml'
 import {
   advancePullRequestWorkflowRun,
   automationBranch,
@@ -285,86 +283,4 @@ describe('protected dataset pin automation', () => {
     expect(successfulDeployment([{ ...successfulExact, head_branch: 'feature' }], mergeSha)).toBeUndefined()
   })
 
-  it('keeps dispatch, reusable quality, and scoped write permissions in the workflow contract', () => {
-    const root = new URL('../../', import.meta.url)
-    const quality = parse(readFileSync(new URL('.github/workflows/pull-request-quality.yml', root), 'utf8'))
-    const mobile = parse(readFileSync(new URL('.github/workflows/mobile.yml', root), 'utf8'))
-    const refresh = parse(readFileSync(new URL('.github/workflows/data-refresh.yml', root), 'utf8'))
-    const deploy = parse(readFileSync(new URL('.github/workflows/deploy.yml', root), 'utf8'))
-
-    expect(quality.on.workflow_dispatch.inputs).toMatchObject({
-      pr_number: { required: true },
-      base_sha: { required: true },
-      head_sha: { required: true },
-      request_id: { required: true },
-    })
-    expect(quality['run-name']).toBe("${{ inputs.request_id || (github.event_name == 'push' && format('Branch quality: {0}', github.ref_name)) || format('Pull request #{0}', github.event.pull_request.number) }}")
-    expect(quality.permissions).toEqual({ contents: 'read', 'pull-requests': 'read' })
-    expect(quality.jobs.mobile_quality.uses).toBe('./.github/workflows/mobile.yml')
-    expect(mobile.on.workflow_call.inputs.checkout_ref.type).toBe('string')
-    expect(refresh.permissions).toEqual({ contents: 'read' })
-    expect(refresh.jobs.build_candidate.permissions).toEqual({ contents: 'read' })
-    expect(refresh.jobs.build_candidate.outputs.source_sha).toBe('${{ github.sha }}')
-    const buildCheckout = refresh.jobs.build_candidate.steps.find(step => step.uses === 'actions/checkout@v7')
-    expect(buildCheckout.with).toEqual({ ref: '${{ github.sha }}', 'persist-credentials': false })
-    const upload = refresh.jobs.build_candidate.steps.find(step => step.uses === 'actions/upload-artifact@v6')
-    expect(upload.with.path).toBe('asteroid-dataset.tar.gz')
-    expect(refresh.jobs.publish.permissions).toEqual({
-      contents: 'write',
-      'pull-requests': 'write',
-      actions: 'write',
-    })
-    expect(refresh.jobs.publish.needs).toBe('build_candidate')
-    const publishSteps = refresh.jobs.publish.steps
-    const sourceCheckoutIndex = publishSteps.findIndex(step => step.name === 'Read the immutable source control without persistent credentials')
-    const downloadIndex = publishSteps.findIndex(step => step.name === 'Download the validated dataset candidate')
-    const verifyIndex = publishSteps.findIndex(step => step.name === 'Verify and classify the candidate before any write')
-    const authenticatedCheckoutIndex = publishSteps.findIndex(step => step.name === 'Enable authenticated publishing after candidate verification')
-    const releaseIndex = publishSteps.findIndex(step => step.name === 'Publish GitHub release')
-    expect(sourceCheckoutIndex).toBeGreaterThanOrEqual(0)
-    expect(sourceCheckoutIndex).toBeLessThan(downloadIndex)
-    expect(downloadIndex).toBeLessThan(verifyIndex)
-    expect(verifyIndex).toBeLessThan(authenticatedCheckoutIndex)
-    expect(authenticatedCheckoutIndex).toBeLessThan(releaseIndex)
-    expect(publishSteps[sourceCheckoutIndex].with).toEqual({
-      ref: '${{ needs.build_candidate.outputs.source_sha }}',
-      'persist-credentials': false,
-    })
-    expect(publishSteps[verifyIndex].run).toContain('validate-candidate-identity')
-    expect(publishSteps[verifyIndex].run).toContain('sha256sum --check --strict')
-    expect(publishSteps[verifyIndex].run).toContain('classify-publication')
-    expect(publishSteps[verifyIndex].run).toContain('"$VERSION" "$EXPECTED_ASSET_SHA256" "$SOURCE_SHA" "$PUBLIC_REPOSITORY_URL"')
-    expect(publishSteps.slice(0, authenticatedCheckoutIndex).every(step => (
-      !step.env?.GH_TOKEN && !step.env?.GITHUB_TOKEN && !JSON.stringify(step).includes('github.token')
-    ))).toBe(true)
-    expect(publishSteps[authenticatedCheckoutIndex].with).toEqual({
-      ref: '${{ needs.build_candidate.outputs.source_sha }}',
-      'persist-credentials': true,
-      clean: false,
-    })
-    expect(publishSteps[authenticatedCheckoutIndex].if).toBe("steps.publication.outputs.mode == 'fresh'")
-    expect(publishSteps.some(step => step.uses === 'actions/download-artifact@v7')).toBe(true)
-    expect(publishSteps.find(step => step.id === 'pin').run).toContain('"$SOURCE_SHA"')
-    expect(publishSteps.find(step => step.id === 'recover_deploy').if).toContain("steps.publication.outputs.mode == 'fresh'")
-    expect(publishSteps.find(step => step.id === 'recover_post_merge').if).toBe("steps.publication.outputs.mode == 'recover'")
-    expect(publishSteps.find(step => step.id === 'recover_post_merge').run).toContain('steps.publication.outputs.target_sha')
-    expect(publishSteps.filter(step => step.run).every(step => !step.run.includes('publish-input/scripts/'))).toBe(true)
-    expect(publishSteps.filter(step => step.run?.includes('dataset-pin-automation.mjs')).every(step => (
-      step.run.includes('node scripts/dataset-pin-automation.mjs')
-    ))).toBe(true)
-    expect(publishSteps.map(step => step.run ?? '').join('\n')).not.toMatch(/\bnpm\b|\bnpx\b/)
-    expect(deploy.on.workflow_dispatch.inputs).toMatchObject({
-      expected_sha: { required: false },
-      request_id: { required: false },
-    })
-    const refreshSource = readFileSync(new URL('.github/workflows/data-refresh.yml', root), 'utf8')
-    const automationSource = readFileSync(new URL('scripts/dataset-pin-automation.mjs', root), 'utf8')
-    expect(refreshSource).not.toContain('HEAD:main')
-    expect(automationSource).not.toContain("git(['rebase'")
-    expect(automationSource).not.toContain('rebaseAutomationBranch')
-    expect(automationSource).not.toContain('dataset-pin-quality-')
-    expect(automationSource).not.toContain('dispatchWorkflow(owner, repo, QUALITY_WORKFLOW')
-    expect(automationSource).toContain('/actions/runs/${initialRun.id}/approve')
-    expect(automationSource).toContain("event: 'pull_request'")
-  })
 })

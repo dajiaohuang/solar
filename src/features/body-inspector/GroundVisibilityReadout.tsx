@@ -4,6 +4,7 @@ import { loadGroundVisibility, type GroundVisibility, type GroundVisibilityReque
 import type { GroundStation } from '../../lib/groundObservation'
 import { saveTextExport } from '../../lib/platform'
 import { PRODUCT_PROFILE } from '../../lib/productAvailability'
+import { GroundSourceEvidence } from './GroundSourceEvidence'
 
 export function GroundVisibilityReadout({ startUtc, station, bodyId, base }: { startUtc: string; station: GroundStation; bodyId: string; base: string }) {
   const { language } = useI18n(), zh = language === 'zh'
@@ -44,9 +45,10 @@ export function GroundVisibilityReadout({ startUtc, station, bodyId, base }: { s
       {result.result.crossings.length > 0 && <table><thead><tr><th>{zh ? '穿越' : 'Crossing'}</th><th>UTC</th></tr></thead><tbody>{result.result.crossings.map((v, i) => <tr key={i}><th>{labels[v.kind]}</th><td>{v.utc}</td></tr>)}</tbody></table>}
       {result.result.missing.map((v, i) => <p className="ground-window" key={i}>{zh ? '无法判断' : 'Unresolved'}: {v.startUtc} → {v.endUtc}<br />{v.reason}</p>)}
       <p>{result.result.warnings.includes('iers-predicted-earth-orientation') ? (zh ? 'IERS 含预测值' : 'IERS includes predictions') : 'IERS'} · {result.earthOrientation.retrievedAt}</p>
+      <GroundSourceEvidence earthOrientation={result.earthOrientation} eopCoverageMjdUtc={result.earthOrientationCoverageMjdUtc} sources={result.result.sources} zh={zh} />
       {result.result.warnings.includes('celestial-pole-correction-unavailable-model-only') && <p>{zh ? '部分时刻缺少天极修正，采用岁差章动模型。' : 'Celestial pole corrections are missing at some instants; those use the precession-nutation model alone.'}</p>}
       {result.result.warnings.includes('solar-deflection-limited-near-solar-limb') && <p>{zh ? '部分方向接近日面，光偏折模型已限幅。' : 'Some directions approach the solar limb, where light deflection is limited.'}</p>}
-      {result.result.warnings.includes('no-leap-seconds-after-2017-assumed') && <p>{zh ? '时间换算假定 2017 年后无新增闰秒。' : 'Time conversion assumes no additional leap seconds after 2017.'}</p>}
+      {result.result.warnings.includes('future-leap-seconds-assumed') && <p>{zh ? 'UTC 时间换算自 2027-07-01 起延用最后已知闰秒偏移；这是未来假设。' : 'From 2027-07-01, UTC conversion holds the last known leap-second offset; this is a future assumption.'}</p>}
       <p>{zh ? '搜索步长 30 秒，已括定边界的数值容差 0.25 秒。短于步长的事件及相切可能漏检；容差不代表物理精度。未传播物理不确定性；不含折射、地形、天体边缘或大气消光。' : 'Search step: 30 s; bracketed boundary tolerance: 0.25 s. Sub-step events and tangencies may be missed; tolerance is not physical accuracy. Physical uncertainty is not propagated; refraction, terrain, target limbs and extinction are excluded.'}</p>
       <button type="button" onClick={() => { void saveTextExport(JSON.stringify(result, null, 2), `solar-visibility-${bodyId.replace(/[^\w-]/g, '_')}.json`, 'application/json').catch(reason => setError(String(reason))) }}>{zh ? '导出窗口与来源 JSON' : 'Export windows and sources JSON'}</button>
     </section>}

@@ -301,6 +301,8 @@ async function installMockCatalog(page: Page | null, options: {
   profileSamples?: { desktop: number[]; mobile: number[] }
   presetDataset?: boolean
   chunkSize?: number
+  searchable?: boolean
+  searchDataset?: boolean
 } = {}) {
   const responses = new Map<string, MockCatalogResponse>()
   const register = async (pattern: string, response: MockCatalogResponse) => {
@@ -332,10 +334,15 @@ async function installMockCatalog(page: Page | null, options: {
         isPha: false,
       }
     })
-    : fixtureEntries
+    : options.searchDataset ? Array.from({ length: 8 }, (_, index) => ({ ...fixtureEntries[0],
+      id: `asteroid:mpc:${String(index+2000).padStart(5,'0')}`, packedDesignation: String(index+2000).padStart(5,'0'),
+      permanentNumber: index+2000, label: `${index+2000} Alpha ${index}`, shortLabel: `Alpha ${index}`, searchKey: `alpha ${index}`,
+    })) : fixtureEntries
   const chunkSize = options.chunkSize ?? 10_000
   const chunkId = (index: number) => `chunk-${String(Math.floor(index / chunkSize)).padStart(4, '0')}`
-  entries.forEach((entry, index) => { entry.chunkId = chunkId(index) })
+  entries.forEach((entry, index) => Object.assign(entry, {
+    chunkId: chunkId(index), chunkIndex: Math.floor(index / chunkSize), rowIndex: index % chunkSize,
+  }))
   const numeric = new Float64Array(entries.length * 8)
   entries.forEach((_, index) => numeric.set([2451545, 2.1 + index % 600 / 500, 0.05 + index % 20 / 100, index % 30, 20, 40, 60, 0.25], index * 8))
   const defaultSampleIndexes = entries.slice(0, options.sampleCount ?? entries.length).map((_, index) => index)
@@ -346,7 +353,7 @@ async function installMockCatalog(page: Page | null, options: {
     datasetMode: options.presetDataset ? 'full' : 'lite',
     source: 'fixture', generatedAt: '2026-08-18T00:00:00Z',
     sourceSha256: 'a'.repeat(64), contentSha256: 'b'.repeat(64), parserVersion: 'test', totalCount: entries.length,
-    chunkCount: Math.ceil(entries.length / chunkSize), chunkSize, format: 'binary-v1', bucketCounts: { 'digit-1': entries.length }, categoryCounts: options.presetDataset ? { MBA: entries.length } : { MBA: 1, APO: 1, TNO: 1 }, featured: [],
+    chunkCount: Math.ceil(entries.length / chunkSize), chunkSize, format: 'binary-v1', bucketCounts: { 'digit-1': entries.length }, categoryCounts: options.presetDataset || options.searchDataset ? { MBA: entries.length } : { MBA: 1, APO: 1, TNO: 1 }, featured: [],
     selectionPolicy: { type: 'permanent-number-through-plus-featured', maxPermanentNumber: 30000, requiredFeaturedNames: [] },
   }
   if (precomputed) Object.assign(manifest, {
@@ -362,12 +369,10 @@ async function installMockCatalog(page: Page | null, options: {
   await register('**/data/asteroids/dataset-version.json', { json: { schemaVersion: 1, activeVersion: manifest.version, mode: manifest.datasetMode, manifestPath: `releases/${manifest.version}/manifest.json`, generatedAt: manifest.generatedAt, sourceSha256: manifest.sourceSha256, contentSha256: manifest.contentSha256 } })
   await register(`**/data/asteroids/releases/${manifest.version}/manifest.json`, { json: manifest })
   await register(`**/data/asteroids/releases/${manifest.version}/provenance.json`, { json: { datasetVersion: manifest.version, downloadedAt: manifest.generatedAt, mode: manifest.datasetMode, totalObjects: entries.length, orbitModel: 'fixture', precision: 'fixture', parserVersion: 'test', ...manifest } })
-  const binaryChecksums: Record<string, string> = {}
   for (let start = 0; start < entries.length; start += chunkSize) {
     const end = Math.min(entries.length, start + chunkSize), binary = Buffer.from(numeric.slice(start * 8, end * 8).buffer)
     await register(`**/data/asteroids/releases/${manifest.version}/meta/${chunkId(start)}.json`, { json: entries.slice(start, end) })
     await register(`**/data/asteroids/releases/${manifest.version}/binary/${chunkId(start)}.bin`, { body: binary, contentType: 'application/octet-stream' })
-    binaryChecksums[`binary/${chunkId(start)}.bin`] = createHash('sha256').update(binary).digest('hex')
   }
   const compact = Buffer.alloc(entries.length * 24)
   entries.forEach((entry, index) => {
@@ -382,12 +387,6 @@ async function installMockCatalog(page: Page | null, options: {
     compact.writeUInt16LE(index % chunkSize, offset + 22)
   })
   await register(`**/data/asteroids/releases/${manifest.version}/catalog-index.bin`, { body: compact, contentType: 'application/octet-stream' })
-  await register(`**/data/asteroids/releases/${manifest.version}/checksums.json`, { json: {
-    schemaVersion: 1, algorithm: 'sha256', files: {
-      'catalog-index.bin': createHash('sha256').update(compact).digest('hex'),
-      ...binaryChecksums,
-    },
-  } })
   for (const size of ['desktop', 'mobile'] as const) {
     const profileEntries = sampleIndexes[size].map((index) => entries[index])
     const profileNumeric = new Float64Array(profileEntries.length * 8)
@@ -398,11 +397,35 @@ async function installMockCatalog(page: Page | null, options: {
     await register(`**/data/asteroids/releases/${manifest.version}/catalog-sample-${size}.bin`, { body: Buffer.from(profileNumeric.buffer), contentType: 'application/octet-stream' })
   }
   await register(`**/data/asteroids/releases/${manifest.version}/catalog-summary.json`, { json: {
-    schemaVersion: 2, datasetMode: manifest.datasetMode, totalCount: entries.length,
-    categoryCounts: manifest.categoryCounts, magnitudeKnownCount: entries.length, magnitudeUnknownCount: 0,
-    numericRanges: { semiMajorAxisAU: [2.1, 2.5], eccentricity: [0.08, 0.14], inclinationDeg: [4, 6], epochJd: [2451545, 2451545] },
+    schemaVersion: 3, datasetMode: manifest.datasetMode, totalCount: entries.length,
+    categoryCounts: manifest.categoryCounts,
+    magnitudeKnownCount: entries.filter(entry => entry.absoluteMagnitude !== undefined).length,
+    magnitudeUnknownCount: entries.filter(entry => entry.absoluteMagnitude === undefined).length,
+    numericRanges: Object.fromEntries([['epochJd', 0], ['semiMajorAxisAU', 1], ['eccentricity', 2], ['inclinationDeg', 3]].map(([name, column]) => {
+      const values = entries.map((_, index) => numeric[index * 8 + Number(column)])
+      return [name, [Math.min(...values), Math.max(...values)]]
+    })),
     sourceSha256: manifest.sourceSha256,
   } })
+  const prefix = `/data/asteroids/releases/${manifest.version}/`
+  if (options.searchable || options.searchDataset) {
+    const buckets = new Map<string, typeof entries>()
+    for (const entry of entries) {
+      const initial = entry.searchKey[0]
+      const bucket = buckets.get(initial) ?? []
+      bucket.push(entry); buckets.set(initial,bucket)
+    }
+    manifest.bucketCounts = Object.fromEntries([...buckets].map(([key, records]) => [key,records.length])) as typeof manifest.bucketCounts
+    for (const [key, records] of buckets) await register(`**${prefix}search/${key}.json`, { json: records })
+  }
+  const files = Object.fromEntries([...responses].filter(([path]) => path.startsWith(prefix))
+    .map(([path, response]) => [path.slice(prefix.length), createHash('sha256').update(response.body ?? JSON.stringify(response.json)).digest('hex')] as const)
+    .filter(([path]) => /^(binary|meta|search|lookup)\//.test(path) || /^catalog-(index|sample|summary)/.test(path))
+    .sort(([left], [right]) => left.localeCompare(right)))
+  manifest.contentSha256 = createHash('sha256').update(JSON.stringify(files)).digest('hex')
+  await register(`**${prefix}checksums.json`, { json: { schemaVersion: 1, algorithm: 'sha256', files } })
+  await register('**/data/asteroids/dataset-version.json', { json: { schemaVersion: 1, activeVersion: manifest.version, mode: manifest.datasetMode, manifestPath: `releases/${manifest.version}/manifest.json`, generatedAt: manifest.generatedAt, sourceSha256: manifest.sourceSha256, contentSha256: manifest.contentSha256 } })
+  await register(`**${prefix}provenance.json`, { json: { datasetVersion: manifest.version, downloadedAt: manifest.generatedAt, mode: manifest.datasetMode, totalObjects: entries.length, orbitModel: 'fixture', precision: 'fixture', parserVersion: 'test', ...manifest } })
   return responses
 }
 
@@ -419,6 +442,73 @@ test('lazy-loads catalog samples only inside catalog workspaces and only once', 
   await openCatalog(page)
   await expect.poll(() => sampleRequests.length).toBe(2)
   expect(new Set(sampleRequests).size).toBe(2)
+})
+
+test('streams the filtered catalog into both Explorer renderers and releases it on stop', async ({ page }) => {
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker
+    const audit = window as Window & { explorerStreamStarts: number; releaseCatalogEpochs: () => void }
+    audit.explorerStreamStarts = 0
+    let holdEpochs = true
+    const heldEpochs: (() => void)[] = []
+    audit.releaseCatalogEpochs = () => { holdEpochs = false; heldEpochs.splice(0).forEach(send => send()) }
+    window.Worker = class extends NativeWorker {
+      override postMessage(data: unknown, options?: Transferable[] | StructuredSerializeOptions) {
+        if ((data as { type?: string; retainEpochs?: boolean })?.type === 'start' && (data as { retainEpochs?: boolean }).retainEpochs) audit.explorerStreamStarts++
+        if ((data as { type?: string })?.type === 'epoch' && holdEpochs) {
+          // Hold the worker request to exercise the displayed/target time gap.
+          heldEpochs.push(() => { if (Array.isArray(options)) super.postMessage(data, options); else super.postMessage(data, options) })
+          return
+        }
+        if (Array.isArray(options)) super.postMessage(data, options)
+        else super.postMessage(data, options)
+      }
+    }
+  })
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await installMockCatalog(page, { precomputed: true, profileSamples: { desktop: [0], mobile: [0] } })
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&catalogCloud=1&quality=max&dataset=mock-content-lite&catalogSample=desktop&catalogSampleCount=1&lang=en')
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
+  await page.locator('.catalog-scene-controls > summary').click()
+  await page.getByLabel('Catalog population', { exact: true }).selectOption('100000')
+  await expect(page.getByTestId('explorer-catalog-status')).toContainText('Computed 3 · Primary draw 3', { timeout: 20000 })
+  await expect(page.locator('.frame-label small')).toContainText('catalog 3 / 3')
+  const viewSwitch = page.locator('.simulation-bar .segmented-control')
+  await viewSwitch.getByRole('button', { name: '2D', exact: true }).click()
+  await expect(page.locator('.trajectory-canvas')).toBeVisible()
+  await expect(page.getByTestId('explorer-catalog-status')).toContainText('Computed 3 · Primary draw 3')
+  expect(await page.locator('.viz-canvas:has(canvas.trajectory-canvas)').evaluate(node => {
+    const viewport = node.getBoundingClientRect()
+    const labels = [...node.querySelectorAll('.placed-floating-label')].map(label => label.getBoundingClientRect())
+    return labels.length > 0 && labels.every((label, index) => label.left >= viewport.left && label.right <= viewport.right
+      && label.top >= viewport.top && label.bottom <= viewport.bottom && labels.slice(index + 1).every(other =>
+        label.right <= other.left || label.left >= other.right || label.bottom <= other.top || label.top >= other.bottom))
+  })).toBe(true)
+  await viewSwitch.getByRole('button', { name: '3D', exact: true }).click()
+  await expect(page.getByTestId('trajectory-canvas-3d')).toBeVisible()
+  await expect(page.getByTestId('explorer-catalog-status')).toContainText('Computed 3 · Primary draw 3')
+  expect(await page.evaluate(() => (window as Window & { explorerStreamStarts: number }).explorerStreamStarts)).toBe(1)
+  const beforeSeek = await page.getByTestId('explorer-catalog-status').getAttribute('data-epoch')
+  await page.locator('.simulation-bar input[type=date]').fill('2026-09-03')
+  await page.locator('.simulation-bar input[type=date]').press('Tab')
+  await expect(page.locator('.catalog-scene-controls > summary')).toContainText('Catching up')
+  expect(await page.getByTestId('explorer-catalog-status').getAttribute('data-epoch')).toBe(beforeSeek)
+  await page.locator('.simulation-bar').getByRole('button', { name: /Play/ }).click()
+  await page.getByRole('button', { name: 'Pause to catch up', exact: true }).click()
+  await page.evaluate(() => (window as Window & { releaseCatalogEpochs: () => void }).releaseCatalogEpochs())
+  await expect(page.locator('.simulation-bar').getByRole('button', { name: /Play/ })).toBeVisible()
+  await expect(page.locator('.catalog-scene-controls > summary')).toContainText('Time synchronized', { timeout: 20000 })
+  expect(await page.getByTestId('explorer-catalog-status').getAttribute('data-epoch')).not.toBe(beforeSeek)
+  await page.locator('.accessible-scene-controls > summary').click()
+  await expect(page.locator('.catalog-scene-controls')).not.toHaveAttribute('open', '')
+  await page.locator('.catalog-scene-controls > summary').click()
+  await expect(page.locator('.accessible-scene-controls')).not.toHaveAttribute('open', '')
+  await page.getByRole('button', { name: 'Stop and return to sample', exact: true }).click()
+  await expect(page.getByTestId('explorer-catalog-status')).toHaveCount(0)
+  await expect(page.locator('.frame-label small')).toContainText('catalog 1 / 1')
+  expect(errors).toEqual([])
 })
 
 test('renders an explicitly enabled reproducible catalog cloud without reloading it across view changes', async ({ page }, testInfo) => {
@@ -477,6 +567,42 @@ test('renders an explicitly enabled reproducible catalog cloud without reloading
   expect(audit.filter(event => event.type === 'result').every(event => event.arrays === 1)).toBe(true)
   expect(sampleRequests).toHaveLength(2)
   expect(errors).toEqual([])
+})
+
+test('reuses sample coordinates within an explicit temporal budget without relabeling their epoch', async ({ page }) => {
+  type AuditWindow = Window & { catalogComputes: number }
+  await installMockCatalog(page, { precomputed: true })
+  await page.addInitScript(() => {
+    localStorage.setItem('solar-atlas-first-run-v1', 'complete')
+    const NativeWorker = window.Worker, audit = window as AuditWindow
+    audit.catalogComputes = 0
+    window.Worker = class extends NativeWorker {
+      private catalog: boolean
+      constructor(url: string | URL, options?: WorkerOptions) { super(url, options); this.catalog = String(url).includes('catalog-points.worker') }
+      override postMessage(data: unknown, options?: Transferable[] | StructuredSerializeOptions) {
+        if (this.catalog && (data as { type: string }).type === 'compute') audit.catalogComputes++
+        if (Array.isArray(options)) super.postMessage(data, options)
+        else super.postMessage(data, options)
+      }
+    }
+  })
+  await page.goto('./?v=4&page=explorer&lang=en&jd=2461287.5&speed=0.001')
+  await page.getByRole('button', { name: '▶ Play', exact: true }).click()
+  await openCatalog(page)
+  const epoch = page.getByTestId('catalog-point-epoch')
+  await expect(epoch).toBeVisible()
+  const budget = page.getByRole('combobox', { name: 'Sample map displacement budget (AU)', exact: true })
+  await budget.selectOption('0.001')
+  const beforeEpoch = await epoch.getAttribute('data-utc-jd')
+  const beforeComputes = await page.evaluate(() => (window as AuditWindow).catalogComputes)
+  const drift = page.getByTestId('catalog-temporal-budget')
+  await expect.poll(async () => Number(await drift.getAttribute('data-drift-au'))).toBeGreaterThan(0.00001)
+  expect(Number(await drift.getAttribute('data-drift-au'))).toBeLessThan(0.001)
+  expect(await epoch.getAttribute('data-utc-jd')).toBe(beforeEpoch)
+  expect(await page.evaluate(() => (window as AuditWindow).catalogComputes)).toBe(beforeComputes)
+  await budget.selectOption('0')
+  await expect.poll(async () => Number(await epoch.getAttribute('data-utc-jd'))).toBeGreaterThan(Number(beforeEpoch))
+  expect(await page.evaluate(() => (window as AuditWindow).catalogComputes)).toBeGreaterThan(beforeComputes)
 })
 
 test('reuses catalog GPU resources across epochs and resize, and recovers actual context loss', async ({ page }, info) => {
@@ -594,14 +720,22 @@ test('streams an expanded source snapshot beyond the sample and restores its act
   await expect(stream).toHaveAttribute('data-drawn-rows', '3')
   await expect(stream).toHaveAttribute('data-source-rows', '3')
   await expect(page.getByTestId('catalog-point-epoch')).toHaveAttribute('data-utc-jd', '2461287.5')
-  expect(requests.slice(before).some(url => /\/meta\/|catalog-sample-/.test(url))).toBe(false)
+  expect(requests.slice(before).some(url => /catalog-sample-/.test(url))).toBe(false)
+  expect(requests.slice(before).filter(url => url.endsWith('/meta/chunk-0000.json'))).toHaveLength(1)
   expect(requests.slice(before).filter(url => url.endsWith('/binary/chunk-0000.bin'))).toHaveLength(1)
   const afterLoad = requests.length
+  await page.getByRole('combobox', { name: 'Map detail', exact: true }).selectOption('spatial')
   await page.getByRole('spinbutton', { name: 'Map radius (AU)', exact: true }).fill('20')
   await expect.poll(() => page.evaluate(() => {
     const selection = (window as SelectionWindow).heldSelections
     return selection.latest > 0 && selection.received === selection.latest
   })).toBe(true)
+  const firstSelection = await page.evaluate(() => (window as SelectionWindow).heldSelections.latest)
+  await page.getByRole('spinbutton', { name: 'Map radius (AU)', exact: true }).fill('30')
+  await expect.poll(() => page.evaluate(first => {
+    const selection = (window as SelectionWindow).heldSelections
+    return selection.latest > first && selection.received === selection.latest
+  }, firstSelection)).toBe(true)
   expect(requests.length).toBe(afterLoad)
   const readPixels = () => stream.evaluate(element => {
     const gl = (element as HTMLCanvasElement).getContext('webgl')!
@@ -615,7 +749,7 @@ test('streams an expanded source snapshot beyond the sample and restores its act
     extension.loseContext()
   })
   await expect(page.locator('.catalog-render-status')).toBeVisible()
-  // Deliver the real worker's now-obsolete selection while no GPU exists.
+  // Deliver both now-obsolete worker selections while no GPU exists.
   await page.evaluate(() => (window as SelectionWindow).heldSelections.release())
   await expect(stream).toHaveAttribute('data-phase', 'complete')
   await page.evaluate(() => (window as Window & { streamContext: WEBGL_lose_context }).streamContext.restoreContext())
@@ -637,7 +771,118 @@ test('streams an expanded source snapshot beyond the sample and restores its act
   expect(errors).toEqual([])
 })
 
-test('excludes unmatched expanded shards and completes empty index selections', async ({ page }) => {
+test('does not acknowledge a catalog upload when the post-draw GPU check fails', async ({ page }) => {
+  await installMockCatalog(page, { precomputed: true, sampleCount: 1 })
+  await page.addInitScript(() => {
+    localStorage.setItem('solar-atlas-first-run-v1', 'complete')
+    const audit = window as Window & { uploadAcks: number }
+    audit.uploadAcks = 0
+    const post = Worker.prototype.postMessage
+    Worker.prototype.postMessage = function (...args: Parameters<typeof post>) {
+      if (args[0]?.type === 'ack') audit.uploadAcks++
+      return Reflect.apply(post, this, args)
+    }
+    const failed = new WeakSet<WebGLRenderingContext>()
+    const upload = WebGLRenderingContext.prototype.bufferSubData
+    WebGLRenderingContext.prototype.bufferSubData = function (...args: Parameters<typeof upload>) {
+      const result = Reflect.apply(upload, this, args)
+      if ((this.canvas as HTMLCanvasElement).dataset.testid === 'catalog-stream-canvas') failed.add(this)
+      return result
+    }
+    const getError = WebGLRenderingContext.prototype.getError
+    WebGLRenderingContext.prototype.getError = function () {
+      if (failed.delete(this)) return this.OUT_OF_MEMORY
+      return getError.call(this)
+    }
+  })
+  await page.goto('./?v=4&page=catalog&lang=en&jd=2461287.5')
+  await page.getByRole('button', { name: /Load expanded snapshot/ }).click()
+  await expect(page.getByTestId('catalog-stream-canvas')).toHaveAttribute('data-phase', 'error')
+  await expect(page.getByRole('alert')).toContainText('GPU allocation, upload or draw failed')
+  expect(await page.evaluate(() => (window as Window & { uploadAcks: number }).uploadAcks)).toBe(0)
+  await expect(page.getByRole('button', { name: /Export (block epochs|screening) and sources JSON/ })).toHaveCount(0)
+})
+
+test('advances retained epochs without source reloads and discards an interrupted replacement', async ({ page }) => {
+  type EpochAudit = Window & { holdEpochAck: boolean; heldEpochAcks: number }
+  const requests: string[] = [], errors: string[] = []
+  page.on('request', request => { if (request.url().includes('/data/asteroids/')) requests.push(request.url()) })
+  page.on('pageerror', error => errors.push(error.message))
+  await installMockCatalog(page,{ precomputed: true, chunkSize: 1 })
+  await page.addInitScript(() => {
+    localStorage.setItem('solar-atlas-first-run-v1','complete')
+    const audit = window as EpochAudit
+    audit.holdEpochAck = false; audit.heldEpochAcks = 0
+    const post = Worker.prototype.postMessage
+    Worker.prototype.postMessage = function (...args: Parameters<typeof post>) {
+      if (audit.holdEpochAck && args[0]?.type === 'epoch-ack') { audit.heldEpochAcks++; return }
+      return Reflect.apply(post,this,args)
+    }
+  })
+  await page.goto('./?v=4&page=explorer&lang=en&jd=2461287.5&speed=0.001')
+  await page.getByRole('button',{ name: '▶ Play', exact: true }).click()
+  await openCatalog(page)
+  await page.getByRole('checkbox',{ name: 'Retain orbits and follow time changes' }).check()
+  await page.getByRole('button',{ name: /Load expanded snapshot/ }).click()
+  const canvas = page.getByTestId('catalog-stream-canvas'), epoch = page.getByTestId('catalog-point-epoch')
+  await expect(canvas).toHaveAttribute('data-phase','complete')
+  await expect(epoch).toHaveCount(1)
+  const firstEpoch = Number(await epoch.getAttribute('data-utc-jd')), reads = requests.length
+  await expect.poll(async () => Number(await epoch.getAttribute('data-utc-jd')),{ timeout: 15_000 }).toBeGreaterThan(firstEpoch)
+  await expect(page.getByTestId('catalog-block-epochs')).toContainText('Rows recomputed / reused: 3 / 0')
+  expect(requests.length).toBe(reads)
+  await page.evaluate(() => { (window as EpochAudit).holdEpochAck = true })
+  await expect.poll(() => page.evaluate(() => (window as EpochAudit).heldEpochAcks),{ timeout: 15_000 }).toBeGreaterThan(0)
+  await expect(canvas).toHaveAttribute('data-phase','updating')
+  await page.getByTestId('catalog-stream-cancel').click()
+  await expect(canvas).toHaveAttribute('data-phase','cancelled')
+  await expect(canvas).toHaveAttribute('data-drawn-rows','0')
+  await expect(epoch).toHaveCount(0)
+  await expect(page.getByRole('button',{ name: /Export (block epochs|screening) and sources JSON/ })).toHaveCount(0)
+  expect(requests.length).toBe(reads)
+  expect(errors).toEqual([])
+})
+
+test('appends selected catalog bodies while retaining uploaded rows and bounded capacity', async ({ page }) => {
+  const errors: string[] = [], requests: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('request', request => { if (request.url().includes('/data/asteroids/')) requests.push(request.url()) })
+  await installMockCatalog(page, { precomputed: true })
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  await page.goto('./?v=4&page=catalog&lang=en&jd=2461287.5')
+  await page.getByRole('checkbox', { name: 'Retain orbits and follow time changes' }).check()
+  await page.getByRole('checkbox', { name: 'Reserve space to append selected bodies' }).check()
+  await page.getByRole('button', { name: /Load expanded snapshot/ }).click()
+  const canvas = page.getByTestId('catalog-stream-canvas')
+  await expect(canvas).toHaveAttribute('data-phase', 'limited')
+  await expect(canvas).toHaveAttribute('data-drawn-rows', '1')
+  await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
+  const append = page.getByRole('button', { name: 'Append missing selected bodies', exact: true })
+  for (const [name, count] of [['Beta', 2], ['Gamma', 3]] as const) {
+    await page.locator('.catalog-table').getByRole('button', { name: new RegExp(name) }).click()
+    await expect(canvas).toHaveAttribute('data-drawn-rows', String(count - 1))
+    await append.click()
+    await expect(canvas).toHaveAttribute('data-drawn-rows', String(count))
+    await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
+    await expect(page.locator('.catalog-stream-status')).toContainText(`Loaded located selections: ${count - 1} / ${count - 1}`)
+  }
+  await expect(append).toBeDisabled()
+  await expect(page.locator('.catalog-stream-status')).toContainText('Remaining append slots: 0 / 2')
+  const downloaded = page.waitForEvent('download')
+  await page.getByRole('button', { name: /Export (block epochs|screening) and sources JSON/ }).click()
+  const downloadPath = await (await downloaded).path()
+  expect(downloadPath).not.toBeNull()
+  const receipt = JSON.parse(await readFile(downloadPath!, 'utf8'))
+  expect(receipt).toMatchObject({ schemaVersion: 4, totalLoadedRows: 3, source: { loadedRows: 1 },
+    budget: { admittedRows: 3, initialRows: 1, appendRows: 2 },
+    display: { focusedUploadedRow: 2, selectedUploadedRows: [1, 2] } })
+  expect(receipt.additions).toMatchObject([{ startRow: 1, addedRows: 1 }, { startRow: 2, addedRows: 1 }])
+  expect(requests.filter(url => url.endsWith('/catalog-index.bin'))).toHaveLength(1)
+  expect(await canvas.evaluate(element => (element as HTMLCanvasElement).getContext('webgl')!.getError())).toBe(0)
+  expect(errors).toEqual([])
+})
+
+test('filters source magnitudes exactly and excludes shards using exact orbital index fields', async ({ page }) => {
   const requests: string[] = [], errors: string[] = []
   page.on('request', request => { if (request.url().includes('/binary/chunk-')) requests.push(new URL(request.url()).pathname) })
   page.on('pageerror', error => errors.push(error.message))
@@ -654,6 +899,7 @@ test('excludes unmatched expanded shards and completes empty index selections', 
   const canvas = page.getByTestId('catalog-stream-canvas')
   await expect(canvas).toHaveAttribute('data-phase', 'complete')
   await expect(canvas).toHaveAttribute('data-drawn-rows', '1')
+  // The compact index rejects known-H shards before the exact source filter.
   await expect(canvas).toHaveAttribute('data-source-rows', '1')
   await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
   expect(requests.slice(before).map(path => path.split('/').at(-1))).toEqual(['chunk-0001.bin'])
@@ -671,20 +917,21 @@ test('excludes unmatched expanded shards and completes empty index selections', 
   expect(errors).toEqual([])
 })
 
-test('updates spatial catalog representatives on zoom and detail changes without reloading source data', async ({ page }) => {
+test('keeps an under-budget catalog complete and updates visibility without reloading source data', async ({ page }) => {
   const requests: string[] = [], errors: string[] = []
   page.on('request', request => { if (request.url().includes('/data/asteroids/')) requests.push(request.url()) })
   page.on('pageerror', error => errors.push(error.message))
   await installMockCatalog(page, { precomputed: true, presetDataset: true, sampleCount: 1, chunkSize: 1000 })
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=4&page=catalog&lang=en&jd=2461287.5')
+  await page.getByRole('combobox', { name: 'Map detail', exact: true }).selectOption('spatial')
   await page.getByRole('button', { name: /Load expanded snapshot/ }).click()
   const canvas = page.getByTestId('catalog-stream-canvas')
   await expect(canvas).toHaveAttribute('data-phase', 'complete')
   await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
   await expect(canvas).toHaveAttribute('data-drawn-rows', '8000')
   const displayed = Number(await canvas.getAttribute('data-display-count'))
-  expect(displayed).toBeGreaterThan(0); expect(displayed).toBeLessThan(8000)
+  expect(displayed).toBe(8000)
   const before = requests.length
   await page.getByRole('spinbutton', { name: 'Map radius (AU)', exact: true }).fill('0.01')
   await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
@@ -698,6 +945,73 @@ test('updates spatial catalog representatives on zoom and detail changes without
   await expect(canvas).toHaveAttribute('data-display-count', String(displayed))
   expect(requests.length).toBe(before)
   expect(errors).toEqual([])
+})
+
+test('rotates a streamed 3D catalog without reloading sources or uploading point attributes', async ({ page }) => {
+  type AuditWindow = Window & { catalogAttributeWrites: number }
+  const requests: string[] = [], errors: string[] = []
+  page.on('request', request => { if (request.url().includes('/data/asteroids/')) requests.push(request.url()) })
+  page.on('pageerror', error => errors.push(error.message))
+  await installMockCatalog(page, { precomputed: true, presetDataset: true, sampleCount: 1, chunkSize: 1000 })
+  await page.addInitScript(() => {
+    localStorage.setItem('solar-atlas-first-run-v1', 'complete')
+    const audit = window as AuditWindow
+    audit.catalogAttributeWrites = 0
+    for (const method of ['bufferData', 'bufferSubData'] as const) {
+      const original = WebGLRenderingContext.prototype[method]
+      Object.defineProperty(WebGLRenderingContext.prototype, method, { value: function (this: WebGLRenderingContext, ...args: unknown[]) {
+        if ((this.canvas as HTMLCanvasElement).dataset.testid === 'catalog-stream-canvas' && args[0] === this.ARRAY_BUFFER) audit.catalogAttributeWrites++
+        return Reflect.apply(original, this, args)
+      } })
+    }
+  })
+  await page.goto('./?v=4&page=catalog&lang=en&jd=2461287.5')
+  await page.getByRole('combobox', { name: 'Catalog snapshot projection', exact: true }).selectOption('3d')
+  await page.getByRole('button', { name: /Load expanded snapshot/ }).click()
+  const canvas = page.getByTestId('catalog-stream-canvas')
+  await expect(canvas).toHaveAttribute('data-phase', 'complete')
+  await expect(canvas).toHaveAttribute('data-coordinate-mode', '3d')
+  await expect(canvas).toHaveAttribute('data-drawn-rows', '8000')
+  await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
+  const capture = () => canvas.evaluate(element => {
+    element.dispatchEvent(new Event('solar-atlas-prepare-canvas-capture'))
+    return (element as HTMLCanvasElement).toDataURL('image/png')
+  })
+  const beforeImage = await capture(), beforeRequests = requests.length
+  const beforeWrites = await page.evaluate(() => (window as AuditWindow).catalogAttributeWrites)
+  expect(beforeWrites).toBeGreaterThan(0)
+  await page.getByRole('slider', { name: 'Catalog tilt', exact: true }).press('End')
+  await expect(page.getByRole('slider', { name: 'Catalog tilt', exact: true })).toHaveValue('90')
+  await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
+  await expect.poll(capture).not.toBe(beforeImage)
+  await page.getByRole('slider', { name: 'Catalog azimuth', exact: true }).press('End')
+  await expect(canvas).toHaveAttribute('data-spatial-pending', 'false')
+  await page.getByRole('combobox', { name: 'Map detail', exact: true }).selectOption('all')
+  await expect(canvas).toHaveAttribute('data-display-count', '8000')
+  expect(await page.evaluate(() => (window as AuditWindow).catalogAttributeWrites)).toBe(beforeWrites)
+  expect(requests.length).toBe(beforeRequests)
+  expect(await canvas.evaluate(element => (element as HTMLCanvasElement).getContext('webgl')!.getError())).toBe(0)
+  expect(errors).toEqual([])
+})
+
+test('loads NEO-tagged shards first and invalidates a snapshot when source priority changes', async ({ page }) => {
+  await installMockCatalog(page, { precomputed: true, sampleCount: 1, chunkSize: 1 })
+  await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
+  const binaries: string[] = []
+  page.on('request', request => { if (request.url().includes('/binary/chunk-')) binaries.push(request.url().split('/').at(-1)!) })
+  await page.goto('./?v=4&page=catalog&lang=en')
+  const priority = page.getByRole('combobox', { name: 'Source shard order', exact: true })
+  await priority.selectOption('neo-first')
+  await expect(page.getByText(/Capacity-limited results depend on this order/)).toBeVisible()
+  const before = binaries.length
+  await page.getByRole('button', { name: /Load expanded snapshot/ }).click()
+  const canvas = page.getByTestId('catalog-stream-canvas')
+  await expect(canvas).toHaveAttribute('data-phase', 'complete')
+  await expect(canvas).toHaveAttribute('data-drawn-rows', '3')
+  expect(binaries.slice(before)).toEqual(['chunk-0001.bin', 'chunk-0000.bin', 'chunk-0002.bin'])
+  await priority.selectOption('source')
+  await expect(canvas).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /Load expanded snapshot/ })).toBeEnabled()
 })
 
 test('bounds expanded source transfers and waits for the last upload acknowledgement before completion', async ({ page }) => {
@@ -775,7 +1089,9 @@ test('stops expanded source loading without installing a late tile and permits r
 
 test('rejects a corrupt expanded source before drawing and retains the independent sample map', async ({ page }) => {
   await installMockCatalog(page, { precomputed: true, sampleCount: 1 })
-  await page.route('**/checksums.json', route => route.fulfill({ json: { schemaVersion: 1, algorithm: 'sha256', files: { 'catalog-index.bin': '0'.repeat(64) } } }))
+  // Corrupt only the expanded index. A corrupt common descriptor correctly
+  // rejects both sample and expanded loads and cannot exercise sample recovery.
+  await page.route('**/catalog-index.bin', route => route.fulfill({ body: Buffer.alloc(3 * 24), contentType: 'application/octet-stream' }))
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
   await page.goto('./?v=4&page=catalog&lang=en&jd=2461287.5')
   await page.getByRole('button', { name: /Load expanded snapshot/ }).click()
@@ -875,9 +1191,7 @@ test(`stops a cancelled ${phase} download and immediately permits a new request`
   let started = 0, disconnected = 0
   let releaseSample!: () => void
   const sampleGate = new Promise<void>(resolve => { releaseSample = resolve })
-  const responses = await installMockCatalog(null, { precomputed: true })
-  const root = '/data/asteroids/releases/mock-content-lite'
-  for (const bucket of ['a', 'b']) responses.set(`${root}/search/${bucket}.json`, responses.get(`${root}/meta/chunk-0000.json`)!)
+  const responses = await installMockCatalog(null, { precomputed: true, searchable: true })
   // Use an actual same-origin unfinished response, without routing this fetch
   // through Playwright's interception proxy. Test only the production bundle.
   const server = createServer(async (request, response) => {
@@ -930,12 +1244,12 @@ test(`stops a cancelled ${phase} download and immediately permits a new request`
       // Make the initial sample finish after the search has started. Its
       // completion must not mark the unrelated pending search as finished.
       const summary = page.locator('.dataset-card')
-      await expect(summary).not.toContainText('3 known · 0 unknown')
+      await expect(summary).not.toContainText('2 known · 1 unknown')
       releaseSample()
       // A consumed response can be marked aborted during sample effect/cache
       // cleanup. CI retained the parsed summary in the UI while finished()
       // never settled. Observe the actual consumer before testing search state.
-      await expect(summary).toContainText('3 known · 0 unknown')
+      await expect(summary).toContainText('2 known · 1 unknown')
       await expect(scan).toBeDisabled()
     }
     if (phase === 'name search') await search.fill('Beta')
@@ -962,24 +1276,17 @@ test(`stops a cancelled ${phase} download and immediately permits a new request`
 }
 
 test('bounds parallel shard hydration while preserving all search matches', async ({ page }) => {
-  const responses = await installMockCatalog(page, { precomputed: true })
+  const responses = await installMockCatalog(page, { precomputed: true, searchDataset: true, chunkSize: 1, sampleCount: 3 })
   const root = '/data/asteroids/releases/mock-content-lite'
-  const base = (responses.get(`${root}/meta/chunk-0000.json`)!.json as Array<Record<string, unknown>>)[0]
-  const entries = Array.from({ length: 8 }, (_, index) => ({ ...base,
-    id: `asteroid:mpc:${index + 2000}`, permanentNumber: index + 2000,
-    label: `${index + 2000} Alpha ${index}`, shortLabel: `Alpha ${index}`, searchKey: `alpha ${index}`,
-    chunkId: `chunk-${String(index + 1).padStart(4, '0')}`,
-  }))
-  const numeric = Buffer.from(new Float64Array([2451545, 2.4, 0.1, 5, 20, 40, 60, 0.25]).buffer)
+  const entries = responses.get(`${root}/search/a.json`)!.json as Array<{ chunkId: string; label: string }>
   let started = 0, active = 0, peak = 0, allowResponses = false
   const waiting: Array<() => void> = []
-  await page.route(`**${root}/search/a.json`, route => route.fulfill({ json: entries }))
   for (const entry of entries) for (const type of ['meta', 'binary']) {
     await page.route(`**${root}/${type}/${entry.chunkId}.${type === 'meta' ? 'json' : 'bin'}`, async route => {
       started++; active++; peak = Math.max(peak, active)
       if (!allowResponses) await new Promise<void>(resolve => waiting.push(resolve))
       try {
-        await route.fulfill(type === 'meta' ? { json: [entry] } : { body: numeric, contentType: 'application/octet-stream' })
+        await route.fulfill(responses.get(`${root}/${type}/${entry.chunkId}.${type === 'meta' ? 'json' : 'bin'}`)!)
       } finally { active-- }
     })
   }
@@ -1421,13 +1728,13 @@ test('falls back safely when a shared mission URL has invalid parameters', async
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
 
-test('discloses the derived Earth geocenter and out-of-range mission extrapolation bilingually', async ({ page }) => {
+test('discloses the Hohmann Earth-system seed and out-of-range mission extrapolation bilingually', async ({ page }) => {
   await page.goto('./?v=4&page=mission&from=earth&to=mars&depart=2050-06-01&arrive=2050-12-01&lang=en')
   await expect(page.getByText(/year 2051 is outside the 1800–2050 validity interval/)).toBeVisible()
 
   await page.goto('./?v=4&page=mission&from=earth&to=mars&depart=2051-01-01&arrive=2051-09-01&lang=en')
   await expect(page.getByText('Mission endpoint model boundary')).toBeVisible()
-  await expect(page.getByText(/geocenter derived from the JPL Table 1 EMB seed/)).toBeVisible()
+  await expect(page.getByText(/Hohmann baseline uses the Earth-system semi-major axis from the EMB seed/)).toBeVisible()
   await expect(page.getByText(/year 2052 is outside the 1800–2050 validity interval/)).toBeVisible()
 
   await page.goto('./?v=4&page=mission&from=ceres&to=pluto&depart=2051-01-01&arrive=2051-09-01&lang=en')
@@ -1435,13 +1742,13 @@ test('discloses the derived Earth geocenter and out-of-range mission extrapolati
 
   await page.goto('./?v=4&page=mission&from=earth&to=mars&depart=2051-01-01&arrive=2051-09-01&lang=zh')
   await expect(page.getByText('任务端点模型边界')).toBeVisible()
-  await expect(page.getByText(/由 JPL 表 1 地月质心种子.*推导的地心/)).toBeVisible()
+  await expect(page.getByText(/圆轨道霍曼基线使用地月系统质心种子的半长轴/)).toBeVisible()
   await expect(page.getByText(/2052 超出 JPL 行星近似根数的 1800–2050 有效区间/)).toBeVisible()
 })
 
 test('publishes the exact planetary model provenance in Evidence and the Earth profile', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('solar-atlas-first-run-v1', 'complete'))
-  // This regression exercises the explicitly retained fallback provenance.
+  // Evidence retains fallback provenance while the backend supplies exact states.
   await page.route('**/data/ephemerides/**', (route) => route.abort())
   await page.goto('./?v=4&page=about&lang=en')
   await expect(page.getByText('jpl-approx-table-1')).toBeVisible()
@@ -1455,7 +1762,7 @@ test('publishes the exact planetary model provenance in Evidence and the Earth p
   await page.getByRole('button', { name: 'Show body details' }).click()
   await page.getByRole('tab', { name: 'Context' }).click()
   await expect(page.getByText('Rendered point')).toBeVisible()
-  await expect(page.getByText('Earth geocenter derived from the EMB seed')).toBeVisible()
+  await expect(page.getByText('Earth geocenter from the active ephemeris')).toBeVisible()
   await expect(page.getByText('Orbit seed represents')).toBeVisible()
   await expect(page.getByText('Earth–Moon barycenter', { exact: true })).toBeVisible()
 })

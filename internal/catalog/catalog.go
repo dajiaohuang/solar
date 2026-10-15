@@ -111,6 +111,7 @@ type kernelBinding struct {
 	endET          float64
 	kernel         *spk.Kernel
 	dependencyOnly bool
+	explicitPool   bool
 	solutionIDs    []string
 	mu             sync.Mutex
 	loading        bool
@@ -124,9 +125,9 @@ type kernelBinding struct {
 
 var errCatalogClosed = errors.New("catalog is closed")
 
-// Kept as a narrow seam for the lifecycle regression test. Production code
-// always uses the SPK package implementation.
-var openKernelWithCache = spk.OpenWithCache
+// Kept as a narrow seam for lifecycle regression checks. Production code
+// always uses the SPK package implementation with verified page digests.
+var openKernelWithVerifiedPages = spk.OpenWithPageHashes
 
 type manifest struct {
 	ID       string         `json:"id"`
@@ -257,12 +258,18 @@ func Load(dataDir string) (*Catalog, error) {
 			// but defer the full-byte integrity read and SPK parse until a request
 			// actually needs this kernel. The binding cannot evaluate a state until
 			// kernelFor has completed both checks.
-			binding = &kernelBinding{id: f.ID, sha256: f.SHA256, path: kernelPath, bytes: f.Bytes, startET: f.StartET, endET: f.EndET, dependencyOnly: f.DependencyOnly, solutionIDs: append([]string(nil), f.SolutionKernelIDs...)}
+			binding = &kernelBinding{id: f.ID, sha256: f.SHA256, path: kernelPath, bytes: f.Bytes, startET: f.StartET, endET: f.EndET, dependencyOnly: f.DependencyOnly, explicitPool: f.SolutionKernelIDs != nil, solutionIDs: append([]string(nil), f.SolutionKernelIDs...)}
 			c.kernels[f.ID] = binding
 			c.packagedFiles++
 			for _, target := range f.Targets {
 				c.byTarget[target] = append(c.byTarget[target], binding)
 			}
+		}
+		// Embedded center kernels are usable only inside declared pools.
+		// They must not create/promote public root identities or replace their
+		// source hash and apparent validity interval while loading a spacecraft.
+		if f.DependencyOnly {
+			continue
 		}
 		for _, naif := range f.Targets {
 			id := "naif:" + strconv.Itoa(naif)
@@ -319,7 +326,7 @@ func Load(dataDir string) (*Catalog, error) {
 		if b.EphemerisStatus == "source-only-missing-compatible-system" {
 			continue
 		}
-		if b.NAIFID != 0 && len(c.byTarget[b.NAIFID]) > 0 {
+		if b.NAIFID != 0 && c.hasOperationalRoot(b.NAIFID) {
 			b.Availability = AvailableOperational
 			b.MissingReason = ""
 			b.Model = "spk-original"
@@ -328,6 +335,15 @@ func Load(dataDir string) (*Catalog, error) {
 	}
 	c.rebuild()
 	return c, nil
+}
+
+func (c *Catalog) hasOperationalRoot(target int) bool {
+	for _, binding := range c.byTarget[target] {
+		if !binding.dependencyOnly {
+			return true
+		}
+	}
+	return false
 }
 
 func readSourceOnlyBodies(dataDir, version string) ([]Body, error) {
@@ -386,47 +402,63 @@ func verifyManifestFile(raw []byte, file manifestFile) bool {
 	return strings.EqualFold(hex.EncodeToString(sum[:]), digest)
 }
 
-func verifyManifestPathContext(ctx context.Context, path string, file manifestFile) (bool, int64, error) {
+func verifyManifestPathContext(ctx context.Context, path string, file manifestFile) (bool, [][32]byte, int64, error) {
 	if !validManifestIdentity(file) {
-		return false, 0, nil
+		return false, nil, 0, nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	pageSize := int64(spk.DefaultPageSize)
+	pageCount := 1 + (file.Bytes-1)/pageSize
+	maxInt := int64(int(^uint(0) >> 1))
+	if pageCount > maxInt {
+		return false, nil, 0, fmt.Errorf("kernel has too many pages to verify: %d", pageCount)
+	}
 	f, err := os.Open(path)
 	if err != nil {
-		return false, 0, err
+		return false, nil, 0, err
 	}
 	defer f.Close()
 	h := sha256.New()
-	buf := make([]byte, 1<<20)
+	buf := make([]byte, int(pageSize))
+	pageHashes := make([][32]byte, 0, int(pageCount))
 	var n int64
-	for {
+	for n < file.Bytes {
 		if err := ctx.Err(); err != nil {
-			return false, n, err
+			return false, nil, n, err
 		}
-		read, readErr := f.Read(buf)
-		if read > 0 {
-			if _, err := h.Write(buf[:read]); err != nil {
-				return false, n, err
-			}
-			n += int64(read)
-			if n > file.Bytes {
-				return false, n, nil
-			}
+		length := pageSize
+		if remaining := file.Bytes - n; remaining < length {
+			length = remaining
 		}
-		if readErr == io.EOF {
-			break
+		page := buf[:int(length)]
+		read, readErr := io.ReadFull(f, page)
+		if read != len(page) {
+			return false, nil, n + int64(read), readErr
 		}
-		if readErr != nil {
-			return false, n, readErr
+		if _, err := h.Write(page); err != nil {
+			return false, nil, n, err
 		}
+		pageHashes = append(pageHashes, sha256.Sum256(page))
+		n += int64(read)
 	}
-	if n != file.Bytes {
-		return false, n, nil
+	var extra [1]byte
+	read, readErr := f.Read(extra[:])
+	if read > 0 {
+		return false, nil, n + int64(read), nil
+	}
+	if readErr != io.EOF {
+		if readErr == nil {
+			readErr = io.ErrNoProgress
+		}
+		return false, nil, n, readErr
 	}
 	digest := strings.TrimSpace(file.SHA256)
-	return strings.EqualFold(hex.EncodeToString(h.Sum(nil)), digest), n, nil
+	if !strings.EqualFold(hex.EncodeToString(h.Sum(nil)), digest) {
+		return false, nil, n, nil
+	}
+	return true, pageHashes, n, nil
 }
 
 // kernelFor verifies the manifest-declared bytes and parses the SPK lazily.
@@ -472,13 +504,13 @@ func (b *kernelBinding) kernelFor(ctx context.Context, pageCacheBytes int64) (*s
 		ready := b.ready
 		b.mu.Unlock()
 
-		verified, integrityBytes, err := verifyManifestPathContext(ctx, b.path, manifestFile{SHA256: b.sha256, Bytes: b.bytes})
+		verified, pageHashes, integrityBytes, err := verifyManifestPathContext(ctx, b.path, manifestFile{SHA256: b.sha256, Bytes: b.bytes})
 		if err == nil && !verified {
 			err = fmt.Errorf("kernel %s failed manifest integrity verification", b.id)
 		}
 		var kernel *spk.Kernel
 		if err == nil {
-			kernel, err = openKernelWithCache(b.path, spk.DefaultPageSize, pageCacheBytes)
+			kernel, err = openKernelWithVerifiedPages(b.path, spk.DefaultPageSize, pageCacheBytes, pageHashes)
 		}
 
 		b.mu.Lock()
@@ -653,6 +685,7 @@ func (c *Catalog) ReadStats() spk.ReadStats {
 		out.MaxBytes += stats.MaxBytes
 		out.CachedBytes += stats.CachedBytes
 		out.LoadedBytes += stats.LoadedBytes
+		out.IntegrityIndexBytes += stats.IntegrityIndexBytes
 		out.PageLoads += stats.PageLoads
 		out.CacheHits += stats.CacheHits
 		out.CacheMisses += stats.CacheMisses
@@ -667,8 +700,8 @@ func (c *Catalog) AuditIdentityTuples() []map[string]string {
 		model := body.Model
 		switch body.Availability {
 		case AvailableFallback:
-			// The current-states endpoint is exact-only; fallback catalog
-			// elements are not an identity it can emit.
+			// State plans and tiles are exact-only; fallback catalog elements
+			// are not an identity they can emit.
 			model = "exact-only"
 		case Missing:
 			if body.Source != "" && body.DatasetVersion != "" {
@@ -763,12 +796,15 @@ func (c *Catalog) OperationalKernelSHA256(id string, jd float64) (string, bool, 
 // example "earth" and "naif:399") therefore cannot report builtin metadata
 // for a state evaluated from a packaged kernel.
 type OperationalProvenance struct {
-	Source          string
-	KernelSHA256    string
-	CenterID        string
-	ValidityStartET float64
-	ValidityEndET   float64
-	ValidityPresent bool
+	Source            string
+	KernelSHA256      string
+	SourceChainSHA256 string
+	CenterID          string
+	SegmentFrame      int
+	SegmentType       int
+	ValidityStartET   float64
+	ValidityEndET     float64
+	ValidityPresent   bool
 }
 
 func (c *Catalog) OperationalProvenance(id string, jd float64) (OperationalProvenance, bool, error) {
@@ -817,21 +853,74 @@ func (c *Catalog) OperationalStatesContext(ctx context.Context, ids []string, jd
 }
 
 // EvalBatchContext returns numerical states and the evidence from the same
-// evaluation. Its caches are epoch-local and never share mutable scratch with
-// another request. Aliases reuse both coefficient work and center chains.
+// evaluation. Resolver scratch is epoch-local; the catalog-owned bounded cache
+// shares immutable final state/provenance values at exact epochs across calls.
+// Aliases reuse both coefficient work and center chains.
 func (c *Catalog) EvalBatchContext(ctx context.Context, ids []string, jd float64) (map[string]State, map[string]bool, map[string]OperationalProvenance, error) {
+	return c.EvalBatchContextWithAdmission(ctx, ids, jd, "", nil)
+}
+
+// EvalBatchContextWithAdmission scopes only in-flight coalescing; completed
+// exact states remain shared across scopes. The admission callback runs only
+// for cache-miss flights this request owns, so coalesced waiters do not occupy
+// a compute slot. Each slot is released after that target's calculation;
+// holding it across the rest of a batch could deadlock against another queued
+// batch. Callers with priority queues should use a stable scope per queue to
+// prevent a lower-priority builder from delaying a higher-priority request.
+func (c *Catalog) EvalBatchContextWithAdmission(ctx context.Context, ids []string, jd float64, scope string,
+	admission func(context.Context) (func(), error)) (map[string]State, map[string]bool, map[string]OperationalProvenance, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, nil, err
+	}
+	if !validFloat(jd) {
+		return make(map[string]State), make(map[string]bool), make(map[string]OperationalProvenance), nil
+	}
+	et := (jd - 2451545.0) * 86400
+	return c.EvalBatchContextAtETWithAdmission(ctx, ids, et, scope, admission)
+}
+
+// EvalBatchContextAtET evaluates at seconds past J2000 TDB. It preserves the
+// precision of split Julian dates from SOFA and avoids rounding them to a
+// one-part JD before SPK segment selection and evaluation.
+func (c *Catalog) EvalBatchContextAtET(ctx context.Context, ids []string, et float64) (map[string]State, map[string]bool, map[string]OperationalProvenance, error) {
+	return c.EvalBatchContextAtETWithAdmission(ctx, ids, et, "", nil)
+}
+
+// EvalBatchContextAtETWithAdmission is the ET-seconds counterpart to
+// EvalBatchContextWithAdmission. Epoch keys and all operational SPK evaluation
+// use the same J2000-relative seconds value.
+func (c *Catalog) EvalBatchContextAtETWithAdmission(ctx context.Context, ids []string, et float64, scope string,
+	admission func(context.Context) (func(), error)) (map[string]State, map[string]bool, map[string]OperationalProvenance, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, nil, err
 	}
 	states := make(map[string]State, len(ids))
 	found := make(map[string]bool, len(ids))
 	evidence := make(map[string]OperationalProvenance, len(ids))
-	if !validFloat(jd) || len(c.byTarget) == 0 {
+	if !validFloat(et) || len(c.byTarget) == 0 {
 		return states, found, evidence, nil
 	}
-	et := (jd - 2451545.0) * 86400
 	cache := make(map[operationalCacheKey]operationalCacheEntry, len(ids)*2)
 	raw := make(map[rawEvaluationKey]operationalCacheEntry)
+	acquireAdmission := func(evalCtx context.Context) (func(), error) {
+		if admission == nil {
+			return nil, evalCtx.Err()
+		}
+		release, err := admission(evalCtx)
+		if err != nil {
+			if release != nil {
+				release()
+			}
+			return nil, err
+		}
+		if err := evalCtx.Err(); err != nil {
+			if release != nil {
+				release()
+			}
+			return nil, err
+		}
+		return release, nil
+	}
 	for _, id := range ids {
 		if err := ctx.Err(); err != nil {
 			return nil, nil, nil, err
@@ -840,29 +929,35 @@ func (c *Catalog) EvalBatchContext(ctx context.Context, ids []string, jd float64
 		if !ok || b.NAIFID == 0 {
 			continue
 		}
-		if cached, ok := c.evaluations.get(b.NAIFID, jd); ok {
-			states[id], found[id], evidence[id] = cached.state, true, cached.provenance
-			continue
-		}
-		root, err := c.operationalRootCached(ctx, b.NAIFID, et, raw)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		if root == nil {
-			continue
-		}
-		allowed, pool := operationalPool(root)
-		st, ok, err := c.resolveOperationalSession(ctx, b.NAIFID, et, allowed, pool, cache, map[int]bool{}, raw)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		if ok {
-			states[id] = State{Position: toEcliptic(st.Position, st.Frame), Velocity: toEcliptic(st.Velocity, st.Frame)}
-			found[id] = true
-			evidence[id] = cache[operationalCacheKey{target: b.NAIFID, pool: pool}].provenance
-			if ctx.Err() == nil {
-				c.evaluations.put(b.NAIFID, jd, evaluationValue{states[id], evidence[id]})
+		value, exact, err := c.evaluations.load(ctx, b.NAIFID, et, scope, func(evalCtx context.Context) (evaluationValue, bool, error) {
+			releaseAdmission, err := acquireAdmission(evalCtx)
+			if err != nil {
+				return evaluationValue{}, false, err
 			}
+			if releaseAdmission != nil {
+				defer releaseAdmission()
+			}
+			root, err := c.operationalRootCached(evalCtx, b.NAIFID, et, raw)
+			if err != nil || root == nil {
+				return evaluationValue{}, false, err
+			}
+			allowed, pool, complete, err := c.operationalPool(root)
+			if err != nil || !complete {
+				return evaluationValue{}, false, err
+			}
+			st, ok, err := c.resolveOperationalSession(evalCtx, b.NAIFID, et, allowed, pool, cache, map[int]bool{}, raw)
+			if err != nil || !ok {
+				return evaluationValue{}, false, err
+			}
+			state := State{Position: toEcliptic(st.Position, st.Frame), Velocity: toEcliptic(st.Velocity, st.Frame)}
+			provenance := cache[operationalCacheKey{target: b.NAIFID, pool: pool}].provenance
+			return evaluationValue{state: state, provenance: provenance}, true, nil
+		})
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if exact {
+			states[id], found[id], evidence[id] = value.state, true, value.provenance
 		}
 	}
 	if err := ctx.Err(); err != nil {
@@ -907,16 +1002,18 @@ func evaluateBinding(ctx context.Context, binding *kernelBinding, kernel *spk.Ke
 	return state, found, err
 }
 
-func bindingProvenance(binding *kernelBinding, target int, et float64, center int) OperationalProvenance {
+func bindingProvenance(binding *kernelBinding, target int, et float64, center, frame int) OperationalProvenance {
 	start, end := binding.startET, binding.endET
+	segmentType := 0
 	for n := len(binding.kernel.Segments) - 1; n >= 0; n-- {
 		segment := binding.kernel.Segments[n]
-		if segment.Target == target && et >= segment.StartET && et <= segment.EndET {
+		if segment.Target == target && segment.Center == center && segment.Frame == frame && et >= segment.StartET && et <= segment.EndET {
 			start, end = segment.StartET, segment.EndET
+			segmentType = segment.Type
 			break
 		}
 	}
-	return OperationalProvenance{Source: binding.id, KernelSHA256: binding.sha256, CenterID: "naif:" + strconv.Itoa(center), ValidityStartET: start, ValidityEndET: end, ValidityPresent: validFloat(start) && validFloat(end) && end >= start}
+	return OperationalProvenance{Source: binding.id, KernelSHA256: binding.sha256, CenterID: "naif:" + strconv.Itoa(center), SegmentFrame: frame, SegmentType: segmentType, ValidityStartET: start, ValidityEndET: end, ValidityPresent: validFloat(start) && validFloat(end) && end >= start}
 }
 
 func (c *Catalog) operationalRootCached(ctx context.Context, target int, et float64, raw map[rawEvaluationKey]operationalCacheEntry) (*kernelBinding, error) {
@@ -944,23 +1041,39 @@ func (c *Catalog) operationalRootCached(ctx context.Context, target int, et floa
 	return nil, nil
 }
 
-func operationalPool(root *kernelBinding) (map[string]bool, string) {
-	if len(root.solutionIDs) == 0 {
-		return nil, ""
-	}
-	allowed := make(map[string]bool, len(root.solutionIDs)+1)
-	for _, id := range root.solutionIDs {
-		allowed[id] = true
-	}
-	allowed[root.id] = true
-	return allowed, root.id + "\x00" + strings.Join(root.solutionIDs, "\x00")
+type operationalSourcePool struct {
+	bindings []*kernelBinding // Declaration order, followed by the root last.
 }
 
-func (c *Catalog) resolveOperationalCached(ctx context.Context, target int, et float64, allowed map[string]bool, pool string, cache map[operationalCacheKey]operationalCacheEntry, visiting map[int]bool) (spk.State, bool, error) {
+func (c *Catalog) operationalPool(root *kernelBinding) (*operationalSourcePool, string, bool, error) {
+	if !root.explicitPool {
+		return nil, "", true, nil
+	}
+	allowed := &operationalSourcePool{bindings: make([]*kernelBinding, 0, len(root.solutionIDs)+1)}
+	seen := map[string]bool{root.id: true}
+	complete := true
+	for _, id := range root.solutionIDs {
+		if seen[id] || id == "" {
+			return nil, "", false, fmt.Errorf("invalid explicit SPK dependency pool for %s", root.id)
+		}
+		seen[id] = true
+		dependency := c.kernels[id]
+		if dependency == nil {
+			complete = false
+		} else {
+			allowed.bindings = append(allowed.bindings, dependency)
+		}
+	}
+	allowed.bindings = append(allowed.bindings, root)
+	identity, err := json.Marshal(append([]string{root.id}, root.solutionIDs...))
+	return allowed, string(identity), complete, err
+}
+
+func (c *Catalog) resolveOperationalCached(ctx context.Context, target int, et float64, allowed *operationalSourcePool, pool string, cache map[operationalCacheKey]operationalCacheEntry, visiting map[int]bool) (spk.State, bool, error) {
 	return c.resolveOperationalSession(ctx, target, et, allowed, pool, cache, visiting, nil)
 }
 
-func (c *Catalog) resolveOperationalSession(ctx context.Context, target int, et float64, allowed map[string]bool, pool string, cache map[operationalCacheKey]operationalCacheEntry, visiting map[int]bool, raw map[rawEvaluationKey]operationalCacheEntry) (spk.State, bool, error) {
+func (c *Catalog) resolveOperationalSession(ctx context.Context, target int, et float64, allowed *operationalSourcePool, pool string, cache map[operationalCacheKey]operationalCacheEntry, visiting map[int]bool, raw map[rawEvaluationKey]operationalCacheEntry) (spk.State, bool, error) {
 	if err := ctx.Err(); err != nil {
 		return spk.State{}, false, err
 	}
@@ -973,7 +1086,7 @@ func (c *Catalog) resolveOperationalSession(ctx context.Context, target int, et 
 	if target == 0 {
 		st := spk.State{Center: 0, Frame: 17}
 		if cache != nil {
-			cache[key] = operationalCacheEntry{state: st, found: true}
+			cache[key] = operationalCacheEntry{state: st, found: true, provenance: OperationalProvenance{SourceChainSHA256: hex.EncodeToString(sourceChainOrigin[:])}}
 		}
 		return st, true, nil
 	}
@@ -986,18 +1099,18 @@ func (c *Catalog) resolveOperationalSession(ctx context.Context, target int, et 
 	}
 	visiting[target] = true
 	defer delete(visiting, target)
-	for n := len(c.byTarget[target]) - 1; n >= 0; n-- {
-		binding := c.byTarget[target][n]
-		if allowed != nil {
-			if !allowed[binding.id] {
-				continue
-			}
-		} else if binding.dependencyOnly {
+	bindings := c.byTarget[target]
+	if allowed != nil {
+		bindings = allowed.bindings
+	}
+	for n := len(bindings) - 1; n >= 0; n-- {
+		binding := bindings[n]
+		if allowed == nil && (binding.dependencyOnly || binding.explicitPool) {
 			continue
 		}
 		kernel, err := binding.kernelFor(ctx, c.kernelCacheBudgetForBinding())
 		if err != nil {
-			if ctx.Err() == nil {
+			if ctx.Err() == nil && allowed == nil {
 				continue
 			}
 			if cache != nil {
@@ -1028,11 +1141,24 @@ func (c *Catalog) resolveOperationalSession(ctx context.Context, target int, et 
 			}
 			return spk.State{}, false, nil
 		}
+		sourceFrame := st.Frame
 		st.Position = addSPK(center.Position, convertFrame(st.Position, st.Frame))
 		st.Velocity = addSPK(center.Velocity, convertFrame(st.Velocity, st.Frame))
 		st.Frame = 17
 		if cache != nil {
-			cache[key] = operationalCacheEntry{state: st, found: true, provenance: bindingProvenance(binding, target, et, st.Center)}
+			provenance := bindingProvenance(binding, target, et, st.Center, sourceFrame)
+			parent := cache[operationalCacheKey{target: st.Center, pool: pool}].provenance.SourceChainSHA256
+			if parent == "" {
+				return spk.State{}, false, fmt.Errorf("SPK center-chain provenance unavailable")
+			}
+			// Hash the actual selected segment and recursively selected center,
+			// not merely the set of files permitted in this source context.
+			provenance.SourceChainSHA256, err = sourceChainSegmentSHA256(provenance.Source, provenance.KernelSHA256,
+				target, st.Center, sourceFrame, provenance.SegmentType, provenance.ValidityStartET, provenance.ValidityEndET, parent)
+			if err != nil {
+				return spk.State{}, false, err
+			}
+			cache[key] = operationalCacheEntry{state: st, found: true, provenance: provenance}
 		}
 		return st, true, nil
 	}
@@ -1042,7 +1168,7 @@ func (c *Catalog) resolveOperationalSession(ctx context.Context, target int, et 
 	return spk.State{}, false, nil
 }
 
-func (c *Catalog) resolveOperational(target int, et float64, allowed map[string]bool, visiting map[int]bool) (spk.State, bool, error) {
+func (c *Catalog) resolveOperational(target int, et float64, allowed *operationalSourcePool, visiting map[int]bool) (spk.State, bool, error) {
 	st, found, err := c.resolveOperationalCached(context.Background(), target, et, allowed, "", nil, visiting)
 	if found {
 		st.Center = 0
@@ -1136,6 +1262,19 @@ func builtins() []Body {
 			b.Model = "exact-only"
 			b.Source = "naif-identity"
 		}
+		out = append(out, b)
+	}
+	// Identity-only spacecraft: no schematic scene points or Kepler fallback.
+	// Keep these mappings aligned with src/data/spacecraftIdentities.ts and
+	// the cited NAIF identity table; kernel presence is checked independently.
+	for _, s := range []seed{{"voyager1", -31, "Voyager 1"}, {"voyager2", -32, "Voyager 2"}, {"newhorizons", -98, "New Horizons"}} {
+		b := Body{ID: s.id, NAIFID: s.naif, Name: s.name, Kind: "spacecraft",
+			Source: "naif-identity", SourceURL: "https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/naif_ids.html",
+			DatasetVersion: "builtin-naif-spacecraft-identities-v1", IdentityStatus: "source-designation",
+			Availability: Missing, MissingReason: "kernel-not-packaged", Model: "exact-only",
+			Provenance: "Reviewed spacecraft identity; no trajectory is implied by this record."}
+		out = append(out, b)
+		b.ID = "naif:" + strconv.Itoa(s.naif)
 		out = append(out, b)
 	}
 	return out

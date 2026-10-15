@@ -97,7 +97,7 @@ describe('JPL approximate element validity', () => {
 
   it('keeps the published coverage inventory aligned with implemented named bodies', () => {
     const coverage = modelEvidence.coverage
-    expect(coverage.supportedNamedBodies).toEqual(['sun', ...defaultSelectedBodyIds])
+    expect(coverage.supportedNamedBodies).toEqual(['sun', ...defaultSelectedBodyIds.filter(id => id !== '67p' && id !== 'borisov')])
     expect(coverage.sourcedSatelliteBodies).toEqual(SATELLITE_ORBIT_MODEL_EVIDENCE.sourcedBodies)
     expect(coverage.sourcedSatelliteBodies.every((bodyId) => majorBodiesById.get(bodyId)?.satelliteOrbitEvidence)).toBe(true)
     expect(coverage.coverageGaps).toEqual([
@@ -119,15 +119,15 @@ describe('JPL approximate element validity', () => {
       satelliteIdentityCount: 472,
       pagesManifest: {
         id: ephemerisManifest.id,
-        sha256: '93e3733dd2d4b673e85bae5f55c1aa4eb8d4af3e95ccc3cc1cc8a3a54d064d1c',
-        bytes: 274401280,
-        fileCount: 670,
+        sha256: '2a6a2627820aa560f937cecf093da2de61045fb57eec342eaf94778b70ebc686',
+        bytes: 386497536,
+        fileCount: 685,
       },
       fullManifest: {
         id: ephemerisManifestFull.id,
-        sha256: '4d600f46c1b0d35ee440d416b19489e3de145058c3aa7f5744d64c480251a1c2',
-        bytes: 1181799424,
-        fileCount: 670,
+        sha256: '6611e75b5dfc3fdc19a00dd517c0987f5afe79c292c1957634c579073b28220d',
+        bytes: 1294291968,
+        fileCount: 685,
       },
     })
     expect(ephemerisBodies.bodies).toHaveLength(spkDelivery.ephemerisBodyCount)

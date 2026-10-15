@@ -227,7 +227,7 @@ func TestFormalCovarianceContractsAndCancellation(t *testing.T) {
 	if result.Output[0][0] <= result.Input[0][0] || result.Output[1][1] <= result.Input[1][1] {
 		t.Fatal("expected growing position variance for this source")
 	}
-	if len(result.Assumptions) != 4 || result.CoordinateLabels[5] != "radial-velocity" {
+	if len(result.Assumptions) != 5 || result.CoordinateLabels[5] != "radial-velocity" {
 		t.Fatal("lost covariance semantics")
 	}
 }
