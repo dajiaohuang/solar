@@ -14,7 +14,7 @@ struct NativePointPayload: Sendable {
 
     static func prepare(projectedPoints: [SIMD3<Float>]) throws -> NativePointPayload {
         try Task.checkCancellation()
-        try prepare(count: projectedPoints.count) { bytes in
+        return try prepare(count: projectedPoints.count) { bytes in
             let stride = MemoryLayout<SIMD3<Float>>.stride
             for index in projectedPoints.indices {
                 if index % 4096 == 0 { try Task.checkCancellation() }
