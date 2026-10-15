@@ -2,6 +2,9 @@ import Foundation
 
 @main
 struct ProtocolTests {
+    // Independent protocol fixture: v2 carries the scientific tags in its
+    // 208-byte header. Do not derive these bytes from the production decoder.
+    static let fixtureHeaderBytes = 208
     static let hashA = String(repeating: "a", count: 64)
     static let hashB = String(repeating: "b", count: 64)
     static let ids = ["naif:10", "missing:fixture"]
@@ -22,17 +25,19 @@ struct ProtocolTests {
             row["sourceRecord"] = false; row["identityStatus"] = ""
             metadata.append(try JSONSerialization.data(withJSONObject: row, options: [.sortedKeys])); metadata.append(10)
         }
-        let exact = 200 + metadata.count, approximate = exact + 1, missing = approximate + 1
+        let exact = fixtureHeaderBytes + metadata.count, approximate = exact + 1, missing = approximate + 1
         let states = (missing + 1 + 7) / 8 * 8
         var data = Data(count: states + 96)
         data.replaceSubrange(0..<8, with: [83, 76, 82, 84, 73, 76, 69, 0])
-        for (offset, value, width) in [(8, 1, 2), (10, 200, 2), (16, 1, 4), (24, 2, 4), (28, 6, 2), (30, 3, 2), (40, 200, 4), (44, metadata.count, 4), (48, exact, 4), (52, 1, 4), (56, approximate, 4), (60, missing, 4), (64, states, 4), (68, 96, 4)] {
+        for (offset, value, width) in [(8, 2, 2), (10, fixtureHeaderBytes, 2), (16, 1, 4), (24, 2, 4), (28, 6, 2), (30, 3, 2), (40, fixtureHeaderBytes, 4), (44, metadata.count, 4), (48, exact, 4), (52, 1, 4), (56, approximate, 4), (60, missing, 4), (64, states, 4), (68, 96, 4)] {
             put(&data, at: offset, value: UInt64(value), width: width)
         }
         put(&data, at: 32, value: Double(2_451_545).bitPattern, width: 8)
         data.replaceSubrange(72..<104, with: repeatElement(UInt8(0xaa), count: 32))
         data.replaceSubrange(104..<136, with: repeatElement(UInt8(0xbb), count: 32))
-        data.replaceSubrange(200..<exact, with: metadata)
+        // TDB, ECLIPJ2000, barycentric origin, km and km/s; reserved bytes zero.
+        for offset in 200...204 { data[offset] = 1 }
+        data.replaceSubrange(fixtureHeaderBytes..<exact, with: metadata)
         data[exact] = 1; data[missing] = 2
         for (index, value) in values.enumerated() { put(&data, at: states + index * 8, value: value.bitPattern, width: 8) }
         checksum(&data)
@@ -40,7 +45,7 @@ struct ProtocolTests {
     }
 
     static func checksum(_ data: inout Data) {
-        let hash = StateTileDecoder.sha256(data.subdata(in: 200..<data.count))
+        let hash = StateTileDecoder.sha256(data.subdata(in: fixtureHeaderBytes..<data.count))
         let bytes = stride(from: 0, to: hash.count, by: 2).map { index -> UInt8 in
             let start = hash.index(hash.startIndex, offsetBy: index)
             return UInt8(hash[start..<hash.index(start, offsetBy: 2)], radix: 16)!
@@ -548,13 +553,18 @@ struct ProtocolTests {
         var overflowRejected = false
         do { _ = try NativeProjection.make(frame: frame, reference: ids[0], limit: 2) } catch { overflowRejected = true }
         precondition(overflowRejected)
-        try rejects(Data(data.prefix(199)))
+        try rejects(Data(data.prefix(fixtureHeaderBytes - 1)))
         var prefixed = Data([0]); prefixed.append(data)
         let sliced = try StateTileDecoder.decode(prefixed.dropFirst(), expected: expected)
         precondition(sliced.payloadHash == tile.payloadHash)
-        var bad = data; bad[200] ^= 1; try rejects(bad)
+        var bad = data
+        put(&bad, at: 8, value: 1, width: 2); try rejects(bad)
+        bad = data; put(&bad, at: 10, value: 200, width: 2); try rejects(bad)
+        bad = data; bad[200] ^= 1; try rejects(bad)
         bad = data; bad[201] = 0xff; checksum(&bad); try rejects(bad)
-        bad = data; bad[200] = 10; checksum(&bad); try rejects(bad)
+        bad = data; bad[207] = 1; try rejects(bad)
+        bad = data; bad[fixtureHeaderBytes] ^= 1; try rejects(bad)
+        bad = data; bad[fixtureHeaderBytes] = 10; checksum(&bad); try rejects(bad)
         // A second metadata line must not be accepted for a declared one-row
         // tile; the decoder scans only declared rows, never an unbounded split.
         bad = data
