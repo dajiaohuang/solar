@@ -307,6 +307,12 @@ describe('state tile binary protocol', () => {
   it('honors Retry-After after releasing its tile permit', async () => {
     const pool = createStateTileAdmissionPool(1), buffers = [await tile(0, 'earth', 1), await tile(1, 'mars', 4)]
     let retriedTileCalls = 0
+    let releases = 0, notifyReleased!: () => void
+    const bothReleased = new Promise<void>(resolve => { notifyReleased = resolve })
+    const acquireTile: typeof pool.acquire = async signal => {
+      const release = await pool.acquire(signal)
+      return () => { release(); if (++releases === 2) notifyReleased() }
+    }
     const fetcher = vi.fn(async (_url: string, init?: RequestInit) => {
       const sequence = JSON.parse(String(init?.body)).sequence as number
       if (sequence === 1 && retriedTileCalls++ === 0) return new Response(null, { status: 429, headers: { 'retry-after': '1' } })
@@ -314,10 +320,11 @@ describe('state tile binary protocol', () => {
     }) as typeof fetch
     vi.useFakeTimers()
     try {
-      const pending = fetchStateTiles({ base: 'https://fixture', plan, signal: new AbortController().signal, fetcher, acquireTile: pool.acquire })
-      for (let turn = 0; turn < 32 && fetcher.mock.calls.length < 2; turn++) await vi.advanceTimersByTimeAsync(0)
+      const pending = fetchStateTiles({ base: 'https://fixture', plan, signal: new AbortController().signal, fetcher, acquireTile })
+      // Crypto hashing completes on the native event loop, not fake timers.
+      // Observe both actual releases before advancing the retry clock.
+      await bothReleased
       expect(fetcher).toHaveBeenCalledTimes(2)
-      for (let turn = 0; turn < 32 && pool.snapshot().active !== 0; turn++) await vi.advanceTimersByTimeAsync(0)
       expect(pool.snapshot()).toMatchObject({ active: 0, queued: 0 })
       await vi.advanceTimersByTimeAsync(999)
       expect(fetcher).toHaveBeenCalledTimes(2)
