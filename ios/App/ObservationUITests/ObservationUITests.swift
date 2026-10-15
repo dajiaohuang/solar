@@ -109,7 +109,7 @@ final class ObservationUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["observation.pressure"].exists)
     }
 
-    func testOriginalGaiaFilesThroughSystemPickerAndLiveBackend() {
+    func testOriginalGaiaFilesThroughSystemPickerAndLiveBackend() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-native.backend.address", "https://127.0.0.1:18791", "-native.onboarding.complete", "YES", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
@@ -181,8 +181,12 @@ final class ObservationUITests: XCTestCase {
         app.buttons["stellar.load"].tap()
         waitForLabel(app.staticTexts["stellar.status"], "Gaia DR3 65212004581252736 · J2026.0 TCB")
         let result = app.staticTexts["stellar.result"]
-        XCTAssertTrue(result.label.contains("56.6929443290"))
-        XCTAssertTrue(result.label.contains("0.357911"))
+        let raLine = try XCTUnwrap(result.label.split(separator: "\n").first { $0.hasPrefix("RA (deg): ") }, result.label)
+        let ra = try XCTUnwrap(Double(raLine.dropFirst("RA (deg): ".count)), result.label)
+        // The 12-significant-digit display omits trailing zeros. Compare the
+        // numerical value within its displayed precision, not padded text.
+        XCTAssertEqual(ra, 56.6929443290, accuracy: 1e-10, result.label)
+        XCTAssertTrue(result.label.contains("0.357911"), result.label)
         reveal(app, app.buttons["stellar.export"])
         screenshot(app, "stellar-system-picker-live-go")
         reveal(app, app.buttons["stellar.disclosure"]); app.buttons["stellar.disclosure"].tap()
