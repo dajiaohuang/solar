@@ -272,6 +272,7 @@ public final class ObservationUITest {
             File exportRoot = instrumentation.getTargetContext().getExternalFilesDir("solar-native-smoke");
             assertNotNull(exportRoot);
             File exported = new File(exportRoot,"stellar-export.json");
+            assertFalse("Fresh smoke destination must not contain an earlier export", exported.exists());
             android.content.IntentFilter exportFilter = new android.content.IntentFilter(Intent.ACTION_CREATE_DOCUMENT);
             exportFilter.addDataType("application/json");
             exportFilter.addCategory(Intent.CATEGORY_OPENABLE);
@@ -279,13 +280,10 @@ public final class ObservationUITest {
                     new android.app.Instrumentation.ActivityResult(Activity.RESULT_OK,new Intent().setData(android.net.Uri.fromFile(exported))),true);
             try {
                 shown(withTagValue(is((Object) "stellar-export"))).perform(scrollTo(),click());
-                waitForText(containsString("Stellar source response saved."));
                 assertEquals(1,exportMonitor.getHits());
-                byte[] saved = java.nio.file.Files.readAllBytes(exported.toPath());
                 StellarMotionRequest exportRequest = new StellarMotionRequest(java.nio.file.Files.readAllBytes(stellarManifest.toPath()),
                         java.nio.file.Files.readAllBytes(stellarRows.toPath()),"65212004581252736",2026,StellarMotionRequest.RV_POLICY,StellarMotionRequest.COVARIANCE_POLICY);
-                StellarMotionReport verifiedExport = StellarMotionReport.decode(saved,exportRequest);
-                assertArrayEquals(saved,verifiedExport.exportBytes());
+                waitForStellarExport(exported, exportRequest);
             } finally { instrumentation.removeMonitor(exportMonitor); }
             shown(withTagValue(is((Object) "stellar-epoch"))).perform(scrollTo(),replaceText("2027"),closeSoftKeyboard());
             shown(withTagValue(is((Object) "stellar-result"))).check(matches(withText("")));
@@ -303,6 +301,26 @@ public final class ObservationUITest {
                 }
             }
         }
+    }
+
+    private static void waitForStellarExport(File destination, StellarMotionRequest request) throws Exception {
+        // Export completion is a process-wide background write with a Toast,
+        // not persistent panel text. Require the actual complete response;
+        // the harness also binds its bytes/hash to the live HTTPS receipt.
+        long deadline = SystemClock.uptimeMillis() + UI_TIMEOUT_MS;
+        java.io.IOException last = null;
+        while (SystemClock.uptimeMillis() < deadline) {
+            try {
+                byte[] saved = java.nio.file.Files.readAllBytes(destination.toPath());
+                StellarMotionReport report = StellarMotionReport.decode(saved, request);
+                assertArrayEquals(saved, report.exportBytes());
+                return;
+            } catch (java.io.IOException pending) {
+                last = pending;
+                SystemClock.sleep(100);
+            }
+        }
+        throw new AssertionError("Export did not produce a complete verified stellar response", last);
     }
 
     private static File stellarSource(String name, int limit, String expectedHash) throws Exception {
