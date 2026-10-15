@@ -156,8 +156,12 @@ final class ObservationUITests: XCTestCase {
                 file = app.cells.matching(match).firstMatch
             }
             XCTAssertTrue(file.waitForExistence(timeout: 15), app.debugDescription)
-            let icon = file.images.firstMatch
-            if icon.exists && icon.isHittable { icon.tap() } else { file.tap() }
+            // Files can replace its thumbnail while a preview loads. The image
+            // was reported hittable, then had no hit point during tap synthesis.
+            // Activate the matched document cell, as for the folder above.
+            let fileReady = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true AND enabled == true"), object: file)
+            XCTAssertEqual(XCTWaiter.wait(for: [fileReady], timeout: 10), .completed, app.debugDescription)
+            file.tap()
             let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.collectionViews["File View"])
             XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 10), .completed, app.debugDescription)
             reveal(app, app.staticTexts["stellar.status"])
