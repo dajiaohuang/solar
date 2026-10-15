@@ -6,8 +6,11 @@ export function SceneTooltip({ x, y, children }: { x: number; y: number; childre
     const place = () => {
       const element = ref.current
       if (!element) return
-      element.style.left = `${Math.max(8, Math.min(x + 14, window.innerWidth - element.offsetWidth - 8))}px`
-      element.style.top = `${Math.max(8, Math.min(y + 12, window.innerHeight - element.offsetHeight - 8))}px`
+      // offsetWidth/Height round fractional text dimensions and can place the
+      // border outside the viewport margin. Round the clamped position inward.
+      const bounds = element.getBoundingClientRect()
+      element.style.left = `${Math.floor(Math.max(8, Math.min(x + 14, window.innerWidth - bounds.width - 8)))}px`
+      element.style.top = `${Math.floor(Math.max(8, Math.min(y + 12, window.innerHeight - bounds.height - 8)))}px`
     }
     place(); window.addEventListener('resize', place)
     return () => window.removeEventListener('resize', place)
