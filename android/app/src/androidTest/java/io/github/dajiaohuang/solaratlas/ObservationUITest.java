@@ -251,7 +251,7 @@ public final class ObservationUITest {
             shown(withTagValue(is((Object) "stellar-toggle"))).perform(scrollTo(), click());
             shown(withTagValue(is((Object) "stellar-load"))).check(matches(not(androidx.test.espresso.matcher.ViewMatchers.isEnabled())));
             File stellarManifest = stellarSource("manifest.json", 1024*1024, requiredArg(args,"solarStellarManifestHash"));
-            File stellarRows = stellarSource("rows.csv", 8*1024*1024, requiredArg(args,"solarStellarRowsHash"));
+            File stellarRows = stellarSource("rows.csv", 16*1024*1024, requiredArg(args,"solarStellarRowsHash"));
             scenario.onActivity(activity -> activity.onActivityResult(732, Activity.RESULT_OK,
                     new Intent().setData(android.net.Uri.fromFile(stellarManifest))));
             waitForText(containsString("manifest.json: "+requiredArg(args,"solarStellarManifestBytes")+" B"));
