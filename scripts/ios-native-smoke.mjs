@@ -234,9 +234,9 @@ export async function nativeSmoke() {
     report.setupStep = 'install-app'
     await command('xcrun', ['simctl', 'install', device, resolve('build/ios-derived-data/Build/Products/Debug-iphonesimulator/App.app')],
       { log: join(artifact, 'simulator-install.log') })
-    report.setupStep = 'launch-files-provider'
-    await command('xcrun', ['simctl', 'launch', device, 'com.apple.DocumentsApp'],
-      { log: join(artifact, 'simulator-files-launch.log') })
+    // Boot registers the built-in local provider and its shared container.
+    // Staging needs that container, not a foreground Files launch, which can
+    // block on cold system-app startup. The real picker is exercised by XCTest.
     report.setupStep = 'locate-files-container'
     const groups = await command('xcrun', ['simctl', 'get_app_container', device, 'com.apple.DocumentsApp', 'groups'])
     await writeFile(join(artifact, 'simulator-files-container.log'), groups, { flag: 'wx' })
