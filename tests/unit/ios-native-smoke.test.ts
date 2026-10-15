@@ -8,6 +8,11 @@ import { bootOwnedSimulator, command, localFilesContainer, removeOwnedTemporary,
 const iphone = { isAvailable: true, name: 'iPhone 17', deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-17' }
 
 describe('isolated native iOS runtime validation', () => {
+  it('identifies the timed-out command arguments even when it produces no output', async () => {
+    const source = 'setInterval(() => {}, 1000)'
+    await expect(command(process.execPath, ['-e', source], { timeout: 100 }))
+      .rejects.toThrow(`-e ${source} timed out`)
+  })
   it('stages external files only in the unique local provider of the owned device', () => {
     const device = '12345678-1234-1234-1234-123456789abc'
     const container = `/Users/CI Runner/Library/Developer/CoreSimulator/Devices/${device}/data/Containers/Shared/AppGroup/abcdefab-1234-1234-1234-123456789abc`

@@ -145,7 +145,7 @@ export function command(file, args, { env = process.env, log, timeout = 120_000,
       clearTimeout(timer)
       const complete = () => {
         if (overflow) reject(new Error(`${file} exceeded its bounded capture limit`))
-        else if (code !== 0 || expired) reject(new Error(`${file} ${expired ? 'timed out' : `exited ${code}`}\n${output}`))
+        else if (code !== 0 || expired) reject(new Error(`${file} ${args.join(' ')} ${expired ? 'timed out' : `exited ${code}`}\n${output}`))
         else resolvePromise(output.trim())
       }
       // Memory retains only a tail; consumers of the full file must wait for
@@ -223,15 +223,23 @@ export async function nativeSmoke() {
     device = created
     report.simulator.udid = device
     await bootOwnedSimulator(device, artifact, report)
-    await command('xcrun', ['simctl', 'keychain', device, 'add-root-cert', join(temporary, 'root.crt')])
+    report.setupStep = 'install-test-certificate'
+    await command('xcrun', ['simctl', 'keychain', device, 'add-root-cert', join(temporary, 'root.crt')],
+      { log: join(artifact, 'simulator-certificate.log') })
 
     // Use Files' independent local provider, not the tested app's Documents:
     // XCTest installs/relaunches that app, and importing its own provider URL
     // failed bookmark resolution before the production callback in CI.
     // The production picker still reads the original bytes across containers.
-    await command('xcrun', ['simctl', 'install', device, resolve('build/ios-derived-data/Build/Products/Debug-iphonesimulator/App.app')])
-    await command('xcrun', ['simctl', 'launch', device, 'com.apple.DocumentsApp'])
+    report.setupStep = 'install-app'
+    await command('xcrun', ['simctl', 'install', device, resolve('build/ios-derived-data/Build/Products/Debug-iphonesimulator/App.app')],
+      { log: join(artifact, 'simulator-install.log') })
+    report.setupStep = 'launch-files-provider'
+    await command('xcrun', ['simctl', 'launch', device, 'com.apple.DocumentsApp'],
+      { log: join(artifact, 'simulator-files-launch.log') })
+    report.setupStep = 'locate-files-container'
     const groups = await command('xcrun', ['simctl', 'get_app_container', device, 'com.apple.DocumentsApp', 'groups'])
+    await writeFile(join(artifact, 'simulator-files-container.log'), groups, { flag: 'wx' })
     const container = localFilesContainer(device, groups)
     if (await realpath(container) !== container) throw new Error('Files container resolves through an unexpected link')
     const storage = join(container, 'File Provider Storage')
@@ -239,6 +247,7 @@ export async function nativeSmoke() {
     if (await realpath(storage) !== storage) throw new Error('Files storage resolves through an unexpected link')
     const documents = join(storage, 'Solar Gaia Fixtures')
     await mkdir(documents) // Fresh owned device: never overwrite an earlier fixture.
+    report.setupStep = 'stage-original-files'
     report.stellarSourceLocation = 'Files local provider / Solar Gaia Fixtures'
     report.stellarSources = {}
     for (const name of ['manifest.json', 'rows.csv']) {
@@ -249,6 +258,7 @@ export async function nativeSmoke() {
       report.stellarSources[name] = { bytes: bytes.length, sha256: createHash('sha256').update(staged).digest('hex') }
     }
 
+    report.setupStep = 'complete'
     await assertFreePort(18790)
     const backendLog = createWriteStream(join(artifact, 'backend.log'), { flags: 'wx' })
     backend = spawn(join(temporary, 'solar-backend'), ['-data-dir', join(temporary, 'data'), '-listen', '127.0.0.1:18790'], { stdio: ['ignore', 'pipe', 'pipe'] })
