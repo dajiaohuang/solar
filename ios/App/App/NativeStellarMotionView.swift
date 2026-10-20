@@ -89,7 +89,18 @@ struct NativeStellarMotionView: View {
 
     var body: some View {
         Section {
-            Button(copy("Gaia stellar motion", "Gaia 恒星运动")) { expanded.toggle() }.accessibilityIdentifier("stellar.disclosure")
+            Button(copy("Gaia stellar motion", "Gaia 恒星运动")) { expanded.toggle() }
+                .accessibilityIdentifier("stellar.disclosure")
+                // Section forwards presentation modifiers to its List rows.
+                // Use one persistent row as the sole presentation owner.
+                .sheet(isPresented: $importing) {
+                    StellarSourcePicker { url in
+                        importing = false
+                        guard let url else { Self.importLog.notice("Source selection cancelled"); return }
+                        Self.importLog.notice("Importer completion delivered a copied URL")
+                        importFile(url, isManifest: importingManifest)
+                    }
+                }
             if expanded {
                 Text(copy("Import the original Gaia manifest.json and rows.csv. J2016 TCB single-star propagation; measured radial velocity is required.", "导入 Gaia 原始 manifest.json 与 rows.csv。从 J2016 TCB 传播单星运动；必须提供实测径向速度。"))
                 Button(copy("Import manifest.json", "导入 manifest.json")) { Self.importLog.notice("Manifest import requested"); importingManifest = true; importing = true }.accessibilityIdentifier("stellar.manifest")
@@ -127,14 +138,6 @@ struct NativeStellarMotionView: View {
         .onChange(of: scenePhase) { if $0 != .active { Self.importLog.notice("Scene left active state"); clear() } }
         .onChange(of: importing) { shown in Self.importLog.notice("Importer presentation binding: \(shown)") }
         .onDisappear { Self.importLog.notice("Stellar section disappeared"); clear() }
-        .sheet(isPresented: $importing) {
-            StellarSourcePicker { url in
-                importing = false
-                guard let url else { Self.importLog.notice("Source selection cancelled"); return }
-                Self.importLog.notice("Importer completion delivered a copied URL")
-                importFile(url, isManifest: importingManifest)
-            }
-        }
         .onChange(of: exporting) { if $0 { exportMessage = "" } }
         .fileExporter(isPresented: $exporting, document: document, contentType: .json, defaultFilename: exportFilename) { outcome in
             defer { document = StellarDocument(bytes: Data()) }

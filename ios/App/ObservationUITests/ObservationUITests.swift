@@ -38,9 +38,11 @@ final class ObservationUITests: XCTestCase {
         // the action. Derive the content boundary from the actual hierarchy.
         let navigation = app.navigationBars.firstMatch
         let top = navigation.exists ? max(app.frame.minY, navigation.frame.maxY) : app.frame.minY
+        let keyboard = app.keyboards.firstMatch
+        let bottom = min(app.frame.maxY, keyboard.exists ? keyboard.frame.minY : app.frame.maxY)
         let frame = element.frame
         return frame.width > 0 && frame.height > 0 && frame.minY >= top
-            && frame.maxY <= app.frame.maxY && frame.minX >= app.frame.minX
+            && frame.maxY <= bottom && frame.minX >= app.frame.minX
             && frame.maxX <= app.frame.maxX
     }
 
@@ -49,10 +51,15 @@ final class ObservationUITests: XCTestCase {
             if isRevealed(app, element) { return }
             let navigation = app.navigationBars.firstMatch
             let top = navigation.exists ? max(app.frame.minY, navigation.frame.maxY) : app.frame.minY
-            let bottom = app.frame.maxY - 20
+            let keyboard = app.keyboards.firstMatch
+            let bottom = min(app.frame.maxY, keyboard.exists ? keyboard.frame.minY : app.frame.maxY) - 20
+            XCTAssertGreaterThan(bottom, top, "No visible content area for scrolling")
             let middle = (top + bottom) / 2
             var travel = min(240, (bottom - top) * 0.35)
-            var upward = attempt < 12
+            // Lazy List rows may be absent above or below the current viewport.
+            // Equal outward/return sweeps only return to the starting position;
+            // the longer reverse sweep must also search above that position.
+            var upward = attempt < 8
             if element.exists, element.frame.height > 0 {
                 let frame = element.frame
                 if frame.maxY > bottom {
