@@ -18,11 +18,15 @@ export type BackendFrame = {
  * evidence pages and explicitly requested positions are materialized on demand. */
 export type BackendStateEvidence = {
   readonly length: number
+  /** O(1) snapshot-local body lookup; returns -1 when the body is absent. */
+  indexOf(bodyId: BodyId): number
   bodyIdAt(index: number): BodyId
   backendIdAt(index: number): string
   statusAt(index: number): 'exact' | 'approximate' | 'missing'
   missingReasonAt(index: number): string
   rowAt(index: number): StateTileAudit
+  /** Source Float64 components: km for 0..2, km/s for 3..5. */
+  stateValueAt?(index: number, component: number): number
   hasPosition(bodyId: BodyId): boolean
   positionAu(bodyId: BodyId): Vector3 | undefined
 }
@@ -36,6 +40,7 @@ export type StateTileAudit = {
   datasetVersion: string
   datasetSha256?: string
   kernelSha256?: string
+  sourceChainSha256?: string
   model: string
   centerId: string
   validityStartEt?: number

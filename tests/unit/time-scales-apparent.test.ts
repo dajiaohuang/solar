@@ -17,6 +17,11 @@ describe('NAIF time-scale approximation', () => {
     expect(() => utcJulianDayToTdb(2_440_000)).toThrow(/1972/)
     expect(utcTimeScaleQuality(2_500_000).status).toBe('future-uncertain')
   })
+  it('keeps the published UTC offset supported through the announced NAIF LSK interval', () => {
+    expect(utcTimeScaleQuality(2461586.5)).toMatchObject({ leapSeconds: 37, status: 'supported' })
+    expect(utcTimeScaleQuality(2461587.5)).toMatchObject({ leapSeconds: 37, status: 'future-uncertain' })
+    expect(utcTimeScaleQuality(2461587.5).sources).toContain('https://naif.jpl.nasa.gov/naif/announcements.html')
+  })
 })
 
 const state = (position: [number, number, number], velocity: [number, number, number] = [0, 0, 0]) => () => ({ position, velocity })
@@ -28,7 +33,14 @@ describe('apparent position corrections', () => {
     const corrected = apparentPosition({ observer, target, julianDay: 2_451_545, mode: 'light-time' })
     expect(geometric.position[0]).toBe(0)
     expect(corrected.lightTimeSeconds).toBeCloseTo(1_000_000 / 299_792.458, 5)
+    expect(corrected.timeScale).toBe('TDB')
+    expect(corrected.residualSeconds).toBeLessThanOrEqual(corrected.toleranceSeconds)
+    expect(Math.abs((2_451_545 - corrected.emissionJulianDay) * 86400 - corrected.lightTimeSeconds)).toBeLessThanOrEqual(corrected.toleranceSeconds)
     expect(corrected.emissionJulianDay).toBeLessThan(2_451_545)
+  })
+  it('does not claim convergence below the representable JD epoch resolution', () => {
+    expect(() => apparentPosition({ observer: state([0, 0, 0]), target: state([1_000_000, 0, 0]),
+      julianDay: 2_451_545, mode: 'light-time', toleranceSeconds: 1e-9 })).toThrow('did not converge')
   })
   it('applies stellar aberration using observer velocity', () => {
     const result = apparentPosition({ target: state([1_000_000, 0, 0]), observer: state([0, 0, 0], [0, 29.78, 0]), julianDay: 2_451_545, mode: 'light-time+stellar-aberration' })

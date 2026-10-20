@@ -21,6 +21,12 @@
 		B10900010000000000000007 /* NativeCoverageReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10900020000000000000007 /* NativeCoverageReport.swift */; };
 		B16000010000000000000002 /* NativeGroundContactView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B16000020000000000000002 /* NativeGroundContactView.swift */; };
 		B16000010000000000000001 /* NativeGroundContacts.swift in Sources */ = {isa = PBXBuildFile; fileRef = B16000020000000000000001 /* NativeGroundContacts.swift */; };
+		B16100010000000000000001 /* NativeStellarMotion.swift in Sources */ = {isa = PBXBuildFile; fileRef = B16100020000000000000001 /* NativeStellarMotion.swift */; };
+		B17100010000000000000001 /* NativeOrbitCovariance.swift in Sources */ = {isa = PBXBuildFile; fileRef = B17100020000000000000001 /* NativeOrbitCovariance.swift */; };
+		B17300010000000000000001 /* NativeOrbitPropagation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B17300020000000000000001 /* NativeOrbitPropagation.swift */; };
+		B17400010000000000000001 /* NativeOrbitEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = B17400020000000000000001 /* NativeOrbitEvents.swift */; };
+		B16200010000000000000001 /* NativeStellarMotionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B16200020000000000000001 /* NativeStellarMotionView.swift */; };
+		B17200010000000000000001 /* NativeOrbitCovarianceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B17200020000000000000001 /* NativeOrbitCovarianceView.swift */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
@@ -43,6 +49,12 @@
 		B10900020000000000000007 /* NativeCoverageReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeCoverageReport.swift; sourceTree = "<group>"; };
 		B16000020000000000000002 /* NativeGroundContactView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeGroundContactView.swift; sourceTree = "<group>"; };
 		B16000020000000000000001 /* NativeGroundContacts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeGroundContacts.swift; sourceTree = "<group>"; };
+		B16100020000000000000001 /* NativeStellarMotion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeStellarMotion.swift; sourceTree = "<group>"; };
+		B17100020000000000000001 /* NativeOrbitCovariance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeOrbitCovariance.swift; sourceTree = "<group>"; };
+		B17300020000000000000001 /* NativeOrbitPropagation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeOrbitPropagation.swift; sourceTree = "<group>"; };
+		B17400020000000000000001 /* NativeOrbitEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeOrbitEvents.swift; sourceTree = "<group>"; };
+		B16200020000000000000001 /* NativeStellarMotionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeStellarMotionView.swift; sourceTree = "<group>"; };
+		B17200020000000000000001 /* NativeOrbitCovarianceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeOrbitCovarianceView.swift; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		504EC30E1FED79650016851F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -92,6 +104,12 @@
 				B10900020000000000000007 /* NativeCoverageReport.swift */,
 				B16000020000000000000002 /* NativeGroundContactView.swift */,
 				B16000020000000000000001 /* NativeGroundContacts.swift */,
+				B16100020000000000000001 /* NativeStellarMotion.swift */,
+				B17100020000000000000001 /* NativeOrbitCovariance.swift */,
+				B17300020000000000000001 /* NativeOrbitPropagation.swift */,
+				B17400020000000000000001 /* NativeOrbitEvents.swift */,
+				B16200020000000000000001 /* NativeStellarMotionView.swift */,
+				B17200020000000000000001 /* NativeOrbitCovarianceView.swift */,
 				B11200020000000000000001 /* NativeSourceIdentityPage.swift */,
 				B11200020000000000000002 /* NativeSourceDirectory.swift */,
 				B10900020000000000000005 /* NativeStateProjection.swift */,
@@ -227,6 +245,12 @@
 				B10900010000000000000007 /* NativeCoverageReport.swift in Sources */,
 				B16000010000000000000002 /* NativeGroundContactView.swift in Sources */,
 				B16000010000000000000001 /* NativeGroundContacts.swift in Sources */,
+				B16100010000000000000001 /* NativeStellarMotion.swift in Sources */,
+				B17100010000000000000001 /* NativeOrbitCovariance.swift in Sources */,
+				B17300010000000000000001 /* NativeOrbitPropagation.swift in Sources */,
+				B17400010000000000000001 /* NativeOrbitEvents.swift in Sources */,
+				B16200010000000000000001 /* NativeStellarMotionView.swift in Sources */,
+				B17200010000000000000001 /* NativeOrbitCovarianceView.swift in Sources */,
 				B11200010000000000000001 /* NativeSourceIdentityPage.swift in Sources */,
 				B11200010000000000000002 /* NativeSourceDirectory.swift in Sources */,
 				B10900010000000000000005 /* NativeStateProjection.swift in Sources */,

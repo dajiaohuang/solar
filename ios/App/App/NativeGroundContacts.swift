@@ -9,7 +9,7 @@ struct NativeGroundContactRequest: Codable, Equatable {
     func validate() throws {
         let utc = "\\A[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z\\z"
         guard startUtc.range(of: utc, options: .regularExpression) != nil, endUtc.range(of: utc, options: .regularExpression) != nil,
-              station.longitudeDeg.isFinite, abs(station.longitudeDeg) <= 180, station.latitudeDeg.isFinite, abs(station.latitudeDeg) <= 90, station.heightMeters.isFinite,
+              station.longitudeDeg.isFinite, abs(station.longitudeDeg) <= 180, station.latitudeDeg.isFinite, abs(station.latitudeDeg) <= 90, station.heightMeters.isFinite, (-1000...100000).contains(station.heightMeters),
               foregroundId > 0, backgroundId > 0, foregroundId != backgroundId, foregroundId != 399, backgroundId != 399, aberration == "CN" else { throw StateTileFailure.invalid("Explicit station, UTC bounds and distinct non-Earth CN targets required.") }
     }
 }
@@ -86,7 +86,8 @@ struct NativeGroundContacts: Decodable {
         var previous = 0.0
         for contact in r.contacts {
             guard ["external", "internal"].contains(contact.boundary), ["enter", "exit", "sampled-zero"].contains(contact.direction), contact.elapsedTaiSeconds >= previous,
-                  bracket(contact.elapsedTaiSeconds, contact.utc, contact.bracketSeconds, contact.bracketUtc, r.durationSeconds) else { throw StateTileFailure.invalid("Invalid contact bracket.") }
+                  bracket(contact.elapsedTaiSeconds, contact.utc, contact.bracketSeconds, contact.bracketUtc, r.durationSeconds),
+                  contact.direction != "sampled-zero" || contact.bracketSeconds == [contact.elapsedTaiSeconds, contact.elapsedTaiSeconds] else { throw StateTileFailure.invalid("Invalid contact bracket.") }
             previous = contact.elapsedTaiSeconds
         }
         if let windows = r.sampledOverlapWindows {
@@ -95,10 +96,10 @@ struct NativeGroundContacts: Decodable {
             for window in windows {
                 guard let previousEnd = ends[window.boundary], window.start.elapsedTaiSeconds >= last, window.start.elapsedTaiSeconds > previousEnd else { throw StateTileFailure.invalid("Unordered overlap windows.") }
                 for (index, edge) in [window.start, window.end].enumerated() {
-                    guard ["search-boundary", "sampled-zero", "bracketed-contact"].contains(edge.kind), bracket(edge.elapsedTaiSeconds, edge.utc, edge.bracketSeconds, edge.bracketUtc, r.durationSeconds),
+                    guard ["search-boundary", "sampled-zero", "sampled-overlap", "bracketed-contact"].contains(edge.kind), bracket(edge.elapsedTaiSeconds, edge.utc, edge.bracketSeconds, edge.bracketUtc, r.durationSeconds),
                           (edge.kind == "search-boundary") == (edge.elapsedTaiSeconds == 0 || edge.elapsedTaiSeconds == r.durationSeconds),
                           edge.kind == "bracketed-contact" || edge.bracketSeconds == [edge.elapsedTaiSeconds, edge.elapsedTaiSeconds] else { throw StateTileFailure.invalid("Invalid overlap edge.") }
-                    if edge.kind != "search-boundary" {
+                    if edge.kind != "search-boundary" && edge.kind != "sampled-overlap" {
                         guard r.contacts.contains(where: { $0.boundary == window.boundary && $0.direction == (edge.kind == "sampled-zero" ? "sampled-zero" : index == 0 ? "enter" : "exit") && $0.elapsedTaiSeconds == edge.elapsedTaiSeconds && $0.utc == edge.utc && $0.bracketSeconds == edge.bracketSeconds && $0.bracketUtc == edge.bracketUtc }) else { throw StateTileFailure.invalid("Overlap edge has no contact evidence.") }
                     }
                 }
@@ -114,5 +115,7 @@ struct NativeGroundContacts: Decodable {
         let pattern = "\\A[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z\\z"
         return at.isFinite && seconds.count == 2 && times.count == 2 && seconds.allSatisfy(\.isFinite) && ([utc]+times).allSatisfy { $0.range(of: pattern, options: .regularExpression) != nil }
             && seconds[0] >= 0 && seconds[0] <= at && at <= seconds[1] && seconds[1] <= duration && seconds[1]-seconds[0] <= 0.05+1e-9 && times[0] <= utc && times[1] >= utc
+            && at == seconds[0]+(seconds[1]-seconds[0])/2
+            && (seconds[0] != at || times[0] == utc) && (seconds[1] != at || times[1] == utc)
     }
 }

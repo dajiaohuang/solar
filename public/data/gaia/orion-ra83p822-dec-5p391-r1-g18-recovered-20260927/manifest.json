@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "catalog": "Gaia DR3",
+  "table": "gaiadr3.gaia_source",
+  "frame": "ICRS",
+  "referenceEpochJulianYear": 2016,
+  "referenceEpochTimeScale": "TCB",
+  "implementation": {
+    "node": "v24.14.1",
+    "generatorSha256": "4913e37477c2131d6e07177b038104ac916b516f55e4706d5a506f8198b3f961",
+    "parserSha256": "2505cd8ee265a4e9f2b954939ee021b515040bbe78c4dacec96a1797d3247ad3",
+    "columnsSha256": "e4d9f897d13ea9184165b58694f060fe1745d76e54e4a30b943f96a3cd04bbaa"
+  },
+  "settings": {
+    "raDeg": 83.8221,
+    "decDeg": -5.3911,
+    "radiusDeg": 1,
+    "maxMagnitude": 18,
+    "maxRows": 100000
+  },
+  "columns": [
+    "source_id",
+    "ref_epoch",
+    "ra",
+    "dec",
+    "ra_error",
+    "dec_error",
+    "parallax",
+    "parallax_error",
+    "pmra",
+    "pmra_error",
+    "pmdec",
+    "pmdec_error",
+    "ra_dec_corr",
+    "ra_parallax_corr",
+    "ra_pmra_corr",
+    "ra_pmdec_corr",
+    "dec_parallax_corr",
+    "dec_pmra_corr",
+    "dec_pmdec_corr",
+    "parallax_pmra_corr",
+    "parallax_pmdec_corr",
+    "pmra_pmdec_corr",
+    "astrometric_params_solved",
+    "ruwe",
+    "phot_g_mean_mag",
+    "bp_rp",
+    "radial_velocity",
+    "radial_velocity_error"
+  ],
+  "rows": 6890,
+  "rowCountEvidence": {
+    "method": "top-plus-one-sentinel",
+    "limit": 100001,
+    "returnedRows": 6890,
+    "overflow": false
+  },
+  "catalogCompletenessCertified": false,
+  "units": {
+    "ra": "degree",
+    "dec": "degree",
+    "ra_error": "mas; alpha*cos(delta)",
+    "dec_error": "mas",
+    "parallax": "mas",
+    "pmra": "mas/Julian year; mu_alpha*cos(delta)",
+    "pmdec": "mas/Julian year",
+    "radial_velocity": "km/s"
+  },
+  "limitations": [
+    "A magnitude-limited cone is not full-sky data or a completeness guarantee.",
+    "Missing fields remain null. Negative parallax is retained; no inverse-parallax distances are inferred.",
+    "No proper-motion propagation, observer parallax, aberration, deflection, zero-point correction or occultation uncertainty model is applied.",
+    "Spatial bins describe returned coordinates at J2016.0, not bounds at arbitrary epochs."
+  ],
+  "documentation": [
+    "https://www.cosmos.esa.int/web/gaia/dr3",
+    "https://www.cosmos.esa.int/web/gaia-users/archive/programmatic-access",
+    "https://gea.esac.esa.int/archive/documentation/GDR3/Gaia_archive/chap_datamodel/sec_dm_main_source_catalogue/ssec_dm_gaia_source.html"
+  ],
+  "sources": [
+    {
+      "path": "rows.csv",
+      "bytes": 2251401,
+      "sha256": "f30ba3d30f889dca1df8347ee43f74eee6ef9333977323029b1691a848b93349",
+      "query": "SELECT TOP 100001 source_id,ref_epoch,ra,dec,ra_error,dec_error,parallax,parallax_error,pmra,pmra_error,pmdec,pmdec_error,ra_dec_corr,ra_parallax_corr,ra_pmra_corr,ra_pmdec_corr,dec_parallax_corr,dec_pmra_corr,dec_pmdec_corr,parallax_pmra_corr,parallax_pmdec_corr,pmra_pmdec_corr,astrometric_params_solved,ruwe,phot_g_mean_mag,bp_rp,radial_velocity,radial_velocity_error FROM gaiadr3.gaia_source WHERE CONTAINS(POINT('ICRS',ra,dec),CIRCLE('ICRS',83.8221,-5.3911,1))=1 AND phot_g_mean_mag<=18",
+      "url": "https://gea.esac.esa.int/tap-server/tap/async/04c39417-ba6e-11f1-924c-bc97e148b76b-O/results/result",
+      "jobUrl": "https://gea.esac.esa.int/tap-server/tap/async/04c39417-ba6e-11f1-924c-bc97e148b76b-O",
+      "cleanupPending": true,
+      "jobReceiptSha256": "52d0f58d277eff51762d47ef48fda4d5543c3900479bbd695f54e532b3ba6bee",
+      "retrievedAt": "2026-09-27T13:26:22.505Z"
+    }
+  ],
+  "chunks": [
+    {
+      "path": "r16-d16.json",
+      "sha256": "7c12b4ac2efd02bad172e62d4f5f31dd1d588f70f080e4824f3c10c2a6b3aa20",
+      "bytes": 3816182,
+      "rows": 5116,
+      "raRangeDeg": [
+        80,
+        85
+      ],
+      "decRangeDeg": [
+        -10,
+        -5
+      ]
+    },
+    {
+      "path": "r16-d17.json",
+      "sha256": "acdec28dadbff423d3f1a0e8b302ffd444b56248baa3857267e1c3cd90bea8b4",
+      "bytes": 1324469,
+      "rows": 1774,
+      "raRangeDeg": [
+        80,
+        85
+      ],
+      "decRangeDeg": [
+        -5,
+        0
+      ]
+    }
+  ]
+}

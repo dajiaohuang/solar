@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="orbit_event_mode">Search distance-threshold events for supplied draws</string>
+    <string name="orbit_event_intro">Enter an explicit chronological window relative to the source epoch. Each supplied six-axis draw is searched separately. Endpoint duration, SRP and covariance refinement do not apply in this mode. No sampling probability is assumed.</string>
+    <string name="orbit_event_start">Start offset from source epoch (TDB seconds)</string>
+    <string name="orbit_event_end">End offset from source epoch (TDB seconds)</string>
+    <string name="orbit_event_target">Target NAIF ID: 10 Sun; 399 Earth; 301 Moon; 1 Mercury, 2 Venus, 4 Mars, 5 Jupiter, 6 Saturn, 7 Uranus, 8 Neptune, 9 Pluto system barycenters</string>
+    <string name="orbit_event_distance">Geometric center-distance threshold (km; not a physical radius)</string>
+    <string name="orbit_event_step">Maximum scan step (seconds)</string>
+    <string name="orbit_event_tolerance">Numerical localization tolerance (seconds; at most scan step)</string>
+    <string name="orbit_event_evaluations">Maximum scalar evaluations per draw (1–2048)</string>
+    <string name="orbit_event_limit">Maximum detected records per draw (1–128)</string>
+    <string name="orbit_event_run">Search supplied-draw events</string>
+    <string name="orbit_event_previous">Previous source draw</string>
+    <string name="orbit_event_next">Next source draw</string>
+    <string name="orbit_event_integer">Enter a nonnegative integer</string>
+    <string name="orbit_event_counts">Draws: %1$d · Searched: %2$d · Failed: %3$d · Unresolved: %4$d · Force calls: %5$d / 250000</string>
+    <string name="orbit_event_window">Reference JD TDB: %1$s · Search offsets: [%2$s, %3$s] seconds</string>
+    <string name="orbit_event_definition">Target NAIF %1$d · geometric distance threshold %2$s km</string>
+    <string name="orbit_event_zero">Sampled zero · direction unclassified</string>
+    <string name="orbit_event_entry">Sampled decreasing sign change · threshold entry candidate</string>
+    <string name="orbit_event_exit">Sampled increasing sign change · threshold exit candidate</string>
+    <string name="orbit_event_time">Elapsed TDB seconds: %1$s · localization bracket [%2$s, %3$s]</string>
+    <string name="orbit_event_limits">Sampled sign changes only: tangencies and multiple crossings can be missed. No detections do not prove absence; failed and unresolved draws are not event-free. Numerical brackets exclude integration and physical uncertainty. Simultaneous geometric distance under adopted forces is not apparent occultation or continuous collision detection. All draws share the backend 20-second context and 250000 force calls. No event probabilities or independent accuracy claim. Only one draw is expanded at a time; export retains every draw and full diagnostics.</string>
+    <string name="orbit_event_timing_intro">Conditional first-detected timing · descriptive supplied-draw statistics, not event probabilities or confidence intervals. Earlier unclassified zeros exclude a draw. Different draws need not describe the same physical event. Bracket bounds exclude integration and physical errors; two selected draws do not establish adequate tail sampling. Export retains all selected/excluded identities.</string>
+    <string name="orbit_event_timing_entry">First detected decreasing sign change</string>
+    <string name="orbit_event_timing_exit">First detected increasing sign change</string>
+    <string name="orbit_event_timing_counts">Selected: %1$d / %2$d · Failed: %3$d · Unresolved: %4$d · Not detected: %5$d · Ambiguous zero: %6$d</string>
+    <string name="orbit_event_timing_unavailable">Timing quantiles unavailable: fewer than two selected draws.</string>
+    <string name="orbit_event_timing_quantile">%1$d%% · rank %2$d · TDB offset %3$s s · numerical bounds [%4$s, %5$s] s</string>
+</resources>

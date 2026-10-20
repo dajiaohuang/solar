@@ -20,6 +20,62 @@ actor StateTileCache {
         return directory.appendingPathComponent(key + ".tile")
     }
 
+    /// Read only bounded raw bytes here. StateTileService verifies and decodes
+    /// them off-actor so two budget-admitted tiles can use separate CPU workers.
+    func readData(key: String) throws -> Data? {
+        try Task.checkCancellation()
+        let url = try file(key)
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        do {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            let length = try handle.seekToEnd()
+            guard length >= UInt64(StateTileDecoder.headerBytes) && length <= UInt64(StateTileDecoder.maxBytes) else {
+                throw StateTileFailure.invalid("Invalid cached tile size")
+            }
+            try handle.seek(toOffset: 0)
+            let size = Int(length)
+            var data = Data(); data.reserveCapacity(size)
+            while data.count < size {
+                try Task.checkCancellation()
+                let part = try handle.read(upToCount: min(262_144, size - data.count)) ?? Data()
+                guard !part.isEmpty else { throw StateTileFailure.invalid("Truncated cached tile") }
+                data.append(part)
+            }
+            try Task.checkCancellation()
+            guard (try handle.read(upToCount: 1) ?? Data()).isEmpty else {
+                throw StateTileFailure.invalid("Cached tile changed size")
+            }
+            try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: url.path)
+            return data
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            try Task.checkCancellation()
+            try? FileManager.default.removeItem(at: url)
+            return nil
+        }
+    }
+
+    func invalidate(key: String) {
+        guard let url = try? file(key) else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    /// Persist only after StateTileDecoder has authenticated the entire payload
+    /// against its plan; a second full SHA/decode here would serialize the tiles.
+    func storeVerified(_ data: Data, key: String, payloadHash: String, etag: String) throws {
+        _ = try file(key)
+        guard data.count >= StateTileDecoder.headerBytes, data.count <= StateTileDecoder.maxBytes,
+              StateTileDecoder.isHash(payloadHash), StateTileDecoder.headerPayloadHash(data) == payloadHash,
+              etag == "\"\(payloadHash)\"" else {
+            throw StateTileFailure.invalid("State tile verification or ETag mismatch.")
+        }
+        do { try persist(data, key: key) }
+        catch is CancellationError { throw CancellationError() }
+        catch { /* A cache I/O failure must not discard a verified observation. */ }
+    }
+
     func read(key: String, expected: TileExpectation,
               checkCancellation: () throws -> Void = { try Task.checkCancellation() }) throws -> VerifiedStateTile? {
         try checkCancellation()
@@ -28,17 +84,22 @@ actor StateTileCache {
         do {
             let handle = try FileHandle(forReadingFrom: url)
             defer { try? handle.close() }
-            let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-            guard size > 0 && size <= StateTileDecoder.maxBytes else { throw StateTileFailure.invalid("Invalid cached tile size") }
+            // Bind allocation and reads to the opened file rather than a path
+            // which could have been replaced after opening the handle.
+            let length = try handle.seekToEnd()
+            guard length >= UInt64(StateTileDecoder.headerBytes) && length <= UInt64(StateTileDecoder.maxBytes) else { throw StateTileFailure.invalid("Invalid cached tile size") }
+            try handle.seek(toOffset: 0)
+            let size = Int(length)
             var data = Data()
             data.reserveCapacity(size)
-            while true {
+            while data.count < size {
                 try checkCancellation()
-                let part = try handle.read(upToCount: min(262_144, StateTileDecoder.maxBytes + 1 - data.count)) ?? Data()
-                if part.isEmpty { break }
+                let part = try handle.read(upToCount: min(262_144, size - data.count)) ?? Data()
+                guard !part.isEmpty else { throw StateTileFailure.invalid("Truncated cached tile") }
                 data.append(part)
-                guard data.count <= StateTileDecoder.maxBytes else { throw StateTileFailure.invalid("Oversized cached tile") }
             }
+            try checkCancellation()
+            guard (try handle.read(upToCount: 1) ?? Data()).isEmpty else { throw StateTileFailure.invalid("Cached tile changed size") }
             let result = try StateTileDecoder.decode(data, expected: expected, checkCancellation: checkCancellation)
             try checkCancellation()
             try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: url.path)
@@ -47,6 +108,9 @@ actor StateTileCache {
             // Cancellation says nothing about integrity; retain a valid file.
             throw CancellationError()
         } catch {
+            // A caller's cancellation checker may use an error other than
+            // CancellationError. Recheck before treating a failure as corrupt.
+            try checkCancellation()
             try? FileManager.default.removeItem(at: url)
             return nil
         }

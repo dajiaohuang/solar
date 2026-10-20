@@ -14,6 +14,7 @@ struct TileMetadata: Decodable, Sendable {
     let datasetVersion: String
     let datasetSha256: String
     let kernelSha256: String
+    let sourceChainSha256: String?
     let model: String
     let centerId: String
     let validityStartEt: Double
@@ -26,9 +27,43 @@ struct TileMetadata: Decodable, Sendable {
     let missingReason: String
     let identityStatus: String
     let sourceRecord: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case id, source, datasetVersion, datasetSha256, kernelSha256, sourceChainSha256, model, centerId, validityStartEt, validityEndEt, validityPresent, stateEvidence, evidenceWindowStartEt, evidenceWindowEndEt, evidenceWindowPresent, missingReason, identityStatus, sourceRecord
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(String.self, forKey: .id)
+        source = try values.decode(String.self, forKey: .source)
+        datasetVersion = try values.decode(String.self, forKey: .datasetVersion)
+        datasetSha256 = try values.decode(String.self, forKey: .datasetSha256)
+        kernelSha256 = try values.decode(String.self, forKey: .kernelSha256)
+        // Omission is supported for older tiles; an explicit null is malformed.
+        if values.contains(.sourceChainSha256) {
+            sourceChainSha256 = try values.decode(String.self, forKey: .sourceChainSha256)
+        } else {
+            sourceChainSha256 = nil
+        }
+        model = try values.decode(String.self, forKey: .model)
+        centerId = try values.decode(String.self, forKey: .centerId)
+        validityStartEt = try values.decode(Double.self, forKey: .validityStartEt)
+        validityEndEt = try values.decode(Double.self, forKey: .validityEndEt)
+        validityPresent = try values.decode(Bool.self, forKey: .validityPresent)
+        stateEvidence = try values.decode(String.self, forKey: .stateEvidence)
+        evidenceWindowStartEt = try values.decode(Double.self, forKey: .evidenceWindowStartEt)
+        evidenceWindowEndEt = try values.decode(Double.self, forKey: .evidenceWindowEndEt)
+        evidenceWindowPresent = try values.decode(Bool.self, forKey: .evidenceWindowPresent)
+        missingReason = try values.decode(String.self, forKey: .missingReason)
+        identityStatus = try values.decode(String.self, forKey: .identityStatus)
+        sourceRecord = try values.decode(Bool.self, forKey: .sourceRecord)
+        if let digest = sourceChainSha256, !digest.isEmpty, !StateTileDecoder.isHash(digest) {
+            throw StateTileFailure.invalid("Invalid source-chain digest.")
+        }
+    }
 }
 
-struct TileExpectation {
+struct TileExpectation: Sendable {
     let planHash: String
     let catalogHash: String
     let inventoryHash: String?
@@ -41,7 +76,12 @@ struct TileExpectation {
 
 /// Float64 source states stay in a single packed allocation. Float32 conversion
 /// belongs exclusively to the renderer after subtracting its reference origin.
-struct VerifiedStateTile {
+struct VerifiedStateTile: Sendable {
+    let timeScale: String
+    let frame: String
+    let stateOriginId: String
+    let distanceUnit: String
+    let velocityUnit: String
     let metadata: [TileMetadata]
     let exact: [Bool]
     let states: [Double]
@@ -49,6 +89,8 @@ struct VerifiedStateTile {
 }
 
 enum StateTileDecoder {
+    static let headerBytes = 208
+    static let wireVersion = 2
     static let maxBytes = 64 * 1024 * 1024
     static let maxRows = 32_768
 
@@ -56,10 +98,35 @@ enum StateTileDecoder {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
+    static func cancellableSHA256(_ data: Data) throws -> String {
+        try Task.checkCancellation()
+        var hash = SHA256()
+        try data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
+            for start in stride(from: 0, to: bytes.count, by: 262_144) {
+                try Task.checkCancellation()
+                let end = min(start + 262_144, bytes.count)
+                hash.update(bufferPointer: UnsafeRawBufferPointer(rebasing: bytes[start..<end]))
+            }
+        }
+        try Task.checkCancellation()
+        let result = hash.finalize().map { String(format: "%02x", $0) }.joined()
+        try Task.checkCancellation()
+        return result
+    }
+
     static func isHash(_ value: String) -> Bool {
         value.utf8.count == 64 && value.utf8.allSatisfy {
             (48...57).contains($0) || (97...102).contains($0)
         }
+    }
+
+    static func headerPayloadHash(_ data: Data) -> String? {
+        guard data.count >= headerBytes else { return nil }
+        return data[168..<200].map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func hasNonWhitespace(_ value: String) -> Bool {
+        !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     static func requestHash(_ ids: [String]) -> String {
@@ -80,7 +147,7 @@ enum StateTileDecoder {
         func require(_ condition: Bool, _ reason: String) throws {
             if !condition { throw StateTileFailure.invalid("State tile: \(reason)") }
         }
-        try require(data.count >= 200 && data.count <= maxBytes, "invalid byte count")
+        try require(data.count >= headerBytes && data.count <= maxBytes, "invalid byte count")
         // Assemble little-endian scalars without assuming Data pointer alignment.
         func integer(_ offset: Int, _ width: Int) -> UInt64 {
             var value: UInt64 = 0
@@ -92,7 +159,9 @@ enum StateTileDecoder {
             data[offset..<(offset + 32)].map { String(format: "%02x", $0) }.joined()
         }
         try require(data.prefix(8) == Data([83, 76, 82, 84, 73, 76, 69, 0]), "magic mismatch")
-        try require(integer(8, 2) == 1 && integer(10, 2) == 200, "unsupported wire format")
+        try require(integer(8, 2) == wireVersion && integer(10, 2) == headerBytes, "unsupported wire format")
+        try require(data[200] == 1 && data[201] == 1 && data[202] == 1 && data[203] == 1 && data[204] == 1
+                    && data[205] == 0 && data[206] == 0 && data[207] == 0, "unsupported scientific contract")
         let sequence = u32(12), tileCount = u32(16), ordinal = u32(20), count = u32(24)
         let epoch = Double(bitPattern: integer(32, 8))
         try require(count > 0 && count <= maxRows && count == expected.ids.count, "row count mismatch")
@@ -104,12 +173,12 @@ enum StateTileDecoder {
         let metadataOffset = u32(40), metadataLength = u32(44), exactOffset = u32(48)
         let bitmapLength = u32(52), approximateOffset = u32(56), missingOffset = u32(60)
         let statesOffset = u32(64), statesLength = u32(68)
-        try require(metadataOffset == 200 && metadataLength > 0 && metadataOffset + metadataLength <= data.count, "metadata bounds")
+        try require(metadataOffset == headerBytes && metadataLength > 0 && metadataOffset + metadataLength <= data.count, "metadata bounds")
         try require(bitmapLength == (count + 7) / 8 && exactOffset == metadataOffset + metadataLength && approximateOffset == exactOffset + bitmapLength && missingOffset == approximateOffset + bitmapLength, "bitmap bounds")
         try require(statesOffset == (missingOffset + bitmapLength + 7) / 8 * 8 && statesLength == count * 48 && statesOffset + statesLength == data.count, "state bounds")
         let payloadHash = hash(168)
         var digest = SHA256()
-        for start in stride(from: 200, to: data.count, by: 262_144) {
+        for start in stride(from: headerBytes, to: data.count, by: 262_144) {
             try checkCancellation()
             digest.update(data: data[start..<min(start + 262_144, data.count)])
         }
@@ -131,6 +200,7 @@ enum StateTileDecoder {
             try checkCancellation()
             let start = cursor
             while cursor < metadataEnd && data[cursor] != 10 {
+                try require(cursor - start < 1_048_576, "metadata line exceeds 1 MiB")
                 cursor += 1
                 if cursor % 262_144 == 0 { try checkCancellation() }
             }
@@ -144,21 +214,27 @@ enum StateTileDecoder {
             try require(metadata.id == expected.ids[row], "requested body identity mismatch")
             let isExact = bit(exactOffset, row), missing = bit(missingOffset, row)
             try require(!bit(approximateOffset, row) && isExact != missing, "invalid exact/missing status")
+            if metadata.validityPresent {
+                try require(metadata.validityStartEt.isFinite && metadata.validityEndEt.isFinite && metadata.validityStartEt <= metadata.validityEndEt, "invalid validity window")
+            }
+            if metadata.evidenceWindowPresent {
+                try require(metadata.evidenceWindowStartEt.isFinite && metadata.evidenceWindowEndEt.isFinite && metadata.evidenceWindowStartEt <= metadata.evidenceWindowEndEt, "invalid evidence window")
+            }
             if isExact {
-                try require(!metadata.source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !metadata.datasetVersion.isEmpty && isHash(metadata.datasetSha256) && !metadata.stateEvidence.isEmpty && !metadata.centerId.isEmpty && metadata.missingReason.isEmpty, "exact provenance missing")
+                try require(hasNonWhitespace(metadata.source) && hasNonWhitespace(metadata.datasetVersion) && isHash(metadata.datasetSha256) && metadata.sourceChainSha256.map { isHash($0) } == true && hasNonWhitespace(metadata.stateEvidence) && metadata.centerId == "naif:0" && metadata.missingReason.isEmpty, "exact provenance missing or non-barycentric origin")
                 try require(metadata.model == "spk-original" || metadata.model == "source-kernel-state-at-audit-epoch", "unsupported exact model")
                 let datasetHash = metadata.sourceRecord ? expected.inventoryHash : expected.catalogHash
                 try require(datasetHash != nil && metadata.datasetSha256 == datasetHash, "dataset hash is not bound to this manifest")
-                if metadata.model == "source-kernel-state-at-audit-epoch" { try require(metadata.sourceRecord && !metadata.identityStatus.isEmpty, "snapshot source identity missing") }
+                if metadata.model == "source-kernel-state-at-audit-epoch" { try require(metadata.sourceRecord && hasNonWhitespace(metadata.identityStatus), "snapshot source identity missing") }
                 try require(isHash(metadata.kernelSha256), "kernel hash missing")
                 let et = (epoch - 2_451_545) * 86_400
                 if metadata.validityPresent {
-                    try require(metadata.validityStartEt.isFinite && metadata.validityEndEt.isFinite && metadata.validityStartEt <= metadata.validityEndEt && et >= metadata.validityStartEt - 0.0001 && et <= metadata.validityEndEt + 0.0001, "state outside validity")
+                    try require(et >= metadata.validityStartEt - 0.0001 && et <= metadata.validityEndEt + 0.0001, "state outside validity")
                 }
                 if metadata.evidenceWindowPresent {
-                    try require(metadata.evidenceWindowStartEt.isFinite && metadata.evidenceWindowEndEt.isFinite && metadata.evidenceWindowStartEt <= metadata.evidenceWindowEndEt && et >= metadata.evidenceWindowStartEt - 0.0001 && et <= metadata.evidenceWindowEndEt + 0.0001, "state outside evidence window")
+                    try require(et >= metadata.evidenceWindowStartEt - 0.0001 && et <= metadata.evidenceWindowEndEt + 0.0001, "state outside evidence window")
                 }
-            } else { try require(!metadata.missingReason.isEmpty, "missing reason absent") }
+            } else { try require(hasNonWhitespace(metadata.missingReason), "missing reason absent") }
             for component in 0..<6 {
                 let value = Double(bitPattern: integer(statesOffset + (row * 6 + component) * 8, 8))
                 try require(value.isFinite && (isExact || value == 0), "invalid state value")
@@ -168,6 +244,6 @@ enum StateTileDecoder {
         }
         try require(cursor == metadataEnd, "metadata count mismatch")
         try checkCancellation()
-        return VerifiedStateTile(metadata: rows, exact: exact, states: states, payloadHash: payloadHash)
+        return VerifiedStateTile(timeScale: "TDB", frame: "ECLIPJ2000", stateOriginId: "naif:0", distanceUnit: "km", velocityUnit: "km/s", metadata: rows, exact: exact, states: states, payloadHash: payloadHash)
     }
 }

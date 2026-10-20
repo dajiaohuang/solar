@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-03",
+  "baselineCommit": "ae2dc46",
+  "scope": "Local interaction audit of Explorer and the main atlas workflows",
+  "fixedBehaviors": [
+    "2D click and completed touch tap focus named bodies",
+    "Drag, pinch and pointer cancellation cannot select or change reference; outside release recovers",
+    "3D switching preserves planar session settings while unsupported controls remain truthful",
+    "Incomplete numeric and playing-date edits are preserved without committing zero or NaN",
+    "Clock seeking does not apply the elapsed interval from before the seek",
+    "Tooltip positions are viewport-clamped and stale view/reference/seek hover is hidden",
+    "Keyboard focus opens object details while canvas focus preserves double-click layout"
+  ],
+  "validation": {
+    "unit": { "files": 4, "passed": 21 },
+    "finalBrowser": { "passed": 21, "failed": 0, "skipped": 1, "projects": ["desktop-chromium", "mobile-chromium"] },
+    "broaderBrowser": { "mainWorkflowChecksPassed": 20, "projects": ["desktop-chromium", "mobile-chromium"] },
+    "productionBuild": "Passed as prerequisite of final Playwright run",
+    "typeScript": "Passed",
+    "scopedLint": { "errors": 0, "existingDependencyWarnings": 3 },
+    "diffCheck": "Passed",
+    "accessibility": "No serious or critical automated violations on checked bilingual first-run, explorer, catalog, elements, stories, story dialog, about and search surfaces"
+  },
+  "commands": [
+    "rtk npx vitest run tests/unit/point-pick-gesture.test.ts tests/unit/simulation-clock-interaction.test.ts tests/unit/catalog-scene-interaction.test.ts tests/unit/preview-guards.test.ts",
+    "rtk npx playwright test tests/e2e/explorer-interactions.spec.ts tests/e2e/interaction-shell.spec.ts tests/e2e/accessibility.spec.ts --workers=1 --output=.cache/interaction-audit-20261003/accepted",
+    "rtk npx tsc -b",
+    "rtk git diff --check"
+  ],
+  "localEvidence": {
+    "finalRun": ".cache/interaction-audit-20261003/accepted",
+    "broaderRun": ".cache/interaction-audit-20261003/broad",
+    "nativeTouchCancellationDiagnosis": ".cache/interaction-audit-20261003/touch-events",
+    "fixtureCorrection": "Use stable built-in backend names for separated body positions, and reread anchors after camera gestures"
+  },
+  "limits": [
+    "Fixture-backed Chromium and emulated mobile/touch, not physical-device acceptance",
+    "No full local test suite, Firefox/WebKit run, live scientific acceptance or deployment",
+    "No push, release, remote issue or pull request publication; previous publication hold retained"
+  ]
+}

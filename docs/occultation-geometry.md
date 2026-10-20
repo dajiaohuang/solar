@@ -14,10 +14,20 @@ There is no hidden tolerance treating a small positive gap as physical contact.
 The contact flags identify exact floating-point zero gaps only.
 
 The caller must supply directions from the same observer, epoch, frame and
-aberration convention. The current real-source verification uses original
-DE440 J2000 geometric (`NONE`) states and [pinned PCK radii](body-shape-sources.md).
-Only equal-axis PCK bodies are treated as spheres. No mean-radius substitution
-is used for a triaxial body, and no body orientation has yet been evaluated.
+aberration convention. The sphere-pair contact path uses original DE440 J2000
+states and [pinned PCK radii](body-shape-sources.md); it accepts only equal-axis
+PCK bodies. No mean-radius substitution is used for a triaxial body. A separate
+point-source ray search now evaluates exact-ID PCK orientation for one body.
+
+The ray-search JSON contract uses `schemaVersion: 1`, exact `targetId` and a
+distinct DE440 `observerId`, a nonzero three-component `directionJ2000` pointing
+from observer toward the point source,
+`referenceEpochTdb` (JD TDB), `startSeconds`/`endSeconds` (relative TDB seconds),
+`maxStepSeconds`, `toleranceSeconds` and `aberration` (`NONE` or `CN`). The
+direction is normalized and held fixed; the experiment does not select or
+identify a catalog star. `CN` optionally accepts `maxLightTimeSeconds` (default
+36,000, maximum one day). Inputs are limited to 64 KiB, one year, 20,000 scan
+evaluations and the existing 30-second worker deadline.
 
 [CSPICE occult](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/occult_c.html)
 independently classifies the two source ellipsoids. The
@@ -41,11 +51,11 @@ rtk proxy uv run --python 3.12 --with spiceypy==8.2.0 python scripts/reference-s
 ```
 
 This is a geometry foundation, not completed event analysis. Complete-window
-certification, full apparent-limb modeling, topocentric observers,
-triaxial/oriented limbs, topography, refraction, atmospheres/rings, stellar
-astrometry and native/browser event consumers remain unfinished. It does not
-provide a photometric flux loss, uncertainty distribution, event probability,
-ground eclipse path or visibility prediction.
+certification, full apparent-limb modeling, topocentric observers, finite-body
+to finite-body triaxial contacts, topography, refraction, atmospheres/rings,
+catalog-sourced stellar astrometry and native ground-event consumers remain
+unfinished. It does not provide a photometric flux loss, uncertainty
+distribution, event probability, ground eclipse path or visibility prediction.
 
 ## Ground-station geometry core
 
@@ -106,9 +116,9 @@ Browser/native access to this ground search remains unfinished.
 **Evidence → Occultation laboratory** runs the same experiment engine as the
 offline CLI in a dedicated worker. Load the Venus example or import a bounded
 64-KiB experiment JSON, inspect its IDs/epoch/window, select NONE or CN, and set
-scan spacing and root tolerance. The imported settings remain inspectable;
-the exported `inputFile` is the effective serialized input after these edits,
-not a claim to preserve the original imported file's bytes. All displayed times
+scan spacing and root tolerance. The preparation record retains imported bytes
+separately from the effective serialized `inputFile` after UI edits; neither
+filename nor source declaration authenticates the file. All displayed times
 are relative TDB seconds, not UTC. The browser export includes source hashes,
 model, settings, numerical brackets/windows and build identity. CLI exports
 add individual implementation hashes.
@@ -127,6 +137,64 @@ horizontal overflow. The shared CLI retains exactly the previous contacts,
 windows, state-request count and source receipt. This is browser model evidence;
 native event UI, topocentric contacts and the other precision limits remain open.
 
+## Oriented ellipsoid point-source contacts
+
+The second panel in the Occultation laboratory accepts an explicit bounded JSON
+request with one PCK target ID, one distinct DE440 observer ID, a fixed nonzero
+J2000 direction, TDB reference epoch and search interval, scan step, root
+tolerance and either `NONE` or `CN`. It does not infer a star identity or
+substitute an SPK/catalog ID for a PCK ID. The source direction is normalized
+and treated as a fixed inertial forward half-ray for the whole search.
+
+At each reception sample the engine resolves the observer and target from the
+same pinned DE440 J2000 center states. `CN` keeps the observer at reception and
+solves target-center Newtonian reception light time; `NONE` uses the same
+geometric epoch for both centers. Unequal-axis targets use pinned text-PCK
+orientation at emission (`CN`) or reception (`NONE`); exact equal-axis spheres
+are rotation-invariant and do not substitute a mean radius or require an
+orientation model. The ray/ellipsoid intersection supplies the signed clearance
+of the forward half-ray in scaled unit-sphere coordinates. When the supporting
+line's closest point is forward of the observer, the gap is scaled impact
+parameter minus one. When that point is behind the observer, the nearest point
+on the forward ray is its origin and the gap is observer scaled distance minus
+one. Thus a backward ray stays outside even when its infinite supporting line
+passes through the body. The gap is dimensionless, not radians or kilometers;
+negative samples indicate forward-ray interception. The receipt identifies this
+definition with `gapModel: "scaled-forward-ray-ellipsoid-clearance-v1"` and
+`gapUnits: "dimensionless-scaled-unit-sphere-clearance"`.
+The observer must remain outside the ellipsoid; scaled observer distance is
+restricted to `(1 + 1e-10, 1e12]`, with a minimum-to-maximum axis ratio of at
+least `1e-12`. The ray helper also reports its `128 * epsilon * max(1, distance)`
+near-limb screening margin; it is a numerical classification policy, not an
+error bound.
+
+The search is bounded by the shared 20,000 geometry-evaluation ceiling, 512
+contacts, the 365-day input interval and the 30-second worker deadline. It
+refines sampled sign changes only when both endpoint signs lie outside the
+ray helper's numerical screening margin. A refinement sample inside that margin
+is retained as a numerically screened candidate, not reported as a localized
+contact; such an interval contributes no inferred intercept window. The receipt
+retains each indeterminate sample and candidate crossing. Tangencies and
+multiple crossings entirely inside one scan interval can be missed; an empty
+result is not proof of no event. CN residuals and time brackets are numerical
+evidence, not physical accuracy or timing uncertainty.
+
+This is a browser/offline-worker point-source slice, not a complete occultation
+solution. It omits catalog astrometry, source parallax/motion, stellar aberration,
+gravitational deflection, differential surface light time, finite background
+disks, body-to-body ellipse overlap, terrain, atmosphere, rings and topocentric
+station contact timing. The Go ground-contact API and native consumers remain
+sphere-only or unavailable for this ray-event mode. The new engine and receipt
+binding have received source review only; runtime verification and independent
+CSPICE comparison remain pending. Static follow-up audits aligned the search
+with its near-limb indeterminate classification and corrected backward-ray gap
+signs, so an intersecting infinite supporting line cannot create a false
+forward-ray window. Receipt checks also reject multiple localized crossings in
+one scan interval, bracketed roots adjacent to sampled zeros, and window edges
+whose crossing direction contradicts ingress or egress. The receipt names the
+revised clearance model. No tests, build, browser run or independent numerical
+comparison was run for these audits.
+
 ## Bounded contact search
 
 `findOccultationContacts` samples external and internal angular gaps, then bisects
@@ -140,12 +208,19 @@ cancellation before and after source evaluation, and does not hide source errors
 `sampledOverlapWindows` adds inferred positive-duration negative-gap spans for
 each boundary. External spans mean disc overlap; internal spans mean one angular
 disc contains the other, not necessarily a total eclipse. Edges distinguish
-bracketed contacts, sampled zeros and clipping at the requested search boundary.
+bracketed contacts, sampled zero gaps, negative-gap samples inside an inferred
+overlap, and clipping at the requested search boundary. A negative-gap sample
+is not itself a contact.
 Durations retain numerical lower/upper bounds from both endpoint brackets. These
 are not physical uncertainty intervals. Adjacent negative samples may conceal
 an unsampled interruption; the spans inherit the search's missed-event warning.
 Zero-only samples do not establish an event duration, and an instantaneous
 search can report contacts/gaps but produces no positive-duration windows.
+Each contact retains its original scan bracket separately from its localized
+root bracket: sampled-zero contacts point to one exact grid sample, while
+crossings point to the adjacent grid samples that triggered refinement.
+Occultation contact receipts use schema version 2 for this provenance and the
+explicit negative-sample edge kind.
 
 Three original-SPK cases independently reproduce the CSPICE GF window durations
 within 0.04 second. Analytic checks cover clipped windows, separate events,
@@ -203,6 +278,14 @@ iterations at a `1e-9`-second residual threshold. Nonconvergence, unrepresentabl
 emission epochs and missing source coverage are explicit errors. This is center
 Newtonian reception light time, not stellar aberration, gravitational deflection
 or different light times across an extended body's limb.
+
+The Web result inspector separates scan interval count and realized maximum
+spacing from the requested maximum step and root-localization tolerance. For CN
+results it also shows observed maximum iterations, equation residual/tolerance,
+and light-time/source-margin values. These residuals are numerical convergence
+evidence only; the receipt retains `physicalTimingUncertaintySeconds: null`.
+Receipt validation binds the declared CN solver model and checks each retained
+contact's scan and localization brackets against the requested grid.
 
 ```sh
 rtk proxy node --experimental-strip-types scripts/find-occultation-contacts.mjs src/data/venus-transit-reception-example.json .cache/venus-reception-new.json

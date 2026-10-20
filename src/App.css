@@ -260,6 +260,15 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 .frame-layer-budget { padding: 6px 10px; font-size: 11px; overflow-wrap: anywhere; }
 .explorer-stage::before { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2; background: radial-gradient(circle at center, transparent 44%, rgba(0,0,0,.28)); }
 .catalog-cloud-error { position: absolute; z-index: 14; top: 72px; left: 50%; width: min(520px, calc(100% - 32px)); transform: translateX(-50%); }
+.catalog-scene-controls { position: absolute; z-index: 12; bottom: 72px; left: 16px; width: min(570px, calc(100% - 32px)); max-height: min(260px, 40vh); overflow: auto; padding: 10px 12px; font-size: 12px; }
+.catalog-scene-controls summary { cursor: pointer; min-height: 24px; }
+.catalog-scene-options { display: flex; flex-wrap: wrap; gap: 8px 14px; padding-top: 8px; }
+.catalog-scene-controls label { display: flex; align-items: center; gap: 8px; }
+.catalog-scene-controls select { min-width: 0; max-width: 220px; }
+.catalog-scene-controls small, .catalog-scene-controls [role="status"] { flex-basis: 100%; }
+@media (max-width: 980px) {
+  .catalog-scene-controls { bottom: 120px; z-index: 13; }
+}
 .simulation-bar { position: absolute; z-index: 12; top: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: end; gap: 9px; padding: 8px; width: max-content; max-width: calc(100% - 28px); }
 .simulation-bar .compact-field { grid-template-columns: auto auto; align-items: center; gap: 7px; }
 .simulation-bar .compact-field input, .simulation-bar .compact-field select { padding: 7px 8px; width: 126px; }
@@ -286,10 +295,12 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 .viz-canvas { position: absolute; inset: 0; overflow: hidden; }
 .viz-canvas > canvas:not(.trajectory-canvas) { display: block; width: 100%; height: 100%; }
 .trajectory-canvas { display: block; position: absolute; inset: 0; }
-.catalog-point-canvas { display: block; width: 100%; height: 100%; }
+.catalog-point-canvas { display: block; z-index: 0; width: 100%; height: 100%; }
+.catalog-screen-count-overlay { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; image-rendering: pixelated; pointer-events: none; }
 .canvas-label-layer { position: absolute; inset: 0; pointer-events: none; }
 .floating-label, .grid-au-label, .lagrange-label { position: absolute; transform: translate(7px, -50%); font: 9px var(--font-mono); color: #9fb0b7; white-space: nowrap; text-shadow: 0 1px 4px #000; }
 .reference-floating-label { color: var(--accent-2); }
+.placed-floating-label { transform: none; line-height: 14px; }
 .grid-au-label { color: rgba(135,155,165,.55); }
 .lagrange-label { color: var(--accent); }
 .soi-circle { position: absolute; transform: translate(-50%, -50%); border: 1px solid rgba(98, 208, 181, .72); border-radius: 50%; pointer-events: none; box-sizing: border-box; }
@@ -302,7 +313,7 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 .accessible-scene-controls summary { padding: 10px 12px; cursor: pointer; color: var(--muted); font: 9px var(--font-mono); list-style-position: inside; }.accessible-scene-controls[open] { padding-bottom: 9px; }.accessible-scene-controls[open] summary { border-bottom: 1px solid var(--line); color: var(--accent); }
 .accessible-view-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 9px; }.accessible-view-actions button, .accessible-scene-controls li button { min-height: 34px; border: 1px solid var(--line); background: transparent; cursor: pointer; font-size: 8px; }
 .accessible-scene-controls ul { max-height: 220px; overflow-y: auto; list-style: none; margin: 0; padding: 0 9px; }.accessible-scene-controls li { display: grid; grid-template-columns: 1fr 78px 92px; gap: 5px; align-items: center; padding: 5px 0; border-top: 1px solid var(--line); }.accessible-scene-controls li > span { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; }.accessible-scene-controls li i { width: 6px; height: 6px; border-radius: 50%; flex: none; }
-.atlas-tooltip { position: fixed; z-index: 100; display: grid; gap: 3px; background: rgba(5,10,14,.94); border: 1px solid var(--line-strong); padding: 8px 10px; pointer-events: none; font-size: 10px; }
+.atlas-tooltip { width: max-content; position: fixed; z-index: 100; display: grid; gap: 3px; background: rgba(5,10,14,.94); border: 1px solid var(--line-strong); padding: 8px 10px; pointer-events: none; font-size: 10px; }
 .atlas-tooltip span { color: var(--accent); font: 9px var(--font-mono); }
 .inspector-header { display: flex; gap: 12px; align-items: center; margin: 14px 0 18px; }
 .inspector-header > i { width: 30px; height: 30px; border-radius: 50%; box-shadow: 0 0 18px currentColor; }
@@ -393,7 +404,9 @@ button.welcome-path:hover { border-color: rgba(98,208,181,.5); transform: transl
 .map-caption { height: 38px; padding: 0 12px; border-bottom: 1px solid var(--line); font: 9px var(--font-mono); color: var(--muted); letter-spacing: .08em; }
 .map-caption strong { color: var(--accent); }
 .catalog-stream-controls { padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.catalog-stream-status { position: absolute; z-index: 1; top: 48px; left: 12px; right: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-solid); font: 11px/1.5 var(--font-mono); }
+.catalog-stream-overlay { position: absolute; z-index: 1; top: 48px; left: 12px; right: 12px; max-height: 45%; overflow: auto; overscroll-behavior: contain; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-solid); }
+.catalog-stream-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; font: 11px/1.5 var(--font-mono); }
+.catalog-stream-overlay .catalog-point-epoch { position: static; padding: 8px 0; }
 .catalog-stream-status span { color: var(--muted); }
 .catalog-stream-status [role="alert"] { flex-basis: 100%; overflow-wrap: anywhere; color: var(--danger); }
 .catalog-point-epoch { position: absolute; z-index: 1; bottom: 0; left: 0; right: 0; margin: 0; padding: 8px 12px; color: var(--muted); background: var(--panel-solid); font: 10px/1.5 var(--font-mono); pointer-events: none; }

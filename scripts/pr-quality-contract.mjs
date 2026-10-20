@@ -17,22 +17,20 @@ export function requiresNativeQuality(paths) {
     path.startsWith('android/') ||
     path.startsWith('ios/') ||
     path.startsWith('resources/') ||
-    path.startsWith('src/') ||
-    path.startsWith('scripts/') ||
-    path.startsWith('public/') ||
-    path.startsWith('cmd/') ||
-    path.startsWith('internal/') ||
-    path.startsWith('tests/') ||
-    path === 'go.mod' ||
-    path === 'go.sum' ||
-    path === 'index.html' ||
-    /^tsconfig[^/]*\.json$/.test(path) ||
-    path === 'package.json' ||
-    path === 'package-lock.json' ||
-    path === 'vite.config.ts' ||
+    /^scripts\/(android-|ios-|native-|verify-native-projects)/.test(path) ||
+    path.startsWith('internal/statewire/') ||
+    path.startsWith('internal/httpapi/') ||
+    path.startsWith('cmd/state-tile-fixture/') ||
+    path === 'tests/unit/state-tiles-golden.test.ts' ||
+    path.startsWith('tests/fixtures/state-tiles') ||
     path === '.github/workflows/mobile.yml' ||
     path === '.github/workflows/pull-request-quality.yml'
   ))
+}
+
+export function requiresBackendQuality(paths) {
+  return paths.some(path => path.startsWith('cmd/') || path.startsWith('internal/') ||
+    path === 'go.mod' || path === 'go.sum' || path === '.github/workflows/pull-request-quality.yml')
 }
 
 function applicableJobPassed(result) {
@@ -59,6 +57,7 @@ function classify(baseSha, headSha) {
   const native = requiresNativeQuality(paths)
   appendFileSync(process.env.GITHUB_OUTPUT, `full_web_quality=${full}\n`)
   appendFileSync(process.env.GITHUB_OUTPUT, `native_quality=${native}\n`)
+  appendFileSync(process.env.GITHUB_OUTPUT, `backend_quality=${requiresBackendQuality(paths)}\n`)
   process.stdout.write(`Web quality ${full ? 'required' : 'skipped'}; native quality ${native ? 'required' : 'skipped'} for ${paths.length} changed path(s).\n`)
 }
 

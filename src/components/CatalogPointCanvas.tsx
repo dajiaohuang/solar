@@ -10,15 +10,17 @@ type Props = {
   opacity?: number
   ariaLabel?: string
   unavailableLabel?: string
+  retryLabel?: string
 }
 
-export function CatalogPointCanvas({ records, positions, viewRadiusAU, opacity = 0.82, ariaLabel = 'GPU small-body catalog view', unavailableLabel = 'Catalog rendering is unavailable. The table remains usable.' }: Props) {
+export function CatalogPointCanvas({ records, positions, viewRadiusAU, opacity = 0.82, ariaLabel = 'GPU small-body catalog view', unavailableLabel = 'Catalog rendering is unavailable. The table remains usable.', retryLabel = 'Retry' }: Props) {
   // This map is heliocentric. Other panes subtract their Float64 reference
   // origin first; only GPU attributes use Float32.
   const gpuPositions = useMemo(() => new Float32Array(positions), [positions])
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const frameRef = useRef<CatalogPointFrame | null>(null)
   const drawRef = useRef<(() => void) | null>(null)
+  const retryRef = useRef<(() => void) | null>(null)
   const [unavailable, setUnavailable] = useState(false)
   const appearance = useMemo(() => {
     const colors = new Float32Array(records.length * 3)
@@ -43,13 +45,13 @@ export function CatalogPointCanvas({ records, positions, viewRadiusAU, opacity =
     let active = true
     const report = (failed: boolean) => queueMicrotask(() => { if (active) setUnavailable(failed) })
     const draw = () => {
-      if (!renderer || !frameRef.current) return
+      if (!renderer || !frameRef.current) return false
       const bounds = canvas.getBoundingClientRect()
       const ratio = Math.min(window.devicePixelRatio, 2)
       const width = Math.max(1, Math.round(bounds.width * ratio)), height = Math.max(1, Math.round(bounds.height * ratio))
       if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height }
-      try { renderer.draw(frameRef.current, width, height, ratio) }
-      catch { renderer.dispose(); renderer = null; report(true) }
+      try { renderer.draw(frameRef.current, width, height, ratio); return true }
+      catch { renderer.dispose(); renderer = null; report(true); return false }
     }
     const initialize = () => {
       renderer?.dispose()
@@ -58,9 +60,11 @@ export function CatalogPointCanvas({ records, positions, viewRadiusAU, opacity =
         const gl = canvas.getContext('webgl', { antialias: false, alpha: false })
         if (!gl) throw new Error('WebGL unavailable')
         renderer = createCatalogPointRenderer(gl)
-        report(false)
-        draw()
-      } catch { report(true) }
+        if (draw()) report(false)
+      } catch {
+        renderer?.dispose(); renderer = null
+        report(true)
+      }
     }
     const onLost = (event: Event) => {
       event.preventDefault()
@@ -69,6 +73,7 @@ export function CatalogPointCanvas({ records, positions, viewRadiusAU, opacity =
     }
     canvas.addEventListener('webglcontextlost', onLost)
     canvas.addEventListener('webglcontextrestored', initialize)
+    retryRef.current = initialize
     drawRef.current = draw
     initialize()
     const observer = new ResizeObserver(draw); observer.observe(canvas)
@@ -77,13 +82,14 @@ export function CatalogPointCanvas({ records, positions, viewRadiusAU, opacity =
       observer.disconnect()
       canvas.removeEventListener('webglcontextlost', onLost)
       canvas.removeEventListener('webglcontextrestored', initialize)
+      retryRef.current = null
       drawRef.current = null
       renderer?.dispose()
     }
   }, [])
 
   return <>
-    <canvas ref={canvasRef} className="viz-canvas catalog-point-canvas" role="img" aria-label={`${ariaLabel}: ${records.length.toLocaleString()}`} />
-    {unavailable && <div className="empty-state catalog-render-status" role="status"><p>{unavailableLabel}</p></div>}
+    <canvas ref={canvasRef} className="viz-canvas catalog-point-canvas" role="img" aria-hidden={unavailable || undefined} style={{ visibility: unavailable ? 'hidden' : undefined }} aria-label={`${ariaLabel}: ${records.length.toLocaleString()}`} />
+    {unavailable && <div className="empty-state catalog-render-status" role="status"><p>{unavailableLabel}</p><button type="button" onClick={() => retryRef.current?.()}>{retryLabel}</button></div>}
   </>
 }

@@ -23,12 +23,24 @@ struct NativeGroundContactView: View {
     @State private var report: NativeGroundContacts?
     @State private var bytes: Data?
     @State private var message = ""
+    @State private var exportMessage = ""
     @State private var work: Task<Void, Never>?
+    @State private var workIdentity: UUID?
+    @State private var workDeadline: Task<Void, Never>?
+    @State private var busy = false
     @State private var generation = UUID()
     @State private var exporting = false
     @State private var exportDocument = ContactDocument(bytes: Data())
     private var zh: Bool { Locale.preferredLanguages.first?.hasPrefix("zh") == true }
     private func copy(_ en: String, _ cn: String) -> String { zh ? cn : en }
+    private func edgeLabel(_ kind: String) -> String {
+        switch kind {
+        case "search-boundary": return copy("Search boundary", "搜索边界")
+        case "sampled-zero": return copy("Sampled zero", "采样零值")
+        case "sampled-overlap": return copy("Sampled negative gap", "采样负间隙")
+        default: return copy("Bracketed contact", "区间定位的接触")
+        }
+    }
     private var inputs: [String] { [address, start, end, longitude, latitude, height, foreground, background] }
     var body: some View {
         Section {
@@ -39,11 +51,14 @@ struct NativeGroundContactView: View {
                 field(copy("End UTC", "结束 UTC"), $end, "end")
                 field(copy("Longitude degrees, east positive", "经度（度，东经为正）"), $longitude, "longitude")
                 field(copy("Latitude degrees", "纬度（度）"), $latitude, "latitude")
-                field(copy("Ellipsoidal height metres", "椭球高（米）"), $height, "height")
+                field(copy("WGS84 ellipsoidal height (−1000 to 100000 metres)", "WGS84 椭球高（−1000 至 100000 米）"), $height, "height")
                 field(copy("Foreground NAIF ID", "前景 NAIF 编号"), $foreground, "foreground")
                 field(copy("Background NAIF ID", "背景 NAIF 编号"), $background, "background")
-                Button(work == nil ? copy("Search ground contacts", "搜索地面接触") : copy("Cancel search", "取消搜索")) { if work == nil { search() } else { clear() } }.accessibilityIdentifier("contacts.load")
+                Button(!busy ? copy("Search ground contacts", "搜索地面接触") : copy("Cancel search", "取消搜索")) { if !busy { search() } else { clear() } }.accessibilityIdentifier("contacts.load")
                 Text(message).accessibilityIdentifier("contacts.status")
+                if !exportMessage.isEmpty {
+                    Text(exportMessage).font(.callout).accessibilityIdentifier("contacts.export-status")
+                }
                 if let result = report?.result {
                     Text(copy("Short or grazing events may be missed. Physical timing uncertainty is unknown; numerical brackets are not physical accuracy. No apparent limb aberration, deflection, terrain, refraction or visibility certification.", "可能漏掉短时或擦边事件。物理时间不确定性未知；数值区间不代表物理精度。不含边缘光行差、偏折、地形、折射或可见性认证。"))
                     ForEach(Array(result.contacts.enumerated()), id: \.offset) { _, c in
@@ -53,7 +68,7 @@ struct NativeGroundContactView: View {
                     if let windows = result.sampledOverlapWindows {
                         Text(copy("Sample-inferred overlap windows. Unsampled gaps may split them; duration bounds are numerical, not physical uncertainty.", "采样推断的重叠窗口。未采样间隙可能分割区间；持续时间范围是数值范围，不是物理不确定性。"))
                         ForEach(Array(windows.enumerated()), id: \.offset) { index, window in
-                            Text("\(window.boundary == "external" ? copy("Disk overlap", "圆盘重叠") : copy("Disk containment", "圆盘包含"))\n\(window.start.utc) → \(window.end.utc)\n\(window.durationSeconds, specifier: "%.3f") s [\(window.numericalDurationBoundsSeconds[0], specifier: "%.3f"), \(window.numericalDurationBoundsSeconds[1], specifier: "%.3f")]\n\(window.start.kind) / \(window.end.kind)").textSelection(.enabled).accessibilityIdentifier("contacts.window.\(index)")
+                            Text("\(window.boundary == "external" ? copy("Disk overlap", "圆盘重叠") : copy("Disk containment", "圆盘包含"))\n\(window.start.utc) → \(window.end.utc)\n\(window.durationSeconds, specifier: "%.3f") s [\(window.numericalDurationBoundsSeconds[0], specifier: "%.3f"), \(window.numericalDurationBoundsSeconds[1], specifier: "%.3f")]\n\(edgeLabel(window.start.kind)) / \(edgeLabel(window.end.kind))").textSelection(.enabled).accessibilityIdentifier("contacts.window.\(index)")
                         }
                     }
                     Text("IERS \(result.earthOrientation.retrievedAt)\n\(result.earthOrientation.sha256)").textSelection(.enabled)
@@ -65,9 +80,11 @@ struct NativeGroundContactView: View {
         .onChange(of: expanded) { if !$0 { clear() } }
         .onChange(of: scenePhase) { if $0 != .active { clear() } }
         .onDisappear { clear() }
+        .onChange(of: exporting) { if $0 { exportMessage = "" } }
         .fileExporter(isPresented: $exporting, document: exportDocument, contentType: .json, defaultFilename: "solar-ground-contacts") { outcome in
-            switch outcome { case .success: message = copy("Contact source response saved.", "已保存接触来源响应。")
-            case .failure(let error): message = String(describing: error) }
+            defer { exportDocument = ContactDocument(bytes: Data()) }
+            switch outcome { case .success: exportMessage = copy("Selected ground-contact snapshot saved.", "已保存所选地面接触快照。")
+            case .failure(let error): exportMessage = copy("Ground-contact snapshot: ", "地面接触快照：") + String(describing: error) }
         }
     }
     private func field(_ label: String, _ value: Binding<String>, _ id: String) -> some View {
@@ -76,19 +93,45 @@ struct NativeGroundContactView: View {
             TextField(label, text: value).textInputAutocapitalization(.never).autocorrectionDisabled().accessibilityIdentifier("contacts.\(id)")
         }
     }
-    private func clear() { generation = UUID(); work?.cancel(); work = nil; report = nil; bytes = nil; message = "" }
+    private func clear() { generation = UUID(); work?.cancel(); workDeadline?.cancel(); workDeadline = nil; busy = false; report = nil; bytes = nil; message = "" }
+    private func acceptWork(token: UUID, deadline: TimeInterval) -> Bool {
+        guard !Task.isCancelled, generation == token else { return false }
+        guard ProcessInfo.processInfo.systemUptime < deadline else {
+            clear(); message = copy("Contact search timed out.", "接触事件搜索超时。")
+            return false
+        }
+        return true
+    }
     private func search() {
         clear()
         guard let base = URL(string: address.trimmingCharacters(in: .whitespacesAndNewlines)), let lon = Double(longitude), let lat = Double(latitude), let h = Double(height), let front = Int(foreground), let back = Int(background) else { message = copy("Invalid backend or station inputs.", "后端或站点输入无效。"); return }
         let input = NativeGroundContactRequest(startUtc: start, endUtc: end, station: .init(longitudeDeg: lon, latitudeDeg: lat, heightMeters: h), foregroundId: front, backgroundId: back, aberration: "CN")
         let token = generation; message = copy("Searching…", "搜索中…")
+        let predecessor = work, owner = UUID()
+        let deadline = ProcessInfo.processInfo.systemUptime + 25
+        workIdentity = owner; busy = true
+        workDeadline = Task { @MainActor in
+            do { try await Task.sleep(nanoseconds: 25_000_000_000) } catch { return }
+            guard generation == token, workIdentity == owner else { return }
+            clear(); message = copy("Contact search timed out.", "接触事件搜索超时。")
+        }
         work = Task { @MainActor in
+            defer {
+                if workIdentity == owner {
+                    workDeadline?.cancel(); workDeadline = nil
+                    work = nil; workIdentity = nil
+                    if generation == token { busy = false }
+                }
+            }
             do {
+                await predecessor?.value
+                try Task.checkCancellation()
+                guard acceptWork(token: token, deadline: deadline) else { return }
                 let (result, raw) = try await NativeGroundContactService(base: base).load(input)
-                guard !Task.isCancelled, generation == token else { return }
-                report = result; bytes = raw; message = "\(result.result.contacts.count) contacts · \(result.result.evaluations) evaluations"; work = nil
+                guard acceptWork(token: token, deadline: deadline) else { return }
+                report = result; bytes = raw; message = "\(result.result.contacts.count) contacts · \(result.result.evaluations) evaluations"
             } catch {
-                guard generation == token else { return }; work = nil; message = String(describing: error)
+                guard acceptWork(token: token, deadline: deadline) else { return }; message = String(describing: error)
             }
         }
     }

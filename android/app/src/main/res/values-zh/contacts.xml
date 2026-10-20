@@ -6,7 +6,7 @@
     <string name="contacts_end">结束 UTC</string>
     <string name="contacts_longitude">经度（度，东经为正）</string>
     <string name="contacts_latitude">纬度（度）</string>
-    <string name="contacts_height">WGS84 椭球高（米）</string>
+    <string name="contacts_height">WGS84 椭球高（−1000 至 100000 米）</string>
     <string name="contacts_foreground">前景 NAIF 编号</string>
     <string name="contacts_background">背景 NAIF 编号</string>
     <string name="contacts_load">搜索地面接触</string>
@@ -27,6 +27,7 @@
     <string name="contacts_no_window">没有推断出正时长重叠。</string>
     <string name="contacts_clipped">在搜索边界截断</string>
     <string name="contacts_zero">采样零值</string>
+    <string name="contacts_sampled_overlap">采样负间隙</string>
     <string name="contacts_bracketed">区间定位的接触</string>
     <string name="contacts_export">保存接触与来源 JSON</string>
     <string name="contacts_exported">已保存地面接触来源响应。</string>

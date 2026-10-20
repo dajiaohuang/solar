@@ -1,20 +1,20 @@
 import { readFileSync } from 'node:fs'
 import { expect, it, vi } from 'vitest'
 
-it('invalidates cached manifest order on install and replacement without exposing mutable shared lists', async () => {
+it('invalidates cached manifest order on install and rejects replacement without exposing mutable shared lists', async () => {
   vi.resetModules()
   const store = await import('../../src/engine/ephemeris/kernelStore')
   const files = [...store.EPHEMERIS_MANIFEST.files].sort((a, b) => a.bytes - b.bytes).slice(0, 2)
-  const install = (file: typeof files[number]) => {
+  const install = async (file: typeof files[number]) => {
     const bytes = readFileSync(`public/data/ephemerides/${file.path}`)
-    store.installKernel(file.id, bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
+    await store.installKernel(file.id, bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))
   }
   expect(store.loadedKernelIds()).toEqual([])
-  install(files[1])
+  await install(files[1])
   const oldCoverage = store.kernelCoverage({ id: 'sun' }, 2461287.5)
   expect(Object.isFrozen(oldCoverage.kernelIds)).toBe(true)
   expect(oldCoverage.kernelIds).toEqual([files[1].id])
-  install(files[0])
+  await install(files[0])
   const order = store.EPHEMERIS_MANIFEST.files.filter(file => files.some(selected => selected.id === file.id)).map(file => file.id)
   expect(store.loadedKernelIds()).toEqual(order)
   expect(oldCoverage.kernelIds).toEqual([files[1].id])
@@ -25,16 +25,17 @@ it('invalidates cached manifest order on install and replacement without exposin
   exposedKernels.length = 0
   expect(store.loadedKernelIds()).toEqual(order)
   expect(store.loadedKernels().map(kernel => kernel.id)).toEqual(order)
-  install(files[0])
+  await expect(install(files[0])).rejects.toThrow('already installed')
   expect(store.loadedKernelIds()).toEqual(order)
-  expect(store.loadedKernels().find(kernel => kernel.id === files[0].id)!.kernel).not.toBe(previousKernel)
+  expect(store.loadedKernels().find(kernel => kernel.id === files[0].id)!.kernel).toBe(previousKernel)
 })
 
 it('bounds concurrent loads across overlapping requests and reuses verified files', async () => {
   vi.resetModules()
   vi.useFakeTimers()
   const store = await import('../../src/engine/ephemeris/kernelStore')
-  const files = [...store.EPHEMERIS_MANIFEST.files].sort((a, b) => a.bytes - b.bytes).slice(0, 12)
+  const files = store.EPHEMERIS_MANIFEST.files.filter(file => !file.dependencyOnly && !file.solutionKernelIds?.length)
+    .sort((a, b) => a.bytes - b.bytes).slice(0, 12)
   const bytes = new Map(files.map(file => [file.path, readFileSync(`public/data/ephemerides/${file.path}`)]))
   let release = false
   let active = 0
@@ -77,7 +78,8 @@ it('bounds concurrent loads across overlapping requests and reuses verified file
 it('retains failed dependency errors across peer successes and clears only successful retries', async () => {
   vi.resetModules()
   const store = await import('../../src/engine/ephemeris/kernelStore')
-  const files = [...store.EPHEMERIS_MANIFEST.files].sort((a, b) => a.bytes - b.bytes).slice(0, 3)
+  const files = store.EPHEMERIS_MANIFEST.files.filter(file => !file.dependencyOnly && !file.solutionKernelIds?.length)
+    .sort((a, b) => a.bytes - b.bytes).slice(0, 3)
   const failing = new Set(files.slice(0, 2).map(file => file.path))
   let releasePeer!: () => void
   const peerGate = new Promise<void>(resolve => { releasePeer = resolve })

@@ -25,12 +25,14 @@ export function receptionLightTime(options: {
     const positionKm = target.map((value, i) => value-observer[i]) as [number, number, number]
     const rangeKm = Math.hypot(...positionKm), next = rangeKm/C_KM_PER_SECOND
     if (!Number.isFinite(next) || next > maxLightTimeSeconds) throw new RangeError('Reception light time exceeds the explicit source margin')
-    const residualSeconds = Math.abs(next-lightTimeSeconds)
-    if (residualSeconds <= toleranceSeconds) return { positionKm, rangeKm, lightTimeSeconds, emissionElapsedTdbSeconds,
+    const residualSeconds = Math.max(Math.abs(next-lightTimeSeconds),
+      Math.abs((elapsedTdbSeconds-emissionElapsedTdbSeconds)-next))
+    if (residualSeconds <= toleranceSeconds) return { positionKm, rangeKm, lightTimeSeconds: next, emissionElapsedTdbSeconds,
       iterations: iteration, residualSeconds, toleranceSeconds, maxLightTimeSeconds,
       model: 'converged-newtonian-reception' as const,
       limitations: ['Center-to-center Newtonian reception light time, not a relativistic light-propagation model.',
         'No stellar aberration, gravitational deflection or differential light time across an extended limb.',
+        'Residual includes the light-time equation at the representable emission epoch; rebase relative times if their spacing exceeds the requested tolerance.',
         'Iteration residual is numerical convergence evidence, not physical angular or timing uncertainty.'] }
     lightTimeSeconds = next
   }

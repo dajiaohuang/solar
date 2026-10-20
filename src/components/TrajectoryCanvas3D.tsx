@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { createFrameInvalidator } from '../lib/frameInvalidation'
 import { ScreenPointIndex } from '../lib/screenPointIndex'
+import { CooperativeScreenPicker } from '../lib/cooperativeScreenPicker'
+import { catalogFramingRadius } from '../lib/catalogScenePresentation'
+import { usePointPickGesture } from '../hooks/usePointPickGesture'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { PREPARE_CANVAS_CAPTURE_EVENT } from '../lib/canvasCapture'
 import { cameraDistanceForFit, cameraRangeForFit, clamp3dZoom, sceneFramingForRadius } from '../lib/camera3d'
@@ -10,12 +13,17 @@ import { createCatalogPointMaterial, createTrajectoryScene, updateTrajectoryLine
 import { updateCurrentPointGeometry, updateCatalogPointGeometry } from '../lib/pointGeometry3d'
 import type { AsteroidRecord, CelestialBody, RenderedBodyPosition, TrajectorySample, Vector3 } from '../types'
 import type { CurrentPositions } from '../lib/currentPositions'
+import { simulationClock } from '../engine/clock/SimulationClock'
+import { SEGMENTED_WEB } from '../lib/webExecution'
+import { updateBodyMarkerInstances } from '../lib/bodyMarkerInstances3d'
+import { updateTrailBatch } from '../lib/trailBatches3d'
 
 type Props = {
   referenceBody: CelestialBody
   trajectories: TrajectorySample[]
   currentPositions: CurrentPositions
-  stateFitKey?: string
+  livePositions?: (julianDay: number) => CurrentPositions
+  stateFitToken: object
   stateFitRadius?: number
   detailBodyIds?: string[]
   onReferenceChange?: (bodyId: string) => void
@@ -28,6 +36,8 @@ type Props = {
   ariaLabel?: string
   fallbackLabel?: string
   onUnavailable?: () => void
+  catalogAppearance?: Uint8Array
+  onCatalogSelect?: (ordinal: number) => void
   catalogRecords?: AsteroidRecord[]
   catalogPositions3D?: Float64Array
   catalogDrawCount?: number
@@ -48,7 +58,10 @@ type SceneResources = {
   controls: OrbitControls
   bodyGeometry: THREE.SphereGeometry
   bodyMeshes: Map<string, THREE.Mesh>
-  trajectoryLines: Map<string, THREE.Line>
+  bodyInstances: THREE.InstancedMesh | null
+  trajectoryLines: Map<string, THREE.LineSegments>
+  trailBatches: [THREE.LineSegments, THREE.LineSegments] | null
+  trailSources: TrajectorySample[]
   auxiliaryGroup: THREE.Group
   lagrangeGeometry: THREE.SphereGeometry
   lagrangeMeshes: Map<string, THREE.Mesh>
@@ -58,7 +71,13 @@ type SceneResources = {
   glowTexture: THREE.Texture
   catalogPoints: THREE.Points
   currentPoints: THREE.Points
+  pointOrdinalStorage: Uint32Array
   pointBodyOrdinals: Uint32Array
+  pointBodies: CelestialBody[]
+  pointPartitionKey: object | null
+  pointDetailedIds: Set<string>
+  pointBodyPositions: Map<string, RenderedBodyPosition>
+  pointBodyPositionOrdinals: Map<string, number>
   bodyScale: number
   fitDistance: number
   contentRadius: number
@@ -81,6 +100,11 @@ function toThree(position: { x: number; y: number; z: number }) {
 }
 
 function updateCameraData(container: HTMLDivElement, resources: SceneResources, appliedZoom: number, fitGeneration: number) {
+  let markers = resources.currentPoints.visible ? resources.currentPoints.geometry.drawRange.count : 0
+  if (!Number.isFinite(markers)) markers = 0
+  for (const mesh of resources.bodyMeshes.values()) if (mesh.visible) markers++
+  container.dataset.visibleMarkerCount = String(markers)
+  container.dataset.markerDrawCalls = String(resources.bodyInstances ? Number(resources.bodyInstances.visible) : markers)
   container.dataset.cameraDistance = resources.camera.position.distanceTo(resources.controls.target).toPrecision(12)
   container.dataset.cameraPosition = resources.camera.position.toArray().map((value) => value.toPrecision(12)).join(',')
   container.dataset.sceneRadius = String(resources.contentRadius)
@@ -143,7 +167,8 @@ export function TrajectoryCanvas3D({
   referenceBody,
   trajectories,
   currentPositions,
-  stateFitKey,
+  livePositions,
+  stateFitToken,
   stateFitRadius,
   detailBodyIds,
   onReferenceChange,
@@ -156,6 +181,8 @@ export function TrajectoryCanvas3D({
   ariaLabel = 'Interactive three-dimensional Solar System trajectory view',
   fallbackLabel = 'Three-dimensional WebGL rendering is unavailable.',
   onUnavailable,
+  catalogAppearance,
+  onCatalogSelect,
   catalogRecords = EMPTY_CATALOG_RECORDS,
   catalogPositions3D = EMPTY_CATALOG_POSITIONS,
   catalogDrawCount = 0,
@@ -169,13 +196,26 @@ export function TrajectoryCanvas3D({
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const resourcesRef = useRef<SceneResources | null>(null)
+  // The visible bulk-point membership and style depend on scene identity,
+  // detail exclusions and count, not on the positions' epoch identity.
+  const pointColorKey = useMemo(() => ({ stateFitToken, detailBodyIds, count: currentPositions.length, referenceBody }),
+    [currentPositions.length, detailBodyIds, referenceBody, stateFitToken])
+  const pointPositionKey = useMemo(() => ({ source: currentPositions, membership: pointColorKey }),
+    [currentPositions, pointColorKey])
+  const catalogPositionKey = useMemo(() => ({ source: catalogPositions3D, x: catalogOrigin.x, y: catalogOrigin.y, z: catalogOrigin.z }),
+    [catalogPositions3D, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z])
   const raycasterRef = useRef(new THREE.Raycaster())
-  const pickingRef = useRef<{ key: string; positions: unknown; index: ScreenPointIndex } | null>(null)
+  const pickingRef = useRef<{ key: string; positions: unknown; width: number; height: number; count: number; index: ScreenPointIndex } | null>(null)
+  const [catalogPicker] = useState(() => new CooperativeScreenPicker())
+  const pickGesture = usePointPickGesture()
+  useEffect(() => () => catalogPicker.cancel(), [catalogPicker])
+  useEffect(() => { catalogPicker.cancel() }, [catalogPicker, catalogPositions3D, catalogDrawCount, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z])
   const positionsRef = useRef(currentPositions)
   const lastTouchTapRef = useRef<{ bodyId: string; timestamp: number } | null>(null)
   const touchGestureRef = useRef<{ pointerId: number; startX: number; startY: number; moved: boolean } | null>(null)
   const activeTouchPointersRef = useRef(new Set<number>())
   const fitKeyRef = useRef('')
+  const stateFitTokenRef = useRef<object | undefined>(undefined)
   const fitGenerationRef = useRef(0)
   const appliedZoomRef = useRef(clamp3dZoom(zoomLevel))
   const appliedResetKeyRef = useRef(resetViewKey)
@@ -184,6 +224,51 @@ export function TrajectoryCanvas3D({
   const [unavailable, setUnavailable] = useState<string | null>(null)
   useEffect(() => { onUnavailableRef.current = onUnavailable; fallbackLabelRef.current = fallbackLabel }, [fallbackLabel, onUnavailable])
   useEffect(() => { positionsRef.current = currentPositions }, [currentPositions])
+
+  useEffect(() => {
+    if (!livePositions) return
+    // The simulation engine owns this cadence. Only coordinates are uploaded;
+    // neither React, sampled histories nor the camera are rebuilt per frame.
+    return simulationClock.subscribeFrames(epoch => {
+      const resources = resourcesRef.current, container = containerRef.current
+      if (!resources || !container || document.hidden) return
+      const next = livePositions(epoch), previous = positionsRef.current
+      let sameMembership = next.length === previous.length
+      for (let index = 0; sameMembership && index < next.length; index++) sameMembership = next.bodyAt(index).id === previous.bodyAt(index).id
+      const ordinals = sameMembership ? null : new Map(Array.from({ length: next.length }, (_, index) => [next.bodyAt(index).id, index]))
+      positionsRef.current = next
+      for (const [id, mesh] of resources.bodyMeshes) {
+        const ordinal = ordinals ? ordinals.get(id) ?? -1 : mesh.userData.positionOrdinal as number
+        mesh.userData.positionOrdinal = ordinal
+        mesh.visible = ordinal >= 0 || id === referenceBody.id && (next.length > 0 || id === 'sun')
+        if (ordinal >= 0) mesh.position.set(next.coordinateAt(ordinal, 0), next.coordinateAt(ordinal, 2), next.coordinateAt(ordinal, 1))
+      }
+      let colorKey: unknown = resources.currentPoints.geometry.userData.colorKey
+      if (ordinals) {
+        // A missing chunk removes only affected bodies, never the whole scene.
+        let count = 0
+        const pointIds: string[] = []
+        for (const body of resources.pointBodies) {
+          const ordinal = ordinals.get(body.id)
+          if (ordinal === undefined) continue
+          resources.pointOrdinalStorage[count++] = ordinal
+          pointIds.push(body.id)
+        }
+        resources.pointBodyOrdinals = resources.pointOrdinalStorage.subarray(0, count)
+        colorKey = pointIds.join('\0')
+      }
+      const saturn = resources.bodyMeshes.get('saturn')
+      resources.saturnRing.visible = Boolean(saturn?.visible && showSaturnRings)
+      if (saturn && resources.saturnRing.visible) resources.saturnRing.position.copy(saturn.position)
+      resources.currentPoints.geometry = updateCurrentPointGeometry(resources.currentPoints.geometry, next, resources.pointBodyOrdinals,
+        colorKey, epoch)
+      resources.currentPoints.visible = resources.pointBodyOrdinals.length > 0
+      container.dataset.liveEpoch = String(epoch)
+      container.dataset.positionCount = String(next.length)
+      container.dataset.liveFrameCount = String(Number(container.dataset.liveFrameCount ?? 0) + 1)
+      resources.invalidate()
+    })
+  }, [livePositions, referenceBody.id, showSaturnRings])
 
   useEffect(() => {
     const container = containerRef.current
@@ -270,7 +355,10 @@ export function TrajectoryCanvas3D({
       controls,
       bodyGeometry: new THREE.SphereGeometry(1, 16, 12),
       bodyMeshes: new Map(),
+      bodyInstances: null,
       trajectoryLines: new Map(),
+      trailBatches: null,
+      trailSources: [],
       auxiliaryGroup,
       lagrangeGeometry,
       lagrangeMeshes: new Map(),
@@ -280,7 +368,13 @@ export function TrajectoryCanvas3D({
       glowTexture,
       catalogPoints,
       currentPoints,
+      pointOrdinalStorage: new Uint32Array(),
       pointBodyOrdinals: new Uint32Array(),
+      pointBodies: [],
+      pointPartitionKey: null,
+      pointDetailedIds: new Set(),
+      pointBodyPositions: new Map(),
+      pointBodyPositionOrdinals: new Map(),
       bodyScale: 1,
       fitDistance: 8.7,
       contentRadius: 0,
@@ -288,7 +382,24 @@ export function TrajectoryCanvas3D({
       grid,
     }
     resourcesRef.current = resources
+    if (SEGMENTED_WEB) {
+      resources.bodyInstances = new THREE.InstancedMesh(resources.bodyGeometry, new THREE.MeshBasicMaterial({ color: 0xffffff }), 161)
+      resources.bodyInstances.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+      resources.bodyInstances.frustumCulled = false
+      resources.bodyInstances.count = 0
+      scene.add(resources.bodyInstances)
+      const trailBatch = (opacity: number) => new THREE.LineSegments(new THREE.BufferGeometry(),
+        new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity }))
+      resources.trailBatches = [trailBatch(0.68), trailBatch(0.3)]
+      scene.add(...resources.trailBatches)
+    }
     const invalidator = createFrameInvalidator(() => {
+      if (resources.bodyInstances) updateBodyMarkerInstances(resources.bodyInstances, resources.bodyMeshes, controls.target)
+      if (resources.trailBatches) {
+        updateTrailBatch(resources.trailBatches[0], resources.trailSources, false, controls.target)
+        updateTrailBatch(resources.trailBatches[1], resources.trailSources, true, controls.target)
+        container.dataset.trailDrawCalls = String(resources.trailBatches.filter(line => line.visible).length)
+      }
       updateCameraData(container, resources, appliedZoomRef.current, fitGenerationRef.current)
       renderer.render(scene, camera)
     })
@@ -322,8 +433,10 @@ export function TrajectoryCanvas3D({
       controls.removeEventListener('change', render)
       controls.dispose()
       for (const line of resources.trajectoryLines.values()) disposeObject(line)
+      for (const line of resources.trailBatches ?? []) disposeObject(line)
       for (const mesh of resources.bodyMeshes.values()) (mesh.material as THREE.Material).dispose()
       resources.bodyGeometry.dispose()
+      if (resources.bodyInstances) (resources.bodyInstances.material as THREE.Material).dispose()
       for (const mesh of resources.lagrangeMeshes.values()) (mesh.material as THREE.Material).dispose()
       resources.lagrangeGeometry.dispose()
       disposeObject(resources.saturnRing)
@@ -351,15 +464,16 @@ export function TrajectoryCanvas3D({
   useEffect(() => {
     if (!continuous) return
     let animationFrame = 0
-    let previous = performance.now()
+    let previous: number | null = null
     const renderFrame = (timestamp: number) => {
       const resources = resourcesRef.current
       if (!resources) return
-      if (!document.hidden) {
+      if (document.hidden) previous = null
+      else {
         resources.invalidate()
-        onFrameDuration?.(timestamp - previous)
+        if (previous !== null) onFrameDuration?.(timestamp - previous)
+        previous = timestamp
       }
-      previous = timestamp
       animationFrame = window.requestAnimationFrame(renderFrame)
     }
     animationFrame = window.requestAnimationFrame(renderFrame)
@@ -369,28 +483,32 @@ export function TrajectoryCanvas3D({
   useEffect(() => {
     const resources = resourcesRef.current
     if (!resources) return
-    const count = Math.min(catalogRecords.length, Math.floor(catalogPositions3D.length / 3))
     resources.catalogPoints.geometry = updateCatalogPointGeometry(resources.catalogPoints.geometry, catalogPositions3D, catalogRecords,
-      { x: catalogOrigin.x, y: catalogOrigin.y, z: catalogOrigin.z })
-    resources.catalogPoints.geometry.setDrawRange(0, Math.min(catalogDrawCount, count))
-    resources.catalogPoints.visible = count > 0
-    resources.invalidate()
-  }, [catalogPositions3D, catalogRecords, catalogDrawCount, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z])
+      { x: catalogOrigin.x, y: catalogOrigin.y, z: catalogOrigin.z }, catalogDrawCount, catalogPositionKey, catalogAppearance)
+  }, [catalogAppearance, catalogDrawCount, catalogPositions3D, catalogPositionKey, catalogRecords, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z])
 
   useEffect(() => {
     const resources = resourcesRef.current
     if (!resources) return
-    const available = Math.min(catalogRecords.length, Math.floor(catalogPositions3D.length / 3))
+    // The geometry writer materializes the visible prefix only; keep the draw
+    // range aligned after source, origin, or adaptive-budget changes.
+    const available = Math.min(catalogAppearance ? catalogAppearance.length / 2 : catalogRecords.length, Math.floor(catalogPositions3D.length / 3))
     resources.catalogPoints.geometry.setDrawRange(0, Math.min(catalogDrawCount, available))
     resources.catalogPoints.visible = catalogDrawCount > 0 && available > 0
     resources.invalidate()
-  }, [catalogDrawCount, catalogPositions3D.length, catalogRecords.length])
+  }, [catalogAppearance, catalogDrawCount, catalogPositions3D, catalogRecords, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z])
 
   useEffect(() => {
     const resources = resourcesRef.current
     if (!resources) return
     resources.eclipticGroup.visible = showEcliptic
     resources.glow.visible = showGlow && referenceBody.id === 'sun'
+    // A history result can commit between throttled UI ticks. Installing it
+    // must not rewind live markers to the older UI epoch.
+    const framePositions = livePositions?.(simulationClock.getJulianDay()) ?? currentPositions
+    const framePositionKey = livePositions ? framePositions : pointPositionKey
+    positionsRef.current = framePositions
+    resources.trailSources = trajectories
 
     const activeLineIds = new Set<string>()
     for (const trajectory of trajectories) {
@@ -399,16 +517,16 @@ export function TrajectoryCanvas3D({
       activeLineIds.add(trajectory.body.id)
       let line = resources.trajectoryLines.get(trajectory.body.id)
       if (!line) {
-        const geometry = updateTrajectoryLineGeometry(new THREE.BufferGeometry(), source)
-        line = new THREE.Line(geometry, new THREE.LineBasicMaterial({
+        const geometry = updateTrajectoryLineGeometry(new THREE.BufferGeometry(), source, trajectory.breakBefore)
+        line = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({
           color: trajectory.body.color,
           transparent: true,
-          opacity: trajectory.body.kind === 'asteroid' ? 0.3 : 0.68,
+          opacity: trajectory.body.kind === 'asteroid' || trajectory.body.kind === 'comet' ? 0.3 : 0.68,
         }))
         resources.trajectoryLines.set(trajectory.body.id, line)
-        resources.scene.add(line)
+        if (!resources.trailBatches) resources.scene.add(line)
       } else {
-        line.geometry = updateTrajectoryLineGeometry(line.geometry, source)
+        line.geometry = updateTrajectoryLineGeometry(line.geometry, source, trajectory.breakBefore)
       }
     }
     for (const [id, line] of resources.trajectoryLines) {
@@ -419,22 +537,41 @@ export function TrajectoryCanvas3D({
       }
     }
 
-    const detailedIds = new Set(detailBodyIds?.slice(0, 160) ?? Array.from({ length: Math.min(160, currentPositions.length) }, (_, index) => currentPositions.bodyAt(index).id))
-    detailedIds.add(referenceBody.id)
-    const bodyPositions = new Map<string, RenderedBodyPosition>()
-    const pointOrdinals = new Uint32Array(currentPositions.length)
-    let pointCount = 0
-    for (let index = 0; index < currentPositions.length; index++) {
-      const id = currentPositions.bodyAt(index).id
-      if (detailedIds.has(id)) bodyPositions.set(id, currentPositions.rowAt(index))
-      else pointOrdinals[pointCount++] = index
+    if (resources.pointPartitionKey !== framePositionKey) {
+      const detailedIds = new Set(detailBodyIds?.slice(0, 160) ?? Array.from({ length: Math.min(160, framePositions.length) }, (_, index) => framePositions.bodyAt(index).id))
+      detailedIds.add(referenceBody.id)
+      const bodyPositions = new Map<string, RenderedBodyPosition>()
+      const bodyPositionOrdinals = new Map<string, number>()
+      // Reuse ordinal storage across frame epochs; geometric growth avoids
+      // reallocating for every incremental increase in selection.
+      if (resources.pointOrdinalStorage.length < framePositions.length) {
+        const capacity = Math.max(256, 2 ** Math.ceil(Math.log2(framePositions.length)))
+        resources.pointOrdinalStorage = new Uint32Array(capacity)
+      }
+      let pointCount = 0
+      for (let index = 0; index < framePositions.length; index++) {
+        const id = framePositions.bodyAt(index).id
+        if (detailedIds.has(id)) {
+          bodyPositions.set(id, framePositions.rowAt(index))
+          bodyPositionOrdinals.set(id, index)
+        }
+        else resources.pointOrdinalStorage[pointCount++] = index
+      }
+      bodyPositions.set(referenceBody.id, {
+        body: referenceBody,
+        planarPosition: { x: 0, y: 0 },
+        position3D: { x: 0, y: 0, z: 0 },
+        distance: 0,
+      })
+      resources.pointDetailedIds = detailedIds
+      resources.pointBodyPositions = bodyPositions
+      resources.pointBodyPositionOrdinals = bodyPositionOrdinals
+      resources.pointBodyOrdinals = resources.pointOrdinalStorage.subarray(0, pointCount)
+      resources.pointBodies = Array.from(resources.pointBodyOrdinals, index => framePositions.bodyAt(index))
+      resources.pointPartitionKey = framePositionKey
     }
-    bodyPositions.set(referenceBody.id, {
-      body: referenceBody,
-      planarPosition: { x: 0, y: 0 },
-      position3D: { x: 0, y: 0, z: 0 },
-      distance: 0,
-    })
+    const { pointDetailedIds: detailedIds, pointBodyPositions: bodyPositions, pointBodyPositionOrdinals: bodyPositionOrdinals } = resources
+    const pointCount = resources.pointBodyOrdinals.length
     for (const [id, item] of bodyPositions) {
       if (!detailedIds.has(id)) continue
       let mesh = resources.bodyMeshes.get(id)
@@ -442,9 +579,11 @@ export function TrajectoryCanvas3D({
         mesh = new THREE.Mesh(resources.bodyGeometry, new THREE.MeshBasicMaterial({ color: item.body.color }))
         mesh.userData.bodyId = id
         resources.bodyMeshes.set(id, mesh)
-        resources.scene.add(mesh)
+        if (!resources.bodyInstances) resources.scene.add(mesh)
       }
       mesh.userData.markerRadius = radiusFor(item.body)
+      mesh.visible = true
+      mesh.userData.positionOrdinal = bodyPositionOrdinals.get(id) ?? -1
       mesh.scale.setScalar(mesh.userData.markerRadius * resources.bodyScale)
       if (item.position3D) mesh.position.copy(toThree(item.position3D))
     }
@@ -455,11 +594,12 @@ export function TrajectoryCanvas3D({
         resources.bodyMeshes.delete(id)
       }
     }
-    resources.pointBodyOrdinals = pointOrdinals.subarray(0, pointCount)
-    resources.currentPoints.geometry = updateCurrentPointGeometry(resources.currentPoints.geometry, currentPositions, resources.pointBodyOrdinals)
+    let sameMembership = framePositions.length === currentPositions.length
+    for (let index = 0; sameMembership && index < framePositions.length; index++) sameMembership = framePositions.bodyAt(index).id === currentPositions.bodyAt(index).id
+    resources.currentPoints.geometry = updateCurrentPointGeometry(resources.currentPoints.geometry, framePositions, resources.pointBodyOrdinals, sameMembership ? pointColorKey : framePositionKey, framePositionKey)
     resources.currentPoints.visible = pointCount > 0
     if (containerRef.current) {
-      containerRef.current.dataset.positionCount = String(currentPositions.length)
+      containerRef.current.dataset.positionCount = String(framePositions.length)
       containerRef.current.dataset.detailCount = String(resources.bodyMeshes.size)
       containerRef.current.dataset.statePointCount = String(pointCount)
       containerRef.current.dataset.trailCount = String(resources.trajectoryLines.size)
@@ -469,32 +609,26 @@ export function TrajectoryCanvas3D({
     // user camera moves during clock playback while keeping story/catalog
     // scenes (including outbound spacecraft paths) discoverable.
     const catalogReady = catalogDrawCount > 0 && catalogPositions3D.length >= 3
-    const fitKey = `${referenceBody.id}|${stateFitKey ?? Array.from({ length: currentPositions.length }, (_, index) => currentPositions.bodyAt(index).id).sort().join(',')}|${trajectories.map((item) => `${item.body.id}:${item.coordinates.length / 3}`).sort().join(',')}|${catalogReady ? catalogFitKey : ''}|${resetViewKey}`
-    if (fitKeyRef.current !== fitKey) {
+    const fitKey = `${referenceBody.id}|selected-state|${catalogReady ? catalogFitKey : ''}|${resetViewKey}`
+    if (fitKeyRef.current !== fitKey || stateFitTokenRef.current !== stateFitToken) {
       fitKeyRef.current = fitKey
+      stateFitTokenRef.current = stateFitToken
       fitGenerationRef.current += 1
       let radius = stateFitRadius ?? 0
       let nearest = Infinity
-      for (let index = 0; index < currentPositions.length; index++) {
-        const distance = currentPositions.distanceAt(index)
+      for (let index = 0; index < framePositions.length; index++) {
+        const distance = framePositions.distanceAt(index)
         radius = Math.max(radius, distance)
         if (distance > 0) nearest = Math.min(nearest, distance)
       }
       for (const trajectory of trajectories) {
-        if (trajectory.body.kind === 'spacecraft') continue
+        if (trajectory.body.source === 'schematic') continue
         const coordinates = trajectory.coordinates
         for (let offset = 0; offset < coordinates.length; offset += 3) radius = Math.max(radius, Math.hypot(coordinates[offset], coordinates[offset + 1], coordinates[offset + 2]))
       }
-      // Fit the complete ready sample once so later adaptive draw-range growth
-      // cannot introduce points outside the user's initial catalog framing.
-      const catalogCount = Math.min(catalogRecords.length, Math.floor(catalogPositions3D.length / 3))
-      for (let index = 0; index < catalogCount; index += 1) {
-        radius = Math.max(radius, Math.hypot(
-          catalogPositions3D[index * 3] - catalogOrigin.x,
-          catalogPositions3D[index * 3 + 1] - catalogOrigin.y,
-          catalogPositions3D[index * 3 + 2] - catalogOrigin.z,
-        ))
-      }
+      // Fit the main population; outliers remain available by zooming out.
+      const catalogCount = Math.min(catalogAppearance ? catalogAppearance.length / 2 : catalogRecords.length, Math.floor(catalogPositions3D.length / 3))
+      radius = Math.max(radius, catalogFramingRadius(catalogPositions3D, 3, catalogCount, { x: catalogOrigin.x, y: catalogOrigin.y, z: catalogOrigin.z }))
       resources.contentRadius = radius
       resources.nearestRadius = nearest
       applySceneFraming(resources)
@@ -534,7 +668,7 @@ export function TrajectoryCanvas3D({
     const container = containerRef.current
     if (container) updateCameraData(container, resources, appliedZoomRef.current, fitGenerationRef.current)
     resources.invalidate()
-  }, [catalogDrawCount, catalogFitKey, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z, catalogPositions3D, catalogRecords.length, currentPositions, detailBodyIds, lagrangePoints, referenceBody, resetViewKey, showEcliptic, showGlow, showSaturnRings, stateFitKey, stateFitRadius, trajectories, zoomLevel])
+  }, [catalogAppearance, catalogDrawCount, catalogFitKey, catalogOrigin.x, catalogOrigin.y, catalogOrigin.z, catalogPositions3D, catalogRecords.length, currentPositions, detailBodyIds, lagrangePoints, livePositions, pointColorKey, pointPositionKey, referenceBody, resetViewKey, showEcliptic, showGlow, showSaturnRings, stateFitToken, stateFitRadius, trajectories, zoomLevel])
 
   useEffect(() => {
     const resources = resourcesRef.current
@@ -575,25 +709,39 @@ export function TrajectoryCanvas3D({
     )
     resources.camera.updateMatrixWorld()
     raycasterRef.current.setFromCamera(pointer, resources.camera)
-    const hits = raycasterRef.current.intersectObjects([...resources.bodyMeshes.values()], false)
-    if (hits[0]) return hits[0].object.userData.bodyId as string
+    const pickable = [...resources.bodyMeshes.values()].filter(mesh => mesh.visible)
+    // Batched marker proxies do not belong to the scene graph.
+    for (const mesh of pickable) mesh.updateMatrixWorld()
+    const hits = raycasterRef.current.intersectObjects(pickable, false)
+    if (hits[0]) return {
+      id: hits[0].object.userData.bodyId as string,
+      positionIndex: hits[0].object.userData.positionOrdinal as number,
+    }
+    if (resources.pointBodyOrdinals.length === 0) return null
     // Pixel-distance picking matches the fixed-pixel points at every zoom.
     const positions = resources.currentPoints.geometry.getAttribute('position')
     const version = positions instanceof THREE.BufferAttribute ? positions.version : positions.data.version
     const key = `${rect.width}:${rect.height}:${version}:${resources.pointBodyOrdinals.length}:${resources.camera.matrixWorld.elements.join(',')}:${resources.camera.projectionMatrix.elements.join(',')}`
     let picking = pickingRef.current
     if (!picking || picking.key !== key || picking.positions !== positions) {
-      const index = new ScreenPointIndex(rect.width, rect.height, resources.pointBodyOrdinals.length)
+      const count = resources.pointBodyOrdinals.length
+      let index: ScreenPointIndex
+      if (picking && picking.width === rect.width && picking.height === rect.height && picking.count === count) {
+        index = picking.index
+        index.clear()
+      } else index = new ScreenPointIndex(rect.width, rect.height, count)
       const projected = new THREE.Vector3()
-      for (let ordinal = 0; ordinal < resources.pointBodyOrdinals.length; ordinal++) {
+      for (let ordinal = 0; ordinal < count; ordinal++) {
         projected.fromBufferAttribute(positions, ordinal).project(resources.camera)
         if (projected.z < -1 || projected.z > 1) continue
         index.add(ordinal, (projected.x + 1) * rect.width / 2, (1 - projected.y) * rect.height / 2)
       }
-      picking = { key, positions, index }; pickingRef.current = picking
+      picking = { key, positions, width: rect.width, height: rect.height, count, index }; pickingRef.current = picking
     }
     const nearest = picking.index.nearest(event.clientX - rect.left, event.clientY - rect.top)
-    return nearest < 0 ? undefined : positionsRef.current.bodyAt(resources.pointBodyOrdinals[nearest]).id
+    if (nearest < 0) return null
+    const positionIndex = resources.pointBodyOrdinals[nearest]
+    return { id: positionsRef.current.bodyAt(positionIndex).id, positionIndex }
   }, [])
 
   return (
@@ -603,8 +751,36 @@ export function TrajectoryCanvas3D({
       data-testid="trajectory-canvas-3d"
       role="img"
       aria-label={ariaLabel}
-      onClick={(event) => { const id = intersectBody(event); if (id) onBodySelect?.(id) }}
-      onDoubleClick={(event) => { const id = intersectBody(event); if (id) onReferenceChange?.(id) }}
+      onPointerDownCapture={event => { pickGesture.start(event); catalogPicker.supersede() }}
+      onPointerMoveCapture={event => pickGesture.move(event)}
+      onPointerUpCapture={event => pickGesture.end(event)}
+      onPointerCancelCapture={event => pickGesture.cancel(event)}
+      onClick={(event) => {
+        catalogPicker.supersede()
+        if (!pickGesture.allowClick()) return
+        const hit = intersectBody(event)
+        if (hit) { onBodySelect?.(hit.id); return }
+        const resources = resourcesRef.current
+        if (!onCatalogSelect || !resources?.catalogPoints.visible) return
+        const rect = event.currentTarget.getBoundingClientRect(), positions = resources.catalogPoints.geometry.getAttribute('position')
+        resources.camera.updateMatrixWorld()
+        const count = resources.catalogPoints.geometry.drawRange.count
+        const cameraKey = () => `${resources.camera.matrixWorld.elements.join(',')}:${resources.camera.projectionMatrix.elements.join(',')}`
+        const matrixKey = cameraKey()
+        const version = positions instanceof THREE.BufferAttribute ? positions.version : positions.data.version
+        const key = `${rect.width}:${rect.height}:${count}:${version}:${matrixKey}`
+        const projected = new THREE.Vector3(), camera = resources.camera.clone()
+        void catalogPicker.nearest(positions, key, rect.width, rect.height, count, row => {
+          projected.fromBufferAttribute(positions, row).project(camera)
+          return projected.z < -1 || projected.z > 1 ? null : { x: (projected.x + 1) * rect.width / 2, y: (1 - projected.y) * rect.height / 2 }
+        }, () => {
+          const currentRect = containerRef.current?.getBoundingClientRect()
+          return resourcesRef.current === resources && resources.catalogPoints.visible && resources.catalogPoints.geometry.getAttribute('position') === positions
+            && resources.catalogPoints.geometry.drawRange.count === count && (positions instanceof THREE.BufferAttribute ? positions.version : positions.data.version) === version
+            && currentRect?.width === rect.width && currentRect.height === rect.height && cameraKey() === matrixKey
+        }, event.clientX - rect.left, event.clientY - rect.top).then(nearest => { if (nearest >= 0) onCatalogSelect(nearest) })
+      }}
+      onDoubleClick={(event) => { if (!pickGesture.allowClick()) return; const hit = intersectBody(event); if (hit) onReferenceChange?.(hit.id) }}
       onPointerDown={(event) => {
         if (event.pointerType !== 'touch') return
         activeTouchPointersRef.current.add(event.pointerId)
@@ -634,19 +810,20 @@ export function TrajectoryCanvas3D({
         activeTouchPointersRef.current.delete(event.pointerId)
         const gesture = touchGestureRef.current
         touchGestureRef.current = null
-        if (!gesture || gesture.pointerId !== event.pointerId || gesture.moved) return
-        const id = intersectBody(event)
-        if (!id) {
+        if (!gesture || gesture.pointerId !== event.pointerId || gesture.moved || !pickGesture.allowClick()) { lastTouchTapRef.current = null; return }
+        const hit = intersectBody(event)
+        if (!hit) {
           lastTouchTapRef.current = null
           return
         }
         const now = performance.now()
         const previous = lastTouchTapRef.current
-        if (previous?.bodyId === id && now - previous.timestamp < 420) {
-          onReferenceChange?.(id)
+        onBodySelect?.(hit.id)
+        if (previous?.bodyId === hit.id && now - previous.timestamp < 420) {
+          onReferenceChange?.(hit.id)
           lastTouchTapRef.current = null
         } else {
-          lastTouchTapRef.current = { bodyId: id, timestamp: now }
+          lastTouchTapRef.current = { bodyId: hit.id, timestamp: now }
         }
       }}
       onPointerCancel={(event) => {
@@ -656,9 +833,9 @@ export function TrajectoryCanvas3D({
         lastTouchTapRef.current = null
       }}
       onMouseMove={(event) => {
-        const id = intersectBody(event)
-        const index = positionsRef.current.indexOf(id)
-        const position = index >= 0 ? positionsRef.current.rowAt(index) : null
+        if (pickGesture.isInteracting()) { onHover?.(null, 0, 0, 0); return }
+        const hit = intersectBody(event)
+        const position = hit && hit.positionIndex >= 0 ? positionsRef.current.rowAt(hit.positionIndex) : null
         if (position) onHover?.(position.body, position.distance, event.clientX, event.clientY)
         else onHover?.(null, 0, 0, 0)
       }}

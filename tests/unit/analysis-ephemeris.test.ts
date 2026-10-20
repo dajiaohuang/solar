@@ -31,7 +31,9 @@ describe('frozen analysis states and evidence', () => {
       expect(analysis.at(jd).velocity('earth')[axis]).toBe(expected.velocity[axis] * (SECONDS_PER_DAY / AU_IN_KM))
     }
     expect(analysis.evidence()).toMatchObject({ frame: 'ECLIPJ2000', dynamicalTimeScale: 'TDB',
-      kernelPool: [{ id: file.id, sha256: file.sha256 }], bodies: [{ bodyId: 'earth', model: 'jpl-spk' }] })
+      // This fixture bypasses the loader; its separately checked bytes do not
+      // create a loader-owned verification receipt for the analysis export.
+      kernelPool: [{ id: file.id, sha256: null }], bodies: [{ bodyId: 'earth', model: 'jpl-spk' }] })
   })
 
   it('refuses missing precise coverage despite an available approximate orbit', () => {
@@ -44,6 +46,22 @@ describe('frozen analysis states and evidence', () => {
     const strict = create({ kernels: [] })
     expect(strict.at(jd).position('sun')).toEqual({ x: 0, y: 0, z: 0 })
     expect(strict.bodyModels()).toMatchObject([{ bodyId: 'sun', model: 'heliocentric-origin' }])
+  })
+
+  it('uses the actual TDB duration for approximate velocities across a UTC leap second', () => {
+    const center = 2457754.5 // 2017-01-01 00:00 UTC, immediately after the inserted leap second.
+    const step = 0.01
+    const before = center - step, after = center + step
+    const analysis = create({ kernels: [], policy: 'prefer-spk', needsVelocity: true,
+      startJulianDay: before, endJulianDay: after })
+    const elapsedDays = (utcJulianDayToEt(after) - utcJulianDayToEt(before)) / SECONDS_PER_DAY
+    expect(elapsedDays * SECONDS_PER_DAY).toBeCloseTo(1729, 4)
+    const expectedBefore = analysis.at(before).position('earth')
+    const expectedAfter = analysis.at(after).position('earth')
+    const velocity = analysis.at(center).velocity('earth')
+    for (const axis of ['x', 'y', 'z'] as const) {
+      expect(velocity[axis]).toBeCloseTo((expectedAfter[axis] - expectedBefore[axis]) / elapsedDays, 12)
+    }
   })
 
   it('rejects a source that covers only part of the analysis window', () => {

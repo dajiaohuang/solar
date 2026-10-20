@@ -1,0 +1,53 @@
+{
+  "type": "executed-current-source-admission-model-not-RSS-or-device-performance",
+  "manifestPath": "public/data/asteroids/releases/mpcorb-26bbcb75e45b7cbb-full/manifest.json",
+  "count": 1561171,
+  "chunkSize": 5000,
+  "chunkCount": 313,
+  "rows": [
+    {
+      "scenePlanMiB": 256,
+      "capacity": 370990,
+      "sceneExtraMiB": 73.59115600585938,
+      "workerBudgetMiB": 182.40884399414062,
+      "workerReservedMiB": 182.4086570739746,
+      "totalModelReservedMiB": 255.99981307983398
+    },
+    {
+      "scenePlanMiB": 512,
+      "capacity": 1094983,
+      "sceneExtraMiB": 217.2054901123047,
+      "workerBudgetMiB": 294.7945098876953,
+      "workerReservedMiB": 294.7944326400757,
+      "totalModelReservedMiB": 511.99992275238037
+    },
+    {
+      "scenePlanMiB": 1024,
+      "capacity": 1561171,
+      "sceneExtraMiB": 309.68052673339844,
+      "workerBudgetMiB": 512,
+      "workerReservedMiB": 355.3144540786743,
+      "totalModelReservedMiB": 664.9949808120728
+    }
+  ],
+  "fullSourceStorageMiB": {
+    "preparedFloat64Coefficients": 119.10789489746094,
+    "mainDoubleXYZSnapshots": 71.46473693847656,
+    "lazyDoubleXY": 23.821578979492188,
+    "twoFloat32XYZVisualSnapshots": 35.73236846923828
+  },
+  "sourceHashes": {
+    "src/lib/catalogStreaming.ts": "0c716fd111d4821ec0fef8f61abd57d14a657267928047f1a53e64321717ab7c",
+    "src/lib/explorerCatalogSession.ts": "46c48bf07d18bb1b3a7e8d85157fa280a925c92e129a7d1671fb4c69bfba1f50",
+    "src/hooks/useExplorerCatalog.ts": "acd606fb406c1efed0c2d2f8fe47c69593ee5b7f3d49d8e6e0944218258128dc"
+  },
+  "auditDate": "2026-10-03",
+  "baseCommit": "363e064",
+  "focusedChecks": {
+    "total": 81,
+    "passed": 78,
+    "failed": 3,
+    "failureFile": "tests/unit/render-budget.test.ts",
+    "note": "Existing expectations disagree with current severe-pressure cooldown and exact-count split semantics; not repaired in this audit."
+  }
+}

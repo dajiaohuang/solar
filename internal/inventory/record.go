@@ -44,10 +44,13 @@ type Orbit struct {
 }
 
 type KernelEvidence struct {
-	AuditET           float64         `json:"auditEt"`
-	Target            int             `json:"target"`
-	Segments          []KernelSegment `json:"segments"`
-	StateAtAuditEpoch *EvidenceState  `json:"stateAtAuditEpoch"`
+	AuditET            float64         `json:"auditEt"`
+	Target             int             `json:"target"`
+	Segments           []KernelSegment `json:"segments"`
+	SourceKernelSHA256 string          `json:"sourceKernelSha256,omitempty"`
+	SourceChainSHA256  string          `json:"sourceChainSha256,omitempty"`
+	SourceSegment      *KernelSegment  `json:"sourceSegment,omitempty"`
+	StateAtAuditEpoch  *EvidenceState  `json:"stateAtAuditEpoch"`
 }
 
 type KernelSegment struct {

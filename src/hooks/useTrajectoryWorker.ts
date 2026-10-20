@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { buildCurrentPositions } from '../lib/trajectory'
-import { getEphemerisSnapshot, loadedKernelIds } from '../engine/ephemeris/kernelStore'
+import { kernelFilesForBodies } from '../engine/ephemeris/kernelStore'
+import { SEGMENTED_WEB } from '../lib/webExecution'
+import { useEphemerisBusy, useEphemerisRevision } from './useEphemerides'
 import type {
   BodyId,
   CelestialBody,
@@ -14,6 +16,7 @@ import { EMPTY_CURRENT_POSITIONS } from '../lib/currentPositions'
 import { trajectoryViews } from '../lib/trajectorySamples'
 import { PRODUCT_PROFILE } from '../lib/productAvailability'
 import { useBackendTrajectoryWorker } from './useBackendTrajectoryWorker'
+import { managedEphemerisWorker } from '../lib/managedEphemerisWorker'
 
 type Params = {
   bodies: CelestialBody[]
@@ -27,6 +30,7 @@ type Params = {
   sampleCount: number
   seekRevision?: number
   currentFrame?: BackendFrame | null
+  isPlaying?: boolean
 }
 
 export function useTrajectoryWorker(params: Params) {
@@ -37,28 +41,60 @@ export function useTrajectoryWorker(params: Params) {
     resolutionBodies,
     referenceId,
     currentJulianDay,
-    trajectoryJulianDay,
+    trajectoryJulianDay: requestedTrajectoryJulianDay,
     historyDays,
     sampleCount,
     currentFrame,
   } = params
   const workerRef = useRef<Worker | null>(null)
+  const workerKernelIdsRef = useRef<Set<string>>(new Set())
   const latestRequestId = useRef(0)
   const [trajectories, setTrajectories] = useState<TrajectorySample[]>([])
   const [trajectoryUnavailableBodyIds, setTrajectoryUnavailableBodyIds] = useState<BodyId[]>([])
   const [progress, setProgress] = useState(0)
   const [isComputing, setIsComputing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const backendEnabled = PRODUCT_PROFILE === 'full'
-  const kernelKey = backendEnabled ? '' : loadedKernelIds().join('|')
-  const ephemerisLoading = !backendEnabled && getEphemerisSnapshot().loading > 0
-  const requestKey = useMemo(() => backendEnabled ? '' : JSON.stringify([referenceId, trajectoryJulianDay, historyDays, sampleCount, kernelKey, trajectoryBodies, resolutionBodies]),
-    [backendEnabled, referenceId, trajectoryJulianDay, historyDays, sampleCount, kernelKey, trajectoryBodies, resolutionBodies])
-  const [completedRequestKey, setCompletedRequestKey] = useState<string | null>(null)
+  const [playbackEpoch, setPlaybackEpoch] = useState(requestedTrajectoryJulianDay)
+  const latestPlayback = useRef({ epoch: requestedTrajectoryJulianDay, busy: isComputing })
+  useEffect(() => { latestPlayback.current = { epoch: requestedTrajectoryJulianDay, busy: isComputing } }, [requestedTrajectoryJulianDay, isComputing])
+  useEffect(() => {
+    if (!params.isPlaying) return
+    // Seek immediately. Otherwise admit a new history only after the previous
+    // worker has settled; rapid playback must not continually cancel it.
+    const refresh = () => { if (!latestPlayback.current.busy) setPlaybackEpoch(latestPlayback.current.epoch) }
+    queueMicrotask(() => setPlaybackEpoch(latestPlayback.current.epoch))
+    const timer = setInterval(refresh, 1000)
+    return () => clearInterval(timer)
+  }, [params.isPlaying, params.seekRevision])
+  const trajectoryJulianDay = params.isPlaying ? playbackEpoch : requestedTrajectoryJulianDay
+  const backendEnabled = PRODUCT_PROFILE === 'full' && !SEGMENTED_WEB
+  const ephemerisRevision = useEphemerisRevision()
+  const ephemerisBusy = useEphemerisBusy()
   const bodiesById = useMemo(
     () => new Map<BodyId, CelestialBody>(resolutionBodies.map((body) => [body.id, body])),
     [resolutionBodies],
   )
+  const trajectoryKernelIdsKey = useMemo(() => {
+    void ephemerisRevision
+    if (backendEnabled || SEGMENTED_WEB) return '[]'
+    const targets = [...trajectoryBodies]
+    const referenceBody = bodiesById.get(referenceId) ?? bodies.find(body => body.id === referenceId)
+    if (referenceBody && !targets.some(body => body.id === referenceId)) targets.push(referenceBody)
+    return JSON.stringify(kernelFilesForBodies(targets))
+  }, [backendEnabled, trajectoryBodies, bodies, bodiesById, referenceId, ephemerisRevision])
+  const trajectoryKernelIds = useMemo(() => JSON.parse(trajectoryKernelIdsKey) as string[], [trajectoryKernelIdsKey])
+  const kernelKey = backendEnabled ? '' : trajectoryKernelIdsKey
+  // Segmented workers acquire their own bounded immutable window. A main-
+  // thread seek/download must not terminate a history already in flight;
+  // at high playback rates it otherwise never reaches a complete result.
+  const ephemerisLoading = !backendEnabled && !SEGMENTED_WEB && ephemerisBusy
+  const requestKey = useMemo(() => backendEnabled ? '' : JSON.stringify([referenceId, trajectoryJulianDay, historyDays, sampleCount, kernelKey, trajectoryBodies, resolutionBodies]),
+    [backendEnabled, referenceId, trajectoryJulianDay, historyDays, sampleCount, kernelKey, trajectoryBodies, resolutionBodies])
+  const [completedRequestKey, setCompletedRequestKey] = useState<string | null>(null)
+  const sceneKey = useMemo(() => JSON.stringify([referenceId, historyDays, sampleCount, kernelKey, trajectoryBodies, resolutionBodies, params.seekRevision]),
+    [referenceId, historyDays, sampleCount, kernelKey, trajectoryBodies, resolutionBodies, params.seekRevision])
+  const [completedSceneKey, setCompletedSceneKey] = useState<string | null>(null)
+  const [completedEpoch, setCompletedEpoch] = useState<number | null>(null)
   const configured = import.meta.env.VITE_SOLAR_API_BASE_URL
   const backend = useBackendTrajectoryWorker({ enabled: backendEnabled && currentFrame !== null,
     base: typeof configured === 'string' && configured.trim() ? configured.trim().replace(/\/+$/, '') : null,
@@ -66,14 +102,16 @@ export function useTrajectoryWorker(params: Params) {
     sourceKey: `${currentFrame?.catalogManifestSha256 ?? ''}:${currentFrame?.inventoryManifestSha256 ?? ''}`, seekRevision: params.seekRevision ?? 0,
     expectedCatalogManifestSha256: currentFrame?.catalogManifestSha256, expectedInventoryManifestSha256: currentFrame?.inventoryManifestSha256 })
 
-  const localCurrent = useMemo(() => !backendEnabled && currentFrame === undefined ? buildCurrentPositions({
-    bodies,
-    bodiesById,
-    referenceId,
-    julianDay: currentJulianDay,
-    resolveBodyPosition,
-  }) : { currentPositions: EMPTY_CURRENT_POSITIONS, missingBodyIds: bodies.map(body => body.id), maxDistance: 0, trajectoryUnavailableBodyIds: [] as BodyId[] },
-  [backendEnabled, bodies, bodiesById, currentFrame, currentJulianDay, referenceId, resolveBodyPosition])
+  const localCurrent = useMemo(() => {
+    void ephemerisRevision
+    return !backendEnabled && currentFrame === undefined ? buildCurrentPositions({
+      bodies,
+      bodiesById,
+      referenceId,
+      julianDay: currentJulianDay,
+      resolveBodyPosition,
+    }) : { currentPositions: EMPTY_CURRENT_POSITIONS, missingBodyIds: bodies.map(body => body.id), maxDistance: 0, trajectoryUnavailableBodyIds: [] as BodyId[] }
+  }, [backendEnabled, bodies, bodiesById, currentFrame, currentJulianDay, referenceId, resolveBodyPosition, ephemerisRevision])
 
   useEffect(() => {
     if (backendEnabled) return
@@ -81,58 +119,93 @@ export function useTrajectoryWorker(params: Params) {
     // update progressively, but do not restart a full sampled trajectory for
     // every partial pool and repeatedly send all those kernels to the worker.
     if (ephemerisLoading) {
+      // Free the previous worker's retained pool while the main thread admits
+      // new files; keeping both pools can otherwise exhaust their shared cap.
+      workerRef.current?.terminate()
+      workerRef.current = null
+      workerKernelIdsRef.current.clear()
+      let active = true
       queueMicrotask(() => {
+        if (!active) return
         setIsComputing(true)
         setProgress(0)
       })
-      return
+      return () => { active = false }
     }
     // Preserve verified kernel buffers across clock updates; recreating a
     // worker every trail tick would repeatedly download/hash/parse megabytes.
-    const worker = workerRef.current ?? new Worker(new URL('../workers/trajectory.worker.ts', import.meta.url), { type: 'module' })
+    let active = true, settled = false
+    let worker: Worker
+    const requestedKernelIds = new Set(trajectoryKernelIds)
+    // A persistent worker keeps parsed SPKs installed. Reuse is safe when its
+    // retained source set is contained by this request; discard stale pools
+    // when the selected body set moves to different source solutions.
+    if (workerRef.current && [...workerKernelIdsRef.current].some(id => !requestedKernelIds.has(id))) {
+      workerRef.current.terminate()
+      workerRef.current = null
+      workerKernelIdsRef.current.clear()
+    }
+    try { worker = workerRef.current ?? managedEphemerisWorker(new Worker(new URL('../workers/trajectory.worker.ts', import.meta.url), { type: 'module' })) }
+    catch (reason) {
+      queueMicrotask(() => {
+        if (!active) return
+        setTrajectories([]); setTrajectoryUnavailableBodyIds([])
+        setProgress(0); setIsComputing(false); setError(String(reason))
+      })
+      return () => { active = false }
+    }
     workerRef.current = worker
+    for (const id of requestedKernelIds) workerKernelIdsRef.current.add(id)
     const requestId = latestRequestId.current + 1
     latestRequestId.current = requestId
     queueMicrotask(() => {
-      if (latestRequestId.current !== requestId) return
+      if (!active || settled || latestRequestId.current !== requestId) return
       setIsComputing(true)
       setProgress(0)
       setError(null)
-      setTrajectories([])
-      setTrajectoryUnavailableBodyIds([])
     })
 
+    const fail = (message: string) => {
+      if (!active || settled || requestId !== latestRequestId.current) return
+      settled = true
+      setTrajectories([]); setTrajectoryUnavailableBodyIds([])
+      setProgress(0); setError(message); setIsComputing(false)
+      worker.terminate()
+      if (workerRef.current === worker) { workerRef.current = null; workerKernelIdsRef.current.clear() }
+    }
     worker.onmessage = (event: MessageEvent<TrajectoryWorkerResponse>) => {
       const response = event.data
-      if (response.requestId !== latestRequestId.current) return
+      if (!active || settled || !response || response.requestId !== requestId || requestId !== latestRequestId.current) return
       if (response.type === 'progress') {
-        setProgress(response.progress ?? 0)
+        if (typeof response.progress !== 'number' || !Number.isFinite(response.progress) || response.progress < 0 || response.progress > 1) { fail('Invalid trajectory progress'); return }
+        setProgress(response.progress)
       } else if (response.type === 'result' && response.packed) {
-        setTrajectories(trajectoryViews(response.packed, bodiesById))
+        let views: TrajectorySample[]
+        try { views = trajectoryViews(response.packed, bodiesById) }
+        catch (reason) { fail(reason instanceof Error ? reason.message : String(reason)); return }
+        settled = true
+        setTrajectories(views)
         setTrajectoryUnavailableBodyIds(response.packed.trajectoryUnavailableBodyIds ?? [])
         setCompletedRequestKey(requestKey)
+        setCompletedSceneKey(sceneKey)
+        setCompletedEpoch(trajectoryJulianDay)
         setProgress(1)
         setIsComputing(false)
       } else if (response.type === 'error') {
-        setTrajectories([])
-        setError(response.error ?? 'Trajectory worker failed')
-        setIsComputing(false)
-        worker.terminate()
-        if (workerRef.current === worker) workerRef.current = null
-      }
+        fail(response.error ?? 'Trajectory worker failed')
+      } else fail('Invalid trajectory worker response')
     }
-    worker.onerror = (event) => {
-      if (requestId !== latestRequestId.current) return
-      setTrajectories([])
-      setError(event.message || 'Trajectory worker failed')
-      setIsComputing(false)
-      worker.terminate()
-      if (workerRef.current === worker) workerRef.current = null
+    const workerFailed = (message: string) => {
+      fail(message)
+      // A worker that fails after delivering a valid result cannot be reused.
+      if (workerRef.current === worker) { worker.terminate(); workerRef.current = null }
     }
+    worker.onerror = event => workerFailed(event.message || 'Trajectory worker failed')
+    worker.onmessageerror = () => workerFailed('Trajectory worker response could not be decoded')
 
     const request: TrajectoryWorkerRequest = {
       type: 'compute',
-      ephemerisFiles: loadedKernelIds(),
+      ephemerisFiles: trajectoryKernelIds,
       requestId,
       bodies: trajectoryBodies,
       resolutionBodies,
@@ -141,35 +214,42 @@ export function useTrajectoryWorker(params: Params) {
       historyDays,
       sampleCount,
     }
-    worker.postMessage(request)
+    try { worker.postMessage(request) }
+    catch (reason) { fail(reason instanceof Error ? reason.message : String(reason)) }
 
     return () => {
+      active = false
       if (workerRef.current === worker) {
-        worker.postMessage({ type: 'cancel', requestId })
+        try { worker.postMessage({ type: 'cancel', requestId }) }
+        catch { worker.terminate(); workerRef.current = null }
       }
     }
-  }, [backendEnabled, trajectoryBodies, bodiesById, ephemerisLoading, historyDays, referenceId, requestKey, resolutionBodies, sampleCount, trajectoryJulianDay])
+  }, [backendEnabled, trajectoryBodies, trajectoryKernelIds, bodiesById, ephemerisLoading, historyDays, referenceId, requestKey, resolutionBodies, sampleCount, trajectoryJulianDay, sceneKey])
 
   useEffect(() => () => {
     workerRef.current?.terminate()
     workerRef.current = null
+    workerKernelIdsRef.current.clear()
   }, [])
 
+  const historyReady = completedRequestKey === requestKey || Boolean(params.isPlaying && completedSceneKey === sceneKey)
   const frame = useMemo(() => ({
     ...(currentFrame !== undefined
       ? (currentFrame ? { ...currentFrame, trajectoryUnavailableBodyIds: [] as BodyId[] } : { currentPositions: EMPTY_CURRENT_POSITIONS, missingBodyIds: bodies.map(body => body.id), maxDistance: 0, trajectoryUnavailableBodyIds: [] as BodyId[] })
       : localCurrent),
-    trajectories: backendEnabled ? backend.trajectories : completedRequestKey === requestKey
-      ? trajectories.filter(sample => !(currentFrame ? currentFrame.missingBodyIds : localCurrent.missingBodyIds).includes(sample.body.id))
+    trajectories: backendEnabled ? backend.trajectories : historyReady
+      ? SEGMENTED_WEB && params.isPlaying ? trajectories
+        : trajectories.filter(sample => !(currentFrame ? currentFrame.missingBodyIds : localCurrent.missingBodyIds).includes(sample.body.id))
       : [],
-    trajectoryUnavailableBodyIds: backendEnabled ? backend.unavailableBodyIds : completedRequestKey === requestKey ? trajectoryUnavailableBodyIds : [],
+    trajectoryUnavailableBodyIds: backendEnabled ? backend.unavailableBodyIds : historyReady ? trajectoryUnavailableBodyIds : [],
     trajectoryAudit: backendEnabled ? backend.audit : undefined,
-  }), [backendEnabled, backend.audit, backend.trajectories, backend.unavailableBodyIds, bodies, completedRequestKey, currentFrame, localCurrent, requestKey, trajectories, trajectoryUnavailableBodyIds])
+  }), [backendEnabled, backend.audit, backend.trajectories, backend.unavailableBodyIds, bodies, historyReady, currentFrame, localCurrent, params.isPlaying, trajectories, trajectoryUnavailableBodyIds])
 
   return {
     frame,
     progress: backendEnabled ? backend.progress : progress,
     isComputing: backendEnabled ? backend.isComputing : isComputing,
     error: backendEnabled ? backend.error : error,
+    historyEpochUtcJd: !backendEnabled && historyReady ? completedEpoch : null,
   }
 }

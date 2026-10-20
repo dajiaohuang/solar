@@ -9,6 +9,7 @@ import { PRODUCT_PROFILE } from '../../lib/productAvailability'
 import type { CelestialBody } from '../../types'
 import { GroundVisibilityReadout } from './GroundVisibilityReadout'
 import { GroundContactsReadout } from './GroundContactsReadout'
+import { GroundSourceEvidence } from './GroundSourceEvidence'
 
 export function GroundObserverReadout({ body, julianDay }: { body: CelestialBody; julianDay: number }) {
   const { language } = useI18n(), zh = language === 'zh'
@@ -69,12 +70,15 @@ export function GroundObserverReadout({ body, julianDay }: { body: CelestialBody
           [zh ? '几何' : 'Geometric', observed.geometric], [zh ? '视位置（无折射）' : 'Apparent (airless)', observed.apparentAirless], [zh ? '含折射估计' : 'Refracted estimate', observed.refracted],
         ] as const).filter(([, value]) => value).map(([label, value]) => <tr key={label}><th>{label}</th><td>{value!.azimuthDeg.toFixed(5)}</td><td>{value!.altitudeDeg.toFixed(5)}</td></tr>)}</tbody></table>
         <p>{zh ? '光时距离' : 'Light-time range'}: {observed.lightTimeRangeKm?.toLocaleString(language, { maximumFractionDigits: 3 })} km · {observed.lightTimeSeconds?.toFixed(6)} s</p>
+        {observed.emissionJdTdbParts && <p>{zh ? '发射时刻 TDB（两部分 JD）' : 'Emission epoch TDB (two-part JD)'}: <code>{observed.emissionJdTdbParts[0].toPrecision(17)} + {observed.emissionJdTdbParts[1].toPrecision(17)}</code> · {zh ? '残差' : 'residual'} {observed.lightTimeResidualSeconds?.toExponential(2)} s</p>}
       </>}
-      <p>{result.result.earthOrientation.predicted ? (zh ? 'IERS 含预测值' : 'IERS includes predictions') : (zh ? 'IERS 测量值' : 'IERS measured values')} · {zh ? '数据获取时间' : 'Snapshot retrieved'}: {result.earthOrientation.retrievedAt}</p>
+      <p>{result.result.earthOrientation.predicted ? (zh ? 'IERS 输入含预测分量' : 'IERS input includes predicted components') : (zh ? '此样本没有预测标志' : 'No prediction flag in this sample')} · {zh ? '数据获取时间' : 'Snapshot retrieved'}: {result.earthOrientation.retrievedAt}</p>
+      <GroundSourceEvidence earthOrientation={result.earthOrientation} eopCoverageMjdUtc={result.earthOrientationCoverageMjdUtc} sources={result.result.sources} sample={result.result.earthOrientation} zh={zh} />
       <p>{zh ? '未传播物理不确定性；不包含地形遮挡、天体边缘、站点潮汐或未来闰秒预测。' : 'Physical uncertainty is not propagated. Terrain, target limbs, station tides and future leap seconds are not modeled.'}</p>
       {refraction && !observed.refracted && observed.status === 'available' && <p>{zh ? '目标低于折射模型的 5° 使用下限，未给出折射值。' : 'The target is below the refraction model’s 5° altitude limit; no refracted value is returned.'}</p>}
       {!result.result.earthOrientation.celestialPoleCorrectionAvailable && <p>{zh ? '天极修正数据缺失，使用岁差章动模型。' : 'Celestial pole corrections are missing; precession-nutation is model-only.'}</p>}
       {observed.warnings.includes('solar-deflection-limited-near-solar-limb') && <p>{zh ? '此方向接近日面，光偏折模型已限幅；不能用于确定日面接触。' : 'Solar light deflection is limited near the solar limb; this result cannot determine limb contact.'}</p>}
+      {result.result.warnings.includes('future-leap-seconds-assumed') && <p>{zh ? 'UTC 时间换算自 2027-07-01 起延用最后已知闰秒偏移；这是未来假设。' : 'From 2027-07-01, UTC conversion holds the last known leap-second offset; this is a future assumption.'}</p>}
       <button type="button" onClick={() => { void saveTextExport(JSON.stringify(result, null, 2), `solar-ground-observation-${body.id.replace(/[^\w-]/g, '_')}.json`, 'application/json').catch(reason => setError(String(reason))) }}>{zh ? '导出结果与来源 JSON' : 'Export result and sources JSON'}</button>
     </section>}
   </details>

@@ -3,11 +3,39 @@
 The harness exercises the real `httpapi.Server` through an in-process HTTP
 server backed by a deliberately selected catalog and audited source inventory. It
 measures fresh-process catalog/inventory load, warm catalog latency and throughput,
-mixed catalog/trajectory/search traffic, exact source-state lookup at the
-declared audit epoch, compact trajectory transport, cancellation, overload
+mixed catalog/state-plan/search traffic, exact source-state lookup at the
+declared audit epoch, binary state-tile transport, cancellation, overload
 backpressure, allocations and process memory. It does not use a toy catalog
 or an empty handler, and the measurements are evidence for the recorded
 machine and dataset rather than universal guarantees.
+
+## Focused SPK Type 21 construction reference
+
+Run `npm run benchmark:spk` for the DE440S hot-evaluation reference and the
+checksum-pinned Type 21 construction sample. Construction timing uses two warmup
+batches followed by seven batches of 50 parses; each reported sample is the
+batch duration divided by 50. The fixtures are verified against
+`tests/fixtures/spk21-provenance.json` before timing. On Windows x64, Node
+v24.14.1 and an Intel Core i9-14900KF, the three original Horizons kernels
+(about 0.20 MiB each, 272–275 records) constructed in 0.0581–0.0587 ms median.
+The 0.53 MiB synthetic mixed-dimension fixture (702 records, dimensions 15,
+20 and 25) took 0.1746 ms median. The benchmark emits all seven samples,
+benchmark, fixture and implementation SHA-256 values, record counts and
+dimensions so a later run can be compared against the same bytes, method and
+code.
+
+This recorded batch used benchmark SHA-256
+`9bcf1dda2b406fd67b63f5b5a0d59418b2914b93d2194d23b6e8e9d219f63e94`, SPK
+reader SHA-256 `2f6e21a3e4a9d1e16b2d43f763d3dd3b1b418f8ba67af580ea8a03f69c35437f`,
+and Type 21 evaluator SHA-256
+`c8f0238ee95d66dce61b543e133e7d9f87be0a24a7f502f56759bddec1e24471`.
+
+These are small parser fixtures, not large-production-kernel, mobile, peak-heap,
+or end-to-end first-load evidence. TypeScript currently validates every Type 21
+record during open while Go validates a selected record on evaluation; the
+measured fixtures do not justify changing that safety/performance trade-off.
+Record selection and the 100-record directory are checked against the
+[NAIF SPK Required Reading](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/FORTRAN/req/spk.html).
 
 ## Historical snapshot identity (pre-tile implementation)
 
@@ -85,7 +113,7 @@ different indexed terms while remaining reproducible.
 Run the current evidence with:
 
 ```text
-go run ./cmd/bench -requests 5 -concurrency 1 -epoch-jd 2461287.5 -data-dir <staged-full-profile> -inventory-dir D:/repo/repostew/.repostew/cache/solar-issue109-addressable-inventory-20260905 -long-samples 100
+go run ./cmd/bench -requests 5 -concurrency 1 -epoch-jd 2461287.5 -data-dir <staged-full-profile> -inventory-dir D:/repo/repostew/.repostew/cache/solar-issue109-addressable-inventory-20260905
 ```
 
 The 2026-09-09 Windows amd64 run reported catalog 572 entries / 519 manifest-
@@ -141,6 +169,10 @@ an in-process cancellation-observation measurement, not an end-to-end network
 guarantee.
 
 ## Historical JSON/index results (not current implementation claims)
+
+The JSON report below predates the binary state transport. Its
+`trajectoryPrecision`, `batch*`, and `longTrajectory*` fields measure the
+retired `/v1/trajectory` endpoint and are retained only as historical evidence.
 
 Reference harness run (2026-09-05, Windows amd64, Intel Core i9-14900KF,
 full source inventory 1,567,193 rows / 314 gzip shards, 89,626,020 declared

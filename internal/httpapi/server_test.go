@@ -88,17 +88,17 @@ func TestCapabilitiesAdvertiseInventoryManifestHash(t *testing.T) {
 	}
 }
 
-func TestTrajectoryValidationAndMissingState(t *testing.T) {
+func TestLegacyJSONTrajectoryEndpointIsRemoved(t *testing.T) {
 	s := testServer(t)
 	rr := httptest.NewRecorder()
 	s.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/v1/trajectory", strings.NewReader(`{"bodyIds":["naif:401"],"startJd":2461287.5,"endJd":2461288.5,"samples":2,"frame":"ECLIPJ2000"}`)))
-	if rr.Code != http.StatusOK {
-		t.Fatalf("trajectory: %d %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("legacy JSON trajectory route is still exposed: %d %s", rr.Code, rr.Body.String())
 	}
 	rr = httptest.NewRecorder()
-	s.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/v1/trajectory", strings.NewReader(`{"bodyIds":["sun"],"startJd":1,"endJd":2,"samples":1}`)))
-	if rr.Code != http.StatusBadRequest {
-		t.Fatalf("expected validation error: %d", rr.Code)
+	s.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/v1/identities/sb:1/state?epochJd=2451545", nil))
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("legacy JSON identity-state route is still exposed: %d %s", rr.Code, rr.Body.String())
 	}
 }
 

@@ -21,7 +21,7 @@ export async function findOccultationFile(sourcePath, outputPath, signal) {
   const result = await runOccultationExperiment({ inputBytes: buffer(bytes), spkBytes: buffer(spk), pckBytes: buffer(pck), gmText, signal })
   const implementationSha256 = {}
   for (const path of ['scripts/find-occultation-contacts.mjs', 'src/engine/events/occultationExperiment.ts', 'src/engine/events/occultationContacts.ts', 'src/engine/events/sphericalOccultation.ts',
-    'src/data/loaders/pckRadii.ts', 'src/engine/dynamics/de440Dynamics.ts', 'src/engine/ephemeris/spk.ts', 'src/engine/ephemeris/spkType17.ts', 'src/engine/ephemeris/spkType21.ts', 'src/engine/ephemeris/receptionLightTime.ts']) {
+    'src/data/loaders/pckRadii.ts', 'src/engine/dynamics/de440Dynamics.ts', 'src/engine/dynamics/de440Source.ts', 'src/engine/ephemeris/spk.ts', 'src/engine/ephemeris/spkType17.ts', 'src/engine/ephemeris/spkType21.ts', 'src/engine/ephemeris/receptionLightTime.ts']) {
     implementationSha256[path] = sha(await readFile(new URL(path, root)))
   }
   const receipt = { ...result, implementationSha256 }

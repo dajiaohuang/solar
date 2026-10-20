@@ -3,11 +3,24 @@ import { join, resolve } from 'node:path'
 import { jsonDocument, productDelivery, sha256 } from './lib/product-delivery.ts'
 import { previewDatasetPlan } from './lib/preview-dataset.mjs'
 import { verifyEphemerisAssets } from './lib/verify-ephemeris-assets.mjs'
+import { verifyApproximationAssets } from './lib/verify-approximation-assets.mjs'
 
 const dist = resolve('dist')
 
 async function exists(path) {
   try { await stat(path); return true } catch { return false }
+}
+
+async function filesUnder(directory) {
+  if (!await exists(directory)) return []
+  const files = []
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name)
+    if (entry.isFile()) files.push(path)
+    else if (entry.isDirectory()) files.push(...await filesUnder(path))
+    else throw new Error(`Unexpected non-file in packaged Gaia data: ${path}`)
+  }
+  return files
 }
 
 async function requireFile(relativePath) {
@@ -95,8 +108,20 @@ const availabilityText = await readFile(join(dist, 'product-availability.json'),
 if (availabilityText !== jsonDocument(delivery.availability) || sha256(availabilityText) !== buildInfo.productAvailabilitySha256) throw new Error('Product availability identity mismatch')
 if (capacity.productProfile !== delivery.product || capacity.productAvailabilitySha256 !== delivery.availabilitySha256) throw new Error('Capacity report product identity mismatch')
 if (await readFile(join(dist, 'ephemeris-manifest.json'), 'utf8') !== jsonDocument(delivery.manifest)) throw new Error('Packaged ephemeris manifest differs from runtime selection')
-const ephemerisBytes = await verifyEphemerisAssets(join(dist, 'data', 'ephemerides'), delivery.manifest.files)
+const segmented = buildInfo.webExecution === 'segmented'
+const ephemerisBytes = segmented ? 0 : await verifyEphemerisAssets(join(dist, 'data', 'ephemerides'), delivery.manifest.files)
+if (segmented) {
+  const approximation = await verifyApproximationAssets(join(dist, 'data', 'approximation'))
+  if (capacity.approximationTotalBytes !== approximation.bytes) throw new Error('Approximation capacity mismatch')
+  if ((await filesUnder(join(dist, 'data', 'ephemerides'))).length) throw new Error('Static Vercel build must not contain raw SPK files')
+  if ((await readFile(join(dist, 'index.html'), 'utf8')).includes('/solar/')) throw new Error('Vercel shell contains the Pages base path')
+}
 if (capacity.ephemerisTotalBytes !== ephemerisBytes) throw new Error('Capacity report ephemeris size mismatch')
+const gaiaFiles = await filesUnder(join(dist, 'data', 'gaia'))
+const gaiaBytes = (await Promise.all(gaiaFiles.map(async (path) => (await stat(path)).size))).reduce((sum, size) => sum + size, 0)
+if (capacity.gaiaSkyBytes !== gaiaBytes || capacity.gaiaSkyFileCount !== gaiaFiles.length) {
+  throw new Error('Capacity report Gaia sky size or file count mismatch')
+}
 
 const health = JSON.parse(await readFile(join(dist, 'health.json'), 'utf8'))
 const scientificValidation = JSON.parse(await readFile(join(dist, 'scientific-validation.json'), 'utf8'))
@@ -128,8 +153,8 @@ const spkDelivery = coverage?.spkDelivery
 if (spkDelivery?.stateBoundary !== 'geometric-spk-six-vector-when-kernel-and-center-chain-cover-epoch') throw new Error('Scientific validation report is missing the SPK state boundary')
 if (spkDelivery?.ephemerisBodyCount !== 316 || spkDelivery?.planetarySatelliteBodyCount !== 152 || spkDelivery?.smallBodyBodyCount !== 164 || spkDelivery?.satelliteIdentityCount !== 472) throw new Error('Scientific validation report is missing the expanded SPK coverage counts')
 if (JSON.stringify(spkDelivery?.satelliteIdentityDelivery) !== JSON.stringify({ catalogBodies: 472, numericNaifIdentities: 471, pagesManifestTargets: 471, fullManifestTargets: 471, identityOnlyBodies: 1, identityOnlyIds: ['sat:planet:saturn:provisional:S/2009 S1'], sourceOnlyBodies: 2, sourceOnlyIds: ['naif:120000617', 'naif:920000617'], sourceOnlyBoundary: 'JPL082 publishes explicit Patroclus/Manoetius component offsets but omits compatible system target 20000617; these identities remain source-only and never imply an exact state or local orbit.', boundary: 'A pinned manifest target proves source delivery identity; an exact state still requires verified kernel bytes and a covered center chain at the requested epoch.', localOrbitBoundary: 'Catalog identities without generated local orbit elements remain source-backed current-state candidates; no fallback orbit is created for them.' })) throw new Error('Scientific validation report is missing complete satellite identity delivery evidence')
-if (spkDelivery?.pagesManifest?.id !== 'jpl-satellite-expansion-20260904-pages' || spkDelivery?.pagesManifest?.sha256 !== '93e3733dd2d4b673e85bae5f55c1aa4eb8d4af3e95ccc3cc1cc8a3a54d064d1c' || spkDelivery?.pagesManifest?.bytes !== 274401280 || spkDelivery?.pagesManifest?.fileCount !== 670) throw new Error('Scientific validation report is missing the pinned Pages SPK manifest')
-if (spkDelivery?.fullManifest?.id !== 'jpl-satellite-expansion-20260904-full' || spkDelivery?.fullManifest?.sha256 !== '4d600f46c1b0d35ee440d416b19489e3de145058c3aa7f5744d64c480251a1c2' || spkDelivery?.fullManifest?.bytes !== 1181799424 || spkDelivery?.fullManifest?.fileCount !== 670) throw new Error('Scientific validation report is missing the pinned full SPK manifest')
+if (spkDelivery?.pagesManifest?.id !== 'jpl-satellite-expansion-20260904-pages' || spkDelivery?.pagesManifest?.sha256 !== '2a6a2627820aa560f937cecf093da2de61045fb57eec342eaf94778b70ebc686' || spkDelivery?.pagesManifest?.bytes !== 386497536 || spkDelivery?.pagesManifest?.fileCount !== 685) throw new Error('Scientific validation report is missing the pinned Pages SPK manifest')
+if (spkDelivery?.fullManifest?.id !== 'jpl-satellite-expansion-20260904-full' || spkDelivery?.fullManifest?.sha256 !== '6611e75b5dfc3fdc19a00dd517c0987f5afe79c292c1957634c579073b28220d' || spkDelivery?.fullManifest?.bytes !== 1294291968 || spkDelivery?.fullManifest?.fileCount !== 685) throw new Error('Scientific validation report is missing the pinned full SPK manifest')
 const expectedSatelliteBatches = {
   mars: 'naif:401,naif:402',
   jupiter: 'naif:505,naif:506,naif:507,naif:508,naif:509,naif:510,naif:511,naif:512,naif:513,naif:514,naif:515,naif:516,naif:517,naif:518,naif:519,naif:520,naif:521,naif:522,naif:523,naif:524,naif:525,naif:526,naif:527,naif:528,naif:529,naif:530,naif:531,naif:532,naif:533,naif:534,naif:535,naif:536,naif:537,naif:538,naif:539,naif:540,naif:541,naif:542,naif:543,naif:544,naif:545,naif:546,naif:547,naif:548,naif:549,naif:550,naif:551,naif:552,naif:553,naif:554,naif:555,naif:556,naif:557,naif:558,naif:559,naif:560,naif:561,naif:562,naif:563,naif:564,naif:565,naif:566,naif:567,naif:568,naif:569,naif:570,naif:571,naif:572,naif:55501,naif:55502,naif:55503,naif:55504,naif:55505,naif:55506,naif:55507,naif:55508,naif:55509,naif:55510,naif:55511,naif:55512,naif:55513,naif:55514,naif:55515,naif:55516,naif:55517,naif:55518,naif:55519,naif:55520,naif:55521,naif:55522,naif:55523,naif:55524,naif:55525,naif:55526,naif:55527,naif:55528,naif:55529,naif:55530,naif:55531,naif:55532,naif:55533,naif:55534,naif:55535,naif:55536,naif:55537,naif:55538,naif:55539,naif:55540,naif:55541,naif:55542,naif:55543,naif:55544',

@@ -4,6 +4,7 @@ import { fetchSbdbBody } from '../data/loaders/sbdb'
 import { simulationClock } from '../engine/clock/SimulationClock'
 import { I18nProvider } from '../i18n/provider'
 import { loadAsteroidBodiesByIds, loadAsteroidManifest, loadDatasetProvenance } from '../lib/catalogLoader'
+import { catalogForEachBounded } from '../data/cache/sharedCatalogCache'
 import { encodeCurrentScene } from '../lib/shareScene'
 import { decodeUrlState, type AppUrlState } from '../lib/urlState'
 import { catalogActions, catalogStore, DEFAULT_CATALOG_FILTERS } from '../state/catalog-store'
@@ -84,6 +85,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
       arrivalId: initial.missionTo && MISSION_BODY_IDS.has(initial.missionTo) ? initial.missionTo : DEFAULT_MISSION_STATE.arrivalId,
       departureDate: initial.departureDate ?? DEFAULT_MISSION_STATE.departureDate,
       arrivalDate: initial.arrivalDate ?? DEFAULT_MISSION_STATE.arrivalDate,
+      departureJulianDay: initial.departureJulianDay,
+      ephemerisPolicy: initial.missionEphemerisPolicy ?? DEFAULT_MISSION_STATE.ephemerisPolicy,
+      arrivalJulianDay: initial.arrivalJulianDay,
     })
     selectionActions.setSelectedIds(selectedIds)
     selectionActions.restoreSourceScene(initial.sourceSelection, import.meta.env.VITE_SOLAR_API_BASE_URL?.trim() || null, initial.sourceSelection ? selectedIds : undefined)
@@ -156,7 +160,8 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
     let manifestPublished = false
     void loadAsteroidManifest(initial.dataset).then(async (manifest) => {
-      const provenance = manifest ? await loadDatasetProvenance() : null
+      if (controller.signal.aborted || datasetLoadGeneration.current !== loadGeneration) return
+      const provenance = manifest ? await loadDatasetProvenance(manifest, controller.signal) : null
       if (datasetLoadGeneration.current !== loadGeneration) return
       catalogActions.patch({
         manifest,
@@ -174,12 +179,18 @@ export function AppProviders({ children }: { children: ReactNode }) {
             : null,
       })
       manifestPublished = true
+      const sbdbDesignations = selectedIds.filter((id) => id.startsWith('sbdb:'))
+        .map((id) => id.slice('sbdb:'.length).replaceAll('_', ' '))
+      const sbdbResults: (Awaited<ReturnType<typeof fetchSbdbBody>> | null)[] = Array(sbdbDesignations.length).fill(null)
       const [datasetBodies, sbdbBodies] = await Promise.all([
         manifest && selectedIds.some((id) => id.startsWith('asteroid:') && !majorBodiesWithPhysicalData.some((body) => body.id === id))
-          ? loadAsteroidBodiesByIds(selectedIds.filter((id) => !majorBodiesWithPhysicalData.some((body) => body.id === id)), controller.signal)
+          ? loadAsteroidBodiesByIds(selectedIds.filter((id) => !majorBodiesWithPhysicalData.some((body) => body.id === id)), controller.signal, manifest)
           : Promise.resolve([]),
-        Promise.all(selectedIds.filter((id) => id.startsWith('sbdb:')).map((id) =>
-          fetchSbdbBody(id.slice('sbdb:'.length).replaceAll('_', ' ')).catch(() => null))),
+        catalogForEachBounded(sbdbDesignations.map((designation, index) => ({ designation, index })), controller.signal,
+          async ({ designation, index }, signal) => {
+            try { sbdbResults[index] = await fetchSbdbBody(designation, signal) }
+            catch (error) { if (signal.aborted) throw error; sbdbResults[index] = null }
+          }).then(() => sbdbResults),
       ])
       if (datasetLoadGeneration.current !== loadGeneration) return
       selectionActions.addCatalogBodies([...datasetBodies, ...sbdbBodies.filter((body) => body !== null)])

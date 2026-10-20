@@ -86,12 +86,12 @@ func (s *Server) observation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer release()
-	result, err := observation.Evaluate(ctx, req, s.earthOrientation, s.catalog.EvalBatchContext)
+	result, err := observation.EvaluateWithET(ctx, req, s.earthOrientation, s.catalog.EvalBatchContextAtET)
 	if err != nil {
 		s.observationError(w, ctx, err)
 		return
 	}
-	s.json(w, 200, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "catalogManifestSha256": s.catalog.ManifestHash(), "earthOrientation": s.earthOrientation.Manifest, "result": result})
+	s.json(w, 200, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "catalogManifestSha256": s.catalog.ManifestHash(), "earthOrientation": s.earthOrientation.Manifest, "earthOrientationCoverageMjdUtc": s.earthOrientation.CoverageMJD(), "result": result})
 }
 
 func (s *Server) observationError(w http.ResponseWriter, ctx context.Context, err error) {

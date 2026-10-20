@@ -18,11 +18,15 @@ export function inspectType17(read: ReadDouble, startAddress: number, endAddress
 }
 
 export function evaluateType17(read: ReadDouble, startAddress: number, et: number) {
-  const r = new Float64Array(12);
-  for (let i = 0; i < 12; i++) r[i] = read(startAddress + i);
-  const [epoch, a, h, k, longitude, p, q, periRate, meanLongitudeRate, nodeRate, rapol, decpol] = r;
+  const epoch = read(startAddress), a = read(startAddress + 1), h = read(startAddress + 2), k = read(startAddress + 3);
+  const longitude = read(startAddress + 4), p = read(startAddress + 5), q = read(startAddress + 6);
+  const periRate = read(startAddress + 7), meanLongitudeRate = read(startAddress + 8), nodeRate = read(startAddress + 9);
+  const rapol = read(startAddress + 10), decpol = read(startAddress + 11);
   const e = Math.hypot(h, k);
-  if (![epoch, et, ...r].every(Number.isFinite)) throw new Error('Invalid SPK: nonfinite type 17 input');
+  if (!Number.isFinite(epoch) || !Number.isFinite(et) || !Number.isFinite(a) || !Number.isFinite(h) ||
+      !Number.isFinite(k) || !Number.isFinite(longitude) || !Number.isFinite(p) || !Number.isFinite(q) ||
+      !Number.isFinite(periRate) || !Number.isFinite(meanLongitudeRate) || !Number.isFinite(nodeRate) ||
+      !Number.isFinite(rapol) || !Number.isFinite(decpol)) throw new Error('Invalid SPK: nonfinite type 17 input');
   if (!(a > 0)) throw new Error('Invalid SPK: type 17 semi-major axis must be positive');
   if (e > 0.9) throw new Error('Invalid SPK: type 17 eccentricity exceeds 0.9');
   if (meanLongitudeRate === 0) throw new Error('Invalid SPK: type 17 mean longitude rate must be nonzero');
@@ -63,7 +67,12 @@ export function evaluateType17(read: ReadDouble, startAddress: number, et: numbe
   const pole = [Math.cos(decpol) * Math.cos(rapol), Math.cos(decpol) * Math.sin(rapol), Math.sin(decpol)];
   const xaxis = [-Math.sin(rapol), Math.cos(rapol), 0];
   const yaxis = [-Math.sin(decpol) * Math.cos(rapol), -Math.sin(decpol) * Math.sin(rapol), Math.cos(decpol)];
-  return { position: rotate(position, xaxis, yaxis, pole), velocity: rotate(velocity, xaxis, yaxis, pole) };
+  const state = { position: rotate(position, xaxis, yaxis, pole), velocity: rotate(velocity, xaxis, yaxis, pole) };
+  if (!Number.isFinite(state.position.x) || !Number.isFinite(state.position.y) || !Number.isFinite(state.position.z) ||
+      !Number.isFinite(state.velocity.x) || !Number.isFinite(state.velocity.y) || !Number.isFinite(state.velocity.z)) {
+    throw new Error('Invalid SPK: nonfinite type 17 state');
+  }
+  return state;
 }
 
 function equinoctialBasis(p: number, q: number, second: boolean): number[] {

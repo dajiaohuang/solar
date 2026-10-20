@@ -16,12 +16,13 @@ export interface ParentRelativeObservationOptions {
   apparentMode?: ApparentMode
 }
 export interface ParentRelativeObservation {
+  epochTimeScale: 'TDB'
   referenceFrame: ObservationReferenceFrame
   epochJulianDay: number
   centerId: string
   state: { positionAU: Vector3; velocityAUPerDay: Vector3 }
   osculatingElements: OsculatingElements | null
-  apparent: { positionKm: Vector3; lightTimeSeconds: number; emissionJulianDay: number; mode: ApparentMode; converged: boolean }
+  apparent: { positionKm: Vector3; timeScale: 'TDB'; lightTimeSeconds: number; emissionJulianDay: number; mode: ApparentMode; converged: boolean; residualSeconds: number; toleranceSeconds: number }
   assumptions: readonly string[]
 }
 const sub = (a: readonly [number, number, number], b: readonly [number, number, number]): Vector3 => ({ x: a[0] - b[0], y: a[1] - b[1], z: a[2] - b[2] })
@@ -44,13 +45,14 @@ export function deriveParentRelativeObservation(options: ParentRelativeObservati
   }
   const apparent = apparentPosition({ target: jd => required(targetId, jd), observer: jd => required(observerId, jd), julianDay, mode })
   return {
-    referenceFrame: options.referenceFrame ?? 'resolver-defined', epochJulianDay: julianDay, centerId: parentId,
+    epochTimeScale: 'TDB', referenceFrame: options.referenceFrame ?? 'resolver-defined', epochJulianDay: julianDay, centerId: parentId,
     state: { positionAU, velocityAUPerDay },
     osculatingElements: stateToOsculatingElements(positionAU, velocityAUPerDay, gmAU3PerDay2),
-    apparent: { positionKm: toVector(apparent.position), lightTimeSeconds: apparent.lightTimeSeconds, emissionJulianDay: apparent.emissionJulianDay, mode: apparent.mode, converged: apparent.converged },
+    apparent: { positionKm: toVector(apparent.position), timeScale: apparent.timeScale, lightTimeSeconds: apparent.lightTimeSeconds, emissionJulianDay: apparent.emissionJulianDay, mode: apparent.mode, converged: apparent.converged, residualSeconds: apparent.residualSeconds, toleranceSeconds: apparent.toleranceSeconds },
     assumptions: [
       'Parent-relative elements are an instantaneous two-body osculating snapshot in the resolver reference frame.',
       'Apparent position is observer-relative barycentric reception geometry; it is not parent-relative orbital state.',
+      'Observation and emission epochs are continuous TDB Julian days; callback states are barycentric kilometers and kilometers per second.',
       'State units are converted from km and km/s to AU and AU/day only for osculating elements.',
       'No gravitational light deflection or additional force correction is applied.',
     ],

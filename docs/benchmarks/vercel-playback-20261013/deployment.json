@@ -1,0 +1,91 @@
+{
+  "checkedAt": "2026-10-12T18:44:42.901Z",
+  "origin": "https://solar-five-woad.vercel.app",
+  "plan": "hobby",
+  "buildInfo": {
+    "version": "0.11.0",
+    "commitSha": "14c8aefa49a5669c7cc4d1c43bc3965c41a8bbeb",
+    "buildTime": "2026-10-12T18:33:20.639Z",
+    "environment": "vercel",
+    "datasetVersion": "mpcorb-26bbcb75e45b7cbb-full",
+    "ephemerisProfile": "full",
+    "productProfile": "full",
+    "productAvailabilitySha256": "17660ac8ce2cd749c23f12174ac258d0f018040fc11234bff2736b0e922d1b55",
+    "webExecution": "segmented",
+    "catalogUrl": null
+  },
+  "checks": [
+    {
+      "path": "build-info.json",
+      "status": 200,
+      "sha256": "3fb0cb6dae38900e66c90e49b66a10f4971e1659200dff5afb3b6ec4a91dceb2",
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "byteLength": 417
+    },
+    {
+      "path": "health.json",
+      "status": 200,
+      "sha256": "45120d9739d97821e5eb26844ae5d89c885ab26a0603c1567e438d4ef7787ae7",
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "byteLength": 983
+    },
+    {
+      "path": "data/approximation/index.json",
+      "status": 200,
+      "sha256": "bcc1d05362517f639b3f3d00bd04467d621bd6746b2f8404dc0452f3853830b7",
+      "cacheControl": "public, max-age=0, must-revalidate",
+      "byteLength": 212
+    }
+  ],
+  "artifactCommit": "14c8aefa49a5669c7cc4d1c43bc3965c41a8bbeb",
+  "assetVerificationCommit": "4e30ad7",
+  "deployment": {
+    "id": "dpl_3YXLk6MDPaf1Kr2M7JTEWLpstykj",
+    "readyState": "READY",
+    "url": "https://solar-239qg0la3-dajiaohuangdjh.vercel.app",
+    "machine": "basic",
+    "cores": 2,
+    "memoryMiB": 8192
+  },
+  "validation": {
+    "fullCi": {
+      "passed": 1309,
+      "skipped": 9
+    },
+    "verificationUnitTests": {
+      "passed": 3
+    },
+    "buildContract": "passed",
+    "hostedDesktop": {
+      "passed": 6,
+      "defaultColdDragAnd365DaysPerSecondSeconds": 8.8,
+      "fullPopulationColdSeconds": 41.9,
+      "fullPopulationObservationTimeoutSeconds": 300,
+      "bulkIndexPaths": 1,
+      "availablePositions": 492,
+      "selectedBodies": 493,
+      "fiveBodyThirtyDayColdBytes": 274589,
+      "cachedReloadBytes": 424
+    },
+    "hostedMobile": {
+      "passed": 3,
+      "seconds": 11.6,
+      "kind": "Chromium iPhone 13 viewport emulation"
+    },
+    "physicalDeviceValidation": false
+  },
+  "localDefaultProfile": {
+    "gpu": "ANGLE SwiftShader software GPU",
+    "width": 1280,
+    "height": 800,
+    "durationSeconds": 10,
+    "frames": 459,
+    "p50Ms": 16.7,
+    "p95Ms": 33.4,
+    "maximumMs": 33.5,
+    "medianDrawCalls": 9,
+    "longTasks": 0,
+    "cameraResets": 0
+  },
+  "boundary": "Artifact runtime is built from 14c8aef; the later asset-verification and receipt commits change build checks, tests and documentation only. No scientific source fits or forecast error claims were changed."
+}

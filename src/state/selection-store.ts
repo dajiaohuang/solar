@@ -48,6 +48,7 @@ function persistCollections(collections: Record<string, BodyId[]>) {
 export const selectionActions = {
   selectSourcePage(page: SourceIdentityPage, base: string) {
     const identity = sourceSceneFromPage(page), pin = sourcePinFor(identity, base)
+    if (page.base !== pin.base) throw new Error('Source page belongs to another backend')
     if (!availabilityActions.require(sceneAvailability({ bodies: identity.ids, sourceSelection: JSON.stringify(identity) }))) return false
     const retained = Object.fromEntries(Object.entries(selectionStore.getState().catalogBodies).filter(([, body]) => body.source !== 'source-inventory'))
     selectionStore.setState({ catalogBodies: { ...retained, ...Object.fromEntries(page.items.map(row => [row.id, sourceRecordBody(row.id, row)])) },
@@ -87,6 +88,7 @@ export const selectionActions = {
   focus(focusedId: BodyId | null) {
     if (!availabilityActions.require(bodyAvailability(focusedId))) return false
     selectionStore.setState({ focusedId })
+    return true
   },
   addCatalogBodies(bodies: CelestialBody[], select = false) {
     if (!availabilityActions.require(sceneAvailability({ bodies: bodies.map(body => body.id) }))) return false
@@ -99,6 +101,7 @@ export const selectionActions = {
         ? [...new Set([...state.selectedIds, ...bodies.map((body) => body.id)])]
         : state.selectedIds,
     }))
+    return true
   },
   clearCatalogBodies() {
     selectionStore.setState((state) => ({

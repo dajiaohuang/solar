@@ -6,7 +6,7 @@
     <string name="contacts_end">End UTC</string>
     <string name="contacts_longitude">Longitude degrees, east positive</string>
     <string name="contacts_latitude">Latitude degrees</string>
-    <string name="contacts_height">WGS84 ellipsoidal height, metres</string>
+    <string name="contacts_height">WGS84 ellipsoidal height (−1000 to 100000 metres)</string>
     <string name="contacts_foreground">Foreground NAIF ID</string>
     <string name="contacts_background">Background NAIF ID</string>
     <string name="contacts_load">Search ground contacts</string>
@@ -27,6 +27,7 @@
     <string name="contacts_no_window">No positive-duration overlap inferred.</string>
     <string name="contacts_clipped">Clipped at search boundary</string>
     <string name="contacts_zero">Sampled zero</string>
+    <string name="contacts_sampled_overlap">Sampled negative gap</string>
     <string name="contacts_bracketed">Bracketed contact</string>
     <string name="contacts_export">Save contacts and sources JSON</string>
     <string name="contacts_exported">Ground-contact source response saved.</string>

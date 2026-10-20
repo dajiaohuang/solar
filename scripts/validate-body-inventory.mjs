@@ -67,7 +67,9 @@ export async function validateInventory(directory, sourceDirectory, { onRecord }
       increment('ephemerides', record.ephemerisStatus); increment('confirmations', record.confirmation); increment('identities', record.identityStatus)
       if (record.ephemerisStatus === 'state-available-at-audit-epoch') {
         const evidence = record.kernelEvidence
-        if (record.confirmation !== 'confirmed' || !evidence?.segments?.length || evidence.auditEt !== manifest.kernels.auditEt || evidence.target !== record.naifId) throw new Error('Invalid ephemeris coverage claim')
+        const root = evidence?.sourceSegment
+        const listed = evidence?.segments?.some(segment => segment?.kernelId === root?.kernelId && segment?.startEt === root?.startEt && segment?.endEt === root?.endEt && segment?.center === root?.center && segment?.frame === root?.frame && segment?.type === root?.type)
+        if (record.confirmation !== 'confirmed' || !root || !listed || typeof root.kernelId !== 'string' || !root.kernelId || !Number.isFinite(root.startEt) || !Number.isFinite(root.endEt) || root.endEt < root.startEt || root.startEt > evidence.auditEt || root.endEt < evidence.auditEt || ![1, 17].includes(root.frame) || ![1, 2, 3, 17, 21].includes(root.type) || !SHA256.test(evidence.sourceKernelSha256 ?? '') || !SHA256.test(evidence.sourceChainSha256 ?? '') || evidence.auditEt !== manifest.kernels.auditEt || evidence.target !== record.naifId) throw new Error('Invalid ephemeris coverage claim')
         for (const part of ['position', 'velocity']) for (const axis of ['x', 'y', 'z']) if (!Number.isFinite(evidence.stateAtAuditEpoch?.[part]?.[axis])) throw new Error('Nonfinite kernel state')
       }
       if (record.identityStatus === 'unresolved-component' && !record.id.includes(':record:')) throw new Error('Unresolved component masquerades as resolved identity')

@@ -50,7 +50,7 @@ On Windows use `android/gradlew.bat -p android` with the same tasks. iOS validat
 
 ```text
 xcodebuild -project ios/App/App.xcodeproj -scheme App -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO build
-swiftc ios/App/App/StateTileDecoder.swift ios/App/App/StateTileCache.swift ios/App/App/NativeStateProjection.swift ios/App/App/NativeCoverageReport.swift ios/App/App/NativeSourceIdentityPage.swift ios/ProtocolTests/ProtocolTests.swift -o <temporary-output>
+swiftc ios/App/App/StateTileDecoder.swift ios/App/App/StateTileCache.swift ios/App/App/NativePointGeometry.swift ios/App/App/NativeStateProjection.swift ios/App/App/NativeCoverageReport.swift ios/App/App/NativeGroundContacts.swift ios/App/App/NativeStellarMotion.swift ios/App/App/NativeOrbitCovariance.swift ios/App/App/NativeSourceIdentityPage.swift ios/ProtocolTests/ProtocolTests.swift -o <temporary-output>
 <temporary-output>
 ```
 

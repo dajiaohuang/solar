@@ -7,17 +7,38 @@ const LSK_ENTRIES: readonly [string, number][] = [
   ['1975-01-01', 14], ['1976-01-01', 15], ['1977-01-01', 16], ['1978-01-01', 17],
   ['1979-01-01', 18], ['1980-01-01', 19], ['1981-07-01', 20], ['1982-07-01', 21],
   ['1983-07-01', 22], ['1985-07-01', 23], ['1988-01-01', 24], ['1990-01-01', 25],
-  ['1991-01-01', 26], ['1992-07-01', 27], ['1993-07-01', 28], ['1994-01-01', 29],
+  ['1991-01-01', 26], ['1992-07-01', 27], ['1993-07-01', 28], ['1994-07-01', 29],
   ['1996-01-01', 30], ['1997-07-01', 31], ['1999-01-01', 32], ['2006-01-01', 33],
   ['2009-01-01', 34], ['2012-07-01', 35], ['2015-07-01', 36], ['2017-01-01', 37],
 ]
 const calendarJulianDay = (date: string) => Date.parse(`${date}T00:00:00Z`) / 86_400_000 + 2_440_587.5
 const LEAPS = LSK_ENTRIES.map(([date, value]) => [calendarJulianDay(date), value] as [number, number])
-const SOURCES = ['https://naif.jpl.nasa.gov/pub/naif/generic_kernels/lsk/naif0012.tls', 'https://datacenter.iers.org/data/html/bulletinc-072.html', 'https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/deltet_c.html'] as const
+// NAIF says the current LSK remains current until at least 2027-07-01 after IERS Bulletin C 72.
+const FUTURE_LEAP_UNCERTAINTY_START = calendarJulianDay('2027-07-01')
+const SOURCES = [
+  'https://naif.jpl.nasa.gov/pub/naif/generic_kernels/lsk/naif0012.tls',
+  'https://naif.jpl.nasa.gov/naif/announcements.html',
+  'https://datacenter.iers.org/data/html/bulletinc-072.html',
+  'https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/cspice/deltet_c.html',
+] as const
 export interface TimeScaleQuality { scale: 'TDB' | 'ET'; status: 'supported' | 'future-uncertain'; leapSeconds: number; assumptions: readonly string[]; sources: readonly string[] }
 function finiteJd(jd: number) { if (!Number.isFinite(jd)) throw new RangeError('Julian day must be finite') }
 function leapSecondsAt(jd: number) { if (jd < LEAPS[0][0]) throw new RangeError('UTC conversion supports 1972-01-01 onward'); let value = LEAPS[0][1]; for (const [date, seconds] of LEAPS) if (jd >= date) value = seconds; return value }
-export function utcTimeScaleQuality(jd: number, scale: 'TDB' | 'ET' = 'TDB'): TimeScaleQuality { finiteJd(jd); const leapSeconds = leapSecondsAt(jd); const future = jd >= calendarJulianDay('2027-01-01'); return { scale, status: future ? 'future-uncertain' : 'supported', leapSeconds, assumptions: ['Numeric UTC Julian days cannot represent the UTC leap-second label itself.', ...(future ? ['Beyond the IERS Bulletin C 72 confirmation window, unknown future leap seconds are held at the last value.'] : []), 'TDB-TT uses the NAIF DELTET periodic approximation, not a full relativistic time ephemeris.'], sources: SOURCES } }
+export function utcTimeScaleQuality(jd: number, scale: 'TDB' | 'ET' = 'TDB'): TimeScaleQuality {
+  finiteJd(jd)
+  const leapSeconds = leapSecondsAt(jd)
+  const future = jd >= FUTURE_LEAP_UNCERTAINTY_START
+  return {
+    scale, status: future ? 'future-uncertain' : 'supported', leapSeconds,
+    assumptions: [
+      'Numeric UTC Julian days cannot represent the UTC leap-second label itself.',
+      ...(future ? ['From 2027-07-01, beyond the NAIF-announced current interval for naif0012.tls, unknown future leap seconds are held at the last value.'] : []),
+      'TDB-TT uses the NAIF DELTET periodic approximation, not a full relativistic time ephemeris.',
+    ],
+    // Exported receipts must not expose the module's reference source list.
+    sources: [...SOURCES],
+  }
+}
 /** Seconds TDB past J2000 (NOT a Julian date). NAIF naif0012.tls DELTET constants. */
 export function utcJulianDayToEt(jd: number): number {
   finiteJd(jd)
@@ -35,4 +56,15 @@ export function utcJulianDayToTdb(jd: number): number {
 export function utcJulianDayToTt(jd: number): number {
   finiteJd(jd)
   return jd + (leapSecondsAt(jd) + 32.184) / SECONDS_PER_DAY
+}
+
+/** Elapsed TT days under the same frozen leap table, without first rounding
+ * each endpoint to a large absolute TT Julian day. The constant 32.184 s
+ * cancels. Numeric UTC still cannot encode the leap-second label itself. */
+export function utcJulianDayIntervalTtDays(fromUtc: number, toUtc: number): number {
+  finiteJd(fromUtc); finiteJd(toUtc)
+  const leapDifference = leapSecondsAt(toUtc)-leapSecondsAt(fromUtc)
+  const elapsed = (toUtc-fromUtc)+leapDifference/SECONDS_PER_DAY
+  if (!Number.isFinite(elapsed)) throw new RangeError('UTC interval to TT produced a non-finite result')
+  return elapsed
 }

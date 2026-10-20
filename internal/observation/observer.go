@@ -16,11 +16,15 @@ import (
 )
 
 const Model = "earth-station-iau2006-2000a-spk-v1"
+const futureLeapSecondUncertaintyStartUTC = "2027-07-01"
+const futureLeapSecondUncertaintyStartJDUTC = 2461587.5 // 2027-07-01, per the current IERS/NAIF confirmation horizon.
 const MaxBodies = 32
 const auKM = gofa.DAU / 1000
-const lightTimeToleranceSeconds = 0.00005 // One-part catalog JD resolution, not physical accuracy.
+const lightTimeToleranceSeconds = 0.00005             // Legacy one-part-JD callback tolerance, not physical accuracy.
+const splitEpochLightTimeToleranceSeconds = 0.0000005 // Half-microsecond numerical target; physical uncertainty is not included.
 
 type Evaluator func(context.Context, []string, float64) (map[string]catalog.State, map[string]bool, map[string]catalog.OperationalProvenance, error)
+type ETEvaluator func(context.Context, []string, float64) (map[string]catalog.State, map[string]bool, map[string]catalog.OperationalProvenance, error)
 
 type Station struct {
 	LongitudeDeg float64 `json:"longitudeDeg"`
@@ -57,6 +61,7 @@ type BodyResult struct {
 	RangeKM                  *float64    `json:"lightTimeRangeKm,omitempty"`
 	LightTimeSeconds         *float64    `json:"lightTimeSeconds,omitempty"`
 	EmissionJDTDB            *float64    `json:"emissionJdTdb,omitempty"`
+	EmissionJDTDBParts       *[2]float64 `json:"emissionJdTdbParts,omitempty"`
 	Iterations               int         `json:"lightTimeIterations,omitempty"`
 	GeometricPositionKM      *[3]float64 `json:"geometricPositionKm,omitempty"`
 	ReceptionPositionKM      *[3]float64 `json:"receptionPositionKm,omitempty"`
@@ -83,18 +88,22 @@ type Source struct {
 }
 
 type Result struct {
-	Model             string                  `json:"model"`
-	Request           Request                 `json:"request"`
-	JDTDB             float64                 `json:"jdTdb"`
-	JDTT              float64                 `json:"jdTt"`
-	JDUT1             float64                 `json:"jdUt1"`
-	TDBMinusTTSeconds float64                 `json:"tdbMinusTtSeconds"`
-	EOP               earthorientation.Sample `json:"earthOrientation"`
-	Bodies            []BodyResult            `json:"bodies"`
-	Sources           []Source                `json:"sources"`
-	Warnings          []string                `json:"warnings"`
-	Contract          map[string]any          `json:"contract"`
-	ObserverState     ObserverState           `json:"observerState"`
+	// In-process only: preserve the same source/EOP context for stellar
+	// transforms. A decoded JSON receipt cannot recreate this authority.
+	astrometry          *gofa.ASTROM
+	refractedAstrometry *gofa.ASTROM
+	Model               string                  `json:"model"`
+	Request             Request                 `json:"request"`
+	JDTDB               float64                 `json:"jdTdb"`
+	JDTT                float64                 `json:"jdTt"`
+	JDUT1               float64                 `json:"jdUt1"`
+	TDBMinusTTSeconds   float64                 `json:"tdbMinusTtSeconds"`
+	EOP                 earthorientation.Sample `json:"earthOrientation"`
+	Bodies              []BodyResult            `json:"bodies"`
+	Sources             []Source                `json:"sources"`
+	Warnings            []string                `json:"warnings"`
+	Contract            map[string]any          `json:"contract"`
+	ObserverState       ObserverState           `json:"observerState"`
 }
 
 type Error struct{ Code, Message string }
@@ -154,15 +163,31 @@ func (req Request) Validate() error {
 type session struct {
 	ctx        context.Context
 	evaluate   Evaluator
+	evaluateET ETEvaluator
 	sources    map[string]*Source
 	identities map[string]string
 }
 
 func (s *session) states(ids []string, jd float64) (map[string]catalog.State, map[string]bool, error) {
+	return s.statesWith(ids, jd, func(ctx context.Context, ids []string) (map[string]catalog.State, map[string]bool, map[string]catalog.OperationalProvenance, error) {
+		return s.evaluate(ctx, ids, jd)
+	})
+}
+
+func (s *session) statesAtET(ids []string, jd, et float64) (map[string]catalog.State, map[string]bool, error) {
+	if s.evaluateET == nil {
+		return s.states(ids, jd)
+	}
+	return s.statesWith(ids, jd, func(ctx context.Context, ids []string) (map[string]catalog.State, map[string]bool, map[string]catalog.OperationalProvenance, error) {
+		return s.evaluateET(ctx, ids, et)
+	})
+}
+
+func (s *session) statesWith(ids []string, jd float64, evaluate func(context.Context, []string) (map[string]catalog.State, map[string]bool, map[string]catalog.OperationalProvenance, error)) (map[string]catalog.State, map[string]bool, error) {
 	if err := s.ctx.Err(); err != nil {
 		return nil, nil, err
 	}
-	states, found, evidence, err := s.evaluate(s.ctx, ids, jd)
+	states, found, evidence, err := evaluate(s.ctx, ids)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -194,11 +219,39 @@ func validState(s catalog.State) bool {
 	return finite(s.Position.X) && finite(s.Position.Y) && finite(s.Position.Z) && finite(s.Velocity.X) && finite(s.Velocity.Y) && finite(s.Velocity.Z)
 }
 
-// NAIF's ECLIPJ2000 is the fixed J2000 ecliptic, not ecliptic-of-date. The
-// inverse of the catalog rotation uses its same 84381.448 arcsecond obliquity.
-func equatorial(v catalog.Vec3) [3]float64 {
+func tdbPartsToET(tdb1, tdb2 float64) float64 {
+	// Keep the low SOFA date part through the conversion to seconds. A direct
+	// tdb1+tdb2 first rounds the absolute JD in ~40-microsecond increments.
+	highDays := tdb1 - 2451545.0
+	sumDays := highDays + tdb2
+	carried := sumDays - highDays
+	lowDays := (highDays - (sumDays - carried)) + (tdb2 - carried)
+	return math.FMA(sumDays, gofa.DAYSEC, lowDays*gofa.DAYSEC)
+}
+
+func tdbPartsFromET(et float64) [2]float64 {
+	days := et / gofa.DAYSEC
+	wholeDays := math.Floor(days)
+	return [2]float64{2451545.0 + wholeDays, days - wholeDays}
+}
+
+// rotateEclipticToEquatorial changes axes only and preserves the input unit.
+// NAIF's ECLIPJ2000 is the fixed J2000 ecliptic, not ecliptic-of-date; this is
+// the inverse of the catalog rotation with the same 84381.448 arcsecond obliquity.
+func rotateEclipticToEquatorial(v catalog.Vec3) [3]float64 {
 	eps := 84381.448 * gofa.DAS2R
-	return [3]float64{v.X / auKM, (v.Y*math.Cos(eps) - v.Z*math.Sin(eps)) / auKM, (v.Y*math.Sin(eps) + v.Z*math.Cos(eps)) / auKM}
+	return [3]float64{v.X, v.Y*math.Cos(eps) - v.Z*math.Sin(eps), v.Y*math.Sin(eps) + v.Z*math.Cos(eps)}
+}
+
+func positionKmToAU(v catalog.Vec3) [3]float64 {
+	rotated := rotateEclipticToEquatorial(v)
+	return [3]float64{rotated[0] / auKM, rotated[1] / auKM, rotated[2] / auKM}
+}
+
+func velocityKmPerSecondToAUPerDay(v catalog.Vec3) [3]float64 {
+	rotated := rotateEclipticToEquatorial(v)
+	perDay := gofa.DAYSEC / auKM
+	return [3]float64{rotated[0] * perDay, rotated[1] * perDay, rotated[2] * perDay}
 }
 func sub(a, b [3]float64) [3]float64 { return [3]float64{a[0] - b[0], a[1] - b[1], a[2] - b[2]} }
 func unit(v [3]float64) ([3]float64, float64) {
@@ -222,6 +275,13 @@ func Evaluate(ctx context.Context, req Request, eop *earthorientation.Table, eva
 	return evaluateSession(ctx, req, eop, sess)
 }
 
+// EvaluateWithET resolves source states in seconds past J2000 TDB. It retains
+// SOFA's split reception date through catalog evaluation and light-time shifts.
+func EvaluateWithET(ctx context.Context, req Request, eop *earthorientation.Table, evaluate ETEvaluator) (*Result, error) {
+	sess := &session{ctx: ctx, evaluateET: evaluate, sources: map[string]*Source{}, identities: map[string]string{}}
+	return evaluateSession(ctx, req, eop, sess)
+}
+
 // A window shares this session so even disjoint observation instants cannot
 // silently switch kernels. The immutable EOP table is shared as well.
 func evaluateSession(ctx context.Context, req Request, eop *earthorientation.Table, sess *session) (*Result, error) {
@@ -235,7 +295,7 @@ func evaluateSession(ctx context.Context, req Request, eop *earthorientation.Tab
 		return nil, fail("earth_orientation_unavailable", "no pinned IERS Earth orientation snapshot is configured")
 	}
 	utc1, utc2, status, _ := utcParts(req.UTC)
-	sample, err := eop.AtUTC(utc1 + utc2)
+	sample, err := eop.AtUTCParts(utc1, utc2)
 	if err != nil {
 		return nil, fail("earth_orientation_outside_coverage", err.Error())
 	}
@@ -254,8 +314,12 @@ func evaluateSession(ctx context.Context, req Request, eop *earthorientation.Tab
 	dtr := gofa.Dtdb(tt1, tt2, utFraction, lon, math.Hypot(stationXYZ[0], stationXYZ[1])/1000, stationXYZ[2]/1000)
 	gofa.Tttdb(tt1, tt2, dtr, &tdb1, &tdb2)
 	jd := tdb1 + tdb2
+	et := tdbPartsToET(tdb1, tdb2)
+	if !finite(et) {
+		return nil, fail("invalid_tdb_epoch", "split TDB date cannot be represented as seconds past J2000")
+	}
 	ids := append([]string{"naif:399", "naif:10"}, req.BodyIDs...)
-	states, found, err := sess.states(ids, jd)
+	states, found, err := sess.statesAtET(ids, jd, et)
 	if err != nil {
 		return nil, err
 	}
@@ -263,16 +327,14 @@ func evaluateSession(ctx context.Context, req Request, eop *earthorientation.Tab
 		return nil, fail("observer_ephemeris_unavailable", "Earth center and Sun require complete SPK states at reception")
 	}
 	earth, sun := states["naif:399"], states["naif:10"]
-	ep, ev, sp := equatorial(earth.Position), equatorial(earth.Velocity), equatorial(sun.Position)
-	for i := range ev {
-		ev[i] *= gofa.DAYSEC
-	}
+	ep, ev, sp := positionKmToAU(earth.Position), velocityKmPerSecondToAUPerDay(earth.Velocity), positionKmToAU(sun.Position)
 	var x, y, cio float64
 	gofa.Xys06a(tt1, tt2, &x, &y, &cio)
 	if sample.CPOAvailable {
+		// The SOFA CIO-based correction recipe adjusts CIP X/Y while retaining
+		// the model CIO locator s returned by Xys06a.
 		x += *sample.DX * gofa.DMAS2R
 		y += *sample.DY * gofa.DMAS2R
-		cio = gofa.S06(tt1, tt2, x, y)
 	}
 	var astrom gofa.ASTROM
 	gofa.Apco(tdb1, tdb2, [2][3]float64{ep, ev}, sub(ep, sp), x, y, cio, gofa.Era00(ut11, ut12), lon, lat, req.Station.HeightMeters, sample.XP*gofa.DAS2R, sample.YP*gofa.DAS2R, gofa.Sp00(tt1, tt2), 0, 0, &astrom)
@@ -283,11 +345,24 @@ func evaluateSession(ctx context.Context, req Request, eop *earthorientation.Tab
 	if req.Atmosphere != nil {
 		a := req.Atmosphere
 		gofa.Refco(a.PressureHPa, a.TemperatureC, a.RelativeHumidity, a.WavelengthMicrometers, &refracted.Refa, &refracted.Refb)
+		if !finite(refracted.Refa) || !finite(refracted.Refb) {
+			return nil, fail("invalid_atmosphere", "atmosphere produces non-finite refraction coefficients")
+		}
+	}
+	lightTimeTolerance := lightTimeToleranceSeconds
+	epochEvaluation := "one-part-julian-date-compatibility"
+	if sess.evaluateET != nil {
+		lightTimeTolerance = splitEpochLightTimeToleranceSeconds
+		epochEvaluation = "seconds-past-j2000-tdb"
 	}
 	result := &Result{Model: Model, Request: req, JDTDB: jd, JDTT: tt1 + tt2, JDUT1: ut11 + ut12, TDBMinusTTSeconds: dtr, EOP: sample, Bodies: make([]BodyResult, 0, len(req.BodyIDs)), Sources: []Source{}, Warnings: []string{}, Contract: map[string]any{
-		"stationDatum": "WGS84-ellipsoidal-height", "azimuthConvention": "north-zero-east-positive", "angleUnit": "deg", "sourceFrame": "ECLIPJ2000", "sourceOrigin": "solar-system-barycenter", "astrometryLibrary": "github.com/hebl/gofa@v1.19.1", "precessionNutation": "IAU-2006/2000A", "timeConversion": "SOFA-UTC-TAI-TT-UT1; Fairhead-Bretagnon-topocentric-TDB", "lightDeflection": "finite-distance-solar-monopole", "lightTimeToleranceSeconds": lightTimeToleranceSeconds, "physicalUncertainty": "not-propagated", "leapSecondTableLastEffectiveUTC": "2017-01-01", "excludedEffects": []string{"planetary-light-deflection", "Shapiro-light-time", "station-tectonic-motion", "solid-earth-and-ocean-tides", "terrain-horizon", "finite-target-limb"},
+		"stationDatum": "WGS84-ellipsoidal-height", "azimuthConvention": "north-zero-east-positive", "angleUnit": "deg", "sourceFrame": "ECLIPJ2000", "sourceOrigin": "solar-system-barycenter", "astrometryLibrary": "github.com/hebl/gofa@v1.19.1", "precessionNutation": "IAU-2006/2000A", "timeConversion": "SOFA-UTC-TAI-TT-UT1; Fairhead-Bretagnon-topocentric-TDB", "epochEvaluation": epochEvaluation, "lightDeflection": "finite-distance-solar-monopole", "lightTimeToleranceSeconds": lightTimeTolerance, "physicalUncertainty": "not-propagated", "leapSecondTableLastEffectiveUTC": "2017-01-01", "futureLeapSecondUncertaintyStartUTC": futureLeapSecondUncertaintyStartUTC, "excludedEffects": []string{"planetary-light-deflection", "Shapiro-light-time", "station-tectonic-motion", "solid-earth-and-ocean-tides", "terrain-horizon", "finite-target-limb"},
 	}}
 	result.ObserverState = ObserverState{Frame: "J2000", Origin: "solar-system-barycenter", EpochTDB: [2]float64{tdb1, tdb2}}
+	result.astrometry = &astrom
+	if req.Atmosphere != nil {
+		result.refractedAstrometry = &refracted
+	}
 	for i := 0; i < 3; i++ {
 		result.ObserverState.PositionKM[i] = astrom.Eb[i] * auKM
 		result.ObserverState.VelocityKMPerSecond[i] = astrom.V[i] * gofa.CMPS / 1000
@@ -300,8 +375,8 @@ func evaluateSession(ctx context.Context, req Request, eop *earthorientation.Tab
 	if status > 0 {
 		result.Warnings = append(result.Warnings, "sofa-dubious-year")
 	}
-	if utc1+utc2 >= 2457754.5 {
-		result.Warnings = append(result.Warnings, "no-leap-seconds-after-2017-assumed")
+	if (utc1-futureLeapSecondUncertaintyStartJDUTC)+utc2 >= 0 {
+		result.Warnings = append(result.Warnings, "future-leap-seconds-assumed")
 	}
 	if sample.Predicted {
 		result.Warnings = append(result.Warnings, "iers-predicted-earth-orientation")
@@ -310,7 +385,7 @@ func evaluateSession(ctx context.Context, req Request, eop *earthorientation.Tab
 		result.Warnings = append(result.Warnings, "celestial-pole-correction-unavailable-model-only")
 	}
 	for _, id := range req.BodyIDs {
-		body, err := sess.body(id, jd, states, found, astrom, refracted, req.Atmosphere != nil, sp)
+		body, err := sess.body(id, jd, et, states, found, astrom, refracted, req.Atmosphere != nil, sp)
 		if err != nil {
 			return nil, err
 		}
@@ -326,7 +401,7 @@ func evaluateSession(ctx context.Context, req Request, eop *earthorientation.Tab
 	return result, nil
 }
 
-func (s *session) body(id string, jd float64, states map[string]catalog.State, found map[string]bool, astrom, refracted gofa.ASTROM, useRefraction bool, sun [3]float64) (BodyResult, error) {
+func (s *session) body(id string, jd, receptionET float64, states map[string]catalog.State, found map[string]bool, astrom, refracted gofa.ASTROM, useRefraction bool, sun [3]float64) (BodyResult, error) {
 	out := BodyResult{BodyID: id, Status: "missing", Warnings: []string{}}
 	missing := func(reason string) (BodyResult, error) { out.MissingReason = reason; return out, nil }
 	if id == "earth" || id == "naif:399" {
@@ -335,35 +410,56 @@ func (s *session) body(id string, jd float64, states map[string]catalog.State, f
 	if !found[id] {
 		return missing("target-reception-spk-unavailable")
 	}
-	geometricVector := sub(equatorial(states[id].Position), astrom.Eb)
+	geometricVector := sub(positionKmToAU(states[id].Position), astrom.Eb)
 	geometric, distance := unit(geometricVector)
 	if distance <= 0 {
 		return missing("zero-observer-target-distance")
 	}
 	g := direction(geometric, astrom)
 	tau, emission := distance*gofa.AULT, jd
+	emissionET := receptionET
 	var target, p [3]float64
 	var residual float64
 	converged := false
 	for i := 0; i < 16; i++ {
-		emission = jd - tau/gofa.DAYSEC
-		st, ok, err := s.states([]string{id}, emission)
+		var st map[string]catalog.State
+		var ok map[string]bool
+		var err error
+		if s.evaluateET != nil {
+			emissionET = receptionET - tau
+			parts := tdbPartsFromET(emissionET)
+			emission = parts[0] + parts[1]
+			st, ok, err = s.statesAtET([]string{id}, emission, emissionET)
+		} else {
+			emission = jd - tau/gofa.DAYSEC
+			st, ok, err = s.states([]string{id}, emission)
+		}
 		if err != nil {
 			return out, err
 		}
 		if !ok[id] {
 			return missing("target-emission-spk-unavailable")
 		}
-		target = equatorial(st[id].Position)
+		target = positionKmToAU(st[id].Position)
 		p, distance = unit(sub(target, astrom.Eb))
 		next := distance * gofa.AULT
 		out.Iterations = i + 1
-		residual = math.Abs(next - tau)
-		if residual <= lightTimeToleranceSeconds {
+		if s.evaluateET != nil {
+			residual = math.Max(math.Abs(next-tau), math.Abs((receptionET-emissionET)-next))
+		} else {
+			// Check the equation at the representable emission JD, not just
+			// stagnation of successive delays on the one-part JD time grid.
+			residual = math.Max(math.Abs(next-tau), math.Abs((jd-emission)*gofa.DAYSEC-next))
+		}
+		tau = next
+		tolerance := lightTimeToleranceSeconds
+		if s.evaluateET != nil {
+			tolerance = splitEpochLightTimeToleranceSeconds
+		}
+		if residual <= tolerance {
 			converged = true
 			break
 		}
-		tau = next
 	}
 	if !converged {
 		return missing("light-time-not-converged")
@@ -376,14 +472,14 @@ func (s *session) body(id string, jd float64, states map[string]catalog.State, f
 		// Deflector at closest approach along the finite observer-target ray.
 		delay := math.Max(0, math.Min(tau, gofa.Pdp(sub(sun, astrom.Eb), p)*gofa.AULT))
 		if delay > 0 {
-			st, ok, err := s.states([]string{"naif:10"}, jd-delay/gofa.DAYSEC)
+			st, ok, err := s.statesAtET([]string{"naif:10"}, jd-delay/gofa.DAYSEC, receptionET-delay)
 			if err != nil {
 				return out, err
 			}
 			if !ok["naif:10"] {
 				return missing("deflector-spk-unavailable")
 			}
-			sun = equatorial(st["naif:10"].Position)
+			sun = positionKmToAU(st["naif:10"].Position)
 		}
 		q, qn := unit(sub(target, sun))
 		e, em := unit(sub(astrom.Eb, sun))
@@ -405,6 +501,10 @@ func (s *session) body(id string, jd float64, states map[string]catalog.State, f
 	out.RangeKM = &rangeKM
 	out.LightTimeSeconds = &tau
 	out.EmissionJDTDB = &emission
+	if s.evaluateET != nil {
+		parts := tdbPartsFromET(emissionET)
+		out.EmissionJDTDBParts = &parts
+	}
 	var geometricKM, receptionKM [3]float64
 	for i := 0; i < 3; i++ {
 		geometricKM[i] = geometricVector[i] * auKM

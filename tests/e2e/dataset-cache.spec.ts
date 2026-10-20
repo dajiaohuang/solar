@@ -36,7 +36,9 @@ type Seed = { key: string; version: string; accessed: number }
 async function seed(page: Page, records: Seed[]) {
   await page.evaluate(async (entries) => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open('solar-atlas-data-v1', 2)
+      // Seed a payload-only legacy database on first use; let production own
+      // schema upgrades, and reopen its current version on subsequent seeds.
+      const request = indexedDB.open('solar-atlas-data-v1')
       request.onupgradeneeded = () => request.result.createObjectStore('immutable-responses')
       request.onsuccess = () => resolve(request.result)
       request.onerror = () => reject(request.error)
@@ -56,14 +58,21 @@ async function seed(page: Page, records: Seed[]) {
 
 async function keys(page: Page) {
   return page.evaluate(async () => {
-    const request = indexedDB.open('solar-atlas-data-v1', 2)
+    const request = indexedDB.open('solar-atlas-data-v1')
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
       request.onsuccess = () => resolve(request.result)
       request.onerror = () => reject(request.error)
     })
     const result = await new Promise<IDBValidKey[]>((resolve, reject) => {
-      const request = database.transaction('immutable-responses').objectStore('immutable-responses').getAllKeys()
-      request.onsuccess = () => resolve(request.result)
+      const keys: IDBValidKey[] = []
+      const request = database.transaction('immutable-responses').objectStore('immutable-responses').openCursor()
+      request.onsuccess = () => {
+        const cursor = request.result
+        if (!cursor) { resolve(keys); return }
+        // Enumerate cached payloads, excluding internal byte-accounting rows.
+        if (cursor.value.buffer instanceof ArrayBuffer) keys.push(cursor.primaryKey)
+        cursor.continue()
+      }
       request.onerror = () => reject(request.error)
     })
     database.close()

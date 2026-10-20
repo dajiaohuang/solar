@@ -49,7 +49,7 @@ function fixture(options: { missing?: (epochIndex: number, id: string) => boolea
     // Deliberately finish odd-numbered tiles first.
     await new Promise(resolve => setTimeout(resolve, request.sequence % 2 ? 0 : 5))
     const metadata: StateTileMetadata = { id, source: 'synthetic-six-vector', datasetVersion: 'fixture', datasetSha256: hash,
-      kernelSha256: 'c'.repeat(64), model: 'spk-original', centerId: 'naif:0', validityStartEt: -1e12, validityEndEt: 1e12,
+      kernelSha256: 'c'.repeat(64), sourceChainSha256: 'e'.repeat(64), model: 'spk-original', centerId: 'naif:0', validityStartEt: -1e12, validityEndEt: 1e12,
       validityPresent: true, stateEvidence: missing ? '' : 'synthetic-kernel', missingReason: missing ? 'synthetic-window-gap' : '',
       evidenceWindowStartEt: 0, evidenceWindowEndEt: 0, evidenceWindowPresent: false, identityStatus: '', sourceRecord: false }
     const raw = await encodeStateTile({ sequence: request.sequence, tileCount: plan.ids.length, ordinalStart: request.sequence,
@@ -121,7 +121,7 @@ describe('backend historical state tiles', () => {
       init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason), { once: true })
     }))
     const result = loadBackendTrajectories({ ...input, signal: new AbortController().signal, fetcher })
-    const rejected = expect(result).rejects.toThrow('Backend trajectory deadline exceeded')
+    const rejected = expect(result).rejects.toThrow('State window setup deadline exceeded')
     await vi.advanceTimersByTimeAsync(TRAJECTORY_DEADLINE_MS)
     await rejected
     expect(fetcher).toHaveBeenCalledTimes(1)

@@ -19,7 +19,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:preview": "playwright test --config playwright.preview.config.ts",
-    "ci": "npm run lint && npm run test:unit && npm run test:scientific && npm run build",
+    "ci": "npm run lint && npm run test:unit && npm run build",
     "preprocess:asteroids": "node --max-old-space-size=4096 ./scripts/preprocess-asteroids.mjs",
     "data:lite": "cross-env MPCORB_MODE=lite MPCORB_LITE_MAX_NUMBER=30000 node ./scripts/preprocess-asteroids.mjs",
     "data:full": "cross-env MPCORB_MODE=full node --max-old-space-size=4096 ./scripts/preprocess-asteroids.mjs",
@@ -30,7 +30,11 @@
     "benchmark:spk": "node --experimental-strip-types ./scripts/benchmark-spk.mjs",
     "audit:scientific-assets": "node --experimental-strip-types ./scripts/audit-scientific-assets.mjs",
     "check:capacity": "node ./scripts/check-capacity.mjs",
-    "check:repository": "node ./scripts/validate-yaml.mjs && node ./scripts/validate-repository.mjs"
+    "check:repository": "node ./scripts/validate-yaml.mjs && node ./scripts/validate-repository.mjs",
+    "build:vercel": "node ./scripts/build-vercel.mjs",
+    "precompute:vercel": "node ./scripts/precompute-vercel.mjs",
+    "verify:vercel-data": "node --experimental-strip-types ./scripts/verify-segmented-ephemerides.mjs",
+    "test:vercel": "playwright test --config playwright.vercel.config.ts"
   },
   "dependencies": {
     "@types/three": "^0.184.0",

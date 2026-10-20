@@ -5,6 +5,8 @@ import { loadedKernels, kernelsForWindow } from '../engine/ephemeris/kernelStore
 import { createKernelResolver, type LoadedKernel } from '../engine/ephemeris/kernelPool'
 import { utcJulianDayToEt, utcJulianDayToTdb, utcJulianDayToTt } from '../engine/ephemeris/timeScales'
 import { bodyNaifId } from '../data/ephemerisTargets'
+import { SEGMENTED_WEB, isDynamicOrbitBody } from './webExecution'
+import { approximationForBody } from '../engine/ephemeris/segmentedStore'
 import { AU_IN_KM, SECONDS_PER_DAY } from '../engine/units'
 import type {
   BodyId,
@@ -242,6 +244,20 @@ export function createBodyPositionResolver(bodiesById: Map<BodyId, CelestialBody
     }
     if (body.source === 'source-inventory') throw new MissingBodyStateError(bodyId, julianDay)
 
+    if (SEGMENTED_WEB) {
+      if (bodyId === 'sun') return { x: 0, y: 0, z: 0 }
+      const approximation = approximationForBody(bodyId, julianDay)
+      // Built-ins never borrow an epoch orbit outside their precomputed range.
+      // Catalog records retain their explicitly approximate Kepler model.
+      if (approximation.body || !isDynamicOrbitBody(body)) {
+        if (!approximation.state) throw new MissingBodyStateError(bodyId, julianDay)
+        const local = scaleVector3(approximation.state.position, 1 / AU_IN_KM)
+        const position = addVector3(resolve(approximation.body!.parentId), local)
+        cache.set(bodyId, position)
+        return position
+      }
+    }
+
     const target = bodyNaifId(body)
     const state = precise && target !== undefined ? precise.relative(target, 10) : null
     if (state) {
@@ -288,8 +304,21 @@ export function createBodyVelocityResolver(
   const derivativeKernels = kernelsForWindow(julianDay - stepDays, julianDay + stepDays, kernels.map((kernel) => kernel.id))
   const before = createBodyPositionResolver(bodiesById, julianDay - stepDays, derivativeKernels)
   const after = createBodyPositionResolver(bodiesById, julianDay + stepDays, derivativeKernels)
+  const velocities = new Map<BodyId, Vector3>()
 
-  return (bodyId: BodyId): Vector3 => {
+  const resolveVelocity = (bodyId: BodyId): Vector3 => {
+    const cached = velocities.get(bodyId)
+    if (cached) return cached
+    if (SEGMENTED_WEB) {
+      if (bodyId === 'sun') return { x: 0, y: 0, z: 0 }
+      const approximation = approximationForBody(bodyId, julianDay)
+      if (approximation.body) {
+        if (!approximation.state) throw new MissingBodyStateError(bodyId, julianDay)
+        const velocity = addVector3(resolveVelocity(approximation.body.parentId), scaleVector3(approximation.state.velocity, SECONDS_PER_DAY / AU_IN_KM))
+        velocities.set(bodyId, velocity)
+        return velocity
+      }
+    }
     const body = bodiesById.get(bodyId)
     const target = body ? bodyNaifId(body) : undefined
     const state = precise && target !== undefined ? precise.relative(target, 10) : null
@@ -297,6 +326,7 @@ export function createBodyVelocityResolver(
     const delta = subtractVector3(after(bodyId), before(bodyId))
     return scaleVector3(delta, 1 / (2 * stepDays))
   }
+  return resolveVelocity
 }
 
 export function estimateAphelionDistance(body: CelestialBody, bodiesById: Map<BodyId, CelestialBody>): number {

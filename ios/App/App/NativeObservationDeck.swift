@@ -11,6 +11,8 @@ final class ObservationModel: ObservableObject {
     @Published var coverageLoading = false
     @Published var coverageMessage = CoverageCopy.empty
     private var request: Task<Void, Never>?
+    private var requestIdentity: UUID?
+    private var requestedBodyCount = 0
     private var coverageRequest: Task<Void, Never>?
     private var coverageGeneration = 0
     private var requestGate = NativeObservationRequestGate()
@@ -18,8 +20,16 @@ final class ObservationModel: ObservableObject {
 
     func cancel() {
         requestGate.cancel()
-        request?.cancel(); request = nil
-        if loading { message = "Loading cancelled. No partial observation was published." }
+        // Retain the task as a drain barrier: cancellation does not imply its
+        // service has released the prior frame/decoder allocations yet.
+        request?.cancel()
+        if loading {
+            if let retained = frame {
+                message = "Loading cancelled. Retained \(retained.metadata.count)/\(requestedBodyCount) identities from the verified first plan."
+            } else {
+                message = "Loading cancelled before a verified plan was available."
+            }
+        }
         loading = false
         clearCoverage()
     }
@@ -36,32 +46,61 @@ final class ObservationModel: ObservableObject {
     }
 
     func load(address: String, ids: [String], epoch: String, reference: String, selectedPage: NativeSourceIdentityPage? = nil) {
+        let previous = request
         cancel(); frame = nil
+        let requestIDs = [reference] + ids.filter { $0 != reference }
         guard let url = URL(string: address.trimmingCharacters(in: .whitespacesAndNewlines)),
               let jd = Double(epoch), jd.isFinite else {
             message = "Enter a backend HTTPS address and a finite Julian date in TDB."
             return
         }
+        requestedBodyCount = requestIDs.count
         let current = requestGate.begin(reference: reference)
-        loading = true; message = "Loading verified states…"
+        let owner = UUID()
+        requestIdentity = owner
+        loading = true; message = "Loading verified states. A first frame appears after its complete plan is verified."
         request = Task {
+            defer {
+                // Publication validity and drain ownership are different:
+                // cancel invalidates the gate, but this task still owns its
+                // handle until service cleanup and predecessor draining finish.
+                if requestIdentity == owner {
+                    request = nil; requestIdentity = nil
+                    if requestGate.isCurrent(current) { loading = false }
+                }
+            }
             do {
+                await previous?.value
+                try Task.checkCancellation()
+                guard requestGate.isCurrent(current) else { return }
                 if cache == nil { cache = try StateTileCache() }
                 guard let cache = cache else { return }
                 let service = try StateTileService(base: url, cache: cache)
-                let result = try await service.load(ids: ids, epochJd: jd, selectedPage: selectedPage)
+                let result = try await service.load(ids: requestIDs, epochJd: jd, selectedPage: selectedPage,
+                    onInitialPartial: { [weak self] partial in
+                        guard let self, self.requestGate.isCurrent(current) else { return }
+                        self.frame = partial
+                        let exactCount = partial.verifiedExactCount ?? 0
+                        self.message = "First verified plan displayed (\(partial.metadata.count)/\(requestIDs.count) identities); \(exactCount) exact states. Loading remaining plans."
+                    })
                 try Task.checkCancellation()
                 guard requestGate.isCurrent(current) else { return }
+                guard let exact = result.verifiedExactCount, exact >= 0, exact <= result.exact.count else {
+                    throw StateTileFailure.invalid("Verified state count is unavailable.")
+                }
                 frame = result
-                let exact = result.exact.reduce(0) { $0 + ($1 ? 1 : 0) }
                 let gaps = result.exact.count - exact
                 let gapLabel = gaps == 1 ? "data gap" : "data gaps"
                 message = "\(exact) verified states · \(gaps) \(gapLabel)"
             } catch {
                 guard requestGate.isCurrent(current) else { return }
-                message = error.localizedDescription
+                if let retained = frame {
+                    let exactCount = retained.verifiedExactCount ?? 0
+                    message = "Remaining plans failed. Retained \(retained.metadata.count)/\(requestedBodyCount) verified-plan identities (\(exactCount) exact states). \(error.localizedDescription)"
+                } else {
+                    message = error.localizedDescription
+                }
             }
-            if requestGate.isCurrent(current) { loading = false; request = nil }
         }
     }
 
@@ -243,6 +282,8 @@ struct ObservationDeckView: View {
                     model.message = SourceDirectoryCopy.selected
                 }
                 NativeGroundContactView(address: address)
+                NativeStellarMotionView(address: address)
+                NativeOrbitCovarianceView(address: address)
                 Section(CoverageCopy.title) {
                     // Keep every audit item a separate List row. A single nested
                     // disclosure row can clip its controls and propagate its
@@ -331,17 +372,7 @@ struct ObservationDeckView: View {
                     }
                 }
                 if let frame = model.frame {
-                    DisclosureGroup("State evidence and data gaps (\(frame.metadata.count))") {
-                        ForEach(frame.metadata.indices, id: \.self) { index in
-                            let row = frame.metadata[index]
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(row.id).font(.headline)
-                                Text(frame.exact[index] ? "Verified · \(row.model) · \(row.source)" : "Missing · \(row.missingReason)")
-                                    .font(.caption).foregroundStyle(.secondary)
-                                if frame.exact[index] { Text(row.datasetSha256).font(.caption2).textSelection(.enabled) }
-                            }
-                        }
-                    }
+                    NativeStateEvidence(frame: frame).id(frame.identity)
                 }
             }
             .navigationTitle("Solar Atlas")
@@ -363,6 +394,43 @@ struct ObservationDeckView: View {
             .onChange(of: coverageExpanded) { expanded in if !expanded { model.clearCoverage() } }
             .onChange(of: reference) { value in model.referenceChanged(value) }
             .onDisappear { model.cancel(); sourceDirectory.clear() }
+        }
+    }
+}
+
+private struct NativeStateEvidence: View {
+    let frame: NativeStateFrame
+    @State private var page = 0
+    private let pageSize = 100
+
+    var body: some View {
+        let count = frame.metadata.count
+        let pages = max(1, (count + pageSize - 1) / pageSize)
+        let current = min(max(0, page), pages - 1)
+        let start = current * pageSize
+        let end = min(count, start + pageSize)
+        DisclosureGroup("State evidence and data gaps (\(count))") {
+            HStack {
+                Button("Previous") { page = current - 1 }
+                    .disabled(current == 0).accessibilityIdentifier("observation.evidence.previous")
+                Text("Page \(current + 1) / \(pages)")
+                    .accessibilityIdentifier("observation.evidence.page")
+                Button("Next") { page = current + 1 }
+                    .disabled(current + 1 >= pages).accessibilityIdentifier("observation.evidence.next")
+            }.buttonStyle(.borderless)
+            ForEach(start..<end, id: \.self) { index in
+                let row = frame.metadata[index]
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(row.id).font(.headline)
+                    Text(frame.exact[index] ? "Verified · \(row.model) · \(row.source)" : "Missing · \(row.missingReason)")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if frame.exact[index] {
+                        Text(row.datasetSha256).font(.caption2).textSelection(.enabled)
+                        Text("Source-chain SHA-256: \(row.sourceChainSha256.flatMap { $0.isEmpty ? nil : $0 } ?? "not provided")")
+                            .font(.caption2).textSelection(.enabled)
+                    }
+                }
+            }
         }
     }
 }
@@ -415,6 +483,7 @@ private struct NativeStateViewport: View {
     }
 
     private func sample(_ window: NativeFrameWindow) {
+        guard projectedKey == key, scenePhase == .active else { return }
         var updated = pressure
         if updated.sample(mode3D: mode3D, available: projection.candidates, window: window,
                           now: ProcessInfo.processInfo.systemUptime) {
@@ -424,9 +493,10 @@ private struct NativeStateViewport: View {
 
     var body: some View {
         let positions = projectedKey == key ? projection.points : []
+        let displayedCount = projectedKey == key ? projection.displayedCount : 0
         ZStack(alignment: .bottomLeading) {
             Color.black
-            if positions.isEmpty {
+            if displayedCount == 0 {
                 Text(projectionError ?? "No verified states to display\nLoad a scene with an available reference body.")
                     .multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.8)).padding()
             } else if mode3D {
@@ -442,9 +512,9 @@ private struct NativeStateViewport: View {
             }
             if frame != nil && projectedKey == key {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("\(positions.count)/\(projection.candidates) displayed · \(limit.formatted(.number.locale(Locale(identifier: "en_US")))) display limit")
+                    Text("\(displayedCount)/\(projection.candidates) displayed · \(limit.formatted(.number.locale(Locale(identifier: "en_US")))) display limit")
                         .accessibilityIdentifier("observation.displayed")
-                    Text("Computed \(projection.candidates) · displayed \(positions.count) · not displayed \(max(0, projection.candidates - positions.count))")
+                    Text("Computed \(projection.candidates) · displayed \(displayedCount) · not displayed \(max(0, projection.candidates - displayedCount))")
                         .accessibilityIdentifier("observation.counts")
                     Text(pressureMessage).accessibilityIdentifier("observation.pressure")
                 }.font(.caption2).foregroundStyle(.white).padding(8).background(.black.opacity(0.7))
@@ -461,20 +531,16 @@ private struct NativeStateViewport: View {
             applyThermal()
             let source = frame, sourceReference = reference, renderLimit = limit
             do {
-                let result = try await projectionPrefetch.prepare(frame: source, reference: sourceReference, limit: renderLimit)
+                let result = try await projectionPrefetch.prepare(frame: source, reference: sourceReference, limit: renderLimit, mode3D: mode3D)
                 try Task.checkCancellation()
                 guard expected == key else { return }
-                // A pressure warning may arrive while the worker runs. Clamp
-                // against the current policy, not the captured old limit.
-                projection = try result.limited(to: limit); projectedKey = expected
+                // A changed pressure revision invalidates this task. Never
+                // rebuild geometry payloads on main to salvage an old result.
+                guard result.displayedCount <= limit else { return }
+                projection = result; projectedKey = expected
             } catch is CancellationError {
                 // SwiftUI restarts for observation/reference/mode/activity changes.
             } catch { if !Task.isCancelled { projectionError = error.localizedDescription } }
-        }
-        .onChange(of: limit) { value in
-            // The budget revision in ProjectionKey restarts the single
-            // cancellable worker for both reductions and gradual growth.
-            if value < projection.points.count { projection = (try? projection.limited(to: value)) ?? NativeProjection() }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification).receive(on: RunLoop.main)) { _ in
             pressure.memoryWarning(now: ProcessInfo.processInfo.systemUptime)
@@ -487,13 +553,45 @@ private struct NativePointScene: UIViewRepresentable {
     let projection: NativeProjection
     let onWindow: (NativeFrameWindow) -> Void
     final class Coordinator: NSObject, SCNSceneRendererDelegate {
-        var identity: UUID?
-        var onWindow: ((NativeFrameWindow) -> Void)?
-        let sampler = NativeFrameSampler()
+        private let lock = NSLock()
+        private var identity: UUID?
+        private var onWindow: ((NativeFrameWindow) -> Void)?
+        private let sampler = NativeFrameSampler()
+        private var notificationPending = false
+
+        // Called on the main thread; sampling itself runs on SceneKit's thread.
+        func configure(identity next: UUID, onWindow: @escaping (NativeFrameWindow) -> Void) -> Bool {
+            lock.lock(); defer { lock.unlock() }
+            self.onWindow = onWindow
+            guard identity != next else { return false }
+            identity = next
+            sampler.reset()
+            return true
+        }
+
+        func clear() {
+            lock.lock(); defer { lock.unlock() }
+            identity = nil; onWindow = nil; sampler.reset()
+        }
 
         func renderer(_ renderer: SCNSceneRenderer, didRenderScene scene: SCNScene, atTime time: TimeInterval) {
-            guard let window = sampler.record(time) else { return }
-            DispatchQueue.main.async { [weak self] in self?.onWindow?(window) }
+            lock.lock()
+            guard let identity, let window = sampler.record(time), !notificationPending else {
+                lock.unlock(); return
+            }
+            notificationPending = true
+            lock.unlock()
+            // Value-only payload: no projection or scene buffer is captured.
+            DispatchQueue.main.async { [weak self] in self?.deliver(window, identity: identity) }
+        }
+
+        private func deliver(_ window: NativeFrameWindow, identity sampledIdentity: UUID) {
+            lock.lock()
+            notificationPending = false
+            let callback = identity == sampledIdentity ? onWindow : nil
+            lock.unlock()
+            // Configuration, teardown and delivery are serialized on main.
+            callback?(window)
         }
     }
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -513,14 +611,17 @@ private struct NativePointScene: UIViewRepresentable {
         return view
     }
     func updateUIView(_ view: SCNView, context: Context) {
-        context.coordinator.onWindow = onWindow
-        guard context.coordinator.identity != projection.identity else { return }
-        context.coordinator.identity = projection.identity
-        let points = projection.points.map { SCNVector3($0.x, $0.y, $0.z) }
-        view.scene?.rootNode.childNode(withName: "verified-states", recursively: false)?.geometry = NativePointGeometry.make(points: points)
+        guard context.coordinator.configure(identity: projection.identity, onWindow: onWindow) else { return }
+        guard let cloud = view.scene?.rootNode.childNode(withName: "verified-states", recursively: false) else { return }
+        // Release the scene node's old geometry before allocating its replacement.
+        // SceneKit/driver references may outlive this assignment.
+        cloud.geometry = nil
+        if let payload = projection.geometryPayload {
+            cloud.geometry = NativePointGeometry.make(payload: payload)
+        }
     }
     static func dismantleUIView(_ view: SCNView, coordinator: Coordinator) {
-        view.delegate = nil; coordinator.onWindow = nil; coordinator.sampler.reset()
+        view.delegate = nil; coordinator.clear()
         view.isPlaying = false; view.scene = nil; view.pointOfView = nil
     }
 }

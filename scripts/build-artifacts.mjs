@@ -7,17 +7,22 @@ import { fileURLToPath } from 'node:url'
 import { createGzip, constants as zlibConstants } from 'node:zlib'
 import { pipeline } from 'node:stream/promises'
 import { jsonDocument, productDelivery, sha256 } from './lib/product-delivery.ts'
-import { previewDatasetPlan } from './lib/preview-dataset.mjs'
+import { previewDatasetPlan, verifyPreviewSourceChecksums } from './lib/preview-dataset.mjs'
 import { verifyEphemerisAssets } from './lib/verify-ephemeris-assets.mjs'
+import { verifyApproximationAssets } from './lib/verify-approximation-assets.mjs'
+import { packageApproximation } from './lib/package-approximation.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const CACHE_FILE = join(ROOT, '.cache', 'solar-build-info.json')
 const SCIENTIFIC_VALIDATION_CACHE = join(ROOT, '.cache', 'scientific-validation.json')
 const DIST = join(ROOT, 'dist')
 const PUBLIC = join(ROOT, 'public')
-const SITE_BASE = 'https://dajiaohuang.github.io/solar/'
-const MAX_ARTIFACT_BYTES = 700 * 1024 * 1024
-const WARN_ARTIFACT_BYTES = 600 * 1024 * 1024
+const APPROXIMATION_ROOT = resolve(process.env.SOLAR_ATLAS_APPROXIMATION_DIR ?? join(PUBLIC, 'data', 'approximation'))
+const SEGMENTED = process.env.SOLAR_ATLAS_WEB_EXECUTION === 'segmented'
+const SITE_BASE = SEGMENTED ? `${(process.env.SOLAR_ATLAS_SITE_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : 'http://localhost:4173')).replace(/\/+$/, '')}/` : 'https://dajiaohuang.github.io/solar/'
+// Engineering storage budgets, independent of plan-specific CLI source uploads.
+const MAX_ARTIFACT_BYTES = SEGMENTED ? 1_500_000_000 : 700 * 1024 * 1024
+const WARN_ARTIFACT_BYTES = SEGMENTED ? 1_400_000_000 : 600 * 1024 * 1024
 const DELIVERY = productDelivery(process.env.SOLAR_ATLAS_PRODUCT_PROFILE, process.env.SOLAR_ATLAS_EPHEMERIS_PROFILE)
 const EPHEMERIS_PROFILE = DELIVERY.scientificProfile
 
@@ -51,6 +56,8 @@ async function prepareBuildInfo() {
     ephemerisProfile: EPHEMERIS_PROFILE,
     productProfile: DELIVERY.product,
     productAvailabilitySha256: DELIVERY.availabilitySha256,
+    webExecution: SEGMENTED ? 'segmented' : 'backend',
+    catalogUrl: SEGMENTED ? process.env.SOLAR_ATLAS_CATALOG_URL ?? null : null,
   }
   await mkdir(dirname(CACHE_FILE), { recursive: true })
   await writeFile(CACHE_FILE, `${JSON.stringify(info, null, 2)}\n`)
@@ -77,19 +84,25 @@ function normalizedRelative(root, path) {
 
 async function copyStaticPublic() {
   const ephemerides = DELIVERY.manifest
+  const approximation = SEGMENTED ? await verifyApproximationAssets(APPROXIMATION_ROOT) : null
   const ephemerisPaths = new Set(ephemerides.files.map((file) => `data/ephemerides/${file.path}`))
   const files = await walkFiles(PUBLIC)
   for (const source of files) {
     const relativePath = normalizedRelative(PUBLIC, source)
     if (relativePath.startsWith('data/asteroids/')) continue
+    if (relativePath.startsWith('data/approximation/')) continue
+    if (SEGMENTED && relativePath.startsWith('data/ephemerides/')) continue
     if (relativePath.startsWith('data/ephemerides/') && !ephemerisPaths.has(relativePath)) continue
     const destination = join(DIST, ...relativePath.split('/'))
     await mkdir(dirname(destination), { recursive: true })
     await copyFile(source, destination)
   }
+  if (approximation) {
+    await packageApproximation(APPROXIMATION_ROOT, join(DIST, 'data', 'approximation'), approximation.manifest)
+  }
   // Only the pinned profile is shipped, even if a developer generated a larger
   // local pack in public/. Fail closed for missing or changed coefficients.
-  await verifyEphemerisAssets(join(DIST, 'data', 'ephemerides'), ephemerides.files)
+  if (!SEGMENTED) await verifyEphemerisAssets(join(DIST, 'data', 'ephemerides'), ephemerides.files)
   await writeFile(join(DIST, 'ephemeris-manifest.json'), jsonDocument(ephemerides))
   await writeFile(join(DIST, 'product-availability.json'), jsonDocument(DELIVERY.availability))
 }
@@ -128,9 +141,11 @@ async function copyActiveDataset(buildInfo) {
   const sourceFiles = previewPlan ? previewPlan.sourcePaths.map(path => join(sourceRoot, path)) : await walkFiles(sourceRoot)
   if (previewPlan) {
     const checksums = await readJson(join(sourceRoot, 'checksums.json'))
+    verifyPreviewSourceChecksums(checksums, sourceManifest)
     // The preview delivery hash must not bless changed source bytes. Verify
     // each copied source artifact against the immutable release first.
     for (const path of previewPlan.sourcePaths) {
+      if (path === 'checksums.json') continue // Bound above; the descriptor cannot hash itself.
       if (!checksums.files?.[path] || await hashFile(join(sourceRoot, path)) !== checksums.files[path]) throw new Error(`Preview source checksum mismatch: ${path}`)
     }
   }
@@ -421,7 +436,7 @@ async function writeStaticKnowledgePages() {
   const urls = [SITE_BASE, ...pages.map((path) => `${SITE_BASE}${path}/`)]
   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((url) => `  <url><loc>${url}</loc><changefreq>monthly</changefreq></url>`).join('\n')}\n</urlset>\n`
   await writeFile(join(DIST, 'sitemap.xml'), sitemap)
-  await writeFile(join(DIST, 'robots.txt'), `User-agent: *\nAllow: /solar/\nSitemap: ${SITE_BASE}sitemap.xml\n`)
+  await writeFile(join(DIST, 'robots.txt'), `User-agent: *\nAllow: ${new URL(SITE_BASE).pathname}\nSitemap: ${SITE_BASE}sitemap.xml\n`)
 }
 
 async function hashFile(path) {
@@ -467,7 +482,14 @@ async function writeManifestsAndCapacity(buildInfo, dataset) {
     planetaryApproximation: `${planetaryModelEvidence.validFrom}/${planetaryModelEvidence.validTo}`,
     outsideWindow: scientificValidation.modelWindow?.outsideWindow ?? 'explicitly-labelled-extrapolation',
   }
-  const publishedScientificValidation = { ...scientificValidation, modelWindow, modelEvidence, build: buildInfo, dataset }
+  const approximationEvidence = SEGMENTED ? {
+    model: 'piecewise-chebyshev-best-sampled-v1', manifest: 'data/approximation/manifest.json',
+    validation: 'Candidate errors are measured at 66 off-node samples per fitted interval, relative to its local source state. They are not continuous bounds or physical uncertainties.',
+    outsideCoverage: 'no-state-outside-published-window; explicitly-labeled-two-body-forecasts-in-source-gaps', sourceDelivery: 'lossless-float64-coefficients-and-forecast-parameters-only-no-raw-spk',
+    forecastBoundary: 'Backtest errors are measured inside source windows. Prediction errors outside source coverage are unknown; no maneuver, perturbation, collision or existence model.',
+    scientificTests: 'The existing report below validates source and analysis contracts; it does not independently certify the generated approximation archive.',
+  } : undefined
+  const publishedScientificValidation = { ...scientificValidation, modelWindow, modelEvidence, approximationEvidence, build: buildInfo, dataset }
   await writeFile(join(DIST, 'scientific-validation.json'), `${JSON.stringify(publishedScientificValidation, null, 2)}\n`)
   await writeFile(join(DIST, 'health.json'), `${JSON.stringify({ status: scientificValidation.passed === false ? 'degraded' : 'ok', checkedAt: buildInfo.buildTime, build: buildInfo, dataset, scientificValidation: { passed: scientificValidation.passed, passedTests: scientificValidation.runner?.passedTests ?? 0, totalTests: scientificValidation.runner?.totalTests ?? 0 } }, null, 2)}\n`)
 
@@ -478,6 +500,8 @@ async function writeManifestsAndCapacity(buildInfo, dataset) {
   }))
   const datasetEntries = entries.filter((entry) => entry.path.startsWith('data/asteroids/'))
   const ephemerisEntries = entries.filter((entry) => entry.path.startsWith('data/ephemerides/'))
+  const approximationEntries = entries.filter((entry) => entry.path.startsWith('data/approximation/'))
+  const gaiaEntries = entries.filter((entry) => entry.path.startsWith('data/gaia/'))
   const shellEntries = entries.filter((entry) => !entry.path.startsWith('data/'))
   const bytes = (items) => items.reduce((sum, item) => sum + item.bytes, 0)
   const coldLoadEntries = entries.filter((entry) => entry.path === 'index.html' || entry.path === 'manifest.webmanifest' || entry.path.startsWith('assets/'))
@@ -486,7 +510,7 @@ async function writeManifestsAndCapacity(buildInfo, dataset) {
   // The full-product build is a test-only artifact for the strict E2E adapter;
   // only the curated preview is uploaded to GitHub Pages and subject to its
   // hosting cap. Keep the cap fail-closed for that published profile.
-  const pagesBudgetApplies = DELIVERY.product === 'preview'
+  const pagesBudgetApplies = DELIVERY.product === 'preview' || SEGMENTED
   const report = {
     schemaVersion: 1,
     generatedAt: buildInfo.buildTime,
@@ -501,6 +525,9 @@ async function writeManifestsAndCapacity(buildInfo, dataset) {
     applicationShellBytes: bytes(shellEntries),
     datasetTotalBytes: bytes(datasetEntries),
     ephemerisTotalBytes: bytes(ephemerisEntries),
+    approximationTotalBytes: bytes(approximationEntries),
+    gaiaSkyBytes: bytes(gaiaEntries),
+    gaiaSkyFileCount: gaiaEntries.length,
     coldLoadTransferBytes: bytes(coldLoadEntries),
     typicalCatalogSessionBytes: bytes(coldLoadEntries) + bytes(typicalExtra),
     fileCount: entries.length,
@@ -515,6 +542,10 @@ async function finalizeBuild() {
   if (buildInfo.productProfile !== DELIVERY.product || buildInfo.productAvailabilitySha256 !== DELIVERY.availabilitySha256) throw new Error('Product profile changed between prepare and finalize')
   if (!await exists(DIST)) throw new Error('dist does not exist; run Vite before finalizing')
   await copyStaticPublic()
+  if (SEGMENTED) {
+    const path = join(DIST, 'index.html')
+    await writeFile(path, (await readFile(path, 'utf8')).replaceAll('https://dajiaohuang.github.io/solar/', SITE_BASE))
+  }
   const dataset = await copyActiveDataset(buildInfo)
   await writeStaticKnowledgePages()
   await finalizeServiceWorker(buildInfo)

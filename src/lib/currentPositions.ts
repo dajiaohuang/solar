@@ -52,7 +52,11 @@ export function concatCurrentPositions(first: CurrentPositions, second: CurrentP
 
 /** Source-order ordinal selection, retaining the original scalar storage. */
 export function selectCurrentPositions(source: CurrentPositions, ordinals: Uint32Array) {
-  const selected = ordinals.slice()
+  return adoptCurrentPositionOrdinals(source, ordinals.slice())
+}
+
+/** Adopt fresh ordinal storage when the caller transfers exclusive ownership. */
+export function adoptCurrentPositionOrdinals(source: CurrentPositions, selected: Uint32Array) {
   for (const ordinal of selected) if (ordinal >= source.length) throw new RangeError('Selected position ordinal is out of range')
   return new CurrentPositions(selected.length, index => source.bodyAt(selected[index]), (index, axis) => source.coordinateAt(selected[index], axis))
 }

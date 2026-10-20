@@ -44,7 +44,6 @@ type report struct {
 	InventoryIndexHeapBytes uint64              `json:"inventoryIndexHeapBytes,omitempty"`
 	InventoryBlockCache     map[string]int64    `json:"inventoryBlockCache,omitempty"`
 	DirectoryQueries        []string            `json:"directoryQueries,omitempty"`
-	TrajectoryPrecision     string              `json:"trajectoryPrecision"`
 	CatalogLoadMs           float64             `json:"catalogLoadMs"`
 	CatalogIntegrity        map[string]uint64   `json:"catalogIntegrity"`
 	CatalogSPKRead          map[string]uint64   `json:"catalogSPKRead"`
@@ -70,16 +69,10 @@ type report struct {
 	IdentityDetailP50Ns     int64               `json:"identityDetailP50Ns"`
 	IdentityDetailP95Ns     int64               `json:"identityDetailP95Ns"`
 	InventoryWorkloadErrors int64               `json:"inventoryWorkloadErrors"`
-	BatchBodies             int                 `json:"batchBodies"`
-	BatchSamples            int                 `json:"batchSamples"`
-	BatchMs                 float64             `json:"batchMs"`
 	StateTiles              []stateTileEvidence `json:"stateTileBatches,omitempty"`
 	StateTilesSource        []stateTileEvidence `json:"stateTileSourceBatches,omitempty"`
 	TileMemory              *tileMemoryEvidence `json:"tileMemory,omitempty"`
-	LongSamples             int                 `json:"longSamples"`
 	StateEpochJD            float64             `json:"stateEpochJd"`
-	LongMs                  float64             `json:"longTrajectoryMs"`
-	LongResponseBytes       int64               `json:"longResponseBytes"`
 	OverloadRequests        int                 `json:"overloadRequests"`
 	OverloadRejected        int64               `json:"overloadRejected"`
 	Scheduler               map[string]uint64   `json:"scheduler,omitempty"`
@@ -101,13 +94,12 @@ func main() {
 	workers := flag.Int("concurrency", 32, "parallel throughput workers")
 	dataDir := flag.String("data-dir", "src/data", "directory containing the manifest and body data")
 	inventoryDir := flag.String("inventory-dir", "", "optional audited source-inventory directory")
-	longSamples := flag.Int("long-samples", 10000, "samples in the long-trajectory workload")
 	stateEpochJD := flag.Float64("epoch-jd", 2461287.5, "TDB epoch for state-plan/tile workloads (default is the reproducible audit epoch)")
 	startupOnly := flag.Bool("startup-only", false, "report catalog/inventory cold-process startup without running request workloads")
 	tileMemoryOnly := flag.Bool("tile-memory-only", false, "measure one cold 32768-row tile per distinct plan; requires inventory and concurrency 1..4")
 	flag.Parse()
-	if *n < 1 || *workers < 1 || *longSamples < 2 || math.IsNaN(*stateEpochJD) || math.IsInf(*stateEpochJD, 0) {
-		panic("requests, concurrency and long-samples must be positive")
+	if *n < 1 || *workers < 1 || math.IsNaN(*stateEpochJD) || math.IsInf(*stateEpochJD, 0) {
+		panic("requests and concurrency must be positive, and epoch-jd must be finite")
 	}
 	if *tileMemoryOnly && (*startupOnly || *inventoryDir == "" || *workers > 4) {
 		panic("tile-memory-only requires an inventory, concurrency 1..4 and no startup-only flag")
@@ -182,26 +174,21 @@ func main() {
 			InventoryShards: inventoryShards(inv), InventoryBytes: inventoryBytes(inv), InventoryLoadMs: inventoryLoadMs,
 			InventoryIndexDigest:    inventoryIndexDigest,
 			InventoryIndexHeapBytes: inventoryIndexHeapBytes,
-			CatalogLoadMs:           loadMs, CatalogIntegrity: c.IntegrityStats(), CatalogSPKRead: map[string]uint64{"cachedBytes": uint64(reads.CachedBytes), "loadedBytes": uint64(reads.LoadedBytes), "pageLoads": reads.PageLoads, "cacheHits": reads.CacheHits, "cacheMisses": reads.CacheMisses},
+			CatalogLoadMs:           loadMs, CatalogIntegrity: c.IntegrityStats(), CatalogSPKRead: map[string]uint64{"cachedBytes": uint64(reads.CachedBytes), "loadedBytes": uint64(reads.LoadedBytes), "integrityIndexBytes": uint64(reads.IntegrityIndexBytes), "pageLoads": reads.PageLoads, "cacheHits": reads.CacheHits, "cacheMisses": reads.CacheMisses},
 			Concurrency: *workers, StateEpochJD: *stateEpochJD, TileMemory: &evidence, Scheduler: service.SchedulerStats()}
 		if err := json.NewEncoder(os.Stdout).Encode(out); err != nil {
 			panic(err)
 		}
 		return
 	}
-	ids := benchmarkBodyIDs(c)
-	// Trajectory throughput is an explicitly approximate workload; state-tile
-	// workloads below report exact and missing rows separately.
-	singlePayload := trajectoryPayload([]string{"earth"}, 64, "approximate")
-	batchPayload := trajectoryPayload(ids, 128, "approximate")
-	longPayload := trajectoryPayload([]string{"earth"}, *longSamples, "approximate")
 	stateTileIDs := benchmarkStateTileIDs(c)
 	stateTileSourceIDs := benchmarkInventoryStateTileIDs(c, inv)
+	statePlanBody := statePlanPayload([]string{"earth"}, *stateEpochJD)
 
 	firstStart := time.Now()
-	firstStatus, _, err := doRequest(client, http.MethodPost, server.URL+"/v1/trajectory", singlePayload)
+	firstStatus, _, err := doRequest(client, http.MethodPost, server.URL+"/v1/state/plan", statePlanBody)
 	if err != nil || firstStatus != http.StatusOK {
-		panic("first trajectory request failed")
+		panic("first exact state-plan request failed")
 	}
 	firstMs := elapsedMilliseconds(firstStart)
 	peak.Sample()
@@ -211,9 +198,9 @@ func main() {
 	for i := 0; i < *n; i++ {
 		start := time.Now()
 		for j := 0; j < latencyBatch; j++ {
-			status, _, requestErr := doRequest(client, http.MethodPost, server.URL+"/v1/trajectory", singlePayload)
+			status, _, requestErr := doRequest(client, http.MethodPost, server.URL+"/v1/state/plan", statePlanBody)
 			if requestErr != nil || status != http.StatusOK {
-				panic("latency trajectory request failed")
+				panic("latency state-plan request failed")
 			}
 		}
 		lat = append(lat, time.Since(start).Nanoseconds()/latencyBatch)
@@ -222,27 +209,12 @@ func main() {
 		}
 	}
 
-	batchStart := time.Now()
-	batchStatus, _, err := doRequest(client, http.MethodPost, server.URL+"/v1/trajectory", batchPayload)
-	if err != nil || batchStatus != http.StatusOK {
-		panic("batch trajectory request failed")
-	}
-	batchMs := elapsedMilliseconds(batchStart)
-	peak.Sample()
-
-	longStart := time.Now()
-	longStatus, longBytes, err := doRequest(client, http.MethodPost, server.URL+"/v1/trajectory", longPayload)
-	if err != nil || longStatus != http.StatusOK {
-		panic("long trajectory request failed")
-	}
-	longMs := elapsedMilliseconds(longStart)
-	peak.Sample()
 	stateTileEvidence := runStateTileWorkloads(service, client, server.URL, stateTileIDs, []int{len(stateTileIDs)}, *stateEpochJD, *n, *workers, peak)
 	stateTileSourceEvidence := runStateTileWorkloads(service, client, server.URL, stateTileSourceIDs, []int{16384, 32768}, *stateEpochJD, *n, *workers, peak)
 
-	// The mixed run exercises the sorted catalog index, optional indexed source
-	// inventory and batched trajectory path under the same bounded pool.
-	mixed := runMixed(client, server.URL, *n, *workers, batchPayload, inv != nil, peak)
+	// The mixed run exercises exact state preflight alongside directory reads
+	// under the same bounded pool; binary tile throughput is measured above.
+	mixed := runMixed(client, server.URL, *n, *workers, statePlanBody, inv != nil, peak)
 	// Leave one slot free while the benchmark turns a completed HTTP response
 	// into the next request; the handler releases its slot on return, just after
 	// the response body has been written.
@@ -281,7 +253,7 @@ func main() {
 	peak.Sample()
 
 	cancelObserved, cancelLatencyNs := runCancellation(c, inv, stateTileSourceIDs, peak)
-	overloadRequests, overloadRejected, overloadScheduler := runOverload(c, inv, *workers, longPayload, peak)
+	overloadRequests, overloadRejected, overloadScheduler := runOverload(c, inv, *workers, statePlanBody, peak)
 
 	sort.Slice(lat, func(i, j int) bool { return lat[i] < lat[j] })
 	catalogStats := c.Stats()
@@ -294,13 +266,12 @@ func main() {
 		InventoryIndexDigest:    inventoryIndexDigest,
 		InventoryIndexHeapBytes: inventoryIndexHeapBytes,
 		DirectoryQueries:        append([]string(nil), benchmarkDirectoryQueries...),
-		CatalogIntegrity:        c.IntegrityStats(), CatalogSPKRead: map[string]uint64{"cachedBytes": uint64(catalogRead.CachedBytes), "loadedBytes": uint64(catalogRead.LoadedBytes), "pageLoads": catalogRead.PageLoads, "cacheHits": catalogRead.CacheHits, "cacheMisses": catalogRead.CacheMisses},
-		TrajectoryPrecision: "approximate-opt-in",
-		Requests:            *n * latencyBatch, Concurrency: *workers, FirstRequestMs: firstMs,
+		CatalogIntegrity:        c.IntegrityStats(), CatalogSPKRead: map[string]uint64{"cachedBytes": uint64(catalogRead.CachedBytes), "loadedBytes": uint64(catalogRead.LoadedBytes), "integrityIndexBytes": uint64(catalogRead.IntegrityIndexBytes), "pageLoads": catalogRead.PageLoads, "cacheHits": catalogRead.CacheHits, "cacheMisses": catalogRead.CacheMisses},
+		Requests: *n * latencyBatch, Concurrency: *workers, FirstRequestMs: firstMs,
 		P50Ns: quantile(lat, .50), P95Ns: quantile(lat, .95), P99Ns: quantile(lat, .99), MinNs: quantile(lat, 0), MaxNs: quantile(lat, 1),
 		Throughput: float64(completed) / elapsed, MixedRequests: mixed.count, MixedP50Ns: mixed.p50, MixedP95Ns: mixed.p95, MixedP99Ns: mixed.p99,
 		ExactStateRequests: exactState.count, ExactStateP50Ns: exactState.p50, ExactStateP95Ns: exactState.p95, ExactStateP99Ns: exactState.p99, IdentitySearchP50Ns: searchP50, IdentitySearchP95Ns: searchP95, IdentityDetailP50Ns: detailP50, IdentityDetailP95Ns: detailP95, InventoryWorkloadErrors: inventoryErrors,
-		BatchBodies: len(ids), BatchSamples: 128, BatchMs: batchMs, LongSamples: *longSamples, StateEpochJD: *stateEpochJD, LongMs: longMs, LongResponseBytes: longBytes,
+		StateEpochJD:     *stateEpochJD,
 		StateTiles:       stateTileEvidence,
 		StateTilesSource: stateTileSourceEvidence,
 		OverloadRequests: overloadRequests, OverloadRejected: overloadRejected, OverloadStatusExpected: http.StatusTooManyRequests,
@@ -343,7 +314,7 @@ func runMixed(client *http.Client, base string, n, workers int, payload string, 
 				}
 				path, method, body := "/v1/catalog?limit=100", http.MethodGet, ""
 				if i%3 == 1 {
-					path, method, body = "/v1/trajectory", http.MethodPost, payload
+					path, method, body = "/v1/state/plan?workload=trajectory", http.MethodPost, payload
 				} else if i%3 == 2 && withInventory {
 					path = "/v1/identities?limit=10&q=" + benchmarkDirectoryQuery(i)
 				}
@@ -500,6 +471,7 @@ func runInventoryWorkloads(client *http.Client, base string, n, workers int, inv
 	if workers < 1 {
 		workers = 1
 	}
+	statePayload := statePlanPayload([]string{"sb:asteroid:1"}, 2461287.5)
 	var next, errors int64
 	var wg sync.WaitGroup
 	for w := 0; w < workers; w++ {
@@ -512,7 +484,7 @@ func runInventoryWorkloads(client *http.Client, base string, n, workers int, inv
 					return
 				}
 				start := time.Now()
-				status, _, err := doRequest(client, http.MethodGet, base+"/v1/identities/sb:asteroid:1/state?epochJd=2461287.5", "")
+				status, _, err := doRequest(client, http.MethodPost, base+"/v1/state/plan?workload=trajectory", statePayload)
 				if err == nil && status == http.StatusOK {
 					stateTimes[i] = time.Since(start).Nanoseconds()
 				} else {
@@ -569,7 +541,7 @@ func runOverload(c *catalog.Catalog, inv *inventory.Inventory, workers int, payl
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			status, _, err := doRequest(client, http.MethodPost, server.URL+"/v1/trajectory", payload)
+			status, _, err := doRequest(client, http.MethodPost, server.URL+"/v1/state/plan?workload=trajectory", payload)
 			if err == nil && status == http.StatusTooManyRequests {
 				atomic.AddInt64(&rejected, 1)
 			}
@@ -674,36 +646,10 @@ func doRequestBody(client *http.Client, method, url, body string) (int, []byte, 
 	return response.StatusCode, raw, err
 }
 
-func trajectoryPayload(ids []string, samples int, precision string) string {
-	payload := map[string]any{"bodyIds": ids, "startJd": 2451545.0, "endJd": 2451910.0, "samples": samples, "frame": "ECLIPJ2000"}
-	if precision != "" {
-		payload["precision"] = precision
-	}
-	b, _ := json.Marshal(payload)
-	return string(b)
-}
-
 func statePlanPayload(ids []string, epochJD float64) string {
 	payload := map[string]any{"ids": ids, "epochJd": epochJD, "timeScale": "TDB", "frame": "ECLIPJ2000", "precision": "exact", "fieldMask": []string{"position", "velocity"}, "tileSize": 16384}
 	b, _ := json.Marshal(payload)
 	return string(b)
-}
-
-func benchmarkBodyIDs(c *catalog.Catalog) []string {
-	items := c.Page("", 0, 500)
-	ids := make([]string, 0, 64)
-	for _, b := range items {
-		// Include missing rows as well: this intentionally exercises the full
-		// 64-body request contract and its explicit availability semantics.
-		ids = append(ids, b.ID)
-		if len(ids) == 64 {
-			break
-		}
-	}
-	if len(ids) == 0 {
-		return []string{"earth"}
-	}
-	return ids
 }
 
 func benchmarkStateTileIDs(c *catalog.Catalog) []string {

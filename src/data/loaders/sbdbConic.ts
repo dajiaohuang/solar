@@ -1,4 +1,5 @@
 import type { PeriapsisConic } from '../../engine/ephemeris/conicPeriapsis'
+import { dynamicsSourceBase64 } from '../../lib/dynamicsSourceBytes'
 
 const AU_KM = 149597870.7
 const record = (value: unknown): Record<string,unknown> => {
@@ -24,10 +25,12 @@ export const splitTdbDay = (value: unknown) => {
 
 /** Imports the source osculating conic without guessing a GM or fitting forces.
  * Retains the entire owned response and model parameters for reproducible use. */
-export async function decodeSbdbConic(bytes: Uint8Array) {
+export async function decodeSbdbConic(bytes: Uint8Array, signal?: AbortSignal) {
+  signal?.throwIfAborted()
   if (!bytes.length || bytes.length > 1024*1024) throw new Error('SBDB conic source exceeds byte budget')
   const owned = Uint8Array.from(bytes)
   const raw = record(JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(owned)))
+  signal?.throwIfAborted()
   const signature = record(raw.signature), object = record(raw.object), orbit = record(raw.orbit)
   if (signature.version !== '1.3' || signature.source !== 'NASA/JPL Small-Body Database (SBDB) API' || orbit.source !== 'JPL' || orbit.equinox !== 'J2000') throw new Error('Unsupported SBDB version, source or reference frame')
   if (!Array.isArray(orbit.elements) || orbit.elements.length > 64 || !Array.isArray(orbit.model_pars) || orbit.model_pars.length > 64) throw new Error('Invalid SBDB element or model parameter list')
@@ -52,9 +55,10 @@ export async function decodeSbdbConic(bytes: Uint8Array) {
   if (object.orbit_id !== orbitId) throw new Error('SBDB solution identity mismatch')
   const parameters: Omit<PeriapsisConic,'gmKm3PerSecond2'> = { eccentricity,periapsisKm,inclinationRadians,ascendingNodeRadians,argumentOfPeriapsisRadians }
   const sha256 = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',owned)),v=>v.toString(16).padStart(2,'0')).join('')
+  signal?.throwIfAborted()
   return { designation:text(object.des,'designation'), name:text(object.fullname,'fullname'), spkId:text(object.spkid,'SPK ID'), orbitId,
     parameters, periapsisTdbText:elements.get('tp')!.value as string, osculationTdbText:orbit.epoch as string, periapsisTdb, osculationTdb, periapsisTdbJd, osculationTdbJd, timeScale:'TDB' as const, frame:'ECLIPJ2000' as const, center:'Sun' as const,
-    sourceSha256:sha256, sourceBytes:owned.length, raw, modelParameters:structuredClone(orbit.model_pars),
+    sourceSha256:sha256, sourceBytes:owned.length, originalBase64:dynamicsSourceBase64(owned.buffer), raw, modelParameters:structuredClone(orbit.model_pars),
     sourceValidity:{notValidBefore:orbit.not_valid_before ?? null,notValidAfter:orbit.not_valid_after ?? null},
     limitations:['GM must be supplied with independent source evidence.', 'Osculating two-body propagation does not reproduce the fitted planetary, relativistic or non-gravitational model.', 'No propagated covariance or physical accuracy certification.'] }
 }

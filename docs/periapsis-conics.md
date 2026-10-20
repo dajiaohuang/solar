@@ -35,9 +35,10 @@ Run only the relevant cases with:
 rtk proxy npx vitest run tests/unit/periapsis-conics.test.ts
 ~~~
 
-Pending: broader original comet coverage, main catalog/scene integration,
-realistic perturbed comet references, non-gravitational forces and uncertainty. Two-body conics must remain distinguishable from
-authoritative SPK evaluations. Tested time/eccentricity ranges are evidence,
+Pending: independent current-reader comparison of original comet SPKs,
+realistic perturbed comet reference cases, source-matched non-gravitational
+force propagation and time propagation of comet covariance. Two-body conics
+must remain distinguishable from authoritative SPK evaluations. Tested time/eccentricity ranges are evidence,
 not certification for arbitrary finite inputs or long-term physical prediction.
 
 ## Source-backed Borisov import
@@ -81,3 +82,21 @@ overflow and stale-result clearing. Screenshot inspection includes mobile
 emulation. These compare two-body calculations from real source elements, not
 the full JPL fitted trajectory or observational residuals. Source validity
 bounds with non-null UTC values currently cause an explicit refusal.
+
+## Source-backed Borisov trajectory and uncertainty
+
+The main body registry now exposes 2I/Borisov (NAIF 1003639) without a
+fabricated osculating-orbit fallback, mass or radius. Both source profiles
+contain original JPL Horizons type-21 records for solution 54; the full profile
+covers 2019-01-01 through 2031-01-01 TDB and Pages covers 2026-01-01 through
+2027-01-01. The manifest binds record 90004568 to the pinned SBDB solution,
+including its 964-observation arc and DE441/SB441-N16 provenance.
+
+The fixed-epoch Orbit Uncertainty example loads the original ten-axis SBDB
+`cov=mat` response (`e,q,tp,node,peri,i,A1,A2,A3,DT`). The mapped Horizons
+uncertainty panel displays a separate set of 147 source epochs with RTN
+marginal 1σ state components. Neither represents inter-epoch covariance; the
+local covariance propagation deliberately refuses the additional force-fit
+axes until matching non-gravitational parameter derivatives are implemented.
+The conic lab remains a two-body experiment and does not reproduce the JPL
+trajectory. See [the Borisov source and uncertainty record](./borisov-uncertainty.md).

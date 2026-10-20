@@ -1,10 +1,38 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { gzipSync } from 'node:zlib'
+import { createHash } from 'node:crypto'
 import type { AsteroidManifest, CatalogScanWorkerCancelRequest, CatalogScanWorkerRequest, CatalogScanWorkerResponse } from '../../src/types'
 
 afterEach(() => { vi.unstubAllGlobals(); vi.resetModules() })
 
 const manifest: AsteroidManifest = { version: 'test', source: 'fixture', generatedAt: '2026-09-22', totalCount: 1, chunkCount: 1, chunkSize: 1, format: 'binary-v1', releasePath: '/scan-test', capabilities: ['gzip-json-v1'], bucketCounts: {}, categoryCounts: {}, featured: [] }
+const metadata = (chunk = 0) => ({ id: `asteroid:${chunk+1}`, label: 'Alpha', shortLabel: 'Alpha', searchKey: 'alpha',
+  orbitClassCode: 'MBA', orbitClassName: 'Main belt', isNeo: false, isPha: false,
+  chunkId: `chunk-${String(chunk).padStart(4,'0')}`, chunkIndex: chunk, rowIndex: 0 })
+
+function compactFixture(count: number) {
+  const compact = Buffer.alloc(count*24), files = new Map<string, Buffer>()
+  for (let chunk=0; chunk<count; chunk++) {
+    const offset = chunk*24, id = `chunk-${String(chunk).padStart(4,'0')}`
+    compact.writeDoubleLE(2.5,offset); compact.writeUInt32LE(100_000_000,offset+8)
+    compact.writeUInt32LE(5_000_000,offset+12); compact.writeInt16LE(0x7fff,offset+16)
+    compact.writeUInt16LE(chunk,offset+20)
+    files.set(`meta/${id}.json`,Buffer.from(JSON.stringify([metadata(chunk)])))
+    files.set(`binary/${id}.bin`,Buffer.from(new Float64Array([2451545,2.5,.1,5,0,0,0,1]).buffer))
+  }
+  files.set('catalog-index.bin',compact)
+  const hashes = Object.fromEntries([...files].sort(([a],[b]) => a.localeCompare(b)).map(([path,bytes]) => [path,createHash('sha256').update(bytes).digest('hex')]))
+  const contentSha256 = createHash('sha256').update(JSON.stringify(hashes)).digest('hex')
+  files.set('checksums.json',Buffer.from(JSON.stringify({ schemaVersion: 1, algorithm: 'sha256', files: hashes })))
+  const dataset: AsteroidManifest = { ...manifest, totalCount: count, chunkCount: count, contentSha256,
+    compactIndex: { path: 'catalog-index.bin', format: 'catalog-index-v1', strideBytes: 24, count, classCodes: ['MBA'] } }
+  const respond = (url: string) => {
+    const path = url.replace(/^\/[^/]+\//,'').replace(/\.gz$/,'')
+    const bytes = files.get(path)
+    return bytes ? new Response(new Uint8Array(url.endsWith('.gz') ? gzipSync(bytes) : bytes)) : new Response(null,{ status: 404 })
+  }
+  return { dataset, respond }
+}
 const request = (requestId: number, extra: Partial<CatalogScanWorkerRequest> = {}): CatalogScanWorkerRequest => ({
   type: 'scan', requestId, scanKey: String(requestId), manifest, sampleLimit: 10,
   filters: { query: 'alpha', orbitClass: 'all', semiMajorAxis: [0, 100], eccentricity: [0, 1], inclination: [0, 180], absoluteMagnitude: [-100, 100], perihelion: [0, 100], magnitudeStatus: 'all' }, ...extra,
@@ -22,7 +50,7 @@ it('scans gzip-only metadata and rejects corrupt binary rows instead of reportin
   const urls: string[] = []
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input); urls.push(url)
-    if (url.endsWith('.json.gz')) return new Response(new Uint8Array(gzipSync(JSON.stringify([{ id: 'asteroid:1', searchKey: 'alpha', orbitClassCode: 'MBA' }]))))
+    if (url.endsWith('.json.gz')) return new Response(new Uint8Array(gzipSync(JSON.stringify([metadata()]))))
     if (url.endsWith('.bin')) return new Response(new Float64Array([2451545, corrupt ? NaN : 2, .1, 0, 0, 0, 0, 1]))
     return new Response(null, { status: 404 })
   }))
@@ -49,36 +77,39 @@ it('does not publish progress or results after cancellation during a shard downl
 })
 
 it('evicts old compact indexes while retaining only two release buffers', async () => {
+  const fixture = compactFixture(0)
   const urls: string[] = []
-  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => { urls.push(String(input)); return new Response(new ArrayBuffer(0)) }))
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => { urls.push(String(input)); return fixture.respond(String(input)) }))
   const { messages, send } = await worker()
   for (const [index, release] of ['one', 'two', 'three', 'one'].entries()) {
-    send(request(index + 1, { candidateLocators: new Uint32Array(), manifest: { ...manifest, releasePath: `/${release}`, compactIndex: { path: 'index.bin', format: 'catalog-index-v1', strideBytes: 24, count: 0, classCodes: [] } } }))
+    send(request(index + 1, { candidateLocators: new Uint32Array(), manifest: { ...fixture.dataset, releasePath: `/${release}` } }))
     await vi.waitFor(() => expect(messages.at(-1)).toMatchObject({ type: 'result', requestId: index + 1 }))
   }
-  expect(urls.filter(url => url === '/one/index.bin')).toHaveLength(2)
+  expect(urls.filter(url => url === '/one/catalog-index.bin')).toHaveLength(2)
 })
 
 it('cancels in-flight compact bytes and starts a replacement without inheriting aborted data', async () => {
+  const fixture = compactFixture(0)
   let firstSignal!: AbortSignal
   const cancelled = vi.fn()
-  const fetcher = vi.fn((_url: string, init: RequestInit) => {
+  const fetcher = vi.fn((url: string, init: RequestInit) => {
+    if (url.endsWith('/checksums.json')) return Promise.resolve(fixture.respond(url))
     firstSignal = init.signal!
     return Promise.resolve(new Response(new ReadableStream<Uint8Array>({ cancel: cancelled })))
   })
   vi.stubGlobal('fetch', fetcher)
   const { messages, send } = await worker()
-  const extra = { candidateLocators: new Uint32Array(), manifest: { ...manifest, compactIndex: { path: 'index.bin', format: 'catalog-index-v1' as const, strideBytes: 24, count: 0, classCodes: [] } } }
+  const extra = { candidateLocators: new Uint32Array(), manifest: fixture.dataset }
   send(request(1, extra))
-  await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1))
+  await vi.waitFor(() => expect(firstSignal).toBeDefined())
   send({ type: 'cancel', requestId: 1 })
   await vi.waitFor(() => expect(cancelled).toHaveBeenCalledTimes(1))
   expect(firstSignal.aborted).toBe(true)
-  fetcher.mockImplementation(async () => new Response(new ArrayBuffer(0)))
+  fetcher.mockImplementation(async url => fixture.respond(url))
   send(request(2, extra))
   await vi.waitFor(() => expect(messages.at(-1)).toMatchObject({ type: 'result', requestId: 2, total: 0 }))
   expect(messages.every(message => message.requestId === 2)).toBe(true)
-  expect(fetcher).toHaveBeenCalledTimes(2)
+  expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/catalog-index.bin'))).toHaveLength(2)
 })
 
 it('aborts unfinished metadata when its paired numeric shard fails validation', async () => {
@@ -93,16 +124,10 @@ it('aborts unfinished metadata when its paired numeric shard fails validation', 
 })
 
 it('decodes the published 24-byte index layout and rejects row aliases across chunk boundaries', async () => {
-  const buffer = new ArrayBuffer(48), view = new DataView(buffer)
-  for (const offset of [0, 24]) {
-    view.setFloat64(offset, 2.5, true)
-    view.setUint32(offset + 8, 100_000_000, true)
-    view.setUint32(offset + 12, 5_000_000, true)
-    view.setInt16(offset + 16, 0x7fff, true)
-  }
-  vi.stubGlobal('fetch', vi.fn(async () => new Response(buffer)))
+  const fixture = compactFixture(2)
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => fixture.respond(url)))
   const { messages, send } = await worker()
-  const dataset = { ...manifest, chunkCount: 2, compactIndex: { path: 'index.bin', format: 'catalog-index-v1' as const, strideBytes: 24, count: 2, classCodes: ['MBA'] } }
+  const dataset = fixture.dataset
   send(request(1, { manifest: dataset, candidateLocators: new Uint32Array([1, 0]) }))
   await vi.waitFor(() => expect(messages.at(-1)).toMatchObject({ type: 'result', total: 1, locators: new Uint32Array([1, 0]) }))
   send(request(2, { manifest: dataset, candidateLocators: new Uint32Array([0, 1]) }))

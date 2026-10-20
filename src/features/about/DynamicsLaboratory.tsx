@@ -1,13 +1,17 @@
+import { ForceModelEvidence } from './ForceModelEvidence'
+import { TdbEpochReadout } from './TdbEpochReadout'
+import { readScientificSourceFile } from '../../lib/scientificSourceFile'
+import { startDynamicsJob, type DynamicsJob } from '../../lib/dynamicsJob'
 import { useEffect, useRef, useState } from 'react'
 import example from '../../data/dynamics-eros-example.json'
 import { parseDynamicsInitial, type integrateDynamicsExperiment } from '../../engine/dynamics/experiment'
 import { useI18n } from '../../i18n/context'
-import { saveTextExport } from '../../lib/platform'
+import { saveExport, saveTextExport } from '../../lib/platform'
 import { BUILD_INFO } from '../../lib/buildInfo'
 import { DynamicsTrajectory } from './DynamicsTrajectory'
 import { DynamicsDiagnostics } from './DynamicsDiagnostics'
 
-type Receipt = Awaited<ReturnType<typeof integrateDynamicsExperiment>> & { initialFile: { sha256: string; bytes: number; payload: Record<string, unknown> }; schemaVersion: number; calculation: string }
+type Receipt = Awaited<ReturnType<typeof integrateDynamicsExperiment>> & { initialFile: { sha256: string; bytes: number; originalBase64: string; payload: Record<string, unknown> }; schemaVersion: number; calculation: string }
 type Input = { bytes: ArrayBuffer; parsed: ReturnType<typeof parseDynamicsInitial>; name: string }
 
 export function DynamicsLaboratory() {
@@ -16,22 +20,35 @@ export function DynamicsLaboratory() {
   const [days, setDays] = useState('30'), [exclusion, setExclusion] = useState('1')
   const [compareRefinement, setCompareRefinement] = useState(false)
   const [solarRelativity, setSolarRelativity] = useState(false)
+  const [adoptSolarRadiationPressure, setAdoptSolarRadiationPressure] = useState(false)
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
-  const worker = useRef<Worker | null>(null), generation = useRef(0)
-  const clear = () => { generation.current++; worker.current?.terminate(); worker.current = null; setBusy(false); setResult(null); setError('') }
-  useEffect(() => () => { generation.current++; worker.current?.terminate() }, [])
-  const install = (bytes: ArrayBuffer, name: string) => {
+  const worker = useRef<DynamicsJob | null>(null), generation = useRef(0)
+  const sourceRead = useRef<AbortController | null>(null)
+  const [reading,setReading] = useState(false)
+  const clear = () => { generation.current++; sourceRead.current?.abort(); sourceRead.current = null; setReading(false); worker.current?.terminate(); worker.current = null; setBusy(false); setResult(null); setError('') }
+  useEffect(() => () => { generation.current++; sourceRead.current?.abort(); sourceRead.current = null; worker.current?.terminate(); worker.current = null }, [])
+  const install = (bytes: ArrayBuffer, name: string, check: () => void = () => {}) => {
+    check()
     const parsed = parseDynamicsInitial(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)))
+    check()
     setInput({ bytes, parsed, name })
+    setAdoptSolarRadiationPressure(false)
   }
   const read = async (file: File) => {
     clear(); setInput(null)
-    const current = generation.current
+    const current = generation.current, controller = new AbortController()
+    const deadline = performance.now()+30000
+    const check = () => {
+      controller.signal.throwIfAborted()
+      if (performance.now() >= deadline) throw new Error(zh ? '初始条件导入超过 30 秒时限。' : 'Initial condition import exceeded its 30-second limit.')
+    }
+    sourceRead.current = controller; setReading(true)
     try {
       if (file.size > 2 * 1024 * 1024) throw new Error(zh ? '文件超过 2 MiB 上限。' : 'The file exceeds the 2 MiB limit.')
-      const bytes = await file.arrayBuffer()
-      if (current === generation.current) install(bytes, file.name)
+      const bytes = await readScientificSourceFile(file,controller.signal)
+      if (current === generation.current) install(bytes, file.name, check)
     } catch (reason) { if (current === generation.current) setError(String(reason)) }
+    finally { if(sourceRead.current === controller) sourceRead.current = null; if(current === generation.current) setReading(false) }
   }
   const run = () => {
     clear()
@@ -41,49 +58,62 @@ export function DynamicsLaboratory() {
       setError(zh ? '时长须在 ±365 天内，排除距离须非负。' : 'Duration must be within ±365 days and exclusion distance nonnegative.'); return
     }
     try {
-      const active = new Worker(new URL('../../workers/dynamics.worker.ts', import.meta.url), { type: 'module' })
-      worker.current = active; setBusy(true)
-      active.onmessage = (event: MessageEvent<{ type: 'done'; receipt: Receipt } | { type: 'error'; error: string }>) => {
-        if (worker.current !== active) return
-        active.terminate(); worker.current = null; setBusy(false)
-        if (event.data.type === 'done') setResult(event.data.receipt)
-        else setError(event.data.error)
-      }
-      active.onerror = event => { if (worker.current === active) { active.terminate(); worker.current = null; setBusy(false); setError(event.message || 'Worker failed') } }
       const initialBytes = input.bytes.slice(0)
-      active.postMessage({ initialBytes, durationSeconds, exclusionKm, compareRefinement, solarRelativity }, [initialBytes])
+      const active = startDynamicsJob<Receipt>({ initialBytes, durationSeconds, exclusionKm, compareRefinement, solarRelativity, adoptSolarRadiationPressure }, [initialBytes], {
+        done: receipt => {
+          if (worker.current !== active) return
+          worker.current = null; setBusy(false); setResult(receipt)
+        },
+        error: message => {
+          if (worker.current !== active) return
+          worker.current = null; setBusy(false); setResult(null); setError(message)
+        },
+      })
+      worker.current = active; setBusy(true)
     } catch (reason) { worker.current?.terminate(); worker.current = null; setBusy(false); setError(String(reason)) }
   }
   return <section className="evidence-module glass-panel dynamics-laboratory" aria-label={zh ? '动力学实验室' : 'Dynamics laboratory'}>
     <div className="module-heading"><span>{zh ? '动力学实验室' : 'Dynamics laboratory'}</span><em>DE440</em></div>
-    <p>{zh ? '在真实 DE440 扰动源下积分试验粒子。默认使用牛顿点质量引力，可另行采用太阳一阶后牛顿修正。非球形引力和非引力项尚未包含。' : 'Integrate a test particle under real DE440 perturbing sources. Newtonian point masses are the default; a solar first post-Newtonian correction can be adopted separately. Harmonics and non-gravitational terms are absent.'}</p>
+    <p>{zh ? '在真实 DE440 扰动源下积分试验粒子。默认使用牛顿点质量引力，可另行采用太阳一阶后牛顿修正，或导入显式参数的无阴影径向太阳辐射压。非球形引力尚未包含。' : 'Integrate a test particle under real DE440 perturbing sources. Newtonian point masses are the default; optionally adopt solar 1PN or import explicit unshadowed radial solar radiation pressure parameters. Harmonics are absent.'}</p>
     <button type="button" className="secondary-button" onClick={() => { clear(); install(new TextEncoder().encode(JSON.stringify(example)).buffer, 'Eros 433 · CSPICE') }}>{zh ? '载入有据可查的 Eros 示例' : 'Load source-backed Eros example'}</button>
     <label className="field"><span>{zh ? '初始条件 JSON 文件' : 'Initial condition JSON file'}</span><input type="file" accept=".json,application/json" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void read(file) }} /></label>
     <p>{zh ? '初始状态必须为 J2000 / 太阳系质心 / TDB，位置 km、速度 km/s。来源声明不会自动认证自备文件。' : 'Initial states must use J2000 / SSB / TDB, position km and velocity km/s. A source declaration does not authenticate an imported file.'}</p>
     {input && <dl className="contract-list"><div><dt>{zh ? '输入' : 'Input'}</dt><dd>{input.name}</dd></div><div><dt>{zh ? '初始历元' : 'Initial epoch'}</dt><dd>JD {input.parsed.referenceEpochTdb} TDB</dd></div><div><dt>{zh ? '来源' : 'Source'}</dt><dd>{input.parsed.initialSource}</dd></div></dl>}
     {input && <><details><summary>{zh ? '查看初始坐标与速度' : 'Inspect initial coordinates and velocity'}</summary><div className="uncertainty-table"><table><caption>J2000 / SSB</caption><tbody>{['x', 'y', 'z', 'vx', 'vy', 'vz'].map((label, i) => <tr key={label}><th>{label}</th><td>{input.parsed.initial[i].toPrecision(15)}</td><td>{i < 3 ? 'km' : 'km/s'}</td></tr>)}</tbody></table></div></details>
-      <button type="button" className="secondary-button" onClick={() => { void saveTextExport(new TextDecoder().decode(input.bytes), 'solar-dynamics-initial.json', 'application/json').catch(reason => setError(String(reason))) }}>{zh ? '导出初始条件 JSON' : 'Export initial conditions JSON'}</button></>}
+      <button type="button" className="secondary-button" onClick={() => { const current = generation.current; void saveExport(new Blob([input.bytes], { type: 'application/json' }), 'solar-dynamics-initial.json').catch(reason => { if (current === generation.current) setError(String(reason)) }) }}>{zh ? '导出初始条件 JSON' : 'Export initial conditions JSON'}</button></>}
     <label className="field"><span>{zh ? '积分时长（TDB 天）' : 'Duration (TDB days)'}</span><input type="number" min="-365" max="365" step="any" value={days} onChange={event => { clear(); setDays(event.target.value) }} /></label>
     <label className="field"><span>{zh ? '点质量排除距离（km）' : 'Point-mass exclusion distance (km)'}</span><input type="number" min="0" step="any" value={exclusion} onChange={event => { clear(); setExclusion(event.target.value) }} /></label>
     <p>{zh ? '排除距离在力计算时检查，不是连续碰撞检测。实验不计算完整拟合协方差或事件概率。' : 'Exclusion is checked at force evaluations, not by continuous collision detection. No complete fit covariance or event probability is calculated.'}</p>
     <label className="dynamics-check"><input type="checkbox" checked={compareRefinement} onChange={event => { clear(); setCompareRefinement(event.target.checked) }} />{zh ? '追加更细数值设置比较（额外计算一次）' : 'Compare finer numerical settings (one additional integration)'}</label>
     <label className="dynamics-check"><input type="checkbox" checked={solarRelativity} onChange={event => { clear(); setSolarRelativity(event.target.checked) }} />{zh ? '采用太阳一阶后牛顿修正（1PN）' : 'Adopt solar first post-Newtonian correction (1PN)'}</label>
     {solarRelativity && <p>{zh ? '采用相对太阳的位置与速度，仅修正太阳单极项，不是完整质心 EIH 模型。弱场参数 GM/(rc²) 和 v²/c² 均须不超过 10⁻⁴；该限制不是误差界。' : 'Uses Sun-relative position and velocity for the solar monopole only, not full barycentric EIH dynamics. GM/(rc²) and v²/c² must each remain at most 10⁻⁴; this guard is not an error bound.'}</p>}
-    <button type="button" className="primary-button" disabled={!input || busy} onClick={run}>{zh ? '采用 DE440 点质量模型并运行' : 'Adopt DE440 point masses and run'}</button>
+    {input?.parsed.solarRadiationPressure && <div>
+      <dl className="contract-list">
+        <div><dt>{zh ? '辐射压参数来源（未认证）' : 'SRP parameter source (unverified)'}</dt><dd>{input.parsed.solarRadiationPressure.source}</dd></div>
+        <div><dt>P at 1 AU</dt><dd>{input.parsed.solarRadiationPressure.pressureAt1AuNewtonPerSquareMeter} N/m²</dd></div>
+        <div><dt>{zh ? '有效面积 / 质量 / 光压系数' : 'Effective area / mass / optical coefficient'}</dt><dd>{input.parsed.solarRadiationPressure.areaSquareMeters} m² / {input.parsed.solarRadiationPressure.massKg} kg / {input.parsed.solarRadiationPressure.reflectivityCoefficient}</dd></div>
+      </dl>
+      <label className="dynamics-check"><input type="checkbox" checked={adoptSolarRadiationPressure} onChange={event => { clear(); setAdoptSolarRadiationPressure(event.target.checked) }} />{zh ? '采用文件中的太阳辐射压参数及恒定、无阴影假设' : 'Adopt imported solar radiation pressure parameters and constant, unshadowed assumptions'}</label>
+      <p>{zh ? '不含食、姿态变化、热反冲或喷气；状态转移矩阵固定这些参数，不传播参数不确定性。此项尚待独立数值验证。' : 'No eclipses, attitude changes, thermal recoil or outgassing. The state transition fixes these parameters and does not propagate their uncertainty. Independent numerical validation is pending.'}</p>
+    </div>}
+    <button type="button" className="primary-button" disabled={!input || busy || (Boolean(input.parsed.solarRadiationPressure) && !adoptSolarRadiationPressure)} onClick={run}>{zh ? '采用 DE440 点质量模型并运行' : 'Adopt DE440 point masses and run'}</button>
     {busy && <><p role="status">{zh ? '正在校验星历并积分…' : 'Verifying ephemeris and integrating…'}</p><button type="button" className="secondary-button" onClick={clear}>{zh ? '取消实验' : 'Cancel experiment'}</button></>}
+    <p>{zh ? '每次浏览器实验最多运行 300 秒；超时即终止，可缩短时长或减少样本后重新运行。' : 'Each browser experiment has a 300-second limit; expiry terminates it. Reduce duration or sample count before retrying.'}</p>
+    {reading && <><p role="status">{zh ? '正在读取科学文件…' : 'Reading scientific source…'}</p><button type="button" className="secondary-button" onClick={clear}>{zh ? '取消读取' : 'Cancel read'}</button></>}
     {error && <p role="alert">{error}</p>}
     {result && <div data-testid="dynamics-result">
-      <p>{zh ? '实验终点' : 'Experiment endpoint'}: JD {result.finalEpoch.referenceEpochTdb} TDB + {result.finalEpoch.elapsedTdbSeconds} s</p>
+      <ForceModelEvidence evidence={result.forceModel} zh={zh} />
+      <TdbEpochReadout epoch={result.finalEpoch} title={zh ? '实验终点' : 'Experiment endpoint'} zh={zh} />
       <div className="uncertainty-table"><table><caption>{zh ? '模型积分状态 · J2000 / SSB' : 'Model-integrated state · J2000 / SSB'}</caption><thead><tr><th>{zh ? '分量' : 'Axis'}</th><th>{zh ? '值' : 'Value'}</th><th>{zh ? '单位' : 'Unit'}</th></tr></thead><tbody>{['x', 'y', 'z', 'vx', 'vy', 'vz'].map((label, i) => <tr key={label}><th>{label}</th><td>{result.finalStateKmKmPerSecond[i].toPrecision(12)}</td><td>{i < 3 ? 'km' : 'km/s'}</td></tr>)}</tbody></table></div>
       <p>{result.numerics.accepted} {zh ? '接受步数' : 'accepted steps'} · {result.numerics.evaluations} {zh ? '力计算次数' : 'force evaluations'}</p>
-      <p>{result.forceModel.solarRelativity ? (zh ? '已采用太阳 1PN 修正；独立 Eros 30 天参考案例相对原始 SPK 的位置差异约 0.63 米。' : 'Solar 1PN adopted; the independent 30-day Eros reference differs from its original SPK by about 0.63 m.') : (zh ? '牛顿点质量模型；独立 Eros 30 天参考案例相对原始 SPK 的位置差异约 191 米。' : 'Newtonian point masses; the independent 30-day Eros reference differs from its original SPK by about 191 m.')}</p>
+      <p>{result.forceModel.solarRadiationPressure ? (zh ? '已采用径向太阳辐射压；原有 Eros 引力参考案例不验证此力模型。' : 'Radial solar radiation pressure adopted; the historical Eros gravity reference does not validate this force model.') : result.forceModel.solarRelativity ? (zh ? '已采用太阳 1PN 修正；独立 Eros 30 天参考案例相对原始 SPK 的位置差异约 0.63 米。' : 'Solar 1PN adopted; the independent 30-day Eros reference differs from its original SPK by about 0.63 m.') : (zh ? '牛顿点质量模型；独立 Eros 30 天参考案例相对原始 SPK 的位置差异约 191 米。' : 'Newtonian point masses; the independent 30-day Eros reference differs from its original SPK by about 191 m.')}</p>
       <p>{zh ? '日心 J2000 投影；金色为太阳，空心为起点，实心为终点。' : 'Heliocentric J2000 projections: gold Sun, open start, filled endpoint.'}</p>
       <DynamicsTrajectory samples={result.trajectory.samples} zh={zh} />
-      <DynamicsDiagnostics first={result.trajectory.samples[0].osculating} last={result.trajectory.samples[result.trajectory.samples.length-1].osculating} zh={zh} />
-      <p>{result.trajectory.retainedNodes} {zh ? '个实际积分节点；抽样间隔' : 'actual integration nodes; sampling stride'} {result.trajectory.stride}. {zh ? '连线仅供显示，不保证中间没有碰撞或事件。' : 'Connecting lines are visual only and do not exclude intervening collisions or events.'}</p>
+      <DynamicsDiagnostics samples={result.trajectory.samples} comparison={result.diagnostics.timescaleComparison} zh={zh} />
+      <p>{result.trajectory.retainedNodes} {zh ? '个实际积分节点；按接受步编号每' : 'actual integration nodes; one sampled node per'} {result.trajectory.stride} {zh ? '步抽样。时间间隔不固定，首末节点始终保留；容量已满时末节点可能替换最后一个抽样节点。导出含每个节点的接受步编号。连线不保证中间没有碰撞或事件。' : 'accepted steps. Time spacing varies. Endpoints are retained; at capacity the final endpoint may replace the last sampled node. Exports include each node’s accepted-step index. Connecting lines do not exclude intervening collisions or events.'}</p>
       {result.refinement && <div data-testid="dynamics-refinement"><p>{zh ? '细化设置的终点差异' : 'Endpoint difference with finer settings'}: {result.refinement.endpointPositionDifferenceKm.toExponential(3)} km · {result.refinement.endpointVelocityDifferenceKmPerSecond.toExponential(3)} km/s</p><p>{zh ? '这是同一力模型的两次数值计算比较，不是全局误差界或物理不确定性。' : 'This compares two numerical settings of the same force model, not a global error bound or physical uncertainty.'}</p></div>}
       <p>{zh ? '太阳、分离的地球和月球、其他行星系统质心，共 11 个点质量。容差只控制数值计算；参考案例差异不代表任意输入的物理精度。' : 'Eleven point masses: Sun, separate Earth/Moon and other planetary system barycenters. Tolerances control numerical computation only; reference-case differences do not establish physical accuracy for arbitrary inputs.'}</p>
-      <button type="button" className="secondary-button" onClick={() => { void saveTextExport(JSON.stringify({ ...result, build: BUILD_INFO }, null, 2), 'solar-dynamics-experiment.json', 'application/json').catch(reason => setError(String(reason))) }}>{zh ? '导出实验与来源 JSON' : 'Export experiment and sources JSON'}</button>
+      <button type="button" className="secondary-button" onClick={() => { const current = generation.current; void saveTextExport(JSON.stringify({ ...result, build: BUILD_INFO }, null, 2), 'solar-dynamics-experiment.json', 'application/json').catch(reason => { if (current === generation.current) setError(String(reason)) }) }}>{zh ? '导出实验与来源 JSON' : 'Export experiment and sources JSON'}</button>
     </div>}
   </section>
 }

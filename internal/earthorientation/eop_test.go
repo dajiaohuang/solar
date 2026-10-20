@@ -76,6 +76,28 @@ func TestInterpolationDoesNotSmearLeapSecond(t *testing.T) {
 	}
 }
 
+func TestAtUTCPartsRetainsSubMillisecondEpochPrecision(t *testing.T) {
+	_, rows := fixture(t)
+	table := &Table{Manifest: Manifest{SHA256: "fixture"}, entries: rows}
+	dayStart := 2400000.5 + rows[0].MJD
+	fraction := 0.123456789
+	wantMJD := rows[0].MJD + fraction
+	split, err := table.AtUTCParts(dayStart, fraction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	collapsed, err := table.AtUTC(dayStart + fraction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if math.Abs(split.MJD-wantMJD) > 1e-12 {
+		t.Fatalf("split UTC lost sub-millisecond precision: got %.12f, want %.12f", split.MJD, wantMJD)
+	}
+	if math.Abs(split.MJD-wantMJD) >= math.Abs(collapsed.MJD-wantMJD) {
+		t.Fatalf("split UTC did not improve on one-part JD: split %.12f collapsed %.12f want %.12f", split.MJD, collapsed.MJD, wantMJD)
+	}
+}
+
 func TestNoEOPExtrapolationOrGapFilling(t *testing.T) {
 	_, rows := fixture(t)
 	table := &Table{entries: rows}

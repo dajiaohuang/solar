@@ -99,7 +99,7 @@ func TestSyntheticDefaultsCoverCatalogOperationalSnapshotAndMissing(t *testing.T
 		t.Fatal(err)
 	}
 	defer dataCleanup()
-	inventoryDir, inventoryCleanup, err := makeSyntheticInventory()
+	inventoryDir, inventoryCleanup, err := makeSyntheticInventory(dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestSyntheticSnapshotRequiresItsAuditEpoch(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer dataCleanup()
-	inventoryDir, inventoryCleanup, err := makeSyntheticInventory()
+	inventoryDir, inventoryCleanup, err := makeSyntheticInventory(dataDir)
 	if err != nil {
 		t.Fatal(err)
 	}

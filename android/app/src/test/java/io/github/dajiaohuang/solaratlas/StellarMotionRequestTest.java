@@ -44,6 +44,6 @@ public final class StellarMotionRequestTest {
         try {new StellarMotionRequest(m,r,"1",2026,"",null);fail();}catch(IOException expected){}
         try {new StellarMotionRequest(m,r,"1",2026,StellarMotionRequest.RV_POLICY,"unknown");fail();}catch(IOException expected){}
         try {new StellarMotionRequest(new byte[1024*1024+1],r,"1",2026,StellarMotionRequest.RV_POLICY,null);fail();}catch(IOException expected){}
-        try {new StellarMotionRequest(m,new byte[8*1024*1024+1],"1",2026,StellarMotionRequest.RV_POLICY,null);fail();}catch(IOException expected){}
+        try {new StellarMotionRequest(m,new byte[16*1024*1024+1],"1",2026,StellarMotionRequest.RV_POLICY,null);fail();}catch(IOException expected){}
     }
 }

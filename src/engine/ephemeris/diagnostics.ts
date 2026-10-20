@@ -7,6 +7,8 @@ import { stateToOsculatingElements } from './osculating'
 import { apparentPosition, type ApparentMode, type BarycentricState } from './apparent'
 import { utcJulianDayToEt } from './timeScales'
 import type { CelestialBody } from '../../types'
+import { SEGMENTED_WEB } from '../../lib/webExecution'
+import { approximationForBody } from './segmentedStore'
 
 export function currentOsculatingElements(body: CelestialBody, parent: CelestialBody, utcJd: number) {
   const targetId = bodyNaifId(body), parentId = bodyNaifId(parent)
@@ -14,7 +16,9 @@ export function currentOsculatingElements(body: CelestialBody, parent: Celestial
   const gm = seedData.source.gmKm3S2 as Record<string, number>
   if (!gm[parentId]) return null
   try {
-    const state = createKernelResolver(loadedKernels(), utcJulianDayToEt(utcJd)).relative(targetId, parentId)
+    const approximation = SEGMENTED_WEB ? approximationForBody(body.id, utcJd) : null
+    const state = SEGMENTED_WEB ? approximation?.body?.parentId === parent.id ? approximation.state : null
+      : createKernelResolver(loadedKernels(), utcJulianDayToEt(utcJd)).relative(targetId, parentId)
     if (!state) return null
     const position = { x: state.position.x / AU_IN_KM, y: state.position.y / AU_IN_KM, z: state.position.z / AU_IN_KM }
     const velocity = { x: state.velocity.x * SECONDS_PER_DAY / AU_IN_KM, y: state.velocity.y * SECONDS_PER_DAY / AU_IN_KM, z: state.velocity.z * SECONDS_PER_DAY / AU_IN_KM }

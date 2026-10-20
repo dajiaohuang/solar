@@ -1,3 +1,4 @@
+import { CoverageTargetInspector } from './CoverageTargetInspector'
 import { useEffect, useRef, useState } from 'react'
 import { useI18n } from '../../i18n/context'
 import { CoverageUnavailableError, loadCoverageReport, type CoverageReport } from '../../lib/coverageReport'
@@ -16,9 +17,12 @@ export function SourceCoverageReport() {
     active.current?.abort()
     const controller = new AbortController(); active.current = controller
     setState({ status: 'loading' })
+    const deadline = performance.now() + 30_000
     const timeout = setTimeout(() => controller.abort(), 30_000)
     try {
       const report = await loadCoverageReport(base, PRODUCT_PROFILE, controller.signal)
+      if (performance.now() >= deadline) controller.abort()
+      controller.signal.throwIfAborted()
       if (active.current === controller) setState({ status: 'ready', report })
     } catch (error) {
       if (active.current === controller) setState({ status: error instanceof CoverageUnavailableError ? 'unavailable' : 'error' })
@@ -37,6 +41,12 @@ export function SourceCoverageReport() {
       <p role="status">{state.status === 'loading' ? t('loading') : state.status === 'unavailable' ? t('sourceCoverageUnavailable') : state.status === 'error' ? t('sourceCoverageError') : ''}</p>
     </>}
     {report && <>
+      <details><summary>{language === 'zh' ? '报告记录的生成器文件哈希' : 'Generator file hashes recorded by the report'}</summary>
+        <p>{language === 'zh' ? '这些哈希来自报告，浏览器未独立核验实现文件或重算科学结果。' : 'These hashes come from the report; the browser has not independently verified implementation files or recomputed scientific results.'}</p>
+        {report.generator.length ? <ul>{report.generator.map(entry => <li key={entry.path}><span>{entry.path}</span><p className="checksum">{entry.sha256}</p></li>)}</ul>
+          : <p>{language === 'zh' ? '此报告未提供生成器文件哈希。' : 'This report provides no generator file hashes.'}</p>}
+      </details>
+      {enabled && base && <CoverageTargetInspector key={report.reportSha256} base={base} report={report} zh={language === 'zh'} />}
       <dl className="source-coverage-counts">
         <dt>{t('sourceCoverageRecords')}</dt><dd>{number(report.counts.sourceRecords)}</dd>
         <dt>{t('sourceCoverageMapped')}</dt><dd>{number(report.counts.mappedSourceRecords)}</dd>

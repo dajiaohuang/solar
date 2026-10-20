@@ -15,10 +15,21 @@ import (
 )
 
 const (
-	HeaderSize = 200
-	Stride     = 6
-	FieldState = 3 // position (1) | velocity (2)
-	MaxRows    = 32768
+	HeaderSize  = 208
+	WireVersion = 2
+	Stride      = 6
+	FieldState  = 3 // position (1) | velocity (2)
+	// Contract identifiers are stable wire enums. Version 2 carries them in
+	// every tile so consumers can interpret the Float64 state without the plan.
+	TimeScaleTDB    = 1
+	FrameEclipJ2000 = 1
+	OriginNAIF0     = 1
+	DistanceUnitKM  = 1
+	VelocityUnitKMS = 1
+	MaxRows         = 32768
+	// EpochRoundingAllowanceETSeconds bounds JD/ET Float64 round-trip drift in
+	// state metadata checks; it is not an SPK coverage extrapolation margin.
+	EpochRoundingAllowanceETSeconds = 0.0001
 )
 
 var magic = [8]byte{'S', 'L', 'R', 'T', 'I', 'L', 'E', 0}
@@ -34,6 +45,7 @@ type Metadata struct {
 	DatasetVersion        string  `json:"datasetVersion"`
 	DatasetSHA256         string  `json:"datasetSha256"`
 	KernelSHA256          string  `json:"kernelSha256"`
+	SourceChainSHA256     string  `json:"sourceChainSha256,omitempty"`
 	Model                 string  `json:"model"`
 	CenterID              string  `json:"centerId"`
 	ValidityStartET       float64 `json:"validityStartEt"`
@@ -87,6 +99,7 @@ func EncodeLimited(tile Tile, maxBytes int64) ([]byte, error) {
 	if len(tile.States) != n*Stride {
 		return nil, fmt.Errorf("invalid tile state length")
 	}
+	epochET := (tile.EpochJD - 2451545.0) * 86400.0
 	for row := 0; row < n; row++ {
 		if tile.Exact[row] && tile.Missing[row] || tile.Exact[row] && tile.Approximate[row] || tile.Approximate[row] && tile.Missing[row] {
 			return nil, fmt.Errorf("tile status bitmaps overlap at row %d", row)
@@ -98,15 +111,40 @@ func EncodeLimited(tile Tile, maxBytes int64) ([]byte, error) {
 			return nil, fmt.Errorf("tile row %d is approximate in exact-only wire", row)
 		}
 		metadata := tile.Metadata[row]
+		if metadata.ValidityPresent && (!finite(metadata.ValidityStartET) || !finite(metadata.ValidityEndET) || metadata.ValidityEndET < metadata.ValidityStartET) {
+			return nil, fmt.Errorf("tile row %d validity window is invalid", row)
+		}
+		if metadata.EvidenceWindowPresent && (!finite(metadata.EvidenceWindowStartET) || !finite(metadata.EvidenceWindowEndET) || metadata.EvidenceWindowEndET < metadata.EvidenceWindowStartET) {
+			return nil, fmt.Errorf("tile row %d evidence window is invalid", row)
+		}
+		if metadata.SourceChainSHA256 != "" && !validHash(metadata.SourceChainSHA256) {
+			return nil, fmt.Errorf("tile row %d source-chain provenance is invalid", row)
+		}
 		if strings.TrimSpace(metadata.ID) == "" {
 			return nil, fmt.Errorf("tile row %d has no identity", row)
 		}
 		if tile.Exact[row] {
-			if strings.TrimSpace(metadata.Source) == "" || strings.TrimSpace(metadata.DatasetVersion) == "" || !validHash(metadata.DatasetSHA256) || strings.TrimSpace(metadata.StateEvidence) == "" || (metadata.Model != "spk-original" && metadata.Model != "source-kernel-state-at-audit-epoch") {
+			if strings.TrimSpace(metadata.Source) == "" || strings.TrimSpace(metadata.DatasetVersion) == "" || !validHash(metadata.DatasetSHA256) || !validHash(metadata.SourceChainSHA256) || strings.TrimSpace(metadata.StateEvidence) == "" || metadata.CenterID != "naif:0" || (metadata.Model != "spk-original" && metadata.Model != "source-kernel-state-at-audit-epoch") {
 				return nil, fmt.Errorf("tile row %d exact provenance is invalid", row)
 			}
-			if metadata.Model == "spk-original" && !validHash(metadata.KernelSHA256) {
+			expectedDatasetHash := tile.CatalogManifestHash
+			if metadata.SourceRecord {
+				expectedDatasetHash = tile.InventoryManifestHash
+			}
+			if expectedDatasetHash == ([32]byte{}) || metadata.DatasetSHA256 != HashHex(expectedDatasetHash) {
+				return nil, fmt.Errorf("tile row %d dataset provenance is not bound to its manifest", row)
+			}
+			if !validHash(metadata.KernelSHA256) {
 				return nil, fmt.Errorf("tile row %d kernel provenance is invalid", row)
+			}
+			if metadata.Model == "source-kernel-state-at-audit-epoch" && (!metadata.SourceRecord || strings.TrimSpace(metadata.IdentityStatus) == "") {
+				return nil, fmt.Errorf("tile row %d snapshot identity provenance is invalid", row)
+			}
+			if metadata.ValidityPresent && (epochET < metadata.ValidityStartET-EpochRoundingAllowanceETSeconds || epochET > metadata.ValidityEndET+EpochRoundingAllowanceETSeconds) {
+				return nil, fmt.Errorf("tile row %d state falls outside its validity window", row)
+			}
+			if metadata.EvidenceWindowPresent && (epochET < metadata.EvidenceWindowStartET-EpochRoundingAllowanceETSeconds || epochET > metadata.EvidenceWindowEndET+EpochRoundingAllowanceETSeconds) {
+				return nil, fmt.Errorf("tile row %d state falls outside its evidence window", row)
 			}
 			if metadata.MissingReason != "" {
 				return nil, fmt.Errorf("tile row %d exact state has missing reason", row)
@@ -177,7 +215,7 @@ func EncodeLimited(tile Tile, maxBytes int64) ([]byte, error) {
 	result = result[:total]
 	payloadHash := sha256.Sum256(result[HeaderSize:])
 	copy(result[:8], magic[:])
-	binary.LittleEndian.PutUint16(result[8:], 1)
+	binary.LittleEndian.PutUint16(result[8:], WireVersion)
 	binary.LittleEndian.PutUint16(result[10:], HeaderSize)
 	binary.LittleEndian.PutUint32(result[12:], tile.Sequence)
 	binary.LittleEndian.PutUint32(result[16:], tile.TileCount)
@@ -198,6 +236,11 @@ func EncodeLimited(tile Tile, maxBytes int64) ([]byte, error) {
 	copy(result[104:136], tile.CatalogManifestHash[:])
 	copy(result[136:168], tile.InventoryManifestHash[:])
 	copy(result[168:200], payloadHash[:])
+	result[200] = TimeScaleTDB
+	result[201] = FrameEclipJ2000
+	result[202] = OriginNAIF0
+	result[203] = DistanceUnitKM
+	result[204] = VelocityUnitKMS
 	return result, nil
 }
 
@@ -207,8 +250,8 @@ func metadataUpperBound(rows []Metadata) (int64, error) {
 		// Fixed JSON punctuation, keys, four finite numbers, three booleans,
 		// and the trailing NDJSON newline. String bounds account for JSON
 		// quotes, control/HTML escapes, valid UTF-8 and invalid-byte repair.
-		rowSize := int64(512 + 1)
-		for _, value := range []string{row.ID, row.Source, row.DatasetVersion, row.DatasetSHA256, row.KernelSHA256, row.Model, row.CenterID, row.StateEvidence, row.MissingReason, row.IdentityStatus} {
+		rowSize := int64(544 + 1)
+		for _, value := range []string{row.ID, row.Source, row.DatasetVersion, row.DatasetSHA256, row.KernelSHA256, row.SourceChainSHA256, row.Model, row.CenterID, row.StateEvidence, row.MissingReason, row.IdentityStatus} {
 			encoded, ok := jsonStringUpperBound(value)
 			if !ok || rowSize > math.MaxInt64-encoded {
 				return 0, fmt.Errorf("%w: metadata size overflows int64", ErrTooLarge)
@@ -270,23 +313,39 @@ type Header struct {
 	ApproxBitmapOffset, MissingBitmapOffset                             uint32
 	StatesOffset, StatesLength                                          uint32
 	PlanHash, CatalogManifestHash, InventoryManifestHash, PayloadSHA256 [32]byte
+	TimeScaleID, FrameID, OriginID, DistanceUnitID, VelocityUnitID      uint8
 }
 
 func ParseHeader(raw []byte) (Header, error) {
-	if len(raw) < HeaderSize || !bytes.Equal(raw[:8], magic[:]) || binary.LittleEndian.Uint16(raw[8:]) != 1 || binary.LittleEndian.Uint16(raw[10:]) != HeaderSize {
+	if len(raw) < HeaderSize || !bytes.Equal(raw[:8], magic[:]) || binary.LittleEndian.Uint16(raw[8:]) != WireVersion || binary.LittleEndian.Uint16(raw[10:]) != HeaderSize {
 		return Header{}, fmt.Errorf("invalid state tile header")
 	}
+	if raw[200] != TimeScaleTDB || raw[201] != FrameEclipJ2000 || raw[202] != OriginNAIF0 || raw[203] != DistanceUnitKM || raw[204] != VelocityUnitKMS || !bytes.Equal(raw[205:208], []byte{0, 0, 0}) {
+		return Header{}, fmt.Errorf("unsupported state tile scientific contract")
+	}
 	h := Header{Sequence: binary.LittleEndian.Uint32(raw[12:]), TileCount: binary.LittleEndian.Uint32(raw[16:]), OrdinalStart: binary.LittleEndian.Uint32(raw[20:]), RecordCount: binary.LittleEndian.Uint32(raw[24:]), Stride: binary.LittleEndian.Uint16(raw[28:]), FieldMask: binary.LittleEndian.Uint16(raw[30:]), EpochJD: math.Float64frombits(binary.LittleEndian.Uint64(raw[32:])), MetadataOffset: binary.LittleEndian.Uint32(raw[40:]), MetadataLength: binary.LittleEndian.Uint32(raw[44:]), ExactBitmapOffset: binary.LittleEndian.Uint32(raw[48:]), BitmapLength: binary.LittleEndian.Uint32(raw[52:]), ApproxBitmapOffset: binary.LittleEndian.Uint32(raw[56:]), MissingBitmapOffset: binary.LittleEndian.Uint32(raw[60:]), StatesOffset: binary.LittleEndian.Uint32(raw[64:]), StatesLength: binary.LittleEndian.Uint32(raw[68:])}
+	h.TimeScaleID, h.FrameID, h.OriginID, h.DistanceUnitID, h.VelocityUnitID = raw[200], raw[201], raw[202], raw[203], raw[204]
 	copy(h.PlanHash[:], raw[72:104])
 	copy(h.CatalogManifestHash[:], raw[104:136])
 	copy(h.InventoryManifestHash[:], raw[136:168])
 	copy(h.PayloadSHA256[:], raw[168:200])
 	expectedBitmapLength := (h.RecordCount + 7) / 8
-	if h.RecordCount == 0 || h.RecordCount > MaxRows || h.TileCount == 0 || h.Sequence >= h.TileCount || h.Stride != Stride || h.FieldMask != FieldState || !finite(h.EpochJD) || h.MetadataOffset != HeaderSize || h.MetadataLength == 0 || h.BitmapLength != expectedBitmapLength || h.StatesOffset%8 != 0 || h.StatesLength != h.RecordCount*Stride*8 || int(h.StatesOffset)+int(h.StatesLength) != len(raw) {
+	metadataEnd := uint64(h.MetadataOffset) + uint64(h.MetadataLength)
+	exactEnd := uint64(h.ExactBitmapOffset) + uint64(h.BitmapLength)
+	approximateEnd := uint64(h.ApproxBitmapOffset) + uint64(h.BitmapLength)
+	missingEnd := uint64(h.MissingBitmapOffset) + uint64(h.BitmapLength)
+	canonicalStatesOffset := (missingEnd + 7) &^ uint64(7)
+	statesEnd := uint64(h.StatesOffset) + uint64(h.StatesLength)
+	if h.RecordCount == 0 || h.RecordCount > MaxRows || h.TileCount == 0 || h.Sequence >= h.TileCount || h.Stride != Stride || h.FieldMask != FieldState || !finite(h.EpochJD) || h.MetadataOffset != HeaderSize || h.MetadataLength == 0 || h.BitmapLength != expectedBitmapLength || uint64(h.StatesOffset) != canonicalStatesOffset || h.StatesLength != h.RecordCount*Stride*8 || statesEnd != uint64(len(raw)) {
 		return Header{}, fmt.Errorf("invalid state tile dimensions")
 	}
-	if int(h.MetadataOffset)+int(h.MetadataLength) > len(raw) || int(h.ExactBitmapOffset)+int(h.BitmapLength) > len(raw) || int(h.ApproxBitmapOffset)+int(h.BitmapLength) > len(raw) || int(h.MissingBitmapOffset)+int(h.BitmapLength) > len(raw) || h.ExactBitmapOffset < h.MetadataOffset+h.MetadataLength || h.ApproxBitmapOffset < h.ExactBitmapOffset+h.BitmapLength || h.MissingBitmapOffset < h.ApproxBitmapOffset+h.BitmapLength || h.StatesOffset < h.MissingBitmapOffset+h.BitmapLength {
+	if metadataEnd > uint64(len(raw)) || exactEnd > uint64(len(raw)) || approximateEnd > uint64(len(raw)) || missingEnd > uint64(len(raw)) || uint64(h.ExactBitmapOffset) != metadataEnd || uint64(h.ApproxBitmapOffset) != exactEnd || uint64(h.MissingBitmapOffset) != approximateEnd {
 		return Header{}, fmt.Errorf("invalid state tile offsets")
+	}
+	for offset := missingEnd; offset < canonicalStatesOffset; offset++ {
+		if raw[int(offset)] != 0 {
+			return Header{}, fmt.Errorf("nonzero state tile alignment padding")
+		}
 	}
 	sum := sha256.Sum256(raw[HeaderSize:])
 	if !bytes.Equal(sum[:], h.PayloadSHA256[:]) {

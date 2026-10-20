@@ -4,6 +4,7 @@ declare const __SOLAR_PRODUCT_PROFILE__: 'full' | 'preview'
 declare const __SOLAR_EPHEMERIS_MANIFEST__: ReturnType<typeof import('./engine/ephemeris/runtimeManifest').runtimeEphemerisManifest>
 declare const __SOLAR_EPHEMERIS_PROFILE__: 'pages' | 'full'
 declare const __SOLAR_DATA_ROOT__: string
+declare const __SOLAR_WEB_EXECUTION__: 'backend' | 'segmented'
 
 declare const __SOLAR_BUILD_INFO__: {
   version: string

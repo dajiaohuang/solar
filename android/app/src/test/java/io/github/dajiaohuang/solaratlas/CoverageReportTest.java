@@ -27,6 +27,7 @@ public class CoverageReportTest {
                 + "\"requestedWindow\":{\"startEt\":0,\"endEt\":1000,\"timeScale\":\"TDB seconds past J2000\"},"
                 + "\"counts\":{\"sourceRecords\":10,\"mappedSourceRecords\":3,\"unresolvedSourceRecords\":7,"
                 + "\"explicitNaifTargets\":2,\"availableTargetsAtAuditEpoch\":2},"
+                + "\"sourceCounts\":{\"synthetic\":10},"
                 + "\"windowCounts\":{\"dependencyCoveredTargets\":1,\"targetsWithDependencyGaps\":1,"
                 + "\"numericallyCertifiedWholeWindowTargets\":null},"
                 + "\"coverage\":[{\"datasetVersion\":\"coverage-fixture\",\"source\":\"synthetic\",\"model\":\"spk-at-audit-epoch\",\"auditEt\":500,\"frame\":\"ECLIPJ2000\",\"exact\":3,\"approximate\":0,\"missing\":7}],"
@@ -56,6 +57,7 @@ public class CoverageReportTest {
 
     @Test public void acceptsEmptyOrZeroReasonsForNoUnresolvedRecords() throws Exception {
         String complete = summary().replace("\"sourceRecords\":10", "\"sourceRecords\":3")
+                .replace("\"synthetic\":10", "\"synthetic\":3")
                 .replace("\"unresolvedSourceRecords\":7", "\"unresolvedSourceRecords\":0")
                 .replace("\"exact\":3,\"approximate\":0,\"missing\":7", "\"exact\":3,\"approximate\":0,\"missing\":0")
                 .replace("\"no-explicit-naif-mapping\":6,\"unresolved-component\":1", "");

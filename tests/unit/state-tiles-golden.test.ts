@@ -17,7 +17,7 @@ type Golden = {
 describe.skipIf(!directory)('shared Go-generated state tiles', () => {
   it('decodes the actual Go handler output with the production Web decoder', async () => {
     const golden: Golden = JSON.parse(await readFile(join(directory!, 'manifest.json'), 'utf8'))
-    expect(golden.format).toBe('solar.state-tile-fixture/v1')
+    expect(golden.format).toBe('solar.state-tile-fixture/v2')
     const manifest = validateStateTileManifest(JSON.parse(await readFile(join(directory!, 'catalog-manifest.json'), 'utf8')))
     const plan = validateStateTilePlan(JSON.parse(await readFile(join(directory!, 'plan.json'), 'utf8')), manifest, golden.epochJd, golden.ids, await digestStateTileRequestIds(golden.ids))
     const decoded = []
@@ -28,6 +28,7 @@ describe.skipIf(!directory)('shared Go-generated state tiles', () => {
       expect(createHash('sha256').update(bytes).digest('hex')).toBe(item.sha256)
       const tile = await decodeStateTile(bytes, { planHash: plan.planHash, catalogManifestSha256: manifest.catalogManifestSha256, inventoryManifestSha256: manifest.inventoryManifestSha256, sequence: item.sequence, tileCount: plan.tileCount })
       expect(tile.payloadSha256).toBe(item.payloadSha256)
+      expect([tile.timeScale, tile.frame, tile.stateOriginId, tile.distanceUnit, tile.velocityUnit]).toEqual(['TDB', 'ECLIPJ2000', 'naif:0', 'km', 'km/s'])
       expect(tile.ordinalStart).toBe(item.ordinalStart)
       expect(tile.recordCount).toBe(item.recordCount)
       for (const [row, expected] of item.expectedRows.entries()) {

@@ -3,7 +3,7 @@ import Foundation
 /// A preset updates the reference and starts a request in one action. Its
 /// deferred reference-change callback must not cancel that matching request.
 struct NativeObservationRequestGate {
-    struct Token: Equatable { let generation: UInt64; let reference: String }
+    struct Token: Equatable, Sendable { let generation: UInt64; let reference: String }
     private var generation: UInt64 = 0
     private var active: Token?
 
@@ -30,6 +30,44 @@ struct NativeStateFrame: Sendable {
     var metadata: [TileMetadata] = []
     var states: [Double] = []
     var exact: [Bool] = []
+    // Set only after every decoded chunk's count matches its verified plan.
+    var verifiedExactCount: Int?
+
+    /// Copies only verified rows into independent, bounded storage for an early frame.
+    /// The caller accounts the returned allocation alongside its resident final frame.
+    static func verifiedPrefix(of frame: NativeStateFrame, exactCount: Int,
+                               budgetRemaining: Int) -> (frame: NativeStateFrame, residentBytes: Int)? {
+        let count = frame.metadata.count
+        guard count > 0, count <= Int.max / 6, frame.states.count == count * 6,
+              frame.exact.count == count, exactCount >= 0, exactCount <= count,
+              budgetRemaining >= 0,
+              frame.exact.prefix(count).reduce(0, { $0 + ($1 ? 1 : 0) }) == exactCount else { return nil }
+        let stateCount = count * 6
+        let minimumBytes = count * (MemoryLayout<TileMetadata>.stride + MemoryLayout<Bool>.stride)
+            + stateCount * MemoryLayout<Double>.stride
+        guard minimumBytes <= budgetRemaining else { return nil }
+
+        var metadata: [TileMetadata] = []
+        metadata.reserveCapacity(count)
+        var states: [Double] = []
+        states.reserveCapacity(stateCount)
+        var exact: [Bool] = []
+        exact.reserveCapacity(count)
+        let residentBytes = metadata.capacity * MemoryLayout<TileMetadata>.stride
+            + states.capacity * MemoryLayout<Double>.stride + exact.capacity * MemoryLayout<Bool>.stride
+        guard residentBytes <= budgetRemaining else { return nil }
+        metadata.append(contentsOf: frame.metadata.prefix(count))
+        states.append(contentsOf: frame.states.prefix(stateCount))
+        exact.append(contentsOf: frame.exact.prefix(count))
+
+        var prefix = NativeStateFrame(epochJd: frame.epochJd, catalogHash: frame.catalogHash,
+                                      inventoryHash: frame.inventoryHash)
+        prefix.metadata = metadata
+        prefix.states = states
+        prefix.exact = exact
+        prefix.verifiedExactCount = exactCount
+        return (prefix, residentBytes)
+    }
 }
 
 /// A bounded frame-time window from a native renderer callback. It is a
@@ -69,12 +107,13 @@ final class NativeFrameSampler: @unchecked Sendable {
         intervals.append(milliseconds); elapsed += milliseconds
         guard intervals.count >= 120 || (intervals.count >= 12 && elapsed >= 1_000) else { return nil }
         let sorted = intervals.sorted()
-        var dropped = 0.0
-        for interval in sorted { dropped += max(0, (interval / (1000.0 / 60)).rounded() - 1) }
+        let expectedSlots = elapsed / (1000.0 / 60)
+        let missedSlots = max(0, expectedSlots - Double(sorted.count))
+        let droppedRatio = expectedSlots.isFinite && expectedSlots > 0 ? missedSlots / expectedSlots : 1
         let result = NativeFrameWindow(samples: sorted.count,
             p50Ms: sorted[(sorted.count - 1) / 2],
             p95Ms: sorted[min(sorted.count - 1, Int(ceil(Double(sorted.count) * 0.95)) - 1)],
-            droppedRatio: dropped / (Double(sorted.count) + dropped))
+            droppedRatio: droppedRatio)
         intervals.removeAll(keepingCapacity: true); elapsed = 0
         return result
     }
@@ -87,19 +126,28 @@ actor NativeProjectionPrefetch {
     private var generation: UInt64 = 0
     private var worker: Task<NativeProjection, Error>?
 
-    func prepare(frame: NativeStateFrame?, reference: String, limit: Int) async throws -> NativeProjection {
+    func prepare(frame: NativeStateFrame?, reference: String, limit: Int, mode3D: Bool = false) async throws -> NativeProjection {
         generation &+= 1
         let current = generation
+        // This request also owns cleanup while draining its predecessor. If
+        // cancelled during that wait, do not retain the completed old result.
+        // The wait finishes before cleanup, preserving the allocation barrier.
+        defer { if generation == current { worker = nil } }
         worker?.cancel()
         if let previous = worker { _ = await previous.result }
         try Task.checkCancellation()
         // The actor can admit a newer request while awaiting the old worker.
         guard generation == current else { throw CancellationError() }
+        let maximum = mode3D ? NativeDisplayPressure.maximumSpatial : NativeDisplayPressure.maximumPlanar
+        guard limit > 0, limit <= maximum else {
+            throw StateTileFailure.invalid("Invalid display limit.")
+        }
         let next = Task.detached(priority: .userInitiated) {
-            try NativeProjection.make(frame: frame, reference: reference, limit: limit)
+            let projection = try NativeProjection.make(frame: frame, reference: reference, limit: limit, mode3D: mode3D)
+            try Task.checkCancellation()
+            return projection
         }
         worker = next
-        defer { if generation == current { worker = nil } }
         // Cancellation belongs to this request's worker. A deferred actor-wide
         // cancel from an old view task could otherwise kill its replacement.
         let result = try await withTaskCancellationHandler(operation: {
@@ -234,45 +282,93 @@ struct NativeDisplayPressure: Sendable {
 /// Immutable render-only coordinates; source states retain Float64 precision.
 struct NativeProjection: Sendable {
     let identity = UUID()
-    var points: [SIMD3<Float>] = []
+    var points: [SIMD2<Float>] = []
     var candidates = 0
+    var geometryPayload: NativePointPayload?
+    var displayedCount: Int { geometryPayload?.count ?? points.count }
 
     /// A smaller prefix preserves the full-source scale and camera coordinates.
     /// Never retain a slice referencing the discarded oversized backing buffer.
     func limited(to limit: Int) throws -> NativeProjection {
-        guard limit > 0 else { throw StateTileFailure.invalid("Invalid display limit.") }
-        if points.count <= limit { return self }
-        return NativeProjection(points: Array(points.prefix(limit)), candidates: candidates)
+        try Task.checkCancellation()
+        try Self.validateLimit(limit)
+        if displayedCount <= limit { return self }
+        var result = NativeProjection(candidates: candidates)
+        if let geometryPayload {
+            guard points.isEmpty else { throw StateTileFailure.invalid("Mixed planar and spatial projection buffers.") }
+            result.geometryPayload = try geometryPayload.limited(to: limit)
+        } else {
+            result.points.reserveCapacity(limit)
+            for index in 0..<limit {
+                if index % 4096 == 0 { try Task.checkCancellation() }
+                result.points.append(points[index])
+            }
+        }
+        try Task.checkCancellation()
+        return result
     }
 
-    static func make(frame: NativeStateFrame?, reference: String, limit: Int) throws -> NativeProjection {
-        guard limit > 0 else { throw StateTileFailure.invalid("Invalid display limit.") }
+    static func make(frame: NativeStateFrame?, reference: String, limit: Int, mode3D: Bool = false) throws -> NativeProjection {
+        try Task.checkCancellation()
+        try validateLimit(limit)
         guard let frame = frame else { return NativeProjection() }
         guard frame.metadata.count == frame.exact.count, frame.states.count / 6 == frame.exact.count,
               frame.states.count % 6 == 0 else { throw StateTileFailure.invalid("Incomplete render source.") }
-        guard let origin = frame.metadata.firstIndex(where: { $0.id == reference }), frame.exact[origin] else {
-            var candidates = 0
-            for row in frame.exact.indices {
-                if row % 4096 == 0 { try Task.checkCancellation() }
-                if frame.exact[row] { candidates += 1 }
-            }
+        var originIndex: Int?, candidates = 0
+        for row in frame.exact.indices {
+            if row % 4096 == 0 { try Task.checkCancellation() }
+            if originIndex == nil && frame.metadata[row].id == reference { originIndex = row }
+            if frame.exact[row] { candidates += 1 }
+        }
+        try Task.checkCancellation()
+        guard let origin = originIndex, frame.exact[origin] else {
             // An unavailable reference prevents projection, not exact target states.
             return NativeProjection(candidates: candidates)
         }
         let offset = origin * 6
-        var radius = 0.0, candidates = 0
+        var radius = 0.0
         for row in frame.exact.indices {
             if row % 4096 == 0 { try Task.checkCancellation() }
             guard frame.exact[row] else { continue }
-            candidates += 1
-            for axis in 0..<3 {
-                let relative = frame.states[row * 6 + axis] - frame.states[offset + axis]
-                guard relative.isFinite else { throw StateTileFailure.invalid("Reference-relative coordinate exceeds numeric range.") }
-                radius = max(radius, abs(relative))
+            let dx = frame.states[row * 6] - frame.states[offset]
+            let dy = frame.states[row * 6 + 1] - frame.states[offset + 1]
+            let dz = frame.states[row * 6 + 2] - frame.states[offset + 2]
+            guard dx.isFinite, dy.isFinite, dz.isFinite else {
+                throw StateTileFailure.invalid("Reference-relative coordinate exceeds numeric range.")
             }
+            let distance = mode3D ? hypot(hypot(dx, dy), dz) : hypot(dx, dy)
+            guard distance.isFinite else { throw StateTileFailure.invalid("Reference-relative radius exceeds numeric range.") }
+            radius = max(radius, distance)
         }
-        let scale = max(radius, 1) / 5
+        // A spherical 3D bound survives every camera rotation; 2D fits only
+        // the displayed plane so distant z coordinates do not shrink the map.
+        let scale = max(radius, 1) / 4.75
         var result = NativeProjection(candidates: candidates)
+        try Task.checkCancellation()
+        if mode3D {
+            let displayed = min(limit, candidates)
+            let vertexStride = MemoryLayout<SIMD3<Float>>.stride
+            result.geometryPayload = try NativePointPayload.prepare(count: displayed) { bytes in
+                // Preserve the reference first, followed by exact source order.
+                bytes.storeBytes(of: Float.zero, toByteOffset: 0, as: Float.self)
+                bytes.storeBytes(of: Float.zero, toByteOffset: MemoryLayout<Float>.stride, as: Float.self)
+                bytes.storeBytes(of: Float.zero, toByteOffset: 2 * MemoryLayout<Float>.stride, as: Float.self)
+                var written = 1
+                for row in frame.exact.indices {
+                    if written >= displayed { break }
+                    if row % 4096 == 0 { try Task.checkCancellation() }
+                    guard row != origin, frame.exact[row] else { continue }
+                    let outputOffset = written * vertexStride
+                    bytes.storeBytes(of: Float((frame.states[row * 6] - frame.states[offset]) / scale), toByteOffset: outputOffset, as: Float.self)
+                    bytes.storeBytes(of: Float((frame.states[row * 6 + 1] - frame.states[offset + 1]) / scale), toByteOffset: outputOffset + MemoryLayout<Float>.stride, as: Float.self)
+                    bytes.storeBytes(of: Float((frame.states[row * 6 + 2] - frame.states[offset + 2]) / scale), toByteOffset: outputOffset + 2 * MemoryLayout<Float>.stride, as: Float.self)
+                    written += 1
+                    if written == displayed { break }
+                }
+                return written
+            }
+            return result
+        }
         result.points.reserveCapacity(min(limit, candidates))
         // The reference always survives a display cap, regardless of ID ordering.
         result.points.append(.zero)
@@ -280,8 +376,17 @@ struct NativeProjection: Sendable {
             if row % 4096 == 0 { try Task.checkCancellation() }
             if result.points.count >= limit { break }
             guard row != origin, frame.exact[row] else { continue }
-            result.points.append(SIMD3<Float>(Float((frame.states[row * 6] - frame.states[offset]) / scale), Float((frame.states[row * 6 + 1] - frame.states[offset + 1]) / scale), Float((frame.states[row * 6 + 2] - frame.states[offset + 2]) / scale)))
+            result.points.append(SIMD2<Float>(Float((frame.states[row * 6] - frame.states[offset]) / scale), Float((frame.states[row * 6 + 1] - frame.states[offset + 1]) / scale)))
         }
+        try Task.checkCancellation()
         return result
+    }
+
+    private static func validateLimit(_ limit: Int) throws {
+        // Shared projection storage serves both modes. Their tighter adaptive
+        // policies still apply at the caller; no entry may exceed the 2D cap.
+        guard limit > 0, limit <= NativeDisplayPressure.maximumPlanar else {
+            throw StateTileFailure.invalid("Invalid display limit.")
+        }
     }
 }

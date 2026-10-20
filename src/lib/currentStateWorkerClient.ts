@@ -1,9 +1,9 @@
-import type { CurrentStateObservation, CurrentStateObservationRequest } from './currentStateObservation'
+import type { CurrentStateObservation, CurrentStateObservationPartial, CurrentStateObservationRequest } from './currentStateObservation'
 import type { CurrentStateWorkerRequest, CurrentStateWorkerResponse } from '../workers/current-states.protocol'
 import { attachStateTileAdmission } from './stateTileAdmission'
 
-type WorkerPort = Pick<Worker, 'postMessage' | 'terminate' | 'onmessage' | 'onerror'>
-type Pending = { id: number; epochTdbJd: number; epochUtcJd: number; resolve: (value: CurrentStateObservation) => void; reject: (error: unknown) => void; removeAbort: () => void }
+type WorkerPort = Pick<Worker, 'postMessage' | 'terminate' | 'onmessage' | 'onerror'> & Partial<Pick<Worker, 'onmessageerror'>>
+type Pending = { id: number; epochTdbJd: number; epochUtcJd: number; resolve: (value: CurrentStateObservation) => void; reject: (error: unknown) => void; onPartial?: (value: CurrentStateObservationPartial) => void; removeAbort: () => void }
 
 /** One reusable worker and one caller-owned request. Cancellation retires the
  * promise immediately; its late messages can never resolve another request. */
@@ -25,6 +25,16 @@ export function createCurrentStateWorkerClient(createWorker: () => WorkerPort = 
   worker.onmessage = (event: MessageEvent<CurrentStateWorkerResponse>) => {
     const response = event.data, request = pending
     if (closed || !request || !response || response.requestId !== request.id) return
+    if (response.type === 'partial') {
+      const observation = response.partial?.observation
+      if (!observation || observation.epochTdbJd !== request.epochTdbJd || observation.epochUtcJd !== request.epochUtcJd) {
+        retire(new Error('Current-state worker partial epoch mismatch'), true)
+        return
+      }
+      try { request.onPartial?.(response.partial) }
+      catch (error) { retire(error, true) }
+      return
+    }
     pending = null; request.removeAbort()
     if (response.type === 'error') request.reject(new Error(response.error))
     else if (response.type !== 'result' || !response.result) request.reject(new Error('Invalid current-state worker response'))
@@ -37,9 +47,15 @@ export function createCurrentStateWorkerClient(createWorker: () => WorkerPort = 
     retire(new Error(event.message || 'Current-state worker failed'), false)
     terminate()
   }
+  worker.onmessageerror = () => {
+    if (closed) return
+    closed = true
+    retire(new Error('Current-state worker response could not be decoded'), false)
+    terminate()
+  }
   return {
     get closed() { return closed },
-    load(request: CurrentStateObservationRequest, signal: AbortSignal): Promise<CurrentStateObservation> {
+    load(request: CurrentStateObservationRequest, signal: AbortSignal, onPartial?: (value: CurrentStateObservationPartial) => void): Promise<CurrentStateObservation> {
       if (closed) return Promise.reject(new Error('Current-state worker is closed'))
       retire(new DOMException('Replaced', 'AbortError'), true)
       if (closed) return Promise.reject(new Error('Current-state worker is closed'))
@@ -48,7 +64,7 @@ export function createCurrentStateWorkerClient(createWorker: () => WorkerPort = 
         const id = ++nextId
         const abort = () => { if (pending?.id === id) retire(signal.reason ?? new DOMException('Aborted', 'AbortError'), true) }
         signal.addEventListener('abort', abort, { once: true })
-        pending = { id, epochTdbJd: request.epochTdbJd, epochUtcJd: request.epochUtcJd, resolve, reject, removeAbort: () => signal.removeEventListener('abort', abort) }
+        pending = { id, epochTdbJd: request.epochTdbJd, epochUtcJd: request.epochUtcJd, resolve, reject, onPartial, removeAbort: () => signal.removeEventListener('abort', abort) }
         try { worker.postMessage({ type: 'load', requestId: id, request } satisfies CurrentStateWorkerRequest) }
         catch (error) { retire(error, false) }
       })

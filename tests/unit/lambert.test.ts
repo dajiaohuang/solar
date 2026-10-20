@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { classifyLambertFailure, computePorkchopGrid, solveLambertUniversal } from '../../src/engine/mission/lambert'
 import { SOLAR_GM_AU3_PER_DAY2 } from '../../src/engine/units'
 import fixture from '../fixtures/lambert-benchmarks.json'
+import { majorBodiesById } from '../../src/data/majorBodies'
 
 describe('universal-variable Lambert solver', () => {
   it('rejects invalid grid inputs instead of returning an empty or extrapolated completed grid', () => {
-    const params = { departureBodyId: 'earth', arrivalBodyId: 'mars', bodiesById: new Map(), departureStartJd: 2451545, departureSpanDays: 10, minFlightDays: 100, maxFlightDays: 300 }
+    const params = { departureBodyId: 'earth', arrivalBodyId: 'mars', bodiesById: majorBodiesById, departureStartJd: 2451545, departureSpanDays: 10, minFlightDays: 100, maxFlightDays: 300 }
     for (const invalid of [{ columns: NaN }, { rows: 2.5 }, { columns: 0 }, { departureStartJd: Infinity },
       { departureSpanDays: -1 }, { minFlightDays: 0 }, { maxFlightDays: 99 }, { minFlightDays: NaN }]) {
       expect(() => computePorkchopGrid({ ...params, ...invalid })).toThrow(RangeError)

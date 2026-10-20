@@ -57,8 +57,11 @@ describe('catalog search sharding', () => {
 
   it('makes unknown absolute magnitude inclusion explicit', () => {
     const known = { ...record, id: 'asteroid:known', absoluteMagnitude: 12 }
+    const sentinel = { ...record, id: 'asteroid:sentinel', absoluteMagnitude: 99.99 }
     expect(filterCatalogRecords([record, known], { ...filters, absoluteMagnitude: [10, 15], magnitudeStatus: 'known' })).toEqual([known])
     expect(filterCatalogRecords([record, known], { ...filters, absoluteMagnitude: [10, 15], magnitudeStatus: 'unknown' })).toEqual([record])
     expect(filterCatalogRecords([record, known], { ...filters, absoluteMagnitude: [10, 15], magnitudeStatus: 'all' })).toEqual([record, known])
+    expect(filterCatalogRecords([sentinel], { ...filters, absoluteMagnitude: [10, 15], magnitudeStatus: 'unknown' })).toEqual([sentinel])
+    expect(filterCatalogRecords([sentinel], { ...filters, absoluteMagnitude: [10, 15], magnitudeStatus: 'known' })).toEqual([])
   })
 })

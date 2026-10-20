@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 export const endpoint = 'https://gea.esac.esa.int/tap-server/tap/sync'
 import columns from '../../src/data/gaiaColumns.json' with { type: 'json' }
 import columnsV2 from '../../src/data/gaiaColumnsV2.json' with { type: 'json' }
+import capacity from '../../src/data/gaiaCapacity.json' with { type: 'json' }
 export { columns }
 export function columnsForSchema(schemaVersion = 1) {
   if (schemaVersion !== 1 && schemaVersion !== 2) throw new Error('Unsupported Gaia schema version')
@@ -11,10 +12,10 @@ export function columnsForSchema(schemaVersion = 1) {
 export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex')
 export function queries({ raDeg, decDeg, radiusDeg, maxMagnitude, maxRows }, schemaVersion = 1) {
   const columns = columnsForSchema(schemaVersion)
-  if (![raDeg, decDeg, radiusDeg, maxMagnitude].every(Number.isFinite) || raDeg < 0 || raDeg >= 360 || Math.abs(decDeg) > 90 || radiusDeg <= 0 || radiusDeg > 2 || maxMagnitude < 3 || maxMagnitude > 20 || !Number.isInteger(maxRows) || maxRows < 1 || maxRows > 10000) throw new Error('Invalid bounded Gaia cone settings')
+  if (![raDeg, decDeg, radiusDeg, maxMagnitude].every(Number.isFinite) || raDeg < 0 || raDeg >= 360 || Math.abs(decDeg) > 90 || radiusDeg <= 0 || radiusDeg > 2 || maxMagnitude < 3 || maxMagnitude > 20 || !Number.isInteger(maxRows) || maxRows < 1 || maxRows > capacity.maxCatalogRows) throw new Error('Invalid bounded Gaia cone settings')
   const predicate = `CONTAINS(POINT('ICRS',ra,dec),CIRCLE('ICRS',${raDeg},${decDeg},${radiusDeg}))=1 AND phot_g_mean_mag<=${maxMagnitude}`
   return { count: `SELECT COUNT(*) AS selected_count FROM gaiadr3.gaia_source WHERE ${predicate}`,
-    rows: `SELECT TOP ${maxRows+1} ${columns.join(',')} FROM gaiadr3.gaia_source WHERE ${predicate} ORDER BY source_id` }
+    rows: `SELECT TOP ${maxRows+1} ${columns.join(',')} FROM gaiadr3.gaia_source WHERE ${predicate}` }
 }
 function csv(bytes, header) {
   const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
@@ -32,12 +33,10 @@ export function parseSources(bytes, settings, count, schemaVersion = 1) {
   queries(settings, schemaVersion)
   const columns = columnsForSchema(schemaVersion)
   const rows = csv(bytes, columns)
-  if (rows.length !== count || rows.length > settings.maxRows) throw new Error('Gaia count mismatch or truncated response')
-  let last = -1n
-  return rows.map(cells => {
+  if ((count !== undefined && rows.length !== count) || rows.length > settings.maxRows || rows.length > capacity.maxCatalogRows) throw new Error('Gaia count mismatch, overbudget cone or truncated response')
+  const parsed = rows.map(cells => {
     const id = cells[0]
-    if (!/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n || BigInt(id) <= last) throw new Error('Gaia source IDs must be unique ordered 64-bit strings')
-    last = BigInt(id)
+    if (!/^[1-9]\d{0,18}$/.test(id) || BigInt(id) > 9223372036854775807n) throw new Error('Gaia source IDs must be unique signed 64-bit strings')
     const row = { source_id: id }
     for (let i = 1; i < columns.length; i++) {
       const name = columns[i], cell = cells[i]
@@ -50,8 +49,11 @@ export function parseSources(bytes, settings, count, schemaVersion = 1) {
     const rad = Math.PI/180, dra = (row.ra-settings.raDeg)*rad, dec = row.dec*rad, center = settings.decDeg*rad
     const hav = Math.sin((dec-center)/2)**2+Math.cos(dec)*Math.cos(center)*Math.sin(dra/2)**2
     if (2*Math.asin(Math.sqrt(Math.min(1, Math.max(0, hav))))/rad > settings.radiusDeg+1e-9) throw new Error('Gaia row outside requested cone')
-    return row
+    return { identity: BigInt(id), row }
   })
+  parsed.sort((a,b) => a.identity < b.identity ? -1 : a.identity > b.identity ? 1 : 0)
+  for (let i = 1; i < parsed.length; i++) if (parsed[i-1].identity === parsed[i].identity) throw new Error('Gaia source IDs must be unique signed 64-bit strings')
+  return parsed.map(item => item.row)
 }
 /** Partition by the returned ICRS coordinates, not source_id's assignment-era pixel. */
 export function spatialChunks(rows) {

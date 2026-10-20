@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"math"
 	"net/http"
 	"runtime"
@@ -20,19 +19,24 @@ import (
 	"github.com/dajiaohuang/solar/backend/internal/coverage"
 	"github.com/dajiaohuang/solar/backend/internal/earthorientation"
 	"github.com/dajiaohuang/solar/backend/internal/inventory"
-	"github.com/dajiaohuang/solar/backend/internal/science"
+	"github.com/dajiaohuang/solar/backend/internal/orbituncertainty"
+	"github.com/dajiaohuang/solar/backend/internal/stellarmotion"
 )
 
 const maxBodyBytes = 1 << 20
 
 type Server struct {
+	orbitSource         *orbituncertainty.DE440Source
 	catalog             *catalog.Catalog
 	inventory           *inventory.Inventory
 	scheduler           *requestScheduler
+	windowStreams       *requestScheduler
+	stellarBatches      *requestScheduler
 	compute             *requestScheduler
 	tileSlots           chan struct{}
 	plans               *statePlanCache
 	tiles               *stateTileCache
+	stellarManifests    *stellarmotion.GaiaMotionManifestCache
 	stateTileByteBudget int64
 	coverage            *coverage.Ledger
 	earthOrientation    *earthorientation.Table
@@ -59,7 +63,8 @@ func newServer(c *catalog.Catalog, maxConcurrent int, inv *inventory.Inventory, 
 	if maxConcurrent < 1 {
 		maxConcurrent = 1
 	}
-	return &Server{catalog: c, inventory: inv, coverage: ledger, scheduler: newRequestScheduler(maxConcurrent, requestQueueCapacity, requestQueueTimeout), compute: newRequestScheduler(runtime.GOMAXPROCS(0), requestQueueCapacity, requestQueueTimeout), tileSlots: make(chan struct{}, 2), plans: newStatePlanCache(statePlanCacheItems), tiles: newStateTileCache(stateTileCacheBytes), stateTileByteBudget: maxStateTileBytes}
+	windowStreamLimit := min(maxConcurrent, maxConcurrentStateWindowStreams)
+	return &Server{catalog: c, inventory: inv, coverage: ledger, scheduler: newRequestScheduler(maxConcurrent, requestQueueCapacity, requestQueueTimeout), windowStreams: newRequestScheduler(windowStreamLimit, requestQueueCapacity, requestQueueTimeout), stellarBatches: newRequestScheduler(min(maxConcurrent, 2), 4, requestQueueTimeout), compute: newRequestScheduler(runtime.GOMAXPROCS(0), requestQueueCapacity, requestQueueTimeout), tileSlots: make(chan struct{}, 2), plans: newStatePlanCache(statePlanCacheItems), tiles: newStateTileCache(stateTileCacheBytes), stellarManifests: stellarmotion.NewGaiaMotionManifestCache(), stateTileByteBudget: maxStateTileBytes}
 }
 
 // ConfigureComputeWorkers sets the CPU block budget before serving requests.
@@ -76,6 +81,9 @@ func (s *Server) ComputeStats() map[string]uint64 { return s.compute.stats() }
 // SchedulerStats is local benchmark evidence, not a public metrics endpoint.
 func (s *Server) SchedulerStats() map[string]uint64 { return s.scheduler.stats() }
 
+// StateWindowStats isolates long-lived stream admission from ordinary requests.
+func (s *Server) StateWindowStats() map[string]uint64 { return s.windowStreams.stats() }
+
 // TileCacheStats exposes bounded runtime evidence to the local benchmark
 // harness without adding diagnostic state to the wire protocol.
 func (s *Server) TileCacheStats() map[string]uint64 {
@@ -90,8 +98,15 @@ func (s *Server) TileCacheStats() map[string]uint64 {
 
 // PlanCacheStats describes retained preflight work for local memory probes.
 func (s *Server) PlanCacheStats() map[string]uint64 {
-	items, bytes, maxBytes := s.plans.stats()
-	return map[string]uint64{"items": uint64(items), "residentBytes": uint64(bytes), "maxResidentBytes": uint64(maxBytes)}
+	items, bytes, maxBytes, hits, builds, coalesced, active := s.plans.stats()
+	return map[string]uint64{"items": uint64(items), "residentBytes": uint64(bytes), "maxResidentBytes": uint64(maxBytes),
+		"cacheHits": hits, "builds": builds, "coalescedRequests": coalesced, "activeBuilds": uint64(active)}
+}
+
+// StellarManifestCacheStats exposes process-local manifest reuse evidence to
+// focused benchmarks without adding diagnostics to the public API.
+func (s *Server) StellarManifestCacheStats() map[string]uint64 {
+	return s.stellarManifests.Stats()
 }
 
 // CancelledRequests reports requests whose server handler observed a canceled
@@ -121,7 +136,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// These immutable metadata/liveness routes must remain responsive while
-	// expensive work is admitted. Directory and identity-state GETs still use
+	// expensive work is admitted. Directory and identity-detail GETs still use
 	// bounded admission: a GET method alone is not evidence of cheap work.
 	if r.Method == http.MethodGet {
 		switch r.URL.Path {
@@ -143,7 +158,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
 		return
 	}
-	release, err := s.scheduler.acquire(r.Context(), classifyRequest(r))
+	requestAdmission := s.scheduler
+	if r.Method == http.MethodPost && r.URL.Path == "/v1/state/window" {
+		// Long-lived streaming responses have a separate bounded lane. Holding
+		// a general request slot until a slow client finishes would let history
+		// streams starve interactive API requests after CPU admission is released.
+		requestAdmission = s.windowStreams
+	} else if r.Method == http.MethodPost && r.URL.Path == "/v1/stellar/motion/tile" {
+		// A batch carries a decoded Gaia chunk and retains it through propagation.
+		// Isolate its body and compute admission from interactive request capacity.
+		requestAdmission = s.stellarBatches
+	}
+	release, err := requestAdmission.acquire(r.Context(), classifyRequest(r))
 	if err != nil {
 		if r.Context().Err() != nil {
 			s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
@@ -172,8 +198,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.inventoryDetail(w, r, strings.TrimPrefix(path, "inventory/"))
 	case r.Method == "GET" && strings.HasPrefix(path, "bodies/"):
 		s.body(w, r, strings.TrimPrefix(path, "bodies/"))
-	case r.Method == "POST" && path == "trajectory":
-		s.trajectory(w, r)
 	case r.Method == "POST" && path == "observation":
 		s.observation(w, r)
 	case r.Method == "POST" && path == "observation/windows":
@@ -182,6 +206,20 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.observationContacts(w, r)
 	case r.Method == "POST" && path == "stellar/motion":
 		s.stellarMotion(w, r)
+	case r.Method == "POST" && path == "stellar/motion/tile":
+		s.stellarMotionTile(w, r)
+	case r.Method == "POST" && path == "stellar/observer":
+		s.stellarObserver(w, r)
+	case r.Method == "POST" && path == "orbit/covariance/inspect":
+		s.orbitCovarianceInspect(w, r)
+	case r.Method == "POST" && path == "orbit/covariance/convert":
+		s.orbitCovarianceConvert(w, r)
+	case r.Method == "POST" && path == "orbit/covariance/propagate":
+		s.orbitCovariancePropagate(w, r)
+	case r.Method == "POST" && path == "orbit/covariance/ensemble":
+		s.orbitEnsemblePropagate(w, r)
+	case r.Method == "POST" && path == "orbit/covariance/ensemble/events":
+		s.orbitEnsembleEvents(w, r)
 	case r.Method == "GET" && path == "catalog/manifest":
 		s.catalogManifest(w, r)
 	case r.Method == "GET" && path == "coverage":
@@ -237,7 +275,29 @@ func (s *Server) capabilities(w http.ResponseWriter, _ *http.Request) {
 		}
 		identities = unique
 	}
-	s.json(w, http.StatusOK, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "manifestSha256": s.catalog.ManifestHash(), "coverage": coverage, "contract": map[string]any{"timeScale": "TDB", "epoch": "Julian date", "frame": "ECLIPJ2000", "distanceUnit": "km", "velocityUnit": "km/s", "precisionModes": []string{"exact", "approximate-opt-in"}, "stateTiles": map[string]any{"precision": "exact-only", "stateOriginId": "naif:0", "fieldMask": []string{"position", "velocity"}}, "modelBoundary": "State tiles accept exact only; trajectory and identity endpoints may expose explicit approximate opt-in", "nBody": false, "auditIdentities": identities}, "limits": map[string]int{"catalogPageMax": 500, "trajectoryBodiesMax": 64, "trajectorySamplesMax": 10000, "statePlanIDsMax": maxStatePlanIDs, "stateTileBodiesMax": maxStateTileBodies, "stateTileBytesMax": maxStateTileBytes, "statePlanCacheItemsMax": statePlanCacheItems, "statePlanCacheBytesMax": statePlanCacheBytes, "inventoryPageMax": 500, "inventoryMaxIndexedRecords": inventory.MaxIndexedRecords, "inventoryMaxIndexPostings": inventory.MaxIndexPostings, "inventoryMaxShards": inventory.MaxShards, "inventoryMaxShardBytes": inventory.MaxShardBytes, "inventoryBlockRowsMax": inventory.MaxBlockRows, "inventoryBlockBytesMax": inventory.MaxBlockBytes, "inventoryBlockCacheBytesMax": inventory.BlockCacheBytes}, "profiles": map[string]any{"full": map[string]any{"catalog": true, "identities": s.inventory != nil, "trajectory": true, "stateTiles": true}, "preview": map[string]any{"catalog": "curated", "fullOnlyVisible": true, "restrictedActions": "blocked"}}})
+	s.json(w, http.StatusOK, map[string]any{
+		"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "manifestSha256": s.catalog.ManifestHash(), "coverage": coverage,
+		"contract": map[string]any{
+			"timeScale": "TDB", "epoch": "Julian date", "frame": "ECLIPJ2000", "distanceUnit": "km", "velocityUnit": "km/s",
+			"precisionModes": []string{"exact"},
+			"stateTiles":     map[string]any{"precision": "exact-only", "stateOriginId": "naif:0", "fieldMask": []string{"position", "velocity"}},
+			"modelBoundary":  "State plans, tiles, and historical state windows return exact-provenance or missing states; server-side approximate fallback is disabled",
+			"nBody":          false, "auditIdentities": identities,
+		},
+		"limits": map[string]int{
+			"catalogPageMax": 500, "statePlanIDsMax": maxStatePlanIDs, "statePlanBytesMax": maxStatePlanBytes, "stateTileBodiesMax": maxStateTileBodies, "stateTileBytesMax": maxStateTileBytes,
+			"gaiaMotionBatchRowsMax": gaiaMotionBatchRowsMax,
+			"statePlanCacheItemsMax": statePlanCacheItems, "statePlanCacheBytesMax": statePlanCacheBytes,
+			"stateWindowIDsMax": maxWindowIDs, "stateWindowEpochsMax": maxWindowEpochs, "stateWindowStatesMax": maxWindowStates,
+			"inventoryPageMax": 500, "inventoryMaxIndexedRecords": inventory.MaxIndexedRecords, "inventoryMaxIndexPostings": inventory.MaxIndexPostings,
+			"inventoryMaxShards": inventory.MaxShards, "inventoryMaxShardBytes": inventory.MaxShardBytes,
+			"inventoryBlockRowsMax": inventory.MaxBlockRows, "inventoryBlockBytesMax": inventory.MaxBlockBytes, "inventoryBlockCacheBytesMax": inventory.BlockCacheBytes,
+		},
+		"profiles": map[string]any{
+			"full":    map[string]any{"catalog": true, "identities": s.inventory != nil, "trajectory": true, "stateTiles": true, "stateWindows": true},
+			"preview": map[string]any{"catalog": "curated", "fullOnlyVisible": true, "restrictedActions": "blocked"},
+		},
+	})
 }
 
 func (s *Server) catalogPage(w http.ResponseWriter, r *http.Request) {
@@ -329,8 +389,8 @@ func (s *Server) identityRoute(w http.ResponseWriter, r *http.Request, id string
 		s.error(w, http.StatusNotFound, "inventory_unavailable", "source inventory is not configured for this service")
 		return
 	}
-	if strings.HasSuffix(id, "/state") {
-		s.identityState(w, r, strings.TrimSuffix(id, "/state"))
+	if strings.Contains(id, "/") {
+		s.error(w, http.StatusNotFound, "not_found", "unknown endpoint")
 		return
 	}
 	s.identityDetail(w, r, id)
@@ -413,29 +473,13 @@ func (s *Server) body(w http.ResponseWriter, r *http.Request, id string) {
 	s.json(w, 200, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "body": b})
 }
 
-func precisionMode(value string) (bool, error) {
-	if value == "" || value == "exact" {
-		return false, nil
-	}
-	if value == "approximate" {
-		return true, nil
-	}
-	return false, fmt.Errorf("precision must be exact or approximate")
-}
-
-func (s *Server) resolveInventoryState(ctx context.Context, record inventory.Record, jd float64, allowApproximate bool) (sourceStateResult, error) {
-	release, err := s.compute.acquire(ctx, computeClass(ctx))
-	if err != nil {
-		return sourceStateResult{}, err
-	}
-	defer release()
-	return s.resolveInventoryStateWithOperational(ctx, record, jd, allowApproximate, nil, nil, nil)
-}
-
-func (s *Server) resolveInventoryStateWithOperational(ctx context.Context, record inventory.Record, jd float64, allowApproximate bool, operational map[string]catalog.State, operationalFound map[string]bool, evidence map[string]catalog.OperationalProvenance) (sourceStateResult, error) {
+func (s *Server) resolveInventoryStateWithOperational(ctx context.Context, record inventory.Record, jd float64, operational map[string]catalog.State, operationalFound map[string]bool, evidence map[string]catalog.OperationalProvenance) (sourceStateResult, error) {
+	// State tiles admit exact provenance only; approximate source elements
+	// remain visible as missing inventory rows.
 	if !finite(jd) {
 		return sourceStateResult{Availability: catalog.Missing, MissingReason: "invalid-epoch"}, nil
 	}
+	snapshotReason := ""
 	if record.NAIFID != 0 {
 		catalogID := "naif:" + strconv.Itoa(record.NAIFID)
 		if body, ok := s.catalog.Get(catalogID); ok && body.Availability == catalog.AvailableOperational {
@@ -455,55 +499,75 @@ func (s *Server) resolveInventoryStateWithOperational(ctx context.Context, recor
 				return sourceStateResult{}, err
 			}
 			if found && finiteState(state) {
-				var window map[string]float64
-				if provenance, provenanceOK := evidence[catalogID]; provenanceOK && provenance.ValidityPresent {
-					window = map[string]float64{"startEt": provenance.ValidityStartET, "endEt": provenance.ValidityEndET}
+				provenance, provenanceOK := evidence[catalogID]
+				datasetOK := s.hasInventoryDatasetProvenance()
+				if provenanceOK && provenance.Source != "" && validProvenanceSHA256(provenance.KernelSHA256) && validProvenanceSHA256(provenance.SourceChainSHA256) && datasetOK {
+					var window map[string]float64
+					if provenance.ValidityPresent {
+						window = map[string]float64{"startEt": provenance.ValidityStartET, "endEt": provenance.ValidityEndET}
+					}
+					result := sourceStateResult{
+						Availability:   catalog.AvailableOperational,
+						Model:          "spk-original",
+						State:          &state,
+						Evidence:       "catalog-kernel",
+						EvidenceWindow: window,
+					}
+					return result, nil
 				}
-				return sourceStateResult{Availability: catalog.AvailableOperational, Model: "spk-original", State: &state, Evidence: "catalog-kernel", EvidenceWindow: window}, nil
+				snapshotReason = "kernel-provenance-unavailable"
 			}
 		}
 	}
-	if record.KernelEvidence != nil && record.KernelEvidence.StateAtAuditEpoch != nil && evidenceTargetMatches(record) && evidenceWindowMatches(record) {
-		auditJD := 2451545.0 + record.KernelEvidence.AuditET/86400
-		if finite(auditJD) && math.Abs(jd-auditJD) < 1e-9 {
-			v := record.KernelEvidence.StateAtAuditEpoch
-			state := catalog.State{Position: catalog.Vec3{X: v.Position.X, Y: v.Position.Y, Z: v.Position.Z}, Velocity: catalog.Vec3{X: v.Velocity.X, Y: v.Velocity.Y, Z: v.Velocity.Z}}
-			if finiteState(state) {
-				return sourceStateResult{Availability: catalog.AvailableSnapshot, Model: "source-kernel-state-at-audit-epoch", State: &state, Evidence: "inventory-kernel-evidence", EvidenceWindow: matchingEvidenceWindow(record)}, nil
+	if record.KernelEvidence != nil && record.KernelEvidence.StateAtAuditEpoch != nil && epochMatchesEvidence(record, jd) {
+		if strings.TrimSpace(record.IdentityStatus) == "" {
+			snapshotReason = "source-identity-status-unavailable"
+		} else if segment, ok := matchingEvidenceSegment(record); !ok {
+			snapshotReason = "kernel-provenance-unavailable"
+		} else if kernelHash, ok := s.catalog.KernelSHA256(segment.KernelID); !ok || !validProvenanceSHA256(kernelHash) || kernelHash != record.KernelEvidence.SourceKernelSHA256 || !validProvenanceSHA256(record.KernelEvidence.SourceChainSHA256) {
+			snapshotReason = "kernel-provenance-unavailable"
+		} else {
+			if !s.hasInventoryDatasetProvenance() {
+				snapshotReason = "kernel-provenance-unavailable"
+			} else {
+				v := record.KernelEvidence.StateAtAuditEpoch
+				state := catalog.State{Position: catalog.Vec3{X: v.Position.X, Y: v.Position.Y, Z: v.Position.Z}, Velocity: catalog.Vec3{X: v.Velocity.X, Y: v.Velocity.Y, Z: v.Velocity.Z}}
+				if finiteState(state) {
+					result := sourceStateResult{Availability: catalog.AvailableSnapshot, Model: "source-kernel-state-at-audit-epoch", State: &state, Evidence: "inventory-kernel-evidence", EvidenceWindow: matchingEvidenceWindow(record)}
+					return result, nil
+				}
+				snapshotReason = "unvalidated-source-kernel-evidence"
 			}
 		}
 	}
-	if !allowApproximate {
-		return sourceStateResult{Availability: catalog.Missing, Model: "exact-only", MissingReason: missingInventoryStateReason(record)}, nil
+	if snapshotReason != "" {
+		return sourceStateResult{Availability: catalog.Missing, Model: "exact-only", MissingReason: snapshotReason}, nil
 	}
-	if record.Source != "numbered" && record.Source != "unnumbered" {
-		return sourceStateResult{Availability: catalog.Missing, Model: "exact-only", MissingReason: missingInventoryStateReason(record)}, nil
+	return sourceStateResult{Availability: catalog.Missing, Model: "exact-only", MissingReason: missingInventoryStateReason(record)}, nil
+}
+
+func (s *Server) hasInventoryDatasetProvenance() bool {
+	if s.inventory == nil {
+		return false
 	}
-	if record.Orbit == nil || record.Orbit.EpochJD == nil || record.Orbit.SemiMajorAxisAU == nil || record.Orbit.Eccentricity == nil || record.Orbit.InclinationDeg == nil || record.Orbit.ArgPeriapsisDeg == nil || record.Orbit.AscendingNodeDeg == nil || record.Orbit.MeanAnomalyDeg == nil {
-		return sourceStateResult{Availability: catalog.Missing, Model: "approximate-opt-in", MissingReason: missingInventoryStateReason(record)}, nil
+	return validProvenanceSHA256(s.inventory.ManifestHash())
+}
+
+func validProvenanceSHA256(value string) bool {
+	if len(value) != sha256.Size*2 {
+		return false
 	}
-	if record.Orbit.TimeScale != "TDB" || record.Orbit.Frame != "ECLIPJ2000" {
-		return sourceStateResult{Availability: catalog.Missing, Model: "approximate-opt-in", MissingReason: "unvalidated-source-elements"}, nil
-	}
-	if !finite(*record.Orbit.EpochJD) || !finite(*record.Orbit.SemiMajorAxisAU) || !finite(*record.Orbit.Eccentricity) || !finite(*record.Orbit.InclinationDeg) || !finite(*record.Orbit.ArgPeriapsisDeg) || !finite(*record.Orbit.AscendingNodeDeg) || !finite(*record.Orbit.MeanAnomalyDeg) || *record.Orbit.SemiMajorAxisAU <= 0 {
-		return sourceStateResult{Availability: catalog.Missing, Model: "approximate-opt-in", MissingReason: "unvalidated-source-elements"}, nil
-	}
-	if *record.Orbit.Eccentricity < 0 || *record.Orbit.Eccentricity >= 1 {
-		return sourceStateResult{Availability: catalog.Missing, Model: "approximate-opt-in", MissingReason: "open-conic-not-supported"}, nil
-	}
-	meanMotion := 0.0
-	if record.Orbit.MeanMotionDegPerDay != nil {
-		if !finite(*record.Orbit.MeanMotionDegPerDay) {
-			return sourceStateResult{Availability: catalog.Missing, Model: "approximate-opt-in", MissingReason: "unvalidated-source-elements"}, nil
-		}
-		meanMotion = *record.Orbit.MeanMotionDegPerDay
-	}
-	state, err := science.PropagateBoundElliptic(ctx, science.Elements{SemiMajorAxisAU: *record.Orbit.SemiMajorAxisAU, Eccentricity: *record.Orbit.Eccentricity, InclinationDeg: *record.Orbit.InclinationDeg, AscendingNodeDeg: *record.Orbit.AscendingNodeDeg, ArgPeriapsisDeg: *record.Orbit.ArgPeriapsisDeg, MeanAnomalyDeg: *record.Orbit.MeanAnomalyDeg, MeanMotionDegPerDay: meanMotion}, *record.Orbit.EpochJD, jd)
-	if err != nil {
-		return sourceStateResult{}, err
-	}
-	result := catalog.State{Position: catalog.Vec3{X: state.Position.X, Y: state.Position.Y, Z: state.Position.Z}, Velocity: catalog.Vec3{X: state.Velocity.X, Y: state.Velocity.Y, Z: state.Velocity.Z}}
-	return sourceStateResult{Availability: catalog.AvailableFallback, Model: "source-elements-two-body", State: &result, Evidence: "source-elements-approximation"}, nil
+	_, err := hex.DecodeString(value)
+	return err == nil
+}
+
+type sourceStateResult struct {
+	Availability   catalog.Availability
+	Model          string
+	MissingReason  string
+	State          *catalog.State
+	Evidence       string
+	EvidenceWindow map[string]float64
 }
 
 func missingInventoryStateReason(record inventory.Record) string {
@@ -535,28 +599,16 @@ func evidenceTargetMatches(record inventory.Record) bool {
 }
 
 func evidenceWindowMatches(record inventory.Record) bool {
-	if record.KernelEvidence == nil || !finite(record.KernelEvidence.AuditET) {
-		return false
-	}
-	for _, segment := range record.KernelEvidence.Segments {
-		if segment.KernelID == "" || !finite(segment.StartET) || !finite(segment.EndET) || segment.EndET < segment.StartET || segment.StartET > record.KernelEvidence.AuditET || segment.EndET < record.KernelEvidence.AuditET || segment.Frame != 1 || (segment.Type != 2 && segment.Type != 3 && segment.Type != 17 && segment.Type != 21) {
-			continue
-		}
-		return true
-	}
-	return false
+	_, ok := matchingEvidenceSegment(record)
+	return ok
 }
 
 func matchingEvidenceWindow(record inventory.Record) map[string]float64 {
-	if record.KernelEvidence == nil {
+	segment, ok := matchingEvidenceSegment(record)
+	if !ok || record.KernelEvidence == nil {
 		return nil
 	}
-	for _, segment := range record.KernelEvidence.Segments {
-		if segment.KernelID != "" && finite(segment.StartET) && finite(segment.EndET) && segment.EndET >= segment.StartET && segment.StartET <= record.KernelEvidence.AuditET && segment.EndET >= record.KernelEvidence.AuditET && segment.Frame == 1 && (segment.Type == 2 || segment.Type == 3 || segment.Type == 17 || segment.Type == 21) {
-			return map[string]float64{"startEt": segment.StartET, "endEt": segment.EndET}
-		}
-	}
-	return nil
+	return map[string]float64{"startEt": segment.StartET, "endEt": segment.EndET}
 }
 
 func finiteState(state catalog.State) bool {
@@ -566,290 +618,6 @@ func finiteState(state catalog.State) bool {
 		}
 	}
 	return true
-}
-
-func (s *Server) identityState(w http.ResponseWriter, r *http.Request, id string) {
-	if id == "" {
-		s.error(w, http.StatusBadRequest, "invalid_identity_id", "identity id must not be empty")
-		return
-	}
-	epochText := r.URL.Query().Get("epochJd")
-	epoch, err := strconv.ParseFloat(epochText, 64)
-	if err != nil || !finite(epoch) {
-		s.error(w, http.StatusBadRequest, "invalid_epoch", "epochJd must be a finite Julian TDB date")
-		return
-	}
-	frame := r.URL.Query().Get("frame")
-	if frame == "" {
-		frame = "ECLIPJ2000"
-	}
-	if frame != "ECLIPJ2000" {
-		s.error(w, http.StatusBadRequest, "unsupported_frame", "only ECLIPJ2000 is supported")
-		return
-	}
-	allowApproximate, err := precisionMode(r.URL.Query().Get("precision"))
-	if err != nil {
-		s.error(w, http.StatusBadRequest, "invalid_precision", err.Error())
-		return
-	}
-	raw, found, err := s.inventory.Get(r.Context(), id)
-	if err != nil {
-		if r.Context().Err() != nil {
-			s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
-		} else {
-			s.error(w, http.StatusUnprocessableEntity, "inventory_unavailable", err.Error())
-		}
-		return
-	}
-	if !found {
-		s.error(w, http.StatusNotFound, "identity_not_found", "unknown source identity")
-		return
-	}
-	record, err := inventory.Decode(raw)
-	if err != nil {
-		s.error(w, http.StatusUnprocessableEntity, "invalid_source_record", err.Error())
-		return
-	}
-	result, err := s.resolveInventoryState(r.Context(), record, epoch, allowApproximate)
-	if err != nil {
-		s.stateWorkError(w, r, err)
-		return
-	}
-	response := map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "inventoryManifestSha256": s.inventory.ManifestHash(), "identity": s.inventory.Summary(record), "epochJd": epoch, "timeScale": "TDB", "frame": frame, "distanceUnit": "km", "velocityUnit": "km/s", "precision": map[bool]string{true: "approximate", false: "exact"}[allowApproximate], "availability": result.Availability, "model": result.Model, "missingReason": result.MissingReason, "stateEvidence": result.Evidence, "evidenceWindowEt": result.EvidenceWindow}
-	if result.State != nil {
-		response["state"] = result.State
-	}
-	s.json(w, http.StatusOK, response)
-}
-
-type trajectoryRequest struct {
-	BodyIDs   []string `json:"bodyIds"`
-	StartJD   float64  `json:"startJd"`
-	EndJD     float64  `json:"endJd"`
-	Samples   int      `json:"samples"`
-	Frame     string   `json:"frame"`
-	Precision string   `json:"precision"`
-}
-type trajectoryBody struct {
-	ID             string               `json:"id"`
-	Availability   catalog.Availability `json:"availability"`
-	MissingReason  string               `json:"missingReason,omitempty"`
-	Model          string               `json:"model,omitempty"`
-	Precision      string               `json:"precision,omitempty"`
-	SourceRecord   bool                 `json:"sourceRecord,omitempty"`
-	IdentityStatus string               `json:"identityStatus,omitempty"`
-	ParentID       string               `json:"parentId,omitempty"`
-	CenterID       string               `json:"centerId,omitempty"`
-	States         []float64            `json:"states,omitempty"`
-	StateStride    int                  `json:"stateStride,omitempty"`
-}
-
-type sourceStateResult struct {
-	Availability   catalog.Availability
-	Model          string
-	MissingReason  string
-	State          *catalog.State
-	Evidence       string
-	EvidenceWindow map[string]float64
-}
-
-func (s *Server) trajectory(w http.ResponseWriter, r *http.Request) {
-	var req trajectoryRequest
-	if err := decodeOneJSON(r, &req); err != nil {
-		s.error(w, 400, "invalid_json", err.Error())
-		return
-	}
-	if len(req.BodyIDs) < 1 || len(req.BodyIDs) > 64 {
-		s.error(w, 400, "invalid_body_count", "bodyIds must contain 1..64 entries")
-		return
-	}
-	if req.Samples < 2 || req.Samples > 10000 {
-		s.error(w, 400, "invalid_samples", "samples must be between 2 and 10000")
-		return
-	}
-	if !finite(req.StartJD) || !finite(req.EndJD) || req.EndJD <= req.StartJD || req.EndJD-req.StartJD > 365250 {
-		s.error(w, 400, "invalid_time_range", "time range must be positive and at most 1000 years")
-		return
-	}
-	if req.Frame == "" {
-		req.Frame = "ECLIPJ2000"
-	}
-	if req.Frame != "ECLIPJ2000" {
-		s.error(w, 400, "unsupported_frame", "only ECLIPJ2000 is supported")
-		return
-	}
-	allowApproximate, err := precisionMode(req.Precision)
-	if err != nil {
-		s.error(w, http.StatusBadRequest, "invalid_precision", err.Error())
-		return
-	}
-	step := (req.EndJD - req.StartJD) / float64(req.Samples-1)
-	out := make([]trajectoryBody, 0, len(req.BodyIDs))
-	seen := map[string]bool{}
-	for _, id := range req.BodyIDs {
-		if seen[id] {
-			s.error(w, 400, "duplicate_body_id", "bodyIds must be unique")
-			return
-		}
-		seen[id] = true
-		b, ok := s.catalog.Get(id)
-		if !ok && s.inventory != nil {
-			raw, found, getErr := s.inventory.Get(r.Context(), id)
-			if getErr != nil {
-				if r.Context().Err() != nil {
-					s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
-				} else {
-					s.error(w, http.StatusUnprocessableEntity, "inventory_unavailable", getErr.Error())
-				}
-				return
-			}
-			if found {
-				record, decodeErr := inventory.Decode(raw)
-				if decodeErr != nil {
-					s.error(w, http.StatusUnprocessableEntity, "invalid_source_record", decodeErr.Error())
-					return
-				}
-				tb := trajectoryBody{ID: id, Availability: catalog.Missing, Precision: map[bool]string{true: "approximate", false: "exact"}[allowApproximate], SourceRecord: true, IdentityStatus: record.IdentityStatus, ParentID: record.ParentID}
-				if record.Orbit != nil {
-					tb.CenterID = record.Orbit.Center
-				}
-				var states []float64
-				for sample := 0; sample < req.Samples; sample++ {
-					if err := r.Context().Err(); err != nil {
-						s.error(w, http.StatusRequestTimeout, "cancelled", "request cancelled")
-						return
-					}
-					resolved, stateErr := s.resolveInventoryState(r.Context(), record, req.StartJD+float64(sample)*step, allowApproximate)
-					if stateErr != nil {
-						s.stateWorkError(w, r, stateErr)
-						return
-					}
-					if resolved.State == nil {
-						tb.Availability = resolved.Availability
-						tb.Model = resolved.Model
-						tb.MissingReason = resolved.MissingReason
-						states = nil
-						break
-					}
-					if states == nil {
-						states = make([]float64, 0, req.Samples*6)
-					}
-					states = appendFlatState(states, *resolved.State)
-					tb.Availability = resolved.Availability
-					tb.Model = resolved.Model
-				}
-				tb.States = states
-				if len(states) > 0 {
-					tb.StateStride = 6
-				}
-				out = append(out, tb)
-				continue
-			}
-		}
-		if !ok {
-			s.error(w, 404, "body_not_found", "unknown body id: "+id)
-			return
-		}
-		tb := trajectoryBody{ID: id, Availability: b.Availability, MissingReason: b.MissingReason, Model: b.Model, Precision: map[bool]string{true: "approximate", false: "exact"}[allowApproximate]}
-		tb.ParentID = b.ParentID
-		if b.Availability == catalog.AvailableOperational {
-			tb.CenterID = "naif:0"
-			tb.States = make([]float64, 0, req.Samples*6)
-			for i := 0; i < req.Samples; i++ {
-				if err := r.Context().Err(); err != nil {
-					s.error(w, 408, "cancelled", "request cancelled")
-					return
-				}
-				st, found, err := s.scheduledOperationalState(r.Context(), id, req.StartJD+float64(i)*step)
-				if err != nil {
-					s.stateWorkError(w, r, err)
-					return
-				}
-				if !found {
-					tb.States = nil
-					tb.StateStride = 0
-					tb.Availability = catalog.Missing
-					tb.MissingReason = s.catalog.KernelMissingReason(id)
-					if tb.MissingReason == "" {
-						tb.MissingReason = "kernel-coverage-gap"
-					}
-					break
-				}
-				tb.States = appendFlatState(tb.States, st)
-			}
-			if len(tb.States) > 0 {
-				tb.StateStride = 6
-			}
-			out = append(out, tb)
-			continue
-		}
-		if b.Availability == catalog.Missing || (b.Elements == nil && b.Model != "fixed-origin") {
-			if tb.MissingReason == "" {
-				tb.MissingReason = "no-supported-state-model"
-			}
-			out = append(out, tb)
-			continue
-		}
-		if !allowApproximate {
-			tb.Availability = catalog.Missing
-			tb.MissingReason = "approximate-model-requires-explicit-opt-in"
-			out = append(out, tb)
-			continue
-		}
-		tb.Model = b.Model
-		tb.CenterID = b.ParentID
-		if tb.CenterID == "" {
-			tb.CenterID = "sun"
-		}
-		if strings.HasPrefix(b.Model, "jpl-approx-keplerian-secular") && (req.StartJD < science.PlanetaryStartJD || req.EndJD >= science.PlanetaryEndJD) {
-			tb.Availability = catalog.Missing
-			tb.MissingReason = "outside-approximate-model-validity"
-			out = append(out, tb)
-			continue
-		}
-		tb.States = make([]float64, 0, req.Samples*6)
-		for i := 0; i < req.Samples; i++ {
-			if err := r.Context().Err(); err != nil {
-				s.error(w, 408, "cancelled", "request cancelled")
-				return
-			}
-			var st science.State
-			var err error
-			jd := req.StartJD + float64(i)*step
-			switch b.Model {
-			case "fixed-origin":
-				// Heliocentric Sun: exactly zero in this approximate frame.
-			case "jpl-approx-keplerian-secular", "jpl-approx-keplerian-secular-earth-moon-partition":
-				st, err = science.PlanetaryApproxState(r.Context(), b.NAIFID, jd)
-			default:
-				st, err = science.PropagateBoundElliptic(r.Context(), science.Elements{SemiMajorAxisAU: b.Elements.SemiMajorAxisAU, Eccentricity: b.Elements.Eccentricity, InclinationDeg: b.Elements.InclinationDeg, AscendingNodeDeg: b.Elements.AscendingNodeDeg, ArgPeriapsisDeg: b.Elements.ArgPeriapsisDeg, MeanAnomalyDeg: b.Elements.MeanAnomalyDeg, MeanMotionDegPerDay: b.Elements.MeanMotionDegPerDay}, b.EpochJD, jd)
-			}
-			if err != nil {
-				s.error(w, 422, "state_unavailable", err.Error())
-				return
-			}
-			tb.States = appendFlatState(tb.States, catalog.State{Position: catalog.Vec3{X: st.Position.X, Y: st.Position.Y, Z: st.Position.Z}, Velocity: catalog.Vec3{X: st.Velocity.X, Y: st.Velocity.Y, Z: st.Velocity.Z}})
-		}
-		if len(tb.States) > 0 {
-			tb.StateStride = 6
-		}
-		out = append(out, tb)
-	}
-	s.json(w, 200, map[string]any{"apiVersion": catalog.APIVersion, "catalogVersion": s.catalog.Version(), "frame": req.Frame, "timeScale": "TDB", "startJd": req.StartJD, "endJd": req.EndJD, "distanceUnit": "km", "velocityUnit": "km/s", "precision": map[bool]string{true: "approximate", false: "exact"}[allowApproximate], "stateLayout": "row-major-[x,y,z,vx,vy,vz]", "modelBoundary": "Exact requests use only verified SPK coefficients or source state evidence; approximate source-element propagation is explicit opt-in.", "bodies": out})
-}
-
-func (s *Server) scheduledOperationalState(ctx context.Context, id string, jd float64) (catalog.State, bool, error) {
-	release, err := s.compute.acquire(ctx, computeClass(ctx))
-	if err != nil {
-		return catalog.State{}, false, err
-	}
-	defer release()
-	states, found, _, err := s.catalog.EvalBatchContext(ctx, []string{id}, jd)
-	return states[id], found[id], err
-}
-
-func appendFlatState(dst []float64, state catalog.State) []float64 {
-	return append(dst, state.Position.X, state.Position.Y, state.Position.Z, state.Velocity.X, state.Velocity.Y, state.Velocity.Z)
 }
 
 func (s *Server) preview(w http.ResponseWriter, _ *http.Request) {
@@ -889,7 +657,8 @@ func (s *Server) jsonLimited(w http.ResponseWriter, status int, v any, limit int
 		s.error(w, http.StatusInternalServerError, "encode_response", "response could not be encoded")
 		return
 	}
-	if len(raw) > limit {
+	// Reserve the trailing newline in the advertised response-byte budget.
+	if len(raw) >= limit {
 		s.error(w, http.StatusRequestEntityTooLarge, "response_too_large", "response exceeds the configured byte limit")
 		return
 	}

@@ -7,7 +7,7 @@ import java.util.Arrays;
 final class NativeRenderBudget {
     static final int MINIMUM = 25_000;
     private static final long COOLDOWN_NS = 5_000_000_000L;
-    final int initial, maximum;
+    final int initial, maximum, moderateThermalMaximum;
     private int limit, slow, fast, thermal;
     private long lastAdjustment = Long.MIN_VALUE;
     enum Reason { INITIAL, SLOW, HEADROOM, THERMAL, MODERATE_THERMAL, MEMORY }
@@ -16,6 +16,7 @@ final class NativeRenderBudget {
     NativeRenderBudget(boolean mode3d) {
         initial = mode3d ? 100_000 : 250_000;
         maximum = mode3d ? 250_000 : 500_000;
+        moderateThermalMaximum = mode3d ? 75_000 : 100_000;
         limit = initial;
     }
 
@@ -33,7 +34,7 @@ final class NativeRenderBudget {
         thermal = status;
         resetEvidence();
         if (status >= 3) return change(MINIMUM, now, Reason.THERMAL);
-        if (status >= 2) return change(Math.min(limit, initial), now, Reason.MODERATE_THERMAL);
+        if (status >= 2) return change(Math.min(limit, moderateThermalMaximum), now, Reason.MODERATE_THERMAL);
         // Recovery never restores an unmeasured high limit immediately.
         return false;
     }
@@ -48,14 +49,15 @@ final class NativeRenderBudget {
         if (thermal >= 3) return change(MINIMUM, now, Reason.THERMAL);
         if (lastAdjustment != Long.MIN_VALUE && (now < lastAdjustment || now - lastAdjustment < COOLDOWN_NS)) return false;
         boolean pressured = window.p95Ms > 18.5 || window.droppedRatio > 0.05;
-        boolean healthy = thermal < 2 && available >= limit && window.p95Ms <= 16.7 && window.droppedRatio < 0.02;
+        boolean healthy = thermal < 3 && available >= limit && window.p95Ms <= 16.7 && window.droppedRatio < 0.02;
         slow = pressured ? slow + 1 : 0;
         fast = healthy ? fast + 1 : 0;
         if (slow >= 2 || window.p95Ms > 33.3 || window.droppedRatio > 0.2) {
             return change(Math.max(MINIMUM, (limit * 3 / 4 / 5000) * 5000), now, Reason.SLOW);
         }
         if (fast >= 4) {
-            return change(Math.min(maximum, ((limit + limit / 8 + 4999) / 5000) * 5000), now, Reason.HEADROOM);
+            int ceiling = thermal >= 2 ? moderateThermalMaximum : maximum;
+            return change(Math.min(ceiling, ((limit + limit / 8 + 4999) / 5000) * 5000), now, Reason.HEADROOM);
         }
         return false;
     }
@@ -93,9 +95,10 @@ final class NativeRenderBudget {
             if (count < intervals.length && (count < 12 || elapsed < 1000)) return null;
             double[] sorted = Arrays.copyOf(intervals, count);
             Arrays.sort(sorted);
-            double dropped = 0;
-            for (double interval : sorted) dropped += Math.max(0, Math.round(interval / (1000.0 / 60)) - 1);
-            Window result = new Window(count, sorted[(count - 1) / 2], sorted[(int) Math.ceil(count * 0.95) - 1], dropped / (count + dropped));
+            double expectedSlots = elapsed / (1000.0 / 60);
+            double missedSlots = Math.max(0, expectedSlots - count);
+            double droppedRatio = expectedSlots > 0 && Double.isFinite(expectedSlots) ? missedSlots / expectedSlots : 1;
+            Window result = new Window(count, sorted[(count - 1) / 2], sorted[(int) Math.ceil(count * 0.95) - 1], droppedRatio);
             count = 0; elapsed = 0;
             return result;
         }

@@ -1,4 +1,5 @@
 import type { AsteroidRecord, CatalogFilters } from '../types'
+import { normalizeCatalogAbsoluteMagnitude } from './catalogMagnitude'
 import { normalizeSearchText } from './catalogLoader'
 
 export const CATALOG_ORBIT_CLASS_FILTERS = ['all', 'MBA', 'MCR', 'APO', 'ATE', 'AMO', 'ATI', 'HUN', 'HIL', 'JTA', 'TNO', 'OTHER'] as const
@@ -14,12 +15,13 @@ export function createCatalogFieldMatcher(filters: CatalogFilters) {
     inclinationDeg: number,
   ) => {
     const perihelion = semiMajorAxisAU * (1 - eccentricity)
-    const magnitudeKnown = absoluteMagnitude !== undefined
+    const normalizedMagnitude = normalizeCatalogAbsoluteMagnitude(absoluteMagnitude)
+    const magnitudeKnown = normalizedMagnitude !== undefined
     const magnitudeMatches = filters.magnitudeStatus === 'unknown'
       ? !magnitudeKnown
       : filters.magnitudeStatus === 'known'
-        ? magnitudeKnown && absoluteMagnitude! >= filters.absoluteMagnitude[0] && absoluteMagnitude! <= filters.absoluteMagnitude[1]
-        : !magnitudeKnown || (absoluteMagnitude! >= filters.absoluteMagnitude[0] && absoluteMagnitude! <= filters.absoluteMagnitude[1])
+        ? magnitudeKnown && normalizedMagnitude! >= filters.absoluteMagnitude[0] && normalizedMagnitude! <= filters.absoluteMagnitude[1]
+        : !magnitudeKnown || (normalizedMagnitude! >= filters.absoluteMagnitude[0] && normalizedMagnitude! <= filters.absoluteMagnitude[1])
     return (!query || searchKey.includes(query)) &&
       (filters.orbitClass === 'all' || orbitClassCode === filters.orbitClass) &&
       semiMajorAxisAU >= filters.semiMajorAxis[0] && semiMajorAxisAU <= filters.semiMajorAxis[1] &&

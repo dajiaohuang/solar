@@ -3,6 +3,8 @@ package io.github.dajiaohuang.solaratlas;
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.URLEncoder;
+import java.util.HashSet;
+import java.util.Set;
 
 /** One bounded, cancellable source page; never walks the full inventory implicitly. */
 public final class SourceIdentityService implements Closeable {
@@ -21,6 +23,15 @@ public final class SourceIdentityService implements Closeable {
         if (previous != null) path += "&pageToken=" + URLEncoder.encode(previous.next, "UTF-8");
         SourceIdentityPage page = SourceIdentityPage.decode(transport.receive(path, 256 * 1024), manifest, base, query);
         SourceIdentityPage.require(previous == null || page.next.isEmpty() || !page.next.equals(previous.next), "Source cursor did not advance");
+        if (previous != null) {
+            SourceIdentityPage.require(page.totalRecords == previous.totalRecords, "Source inventory total changed between pages");
+            Set<String> previousIds = new HashSet<>();
+            for (SourceIdentityPage.Row row : previous.rows) previousIds.add(row.id);
+            for (SourceIdentityPage.Row row : page.rows) {
+                if (cancelled || Thread.currentThread().isInterrupted()) throw new IOException("Source query cancelled");
+                SourceIdentityPage.require(!previousIds.contains(row.id), "Source page repeats a previous-page record");
+            }
+        }
         if (cancelled || Thread.currentThread().isInterrupted()) throw new IOException("Source query cancelled");
         return page;
     }

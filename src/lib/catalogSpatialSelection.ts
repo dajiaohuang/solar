@@ -1,4 +1,15 @@
-export type CatalogSpatialView = { radius: number; aspect: number; maximumPoints: number }
+import { CATALOG_CLIP_RELATIVE_MARGIN, catalogProjection, type CatalogRotation } from './catalogProjection'
+import type { createCatalogSpatialIndex } from './catalogSpatialIndex'
+
+export type CatalogSpatialView = { mode?: 'spatial' | 'all'; radius: number; aspect: number; maximumPoints: number; rotation?: CatalogRotation; focusedRow?: number; selectedRows?: readonly number[] }
+
+// A bounded equal-area projected count layer adds the population to a view
+// without pretending that overlapping source points are individually resolved.
+export const CATALOG_SCREEN_COUNT_MAX_CELLS = 65_536
+
+// Cooperative scheduling policy, not a measured latency guarantee. Check the
+// clock only at bounded row/cell/word intervals, never once per source point.
+export const CATALOG_SELECTION_SLICE_MS = 4
 
 function hash(index: number) {
   let value = index + 1
@@ -7,43 +18,271 @@ function hash(index: number) {
   return (value ^ value >>> 15) >>> 0
 }
 
-/** Visual selection only: deterministic representatives per projected cell.
- * This neither changes orbital states nor estimates density/probability. */
+/** Visual selection only: deterministic representatives per projected cell,
+ * returned as unique source rows in strictly increasing order. This neither
+ * changes orbital states nor estimates density/probability. */
 export async function selectCatalogSpatialPoints(
   positions: Float32Array,
   count: number,
   view: CatalogSpatialView,
   cancelled: () => boolean,
   yieldToMessages: () => Promise<void>,
+  spatialIndex?: ReturnType<typeof createCatalogSpatialIndex>,
 ) {
-  if (!Number.isSafeInteger(count) || count < 0 || count * 2 > positions.length ||
-      !Number.isFinite(view.radius) || view.radius <= 0 || !Number.isFinite(view.aspect) || view.aspect <= 0 ||
-      !Number.isSafeInteger(view.maximumPoints) || view.maximumPoints < 1 || view.maximumPoints > 500_000) throw new Error('Invalid spatial catalog view')
-  const columns = Math.max(1, Math.min(view.maximumPoints, Math.floor(Math.sqrt(view.maximumPoints * view.aspect))))
-  const rows = Math.max(1, Math.floor(view.maximumPoints / columns))
-  const winners = new Uint32Array(columns * rows).fill(0xffffffff)
-  let occupied = 0, visible = 0
-  for (let start = 0; start < count; start += 20_000) {
+  let sliceStarted = performance.now()
+  const yieldSelection = async () => {
+    await yieldToMessages()
+    sliceStarted = performance.now()
+    return cancelled()
+  }
+  // Camera messages may arrive while this cooperative pass is yielding. Keep
+  // one view's projection, normalization and cell layout together throughout.
+  const { radius, aspect, maximumPoints, focusedRow } = view
+  const stride = view.rotation ? 3 : 2
+  const projection = view.rotation ? catalogProjection(view.rotation) : null
+  const horizontalExtent = radius * aspect
+  const hasFiniteHorizontalExtent = Number.isFinite(horizontalExtent) && horizontalExtent > 0
+  if (!Number.isSafeInteger(count) || count < 0 || count * stride > positions.length ||
+      !Number.isFinite(radius) || radius <= 0 || !Number.isFinite(aspect) || aspect <= 0 ||
+      !Number.isSafeInteger(maximumPoints) || maximumPoints < 1) throw new Error('Invalid spatial catalog view')
+  if (focusedRow !== undefined && (!Number.isSafeInteger(focusedRow) || focusedRow < 0 || focusedRow >= count)) throw new Error('Focused catalog row is outside the uploaded snapshot')
+  const requested = view.selectedRows?.slice() ?? []
+  if (requested.length > 256 || requested.some(row => !Number.isSafeInteger(row) || row < 0 || row >= count)) throw new Error('Selected catalog rows exceed the bounded snapshot contract')
+  const pinned = new Set<number>()
+  // Evaluate the same display projection for selected and ordinary rows.
+  // Include term magnitudes so cancellation in a rotated coordinate cannot
+  // hide Float32 rounding near an edge. Cell clamping below only assigns an
+  // admitted edge point to a representative cell; it never moves GPU points.
+  let screenX = 0, screenY = 0
+  const screen = (index: number) => {
+    const offset = index*stride
+    const ax = projection ? projection[0][0]*positions[offset] : positions[offset]
+    const bx = projection ? projection[0][1]*positions[offset+1] : 0
+    const ay = projection ? projection[1][0]*positions[offset] : 0
+    const by = projection ? projection[1][1]*positions[offset+1] : positions[offset+1]
+    const cy = projection ? projection[1][2]*positions[offset+2] : 0
+    const horizontal = ax+bx
+    const x = hasFiniteHorizontalExtent ? horizontal/horizontalExtent : horizontal/radius/aspect
+    const y = (ay+by+cy)/radius
+    if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error('Invalid spatial catalog position')
+    const horizontalMagnitude = Math.abs(ax)+Math.abs(bx)
+    const marginX = CATALOG_CLIP_RELATIVE_MARGIN*(1+(hasFiniteHorizontalExtent ? horizontalMagnitude/horizontalExtent : horizontalMagnitude/radius/aspect))
+    const marginY = CATALOG_CLIP_RELATIVE_MARGIN*(1+(Math.abs(ay)+Math.abs(by)+Math.abs(cy))/radius)
+    screenX = x; screenY = y
+    return x >= -1-marginX && x <= 1+marginX && y >= -1-marginY && y <= 1+marginY
+  }
+  for (const index of focusedRow === undefined ? requested : [focusedRow, ...requested]) {
+    if (pinned.size >= maximumPoints) break
+    if (screen(index)) pinned.add(index)
+  }
+  if (spatialIndex && (spatialIndex.positions !== positions || spatialIndex.dimensions !== stride)) throw new Error('Spatial index belongs to another catalog snapshot')
+  // Display limits can exceed this snapshot's admitted capacity. No more than
+  // count rows can win, so grid scratch must not scale with an unrelated UI
+  // ceiling (e.g. 500k representatives for a handful of loaded source rows).
+  // Keep the planner's per-admitted-row allocation bound, including empty views.
+  // The caller may request the full catalog ceiling before that many rows
+  // have arrived. Clamp scratch and output work to this admitted snapshot.
+  const cellBudget = Math.min(maximumPoints, count)-pinned.size
+  // When every uploaded row fits, screen-cell collisions must not discard
+  // otherwise visible bodies. Use one bounded slot per source row in this
+  // case; only snapshots exceeding the display budget need representatives.
+  const retainAll = count <= maximumPoints
+  const columns = retainAll ? 1 : Math.max(1, Math.min(cellBudget, Math.floor(Math.sqrt(cellBudget * aspect))))
+  const rows = retainAll ? 1 : Math.max(1, Math.floor(cellBudget / columns))
+  const cellCount = retainAll ? count : cellBudget ? columns * rows : 0
+  const countCellBudget = retainAll ? 0 : Math.min(cellBudget, CATALOG_SCREEN_COUNT_MAX_CELLS)
+  const countColumns = countCellBudget ? Math.max(1, Math.min(countCellBudget, Math.floor(Math.sqrt(countCellBudget * aspect)))) : 0
+  const countRows = countCellBudget ? Math.max(1, Math.floor(countCellBudget / countColumns)) : 0
+  const countCellCount = countColumns * countRows
+  const countCells = countCellCount ? new Uint32Array(countCellCount) : null
+  // In retain-all mode each source row owns its own cell, so no winner
+  // arbitration is needed. Write visible rows directly into membership and
+  // avoid allocating a row-sized winners array and priority-byte array.
+  const winners = retainAll ? null : new Uint32Array(cellCount).fill(0xffffffff)
+  const winnerInside = winners ? new Uint8Array(Math.ceil(winners.length / 8)) : null
+  let selected = retainAll ? new Uint32Array(Math.ceil(count / 32)) : null
+  if (selected) for (const index of pinned) selected[index >>> 5] |= 1 << (index & 31)
+  let occupied = 0, visible = 0, edgeCandidates = 0, countRowsInView = 0, occupiedCountCells = 0, maximumCellCount = 0, skippedRows = 0, testedRows = 0
+  const sliceRows = spatialIndex ? spatialIndex.blockRows * 16 : 16_384
+  for (let start = 0; start < count; start += sliceRows) {
     if (cancelled()) return null
-    const end = Math.min(count, start + 20_000)
+    const end = Math.min(count, start + sliceRows)
     for (let index = start; index < end; index++) {
-      const x = positions[index * 2] / view.radius / view.aspect, y = positions[index * 2 + 1] / view.radius
-      if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error('Invalid spatial catalog position')
-      if (x < -1 || x > 1 || y < -1 || y > 1) continue
+      // A spatial-bound rebuild itself is bounded to one 1024-row block.
+      // When that or projection/selection work is slow, service newer camera
+      // messages before finishing the older fixed 16k-row batch.
+      if (index % 1024 === 0 && performance.now()-sliceStarted >= CATALOG_SELECTION_SLICE_MS) {
+        if (await yieldSelection()) return null
+      }
+      if (spatialIndex && index % spatialIndex.blockRows === 0) {
+        const blockEnd = Math.min(count, index+spatialIndex.blockRows)
+        if (blockEnd <= end && !spatialIndex.intersects(index, blockEnd, projection, radius, aspect)) {
+          skippedRows += blockEnd-index; index = blockEnd-1; continue
+        }
+      }
+      testedRows++
+      if (!screen(index)) continue
+      const x = screenX, y = screenY
+      const inside = x >= -1 && x <= 1 && y >= -1 && y <= 1
       visible++
-      const column = Math.min(columns - 1, Math.floor((x + 1) * .5 * columns))
-      const row = Math.min(rows - 1, Math.floor((y + 1) * .5 * rows)), cell = row * columns + column
-      const previous = winners[cell]
-      if (previous === 0xffffffff) { winners[cell] = index; occupied++ }
-      else if (hash(index) < hash(previous)) winners[cell] = index
+      if (!inside) edgeCandidates++
+      if (inside && countCells) {
+        const column = Math.max(0, Math.min(countColumns - 1, Math.floor((x + 1) * .5 * countColumns)))
+        const row = Math.max(0, Math.min(countRows - 1, Math.floor((y + 1) * .5 * countRows)))
+        const cell = row * countColumns + column
+        const previousCellCount = countCells[cell]
+        if (previousCellCount === 0) occupiedCountCells++
+        if (previousCellCount === 0xffffffff) throw new Error('Catalog screen-cell count overflow')
+        const cellCount = previousCellCount + 1
+        countCells[cell] = cellCount
+        if (cellCount > maximumCellCount) maximumCellCount = cellCount
+        countRowsInView++
+      }
+      if (pinned.has(index)) continue
+      if (retainAll) {
+        selected![index >>> 5] |= 1 << (index & 31)
+        occupied++
+        continue
+      }
+      if (!cellBudget) continue
+      const column = Math.max(0, Math.min(columns - 1, Math.floor((x + 1) * .5 * columns)))
+      const row = Math.max(0, Math.min(rows - 1, Math.floor((y + 1) * .5 * rows))), cell = row * columns + column
+      const previous = winners![cell]
+      // An allowance-only point may be clipped by the GPU. It must not evict
+      // a mathematical-viewport point from an otherwise populated cell.
+      // Explicit focus/selection pins keep their independent priority.
+      if (previous === 0xffffffff) {
+        winners![cell] = index
+        if (inside) winnerInside![cell >>> 3] |= 1 << (cell & 7)
+        occupied++
+      } else {
+        const insideByte = cell >>> 3, insideMask = 1 << (cell & 7)
+        const previousInside = Boolean(winnerInside![insideByte] & insideMask)
+        if ((inside && !previousInside) || (inside === previousInside && hash(index) < hash(previous))) {
+          winners![cell] = index
+          if (inside) winnerInside![insideByte] |= insideMask
+        }
+      }
     }
-    if (end < count) await yieldToMessages()
+    if (end < count && await yieldSelection()) return null
   }
   if (cancelled()) return null
-  const indices = new Uint32Array(occupied)
+  // Bit membership preserves exactly the same source-order output without a
+  // potentially 500k-element synchronous sort. This scratch is budgeted by the
+  // stream planner and both collection stages cooperate with cancellation.
+  if (!selected) {
+    selected = new Uint32Array(Math.ceil(count / 32))
+    for (const index of pinned) selected[index >>> 5] |= 1 << (index&31)
+  }
+  if (winners) for (let start = 0; start < winners.length; start += 16_384) {
+    if (cancelled()) return null
+    const end = Math.min(winners.length, start + 16_384)
+    for (let cell = start; cell < end; cell++) {
+      if (cell % 1024 === 0 && performance.now()-sliceStarted >= CATALOG_SELECTION_SLICE_MS) {
+        if (await yieldSelection()) return null
+      }
+      const winner = winners[cell]
+      if (winner !== 0xffffffff) selected[winner >>> 5] |= 1 << (winner & 31)
+    }
+    if (end < winners.length && await yieldSelection()) return null
+  }
+  const indices = new Uint32Array(occupied+pinned.size)
   let offset = 0
-  for (const winner of winners) if (winner !== 0xffffffff) indices[offset++] = winner
-  // Keep source-order blending and make uniqueness/range validation cheap.
-  indices.sort()
-  return { indices, visible, cells: winners.length }
+  for (let start = 0; start < selected.length; start += 512) {
+    if (cancelled()) return null
+    const end = Math.min(selected.length, start + 512)
+    for (let index = start; index < end; index++) {
+      // One word enumerates at most 32 source rows. This also bounds the
+      // source-order assembly stage when most representative cells are full.
+      if (index % 32 === 0 && performance.now()-sliceStarted >= CATALOG_SELECTION_SLICE_MS) {
+        if (await yieldSelection()) return null
+      }
+      let word = selected[index]
+      while (word !== 0) {
+        const bit = 31 - Math.clz32(word & -word)
+        indices[offset++] = index * 32 + bit
+        word = (word & (word - 1)) >>> 0
+      }
+    }
+    if (end < selected.length && await yieldSelection()) return null
+  }
+  if (cancelled()) return null
+  if (offset !== occupied+pinned.size) throw new Error('Spatial catalog membership count mismatch')
+  const countOverlay = countCells ? { counts: countCells, columns: countColumns, rows: countRows,
+    sourceRows: countRowsInView, occupiedCells: occupiedCountCells, maximumCount: maximumCellCount } : undefined
+  if (countOverlay && countRowsInView !== visible-edgeCandidates) throw new Error('Catalog screen-cell count does not cover every in-viewport row')
+  return { indices, visible, edgeCandidates, cells: cellCount, testedRows, skippedRows, countOverlay }
+}
+
+/** All-row display mode keeps every computed row available to science, but
+ * submits a bounded, deterministic, strictly increasing upload-order selection
+ * to the GPU. This is display thinning, not a spatial or statistical sample. */
+export async function selectCatalogAllPoints(
+  count: number,
+  maximumPoints: number,
+  focusedRow: number | undefined,
+  selectedRows: readonly number[] | undefined,
+  cancelled: () => boolean,
+  yieldToMessages: () => Promise<void>,
+) {
+  let sliceStarted = performance.now()
+  const yieldSelection = async () => {
+    await yieldToMessages()
+    sliceStarted = performance.now()
+    return cancelled()
+  }
+  if (!Number.isSafeInteger(count) || count < 0 || !Number.isSafeInteger(maximumPoints) || maximumPoints < 1) {
+    throw new Error('Invalid all-row catalog display')
+  }
+  if (focusedRow !== undefined && (!Number.isSafeInteger(focusedRow) || focusedRow < 0 || focusedRow >= count)) {
+    throw new Error('Focused catalog row is outside the uploaded snapshot')
+  }
+  const requested = selectedRows?.slice() ?? []
+  if (requested.length > 256 || requested.some(row => !Number.isSafeInteger(row) || row < 0 || row >= count)) {
+    throw new Error('Selected catalog rows exceed the bounded snapshot contract')
+  }
+
+  const drawCount = Math.min(count, maximumPoints)
+  const pinned = new Set<number>()
+  for (const index of focusedRow === undefined ? requested : [focusedRow, ...requested]) {
+    if (pinned.size >= drawCount) break
+    pinned.add(index)
+  }
+  const sampleCount = drawCount-pinned.size
+  const samplePopulation = count-pinned.size
+  const indices = new Uint32Array(drawCount)
+  const orderedPinned = [...pinned].sort((a, b) => a-b)
+  let skippedPinned = 0, pinCursor = 0, sampleRank = 0
+  for (; sampleRank < sampleCount; sampleRank++) {
+    if (sampleRank % 1024 === 0 && performance.now()-sliceStarted >= CATALOG_SELECTION_SLICE_MS) {
+      if (await yieldSelection()) return null
+    }
+    // Select the same midpoint-spaced rank among unpinned rows without walking
+    // every omitted source row. After sorting at most 257 pins, a monotone cursor
+    // maps ranks back to upload indices in O(sampleCount + pinned.size) work.
+    const targetRank = Math.floor((sampleRank+0.5)*samplePopulation/sampleCount)
+    let sourceIndex = targetRank+skippedPinned
+    while (pinCursor < orderedPinned.length && orderedPinned[pinCursor] <= sourceIndex) {
+      skippedPinned++
+      pinCursor++
+      sourceIndex = targetRank+skippedPinned
+    }
+    indices[sampleRank] = sourceIndex
+  }
+  // Samples and pinned rows are each source ordered and disjoint. Merge from
+  // the end in place so sparse display adds no second row-sized scratch array.
+  let pinIndex = orderedPinned.length-1, sampleIndex = sampleCount-1, offset = drawCount-1
+  while (offset >= 0) {
+    if (pinIndex >= 0 && (sampleIndex < 0 || orderedPinned[pinIndex] > indices[sampleIndex])) {
+      indices[offset--] = orderedPinned[pinIndex--]
+    } else {
+      indices[offset--] = indices[sampleIndex--]
+    }
+    if ((offset+1) % 1024 === 0 && performance.now()-sliceStarted >= CATALOG_SELECTION_SLICE_MS) {
+      if (await yieldSelection()) return null
+    }
+  }
+  if (cancelled()) return null
+  if (offset !== -1 || sampleRank !== sampleCount) throw new Error('All-row catalog selection count mismatch')
+  return { indices, visible: count, edgeCandidates: 0 }
 }

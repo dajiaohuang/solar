@@ -1,8 +1,13 @@
+import { SPACECRAFT_IDENTITIES } from './spacecraftIdentities.ts'
+
 // NAIF body-center IDs. Never substitute a planetary-system barycenter for a
 // named planet; center offsets must be supplied by the satellite SPK kernels.
 export const BODY_NAIF_IDS: Record<string, number> = {
+  ...Object.fromEntries(SPACECRAFT_IDENTITIES.map(body => [body.id, body.naifId])),
   sun: 10, mercury: 199, venus: 299, earth: 399, moon: 301,
   mars: 499, jupiter: 599, saturn: 699, uranus: 799, neptune: 899, pluto: 999,
+  '67p': 1000012,
+  borisov: 1003639,
   io: 501, europa: 502, ganymede: 503, callisto: 504, titan: 606,
   ceres: 2000001, pallas: 2000002, vesta: 2000004,
   // TNO primary centers, not the 20136xxx system barycenters. Makemake's
@@ -17,7 +22,8 @@ export const BODY_NAIF_IDS: Record<string, number> = {
 
 export function bodyNaifId(body: { id: string; naifId?: number; source?: string }): number | undefined {
   // Only the backend may reconcile a pinned source record with its kernels.
-  if (body.source === 'source-inventory') return undefined
+  // Identity additions must not silently promote a schematic scene path.
+  if (body.source === 'source-inventory' || body.source === 'schematic') return undefined
   if (Number.isSafeInteger(body.naifId)) return body.naifId
   if (BODY_NAIF_IDS[body.id] !== undefined) return BODY_NAIF_IDS[body.id]
   // Only conventional numbered asteroid SPK IDs; unknown/provisional targets

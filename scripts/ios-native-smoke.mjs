@@ -1,18 +1,35 @@
 import { isDeepStrictEqual } from 'node:util'
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { createWriteStream } from 'node:fs'
 import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import http from 'node:http'
 import https from 'node:https'
 import net from 'node:net'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, posix, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { stageBackendProfile } from './stage-backend-profile.mjs'
 import { createNativeCoverageResponder, verifyNativeCoverageTraffic } from './native-coverage-fixture.mjs'
 import { createNativeIdentityResponder, verifyNativeIdentityTraffic } from './native-identity-fixture.mjs'
 
 const uuidPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i
+
+export function localFilesContainer(device, groups) {
+  if (!uuidPattern.test(device)) throw new Error('Invalid owned simulator ID')
+  const matches = groups.split(/\r?\n/).map(line =>
+    /^group\.com\.apple\.FileProvider\.LocalStorage\s+(\/[^\r\n]+)$/.exec(line.trim()))
+    .filter(Boolean)
+  if (matches.length !== 1) throw new Error('Expected one Files local-storage container')
+  const container = matches[0][1]
+  const suffix = `/Devices/${device}/data/Containers/Shared/AppGroup/`
+  const offset = container.indexOf(suffix)
+  if (offset < 0 || posix.normalize(container) !== container ||
+      !uuidPattern.test(container.slice(offset + suffix.length))) {
+    throw new Error('Files container is outside the owned simulator')
+  }
+  return container
+}
 
 export function selectSimulatorTemplate(snapshot) {
   const candidates = Object.entries(snapshot.devices ?? {}).flatMap(([runtime, devices]) =>
@@ -128,7 +145,7 @@ export function command(file, args, { env = process.env, log, timeout = 120_000,
       clearTimeout(timer)
       const complete = () => {
         if (overflow) reject(new Error(`${file} exceeded its bounded capture limit`))
-        else if (code !== 0 || expired) reject(new Error(`${file} ${expired ? 'timed out' : `exited ${code}`}\n${output}`))
+        else if (code !== 0 || expired) reject(new Error(`${file} ${args.join(' ')} ${expired ? 'timed out' : `exited ${code}`}\n${output}`))
         else resolvePromise(output.trim())
       }
       // Memory retains only a tail; consumers of the full file must wait for
@@ -193,7 +210,7 @@ export async function nativeSmoke() {
     await command(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', 'tests/unit/state-tiles-golden.test.ts'],
       { env: goldenEnv, log: join(artifact, 'real-web-golden.log') })
     await command('swiftc', ['ios/App/App/StateTileDecoder.swift', 'ios/App/App/StateTileCache.swift',
-      'ios/App/App/NativeStateProjection.swift', 'ios/App/App/NativeCoverageReport.swift', 'ios/App/App/NativeGroundContacts.swift', 'ios/App/App/NativeSourceIdentityPage.swift', 'ios/ProtocolTests/ProtocolTests.swift', '-o', join(temporary, 'protocol-tests')])
+      'ios/App/App/NativeStateProjection.swift', 'ios/App/App/NativePointGeometry.swift', 'ios/App/App/NativeCoverageReport.swift', 'ios/App/App/NativeGroundContacts.swift', 'ios/App/App/NativeStellarMotion.swift', 'ios/App/App/NativeOrbitCovariance.swift', 'ios/App/App/NativeSourceIdentityPage.swift', 'ios/ProtocolTests/ProtocolTests.swift', '-o', join(temporary, 'protocol-tests')])
     await command(join(temporary, 'protocol-tests'), [], { env: goldenEnv, log: join(artifact, 'real-swift-golden.log') })
     report.golden = JSON.parse(await readFile(join(temporary, 'real-golden/manifest.json'), 'utf8'))
     if (report.golden.plan.exactCount !== 4 || report.golden.plan.missingCount !== 3) throw new Error('Real Earth/Moon/TNO/source-only fixture must contain four exact states and three explicit gaps')
@@ -206,8 +223,42 @@ export async function nativeSmoke() {
     device = created
     report.simulator.udid = device
     await bootOwnedSimulator(device, artifact, report)
-    await command('xcrun', ['simctl', 'keychain', device, 'add-root-cert', join(temporary, 'root.crt')])
+    report.setupStep = 'install-test-certificate'
+    await command('xcrun', ['simctl', 'keychain', device, 'add-root-cert', join(temporary, 'root.crt')],
+      { log: join(artifact, 'simulator-certificate.log') })
 
+    // Use Files' independent local provider, not the tested app's Documents:
+    // XCTest installs/relaunches that app, and importing its own provider URL
+    // failed bookmark resolution before the production callback in CI.
+    // The production picker still reads the original bytes across containers.
+    report.setupStep = 'install-app'
+    await command('xcrun', ['simctl', 'install', device, resolve('build/ios-derived-data/Build/Products/Debug-iphonesimulator/App.app')],
+      { log: join(artifact, 'simulator-install.log') })
+    // Boot registers the built-in local provider and its shared container.
+    // Staging needs that container, not a foreground Files launch, which can
+    // block on cold system-app startup. The real picker is exercised by XCTest.
+    report.setupStep = 'locate-files-container'
+    const groups = await command('xcrun', ['simctl', 'get_app_container', device, 'com.apple.DocumentsApp', 'groups'])
+    await writeFile(join(artifact, 'simulator-files-container.log'), groups, { flag: 'wx' })
+    const container = localFilesContainer(device, groups)
+    if (await realpath(container) !== container) throw new Error('Files container resolves through an unexpected link')
+    const storage = join(container, 'File Provider Storage')
+    await mkdir(storage, { recursive: true })
+    if (await realpath(storage) !== storage) throw new Error('Files storage resolves through an unexpected link')
+    const documents = join(storage, 'Solar Gaia Fixtures')
+    await mkdir(documents) // Fresh owned device: never overwrite an earlier fixture.
+    report.setupStep = 'stage-original-files'
+    report.stellarSourceLocation = 'Files local provider / Solar Gaia Fixtures'
+    report.stellarSources = {}
+    for (const name of ['manifest.json', 'rows.csv']) {
+      const bytes = await readFile(resolve('tests/fixtures/gaia-six-20260923', name))
+      await writeFile(join(documents, name), bytes, { flag: 'wx' })
+      const staged = await readFile(join(documents, name))
+      if (!staged.equals(bytes)) throw new Error('Staged iOS source bytes differ from the original')
+      report.stellarSources[name] = { bytes: bytes.length, sha256: createHash('sha256').update(staged).digest('hex') }
+    }
+
+    report.setupStep = 'complete'
     await assertFreePort(18790)
     const backendLog = createWriteStream(join(artifact, 'backend.log'), { flags: 'wx' })
     backend = spawn(join(temporary, 'solar-backend'), ['-data-dir', join(temporary, 'data'), '-listen', '127.0.0.1:18790'], { stdio: ['ignore', 'pipe', 'pipe'] })
@@ -265,6 +316,8 @@ export async function nativeSmoke() {
       if (!traffic.some(row => row.path === '/contacts-fixture/'+path+'/v1/observation/contacts' && row.status === status)) throw new Error('Missing iOS contact replay UI traffic: '+path)
     }
     report.groundContactsUi = { evidence: 'real-loopback-response-replay', liveScientificService: false }
+    if (!traffic.some(row => row.path === '/v1/stellar/motion' && row.method === 'POST' && row.status === 200)) throw new Error('Missing live iOS stellar calculation traffic')
+    report.stellarMotionUi = { evidence: 'system-file-picker-to-live-go-over-https', physicalDevice: false }
     report.identityUi = verifyNativeIdentityTraffic(traffic)
     report.status = 'passed'
   } catch (error) {
@@ -281,6 +334,18 @@ export async function nativeSmoke() {
       })
     }
     if (device) {
+      // Retain importer binding/callback/read phases even when XCTest fails.
+      // This subsystem logs only lifecycle markers and counts, never source
+      // contents, security-scoped URLs or filenames from user-selected files.
+      await command('xcrun', ['simctl', 'spawn', device, 'log', 'show', '--style', 'compact', '--last', '30m',
+        '--predicate', 'subsystem == "io.github.dajiaohuang.solaratlas.stellar-import"'],
+      { log: join(artifact, 'stellar-import-lifecycle.log'), timeout: 30_000 }).catch(error => { report.importLogError = error.message })
+      // This is the isolated fixture-only simulator owned by this run. Retain
+      // provider-side diagnostics as well: no app callback does not establish
+      // whether Files selection, provider transfer or presentation failed.
+      await command('xcrun', ['simctl', 'spawn', device, 'log', 'show', '--style', 'compact', '--last', '20m',
+        '--predicate', '(process == "App" OR process CONTAINS[c] "fileprovider" OR process CONTAINS[c] "documentpicker" OR subsystem CONTAINS[c] "fileprovider" OR subsystem CONTAINS[c] "documentmanager") AND subsystem != "com.apple.dt.xctest" AND (messageType == error OR messageType == fault OR messageType == default)'],
+      { log: join(artifact, 'document-provider.log'), timeout: 30_000 }).catch(error => { report.documentProviderLogError = error.message })
       await command('xcrun', ['simctl', 'shutdown', device]).catch(error => { report.shutdownError = error.message })
       await command('xcrun', ['simctl', 'delete', device]).catch(error => { report.cleanupError = error.message })
     }

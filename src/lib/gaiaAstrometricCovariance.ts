@@ -43,5 +43,6 @@ export function gaiaAstrometricCovariance(source: GaiaSource, dimension: 5 | 6 =
     matrixUnits: 'product-of-row-and-column-coordinate-units',
     sourceSolutionParameters: source.astrometric_params_solved === 95 ? 6 : 5,
     scope: dimension === 6 ? 'six-parameter-astrometric-pseudocolour-solution' : 'five-astrometric-parameter-marginal', pseudocolourIncluded: dimension === 6,
+    correlationScope: 'approximate-within-source-only; between-source correlations omitted',
     validation: 'strict-positive-correlation-Cholesky-no-repair', includesSystematics: false, propagated: false }
 }

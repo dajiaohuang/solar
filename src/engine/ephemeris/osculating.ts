@@ -34,9 +34,30 @@ export function stateToConicDiagnostics(positionKm: Vector3, velocityKmPerSecond
   if (![hNorm, speed2, eccentricity, reciprocalSemiMajorAxisPerKm, periapsisKm, specificKeplerEnergyKm2PerSecond2].every(Number.isFinite)) return null
   const axis = 1/reciprocalSemiMajorAxisPerKm
   const nearParabolic = Math.abs(2-speed2) <= 32*Number.EPSILON*Math.max(2, speed2)
+  const definedPlane = hNorm > 0 && hNorm/Math.sqrt(speed2) > EPS
+  const elliptic = definedPlane && !nearParabolic && Number.isFinite(axis) && axis > 0 && eccentricity < 1
+  // Kepler period 2*pi*sqrt(a^3/mu), ordered without cubing a. NAIF
+  // OSCLTX defines period only for ellipses; null is our undefined sentinel.
+  const period = elliptic ? 2*Math.PI*(Math.sqrt(axis)*(axis/Math.sqrt(mu))) : NaN
+  const apoapsis = elliptic ? axis*(1+eccentricity) : NaN
   return { eccentricity, reciprocalSemiMajorAxisPerKm, nearParabolic, semiMajorAxisKm: !nearParabolic && Number.isFinite(axis) ? axis : null, periapsisKm,
-    inclinationDeg: hNorm > 0 && hNorm/Math.sqrt(speed2) > EPS ? Math.atan2(Math.hypot(h.x, h.y), h.z)*deg : null,
+    inclinationDeg: definedPlane ? Math.atan2(Math.hypot(h.x, h.y), h.z)*deg : null,
+    apoapsisKm: Number.isFinite(apoapsis) && apoapsis > 0 ? apoapsis : null,
+    orbitalPeriodSeconds: Number.isFinite(period) && period > 0 ? period : null,
     specificKeplerEnergyKm2PerSecond2 }
+}
+
+/** Reproducible duration comparison, not an observed revolution count. */
+export function orbitalTimescaleComparison(elapsedTdbSeconds: number, initialPeriodSeconds: number | null) {
+  if (!Number.isFinite(elapsedTdbSeconds) || initialPeriodSeconds !== null &&
+      (!Number.isFinite(initialPeriodSeconds) || initialPeriodSeconds <= 0)) throw new RangeError('Invalid orbital timescale inputs')
+  const ratio = initialPeriodSeconds === null ? NaN : Math.abs(elapsedTdbSeconds)/initialPeriodSeconds
+  return {
+    method: 'absolute-duration-over-initial-osculating-period-v1',
+    elapsedTdbSeconds, initialPeriodSeconds,
+    absoluteDurationInInitialPeriods: Number.isFinite(ratio) && (ratio > 0 || elapsedTdbSeconds === 0) ? ratio : null,
+    limitation: 'Timescale comparison with the initial instantaneous Newtonian ellipse; not a measured revolution count, resonance classification or long-term stability proof.',
+  }
 }
 
 /**

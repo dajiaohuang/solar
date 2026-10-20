@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -32,6 +33,8 @@ const (
 	statePlanCacheItems  = 64
 	stateTileCacheBytes  = 64 << 20
 )
+
+var errRequestJSONTooLarge = errors.New("request body exceeds configured byte limit")
 
 type statePlanRequest struct {
 	IDs       []string `json:"ids"`
@@ -103,14 +106,24 @@ type statePlanCacheEntry struct {
 	bytes int64
 }
 
+type statePlanFlight struct {
+	done chan struct{}
+	plan *statePlan
+	err  error
+}
+
 type statePlanCache struct {
-	mu       sync.Mutex
-	max      int
-	maxBytes int64
-	bytes    int64
-	ttl      time.Duration
-	items    map[string]*list.Element
-	order    *list.List
+	mu        sync.Mutex
+	max       int
+	maxBytes  int64
+	bytes     int64
+	ttl       time.Duration
+	items     map[string]*list.Element
+	order     *list.List
+	flights   map[string]*statePlanFlight
+	hits      uint64
+	builds    uint64
+	coalesced uint64
 }
 
 type stateTileCacheValue struct {
@@ -181,7 +194,10 @@ func (c *stateTileCache) lookup(key string, count bool) (stateTileCacheValue, bo
 }
 
 func (c *stateTileCache) put(key string, value stateTileCacheValue) {
-	weight := int64(len(value.raw) + len(value.etag))
+	// Charge the retained buffer capacity, key/ETag text, and a conservative
+	// allowance for the entry, list node and map slot. This is cache accounting,
+	// not an exact Go-heap or process-RSS measurement.
+	weight := int64(cap(value.raw)) + int64(len(key)) + int64(len(value.etag)) + 256
 	if weight > c.maxBytes {
 		return
 	}
@@ -224,7 +240,7 @@ func newStatePlanCache(max int, maxBytes ...int64) *statePlanCache {
 	if byteLimit < 1 {
 		byteLimit = 1
 	}
-	return &statePlanCache{max: max, maxBytes: byteLimit, ttl: statePlanTTL, items: make(map[string]*list.Element), order: list.New()}
+	return &statePlanCache{max: max, maxBytes: byteLimit, ttl: statePlanTTL, items: make(map[string]*list.Element), order: list.New(), flights: make(map[string]*statePlanFlight)}
 }
 
 func (c *statePlanCache) get(key string) (*statePlan, bool) {
@@ -246,10 +262,88 @@ func (c *statePlanCache) get(key string) (*statePlan, bool) {
 	return entry.plan, true
 }
 
-func (c *statePlanCache) put(key string, plan *statePlan) {
-	weight := statePlanResidentBytes(plan)
-	if weight > c.maxBytes {
-		return
+// load coalesces identical in-flight plan builds. Each waiter keeps its own
+// cancellation; if the builder is cancelled, a remaining waiter may retry
+// with its own context instead of inheriting that cancellation.
+func (c *statePlanCache) load(ctx context.Context, key string, build func() (*statePlan, error)) (*statePlan, error) {
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		c.mu.Lock()
+		if element := c.items[key]; element != nil {
+			entry := element.Value.(*statePlanCacheEntry)
+			if time.Since(entry.used) > c.ttl {
+				delete(c.items, key)
+				c.bytes -= entry.bytes
+				c.order.Remove(element)
+			} else {
+				entry.used = time.Now()
+				c.order.MoveToFront(element)
+				c.hits++
+				plan := entry.plan
+				c.mu.Unlock()
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+				return plan, nil
+			}
+		}
+		flight := c.flights[key]
+		leader := flight == nil
+		if leader {
+			flight = &statePlanFlight{done: make(chan struct{})}
+			c.flights[key] = flight
+			c.builds++
+		} else {
+			c.coalesced++
+		}
+		c.mu.Unlock()
+		if leader {
+			return c.buildFlight(ctx, key, flight, build)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-flight.done:
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if errors.Is(flight.err, context.Canceled) || errors.Is(flight.err, context.DeadlineExceeded) {
+			continue
+		}
+		return flight.plan, flight.err
+	}
+}
+
+func (c *statePlanCache) buildFlight(ctx context.Context, key string, flight *statePlanFlight, build func() (*statePlan, error)) (plan *statePlan, err error) {
+	finished := false
+	defer func() {
+		c.mu.Lock()
+		if finished {
+			flight.plan, flight.err = plan, err
+		} else {
+			flight.err = errors.New("state plan construction interrupted")
+		}
+		delete(c.flights, key)
+		close(flight.done)
+		c.mu.Unlock()
+	}()
+	plan, err = build()
+	if cancelled := ctx.Err(); cancelled != nil {
+		plan, err = nil, cancelled
+	} else if err != nil {
+		plan = nil
+	}
+	finished = true
+	return plan, err
+}
+
+func (c *statePlanCache) put(key string, plan *statePlan) bool {
+	weight := statePlanResidentBytes(plan) + int64(len(key)) + 256
+	if plan == nil || weight > c.maxBytes {
+		return false
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -271,16 +365,27 @@ func (c *statePlanCache) put(key string, plan *statePlan) {
 		c.bytes -= entry.bytes
 		c.order.Remove(old)
 	}
+	return true
 }
 
 func statePlanResidentBytes(plan *statePlan) int64 {
 	if plan == nil {
 		return 0
 	}
-	bytes := int64(1024 + len(plan.response.Tiles)*40)
+	// Account retained slice capacities, not only visible elements. Fixed
+	// allowances are conservative cache weights rather than measured heap size.
+	bytes := int64(1024) + int64(cap(plan.response.Tiles))*40 + int64(cap(plan.rows))*272 + int64(cap(plan.response.FieldMask))*16
+	r := plan.response
+	for _, text := range []string{r.APIVersion, r.CatalogVersion, r.CatalogManifestSHA256, r.InventoryManifestSHA256,
+		r.RequestIDsSHA256, r.PlanID, r.TimeScale, r.Frame, r.Precision, r.StateOriginID, r.DistanceUnit, r.VelocityUnit} {
+		bytes += int64(len(text))
+	}
+	for _, field := range r.FieldMask {
+		bytes += int64(len(field))
+	}
 	for _, row := range plan.rows {
 		metadata := row.metadata
-		bytes += 256 + int64(len(metadata.ID)+len(metadata.Source)+len(metadata.DatasetVersion)+len(metadata.DatasetSHA256)+len(metadata.KernelSHA256)+len(metadata.Model)+len(metadata.CenterID)+len(metadata.StateEvidence)+len(metadata.MissingReason)+len(metadata.IdentityStatus))
+		bytes += int64(len(metadata.ID) + len(metadata.Source) + len(metadata.DatasetVersion) + len(metadata.DatasetSHA256) + len(metadata.KernelSHA256) + len(metadata.SourceChainSHA256) + len(metadata.Model) + len(metadata.CenterID) + len(metadata.StateEvidence) + len(metadata.MissingReason) + len(metadata.IdentityStatus))
 		if row.state != nil {
 			bytes += statewire.Stride * 8
 		}
@@ -288,10 +393,10 @@ func statePlanResidentBytes(plan *statePlan) int64 {
 	return bytes
 }
 
-func (c *statePlanCache) stats() (items int, bytes, maxBytes int64) {
+func (c *statePlanCache) stats() (items int, bytes, maxBytes int64, hits, builds, coalesced uint64, active int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return len(c.items), c.bytes, c.maxBytes
+	return len(c.items), c.bytes, c.maxBytes, c.hits, c.builds, c.coalesced, len(c.flights)
 }
 
 func (s *Server) catalogManifest(w http.ResponseWriter, _ *http.Request) {
@@ -303,7 +408,7 @@ func (s *Server) catalogManifest(w http.ResponseWriter, _ *http.Request) {
 		"profile":               s.catalog.ManifestProfile(),
 		"contract":              s.catalog.ManifestContract(),
 		"counts":                stats,
-		"limits":                map[string]int{"maxIds": maxStatePlanIDs, "tileSizeMin": 1, "tileSizeMax": maxStateTileBodies, "defaultTileSize": defaultStateTileSize, "maxTileBytes": maxStateTileBytes, "planCacheItems": statePlanCacheItems, "planCacheBytes": statePlanCacheBytes},
+		"limits":                map[string]int{"maxIds": maxStatePlanIDs, "maxPlanBytes": maxStatePlanBytes, "tileSizeMin": 1, "tileSizeMax": maxStateTileBodies, "defaultTileSize": defaultStateTileSize, "maxTileBytes": maxStateTileBytes, "planCacheItems": statePlanCacheItems, "planCacheBytes": statePlanCacheBytes},
 	}
 	if s.inventory != nil {
 		body["inventoryManifestSha256"] = s.inventory.ManifestHash()
@@ -313,7 +418,11 @@ func (s *Server) catalogManifest(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) statePlan(w http.ResponseWriter, r *http.Request) {
 	var req statePlanRequest
-	if err := decodeOneJSON(r, &req); err != nil {
+	if err := decodeOneJSONLimit(r, &req, maxStatePlanBytes); err != nil {
+		if errors.Is(err, errRequestJSONTooLarge) {
+			s.error(w, http.StatusRequestEntityTooLarge, "plan_too_large", "state-plan request exceeds its configured JSON byte budget")
+			return
+		}
 		s.error(w, http.StatusBadRequest, "invalid_json", err.Error())
 		return
 	}
@@ -362,32 +471,36 @@ func (s *Server) buildStatePlan(ctx context.Context, req statePlanRequest, ids [
 	canonicalBytes, _ := json.Marshal(canonical)
 	planHash := sha256.Sum256(canonicalBytes)
 	planID := fmt.Sprintf("%x", planHash[:])
-	if plan, ok := s.plans.get(planID); ok {
+	return s.plans.load(ctx, planID, func() (*statePlan, error) {
+		// This estimate is deliberately conservative and is checked before any
+		// inventory read or SPK/Kepler calculation occurs.
+		maxTileBytes := s.stateTileByteBudget
+		if maxTileBytes <= 0 {
+			maxTileBytes = maxStateTileBytes
+		}
+		tiles, estimated, err := estimateStateTileBudget(len(ids), req.TileSize, maxStatePlanBytes, maxTileBytes)
+		if err != nil {
+			return nil, &stateTileBuildError{http.StatusRequestEntityTooLarge, "plan_too_large", "estimated state tile response exceeds the configured budget"}
+		}
+		tileCount := len(tiles)
+		rows, exact, missing, err := s.preparePlanRows(ctx, ids, req.EpochJD, planHash)
+		if err != nil {
+			return nil, err
+		}
+		response := statePlanResponse{APIVersion: catalog.APIVersion, CatalogVersion: s.catalog.Version(), CatalogManifestSHA256: s.catalog.ManifestHash(), PlanID: planID, EpochJD: req.EpochJD, TimeScale: req.TimeScale, Frame: req.Frame, Precision: req.Precision, StateOriginID: "naif:0", DistanceUnit: "km", VelocityUnit: "km/s", FieldMask: append([]string(nil), req.FieldMask...), BodyCount: len(ids), Stride: statewire.Stride, TileSize: req.TileSize, TileCount: tileCount, ExactCount: exact, ApproximateCount: 0, MissingCount: missing, EstimatedBytes: estimated, Tiles: tiles}
+		response.RequestIDsSHA256 = requestIDsHash(ids)
+		if s.inventory != nil {
+			response.InventoryManifestSHA256 = s.inventory.ManifestHash()
+		}
+		plan := &statePlan{response: response, rows: rows, hash: planHash, created: time.Now()}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if !s.plans.put(planID, plan) {
+			return nil, &stateTileBuildError{http.StatusRequestEntityTooLarge, "plan_too_large", "resolved state plan exceeds the resident cache budget; request fewer bodies"}
+		}
 		return plan, nil
-	}
-	// This estimate is deliberately conservative and is checked before any
-	// inventory read or SPK/Kepler calculation occurs.
-	maxTileBytes := s.stateTileByteBudget
-	if maxTileBytes <= 0 {
-		maxTileBytes = maxStateTileBytes
-	}
-	tiles, estimated, err := estimateStateTileBudget(len(ids), req.TileSize, maxStatePlanBytes, maxTileBytes)
-	if err != nil {
-		return nil, &stateTileBuildError{http.StatusRequestEntityTooLarge, "plan_too_large", "estimated state tile response exceeds the configured budget"}
-	}
-	tileCount := len(tiles)
-	rows, exact, missing, err := s.preparePlanRows(ctx, ids, req.EpochJD, planHash)
-	if err != nil {
-		return nil, err
-	}
-	response := statePlanResponse{APIVersion: catalog.APIVersion, CatalogVersion: s.catalog.Version(), CatalogManifestSHA256: s.catalog.ManifestHash(), PlanID: planID, EpochJD: req.EpochJD, TimeScale: req.TimeScale, Frame: req.Frame, Precision: req.Precision, StateOriginID: "naif:0", DistanceUnit: "km", VelocityUnit: "km/s", FieldMask: append([]string(nil), req.FieldMask...), BodyCount: len(ids), Stride: statewire.Stride, TileSize: req.TileSize, TileCount: tileCount, ExactCount: exact, ApproximateCount: 0, MissingCount: missing, EstimatedBytes: estimated, Tiles: tiles}
-	response.RequestIDsSHA256 = requestIDsHash(ids)
-	if s.inventory != nil {
-		response.InventoryManifestSHA256 = s.inventory.ManifestHash()
-	}
-	plan := &statePlan{response: response, rows: rows, hash: planHash, created: time.Now()}
-	s.plans.put(planID, plan)
-	return plan, nil
+	})
 }
 
 func requestIDsHash(ids []string) string {
@@ -500,12 +613,6 @@ dispatch:
 }
 
 func (s *Server) preparePlanBlock(ctx context.Context, ids []string, epoch float64) ([]statePlanRow, int, int, error) {
-	release, err := s.compute.acquire(ctx, computeClass(ctx))
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	defer release()
-
 	rows := make([]statePlanRow, len(ids))
 	unknown := make([]string, 0)
 	for n, id := range ids {
@@ -589,7 +696,7 @@ func (s *Server) resolvePlanRows(ctx context.Context, rows []statePlanRow, epoch
 	if err := ctx.Err(); err != nil {
 		return nil, 0, 0, err
 	}
-	operational, found, evidence, err := s.catalog.EvalBatchContext(ctx, operationalIDs, epoch)
+	operational, found, evidence, err := s.catalogOperationalStates(ctx, operationalIDs, epoch)
 	if err != nil {
 		return nil, 0, 0, err
 	}
@@ -604,14 +711,22 @@ func (s *Server) resolvePlanRows(ctx context.Context, rows []statePlanRow, epoch
 				state, ok := operational[row.catalogBody.ID]
 				if found[row.catalogBody.ID] && ok && finiteState(state) {
 					provenance, provenanceOK := evidence[row.catalogBody.ID]
-					if !provenanceOK {
+					if !provenanceOK || strings.TrimSpace(provenance.Source) == "" || !validProvenanceSHA256(provenance.KernelSHA256) {
 						row.metadata.MissingReason = "kernel-provenance-unavailable"
+						missing++
+						continue
+					}
+					if !validProvenanceSHA256(provenance.SourceChainSHA256) {
+						row.metadata.MissingReason = "source-chain-provenance-unavailable"
 						missing++
 						continue
 					}
 					row.metadata.Source = provenance.Source
 					row.metadata.KernelSHA256 = provenance.KernelSHA256
-					row.metadata.CenterID = provenance.CenterID
+					row.metadata.SourceChainSHA256 = provenance.SourceChainSHA256
+					// All states in this plan are barycentric ECLIPJ2000 states;
+					// the selected segment's center is not the resolved state's origin.
+					row.metadata.CenterID = "naif:0"
 					row.metadata.ValidityStartET = provenance.ValidityStartET
 					row.metadata.ValidityEndET = provenance.ValidityEndET
 					row.metadata.ValidityPresent = provenance.ValidityPresent
@@ -633,7 +748,7 @@ func (s *Server) resolvePlanRows(ctx context.Context, rows []statePlanRow, epoch
 			continue
 		}
 		if row.record != nil {
-			result, resolveErr := s.resolveInventoryStateWithOperational(ctx, *row.record, epoch, false, operational, found, evidence)
+			result, resolveErr := s.resolveInventoryStateWithOperational(ctx, *row.record, epoch, operational, found, evidence)
 			if resolveErr != nil {
 				return nil, 0, 0, resolveErr
 			}
@@ -641,14 +756,21 @@ func (s *Server) resolvePlanRows(ctx context.Context, rows []statePlanRow, epoch
 				if result.Model == "spk-original" {
 					catalogID := "naif:" + strconv.Itoa(row.record.NAIFID)
 					provenance, provenanceOK := evidence[catalogID]
-					if !provenanceOK {
+					if !provenanceOK || strings.TrimSpace(provenance.Source) == "" || !validProvenanceSHA256(provenance.KernelSHA256) {
 						row.metadata.MissingReason = "kernel-provenance-unavailable"
+						missing++
+						continue
+					}
+					if !validProvenanceSHA256(provenance.SourceChainSHA256) {
+						row.metadata.MissingReason = "source-chain-provenance-unavailable"
 						missing++
 						continue
 					}
 					row.metadata.Source = provenance.Source
 					row.metadata.KernelSHA256 = provenance.KernelSHA256
-					row.metadata.CenterID = provenance.CenterID
+					row.metadata.SourceChainSHA256 = provenance.SourceChainSHA256
+					// Inventory identities use the same barycentric state contract.
+					row.metadata.CenterID = "naif:0"
 					row.metadata.ValidityStartET = provenance.ValidityStartET
 					row.metadata.ValidityEndET = provenance.ValidityEndET
 					row.metadata.ValidityPresent = provenance.ValidityPresent
@@ -658,18 +780,27 @@ func (s *Server) resolvePlanRows(ctx context.Context, rows []statePlanRow, epoch
 					if segmentOK {
 						kernelHash, hashOK = s.catalog.KernelSHA256(segment.KernelID)
 					}
-					if !segmentOK || !hashOK {
+					if !segmentOK || !hashOK || kernelHash != row.record.KernelEvidence.SourceKernelSHA256 {
 						row.metadata.MissingReason = "kernel-provenance-unavailable"
+						missing++
+						continue
+					}
+					if strings.TrimSpace(row.record.IdentityStatus) == "" {
+						row.metadata.MissingReason = "source-identity-status-unavailable"
+						missing++
+						continue
+					}
+					if !validProvenanceSHA256(row.record.KernelEvidence.SourceChainSHA256) {
+						row.metadata.MissingReason = "source-chain-provenance-unavailable"
 						missing++
 						continue
 					}
 					row.metadata.Source = segment.KernelID
 					row.metadata.KernelSHA256 = kernelHash
-					if segment.Center != 0 {
-						row.metadata.CenterID = "naif:" + strconv.Itoa(segment.Center)
-					}
-					// A snapshot is valid only at its declared audit epoch;
-					// retain the wider kernel segment separately as evidence.
+					row.metadata.SourceChainSHA256 = row.record.KernelEvidence.SourceChainSHA256
+					// Inventory snapshots store barycentric coordinates evaluated from
+					// the same recursively resolved source pool.
+					row.metadata.CenterID = "naif:0"
 					row.metadata.ValidityStartET = row.record.KernelEvidence.AuditET
 					row.metadata.ValidityEndET = row.record.KernelEvidence.AuditET
 					row.metadata.ValidityPresent = finite(row.record.KernelEvidence.AuditET)
@@ -695,20 +826,22 @@ func (s *Server) resolvePlanRows(ctx context.Context, rows []statePlanRow, epoch
 	return rows, exact, missing, nil
 }
 
-func (s *Server) catalogOperationalStates(ctx context.Context, ids []string, epoch float64) (map[string]catalog.State, map[string]bool, error) {
+func (s *Server) catalogOperationalStates(ctx context.Context, ids []string, epoch float64) (map[string]catalog.State, map[string]bool, map[string]catalog.OperationalProvenance, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	// Catalog's resolver is shared by plan and tile-era endpoints. It is
 	// synchronous, so check cancellation on both sides of the bounded call.
-	states, found, err := s.catalog.OperationalStatesContext(ctx, ids, epoch)
+	class := computeClass(ctx)
+	states, found, evidence, err := s.catalog.EvalBatchContextWithAdmission(ctx, ids, epoch, strconv.Itoa(int(class)),
+		func(evalCtx context.Context) (func(), error) { return s.compute.acquire(evalCtx, class) })
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return states, found, nil
+	return states, found, evidence, nil
 }
 
 func (s *Server) stateTiles(w http.ResponseWriter, r *http.Request) {
@@ -812,7 +945,7 @@ func (s *Server) encodeStateTileWithWait(ctx context.Context, plan *statePlan, s
 	if err := ctx.Err(); err != nil {
 		return stateTileCacheValue{}, err
 	}
-	sum := sha256.Sum256(raw[200:])
+	sum := sha256.Sum256(raw[statewire.HeaderSize:])
 	etag := `"` + fmt.Sprintf("%x", sum[:]) + `"`
 	return stateTileCacheValue{raw: raw, etag: etag}, nil
 }
@@ -855,14 +988,26 @@ func estimateStateTileBudget(bodyCount, tileSize int, maxPlanBytes, maxTileBytes
 }
 
 func decodeOneJSON(r *http.Request, out any) error {
+	return decodeOneJSONLimit(r, out, maxBodyBytes)
+}
+
+func decodeOneJSONLimit(r *http.Request, out any, maximum int64) error {
 	// LimitReader fabricates EOF at the limit, accepting a valid prefix even
 	// when another JSON value or oversized whitespace follows it.
-	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, maxBodyBytes))
+	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, maximum))
 	if err := dec.Decode(out); err != nil {
+		var limit *http.MaxBytesError
+		if errors.As(err, &limit) {
+			return errRequestJSONTooLarge
+		}
 		return fmt.Errorf("request body is not valid JSON")
 	}
 	var extra any
 	if err := dec.Decode(&extra); err != io.EOF {
+		var limit *http.MaxBytesError
+		if errors.As(err, &limit) {
+			return errRequestJSONTooLarge
+		}
 		return fmt.Errorf("request body must contain one JSON object")
 	}
 	return nil
@@ -878,33 +1023,31 @@ func exactModel(body catalog.Body) string {
 	return "exact-only"
 }
 
-func epochWithin(start, end, epoch float64) bool {
-	return finite(start) && finite(end) && end >= start && epoch >= 2451545.0+start/86400 && epoch <= 2451545.0+end/86400
-}
-
 func epochMatchesEvidence(record inventory.Record, epochJD float64) bool {
-	if record.KernelEvidence == nil || !finite(record.KernelEvidence.AuditET) {
+	if record.KernelEvidence == nil || !finite(record.KernelEvidence.AuditET) || !finite(epochJD) {
 		return false
 	}
-	auditJD := 2451545.0 + record.KernelEvidence.AuditET/86400
-	return mathAbs(epochJD-auditJD) < 1e-9 && evidenceTargetMatches(record) && evidenceWindowMatches(record)
+	epochET := (epochJD - 2451545.0) * 86400.0
+	return finite(epochET) && math.Abs(epochET-record.KernelEvidence.AuditET) <= statewire.EpochRoundingAllowanceETSeconds && evidenceTargetMatches(record) && evidenceWindowMatches(record)
 }
 
 func matchingEvidenceSegment(record inventory.Record) (inventory.KernelSegment, bool) {
-	if record.KernelEvidence == nil {
+	if record.KernelEvidence == nil || record.KernelEvidence.SourceSegment == nil {
 		return inventory.KernelSegment{}, false
 	}
-	for _, segment := range record.KernelEvidence.Segments {
-		if segment.KernelID != "" && finite(segment.StartET) && finite(segment.EndET) && segment.EndET >= segment.StartET && segment.StartET <= record.KernelEvidence.AuditET && segment.EndET >= record.KernelEvidence.AuditET && segment.Frame == 1 && (segment.Type == 2 || segment.Type == 3 || segment.Type == 17 || segment.Type == 21) {
-			return segment, true
+	segment := *record.KernelEvidence.SourceSegment
+	if segment.KernelID == "" || !finite(segment.StartET) || !finite(segment.EndET) || segment.EndET < segment.StartET || segment.StartET > record.KernelEvidence.AuditET || segment.EndET < record.KernelEvidence.AuditET || (segment.Frame != 1 && segment.Frame != 17) || (segment.Type != 1 && segment.Type != 2 && segment.Type != 3 && segment.Type != 17 && segment.Type != 21) {
+		return inventory.KernelSegment{}, false
+	}
+	listed := false
+	for _, candidate := range record.KernelEvidence.Segments {
+		if candidate == segment {
+			listed = true
+			break
 		}
 	}
-	return inventory.KernelSegment{}, false
-}
-
-func mathAbs(v float64) float64 {
-	if v < 0 {
-		return -v
+	if !listed {
+		return inventory.KernelSegment{}, false
 	}
-	return v
+	return segment, true
 }

@@ -4,6 +4,7 @@ import {
   subtractVector3,
   vector3Magnitude,
 } from '../../lib/ephemeris'
+import { angularSeparationRadians } from '../events/angularSeparation'
 import type { Vector3 } from '../../types'
 
 export type MoonPhaseName =
@@ -43,13 +44,8 @@ export function computeMoonPhase(
   const earthToSun = subtractVector3(sunHeliocentric, earthHeliocentric)
   const earthToMoon = subtractVector3(moonHeliocentric, earthHeliocentric)
 
-  const phaseCos = clamp(
-    dotVector3(moonToSun, moonToEarth) /
-      Math.max(vector3Magnitude(moonToSun) * vector3Magnitude(moonToEarth), Number.EPSILON),
-    -1,
-    1,
-  )
-  const phaseAngle = Math.acos(phaseCos)
+  const phaseAngle = angularSeparationRadians(moonToSun, moonToEarth)
+  const phaseCos = clamp(Math.cos(phaseAngle), -1, 1)
   const illuminatedFraction = (1 + phaseCos) / 2
 
   const sunLength = Math.max(vector3Magnitude(earthToSun), Number.EPSILON)

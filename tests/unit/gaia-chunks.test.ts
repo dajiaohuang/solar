@@ -30,6 +30,20 @@ test('rejects modified hashes and epoch/budget violations before publishing', as
   const bad = structuredClone(manifest); bad.chunks[0].path = '../outside.json'
   await expect(streamGaiaChunks({ ...options, manifest: bad })).rejects.toThrow(/descriptor/)
 })
+test('verifies decoded Gaia chunks from compressed chunked HTTP responses', async () => {
+  const publish = vi.fn(async () => {})
+  const result = await streamGaiaChunks({ manifest, region, baseUrl: 'https://example.test/gaia/', signal: new AbortController().signal,
+    fetcher: vi.fn(async () => new Response(raw, { headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip' } })), onChunk: publish })
+  expect(result.verifiedRows).toBe(19)
+  expect(publish).toHaveBeenCalledTimes(1)
+})
+test('rejects decoded Gaia expansion beyond its manifest size before publication', async () => {
+  const publish = vi.fn(async () => {})
+  await expect(streamGaiaChunks({ manifest, region, baseUrl: 'https://example.test/gaia/', signal: new AbortController().signal,
+    fetcher: vi.fn(async () => new Response(Buffer.concat([raw, Buffer.from(' ')]), { headers: { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip', 'Content-Length': '1' } })),
+    onChunk: publish })).rejects.toThrow(/exceeds/)
+  expect(publish).not.toHaveBeenCalled()
+})
 async function syntheticPartition() {
   // Synthetic queue/budget geometry only; never a scientific or capacity oracle.
   const source = JSON.parse(raw.toString()).sources[0], files = new Map<string, Uint8Array>()
@@ -61,6 +75,48 @@ test('parallel waves respect consumer backpressure and independent row admission
   release(); const result = await pending
   expect(result.verifiedChunks).toBe(3); expect(result.peakReservedRows).toBe(2)
   expect(fetcher).toHaveBeenCalledTimes(3)
+})
+test('out-of-order chunk reads preserve descriptor decode and callback order', async () => {
+  const { files, manifest: m } = await syntheticPartition()
+  let releaseFirst!: () => void, markSecondRead!: () => void
+  const firstHeld = new Promise<void>(resolve => { releaseFirst = resolve })
+  const secondReadReturned = new Promise<void>(resolve => { markSecondRead = resolve })
+  const paths: string[] = []
+  const fetcher = vi.fn(async (url: URL | RequestInfo) => {
+    const path = String(url).split('/').at(-1)!
+    if (path === m.chunks[0].path) await firstHeld
+    else if (path === m.chunks[1].path) markSecondRead()
+    return response(files.get(path)!)
+  })
+  const onChunk = vi.fn(async (chunk: GaiaChunk) => { paths.push(chunk.descriptor.path) })
+  const pending = streamGaiaChunks({ manifest:m, region, baseUrl:'https://example.test/gaia/', signal:new AbortController().signal,
+    concurrency:3, consumerConcurrency:2, fetcher, onChunk })
+  let waitedForFirstRead: boolean
+  try {
+    await secondReadReturned
+    await new Promise(resolve => setTimeout(resolve, 0))
+    waitedForFirstRead = onChunk.mock.calls.length === 0
+  } finally { releaseFirst() }
+  await pending
+  expect(waitedForFirstRead).toBe(true)
+  expect(paths).toEqual(m.chunks.map(chunk => chunk.path))
+})
+test('expanded default byte and row reservations overlap up to three small shards', async () => {
+  const { files, manifest: m } = await syntheticPartition()
+  const fetcher = vi.fn(async (url: URL | RequestInfo) => response(files.get(String(url).split('/').at(-1)!)!))
+  const result = await streamGaiaChunks({ manifest:m, region, baseUrl:'https://example.test/gaia/', signal:new AbortController().signal,
+    fetcher, onChunk:async () => {} })
+  expect(result.loadingBudget).toEqual({ concurrency:8, maxInFlightBytes:96*1024*1024,
+    maxInFlightRows:90_000, maxTotalBytes:128*1024*1024 })
+  expect(result.peakActiveChunks).toBe(3)
+})
+test('expanded in-flight budget ceilings remain bounded and reject before reads', async () => {
+  const { manifest:m } = await syntheticPartition(), fetcher = vi.fn()
+  const options = { manifest:m, region, baseUrl:'https://example.test/gaia/', signal:new AbortController().signal,
+    fetcher:fetcher as typeof fetch, onChunk:async () => {} }
+  await expect(streamGaiaChunks({ ...options, maxInFlightBytes:128*1024*1024+1 })).rejects.toThrow(/budget/)
+  await expect(streamGaiaChunks({ ...options, maxInFlightRows:120_001 })).rejects.toThrow(/budget/)
+  expect(fetcher).not.toHaveBeenCalled()
 })
 test('cancelling while a consumer is active prevents queued publication and later requests', async () => {
   const { files, manifest: m } = await syntheticPartition(), controller = new AbortController()

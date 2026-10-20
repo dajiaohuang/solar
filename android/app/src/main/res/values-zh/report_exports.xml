@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="report_export_orbit">轨道报告快照</string>
+    <string name="report_export_stellar">恒星报告快照</string>
+    <string name="report_export_contacts">地面接触报告快照</string>
+    <string name="report_export_saved">%1$s已保存。</string>
+    <string name="report_export_failed">无法保存%1$s。若已开始写入，可能留有不完整文件。</string>
+    <string name="report_export_not_queued">%1$s未加入导出队列。导出容量暂不可用，请在此前导出完成后重试。</string>
+</resources>

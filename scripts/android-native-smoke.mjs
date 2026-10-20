@@ -16,6 +16,15 @@ import { createNativeIdentityResponder, verifyNativeIdentityTraffic } from './na
 import { pinnedNativeInventory, realDirectoryPrefix, realDirectoryScenario, verifyRealDirectoryTraffic } from './native-real-directory.mjs'
 
 const appId = 'io.github.dajiaohuang.solaratlas'
+
+export function verifyStellarExport(bytes, traffic) {
+  const replies = traffic.filter(row => row.path === '/v1/stellar/motion' && row.method === 'POST' && row.status === 200)
+  const sha256 = createHash('sha256').update(bytes).digest('hex')
+  if (!bytes.length || replies.length !== 1 || replies[0].bytes !== bytes.length || replies[0].sha256 !== sha256) {
+    throw new Error('Android stellar export differs from the live HTTP response')
+  }
+  return { bytes: bytes.length, sha256, destinationPickerAutomated: false, evidence: 'export-button-to-content-resolver-write-with-stubbed-destination' }
+}
 const windows = process.platform === 'win32'
 
 export function verifyInstrumentation(output) {
@@ -102,6 +111,7 @@ export async function androidNativeSmoke() {
     const inventory = await pinnedNativeInventory(process.env.SOLAR_ANDROID_INVENTORY_DIR, process.env.SOLAR_ANDROID_INVENTORY_SHA256)
     report.source = { commit: await command('git', ['rev-parse', 'HEAD']), files: {} }
     for (const file of ['scripts/android-native-smoke.mjs', 'scripts/ios-native-smoke.mjs', 'scripts/native-coverage-fixture.mjs', 'scripts/native-identity-fixture.mjs', 'scripts/native-real-directory.mjs',
+      'android/app/build.gradle',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/MainActivity.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/NativeObservationDeck.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/NativeProjectionPrefetch.java',
@@ -113,6 +123,9 @@ export async function androidNativeSmoke() {
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/GroundContactsReport.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/GroundContactsService.java',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/GroundContactsPanel.java',
+      ...['StellarMotionRequest','StellarMotionReport','StellarMotionService','StellarMotionPanel','StellarSourceImport'].map(name => 'android/app/src/main/java/io/github/dajiaohuang/solaratlas/'+name+'.java'),
+      'android/app/src/main/res/values/strings.xml', 'android/app/src/main/res/values-zh/strings.xml',
+      'tests/fixtures/gaia-six-20260923/manifest.json', 'tests/fixtures/gaia-six-20260923/rows.csv',
       'android/app/src/main/res/values/contacts.xml', 'android/app/src/main/res/values-zh/contacts.xml',
       'tests/fixtures/ground-contacts-api-dallas.json',
       'android/app/src/main/java/io/github/dajiaohuang/solaratlas/CoverageReport.java',
@@ -216,7 +229,9 @@ export async function androidNativeSmoke() {
         path: isRealDirectory ? '/' + request.url.slice(realDirectoryPrefix.length) : request.url, method: request.method, headers: request.headers }, incoming => {
         row.status = incoming.statusCode; traffic.push(row)
         response.writeHead(incoming.statusCode, incoming.headers)
-        incoming.on('data', bytes => { row.bytes += bytes.length }); incoming.pipe(response)
+        const hash = createHash('sha256')
+        incoming.on('data', bytes => { row.bytes += bytes.length; hash.update(bytes) })
+        incoming.on('end', () => { row.sha256 = hash.digest('hex') }); incoming.pipe(response)
       })
       upstream.on('error', () => { if (!response.headersSent) response.writeHead(502); response.end() })
       upstream.setTimeout(30_000, () => upstream.destroy()); response.on('close', () => upstream.destroy()); request.pipe(upstream)
@@ -226,11 +241,19 @@ export async function androidNativeSmoke() {
     // Package install and SystemUI boot can steal focus from the activity
     // window. Wake and dismiss the keyguard again immediately before Espresso.
     await unlockOwnedEmulator(deviceCommand)
+    // Test APK assets are copied by the app UID into its private cache. Files
+    // created by adb in scoped external storage are not necessarily app-readable.
+    const stellarManifest = await readFile(resolve('tests/fixtures/gaia-six-20260923/manifest.json'))
+    const stellarRows = await readFile(resolve('tests/fixtures/gaia-six-20260923/rows.csv'))
     // Test APK trusts only this temporary CA. Production TLS and hostname
     // validation remain unchanged; no root cert is installed on the host/device.
     const output = await command(adb, ['-s', serial, 'shell', 'am', 'instrument', '-w', '-r',
       '-e', 'class', `${appId}.ObservationUITest`, '-e', 'solarBackend', 'https://127.0.0.1:18791',
       ...(realScenario ? ['-e', 'solarRealDirectory', Buffer.from(JSON.stringify(realScenario)).toString('base64')] : []),
+      '-e', 'solarStellarManifestBytes', String(stellarManifest.length),
+      '-e', 'solarStellarRowsBytes', String(stellarRows.length),
+      '-e', 'solarStellarManifestHash', createHash('sha256').update(stellarManifest).digest('base64'),
+      '-e', 'solarStellarRowsHash', createHash('sha256').update(stellarRows).digest('base64'),
       '-e', 'solarCaBase64', (await readFile(join(temporary, 'root.crt'))).toString('base64'), `${appId}.test/androidx.test.runner.AndroidJUnitRunner`],
     { env, log: join(artifact, 'instrumentation.log'), timeout: 240_000 })
     verifyInstrumentation(output); verifyTraffic(traffic.filter(row => !row.path.startsWith('/contacts-fixture/') && !row.path.startsWith('/coverage-fixture/') && !row.path.startsWith('/identity-fixture/') && !row.path.startsWith(realDirectoryPrefix)))
@@ -238,6 +261,8 @@ export async function androidNativeSmoke() {
     for (const [path, status] of [['valid', 200], ['unavailable', 503]]) {
       if (!traffic.some(row => row.path === '/contacts-fixture/'+path+'/v1/observation/contacts' && row.status === status)) throw new Error('Missing ground-contact replay UI traffic: '+path)
     }
+    if (!traffic.some(row => row.path === '/v1/stellar/motion' && row.method === 'POST' && row.status === 200)) throw new Error('Missing live stellar computation traffic')
+    report.stellarMotionUi = { evidence:'original-files-to-live-go-over-https', systemPickerAutomated:false, physicalDevice:false }
     report.groundContactsUi = { evidence: 'real-loopback-response-replay', liveScientificService: false }
     report.identityUi = verifyNativeIdentityTraffic(traffic)
     report.coverageUi = verifyNativeCoverageTraffic(traffic)
@@ -260,6 +285,10 @@ export async function androidNativeSmoke() {
     await stop(backend); await stop(device)
     await removeOwnedAndroidTemporary(temporary).catch(error => { report.temporaryCleanupError = error.message })
     report.traffic = traffic
+    if (report.status === 'passed') {
+      try { report.stellarExport = verifyStellarExport(await readFile(join(artifact, 'screenshots', 'stellar-export.json')), traffic) }
+      catch (error) { report.evidenceError = error.message }
+    }
     if (report.evidenceError || report.deviceCleanupError || report.temporaryCleanupError) report.status = 'failed'
     await writeFile(join(artifact, 'report.json'), JSON.stringify(report, null, 2), { flag: 'wx' })
   }

@@ -6,6 +6,14 @@ for individual records in authoritative source snapshots before adding runtime
 support. **Inventory membership is not selectability, renderability, unique-body
 reconciliation, or high-precision ephemeris coverage.**
 
+Inventory and identity `nextPageToken` values are opaque and bind their position
+to the exact inventory manifest SHA-256 and normalized query SHA-256. Reuse a
+token only with the same source snapshot and query. Changing either requires
+restarting from an empty token; legacy tokens without this binding are rejected.
+The envelope is a consistency check, not an authorization signature. Clients
+must continue verifying response provenance and must not interpret a completed
+page request as proof of complete inventory coverage.
+
 ## Generate and verify
 
 Use Node.js 22.18+ (or a newer supported Node version with TypeScript stripping).
@@ -29,6 +37,21 @@ past J2000. `--audit-et` accepts a finite TDB second value; it is not a civil UT
 timestamp. Kernel availability is evaluated at that epoch only, with full
 position/velocity center-chain resolution. Segment intervals are also retained;
 this does not certify accuracy throughout a time window.
+
+The generator defaults to `--profile pages`; use `--profile full` explicitly
+for the backend's full kernel manifest. The selected profile and manifest hash
+are retained in `manifest.kernels` and printed in the command result. The
+manifest's declared profile must match the requested profile. For example,
+after source integration, prepare a new full-profile inventory with:
+
+```powershell
+rtk node --experimental-strip-types scripts/build-body-inventory.mjs --sources .cache/body-sources-1 --output .cache/body-inventory-full-1 --profile full
+```
+
+This is a later execution step, not evidence that regeneration has occurred.
+Kernel reads preserve manifest order with at most four concurrent readers,
+admit at most 128 MiB per file, and allocate only the declared byte count after
+checking the opened file's size. Original-byte SHA-256 still verifies contents.
 
 Ordinary builds, tests and native project checks do not run the download
 command. No new runtime service or dependency is required. Raw snapshots and
@@ -115,8 +138,8 @@ public observations cannot be filled by invented data.
 
 `scripts/audit-body-coverage.mjs` now produces a separate developer audit from
 the validated addressable inventory. It defaults to the **full** SPK profile;
-the inventory generator's older Pages audit is not reused as full-profile
-evidence. Supply a requested TDB window explicitly:
+an input inventory's earlier state claims are remapped and reevaluated against
+the requested profile rather than reused. Supply a requested TDB window explicitly:
 
 ```bash
 node --experimental-strip-types scripts/audit-body-coverage.mjs --inventory .cache/body-inventory-1 --sources .cache/body-sources-1 --output .cache/body-coverage-1 --profile full --start-et 631108800 --end-et 978264000

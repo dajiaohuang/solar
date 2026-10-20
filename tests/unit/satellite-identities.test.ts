@@ -26,7 +26,7 @@ describe('selectable satellite identity catalog', () => {
       expect(body.radiusKm).toBeUndefined()
       expect(defaultSelectedBodyIds).not.toContain(body.id)
     }
-    expect(defaultSelectedBodyIds).toHaveLength(19)
+    expect(defaultSelectedBodyIds).toHaveLength(21)
     expect(additions.filter(body => body.naifId === undefined)).toHaveLength(1)
     expect(satelliteIdentity(majorBodiesById.get('naif:65304')!)?.name).toBe('S/2009 S2')
   })

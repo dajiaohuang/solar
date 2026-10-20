@@ -55,6 +55,12 @@ describe('MPCORB pipeline parser', () => {
     expect(parseMpcorbLine(optionalBlank.join('')).record?.absoluteMagnitude).toBeUndefined()
   })
 
+  it('treats the MPCORB 99.99 H sentinel as unavailable', () => {
+    const withoutMagnitude = fixedWidthLine().replace('1 Ceres', '999 Sample').split('')
+    withoutMagnitude.splice(8, 5, ...'99.99')
+    expect(parseMpcorbLine(withoutMagnitude.join('')).record?.absoluteMagnitude).toBeUndefined()
+  })
+
   it('classifies q < 1.665 AU objects and keeps unknown flags out of the main belt', () => {
     expect(classifyOrbit(0)).toMatchObject({ orbitClassCode: 'MBA' })
     expect(classifyOrbit(5)).toMatchObject({ orbitClassCode: 'MCR' })

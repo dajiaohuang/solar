@@ -13,6 +13,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -90,13 +91,16 @@ type indexFields struct {
 // current-state identities. Avoid decoding Orbit and other large source
 // fields for every one of the 1.5M rows during startup.
 type indexKernelEvidence struct {
-	AuditET           float64              `json:"auditEt"`
-	Target            int                  `json:"target"`
-	Segments          []indexKernelSegment `json:"segments"`
-	StateAtAuditEpoch *indexEvidenceState  `json:"stateAtAuditEpoch"`
+	AuditET            float64             `json:"auditEt"`
+	Target             int                 `json:"target"`
+	SourceKernelSHA256 string              `json:"sourceKernelSha256"`
+	SourceChainSHA256  string              `json:"sourceChainSha256"`
+	SourceSegment      *indexKernelSegment `json:"sourceSegment"`
+	StateAtAuditEpoch  *indexEvidenceState `json:"stateAtAuditEpoch"`
 }
 type indexKernelSegment struct {
 	KernelID string  `json:"kernelId"`
+	Center   int     `json:"center"`
 	StartET  float64 `json:"startEt"`
 	EndET    float64 `json:"endEt"`
 	Frame    int     `json:"frame"`
@@ -114,19 +118,18 @@ type indexVector struct {
 
 func validIndexSnapshotEvidence(fields indexFields) bool {
 	e := fields.KernelEvidence
-	if e == nil || e.StateAtAuditEpoch == nil || !finiteIndex(e.AuditET) || (e.Target != 0 && fields.NAIFID != 0 && e.Target != fields.NAIFID) {
+	if e == nil || e.StateAtAuditEpoch == nil || e.SourceSegment == nil || e.SourceSegment.KernelID == "" || !validSHA256(e.SourceKernelSHA256) || !validSHA256(e.SourceChainSHA256) || !finiteIndex(e.AuditET) || (e.Target != 0 && fields.NAIFID != 0 && e.Target != fields.NAIFID) {
+		return false
+	}
+	segment := e.SourceSegment
+	if !finiteIndex(segment.StartET) || !finiteIndex(segment.EndET) || segment.EndET < segment.StartET || segment.StartET > e.AuditET || segment.EndET < e.AuditET || (segment.Frame != 1 && segment.Frame != 17) || (segment.Type != 1 && segment.Type != 2 && segment.Type != 3 && segment.Type != 17 && segment.Type != 21) {
 		return false
 	}
 	s := e.StateAtAuditEpoch
 	if !finiteIndex(s.Position.X) || !finiteIndex(s.Position.Y) || !finiteIndex(s.Position.Z) || !finiteIndex(s.Velocity.X) || !finiteIndex(s.Velocity.Y) || !finiteIndex(s.Velocity.Z) {
 		return false
 	}
-	for _, segment := range e.Segments {
-		if segment.KernelID != "" && finiteIndex(segment.StartET) && finiteIndex(segment.EndET) && segment.EndET >= segment.StartET && segment.StartET <= e.AuditET && segment.EndET >= e.AuditET && segment.Frame == 1 && (segment.Type == 2 || segment.Type == 3 || segment.Type == 17 || segment.Type == 21) {
-			return true
-		}
-	}
-	return false
+	return true
 }
 
 func finiteIndex(value float64) bool { return !math.IsNaN(value) && !math.IsInf(value, 0) }
@@ -163,7 +166,7 @@ type Inventory struct {
 	// index has been built and temporary decode/sort buffers have been released.
 	// It is evidence for this load and runtime, not a portable allocator size.
 	indexHeapBytes uint64
-	sources        map[string]struct{}
+	sourceCounts   map[string]int
 	models         map[string]map[string]struct{}
 	blocks         *blockCache
 }
@@ -179,20 +182,28 @@ type blockCacheEntry struct {
 	bytes int64
 }
 
+type blockFlight struct {
+	done  chan struct{}
+	block *decodedBlock
+	err   error
+}
+
 type blockCache struct {
 	mu          sync.Mutex
 	maxBytes    int64
 	bytes       int64
 	hits        uint64
 	misses      uint64
+	coalesced   uint64
 	loads       uint64
 	loadedBytes uint64
 	items       map[uint64]*list.Element
 	order       *list.List
+	flights     map[uint64]*blockFlight
 }
 
 func newBlockCache(maxBytes int64) *blockCache {
-	return &blockCache{maxBytes: maxBytes, items: make(map[uint64]*list.Element), order: list.New()}
+	return &blockCache{maxBytes: maxBytes, items: make(map[uint64]*list.Element), order: list.New(), flights: make(map[uint64]*blockFlight)}
 }
 
 func (c *blockCache) get(key uint64) (*decodedBlock, bool) {
@@ -209,12 +220,16 @@ func (c *blockCache) get(key uint64) (*decodedBlock, bool) {
 }
 
 func (c *blockCache) put(key uint64, value *decodedBlock) {
-	weight := int64(len(value.data) + len(value.starts)*4)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.putLocked(key, value)
+}
+
+func (c *blockCache) putLocked(key uint64, value *decodedBlock) {
+	weight := int64(cap(value.data) + cap(value.starts)*4)
 	if weight > c.maxBytes {
 		return
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.loads++
 	c.loadedBytes += uint64(len(value.data))
 	if e := c.items[key]; e != nil {
@@ -237,12 +252,72 @@ func (c *blockCache) put(key uint64, value *decodedBlock) {
 	}
 }
 
+// load coalesces concurrent misses for a block. Waiters can abandon their own
+// request without cancelling the shared loader; if the loader's request is
+// cancelled, a live waiter takes over instead of inheriting that cancellation.
+func (c *blockCache) load(ctx context.Context, key uint64, loader func(context.Context) (*decodedBlock, error)) (*decodedBlock, error) {
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		c.mu.Lock()
+		if e := c.items[key]; e != nil {
+			c.hits++
+			c.order.MoveToFront(e)
+			block := e.Value.(*blockCacheEntry).block
+			c.mu.Unlock()
+			return block, nil
+		}
+		c.misses++
+		if flight := c.flights[key]; flight != nil {
+			c.coalesced++
+			c.mu.Unlock()
+			select {
+			case <-flight.done:
+				if err := ctx.Err(); err != nil {
+					return nil, err
+				}
+				if errors.Is(flight.err, context.Canceled) || errors.Is(flight.err, context.DeadlineExceeded) {
+					continue
+				}
+				return flight.block, flight.err
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		flight := &blockFlight{done: make(chan struct{})}
+		c.flights[key] = flight
+		c.mu.Unlock()
+
+		block, err := loader(ctx)
+		if err == nil && block == nil {
+			err = fmt.Errorf("inventory block loader returned no block")
+		}
+		if err == nil {
+			if cancelled := ctx.Err(); cancelled != nil {
+				err, block = cancelled, nil
+			}
+		}
+		c.mu.Lock()
+		if err == nil {
+			c.putLocked(key, block)
+			flight.block = block
+		}
+		flight.err = err
+		delete(c.flights, key)
+		close(flight.done)
+		c.mu.Unlock()
+		return block, err
+	}
+}
+
 func (c *blockCache) clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.bytes = 0
 	c.hits = 0
 	c.misses = 0
+	c.coalesced = 0
 	c.loads = 0
 	c.loadedBytes = 0
 	c.items = make(map[uint64]*list.Element)
@@ -252,7 +327,7 @@ func (c *blockCache) clear() {
 func (c *blockCache) stats() map[string]int64 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return map[string]int64{"entries": int64(len(c.items)), "residentBytes": c.bytes, "maxResidentBytes": c.maxBytes, "hits": int64(c.hits), "misses": int64(c.misses), "loads": int64(c.loads), "loadedBytes": int64(c.loadedBytes)}
+	return map[string]int64{"entries": int64(len(c.items)), "residentBytes": c.bytes, "maxResidentBytes": c.maxBytes, "hits": int64(c.hits), "misses": int64(c.misses), "coalesced": int64(c.coalesced), "loads": int64(c.loads), "loadedBytes": int64(c.loadedBytes)}
 }
 
 func Load(dir string) (*Inventory, error) {
@@ -306,7 +381,7 @@ func Load(dir string) (*Inventory, error) {
 		return nil, fmt.Errorf("inventory shard counts do not match declared total")
 	}
 	sum := sha256.Sum256(raw)
-	i := &Inventory{dir: abs, m: m, hash: hex.EncodeToString(sum[:]), sources: make(map[string]struct{}), models: make(map[string]map[string]struct{}), blocks: newBlockCache(BlockCacheBytes)}
+	i := &Inventory{dir: abs, m: m, hash: hex.EncodeToString(sum[:]), sourceCounts: make(map[string]int), models: make(map[string]map[string]struct{}), blocks: newBlockCache(BlockCacheBytes)}
 	runtime.GC()
 	var before runtime.MemStats
 	runtime.ReadMemStats(&before)
@@ -420,12 +495,22 @@ func (i *Inventory) IndexStats() map[string]int {
 // SourceIdentities reports source labels collected while the bounded startup
 // index was built; serving capabilities never rescans the inventory shards.
 func (i *Inventory) SourceIdentities() []string {
-	values := make([]string, 0, len(i.sources))
-	for source := range i.sources {
+	values := make([]string, 0, len(i.sourceCounts))
+	for source := range i.sourceCounts {
 		values = append(values, source)
 	}
 	sort.Strings(values)
 	return values
+}
+
+// SourceRecordCounts returns per-source populations collected during the
+// existing bounded index pass; it does not reread inventory blocks.
+func (i *Inventory) SourceRecordCounts() map[string]int {
+	out := make(map[string]int, len(i.sourceCounts))
+	for source, count := range i.sourceCounts {
+		out[source] = count
+	}
+	return out
 }
 
 // SourceIdentityModels reports only model combinations observed or selected
@@ -597,8 +682,12 @@ func (i *Inventory) pageRefs(cursor, query string, limit int) ([]recordRef, stri
 		return nil, "", fmt.Errorf("limit must be between 1 and 500")
 	}
 	q := normalize(query)
+	position, err := i.unwrapPageCursor(cursor, q)
+	if err != nil {
+		return nil, "", err
+	}
 	if q == "" {
-		shardID, row, err := decodeCursor(cursor)
+		shardID, row, err := decodeCursor(position)
 		if err != nil {
 			return nil, "", err
 		}
@@ -624,10 +713,10 @@ func (i *Inventory) pageRefs(cursor, query string, limit int) ([]recordRef, stri
 			return refs, "", nil
 		}
 		next := i.idx.records[end]
-		return refs, encodeCursor(int(next.Shard), int(next.Row)), nil
+		return refs, i.wrapPageCursor(encodeCursor(int(next.Shard), int(next.Row)), q), nil
 	}
 
-	offset, tokenHash, err := decodeSearchCursor(cursor)
+	offset, tokenHash, err := decodeSearchCursor(position)
 	if err != nil {
 		return nil, "", err
 	}
@@ -650,7 +739,7 @@ func (i *Inventory) pageRefs(cursor, query string, limit int) ([]recordRef, stri
 	if end == len(ordinals) {
 		return out, "", nil
 	}
-	return out, encodeSearchCursor(q, end), nil
+	return out, i.wrapPageCursor(encodeSearchCursor(q, end), q), nil
 }
 
 func (i *Inventory) postings(hash uint64) []uint32 {
@@ -699,7 +788,7 @@ func (i *Inventory) buildIndex() error {
 				return fmt.Errorf("inventory row %d/%d has no stable id", si, row)
 			}
 			if fields.Source != "" {
-				i.sources[fields.Source] = struct{}{}
+				i.sourceCounts[fields.Source]++
 				models := i.models[fields.Source]
 				if models == nil {
 					models = make(map[string]struct{})
@@ -909,45 +998,48 @@ func (i *Inventory) readBlock(ctx context.Context, si, bi int) (*decodedBlock, e
 		return nil, fmt.Errorf("inventory block out of range")
 	}
 	key := blockKey(si, bi)
-	if cached, ok := i.blocks.get(key); ok {
-		return cached, nil
-	}
-	b := i.m.Shards[si].Blocks[bi]
-	file, err := os.Open(filepath.Join(i.dir, i.m.Shards[si].File))
-	if err != nil {
-		return nil, fmt.Errorf("open inventory shard: %w", err)
-	}
-	compressed := make([]byte, b.Bytes)
-	_, readErr := file.ReadAt(compressed, b.Offset)
-	closeErr := file.Close()
-	if readErr != nil || closeErr != nil {
-		return nil, fmt.Errorf("read inventory block: %v", readErr)
-	}
-	sum := sha256.Sum256(compressed)
-	if hex.EncodeToString(sum[:]) != b.SHA256 {
-		return nil, fmt.Errorf("inventory block hash mismatch")
-	}
-	gz, err := gzip.NewReader(bytes.NewReader(compressed))
-	if err != nil {
-		return nil, fmt.Errorf("open inventory block gzip: %w", err)
-	}
-	data, readErr := io.ReadAll(io.LimitReader(gz, int64(MaxBlockRawBytes)+1))
-	closeErr = gz.Close()
-	if readErr != nil || closeErr != nil || len(data) != b.UncompressedBytes || len(data) > MaxBlockRawBytes || len(data) == 0 || data[len(data)-1] != '\n' {
-		return nil, fmt.Errorf("invalid inventory block payload")
-	}
-	starts := make([]uint32, 1, b.Count+1)
-	for n, value := range data {
-		if value == '\n' {
-			starts = append(starts, uint32(n+1))
+	return i.blocks.load(ctx, key, func(ctx context.Context) (*decodedBlock, error) {
+		b := i.m.Shards[si].Blocks[bi]
+		file, err := os.Open(filepath.Join(i.dir, i.m.Shards[si].File))
+		if err != nil {
+			return nil, fmt.Errorf("open inventory shard: %w", err)
 		}
-	}
-	if len(starts) != b.Count+1 {
-		return nil, fmt.Errorf("inventory block row count mismatch")
-	}
-	decoded := &decodedBlock{data: data, starts: starts}
-	i.blocks.put(key, decoded)
-	return decoded, nil
+		compressed := make([]byte, b.Bytes)
+		_, readErr := file.ReadAt(compressed, b.Offset)
+		closeErr := file.Close()
+		if readErr != nil || closeErr != nil {
+			return nil, fmt.Errorf("read inventory block: %v", readErr)
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		sum := sha256.Sum256(compressed)
+		if hex.EncodeToString(sum[:]) != b.SHA256 {
+			return nil, fmt.Errorf("inventory block hash mismatch")
+		}
+		gz, err := gzip.NewReader(bytes.NewReader(compressed))
+		if err != nil {
+			return nil, fmt.Errorf("open inventory block gzip: %w", err)
+		}
+		data, readErr := io.ReadAll(io.LimitReader(gz, int64(MaxBlockRawBytes)+1))
+		closeErr = gz.Close()
+		if readErr != nil || closeErr != nil || len(data) != b.UncompressedBytes || len(data) > MaxBlockRawBytes || len(data) == 0 || data[len(data)-1] != '\n' {
+			return nil, fmt.Errorf("invalid inventory block payload")
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		starts := make([]uint32, 1, b.Count+1)
+		for n, value := range data {
+			if value == '\n' {
+				starts = append(starts, uint32(n+1))
+			}
+		}
+		if len(starts) != b.Count+1 {
+			return nil, fmt.Errorf("inventory block row count mismatch")
+		}
+		return &decodedBlock{data: data, starts: starts}, nil
+	})
 }
 
 func normalize(value string) string {
@@ -992,6 +1084,29 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// Position encodings are internal. The public envelope binds both page modes
+// to the exact inventory manifest and normalized query, without keeping sessions.
+func (i *Inventory) wrapPageCursor(position, query string) string {
+	digest := sha256.Sum256([]byte(query))
+	return "v1." + i.hash + "." + hex.EncodeToString(digest[:]) + "." + position
+}
+
+func (i *Inventory) unwrapPageCursor(token, query string) (string, error) {
+	if token == "" {
+		return "", nil
+	}
+	if len(token) > 256 {
+		return "", fmt.Errorf("invalid inventory page token")
+	}
+	parts := strings.Split(token, ".")
+	digest := sha256.Sum256([]byte(query))
+	if len(parts) != 4 || parts[0] != "v1" || parts[1] != i.hash ||
+		parts[2] != hex.EncodeToString(digest[:]) || parts[3] == "" {
+		return "", fmt.Errorf("inventory page token does not match manifest or query; restart browsing")
+	}
+	return parts[3], nil
 }
 
 func encodeCursor(shard, row int) string {

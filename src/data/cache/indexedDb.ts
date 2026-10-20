@@ -1,11 +1,54 @@
 import { MAX_CATALOG_ARTIFACT_BYTES, readBoundedStream } from './boundedStream'
-import { catalogAdmission } from './catalogAdmission'
+import { CatalogAdmission, catalogAdmission } from './catalogAdmission'
+import { CatalogHttpError } from './catalogHttpError'
 
 const DATABASE_NAME = 'solar-atlas-data-v1'
-const DATABASE_VERSION = 2
+const DATABASE_VERSION = 3
 const STORE_NAME = 'immutable-responses'
+const ACCESS_STORE_NAME = 'immutable-access'
+const CACHE_TOTAL_KEY = '__solar_cache_total_v1__'
 const MAX_DATASET_CACHE_BYTES = 256 * 1024 * 1024
 const MIN_FREE_STORAGE_BYTES = 16 * 1024 * 1024
+const OPTIONAL_CACHE_PHASE_MS = 1500
+const CATALOG_ACQUISITION_MS = 60_000
+const CATALOG_VALIDATION_MS = 30_000
+// Shared downloads do not bound copies: every consumer owns its validator input.
+// Two admitted copies of at most 64 MiB each; parsed objects, decompression,
+// retained caller results and other realms have separate lifetime/budget scopes.
+const validationAdmission = new CatalogAdmission(2)
+
+// Optional persistence must not retain every completed network buffer after
+// the acquisition lease is released. This is per realm, not browser-wide RSS.
+const MAX_PENDING_CACHE_WRITES = 4
+const MAX_RETAINED_CACHE_WRITE_BYTES = 64 * 1024 * 1024
+type PendingCacheWrite = { key: string; value: ArrayBuffer; bytes: number }
+const pendingCacheWrites = new Map<string, PendingCacheWrite>()
+let activeCacheWrite: PendingCacheWrite | null = null
+let retainedCacheWriteBytes = 0
+
+function scheduleCacheWrite(key: string, value: ArrayBuffer) {
+  if (activeCacheWrite?.key === key || pendingCacheWrites.has(key)) return
+  const bytes = value.byteLength
+  if (!bytes || bytes > MAX_RETAINED_CACHE_WRITE_BYTES - retainedCacheWriteBytes ||
+      pendingCacheWrites.size >= MAX_PENDING_CACHE_WRITES) return
+  pendingCacheWrites.set(key, { key, value, bytes })
+  retainedCacheWriteBytes += bytes
+  drainCacheWrites()
+}
+
+function drainCacheWrites() {
+  if (activeCacheWrite || !pendingCacheWrites.size) return
+  const entry = pendingCacheWrites.values().next().value!
+  pendingCacheWrites.delete(entry.key)
+  activeCacheWrite = entry
+  // Keep the reservation through quota checks, pruning and transaction
+  // completion. Sibling validated consumers share one queued write per URL.
+  void writeCache(entry.key, entry.value).catch(() => undefined).finally(() => {
+    retainedCacheWriteBytes -= entry.bytes
+    activeCacheWrite = null
+    drainCacheWrites()
+  })
+}
 
 type CacheRecord = {
   buffer: ArrayBuffer
@@ -35,11 +78,14 @@ function acquireRequest(url: string, signal?: AbortSignal) {
   let pending = inFlight.get(url)
   if (!pending) {
     const controller = new AbortController()
+    let timeout: ReturnType<typeof setTimeout> | undefined
     const created: SharedRequest = { controller, consumers: 0, settled: false, promise: catalogAdmission.acquire(controller.signal).then(release => {
       created.releaseAdmission = release
       controller.signal.throwIfAborted()
+      timeout = setTimeout(() => controller.abort(new DOMException('Catalog acquisition exceeded 60 seconds', 'TimeoutError')), CATALOG_ACQUISITION_MS)
       return loadImmutableArrayBuffer(url, controller.signal)
     }).finally(() => {
+      clearTimeout(timeout)
       created.settled = true
       if (!created.consumers) {
         if (inFlight.get(url) === created) inFlight.delete(url)
@@ -51,7 +97,10 @@ function acquireRequest(url: string, signal?: AbortSignal) {
   }
   pending.consumers++
   const entry = pending
+  let released = false
   return { promise: entry.promise, release: () => {
+    if (released) return
+    released = true
     entry.consumers--
     if (entry.consumers) return
     if (inFlight.get(url) === entry) inFlight.delete(url)
@@ -63,6 +112,7 @@ function acquireRequest(url: string, signal?: AbortSignal) {
 export function datasetVersionFromUrl(url: string) {
   try {
     const pathname = new URL(url, globalThis.location?.href ?? 'https://solar-atlas.invalid/').pathname
+    if (/\/data\/approximation\/(?:chunks|manifests|indices)\//.test(pathname)) return 'approximation'
     const preview = pathname.match(/\/data\/asteroids\/preview\/([a-f0-9]{64})\/releases\/([^/]+)\//)
     if (preview) return `preview:${preview[1]}:${decodeURIComponent(preview[2])}`
     const match = pathname.match(/\/data\/asteroids\/releases\/([^/]+)\//)
@@ -74,6 +124,9 @@ export function datasetVersionFromUrl(url: string) {
 
 export function isObsoleteDatasetVersion(storedVersion: string, activeVersion: string) {
   if (storedVersion === activeVersion) return false
+  // Content-addressed approximation chunks coexist with catalog releases.
+  // A catalog upgrade must not discard still reusable scientific coefficients.
+  if (storedVersion !== 'legacy' && (storedVersion === 'approximation' || activeVersion === 'approximation')) return false
   // Pre-profile records have no trustworthy release identity. Other products
   // coexist in this database and share its global LRU byte budget.
   if (storedVersion === 'legacy') return true
@@ -106,7 +159,7 @@ function openDatabase() {
     }
     // Optional persistence must not block network delivery indefinitely, e.g.
     // when another tab holds an old database open during an upgrade.
-    const timeout = setTimeout(() => finish(null), 1500)
+    const timeout = setTimeout(() => finish(null), OPTIONAL_CACHE_PHASE_MS)
     let request: IDBOpenDBRequest
     try { request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION) }
     catch { finish(null); return }
@@ -114,6 +167,7 @@ function openDatabase() {
       if (!request.result.objectStoreNames.contains(STORE_NAME)) {
         request.result.createObjectStore(STORE_NAME)
       }
+      if (!request.result.objectStoreNames.contains(ACCESS_STORE_NAME)) request.result.createObjectStore(ACCESS_STORE_NAME)
     }
     request.onsuccess = () => finish(request.result)
     request.onerror = () => finish(null)
@@ -121,9 +175,22 @@ function openDatabase() {
   })
 }
 
+function boundedStorageEstimate(): Promise<StorageEstimate | undefined> {
+  return new Promise(resolve => {
+    let settled = false
+    const finish = (value?: StorageEstimate) => {
+      if (settled) return
+      settled = true; clearTimeout(timer); resolve(value)
+    }
+    const timer = setTimeout(() => finish(), OPTIONAL_CACHE_PHASE_MS)
+    try { Promise.resolve(globalThis.navigator?.storage?.estimate?.()).then(finish, () => finish()) }
+    catch { finish() }
+  })
+}
+
 async function storageBudget() {
   try {
-    const estimate = await globalThis.navigator?.storage?.estimate?.()
+    const estimate = await boundedStorageEstimate()
     if (!estimate?.quota) return MAX_DATASET_CACHE_BYTES
     return Math.min(MAX_DATASET_CACHE_BYTES, Math.floor(estimate.quota * 0.25))
   } catch {
@@ -133,7 +200,7 @@ async function storageBudget() {
 
 async function hasCapacityFor(byteLength: number) {
   try {
-    const estimate = await globalThis.navigator?.storage?.estimate?.()
+    const estimate = await boundedStorageEstimate()
     if (estimate?.quota === undefined || estimate.usage === undefined) return true
     return estimate.quota - estimate.usage >= byteLength + MIN_FREE_STORAGE_BYTES
   } catch {
@@ -146,44 +213,89 @@ async function pruneDatasetCache(activeVersion: string, maximumBytes: number, in
   if (!database) return
   await new Promise<void>((resolve) => {
     let settled = false
+    let transaction: IDBTransaction | undefined
     const finish = () => {
       if (settled) return
       settled = true
+      clearTimeout(timer)
+      try { transaction?.abort() } catch { /* Already complete. */ }
       database.close()
       resolve()
     }
+    const timer = setTimeout(finish, OPTIONAL_CACHE_PHASE_MS)
     try {
-      const transaction = database.transaction(STORE_NAME, 'readwrite')
+      transaction = database.transaction([STORE_NAME, ACCESS_STORE_NAME], 'readwrite')
       const store = transaction.objectStore(STORE_NAME)
-      const activeEntries: Array<{ key: IDBValidKey; byteLength: number; lastAccessed: number }> = []
-      const cursorRequest = store.openCursor()
-      cursorRequest.onsuccess = () => {
-        const cursor = cursorRequest.result
-        if (!cursor) {
-          activeEntries.sort((left, right) => right.lastAccessed - left.lastAccessed)
-          // Reserve the new record and replace the old key in this same
-          // transaction. Concurrent writers (including other tabs) serialize
-          // here, so a burst cannot exceed the budget between periodic prunes.
-          let retainedBytes = incoming?.record.byteLength ?? 0
-          for (const entry of activeEntries) {
-            if (retainedBytes + entry.byteLength > maximumBytes) store.delete(entry.key)
-            else retainedBytes += entry.byteLength
+      const access = transaction.objectStore(ACCESS_STORE_NAME)
+      const scan = () => {
+        const activeEntries: Array<{ key: IDBValidKey; byteLength: number; lastAccessed: number }> = []
+        const times = new Map<IDBValidKey, number>()
+        const accessCursor = access.openCursor()
+        accessCursor.onsuccess = () => {
+          const cursor = accessCursor.result
+          if (!cursor) { scanPayloads(); return }
+          if (typeof cursor.value === 'number') times.set(cursor.primaryKey, cursor.value)
+          cursor.continue()
+        }
+        accessCursor.onerror = finish
+        const scanPayloads = () => {
+          const cursorRequest = store.openCursor()
+          cursorRequest.onsuccess = () => {
+            if (settled) return
+            const cursor = cursorRequest.result
+            if (!cursor) {
+              activeEntries.sort((left, right) => right.lastAccessed - left.lastAccessed)
+              // Reserve and replace in one transaction, including sibling tabs.
+              let retainedBytes = incoming?.record.byteLength ?? 0
+              for (const entry of activeEntries) {
+                if (retainedBytes + entry.byteLength > maximumBytes) { store.delete(entry.key); access.delete(entry.key) }
+                else retainedBytes += entry.byteLength
+              }
+              if (incoming) { store.put(incoming.record, incoming.key); access.put(incoming.record.lastAccessed, incoming.key) }
+              for (const key of times.keys()) access.delete(key)
+              store.put({ kind: 'cache-total-v1', activeVersion, totalBytes: retainedBytes }, CACHE_TOTAL_KEY)
+              return
+            }
+            if (cursor.primaryKey === CACHE_TOTAL_KEY) {
+              // Internal byte accounting is replaced atomically after this scan.
+            } else if (incoming && cursor.primaryKey === incoming.key) {
+              // Replacement bytes were reserved above; do not count the old copy.
+            } else if (!isCacheRecord(cursor.value) || isObsoleteDatasetVersion(cursor.value.datasetVersion, activeVersion)) {
+              cursor.delete()
+              access.delete(cursor.primaryKey)
+            } else {
+              // Keep metadata rather than retaining the complete cache buffers.
+              activeEntries.push({ key: cursor.primaryKey, byteLength: cursor.value.byteLength, lastAccessed: Math.max(cursor.value.lastAccessed, times.get(cursor.primaryKey) ?? 0) })
+            }
+            times.delete(cursor.primaryKey)
+            cursor.continue()
           }
-          if (incoming) store.put(incoming.record, incoming.key)
-          return
+          cursorRequest.onerror = finish
         }
-        if (incoming && cursor.primaryKey === incoming.key) {
-          // Replacement bytes were reserved above; do not count the old copy.
-        } else if (!isCacheRecord(cursor.value) || isObsoleteDatasetVersion(cursor.value.datasetVersion, activeVersion)) {
-          cursor.delete()
-        } else {
-          // Retain only metadata. Keeping each record also retains every large
-          // ArrayBuffer until sorting completes (up to the whole cache budget).
-          activeEntries.push({ key: cursor.primaryKey, byteLength: cursor.value.byteLength, lastAccessed: cursor.value.lastAccessed })
-        }
-        cursor.continue()
       }
-      cursorRequest.onerror = finish
+      if (!incoming) scan()
+      else {
+        // All writers serialize in this same transaction. Below the quota,
+        // maintain the exact total without reading every cached ArrayBuffer
+        // again for each small immutable index/coefficient write.
+        const total = store.get(CACHE_TOTAL_KEY), previous = store.get(incoming.key)
+        let completed = 0
+        const update = () => {
+          if (++completed !== 2 || settled) return
+          const oldBytes = isCacheRecord(previous.result) ? previous.result.byteLength : 0
+          const receipt = total.result as { kind?: string; activeVersion?: string; totalBytes?: number } | undefined
+          const bytes = receipt?.totalBytes
+          if (receipt?.kind === 'cache-total-v1' && receipt.activeVersion === activeVersion
+            && Number.isSafeInteger(bytes) && bytes! >= oldBytes && bytes! <= MAX_DATASET_CACHE_BYTES
+            && bytes! - oldBytes + incoming.record.byteLength <= maximumBytes) {
+            store.put(incoming.record, incoming.key)
+            access.put(incoming.record.lastAccessed, incoming.key)
+            store.put({ kind: 'cache-total-v1', activeVersion, totalBytes: bytes! - oldBytes + incoming.record.byteLength }, CACHE_TOTAL_KEY)
+          } else scan()
+        }
+        total.onsuccess = update; previous.onsuccess = update
+        total.onerror = finish; previous.onerror = finish
+      }
       transaction.oncomplete = finish
       transaction.onerror = finish
       transaction.onabort = finish
@@ -202,40 +314,50 @@ async function prepareDatasetCache(datasetVersion: string) {
   return preparePromise
 }
 
-async function readCache(key: string) {
+async function readCache(key: string, signal?: AbortSignal) {
   const database = await openDatabase()
   if (!database) return null
   return new Promise<ArrayBuffer | null>((resolve) => {
     let settled = false
     let cached: ArrayBuffer | null = null
+    let transaction: IDBTransaction | undefined
     const finish = (value: ArrayBuffer | null) => {
       if (settled) return
       settled = true
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', cancel)
+      try { transaction?.abort() } catch { /* Already complete. */ }
       database.close()
       resolve(value)
     }
+    const cancel = () => finish(null)
+    const timer = setTimeout(cancel, OPTIONAL_CACHE_PHASE_MS)
+    signal?.addEventListener('abort', cancel, { once: true })
+    if (signal?.aborted) { cancel(); return }
     try {
-      const transaction = database.transaction(STORE_NAME, 'readwrite')
+      transaction = database.transaction(STORE_NAME, 'readonly')
       const store = transaction.objectStore(STORE_NAME)
       const request = store.get(key)
       request.onsuccess = () => {
-        if (request.result instanceof ArrayBuffer) {
-          cached = request.result
-          store.put({
-            buffer: request.result,
-            datasetVersion: datasetVersionFromUrl(key),
-            byteLength: request.result.byteLength,
-            lastAccessed: Date.now(),
-          } satisfies CacheRecord, key)
-        } else if (isCacheRecord(request.result)) {
+        if (settled) return
+        // Unversioned legacy buffers cannot establish the identity of a
+        // release URL. Reacquire instead of relabelling them as that release.
+        if (isCacheRecord(request.result) && request.result.datasetVersion === datasetVersionFromUrl(key) &&
+            request.result.byteLength > 0 && request.result.byteLength <= MAX_CATALOG_ARTIFACT_BYTES) {
           cached = request.result.buffer
-          store.put({ ...request.result, lastAccessed: Date.now() } satisfies CacheRecord, key)
         }
       }
       request.onerror = () => finish(null)
       transaction.onabort = () => finish(null)
       transaction.onerror = () => finish(null)
-      transaction.oncomplete = () => finish(cached)
+      transaction.oncomplete = () => {
+        if (cached) {
+          // This separate metadata store never serializes payload readers or
+          // clones an ArrayBuffer merely to record an LRU cache hit.
+          try { database.transaction(ACCESS_STORE_NAME, 'readwrite').objectStore(ACCESS_STORE_NAME).put(Date.now(), key) } catch { /* Optional LRU touch. */ }
+        }
+        finish(cached)
+      }
     } catch {
       finish(null)
     }
@@ -258,74 +380,143 @@ async function invalidateCache(key: string) {
   const database = await openDatabase()
   if (!database) return
   await new Promise<void>(resolve => {
-    const finish = () => { database.close(); resolve() }
+    let settled = false, transaction: IDBTransaction | undefined
+    const finish = () => {
+      if (settled) return
+      settled = true; clearTimeout(timer)
+      try { transaction?.abort() } catch { /* Already complete. */ }
+      database.close(); resolve()
+    }
+    const timer = setTimeout(finish, OPTIONAL_CACHE_PHASE_MS)
     try {
-      const transaction = database.transaction(STORE_NAME, 'readwrite')
+      transaction = database.transaction([STORE_NAME, ACCESS_STORE_NAME], 'readwrite')
       transaction.objectStore(STORE_NAME).delete(key)
+      transaction.objectStore(ACCESS_STORE_NAME).delete(key)
       transaction.oncomplete = finish; transaction.onabort = finish; transaction.onerror = finish
     } catch { finish() }
   })
 }
 
-export async function fetchImmutableArrayBuffer(url: string, validate?: (buffer: ArrayBuffer) => void | Promise<void>, signal?: AbortSignal) {
+export function fetchImmutableArrayBuffer(url: string, validate?: (buffer: ArrayBuffer) => void | Promise<void>, signal?: AbortSignal) {
+  // Keep the public callback single-argument: existing validators may have
+  // optional numeric parameters that must never receive an AbortSignal.
+  return fetchValidatedArrayBuffer(url, validate ? buffer => validate(buffer) : undefined, signal)
+}
+
+async function fetchValidatedArrayBuffer(url: string, validate?: (buffer: ArrayBuffer, signal: AbortSignal) => void | Promise<void>, signal?: AbortSignal) {
   // Callers may transfer or modify their buffer without detaching a sibling
   // consumer's result. Only active requests, not completed data, live here.
   const request = acquireRequest(url, signal)
+  let validationWork: Promise<void> | undefined
+  let releaseValidation: (() => void) | undefined
   try {
     const { buffer, cached } = await withSignal(request.promise, signal)
     signal?.throwIfAborted()
-    try { await withSignal(Promise.resolve(validate?.(buffer)), signal) }
+    releaseValidation = await validationAdmission.acquire(signal)
+    signal?.throwIfAborted()
+    // A callback can write to or transfer its argument. Never expose the
+    // shared transport bytes used by siblings and deferred persistence.
+    const owned = buffer.slice(0)
+    const validation = new AbortController()
+    const cancel = () => validation.abort(signal?.reason)
+    const expired = () => validation.abort(new DOMException('Catalog validation exceeded 30 seconds', 'TimeoutError'))
+    const deadline = performance.now() + CATALOG_VALIDATION_MS
+    const timeout = setTimeout(expired, CATALOG_VALIDATION_MS)
+    signal?.addEventListener('abort', cancel, { once: true })
+    try {
+      if (signal?.aborted) cancel()
+      validation.signal.throwIfAborted()
+      validationWork = Promise.resolve().then(() => {
+        validation.signal.throwIfAborted()
+        return validate?.(owned, validation.signal)
+      })
+      await withSignal(validationWork, validation.signal)
+      if (performance.now() >= deadline) expired()
+      validation.signal.throwIfAborted()
+      if (owned.byteLength !== buffer.byteLength) throw new Error('Catalog validation detached or resized its source buffer')
+    }
     catch (error) {
       // Cancellation says nothing about the validity of a shared artifact.
-      if (cached && !signal?.aborted) await invalidateCache(url)
+      if (cached && !validation.signal.aborted) await invalidateCache(url)
       throw error
-    }
+    } finally { clearTimeout(timeout); signal?.removeEventListener('abort', cancel) }
     signal?.throwIfAborted()
     // Never persist a network payload before its caller's format validation.
-    if (!cached) void writeCache(url, buffer).catch(() => undefined)
-    return buffer.slice(0)
-  } finally { request.release() }
+    if (!cached) scheduleCacheWrite(url, buffer)
+    return owned
+  } finally {
+    // The public promise may reject promptly on abort/timeout while a custom
+    // validator still holds its owned buffer. Keep the shared acquisition lease
+    // until that work actually settles; observe either outcome without a late
+    // result being persisted or published to the cancelled caller.
+    const release = () => { releaseValidation?.(); request.release() }
+    if (validationWork) void validationWork.then(release, release)
+    else release()
+  }
 }
 
 async function loadImmutableArrayBuffer(url: string, signal: AbortSignal) {
-  await prepareDatasetCache(datasetVersionFromUrl(url))
+  await withSignal(prepareDatasetCache(datasetVersionFromUrl(url)), signal)
   signal.throwIfAborted()
-  const cached = await readCache(url)
+  const cached = await readCache(url, signal)
   signal.throwIfAborted()
   if (cached && cached.byteLength <= MAX_CATALOG_ARTIFACT_BYTES) return { buffer: cached, cached: true }
   if (cached) await invalidateCache(url)
   const response = await fetch(url, { signal })
-  if (!response.ok) throw new Error(`Failed to load ${url}: ${response.status}`)
+  if (signal.aborted) {
+    await response.body?.cancel().catch(() => undefined)
+    signal.throwIfAborted()
+  }
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined)
+    throw new CatalogHttpError(url, response.status)
+  }
   if (Number(response.headers.get('content-length')) > MAX_CATALOG_ARTIFACT_BYTES) {
-    void response.body?.cancel().catch(() => undefined)
+    await response.body?.cancel().catch(() => undefined)
     throw new Error(`Catalog artifact exceeds ${MAX_CATALOG_ARTIFACT_BYTES} bytes`)
   }
   const buffer = response.body ? await readBoundedStream(response.body, MAX_CATALOG_ARTIFACT_BYTES, signal) : new ArrayBuffer(0)
   return { buffer, cached: false }
 }
 
-export async function fetchImmutableJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+async function decodeSourceJson<T>(bytes: ArrayBuffer, signal?: AbortSignal, expectedSha256?: string): Promise<T> {
+  signal?.throwIfAborted()
+  if (bytes.byteLength > MAX_CATALOG_ARTIFACT_BYTES) throw new Error(`Catalog artifact exceeds ${MAX_CATALOG_ARTIFACT_BYTES} bytes`)
+  if (expectedSha256 !== undefined) {
+    if (!/^[a-f0-9]{64}$/.test(expectedSha256)) throw new Error('Invalid expected catalog JSON hash')
+    const actual = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), byte => byte.toString(16).padStart(2, '0')).join('')
+    signal?.throwIfAborted()
+    if (actual !== expectedSha256) throw new Error('Catalog JSON source SHA-256 mismatch')
+  }
+  return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as T
+}
+
+export async function fetchImmutableJson<T>(url: string, signal?: AbortSignal, expectedSha256?: string): Promise<T> {
   let parsed!: T
-  await fetchImmutableArrayBuffer(url, buffer => { parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(buffer)) as T }, signal)
+  await fetchValidatedArrayBuffer(url, async (buffer, validationSignal) => { parsed = await decodeSourceJson<T>(buffer, validationSignal, expectedSha256) }, signal)
   return parsed
 }
 
-export async function parseMaybeGzipJson<T>(buffer: ArrayBuffer, maximumBytes = MAX_CATALOG_ARTIFACT_BYTES, signal?: AbortSignal): Promise<T> {
+export async function parseMaybeGzipJson<T>(buffer: ArrayBuffer, maximumBytes = MAX_CATALOG_ARTIFACT_BYTES, signal?: AbortSignal, expectedSha256?: string): Promise<T> {
   signal?.throwIfAborted()
+  if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 0 || maximumBytes > MAX_CATALOG_ARTIFACT_BYTES) {
+    throw new RangeError(`Catalog JSON byte limit must be an integer between 0 and ${MAX_CATALOG_ARTIFACT_BYTES}`)
+  }
+  if (expectedSha256 !== undefined && !/^[a-f0-9]{64}$/.test(expectedSha256)) throw new Error('Invalid expected catalog JSON hash')
   if (buffer.byteLength > maximumBytes) throw new Error(`Catalog artifact exceeds ${maximumBytes} bytes`)
   const header = new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 2))
   const isGzip = header[0] === 0x1f && header[1] === 0x8b
-  if (!isGzip) return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(buffer)) as T
+  if (!isGzip) return decodeSourceJson<T>(buffer, signal, expectedSha256)
   if (typeof DecompressionStream === 'undefined') {
     throw new Error('This browser does not support streamed gzip dataset delivery.')
   }
   const stream = new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'))
   const decompressed = await readBoundedStream(stream, maximumBytes, signal)
-  return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(decompressed)) as T
+  return decodeSourceJson<T>(decompressed, signal, expectedSha256)
 }
 
-export async function fetchImmutableGzipJson<T>(url: string, signal?: AbortSignal): Promise<T> {
+export async function fetchImmutableGzipJson<T>(url: string, signal?: AbortSignal, expectedSha256?: string): Promise<T> {
   let parsed!: T
-  await fetchImmutableArrayBuffer(url, async buffer => { parsed = await parseMaybeGzipJson<T>(buffer, MAX_CATALOG_ARTIFACT_BYTES, signal) }, signal)
+  await fetchValidatedArrayBuffer(url, async (buffer, validationSignal) => { parsed = await parseMaybeGzipJson<T>(buffer, MAX_CATALOG_ARTIFACT_BYTES, validationSignal, expectedSha256) }, signal)
   return parsed
 }
