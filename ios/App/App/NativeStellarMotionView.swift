@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 import OSLog
 
@@ -8,6 +9,44 @@ private struct StellarDocument: FileDocument {
     init(bytes: Data) { self.bytes = bytes }
     init(configuration: ReadConfiguration) throws { bytes = configuration.file.regularFileContents ?? Data() }
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: bytes) }
+}
+
+/// Import immutable source bytes through the system's copy operation. Opening
+/// in place requires resolving a provider bookmark in the receiving app; the
+/// retained simulator failure selected the document but failed that resolution
+/// before SwiftUI's fileImporter could deliver a URL.
+private struct StellarSourcePicker: UIViewControllerRepresentable {
+    let completion: (URL?) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(completion: completion) }
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.data], asCopy: true)
+        picker.allowsMultipleSelection = false
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ controller: UIDocumentPickerViewController, context: Context) {}
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        private let completion: (URL?) -> Void
+        private var completed = false
+
+        init(completion: @escaping (URL?) -> Void) { self.completion = completion }
+
+        private func finish(_ url: URL?) {
+            guard !completed else { return }
+            completed = true
+            completion(url)
+        }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            finish(urls.count == 1 ? urls.first : nil)
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) { finish(nil) }
+    }
 }
 
 struct NativeStellarMotionView: View {
@@ -88,9 +127,13 @@ struct NativeStellarMotionView: View {
         .onChange(of: scenePhase) { if $0 != .active { Self.importLog.notice("Scene left active state"); clear() } }
         .onChange(of: importing) { shown in Self.importLog.notice("Importer presentation binding: \(shown)") }
         .onDisappear { Self.importLog.notice("Stellar section disappeared"); clear() }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.data]) { outcome in
-            switch outcome { case .success(let url): Self.importLog.notice("Importer completion delivered a URL"); importFile(url, isManifest: importingManifest)
-            case .failure(let error): Self.importLog.error("Importer completion failed"); message = String(describing: error) }
+        .sheet(isPresented: $importing) {
+            StellarSourcePicker { url in
+                importing = false
+                guard let url else { Self.importLog.notice("Source selection cancelled"); return }
+                Self.importLog.notice("Importer completion delivered a copied URL")
+                importFile(url, isManifest: importingManifest)
+            }
         }
         .onChange(of: exporting) { if $0 { exportMessage = "" } }
         .fileExporter(isPresented: $exporting, document: document, contentType: .json, defaultFilename: exportFilename) { outcome in

@@ -173,6 +173,13 @@ final class ObservationUITests: XCTestCase {
             XCTAssertEqual(XCTWaiter.wait(for: [dismissed], timeout: 10), .completed, app.debugDescription)
             reveal(app, app.staticTexts["stellar.status"])
             waitForLabel(app.staticTexts["stellar.status"], "Original file loaded.")
+            // A picker dismissal alone does not prove the copied source reached
+            // the bounded reader. Check both original fixture byte counts,
+            // including retention of the manifest across the second import.
+            reveal(app, app.staticTexts["stellar.files"])
+            waitForLabel(app.staticTexts["stellar.files"], control == "manifest"
+                ? "manifest.json: 5305 B · rows.csv: 0 B"
+                : "manifest.json: 5305 B · rows.csv: 32918 B")
         }
         let rv = app.switches["stellar.rv"], covariance = app.switches["stellar.covariance"]
         enableSwitch(app, rv); enableSwitch(app, covariance)
