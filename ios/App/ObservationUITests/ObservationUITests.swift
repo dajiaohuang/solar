@@ -185,8 +185,8 @@ final class ObservationUITests: XCTestCase {
             // including retention of the manifest across the second import.
             reveal(app, app.staticTexts["stellar.files"])
             waitForLabel(app.staticTexts["stellar.files"], control == "manifest"
-                ? "manifest.json: 5305 B · rows.csv: 0 B"
-                : "manifest.json: 5305 B · rows.csv: 32918 B")
+                ? "manifest.json: 5,305 B · rows.csv: 0 B"
+                : "manifest.json: 5,305 B · rows.csv: 32,918 B")
         }
         let rv = app.switches["stellar.rv"], covariance = app.switches["stellar.covariance"]
         enableSwitch(app, rv); enableSwitch(app, covariance)
