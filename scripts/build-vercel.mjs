@@ -1,13 +1,15 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { downloadApproximationArchive, installApproximationArchive } from './lib/approximation-archive.mjs'
+import { installBuildDataset } from './lib/install-build-dataset.mjs'
 
 const env = { ...process.env, SOLAR_ATLAS_WEB_EXECUTION: 'segmented', SOLAR_ATLAS_PRODUCT_PROFILE: 'full',
   SOLAR_ATLAS_EPHEMERIS_PROFILE: 'full', SOLAR_ATLAS_BUILD_ENV: 'vercel',
   SOLAR_ATLAS_INCLUDE_DATASET: process.env.SOLAR_ATLAS_CATALOG_URL ? '0' : '1' }
 if (env.SOLAR_ATLAS_CATALOG_URL && !/^https:\/\//.test(env.SOLAR_ATLAS_CATALOG_URL)) throw new Error('SOLAR_ATLAS_CATALOG_URL must be an HTTPS dataset root')
 if (!env.SOLAR_ATLAS_CATALOG_URL && !existsSync('public/data/asteroids/dataset-version.json')) {
-  throw new Error('Install the pinned full catalog locally, or set SOLAR_ATLAS_CATALOG_URL to its published HTTPS dataset root (with CORS).')
+  const pin = JSON.parse(readFileSync('.github/asteroid-dataset.json', 'utf8'))
+  await installBuildDataset(pin)
 }
 const run = (args) => {
   const result = spawnSync(process.execPath, args, { env, stdio: 'inherit' })
